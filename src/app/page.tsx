@@ -70,6 +70,13 @@ export default async function Home() {
             <p className="font-medium text-o2-navy">Gerar contrato</p>
             <p className="text-sm text-gray-500">Monta o contrato final e exporta em Word</p>
           </Link>
+          <Link
+            href="/auditar-contrato"
+            className="rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm transition hover:shadow-md"
+          >
+            <p className="font-medium text-o2-navy">Auditar contrato</p>
+            <p className="text-sm text-gray-500">Analisa um contrato pronto e aponta erros e inconsistências</p>
+          </Link>
         </div>
       </main>
     </>
