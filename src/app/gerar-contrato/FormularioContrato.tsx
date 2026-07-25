@@ -1,0 +1,219 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { gerarContrato } from "./actions";
+
+type TipoGarantia = { id: string; nome: string };
+type Produto = {
+  id: string;
+  nome: string;
+  tipo_garantia_id: string;
+  seguradoras: { nome: string } | { nome: string }[] | null;
+};
+type Cobertura = { id: string; nome: string; produto_id: string };
+
+const NOME_TIPO_INCENDIO = "Seguro Incêndio Imobiliário";
+
+export default function FormularioContrato({
+  tiposGarantia,
+  produtos,
+  coberturas,
+}: {
+  tiposGarantia: TipoGarantia[];
+  produtos: Produto[];
+  coberturas: Cobertura[];
+}) {
+  const tipoIncendio = tiposGarantia.find((t) => t.nome === NOME_TIPO_INCENDIO);
+  const tiposGarantiaDaLocacao = tiposGarantia.filter((t) => t.nome !== NOME_TIPO_INCENDIO);
+  const produtosIncendio = useMemo(
+    () => (tipoIncendio ? produtos.filter((p) => p.tipo_garantia_id === tipoIncendio.id) : []),
+    [produtos, tipoIncendio]
+  );
+
+  const [tipoGarantiaId, setTipoGarantiaId] = useState("");
+  const [produtoId, setProdutoId] = useState("");
+  const [produtoIncendioId, setProdutoIncendioId] = useState("");
+
+  const produtosFiltrados = useMemo(
+    () => produtos.filter((p) => p.tipo_garantia_id === tipoGarantiaId),
+    [produtos, tipoGarantiaId]
+  );
+
+  const coberturasDoProduto = useMemo(
+    () => coberturas.filter((c) => c.produto_id === produtoId),
+    [coberturas, produtoId]
+  );
+
+  const coberturasDoIncendio = useMemo(
+    () => coberturas.filter((c) => c.produto_id === produtoIncendioId),
+    [coberturas, produtoIncendioId]
+  );
+
+  return (
+    <form action={gerarContrato} className="space-y-4">
+      <div className="grid grid-cols-2 gap-2">
+        <input name="locador" placeholder="Locador(es)" required className="rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none" />
+        <input name="locatario" placeholder="Locatário(s)" required className="rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none" />
+      </div>
+
+      <label className="flex items-center gap-2 text-sm text-gray-600">
+        <input type="checkbox" name="locador_procurador" />
+        Locador representado por procurador/administradora
+      </label>
+
+      <input
+        name="ocupantes_adicionais"
+        placeholder="Ocupantes adicionais autorizados (opcional)"
+        className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+      />
+
+      <input
+        name="endereco_imovel"
+        placeholder="Endereço do imóvel"
+        required
+        className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+      />
+
+      <div className="grid grid-cols-2 gap-2">
+        <select name="finalidade" required className="rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none" defaultValue="">
+          <option value="">Finalidade...</option>
+          <option value="residencial">Residencial</option>
+          <option value="nao_residencial">Não residencial</option>
+        </select>
+        <input
+          name="valor_aluguel"
+          type="number"
+          step="0.01"
+          placeholder="Valor do aluguel (R$)"
+          required
+          className="rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="text-sm text-gray-600">Data de início</label>
+          <input name="data_inicio" type="date" required className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none" />
+        </div>
+        <div>
+          <label className="text-sm text-gray-600">Prazo (meses)</label>
+          <input
+            name="prazo_meses"
+            type="number"
+            min={1}
+            required
+            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+          />
+        </div>
+      </div>
+
+      <input
+        name="laudo_vistoria_url"
+        placeholder="Link do laudo de vistoria inicial (opcional)"
+        className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+      />
+
+      <hr />
+
+      <div>
+        <p className="mb-2 text-sm font-semibold text-o2-navy">Garantia da locação</p>
+        <div className="grid grid-cols-2 gap-2">
+          <select
+            value={tipoGarantiaId}
+            onChange={(e) => {
+              setTipoGarantiaId(e.target.value);
+              setProdutoId("");
+            }}
+            className="rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+          >
+            <option value="">Tipo de garantia...</option>
+            {tiposGarantiaDaLocacao.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.nome}
+              </option>
+            ))}
+          </select>
+
+          <select
+            name="produto_id"
+            value={produtoId}
+            onChange={(e) => setProdutoId(e.target.value)}
+            required
+            className="rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+          >
+            <option value="">Seguradora / produto...</option>
+            {produtosFiltrados.map((p) => {
+              const seguradora = Array.isArray(p.seguradoras) ? p.seguradoras[0] : p.seguradoras;
+              return (
+                <option key={p.id} value={p.id}>
+                  {seguradora?.nome} — {p.nome}
+                </option>
+              );
+            })}
+          </select>
+        </div>
+
+        {produtoId && (
+          <div className="mt-2 space-y-1 rounded-lg border border-o2-navy/10 bg-o2-gray/40 p-3">
+            <p className="text-sm font-medium text-gray-700">Coberturas adicionais contratadas</p>
+            {coberturasDoProduto.map((c) => (
+              <label key={c.id} className="flex items-center gap-2 text-sm">
+                <input type="checkbox" name="cobertura_ids" value={c.id} />
+                {c.nome}
+              </label>
+            ))}
+            {!coberturasDoProduto.length && (
+              <p className="text-sm text-gray-500">Nenhuma cobertura adicional para este produto.</p>
+            )}
+          </div>
+        )}
+      </div>
+
+      <hr />
+
+      <div>
+        <p className="mb-2 text-sm font-semibold text-o2-navy">
+          Seguro Incêndio (item obrigatório à parte, protege o patrimônio do locador — não é a garantia da locação)
+        </p>
+        <select
+          name="seguro_incendio_produto_id"
+          value={produtoIncendioId}
+          onChange={(e) => setProdutoIncendioId(e.target.value)}
+          className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+        >
+          <option value="">Seguradora / produto do seguro incêndio (opcional por enquanto)...</option>
+          {produtosIncendio.map((p) => {
+            const seguradora = Array.isArray(p.seguradoras) ? p.seguradoras[0] : p.seguradoras;
+            return (
+              <option key={p.id} value={p.id}>
+                {seguradora?.nome} — {p.nome}
+              </option>
+            );
+          })}
+        </select>
+
+        {produtoIncendioId && (
+          <div className="mt-2 space-y-1 rounded-lg border border-o2-navy/10 bg-o2-gray/40 p-3">
+            <p className="text-sm font-medium text-gray-700">Coberturas adicionais do seguro incêndio</p>
+            {coberturasDoIncendio.map((c) => (
+              <label key={c.id} className="flex items-center gap-2 text-sm">
+                <input type="checkbox" name="cobertura_ids_incendio" value={c.id} />
+                {c.nome}
+              </label>
+            ))}
+            {!coberturasDoIncendio.length && (
+              <p className="text-sm text-gray-500">Nenhuma cobertura adicional para este produto.</p>
+            )}
+          </div>
+        )}
+      </div>
+
+      <button
+        className="rounded-full bg-o2-coral px-6 py-2.5 font-medium text-white transition hover:opacity-90"
+        type="submit"
+      >
+        Gerar contrato
+      </button>
+    </form>
+  );
+}
