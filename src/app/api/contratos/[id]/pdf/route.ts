@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { gerarContratoDocx } from "@/lib/gerarContratoDocx";
+import { gerarContratoPdf, mesclarLaudoNoPdf } from "@/lib/gerarContratoPdf";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -29,27 +29,39 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Sem permissão para este contrato" }, { status: 403 });
   }
 
-  const [{ data: produto }, { data: produtoIncendio }, { data: coberturasVinculadas }] = await Promise.all([
-    supabase
-      .from("produtos")
-      .select("nome, clausula_base, seguradoras(nome), tipos_garantia(nome)")
-      .eq("id", contrato.produto_id)
-      .single(),
-    contrato.seguro_incendio_produto_id
-      ? supabase
-          .from("produtos")
-          .select("nome, clausula_base, seguradoras(nome)")
-          .eq("id", contrato.seguro_incendio_produto_id)
-          .single()
-      : Promise.resolve({ data: null }),
-    supabase
-      .from("contratos_coberturas")
-      .select("coberturas_adicionais(nome, texto, produto_id)")
-      .eq("contrato_id", id),
-  ]);
+  if (contrato.laudo_modo !== "arquivo_embutido" || !contrato.laudo_arquivo_path) {
+    return NextResponse.json(
+      { error: "Este contrato não tem laudo de vistoria para incluir como páginas do PDF." },
+      { status: 400 }
+    );
+  }
+
+  const [{ data: produto }, { data: produtoIncendio }, { data: coberturasVinculadas }, { data: laudoArquivo, error: laudoError }] =
+    await Promise.all([
+      supabase
+        .from("produtos")
+        .select("nome, clausula_base, seguradoras(nome), tipos_garantia(nome)")
+        .eq("id", contrato.produto_id)
+        .single(),
+      contrato.seguro_incendio_produto_id
+        ? supabase
+            .from("produtos")
+            .select("nome, clausula_base, seguradoras(nome)")
+            .eq("id", contrato.seguro_incendio_produto_id)
+            .single()
+        : Promise.resolve({ data: null }),
+      supabase
+        .from("contratos_coberturas")
+        .select("coberturas_adicionais(nome, texto, produto_id)")
+        .eq("contrato_id", id),
+      supabase.storage.from("laudos").download(contrato.laudo_arquivo_path),
+    ]);
 
   if (!produto) {
     return NextResponse.json({ error: "Produto do contrato não encontrado" }, { status: 404 });
+  }
+  if (laudoError || !laudoArquivo) {
+    return NextResponse.json({ error: "Não foi possível ler o arquivo do laudo." }, { status: 500 });
   }
 
   const todasCoberturas = (coberturasVinculadas ?? []).map((c) => {
@@ -73,7 +85,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       : produtoIncendio.seguradoras
     : null;
 
-  const buffer = await gerarContratoDocx({
+  const contratoDoc = await gerarContratoPdf({
     imobiliaria,
     tipoGarantiaNome: tipoGarantia.nome,
     seguradoraNome: seguradora.nome,
@@ -102,10 +114,21 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     laudoArquivoNome: contrato.laudo_arquivo_nome,
   });
 
-  return new NextResponse(new Uint8Array(buffer), {
+  const laudoBytes = new Uint8Array(await laudoArquivo.arrayBuffer());
+  let pdfFinal: Uint8Array;
+  try {
+    pdfFinal = await mesclarLaudoNoPdf(contratoDoc, laudoBytes);
+  } catch {
+    return NextResponse.json(
+      { error: "O arquivo do laudo enviado não é um PDF válido e não pôde ser incluído." },
+      { status: 500 }
+    );
+  }
+
+  return new NextResponse(new Uint8Array(pdfFinal), {
     headers: {
-      "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "Content-Disposition": `attachment; filename="contrato-${contrato.locatario.replace(/\s+/g, "-")}.docx"`,
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="contrato-com-laudo-${contrato.locatario.replace(/\s+/g, "-")}.pdf"`,
     },
   });
 }

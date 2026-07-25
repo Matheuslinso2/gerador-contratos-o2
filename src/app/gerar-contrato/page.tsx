@@ -48,7 +48,9 @@ export default async function GerarContratoPage() {
       supabase.from("coberturas_adicionais").select("id, nome, produto_id").order("nome"),
       supabase
         .from("contratos")
-        .select("id, locador, locatario, endereco_imovel, texto_gerado, created_at")
+        .select(
+          "id, locador, locatario, endereco_imovel, texto_gerado, created_at, laudo_modo, laudo_arquivo_nome"
+        )
         .eq("imobiliaria_id", imobiliaria.id)
         .order("created_at", { ascending: false }),
     ]);
@@ -80,12 +82,30 @@ export default async function GerarContratoPage() {
               <summary className="cursor-pointer font-medium text-o2-navy">
                 {c.locador} × {c.locatario} — {c.endereco_imovel}
               </summary>
-              <a
-                href={`/api/contratos/${c.id}/docx`}
-                className="mt-2 inline-block rounded-full bg-o2-coral px-4 py-1.5 text-sm font-medium text-white transition hover:opacity-90"
-              >
-                Baixar contrato em Word (.docx)
-              </a>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <a
+                  href={`/api/contratos/${c.id}/docx`}
+                  className="inline-block rounded-full bg-o2-coral px-4 py-1.5 text-sm font-medium text-white transition hover:opacity-90"
+                >
+                  Baixar contrato em Word (.docx)
+                </a>
+                {c.laudo_modo === "arquivo_embutido" && (
+                  <a
+                    href={`/api/contratos/${c.id}/pdf`}
+                    className="inline-block rounded-full border border-o2-navy px-4 py-1.5 text-sm font-medium text-o2-navy transition hover:bg-o2-gray/40"
+                  >
+                    Baixar contrato completo com laudo (PDF)
+                  </a>
+                )}
+                {(c.laudo_modo === "arquivo_separado" || c.laudo_modo === "arquivo_embutido") && (
+                  <a
+                    href={`/api/contratos/${c.id}/laudo`}
+                    className="inline-block rounded-full border border-gray-300 px-4 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+                  >
+                    Baixar laudo de vistoria (original{c.laudo_arquivo_nome ? `: ${c.laudo_arquivo_nome}` : ""})
+                  </a>
+                )}
+              </div>
               <pre className="mt-2 whitespace-pre-wrap text-sm text-gray-700">{c.texto_gerado}</pre>
             </details>
           ))}

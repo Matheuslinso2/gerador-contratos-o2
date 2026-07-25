@@ -57,7 +57,9 @@ export type ContratoParaDocx = {
   valorAluguel: number;
   dataInicio: string;
   prazoMeses: number;
+  laudoModo: "nenhum" | "link" | "arquivo_separado" | "arquivo_embutido";
   laudoVistoriaUrl: string | null;
+  laudoArquivoNome: string | null;
 };
 
 function paragrafosDeTexto(texto: string, opts: { italic?: boolean } = {}) {
@@ -243,7 +245,23 @@ export async function gerarContratoDocx(c: ContratoParaDocx): Promise<Buffer> {
     linhaDado("Índice de reajuste", c.imobiliaria.indice_reajuste),
     linhaDado("Data de início", fmtData(c.dataInicio)),
     linhaDado("Prazo", `${c.prazoMeses} meses`),
-    ...(c.laudoVistoriaUrl ? [linhaDado("Laudo de vistoria inicial", c.laudoVistoriaUrl)] : []),
+    ...(c.laudoModo === "link" && c.laudoVistoriaUrl
+      ? [linhaDado("Laudo de vistoria inicial", c.laudoVistoriaUrl)]
+      : c.laudoModo === "arquivo_separado" && c.laudoArquivoNome
+        ? [
+            linhaDado(
+              "Laudo de vistoria inicial",
+              `Documento anexo, entregue separadamente (${c.laudoArquivoNome}), parte integrante deste contrato`
+            ),
+          ]
+        : c.laudoModo === "arquivo_embutido" && c.laudoArquivoNome
+          ? [
+              linhaDado(
+                "Laudo de vistoria inicial",
+                "Anexado como páginas finais deste contrato — disponível na versão em PDF completo, na página de contratos gerados"
+              ),
+            ]
+          : []),
   ];
 
   // Seções numeradas dinamicamente, já que Seguro Incêndio e Assinatura são opcionais.

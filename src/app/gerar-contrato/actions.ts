@@ -70,7 +70,9 @@ export async function gerarContrato(formData: FormData) {
   const valor_aluguel = Number(formData.get("valor_aluguel"));
   const data_inicio = String(formData.get("data_inicio") ?? "");
   const prazo_meses = Number(formData.get("prazo_meses"));
-  const laudo_vistoria_url = String(formData.get("laudo_vistoria_url") ?? "").trim();
+  const laudo_modo = String(formData.get("laudo_modo") ?? "nenhum");
+  const laudo_vistoria_url =
+    laudo_modo === "link" ? String(formData.get("laudo_vistoria_url") ?? "").trim() : "";
   const cobertura_ids = formData.getAll("cobertura_ids").map(String);
   const cobertura_ids_incendio = formData.getAll("cobertura_ids_incendio").map(String);
 
@@ -85,6 +87,28 @@ export async function gerarContrato(formData: FormData) {
     !prazo_meses
   ) {
     return;
+  }
+
+  let laudo_arquivo_path: string | null = null;
+  let laudo_arquivo_nome: string | null = null;
+
+  if (laudo_modo === "arquivo_separado" || laudo_modo === "arquivo_embutido") {
+    const laudoArquivo = formData.get("laudo_arquivo") as File | null;
+    if (laudoArquivo && laudoArquivo.size > 0) {
+      if (laudo_modo === "arquivo_embutido" && !laudoArquivo.name.toLowerCase().endsWith(".pdf")) {
+        throw new Error(
+          "Para incluir o laudo como páginas do contrato, o arquivo precisa estar em PDF."
+        );
+      }
+      const ext = laudoArquivo.name.split(".").pop() || "pdf";
+      const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("laudos")
+        .upload(path, laudoArquivo, { contentType: laudoArquivo.type });
+      if (uploadError) throw new Error(uploadError.message);
+      laudo_arquivo_path = path;
+      laudo_arquivo_nome = laudoArquivo.name;
+    }
   }
 
   const todosCoberturaIds = [...cobertura_ids, ...cobertura_ids_incendio];
@@ -135,7 +159,15 @@ export async function gerarContrato(formData: FormData) {
     `VALOR DO ALUGUEL: R$ ${valor_aluguel.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
     `DATA DE INÍCIO: ${data_inicio}`,
     `PRAZO: ${prazo_meses} meses`,
-    laudo_vistoria_url && `LAUDO DE VISTORIA INICIAL: ${laudo_vistoria_url}`,
+    laudo_modo === "link" &&
+      laudo_vistoria_url &&
+      `LAUDO DE VISTORIA INICIAL: ${laudo_vistoria_url}`,
+    laudo_modo === "arquivo_separado" &&
+      laudo_arquivo_nome &&
+      `LAUDO DE VISTORIA INICIAL: documento anexo (${laudo_arquivo_nome}), entregue separadamente, parte integrante deste contrato.`,
+    laudo_modo === "arquivo_embutido" &&
+      laudo_arquivo_nome &&
+      `LAUDO DE VISTORIA INICIAL: apresentado nas páginas seguintes deste contrato (disponível na versão em PDF completo), das quais é parte integrante.`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -187,7 +219,10 @@ export async function gerarContrato(formData: FormData) {
       valor_aluguel,
       data_inicio,
       prazo_meses,
+      laudo_modo,
       laudo_vistoria_url: laudo_vistoria_url || null,
+      laudo_arquivo_path,
+      laudo_arquivo_nome,
       texto_gerado: textoGerado,
     })
     .select("id")

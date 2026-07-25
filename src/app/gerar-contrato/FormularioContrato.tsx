@@ -34,6 +34,9 @@ export default function FormularioContrato({
   const [tipoGarantiaId, setTipoGarantiaId] = useState("");
   const [produtoId, setProdutoId] = useState("");
   const [produtoIncendioId, setProdutoIncendioId] = useState("");
+  const [laudoModo, setLaudoModo] = useState<"nenhum" | "link" | "arquivo_separado" | "arquivo_embutido">(
+    "nenhum"
+  );
 
   const produtosFiltrados = useMemo(
     () => produtos.filter((p) => p.tipo_garantia_id === tipoGarantiaId),
@@ -114,11 +117,67 @@ export default function FormularioContrato({
         </div>
       </div>
 
-      <input
-        name="laudo_vistoria_url"
-        placeholder="Link do laudo de vistoria inicial (opcional)"
-        className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
-      />
+      <div className="rounded-lg border border-gray-200 p-3">
+        <p className="mb-2 text-sm font-medium text-o2-navy">Laudo de vistoria (opcional)</p>
+        <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {(
+            [
+              { valor: "nenhum", rotulo: "Não tem" },
+              { valor: "link", rotulo: "Link online" },
+              { valor: "arquivo_separado", rotulo: "Arquivo (anexo à parte)" },
+              { valor: "arquivo_embutido", rotulo: "Arquivo (incluir no contrato)" },
+            ] as const
+          ).map((opcao) => (
+            <label key={opcao.valor} className="flex items-center gap-1.5 text-sm text-gray-700">
+              <input
+                type="radio"
+                name="laudo_modo"
+                value={opcao.valor}
+                checked={laudoModo === opcao.valor}
+                onChange={() => setLaudoModo(opcao.valor)}
+              />
+              {opcao.rotulo}
+            </label>
+          ))}
+        </div>
+
+        {laudoModo === "link" && (
+          <input
+            name="laudo_vistoria_url"
+            placeholder="Link do laudo de vistoria (plataforma online)"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+          />
+        )}
+
+        {laudoModo === "arquivo_separado" && (
+          <div>
+            <input
+              name="laudo_arquivo"
+              type="file"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              O arquivo original não é alterado. Fica disponível para baixar à parte; o
+              contrato só cita que ele é parte integrante.
+            </p>
+          </div>
+        )}
+
+        {laudoModo === "arquivo_embutido" && (
+          <div>
+            <input
+              name="laudo_arquivo"
+              type="file"
+              accept=".pdf"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              Precisa ser um PDF. As páginas originais do laudo (sem nenhuma alteração) são
+              coladas ao final do contrato, gerando um único PDF completo para baixar.
+            </p>
+          </div>
+        )}
+      </div>
 
       <hr />
 
