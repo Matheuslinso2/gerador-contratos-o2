@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { salvarImobiliaria } from "./actions";
 import { signOut } from "../actions";
@@ -6,7 +7,12 @@ import BackLink from "@/components/BackLink";
 
 export const dynamic = "force-dynamic";
 
-export default async function ImobiliariaPage() {
+export default async function ImobiliariaPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ sucesso?: string }>;
+}) {
+  const { sucesso } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -28,6 +34,12 @@ export default async function ImobiliariaPage() {
           {imobiliaria ? "Configuração da imobiliária" : "Complete o cadastro da sua imobiliária"}
         </h1>
       </div>
+
+      {sucesso && (
+        <p className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-700">
+          Cadastro atualizado com sucesso!
+        </p>
+      )}
 
       {imobiliaria?.logo_url && (
         // eslint-disable-next-line @next/next/no-img-element
@@ -200,12 +212,20 @@ export default async function ImobiliariaPage() {
           </div>
         </div>
 
-        <button
-          className="rounded-full bg-o2-coral px-6 py-2.5 font-medium text-white transition hover:opacity-90"
-          type="submit"
-        >
-          Salvar imobiliária
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            className="rounded-full bg-o2-coral px-6 py-2.5 font-medium text-white transition hover:opacity-90"
+            type="submit"
+          >
+            Salvar imobiliária
+          </button>
+          <Link
+            href="/"
+            className="rounded-full border border-gray-300 px-6 py-2.5 font-medium text-o2-navy transition hover:bg-gray-50"
+          >
+            Ir para o início
+          </Link>
+        </div>
       </form>
       </main>
     </>

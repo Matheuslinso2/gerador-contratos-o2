@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { extrairTextoDocx } from "@/lib/extrairTextoDocx";
 
@@ -74,4 +75,5 @@ export async function salvarImobiliaria(formData: FormData) {
   if (error) throw new Error(error.message);
 
   revalidatePath("/imobiliaria");
+  redirect("/imobiliaria?sucesso=1");
 }
