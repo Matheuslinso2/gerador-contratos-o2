@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { salvarImobiliaria } from "./actions";
 import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
+import BackLink from "@/components/BackLink";
 
 export const dynamic = "force-dynamic";
 
@@ -21,9 +22,12 @@ export default async function ImobiliariaPage() {
     <>
       <AppHeader userEmail={user?.email} logoutAction={signOut} />
       <main className="mx-auto max-w-3xl flex-1 space-y-8 p-8">
-      <h1 className="text-xl font-semibold text-o2-navy">
-        {imobiliaria ? "Configuração da imobiliária" : "Complete o cadastro da sua imobiliária"}
-      </h1>
+      <div className="space-y-2">
+        <BackLink />
+        <h1 className="text-xl font-semibold text-o2-navy">
+          {imobiliaria ? "Configuração da imobiliária" : "Complete o cadastro da sua imobiliária"}
+        </h1>
+      </div>
 
       {imobiliaria?.logo_url && (
         // eslint-disable-next-line @next/next/no-img-element

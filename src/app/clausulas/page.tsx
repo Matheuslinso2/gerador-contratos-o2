@@ -4,6 +4,7 @@ import { isAdmin } from "@/lib/admin";
 import { addSeguradora, addProduto, addCobertura } from "./actions";
 import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
+import BackLink from "@/components/BackLink";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,10 @@ export default async function ClausulasPage() {
     <>
       <AppHeader userEmail={user?.email} logoutAction={signOut} />
       <main className="mx-auto max-w-3xl flex-1 space-y-12 p-8">
-      <h1 className="text-xl font-semibold text-o2-navy">Biblioteca de cláusulas de garantia</h1>
+      <div className="space-y-2">
+        <BackLink />
+        <h1 className="text-xl font-semibold text-o2-navy">Biblioteca de cláusulas de garantia</h1>
+      </div>
 
       {/* Seguradoras */}
       <section className="space-y-4">

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import FormularioContrato from "./FormularioContrato";
 import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
+import BackLink from "@/components/BackLink";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,7 @@ export default async function GerarContratoPage() {
       <>
         <AppHeader userEmail={user?.email} logoutAction={signOut} />
         <main className="mx-auto max-w-3xl flex-1 space-y-4 p-8">
+          <BackLink />
           <h1 className="text-xl font-semibold text-o2-navy">Gerar contrato de locação</h1>
           <p className="rounded-lg border border-yellow-400 bg-yellow-50 p-3 text-sm text-yellow-800">
             Antes de gerar contratos, complete o cadastro da sua imobiliária em{" "}
@@ -55,9 +57,12 @@ export default async function GerarContratoPage() {
     <>
       <AppHeader userEmail={user?.email} logoutAction={signOut} />
       <main className="mx-auto max-w-3xl flex-1 space-y-8 p-8">
-        <div>
-          <h1 className="text-xl font-semibold text-o2-navy">Gerar contrato de locação</h1>
-          <p className="text-sm text-gray-500">Imobiliária: {imobiliaria.nome}</p>
+        <div className="space-y-2">
+          <BackLink />
+          <div>
+            <h1 className="text-xl font-semibold text-o2-navy">Gerar contrato de locação</h1>
+            <p className="text-sm text-gray-500">Imobiliária: {imobiliaria.nome}</p>
+          </div>
         </div>
 
         <div className="rounded-xl border border-o2-navy/10 bg-white p-5 shadow-sm">
