@@ -35,12 +35,6 @@ export default async function ImobiliariaPage({
         </h1>
       </div>
 
-      {sucesso && (
-        <p className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-700">
-          Cadastro atualizado com sucesso!
-        </p>
-      )}
-
       {imobiliaria?.logo_url && (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={imobiliaria.logo_url} alt="Logo" className="h-16 object-contain" />
@@ -227,6 +221,12 @@ export default async function ImobiliariaPage({
           </Link>
         </div>
       </form>
+
+      {sucesso && (
+        <p className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-700">
+          Cadastro atualizado com sucesso!
+        </p>
+      )}
       </main>
     </>
   );
