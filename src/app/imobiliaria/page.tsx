@@ -34,43 +34,60 @@ export default async function ImobiliariaPage() {
         <img src={imobiliaria.logo_url} alt="Logo" className="h-16 object-contain" />
       )}
 
+      <ChecklistCadastro imobiliaria={imobiliaria} />
+
       <form action={salvarImobiliaria} className="space-y-3">
         <div className="grid grid-cols-2 gap-2">
-          <input
-            name="nome"
-            placeholder="Nome da imobiliária"
-            required
-            defaultValue={imobiliaria?.nome}
-            className="rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
-          />
-          <input
-            name="cnpj"
-            placeholder="CNPJ"
-            required
-            defaultValue={imobiliaria?.cnpj}
-            className="rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
-          />
+          <div>
+            <label className="text-sm text-gray-600">Nome da imobiliária *</label>
+            <input
+              name="nome"
+              placeholder="Nome da imobiliária"
+              required
+              defaultValue={imobiliaria?.nome}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+            />
+          </div>
+          <div>
+            <label className="text-sm text-gray-600">CNPJ *</label>
+            <input
+              name="cnpj"
+              placeholder="CNPJ"
+              required
+              defaultValue={imobiliaria?.cnpj}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+            />
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-sm text-gray-600">CRECI</label>
+            <input
+              name="creci"
+              placeholder="CRECI"
+              defaultValue={imobiliaria?.creci ?? ""}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+            />
+          </div>
+          <div>
+            <label className="text-sm text-gray-600">Telefone de contato</label>
+            <input
+              name="telefone"
+              placeholder="Telefone de contato"
+              defaultValue={imobiliaria?.telefone ?? ""}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+            />
+          </div>
+        </div>
+        <div>
+          <label className="text-sm text-gray-600">Endereço do escritório</label>
           <input
-            name="creci"
-            placeholder="CRECI"
-            defaultValue={imobiliaria?.creci ?? ""}
-            className="rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
-          />
-          <input
-            name="telefone"
-            placeholder="Telefone de contato"
-            defaultValue={imobiliaria?.telefone ?? ""}
-            className="rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+            name="endereco"
+            placeholder="Endereço do escritório"
+            defaultValue={imobiliaria?.endereco ?? ""}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
           />
         </div>
-        <input
-          name="endereco"
-          placeholder="Endereço do escritório"
-          defaultValue={imobiliaria?.endereco ?? ""}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
-        />
 
         <div>
           <label className="text-sm text-gray-600">
@@ -192,5 +209,49 @@ export default async function ImobiliariaPage() {
       </form>
       </main>
     </>
+  );
+}
+
+type ImobiliariaRow = {
+  nome?: string | null;
+  cnpj?: string | null;
+  creci?: string | null;
+  telefone?: string | null;
+  endereco?: string | null;
+  logo_url?: string | null;
+  texto_base_contrato?: string | null;
+  indice_reajuste?: string | null;
+} | null | undefined;
+
+function ChecklistCadastro({ imobiliaria }: { imobiliaria: ImobiliariaRow }) {
+  const campos = [
+    { label: "Nome da imobiliária", ok: !!imobiliaria?.nome },
+    { label: "CNPJ", ok: !!imobiliaria?.cnpj },
+    { label: "CRECI", ok: !!imobiliaria?.creci },
+    { label: "Telefone de contato", ok: !!imobiliaria?.telefone },
+    { label: "Endereço", ok: !!imobiliaria?.endereco },
+    { label: "Logo", ok: !!imobiliaria?.logo_url },
+    { label: "Contrato-base", ok: !!imobiliaria?.texto_base_contrato },
+    { label: "Índice de reajuste", ok: !!imobiliaria?.indice_reajuste },
+  ];
+  const preenchidos = campos.filter((c) => c.ok).length;
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+      <p className="mb-2 text-sm font-medium text-o2-navy">
+        Campos preenchidos: {preenchidos}/{campos.length}
+      </p>
+      <ul className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-4">
+        {campos.map((c) => (
+          <li
+            key={c.label}
+            className={`flex items-center gap-1.5 text-sm ${c.ok ? "text-green-700" : "text-gray-400"}`}
+          >
+            <span>{c.ok ? "✓" : "○"}</span>
+            <span>{c.label}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

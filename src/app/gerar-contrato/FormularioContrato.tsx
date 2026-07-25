@@ -55,11 +55,11 @@ export default function FormularioContrato({
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="mb-1 block text-sm text-gray-600">Locador(es)</label>
-          <CampoPessoas fieldName="locador_nomes" placeholder="Locador" />
+          <CampoPessoas fieldName="locador" placeholder="Locador" />
         </div>
         <div>
           <label className="mb-1 block text-sm text-gray-600">Locatário(s)</label>
-          <CampoPessoas fieldName="locatario_nomes" placeholder="Locatário" />
+          <CampoPessoas fieldName="locatario" placeholder="Locatário" />
         </div>
       </div>
 
