@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { extrairTextoDocx } from "@/lib/extrairTextoDocx";
 
 export async function salvarImobiliaria(formData: FormData) {
   const supabase = await createClient();
@@ -14,7 +15,6 @@ export async function salvarImobiliaria(formData: FormData) {
   const cnpj = String(formData.get("cnpj") ?? "").trim();
   const creci = String(formData.get("creci") ?? "").trim();
   const endereco = String(formData.get("endereco") ?? "").trim();
-  const texto_base_contrato = String(formData.get("texto_base_contrato") ?? "").trim();
   const indice_reajuste = String(formData.get("indice_reajuste") ?? "").trim();
   const percentual_multa_atraso = Number(formData.get("percentual_multa_atraso"));
   const percentual_juros_mora = Number(formData.get("percentual_juros_mora"));
@@ -24,6 +24,18 @@ export async function salvarImobiliaria(formData: FormData) {
   const dia_vencimento_aluguel = Number(formData.get("dia_vencimento_aluguel"));
   const plataforma_assinatura = String(formData.get("plataforma_assinatura") ?? "").trim();
   const logo = formData.get("logo") as File | null;
+  const contratoArquivo = formData.get("contrato_arquivo") as File | null;
+
+  let texto_base_contrato = String(formData.get("texto_base_contrato") ?? "").trim();
+
+  if (contratoArquivo && contratoArquivo.size > 0) {
+    const nomeArquivo = contratoArquivo.name.toLowerCase();
+    if (!nomeArquivo.endsWith(".docx")) {
+      throw new Error("O arquivo do contrato precisa estar em formato Word (.docx).");
+    }
+    const buffer = Buffer.from(await contratoArquivo.arrayBuffer());
+    texto_base_contrato = await extrairTextoDocx(buffer);
+  }
 
   if (!nome || !cnpj || !texto_base_contrato || !indice_reajuste || !dia_vencimento_aluguel) {
     return;

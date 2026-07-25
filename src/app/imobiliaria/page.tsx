@@ -73,10 +73,24 @@ export default async function ImobiliariaPage() {
           <input name="logo" type="file" accept="image/*" className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none" />
         </div>
 
+        <div>
+          <label className="text-sm text-gray-600">
+            Enviar o contrato-base em Word (opcional — extrai o texto automaticamente e preenche o campo abaixo)
+          </label>
+          <input
+            name="contrato_arquivo"
+            type="file"
+            accept=".docx"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            Aceita apenas .docx. Se enviar um arquivo, ele substitui o texto digitado abaixo.
+          </p>
+        </div>
+
         <textarea
           name="texto_base_contrato"
-          placeholder="Texto-base do contrato (comum a todas as locações)"
-          required
+          placeholder="Ou cole aqui o texto-base do contrato (comum a todas as locações)"
           rows={6}
           defaultValue={imobiliaria?.texto_base_contrato ?? ""}
           className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"

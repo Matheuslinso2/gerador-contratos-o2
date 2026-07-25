@@ -3,6 +3,47 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
+function qualificarPessoas(formData: FormData, prefixo: string): string {
+  const nomes = formData.getAll(`${prefixo}_nome`).map(String);
+  const nacionalidades = formData.getAll(`${prefixo}_nacionalidade`).map(String);
+  const estadosCivis = formData.getAll(`${prefixo}_estado_civil`).map(String);
+  const profissoes = formData.getAll(`${prefixo}_profissao`).map(String);
+  const cpfs = formData.getAll(`${prefixo}_cpf`).map(String);
+  const rgs = formData.getAll(`${prefixo}_rg`).map(String);
+  const rgOrgaos = formData.getAll(`${prefixo}_rg_orgao`).map(String);
+  const enderecos = formData.getAll(`${prefixo}_endereco`).map(String);
+
+  return nomes
+    .map((nome, i) => {
+      nome = nome.trim();
+      if (!nome) return "";
+
+      const segmentos = [nome];
+
+      const qualificacao = [nacionalidades[i], estadosCivis[i], profissoes[i]]
+        .map((v) => v?.trim())
+        .filter(Boolean)
+        .join(", ");
+      if (qualificacao) segmentos.push(qualificacao);
+
+      const rg = rgs[i]?.trim();
+      if (rg) {
+        const orgao = rgOrgaos[i]?.trim();
+        segmentos.push(`portador(a) do RG nº ${rg}${orgao ? ` - ${orgao}` : ""}`);
+      }
+
+      const cpf = cpfs[i]?.trim();
+      if (cpf) segmentos.push(`inscrito(a) no CPF sob o nº ${cpf}`);
+
+      const endereco = enderecos[i]?.trim();
+      if (endereco) segmentos.push(`residente e domiciliado(a) em ${endereco}`);
+
+      return segmentos.join(", ");
+    })
+    .filter(Boolean)
+    .join("; ");
+}
+
 export async function gerarContrato(formData: FormData) {
   const supabase = await createClient();
   const {
@@ -20,17 +61,9 @@ export async function gerarContrato(formData: FormData) {
 
   const produto_id = String(formData.get("produto_id") ?? "");
   const seguro_incendio_produto_id = String(formData.get("seguro_incendio_produto_id") ?? "") || null;
-  const locador = formData
-    .getAll("locador_nomes")
-    .map((v) => String(v).trim())
-    .filter(Boolean)
-    .join("; ");
+  const locador = qualificarPessoas(formData, "locador");
   const locador_procurador = formData.get("locador_procurador") === "on";
-  const locatario = formData
-    .getAll("locatario_nomes")
-    .map((v) => String(v).trim())
-    .filter(Boolean)
-    .join("; ");
+  const locatario = qualificarPessoas(formData, "locatario");
   const ocupantes_adicionais = String(formData.get("ocupantes_adicionais") ?? "").trim();
   const endereco_imovel = String(formData.get("endereco_imovel") ?? "").trim();
   const finalidade = String(formData.get("finalidade") ?? "");
