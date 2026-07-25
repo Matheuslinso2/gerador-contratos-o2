@@ -1,7 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const ROTAS_PUBLICAS = ["/login", "/signup"];
+const ROTAS_PUBLICAS = ["/login", "/signup", "/termos"];
+const ROTAS_SO_DESLOGADO = ["/login", "/signup"];
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -29,6 +30,7 @@ export async function proxy(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
   const isPublica = ROTAS_PUBLICAS.some((r) => path.startsWith(r));
+  const isSoDeslogado = ROTAS_SO_DESLOGADO.some((r) => path.startsWith(r));
 
   if (!user && !isPublica && path !== "/") {
     const url = request.nextUrl.clone();
@@ -36,7 +38,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (user && isPublica) {
+  if (user && isSoDeslogado) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     return NextResponse.redirect(url);

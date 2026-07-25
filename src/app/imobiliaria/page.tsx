@@ -59,12 +59,18 @@ export default async function ImobiliariaPage() {
             className="rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
           />
           <input
-            name="endereco"
-            placeholder="Endereço do escritório"
-            defaultValue={imobiliaria?.endereco ?? ""}
+            name="telefone"
+            placeholder="Telefone de contato"
+            defaultValue={imobiliaria?.telefone ?? ""}
             className="rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
           />
         </div>
+        <input
+          name="endereco"
+          placeholder="Endereço do escritório"
+          defaultValue={imobiliaria?.endereco ?? ""}
+          className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+        />
 
         <div>
           <label className="text-sm text-gray-600">

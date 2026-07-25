@@ -14,6 +14,7 @@ export async function salvarImobiliaria(formData: FormData) {
   const nome = String(formData.get("nome") ?? "").trim();
   const cnpj = String(formData.get("cnpj") ?? "").trim();
   const creci = String(formData.get("creci") ?? "").trim();
+  const telefone = String(formData.get("telefone") ?? "").trim();
   const endereco = String(formData.get("endereco") ?? "").trim();
   const indice_reajuste = String(formData.get("indice_reajuste") ?? "").trim();
   const percentual_multa_atraso = Number(formData.get("percentual_multa_atraso"));
@@ -57,6 +58,7 @@ export async function salvarImobiliaria(formData: FormData) {
     nome,
     cnpj,
     creci: creci || null,
+    telefone: telefone || null,
     endereco: endereco || null,
     texto_base_contrato,
     indice_reajuste,

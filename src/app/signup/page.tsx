@@ -39,6 +39,17 @@ export default async function SignupPage({
           minLength={6}
           className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
         />
+        <label className="flex items-start gap-2 text-sm text-gray-600">
+          <input type="checkbox" name="aceite_termos" required className="mt-0.5" />
+          <span>
+            Li e aceito os{" "}
+            <Link href="/termos" target="_blank" className="font-medium text-o2-navy underline">
+              Termos de Uso e a Política de Privacidade
+            </Link>
+            , incluindo o tratamento de dados de locadores e locatários conforme a LGPD.
+          </span>
+        </label>
+
         <button
           className="w-full rounded-full bg-o2-coral px-4 py-2.5 font-medium text-white transition hover:opacity-90"
           type="submit"
