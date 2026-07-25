@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { gerarContrato } from "./actions";
+import CampoPessoas from "./CampoPessoas";
 
 type TipoGarantia = { id: string; nome: string };
 type Produto = {
@@ -51,9 +52,15 @@ export default function FormularioContrato({
 
   return (
     <form action={gerarContrato} className="space-y-4">
-      <div className="grid grid-cols-2 gap-2">
-        <input name="locador" placeholder="Locador(es)" required className="rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none" />
-        <input name="locatario" placeholder="Locatário(s)" required className="rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none" />
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="mb-1 block text-sm text-gray-600">Locador(es)</label>
+          <CampoPessoas fieldName="locador_nomes" placeholder="Locador" />
+        </div>
+        <div>
+          <label className="mb-1 block text-sm text-gray-600">Locatário(s)</label>
+          <CampoPessoas fieldName="locatario_nomes" placeholder="Locatário" />
+        </div>
       </div>
 
       <label className="flex items-center gap-2 text-sm text-gray-600">

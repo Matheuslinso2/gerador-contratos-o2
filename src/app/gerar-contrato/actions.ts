@@ -20,9 +20,17 @@ export async function gerarContrato(formData: FormData) {
 
   const produto_id = String(formData.get("produto_id") ?? "");
   const seguro_incendio_produto_id = String(formData.get("seguro_incendio_produto_id") ?? "") || null;
-  const locador = String(formData.get("locador") ?? "").trim();
+  const locador = formData
+    .getAll("locador_nomes")
+    .map((v) => String(v).trim())
+    .filter(Boolean)
+    .join("; ");
   const locador_procurador = formData.get("locador_procurador") === "on";
-  const locatario = String(formData.get("locatario") ?? "").trim();
+  const locatario = formData
+    .getAll("locatario_nomes")
+    .map((v) => String(v).trim())
+    .filter(Boolean)
+    .join("; ");
   const ocupantes_adicionais = String(formData.get("ocupantes_adicionais") ?? "").trim();
   const endereco_imovel = String(formData.get("endereco_imovel") ?? "").trim();
   const finalidade = String(formData.get("finalidade") ?? "");
