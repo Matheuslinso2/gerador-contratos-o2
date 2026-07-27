@@ -10,9 +10,9 @@ export const dynamic = "force-dynamic";
 export default async function ImobiliariaPage({
   searchParams,
 }: {
-  searchParams: Promise<{ sucesso?: string }>;
+  searchParams: Promise<{ sucesso?: string; erro?: string }>;
 }) {
-  const { sucesso } = await searchParams;
+  const { sucesso, erro } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -34,6 +34,10 @@ export default async function ImobiliariaPage({
           {imobiliaria ? "Configuração da imobiliária" : "Complete o cadastro da sua imobiliária"}
         </h1>
       </div>
+
+      {erro && (
+        <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>
+      )}
 
       {imobiliaria?.logo_url && (
         // eslint-disable-next-line @next/next/no-img-element

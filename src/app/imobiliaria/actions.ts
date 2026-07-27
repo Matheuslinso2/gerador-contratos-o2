@@ -10,7 +10,7 @@ export async function salvarImobiliaria(formData: FormData) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) throw new Error("Não autenticado.");
+  if (!user) redirect("/login");
 
   const nome = String(formData.get("nome") ?? "").trim();
   const cnpj = String(formData.get("cnpj") ?? "").trim();
@@ -33,7 +33,9 @@ export async function salvarImobiliaria(formData: FormData) {
   if (contratoArquivo && contratoArquivo.size > 0) {
     const nomeArquivo = contratoArquivo.name.toLowerCase();
     if (!nomeArquivo.endsWith(".docx")) {
-      throw new Error("O arquivo do contrato precisa estar em formato Word (.docx).");
+      redirect(
+        `/imobiliaria?erro=${encodeURIComponent("O arquivo do contrato precisa estar em formato Word (.docx).")}`
+      );
     }
     const buffer = Buffer.from(await contratoArquivo.arrayBuffer());
     texto_base_contrato = await extrairTextoDocx(buffer);
@@ -50,7 +52,7 @@ export async function salvarImobiliaria(formData: FormData) {
     const { error: uploadError } = await supabase.storage.from("logos").upload(path, logo, {
       contentType: logo.type,
     });
-    if (uploadError) throw new Error(uploadError.message);
+    if (uploadError) redirect(`/imobiliaria?erro=${encodeURIComponent(uploadError.message)}`);
     logo_url = supabase.storage.from("logos").getPublicUrl(path).data.publicUrl;
   }
 
@@ -72,7 +74,7 @@ export async function salvarImobiliaria(formData: FormData) {
   if (logo_url) dados.logo_url = logo_url;
 
   const { error } = await supabase.from("imobiliarias").upsert(dados, { onConflict: "user_id" });
-  if (error) throw new Error(error.message);
+  if (error) redirect(`/imobiliaria?erro=${encodeURIComponent(error.message)}`);
 
   revalidatePath("/imobiliaria");
   redirect("/imobiliaria?sucesso=1");

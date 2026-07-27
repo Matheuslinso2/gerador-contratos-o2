@@ -42,6 +42,14 @@ export default function TermosPage() {
             locatários para inserir esses dados na Ferramenta, e se responsabiliza pela
             exatidão das informações fornecidas.
           </p>
+          <p>
+            Se você usar a funcionalidade <strong>Auditar contrato</strong>, o texto do
+            contrato que você colar ou enviar (que pode conter dados pessoais de locadores e
+            locatários, como nome, CPF e RG) é processado por um provedor de inteligência
+            artificial (Anthropic, responsável pelo modelo Claude) exclusivamente para gerar o
+            relatório de auditoria solicitado por você, e não é usado para treinar modelos de
+            IA de terceiros.
+          </p>
 
           <h2 className="font-semibold text-o2-navy">3. Isolamento e segurança dos dados</h2>
           <p>
@@ -52,10 +60,11 @@ export default function TermosPage() {
 
           <h2 className="font-semibold text-o2-navy">4. Finalidade e uso dos dados</h2>
           <p>
-            Os dados são usados exclusivamente para gerar os contratos solicitados por você e
-            manter o histórico dos contratos gerados pela sua conta. Não vendemos nem
+            Os dados são usados exclusivamente para gerar os contratos e as auditorias
+            solicitadas por você, e para manter o histórico da sua conta. Não vendemos nem
             compartilhamos esses dados com terceiros fora do necessário para a operação da
-            Ferramenta (ex.: provedores de hospedagem e banco de dados).
+            Ferramenta (ex.: provedores de hospedagem, banco de dados e, no caso da auditoria
+            de contratos, o provedor de inteligência artificial citado no item 2).
           </p>
 
           <h2 className="font-semibold text-o2-navy">5. Seus direitos (e dos titulares dos dados inseridos)</h2>

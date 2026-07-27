@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
 function qualificarPessoas(formData: FormData, prefixo: string): string {
@@ -49,14 +49,16 @@ export async function gerarContrato(formData: FormData) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) throw new Error("Não autenticado.");
+  if (!user) redirect("/login");
 
   const { data: minhaImobiliaria } = await supabase
     .from("imobiliarias")
     .select("id")
     .eq("user_id", user.id)
     .maybeSingle();
-  if (!minhaImobiliaria) throw new Error("Cadastre sua imobiliária primeiro.");
+  if (!minhaImobiliaria) {
+    redirect(`/gerar-contrato?erro=${encodeURIComponent("Cadastre sua imobiliária primeiro.")}`);
+  }
   const imobiliaria_id = minhaImobiliaria.id;
 
   const produto_id = String(formData.get("produto_id") ?? "");
@@ -86,7 +88,7 @@ export async function gerarContrato(formData: FormData) {
     !data_inicio ||
     !prazo_meses
   ) {
-    return;
+    redirect(`/gerar-contrato?erro=${encodeURIComponent("Preencha todos os campos obrigatórios.")}`);
   }
 
   let laudo_arquivo_path: string | null = null;
@@ -96,8 +98,10 @@ export async function gerarContrato(formData: FormData) {
     const laudoArquivo = formData.get("laudo_arquivo") as File | null;
     if (laudoArquivo && laudoArquivo.size > 0) {
       if (laudo_modo === "arquivo_embutido" && !laudoArquivo.name.toLowerCase().endsWith(".pdf")) {
-        throw new Error(
-          "Para incluir o laudo como páginas do contrato, o arquivo precisa estar em PDF."
+        redirect(
+          `/gerar-contrato?erro=${encodeURIComponent(
+            "Para incluir o laudo como páginas do contrato, o arquivo precisa estar em PDF."
+          )}`
         );
       }
       const ext = laudoArquivo.name.split(".").pop() || "pdf";
@@ -105,7 +109,7 @@ export async function gerarContrato(formData: FormData) {
       const { error: uploadError } = await supabase.storage
         .from("laudos")
         .upload(path, laudoArquivo, { contentType: laudoArquivo.type });
-      if (uploadError) throw new Error(uploadError.message);
+      if (uploadError) redirect(`/gerar-contrato?erro=${encodeURIComponent(uploadError.message)}`);
       laudo_arquivo_path = path;
       laudo_arquivo_nome = laudoArquivo.name;
     }
@@ -133,7 +137,9 @@ export async function gerarContrato(formData: FormData) {
         : Promise.resolve({ data: [] as { id: string; nome: string; texto: string }[] }),
     ]);
 
-  if (!imobiliaria || !produto) throw new Error("Imobiliária ou produto não encontrado");
+  if (!imobiliaria || !produto) {
+    redirect(`/gerar-contrato?erro=${encodeURIComponent("Imobiliária ou produto não encontrado.")}`);
+  }
 
   const coberturasPorId = new Map((coberturasTodas ?? []).map((c) => [c.id, c]));
   const coberturasGarantia = cobertura_ids.map((id) => coberturasPorId.get(id)!).filter(Boolean);
@@ -227,14 +233,14 @@ export async function gerarContrato(formData: FormData) {
     })
     .select("id")
     .single();
-  if (error) throw new Error(error.message);
+  if (error) redirect(`/gerar-contrato?erro=${encodeURIComponent(error.message)}`);
 
   if (todosCoberturaIds.length) {
     const { error: covError } = await supabase
       .from("contratos_coberturas")
       .insert(todosCoberturaIds.map((cobertura_id) => ({ contrato_id: contrato.id, cobertura_id })));
-    if (covError) throw new Error(covError.message);
+    if (covError) redirect(`/gerar-contrato?erro=${encodeURIComponent(covError.message)}`);
   }
 
-  revalidatePath("/gerar-contrato");
+  redirect(`/gerar-contrato?sucesso=${contrato.id}`);
 }

@@ -12,9 +12,9 @@ export const dynamic = "force-dynamic";
 export default async function AuditarContratoPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ultimo?: string }>;
+  searchParams: Promise<{ ultimo?: string; erro?: string }>;
 }) {
-  const { ultimo } = await searchParams;
+  const { ultimo, erro } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -65,6 +65,10 @@ export default async function AuditarContratoPage({
             </p>
           </div>
         </div>
+
+        {erro && (
+          <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>
+        )}
 
         <div className="rounded-xl border border-o2-navy/10 bg-white p-5 shadow-sm">
           <AuditorForm />

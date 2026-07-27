@@ -47,6 +47,12 @@ export default async function LoginPage({
       </form>
 
       <p className="text-center text-sm text-gray-600">
+        <Link href="/esqueci-senha" className="font-medium text-o2-navy underline">
+          Esqueci minha senha
+        </Link>
+      </p>
+
+      <p className="text-center text-sm text-gray-600">
         Ainda não tem conta?{" "}
         <Link href="/signup" className="font-medium text-o2-navy underline">
           Criar conta

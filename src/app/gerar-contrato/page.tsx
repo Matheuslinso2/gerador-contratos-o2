@@ -7,7 +7,12 @@ import BackLink from "@/components/BackLink";
 
 export const dynamic = "force-dynamic";
 
-export default async function GerarContratoPage() {
+export default async function GerarContratoPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ sucesso?: string; erro?: string }>;
+}) {
+  const { sucesso, erro } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -67,6 +72,15 @@ export default async function GerarContratoPage() {
           </div>
         </div>
 
+        {erro && (
+          <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>
+        )}
+        {sucesso && (
+          <p className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-700">
+            Contrato gerado com sucesso! Ele já está na lista abaixo.
+          </p>
+        )}
+
         <div className="rounded-xl border border-o2-navy/10 bg-white p-5 shadow-sm">
           <FormularioContrato
             tiposGarantia={tiposGarantia ?? []}
@@ -78,7 +92,13 @@ export default async function GerarContratoPage() {
         <section className="space-y-3">
           <h2 className="text-lg font-semibold text-o2-navy">Contratos gerados</h2>
           {contratos?.map((c) => (
-            <details key={c.id} className="rounded-xl border border-o2-navy/10 bg-white p-3">
+            <details
+              key={c.id}
+              open={c.id === sucesso}
+              className={`rounded-xl border bg-white p-3 ${
+                c.id === sucesso ? "border-green-400 ring-1 ring-green-300" : "border-o2-navy/10"
+              }`}
+            >
               <summary className="cursor-pointer font-medium text-o2-navy">
                 {c.locador} × {c.locatario} — {c.endereco_imovel}
               </summary>
