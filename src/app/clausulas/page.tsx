@@ -63,8 +63,8 @@ export default async function ClausulasPage() {
         <h2 className="text-lg font-semibold text-o2-navy">2. Produtos (cláusula-base obrigatória)</h2>
         <form action={addProduto} className="space-y-2">
           <div className="flex gap-2">
-            <select name="seguradora_id" required className="flex-1 rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none">
-              <option value="">Seguradora...</option>
+            <select name="seguradora_id" className="flex-1 rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none">
+              <option value="">Sem seguradora (ex: Fiador, Caução)</option>
               {seguradoras?.map((s) => (
                 <option key={s.id} value={s.id}>{s.nome}</option>
               ))}
@@ -100,8 +100,8 @@ export default async function ClausulasPage() {
             return (
               <li key={p.id} className="rounded-xl border border-o2-navy/10 bg-white p-3">
                 <p className="font-medium">
-                  {seguradora?.nome} — {p.nome}{" "}
-                  <span className="text-sm text-gray-500">({tipo?.nome})</span>
+                  {seguradora?.nome ? `${seguradora.nome} — ` : ""}
+                  {p.nome} <span className="text-sm text-gray-500">({tipo?.nome})</span>
                 </p>
                 <p className="mt-1 text-sm text-gray-600">{p.clausula_base}</p>
               </li>
@@ -121,7 +121,8 @@ export default async function ClausulasPage() {
               const seguradora = Array.isArray(p.seguradoras) ? p.seguradoras[0] : p.seguradoras;
               return (
                 <option key={p.id} value={p.id}>
-                  {seguradora?.nome} — {p.nome}
+                  {seguradora?.nome ? `${seguradora.nome} — ` : ""}
+                  {p.nome}
                 </option>
               );
             })}

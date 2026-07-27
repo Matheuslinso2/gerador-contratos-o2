@@ -43,7 +43,7 @@ type SeguroIncendio = {
 export type ContratoParaDocx = {
   imobiliaria: Imobiliaria;
   tipoGarantiaNome: string;
-  seguradoraNome: string;
+  seguradoraNome: string | null;
   produtoNome: string;
   clausulaBase: string;
   coberturas: Cobertura[];
@@ -57,6 +57,8 @@ export type ContratoParaDocx = {
   valorAluguel: number;
   dataInicio: string;
   prazoMeses: number;
+  fiador: string | null;
+  valorCaucao: number | null;
   laudoModo: "nenhum" | "link" | "arquivo_separado" | "arquivo_embutido";
   laudoVistoriaUrl: string | null;
   laudoArquivoNome: string | null;
@@ -245,6 +247,8 @@ export async function gerarContratoDocx(c: ContratoParaDocx): Promise<Buffer> {
     linhaDado("Índice de reajuste", c.imobiliaria.indice_reajuste),
     linhaDado("Data de início", fmtData(c.dataInicio)),
     linhaDado("Prazo", `${c.prazoMeses} meses`),
+    ...(c.fiador ? [linhaDado("Fiador(es)", c.fiador)] : []),
+    ...(c.valorCaucao ? [linhaDado("Valor da caução", fmtMoeda(c.valorCaucao))] : []),
     ...(c.laudoModo === "link" && c.laudoVistoriaUrl
       ? [linhaDado("Laudo de vistoria inicial", c.laudoVistoriaUrl)]
       : c.laudoModo === "arquivo_separado" && c.laudoArquivoNome
@@ -270,7 +274,9 @@ export async function gerarContratoDocx(c: ContratoParaDocx): Promise<Buffer> {
     {
       titulo: `Da Garantia Locatícia — ${c.tipoGarantiaNome}`,
       corpo: blocoClausulaComCoberturas(
-        `Seguradora: ${c.seguradoraNome} — Produto: ${c.produtoNome}`,
+        c.seguradoraNome
+          ? `Seguradora: ${c.seguradoraNome} — Produto: ${c.produtoNome}`
+          : `Produto: ${c.produtoNome}`,
         c.clausulaBase,
         c.coberturas
       ),
@@ -376,6 +382,7 @@ export async function gerarContratoDocx(c: ContratoParaDocx): Promise<Buffer> {
 
           ...linhaAssinatura("LOCADOR(ES)"),
           ...linhaAssinatura("LOCATÁRIO(S)", c.locatario),
+          ...(c.fiador ? linhaAssinatura("FIADOR(ES)", c.fiador) : []),
           ...linhaAssinatura("TESTEMUNHA 1"),
           ...linhaAssinatura("TESTEMUNHA 2"),
         ],

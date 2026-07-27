@@ -75,6 +75,9 @@ export async function gerarContrato(formData: FormData) {
   const laudo_modo = String(formData.get("laudo_modo") ?? "nenhum");
   const laudo_vistoria_url =
     laudo_modo === "link" ? String(formData.get("laudo_vistoria_url") ?? "").trim() : "";
+  const fiador = qualificarPessoas(formData, "fiador");
+  const valor_caucao_raw = String(formData.get("valor_caucao") ?? "").trim();
+  const valor_caucao = valor_caucao_raw ? Number(valor_caucao_raw) : null;
   const cobertura_ids = formData.getAll("cobertura_ids").map(String);
   const cobertura_ids_incendio = formData.getAll("cobertura_ids_incendio").map(String);
 
@@ -165,6 +168,8 @@ export async function gerarContrato(formData: FormData) {
     `VALOR DO ALUGUEL: R$ ${valor_aluguel.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
     `DATA DE INÍCIO: ${data_inicio}`,
     `PRAZO: ${prazo_meses} meses`,
+    fiador && `FIADOR(ES): ${fiador}`,
+    valor_caucao && `VALOR DA CAUÇÃO: R$ ${valor_caucao.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
     laudo_modo === "link" &&
       laudo_vistoria_url &&
       `LAUDO DE VISTORIA INICIAL: ${laudo_vistoria_url}`,
@@ -179,7 +184,7 @@ export async function gerarContrato(formData: FormData) {
     .join("\n");
 
   const clausulasGarantia = [
-    `CLÁUSULA DE GARANTIA — ${tipoGarantia?.nome} (${seguradora?.nome} — ${produto.nome})`,
+    `CLÁUSULA DE GARANTIA — ${tipoGarantia?.nome} (${seguradora?.nome ? `${seguradora.nome} — ` : ""}${produto.nome})`,
     produto.clausula_base,
     ...coberturasGarantia.map((c) => `Cobertura adicional: ${c.nome}\n${c.texto}`),
   ].join("\n\n");
@@ -225,6 +230,8 @@ export async function gerarContrato(formData: FormData) {
       valor_aluguel,
       data_inicio,
       prazo_meses,
+      fiador: fiador || null,
+      valor_caucao,
       laudo_modo,
       laudo_vistoria_url: laudo_vistoria_url || null,
       laudo_arquivo_path,

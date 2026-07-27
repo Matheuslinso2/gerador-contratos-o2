@@ -26,11 +26,11 @@ export async function addSeguradora(formData: FormData) {
 
 export async function addProduto(formData: FormData) {
   const supabase = await clienteAdmin();
-  const seguradora_id = String(formData.get("seguradora_id") ?? "");
+  const seguradora_id = String(formData.get("seguradora_id") ?? "") || null;
   const tipo_garantia_id = String(formData.get("tipo_garantia_id") ?? "");
   const nome = String(formData.get("nome") ?? "").trim();
   const clausula_base = String(formData.get("clausula_base") ?? "").trim();
-  if (!seguradora_id || !tipo_garantia_id || !nome || !clausula_base) return;
+  if (!tipo_garantia_id || !nome || !clausula_base) return;
 
   const { error } = await supabase
     .from("produtos")

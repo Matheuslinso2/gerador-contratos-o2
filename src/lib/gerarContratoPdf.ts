@@ -177,6 +177,8 @@ export async function gerarContratoPdf(c: ContratoParaDocx): Promise<PDFDocument
   b.linhaDado("Índice de reajuste", c.imobiliaria.indice_reajuste);
   b.linhaDado("Data de início", fmtData(c.dataInicio));
   b.linhaDado("Prazo", `${c.prazoMeses} meses`);
+  if (c.fiador) b.linhaDado("Fiador(es)", c.fiador);
+  if (c.valorCaucao) b.linhaDado("Valor da caução", fmtMoeda(c.valorCaucao));
   if (c.laudoModo === "link" && c.laudoVistoriaUrl) {
     b.linhaDado("Laudo de vistoria inicial", c.laudoVistoriaUrl);
   } else if (c.laudoModo === "arquivo_separado" && c.laudoArquivoNome) {
@@ -194,7 +196,10 @@ export async function gerarContratoPdf(c: ContratoParaDocx): Promise<PDFDocument
   b.blocoTexto(c.imobiliaria.texto_base_contrato);
 
   b.tituloSecao(`${numero++}. Da Garantia Locatícia — ${c.tipoGarantiaNome}`);
-  b.paragrafo(`Seguradora: ${c.seguradoraNome} — Produto: ${c.produtoNome}`, { negrito: true, depois: 6 });
+  b.paragrafo(
+    c.seguradoraNome ? `Seguradora: ${c.seguradoraNome} — Produto: ${c.produtoNome}` : `Produto: ${c.produtoNome}`,
+    { negrito: true, depois: 6 }
+  );
   b.blocoTexto(c.clausulaBase);
   for (const cob of c.coberturas) {
     b.paragrafo(`Cobertura adicional: ${cob.nome}`, { negrito: true, antes: 6, depois: 4 });
@@ -234,6 +239,7 @@ export async function gerarContratoPdf(c: ContratoParaDocx): Promise<PDFDocument
   };
   assinatura("LOCADOR(ES)");
   assinatura("LOCATÁRIO(S)", c.locatario);
+  if (c.fiador) assinatura("FIADOR(ES)", c.fiador);
   assinatura("TESTEMUNHA 1");
   assinatura("TESTEMUNHA 2");
 

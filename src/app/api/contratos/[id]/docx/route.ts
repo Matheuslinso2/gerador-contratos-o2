@@ -76,7 +76,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const buffer = await gerarContratoDocx({
     imobiliaria,
     tipoGarantiaNome: tipoGarantia.nome,
-    seguradoraNome: seguradora.nome,
+    seguradoraNome: seguradora?.nome ?? null,
     produtoNome: produto.nome,
     clausulaBase: produto.clausula_base,
     coberturas,
@@ -97,6 +97,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     valorAluguel: contrato.valor_aluguel,
     dataInicio: contrato.data_inicio,
     prazoMeses: contrato.prazo_meses,
+    fiador: contrato.fiador,
+    valorCaucao: contrato.valor_caucao,
     laudoModo: contrato.laudo_modo ?? "nenhum",
     laudoVistoriaUrl: contrato.laudo_vistoria_url,
     laudoArquivoNome: contrato.laudo_arquivo_nome,

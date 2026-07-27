@@ -14,6 +14,8 @@ type Produto = {
 type Cobertura = { id: string; nome: string; produto_id: string };
 
 const NOME_TIPO_INCENDIO = "Seguro Incêndio Imobiliário";
+const NOME_TIPO_FIADOR = "Fiador";
+const NOME_TIPO_CAUCAO = "Caução";
 
 export default function FormularioContrato({
   tiposGarantia,
@@ -52,6 +54,8 @@ export default function FormularioContrato({
     () => coberturas.filter((c) => c.produto_id === produtoIncendioId),
     [coberturas, produtoIncendioId]
   );
+
+  const tipoGarantiaSelecionado = tiposGarantiaDaLocacao.find((t) => t.id === tipoGarantiaId)?.nome;
 
   return (
     <form action={gerarContrato} className="space-y-6">
@@ -214,17 +218,39 @@ export default function FormularioContrato({
             required
             className="rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
           >
-            <option value="">Seguradora / produto...</option>
+            <option value="">Produto...</option>
             {produtosFiltrados.map((p) => {
               const seguradora = Array.isArray(p.seguradoras) ? p.seguradoras[0] : p.seguradoras;
               return (
                 <option key={p.id} value={p.id}>
-                  {seguradora?.nome} — {p.nome}
+                  {seguradora?.nome ? `${seguradora.nome} — ` : ""}
+                  {p.nome}
                 </option>
               );
             })}
           </select>
         </div>
+
+        {tipoGarantiaSelecionado === NOME_TIPO_FIADOR && (
+          <div>
+            <label className="mb-1 block text-sm text-gray-600">Fiador(es)</label>
+            <CampoPessoas fieldName="fiador" placeholder="Fiador" />
+          </div>
+        )}
+
+        {tipoGarantiaSelecionado === NOME_TIPO_CAUCAO && (
+          <div>
+            <label className="text-sm text-gray-600">Valor da caução (R$)</label>
+            <input
+              name="valor_caucao"
+              type="number"
+              step="0.01"
+              required
+              placeholder="Valor da caução (R$)"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+            />
+          </div>
+        )}
 
         {produtoId && (
           <div className="mt-2 space-y-1 rounded-lg border border-o2-navy/10 bg-o2-gray/40 p-3">
@@ -258,7 +284,8 @@ export default function FormularioContrato({
             const seguradora = Array.isArray(p.seguradoras) ? p.seguradoras[0] : p.seguradoras;
             return (
               <option key={p.id} value={p.id}>
-                {seguradora?.nome} — {p.nome}
+                {seguradora?.nome ? `${seguradora.nome} — ` : ""}
+                {p.nome}
               </option>
             );
           })}
