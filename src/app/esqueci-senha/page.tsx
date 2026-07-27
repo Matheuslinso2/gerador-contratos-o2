@@ -26,7 +26,9 @@ export default async function EsqueciSenhaPage({
       )}
 
       <form action={esqueciSenha} className="space-y-3">
+        <label htmlFor="email" className="sr-only">E-mail</label>
         <input
+          id="email"
           name="email"
           type="email"
           placeholder="E-mail"

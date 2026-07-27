@@ -2,7 +2,12 @@
 
 import { useMemo, useState } from "react";
 import RelatorioView from "../auditar-contrato/RelatorioView";
+import { excluirContrato, excluirAuditoria } from "./actions";
 import type { RelatorioAuditoria } from "@/lib/auditorContrato";
+
+function confirmarExclusao(e: React.FormEvent, mensagem: string) {
+  if (!confirm(mensagem)) e.preventDefault();
+}
 
 type Contrato = {
   id: string;
@@ -132,6 +137,18 @@ export default function ListaContratosRealizados({
                   {item.data.laudo_arquivo_nome ? `: ${item.data.laudo_arquivo_nome}` : ""})
                 </a>
               )}
+              <form
+                action={excluirContrato}
+                onSubmit={(e) => confirmarExclusao(e, "Excluir este contrato gerado? Essa ação não pode ser desfeita.")}
+              >
+                <input type="hidden" name="id" value={item.data.id} />
+                <button
+                  type="submit"
+                  className="inline-block rounded-full border border-red-300 px-4 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50"
+                >
+                  Excluir
+                </button>
+              </form>
             </div>
             <pre className="mt-2 whitespace-pre-wrap text-sm text-gray-700">{item.data.texto_gerado}</pre>
           </details>
@@ -144,8 +161,20 @@ export default function ListaContratosRealizados({
               {item.data.nome_arquivo || "Texto colado"} —{" "}
               {new Date(item.data.created_at).toLocaleString("pt-BR")}
             </summary>
-            <div className="mt-3">
+            <div className="mt-3 space-y-3">
               <RelatorioView relatorio={item.data.relatorio} />
+              <form
+                action={excluirAuditoria}
+                onSubmit={(e) => confirmarExclusao(e, "Excluir esta auditoria? Essa ação não pode ser desfeita.")}
+              >
+                <input type="hidden" name="id" value={item.data.id} />
+                <button
+                  type="submit"
+                  className="inline-block rounded-full border border-red-300 px-4 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50"
+                >
+                  Excluir
+                </button>
+              </form>
             </div>
           </details>
         )

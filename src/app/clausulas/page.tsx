@@ -42,7 +42,9 @@ export default async function ClausulasPage() {
       <section className="space-y-4">
         <h2 className="text-lg font-semibold text-o2-navy">1. Seguradoras</h2>
         <form action={addSeguradora} className="flex gap-2">
+          <label htmlFor="nome-seguradora" className="sr-only">Nome da seguradora</label>
           <input
+            id="nome-seguradora"
             name="nome"
             placeholder="Nome da seguradora (ex: Porto Seguro)"
             required
@@ -76,13 +78,17 @@ export default async function ClausulasPage() {
               ))}
             </select>
           </div>
+          <label htmlFor="nome-produto" className="sr-only">Nome do produto</label>
           <input
+            id="nome-produto"
             name="nome"
             placeholder="Nome do produto (ex: Fiança Taxa Fixa)"
             required
             className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
           />
+          <label htmlFor="clausula-base" className="sr-only">Texto da cláusula-base obrigatória</label>
           <textarea
+            id="clausula-base"
             name="clausula_base"
             placeholder="Texto da cláusula-base obrigatória"
             required
@@ -127,13 +133,17 @@ export default async function ClausulasPage() {
               );
             })}
           </select>
+          <label htmlFor="nome-cobertura" className="sr-only">Nome da cobertura</label>
           <input
+            id="nome-cobertura"
             name="nome"
             placeholder="Nome da cobertura (ex: Danos ao Imóvel)"
             required
             className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
           />
+          <label htmlFor="texto-cobertura" className="sr-only">Texto da cláusula dessa cobertura</label>
           <textarea
+            id="texto-cobertura"
             name="texto"
             placeholder="Texto da cláusula dessa cobertura"
             required

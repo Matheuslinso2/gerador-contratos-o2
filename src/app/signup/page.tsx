@@ -24,14 +24,18 @@ export default async function SignupPage({
       )}
 
       <form action={signUp} className="space-y-3">
+        <label htmlFor="email" className="sr-only">E-mail</label>
         <input
+          id="email"
           name="email"
           type="email"
           placeholder="E-mail"
           required
           className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
         />
+        <label htmlFor="password" className="sr-only">Senha</label>
         <input
+          id="password"
           name="password"
           type="password"
           placeholder="Senha (mín. 6 caracteres)"

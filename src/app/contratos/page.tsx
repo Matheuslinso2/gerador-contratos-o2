@@ -7,7 +7,12 @@ import ListaContratosRealizados from "./ListaContratosRealizados";
 
 export const dynamic = "force-dynamic";
 
-export default async function ContratosRealizadosPage() {
+export default async function ContratosRealizadosPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ erro?: string; excluido?: string }>;
+}) {
+  const { erro, excluido } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -66,6 +71,15 @@ export default async function ContratosRealizadosPage() {
             </p>
           </div>
         </div>
+
+        {erro && (
+          <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>
+        )}
+        {excluido && (
+          <p className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-700">
+            Excluído com sucesso.
+          </p>
+        )}
 
         <ListaContratosRealizados contratos={contratos ?? []} auditorias={auditorias ?? []} />
       </main>

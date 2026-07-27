@@ -89,7 +89,9 @@ export default function RedefinirSenhaPage() {
           {erro && (
             <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>
           )}
+          <label htmlFor="nova-senha" className="sr-only">Nova senha</label>
           <input
+            id="nova-senha"
             type="password"
             placeholder="Nova senha (mín. 6 caracteres)"
             required

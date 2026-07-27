@@ -83,38 +83,50 @@ export default function FormularioContrato({
           Locador representado por procurador/administradora
         </label>
 
-        <input
-          name="ocupantes_adicionais"
-          placeholder="Ocupantes adicionais autorizados (opcional)"
-          className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
-        />
+        <div>
+          <label className="text-sm text-gray-600">Ocupantes adicionais autorizados (opcional)</label>
+          <input
+            name="ocupantes_adicionais"
+            placeholder="Ocupantes adicionais autorizados (opcional)"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+          />
+        </div>
       </section>
 
       <section className="space-y-3 border-t border-gray-200 pt-6">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">2. Imóvel e locação</h2>
-        <input
-          name="endereco_imovel"
-          placeholder="Endereço do imóvel"
-          required
-          className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
-        />
+        <div>
+          <label className="text-sm text-gray-600">Endereço do imóvel</label>
+          <input
+            name="endereco_imovel"
+            placeholder="Endereço do imóvel"
+            required
+            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+          />
+        </div>
 
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <select name="finalidade" required className="rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none" defaultValue="">
-            <option value="">Finalidade...</option>
-            <option value="residencial">Residencial</option>
-            <option value="nao_residencial">Não residencial</option>
-          </select>
-          <input
-            name="valor_aluguel"
-            type="number"
-            step="0.01"
-            placeholder="Valor do aluguel (R$)"
-            required
-            value={valorAluguel}
-            onChange={(e) => setValorAluguel(e.target.value)}
-            className="rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
-          />
+          <div>
+            <label className="text-sm text-gray-600">Finalidade</label>
+            <select name="finalidade" required className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none" defaultValue="">
+              <option value="">Finalidade...</option>
+              <option value="residencial">Residencial</option>
+              <option value="nao_residencial">Não residencial</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-sm text-gray-600">Valor do aluguel (R$)</label>
+            <input
+              name="valor_aluguel"
+              type="number"
+              step="0.01"
+              placeholder="Valor do aluguel (R$)"
+              required
+              value={valorAluguel}
+              onChange={(e) => setValorAluguel(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+            />
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -173,11 +185,14 @@ export default function FormularioContrato({
           </div>
 
           {laudoModo === "link" && (
-            <input
-              name="laudo_vistoria_url"
-              placeholder="Link do laudo de vistoria (plataforma online)"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
-            />
+            <div>
+              <label className="text-sm text-gray-600">Link do laudo de vistoria</label>
+              <input
+                name="laudo_vistoria_url"
+                placeholder="Link do laudo de vistoria (plataforma online)"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+              />
+            </div>
           )}
 
           {laudoModo === "arquivo_separado" && (
