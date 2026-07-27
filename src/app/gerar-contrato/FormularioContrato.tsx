@@ -117,7 +117,7 @@ export default function FormularioContrato({
           />
         </div>
 
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           <div>
             <label className="text-sm text-gray-600">Data de início</label>
             <input name="data_inicio" type="date" required className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none" />
@@ -128,6 +128,17 @@ export default function FormularioContrato({
               name="prazo_meses"
               type="number"
               min={1}
+              required
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+            />
+          </div>
+          <div>
+            <label className="text-sm text-gray-600">Dia de vencimento do aluguel</label>
+            <input
+              name="dia_vencimento_aluguel"
+              type="number"
+              min={1}
+              max={31}
               required
               className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
             />

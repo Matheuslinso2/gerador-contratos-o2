@@ -132,6 +132,11 @@ export default async function ImobiliariaPage({
             defaultValue={imobiliaria?.texto_base_contrato ?? ""}
             className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
           />
+          <p className="text-xs text-gray-500">
+            Na cláusula de pagamento, use o código <code className="rounded bg-gray-100 px-1">{"{{dia_vencimento}}"}</code> no
+            lugar do dia (ex: &quot;deverá ser pago até o dia {"{{dia_vencimento}}"} de cada mês&quot;) — ao gerar
+            cada contrato, o sistema substitui automaticamente pelo dia escolhido naquela locação.
+          </p>
         </section>
 
         <section className="space-y-3 border-t border-gray-200 pt-6">
@@ -203,7 +208,7 @@ export default async function ImobiliariaPage({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <div>
               <label className="text-sm text-gray-600">% multa por atraso</label>
               <input
@@ -237,19 +242,11 @@ export default async function ImobiliariaPage({
                 className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
               />
             </div>
-            <div>
-              <label className="text-sm text-gray-600">Dia vencimento aluguel</label>
-              <input
-                name="dia_vencimento_aluguel"
-                type="number"
-                min={1}
-                max={31}
-                required
-                defaultValue={imobiliaria?.dia_vencimento_aluguel ?? ""}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
-              />
-            </div>
           </div>
+          <p className="text-xs text-gray-500">
+            O dia de vencimento do aluguel agora é definido em cada contrato (na tela "Gerar
+            contrato"), já que pode variar de locação para locação.
+          </p>
         </section>
 
         <div className="flex items-center gap-3">

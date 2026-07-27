@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { substituirPlaceholders } from "@/lib/placeholdersContrato";
 
 function qualificarPessoas(formData: FormData, prefixo: string): string {
   const nomes = formData.getAll(`${prefixo}_nome`).map(String);
@@ -73,6 +74,7 @@ export async function gerarContrato(formData: FormData) {
   const valor_aluguel = Number(formData.get("valor_aluguel"));
   const data_inicio = String(formData.get("data_inicio") ?? "");
   const prazo_meses = Number(formData.get("prazo_meses"));
+  const dia_vencimento_aluguel = Number(formData.get("dia_vencimento_aluguel"));
   const laudo_modo = String(formData.get("laudo_modo") ?? "nenhum");
   const laudo_vistoria_url =
     laudo_modo === "link" ? String(formData.get("laudo_vistoria_url") ?? "").trim() : "";
@@ -90,7 +92,8 @@ export async function gerarContrato(formData: FormData) {
     !finalidade ||
     !valor_aluguel ||
     !data_inicio ||
-    !prazo_meses
+    !prazo_meses ||
+    !dia_vencimento_aluguel
   ) {
     redirect(`/gerar-contrato?erro=${encodeURIComponent("Preencha todos os campos obrigatórios.")}`);
   }
@@ -194,6 +197,7 @@ export async function gerarContrato(formData: FormData) {
     `VALOR DO ALUGUEL: R$ ${valor_aluguel.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
     `DATA DE INÍCIO: ${data_inicio}`,
     `PRAZO: ${prazo_meses} meses`,
+    `DIA DE VENCIMENTO DO ALUGUEL: ${dia_vencimento_aluguel}`,
     fiador && `FIADOR(ES): ${fiador}`,
     valor_caucao && `VALOR DA CAUÇÃO: R$ ${valor_caucao.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
     laudo_modo === "link" &&
@@ -225,12 +229,16 @@ export async function gerarContrato(formData: FormData) {
       ].join("\n\n")
     : "";
 
+  const textoBaseContrato = substituirPlaceholders(imobiliaria.texto_base_contrato, {
+    diaVencimentoAluguel: dia_vencimento_aluguel,
+  });
+
   const textoGerado = [
     "DADOS DA LOCAÇÃO",
     partes,
     "",
     "TEXTO-BASE DO CONTRATO (" + imobiliaria.nome + ")",
-    imobiliaria.texto_base_contrato,
+    textoBaseContrato,
     "",
     clausulasGarantia,
     "",
@@ -259,6 +267,7 @@ export async function gerarContrato(formData: FormData) {
       valor_aluguel,
       data_inicio,
       prazo_meses,
+      dia_vencimento_aluguel,
       fiador: fiador || null,
       valor_caucao,
       laudo_modo,

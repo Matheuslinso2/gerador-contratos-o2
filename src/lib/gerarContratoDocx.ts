@@ -26,7 +26,6 @@ type Imobiliaria = {
   percentual_multa_atraso: number;
   percentual_juros_mora: number;
   percentual_honorarios_advocaticios: number;
-  dia_vencimento_aluguel: number;
   plataforma_assinatura: string | null;
   logo_url: string | null;
 };
@@ -57,6 +56,7 @@ export type ContratoParaDocx = {
   valorAluguel: number;
   dataInicio: string;
   prazoMeses: number;
+  diaVencimentoAluguel: number;
   fiador: string | null;
   valorCaucao: number | null;
   laudoModo: "nenhum" | "link" | "arquivo_separado" | "arquivo_embutido";
@@ -251,6 +251,7 @@ export async function gerarContratoDocx(c: ContratoParaDocx): Promise<Buffer> {
     linhaDado("Índice de reajuste", c.imobiliaria.indice_reajuste),
     linhaDado("Data de início", fmtData(c.dataInicio)),
     linhaDado("Prazo", `${c.prazoMeses} meses`),
+    linhaDado("Dia de vencimento do aluguel", String(c.diaVencimentoAluguel)),
     ...(c.fiador ? [linhaDado("Fiador(es)", c.fiador)] : []),
     ...(c.valorCaucao ? [linhaDado("Valor da caução", fmtMoeda(c.valorCaucao))] : []),
     ...(c.laudoModo === "link" && c.laudoVistoriaUrl

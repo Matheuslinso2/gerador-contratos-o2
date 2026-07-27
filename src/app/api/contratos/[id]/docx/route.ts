@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { gerarContratoDocx } from "@/lib/gerarContratoDocx";
+import { substituirPlaceholders } from "@/lib/placeholdersContrato";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -96,8 +97,15 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       : produtoIncendio.seguradoras
     : null;
 
+  const imobiliariaComPlaceholders = {
+    ...imobiliaria,
+    texto_base_contrato: substituirPlaceholders(imobiliaria.texto_base_contrato, {
+      diaVencimentoAluguel: contrato.dia_vencimento_aluguel,
+    }),
+  };
+
   const buffer = await gerarContratoDocx({
-    imobiliaria,
+    imobiliaria: imobiliariaComPlaceholders,
     tipoGarantiaNome,
     seguradoraNome: seguradora?.nome ?? null,
     produtoNome: produto?.nome ?? null,
@@ -120,6 +128,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     valorAluguel: contrato.valor_aluguel,
     dataInicio: contrato.data_inicio,
     prazoMeses: contrato.prazo_meses,
+    diaVencimentoAluguel: contrato.dia_vencimento_aluguel,
     fiador: contrato.fiador,
     valorCaucao: contrato.valor_caucao,
     laudoModo: contrato.laudo_modo ?? "nenhum",

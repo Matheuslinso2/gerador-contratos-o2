@@ -177,6 +177,7 @@ export async function gerarContratoPdf(c: ContratoParaDocx): Promise<PDFDocument
   b.linhaDado("Índice de reajuste", c.imobiliaria.indice_reajuste);
   b.linhaDado("Data de início", fmtData(c.dataInicio));
   b.linhaDado("Prazo", `${c.prazoMeses} meses`);
+  b.linhaDado("Dia de vencimento do aluguel", String(c.diaVencimentoAluguel));
   if (c.fiador) b.linhaDado("Fiador(es)", c.fiador);
   if (c.valorCaucao) b.linhaDado("Valor da caução", fmtMoeda(c.valorCaucao));
   if (c.laudoModo === "link" && c.laudoVistoriaUrl) {

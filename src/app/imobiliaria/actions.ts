@@ -25,7 +25,6 @@ export async function salvarImobiliaria(formData: FormData) {
   const percentual_honorarios_advocaticios = Number(
     formData.get("percentual_honorarios_advocaticios")
   );
-  const dia_vencimento_aluguel = Number(formData.get("dia_vencimento_aluguel"));
   const plataforma_assinatura = String(formData.get("plataforma_assinatura") ?? "").trim();
   const logo = formData.get("logo") as File | null;
   const contratoArquivo = formData.get("contrato_arquivo") as File | null;
@@ -43,7 +42,7 @@ export async function salvarImobiliaria(formData: FormData) {
     texto_base_contrato = await extrairTextoDocx(buffer);
   }
 
-  if (!nome || !cnpj || !texto_base_contrato || !indice_reajuste || !dia_vencimento_aluguel) {
+  if (!nome || !cnpj || !texto_base_contrato || !indice_reajuste) {
     return;
   }
 
@@ -72,7 +71,6 @@ export async function salvarImobiliaria(formData: FormData) {
     percentual_multa_atraso,
     percentual_juros_mora,
     percentual_honorarios_advocaticios,
-    dia_vencimento_aluguel,
     plataforma_assinatura: plataforma_assinatura || null,
   };
   if (logo_url) dados.logo_url = logo_url;
