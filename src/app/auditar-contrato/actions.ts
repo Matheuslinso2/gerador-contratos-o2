@@ -93,6 +93,12 @@ export async function auditar(formData: FormData) {
     redirect(`/auditar-contrato?erro=${encodeURIComponent(mensagem)}`);
   }
 
+  const naoVazio = (valor: string | undefined | null) =>
+    valor && valor.trim() ? valor.trim() : "Não identificado";
+  relatorio.locador_identificado = naoVazio(relatorio.locador_identificado);
+  relatorio.locatario_identificado = naoVazio(relatorio.locatario_identificado);
+  relatorio.endereco_identificado = naoVazio(relatorio.endereco_identificado);
+
   const { data: auditoria, error } = await supabase
     .from("auditorias_contrato")
     .insert({
