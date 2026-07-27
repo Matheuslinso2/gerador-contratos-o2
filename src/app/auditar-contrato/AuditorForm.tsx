@@ -45,6 +45,29 @@ export default function AuditorForm() {
         </p>
       </div>
 
+      <div className="rounded-lg border border-gray-200 p-3">
+        <p className="mb-2 text-sm font-medium text-o2-navy">
+          Cotação/proposta de seguro (opcional)
+        </p>
+        <p className="mb-2 text-xs text-gray-500">
+          Se enviar, o Auditor confere se segurado, valor do aluguel, prazo e endereço batem
+          entre o contrato e a cotação.
+        </p>
+        <textarea
+          name="texto_cotacao"
+          rows={4}
+          placeholder="Cole aqui o texto da cotação/proposta..."
+          className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+        />
+        <p className="my-2 text-center text-sm text-gray-400">— ou —</p>
+        <input
+          name="arquivo_cotacao"
+          type="file"
+          accept=".docx,.pdf"
+          className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+        />
+      </div>
+
       <BotaoEnviar />
     </form>
   );

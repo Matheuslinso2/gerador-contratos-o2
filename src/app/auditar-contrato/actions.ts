@@ -6,6 +6,35 @@ import { extrairTextoDocx } from "@/lib/extrairTextoDocx";
 import { extrairTextoPdf } from "@/lib/extrairTextoPdf";
 import { auditarContrato } from "@/lib/auditorContrato";
 
+async function extrairTextoDeCampo(
+  formData: FormData,
+  campoTexto: string,
+  campoArquivo: string
+): Promise<{ texto: string; nomeArquivo: string | null }> {
+  const arquivo = formData.get(campoArquivo) as File | null;
+  let texto = String(formData.get(campoTexto) ?? "").trim();
+  let nomeArquivo: string | null = null;
+
+  if (arquivo && arquivo.size > 0) {
+    nomeArquivo = arquivo.name;
+    const nomeLower = arquivo.name.toLowerCase();
+    const buffer = Buffer.from(await arquivo.arrayBuffer());
+    if (nomeLower.endsWith(".docx")) {
+      texto = await extrairTextoDocx(buffer);
+    } else if (nomeLower.endsWith(".pdf")) {
+      texto = await extrairTextoPdf(buffer);
+    } else {
+      redirect(
+        `/auditar-contrato?erro=${encodeURIComponent(
+          "Envie um arquivo .docx ou .pdf, ou cole o texto diretamente."
+        )}`
+      );
+    }
+  }
+
+  return { texto, nomeArquivo };
+}
+
 export async function auditar(formData: FormData) {
   const supabase = await createClient();
   const {
@@ -23,25 +52,7 @@ export async function auditar(formData: FormData) {
   }
 
   const arquivo = formData.get("arquivo") as File | null;
-  let texto = String(formData.get("texto") ?? "").trim();
-  let nomeArquivo: string | null = null;
-
-  if (arquivo && arquivo.size > 0) {
-    nomeArquivo = arquivo.name;
-    const nomeLower = arquivo.name.toLowerCase();
-    const buffer = Buffer.from(await arquivo.arrayBuffer());
-    if (nomeLower.endsWith(".docx")) {
-      texto = await extrairTextoDocx(buffer);
-    } else if (nomeLower.endsWith(".pdf")) {
-      texto = await extrairTextoPdf(buffer);
-    } else {
-      redirect(
-        `/auditar-contrato?erro=${encodeURIComponent(
-          "Envie um arquivo .docx ou .pdf, ou cole o texto do contrato."
-        )}`
-      );
-    }
-  }
+  const { texto, nomeArquivo } = await extrairTextoDeCampo(formData, "texto", "arquivo");
 
   if (!texto) {
     redirect(
@@ -52,6 +63,8 @@ export async function auditar(formData: FormData) {
       )}`
     );
   }
+
+  const { texto: textoCotacao } = await extrairTextoDeCampo(formData, "texto_cotacao", "arquivo_cotacao");
 
   const { data: produtosSeguro } = await supabase
     .from("produtos")
@@ -65,7 +78,7 @@ export async function auditar(formData: FormData) {
 
   let relatorio;
   try {
-    relatorio = await auditarContrato(texto, bibliotecaClausulas);
+    relatorio = await auditarContrato(texto, bibliotecaClausulas, textoCotacao || null);
   } catch (e) {
     const mensagem = e instanceof Error ? e.message : "Falha ao analisar o contrato.";
     redirect(`/auditar-contrato?erro=${encodeURIComponent(mensagem)}`);

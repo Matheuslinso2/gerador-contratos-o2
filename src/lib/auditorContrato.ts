@@ -38,6 +38,7 @@ Execute uma verificação minuciosa nos seguintes pilares:
 - Datas de início, término e prazo total coerentes entre si.
 
 3. VALORES E CLÁUSULAS FINANCEIRAS
+- Valor do aluguel presente, claro e sem ambiguidade no contrato.
 - Divergência entre valor numérico e valor por extenso.
 - Data de vencimento, forma de pagamento, multa por atraso, índice de reajuste anual, responsabilidade por condomínio/IPTU.
 
@@ -49,7 +50,12 @@ Execute uma verificação minuciosa nos seguintes pilares:
 - Seguro incêndio NÃO é uma garantia alternativa da locação — é item separado e não deve ser contado como "dupla garantia" se aparecer junto com a garantia locatícia.
 - Se a garantia for seguro-fiança ou título de capitalização E uma BIBLIOTECA DE CLÁUSULAS DE REFERÊNCIA for fornecida abaixo: identifique qual seguradora/produto o contrato diz usar e COMPARE o texto da cláusula de garantia do contrato com o texto oficial correspondente na biblioteca. Aponte em "divergencias" ou "inconsistencias_criticas" (conforme a gravidade) qualquer trecho essencial ausente, alterado ou incompatível com o texto oficial daquele produto. Se a seguradora/produto citado no contrato não constar na biblioteca fornecida, registre isso em "observacoes" (não há como validar o enquadramento).
 
-5. ERROS DE DIGITAÇÃO, FORMATAÇÃO E LÓGICA
+5. CORRESPONDÊNCIA COM A COTAÇÃO/PROPOSTA DE SEGURO (somente se uma COTAÇÃO for fornecida abaixo)
+- Compare segurado/locatário, valor do aluguel, prazo da locação e endereço do imóvel entre o contrato e a cotação.
+- Aponte em "divergencias" ou "inconsistencias_criticas" (conforme a gravidade) qualquer dado do contrato que não bata com a cotação.
+- Se nenhuma cotação for fornecida, não avalie este pilar e não mencione a ausência dela.
+
+6. ERROS DE DIGITAÇÃO, FORMATAÇÃO E LÓGICA
 - Numeração de cláusulas fora de sequência (pula ou repete número).
 - Erros gramaticais, nomes próprios grafados de formas diferentes ao longo do texto, datas impossíveis, CPF/CNPJ/RG com quantidade de dígitos incorreta.
 - Campos em branco, pontilhados "(...)" ou marcadores tipo "[INSERIR NOME]" não preenchidos.
@@ -129,7 +135,8 @@ const FERRAMENTA_RELATORIO: Anthropic.Tool = {
 
 export async function auditarContrato(
   textoContrato: string,
-  bibliotecaClausulas: ClausulaReferencia[] = []
+  bibliotecaClausulas: ClausulaReferencia[] = [],
+  textoCotacao: string | null = null
 ): Promise<RelatorioAuditoria> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -146,6 +153,10 @@ export async function auditarContrato(
         .join("\n\n")}\n\n---\n\n`
     : "";
 
+  const blocoCotacao = textoCotacao
+    ? `COTAÇÃO/PROPOSTA DE SEGURO (documento de referência para o pilar 5 — compare contra o contrato abaixo):\n\n${textoCotacao}\n\n---\n\n`
+    : "";
+
   const mensagem = await anthropic.messages.create({
     model: "claude-sonnet-5",
     max_tokens: 8000,
@@ -155,7 +166,7 @@ export async function auditarContrato(
     messages: [
       {
         role: "user",
-        content: `${blocoBiblioteca}Analise o contrato de locação abaixo e reporte a auditoria:\n\n${textoContrato}`,
+        content: `${blocoBiblioteca}${blocoCotacao}Analise o contrato de locação abaixo e reporte a auditoria:\n\n${textoContrato}`,
       },
     ],
   });
