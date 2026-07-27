@@ -81,8 +81,6 @@ export async function gerarContrato(formData: FormData) {
   const fiador = qualificarPessoas(formData, "fiador");
   const valor_caucao_raw = String(formData.get("valor_caucao") ?? "").trim();
   const valor_caucao = valor_caucao_raw ? Number(valor_caucao_raw) : null;
-  const cobertura_ids = formData.getAll("cobertura_ids").map(String);
-  const cobertura_ids_incendio = formData.getAll("cobertura_ids_incendio").map(String);
 
   if (
     !tipo_garantia_id ||
@@ -122,9 +120,7 @@ export async function gerarContrato(formData: FormData) {
     }
   }
 
-  const todosCoberturaIds = [...cobertura_ids, ...cobertura_ids_incendio];
-
-  const [{ data: imobiliaria }, { data: tipoGarantia }, { data: produto }, { data: produtoIncendio }, { data: coberturasTodas }] =
+  const [{ data: imobiliaria }, { data: tipoGarantia }, { data: produto }, { data: produtoIncendio }] =
     await Promise.all([
       supabase.from("imobiliarias").select("*").eq("id", imobiliaria_id).single(),
       supabase.from("tipos_garantia").select("nome").eq("id", tipo_garantia_id).single(),
@@ -142,9 +138,6 @@ export async function gerarContrato(formData: FormData) {
             .eq("id", seguro_incendio_produto_id)
             .single()
         : Promise.resolve({ data: null }),
-      todosCoberturaIds.length
-        ? supabase.from("coberturas_adicionais").select("id, nome, texto").in("id", todosCoberturaIds)
-        : Promise.resolve({ data: [] as { id: string; nome: string; texto: string }[] }),
     ]);
 
   if (!imobiliaria || !tipoGarantia) {
@@ -157,10 +150,6 @@ export async function gerarContrato(formData: FormData) {
   let produtoNome: string | null = null;
   let seguradoraNome: string | null = null;
   let clausulaGarantiaBase = "";
-  let coberturasGarantia: { id: string; nome: string; texto: string }[] = [];
-
-  const coberturasPorId = new Map((coberturasTodas ?? []).map((c) => [c.id, c]));
-  const coberturasIncendio = cobertura_ids_incendio.map((id) => coberturasPorId.get(id)!).filter(Boolean);
 
   if (ehFiador || ehCaucao) {
     clausulaGarantiaBase = (ehFiador ? imobiliaria.clausula_fiador : imobiliaria.clausula_caucao) ?? "";
@@ -179,7 +168,6 @@ export async function gerarContrato(formData: FormData) {
     produtoNome = produto.nome;
     seguradoraNome = seguradora?.nome ?? null;
     clausulaGarantiaBase = produto.clausula_base;
-    coberturasGarantia = cobertura_ids.map((id) => coberturasPorId.get(id)!).filter(Boolean);
   }
 
   const seguradoraIncendio = produtoIncendio
@@ -218,14 +206,12 @@ export async function gerarContrato(formData: FormData) {
       ? `CLÁUSULA DE GARANTIA — ${tipoGarantia.nome} (${seguradoraNome ? `${seguradoraNome} — ` : ""}${produtoNome})`
       : `CLÁUSULA DE GARANTIA — ${tipoGarantia.nome}`,
     clausulaGarantiaBase,
-    ...coberturasGarantia.map((c) => `Cobertura adicional: ${c.nome}\n${c.texto}`),
   ].join("\n\n");
 
   const clausulaIncendio = produtoIncendio
     ? [
         `SEGURO INCÊNDIO (item obrigatório à parte — ${seguradoraIncendio?.nome} — ${produtoIncendio.nome})`,
         produtoIncendio.clausula_base,
-        ...coberturasIncendio.map((c) => `Cobertura adicional: ${c.nome}\n${c.texto}`),
       ].join("\n\n")
     : "";
 
@@ -279,13 +265,6 @@ export async function gerarContrato(formData: FormData) {
     .select("id")
     .single();
   if (error) redirect(`/gerar-contrato?erro=${encodeURIComponent(error.message)}`);
-
-  if (todosCoberturaIds.length) {
-    const { error: covError } = await supabase
-      .from("contratos_coberturas")
-      .insert(todosCoberturaIds.map((cobertura_id) => ({ contrato_id: contrato.id, cobertura_id })));
-    if (covError) redirect(`/gerar-contrato?erro=${encodeURIComponent(covError.message)}`);
-  }
 
   redirect(`/gerar-contrato?sucesso=${contrato.id}`);
 }

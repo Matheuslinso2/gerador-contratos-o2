@@ -11,8 +11,6 @@ type Produto = {
   tipo_garantia_id: string;
   seguradoras: { nome: string } | { nome: string }[] | null;
 };
-type Cobertura = { id: string; nome: string; produto_id: string };
-
 const NOME_TIPO_INCENDIO = "Seguro Incêndio Imobiliário";
 const NOME_TIPO_FIADOR = "Fiador";
 const NOME_TIPO_CAUCAO = "Caução";
@@ -20,11 +18,9 @@ const NOME_TIPO_CAUCAO = "Caução";
 export default function FormularioContrato({
   tiposGarantia,
   produtos,
-  coberturas,
 }: {
   tiposGarantia: TipoGarantia[];
   produtos: Produto[];
-  coberturas: Cobertura[];
 }) {
   const tipoIncendio = tiposGarantia.find((t) => t.nome === NOME_TIPO_INCENDIO);
   const tiposGarantiaDaLocacao = tiposGarantia.filter((t) => t.nome !== NOME_TIPO_INCENDIO);
@@ -49,16 +45,6 @@ export default function FormularioContrato({
   const produtosFiltrados = useMemo(
     () => produtos.filter((p) => p.tipo_garantia_id === tipoGarantiaId),
     [produtos, tipoGarantiaId]
-  );
-
-  const coberturasDoProduto = useMemo(
-    () => coberturas.filter((c) => c.produto_id === produtoId),
-    [coberturas, produtoId]
-  );
-
-  const coberturasDoIncendio = useMemo(
-    () => coberturas.filter((c) => c.produto_id === produtoIncendioId),
-    [coberturas, produtoIncendioId]
   );
 
   const tipoGarantiaSelecionado = tiposGarantiaDaLocacao.find((t) => t.id === tipoGarantiaId)?.nome;
@@ -298,21 +284,6 @@ export default function FormularioContrato({
             </p>
           </div>
         )}
-
-        {produtoId && (
-          <div className="mt-2 space-y-1 rounded-lg border border-o2-navy/10 bg-o2-gray/40 p-3">
-            <p className="text-sm font-medium text-gray-700">Coberturas adicionais contratadas</p>
-            {coberturasDoProduto.map((c) => (
-              <label key={c.id} className="flex items-center gap-2 text-sm">
-                <input type="checkbox" name="cobertura_ids" value={c.id} />
-                {c.nome}
-              </label>
-            ))}
-            {!coberturasDoProduto.length && (
-              <p className="text-sm text-gray-500">Nenhuma cobertura adicional para este produto.</p>
-            )}
-          </div>
-        )}
       </section>
 
       <section className="space-y-3 border-t border-gray-200 pt-6">
@@ -337,21 +308,6 @@ export default function FormularioContrato({
             );
           })}
         </select>
-
-        {produtoIncendioId && (
-          <div className="mt-2 space-y-1 rounded-lg border border-o2-navy/10 bg-o2-gray/40 p-3">
-            <p className="text-sm font-medium text-gray-700">Coberturas adicionais do seguro incêndio</p>
-            {coberturasDoIncendio.map((c) => (
-              <label key={c.id} className="flex items-center gap-2 text-sm">
-                <input type="checkbox" name="cobertura_ids_incendio" value={c.id} />
-                {c.nome}
-              </label>
-            ))}
-            {!coberturasDoIncendio.length && (
-              <p className="text-sm text-gray-500">Nenhuma cobertura adicional para este produto.</p>
-            )}
-          </div>
-        )}
       </section>
 
       <button

@@ -44,14 +44,13 @@ export default async function GerarContratoPage({
     );
   }
 
-  const [{ data: tiposGarantia }, { data: produtos }, { data: coberturas }, { data: contratos }] =
+  const [{ data: tiposGarantia }, { data: produtos }, { data: contratos }] =
     await Promise.all([
       supabase.from("tipos_garantia").select("id, nome").order("nome"),
       supabase
         .from("produtos")
         .select("id, nome, tipo_garantia_id, seguradoras(nome)")
         .order("nome"),
-      supabase.from("coberturas_adicionais").select("id, nome, produto_id").order("nome"),
       supabase
         .from("contratos")
         .select(
@@ -83,11 +82,7 @@ export default async function GerarContratoPage({
         )}
 
         <div className="rounded-xl border border-o2-navy/10 bg-white p-5 shadow-sm">
-          <FormularioContrato
-            tiposGarantia={tiposGarantia ?? []}
-            produtos={produtos ?? []}
-            coberturas={coberturas ?? []}
-          />
+          <FormularioContrato tiposGarantia={tiposGarantia ?? []} produtos={produtos ?? []} />
         </div>
 
         <section className="space-y-3">
