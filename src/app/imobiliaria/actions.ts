@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { extrairTextoDocx } from "@/lib/extrairTextoDocx";
+import { enviarEmail } from "@/lib/email";
 
 export async function salvarImobiliaria(formData: FormData) {
   const supabase = await createClient();
@@ -54,6 +55,13 @@ export async function salvarImobiliaria(formData: FormData) {
     return;
   }
 
+  const { data: imobiliariaExistente } = await supabase
+    .from("imobiliarias")
+    .select("id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const primeiroCadastro = !imobiliariaExistente;
+
   let logo_url: string | null = null;
   if (logo && logo.size > 0) {
     const ext = logo.name.split(".").pop() || "png";
@@ -67,6 +75,7 @@ export async function salvarImobiliaria(formData: FormData) {
 
   const dados: Record<string, unknown> = {
     user_id: user.id,
+    email: user.email,
     nome,
     cnpj,
     creci: creci || null,
@@ -85,6 +94,24 @@ export async function salvarImobiliaria(formData: FormData) {
 
   const { error } = await supabase.from("imobiliarias").upsert(dados, { onConflict: "user_id" });
   if (error) redirect(`/imobiliaria?erro=${encodeURIComponent(error.message)}`);
+
+  if (primeiroCadastro) {
+    await enviarEmail({
+      para: "comercial@o2seguros.com.br",
+      assunto: `Nova imobiliária cadastrada: ${nome}`,
+      html: `
+        <h2>Nova imobiliária cadastrada no Gerador de Contratos</h2>
+        <p><strong>Nome:</strong> ${nome}</p>
+        <p><strong>CNPJ:</strong> ${cnpj}</p>
+        <p><strong>CRECI:</strong> ${creci || "não informado"}</p>
+        <p><strong>Telefone:</strong> ${telefone || "não informado"}</p>
+        <p><strong>Endereço:</strong> ${endereco || "não informado"}</p>
+        <p><strong>E-mail de login:</strong> ${user.email}</p>
+        <p><strong>Índice de reajuste:</strong> ${indice_reajuste}</p>
+        <p><strong>Plataforma de assinatura:</strong> ${plataforma_assinatura || "não informado"}</p>
+      `,
+    });
+  }
 
   revalidatePath("/imobiliaria");
   redirect("/imobiliaria?sucesso=1");

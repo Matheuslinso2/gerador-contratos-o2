@@ -5,6 +5,8 @@ import AppHeader from "@/components/AppHeader";
 import BackLink from "@/components/BackLink";
 import AuditorForm from "./AuditorForm";
 import ListaAuditorias from "./ListaAuditorias";
+import { isAdmin, isColaboradorO2 } from "@/lib/admin";
+import { garantirImobiliariaColaborador } from "@/lib/imobiliariaColaborador";
 
 export const dynamic = "force-dynamic";
 
@@ -19,11 +21,16 @@ export default async function AuditarContratoPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: imobiliaria } = await supabase
+  let imobiliaria = await supabase
     .from("imobiliarias")
     .select("id, nome")
     .eq("user_id", user!.id)
-    .maybeSingle();
+    .maybeSingle()
+    .then((r) => r.data);
+
+  if (!imobiliaria && (isAdmin(user?.email) || isColaboradorO2(user?.email))) {
+    imobiliaria = await garantirImobiliariaColaborador(supabase, user!.id, user?.email);
+  }
 
   if (!imobiliaria) {
     return (

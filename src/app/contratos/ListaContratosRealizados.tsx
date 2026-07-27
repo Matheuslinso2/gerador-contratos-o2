@@ -9,6 +9,8 @@ function confirmarExclusao(e: React.FormEvent, mensagem: string) {
   if (!confirm(mensagem)) e.preventDefault();
 }
 
+type ImobiliariaRef = { nome: string } | { nome: string }[] | null;
+
 type Contrato = {
   id: string;
   locador: string;
@@ -18,6 +20,7 @@ type Contrato = {
   created_at: string;
   laudo_modo: string | null;
   laudo_arquivo_nome: string | null;
+  imobiliarias?: ImobiliariaRef;
 };
 
 type Auditoria = {
@@ -31,7 +34,13 @@ type Auditoria = {
   relatorio: RelatorioAuditoria;
   texto_contrato: string | null;
   created_at: string;
+  imobiliarias?: ImobiliariaRef;
 };
+
+function nomeImobiliaria(ref: ImobiliariaRef | undefined): string | null {
+  const obj = Array.isArray(ref) ? ref[0] : ref;
+  return obj?.nome ?? null;
+}
 
 type Item =
   | { tipo: "gerado"; data: Contrato }
@@ -46,9 +55,11 @@ const FILTROS = [
 export default function ListaContratosRealizados({
   contratos,
   auditorias,
+  mostrarImobiliaria = false,
 }: {
   contratos: Contrato[];
   auditorias: Auditoria[];
+  mostrarImobiliaria?: boolean;
 }) {
   const [busca, setBusca] = useState("");
   const [filtroTipo, setFiltroTipo] = useState<"todos" | "gerado" | "auditado">("todos");
@@ -158,6 +169,11 @@ export default function ListaContratosRealizados({
               <span className="mr-2 rounded-full bg-o2-coral/10 px-2 py-0.5 text-xs font-semibold text-o2-coral">
                 Gerado
               </span>
+              {mostrarImobiliaria && nomeImobiliaria(item.data.imobiliarias) && (
+                <span className="mr-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+                  {nomeImobiliaria(item.data.imobiliarias)}
+                </span>
+              )}
               {item.data.locador} × {item.data.locatario} — {item.data.endereco_imovel}
             </summary>
             <div className="mt-2 flex flex-wrap gap-2">
@@ -208,6 +224,11 @@ export default function ListaContratosRealizados({
               <span className="mr-2 rounded-full bg-o2-navy/10 px-2 py-0.5 text-xs font-semibold text-o2-navy">
                 Auditado
               </span>
+              {mostrarImobiliaria && nomeImobiliaria(item.data.imobiliarias) && (
+                <span className="mr-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+                  {nomeImobiliaria(item.data.imobiliarias)}
+                </span>
+              )}
               {item.data.locador_identificado || "Locador não identificado"} ×{" "}
               {item.data.locatario_identificado || "Locatário não identificado"} —{" "}
               {item.data.endereco_identificado || "Endereço não identificado"}

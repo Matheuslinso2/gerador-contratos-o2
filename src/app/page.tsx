@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { isAdmin } from "@/lib/admin";
+import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "./actions";
 import AppHeader from "@/components/AppHeader";
 
@@ -45,7 +45,7 @@ export default async function Home() {
     .select("id")
     .eq("user_id", user.id)
     .maybeSingle();
-  const cadastroCompleto = !!imobiliaria;
+  const cadastroCompleto = !!imobiliaria || isAdmin(user.email) || isColaboradorO2(user.email);
 
   return (
     <>
@@ -65,13 +65,22 @@ export default async function Home() {
 
         <div className="flex flex-col gap-3">
           {isAdmin(user.email) && (
-            <Link
-              href="/clausulas"
-              className="rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm transition hover:shadow-md"
-            >
-              <p className="font-medium text-o2-navy">Biblioteca de cláusulas (admin)</p>
-              <p className="text-sm text-gray-500">Seguradoras, produtos e coberturas adicionais</p>
-            </Link>
+            <>
+              <Link
+                href="/clausulas"
+                className="rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm transition hover:shadow-md"
+              >
+                <p className="font-medium text-o2-navy">Biblioteca de cláusulas (admin)</p>
+                <p className="text-sm text-gray-500">Seguradoras, produtos e coberturas adicionais</p>
+              </Link>
+              <Link
+                href="/admin/imobiliarias"
+                className="rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm transition hover:shadow-md"
+              >
+                <p className="font-medium text-o2-navy">Imobiliárias cadastradas (admin)</p>
+                <p className="text-sm text-gray-500">Visão de todas as contas de imobiliária parceiras</p>
+              </Link>
+            </>
           )}
           <Link
             href="/imobiliaria"

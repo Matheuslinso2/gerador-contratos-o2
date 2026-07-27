@@ -39,6 +39,7 @@ export default function AppHeader({
             <NavLink href="/auditar-contrato" label="Auditar contrato" />
             <NavLink href="/contratos" label="Contratos realizados" />
             {isAdmin(userEmail) && <NavLink href="/clausulas" label="Cláusulas" />}
+            {isAdmin(userEmail) && <NavLink href="/admin/imobiliarias" label="Imobiliárias (admin)" />}
           </div>
         </nav>
       )}

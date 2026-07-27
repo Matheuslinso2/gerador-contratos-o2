@@ -4,6 +4,8 @@ import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
 import BackLink from "@/components/BackLink";
 import ListaContratosRealizados from "./ListaContratosRealizados";
+import { isAdmin, isColaboradorO2 } from "@/lib/admin";
+import { garantirImobiliariaColaborador } from "@/lib/imobiliariaColaborador";
 
 export const dynamic = "force-dynamic";
 
@@ -18,11 +20,18 @@ export default async function ContratosRealizadosPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: imobiliaria } = await supabase
+  const vePermitidosDeTodos = isAdmin(user?.email) || isColaboradorO2(user?.email);
+
+  let imobiliaria = await supabase
     .from("imobiliarias")
     .select("id")
     .eq("user_id", user!.id)
-    .maybeSingle();
+    .maybeSingle()
+    .then((r) => r.data);
+
+  if (!imobiliaria && vePermitidosDeTodos) {
+    imobiliaria = await garantirImobiliariaColaborador(supabase, user!.id, user?.email);
+  }
 
   if (!imobiliaria) {
     return (
@@ -43,21 +52,31 @@ export default async function ContratosRealizadosPage({
     );
   }
 
+  // Colaborador/admin da O2 veem os dados de todas as imobiliárias — sem
+  // filtro aqui, quem garante o que cada login pode ver é o RLS do banco.
+  // O join com imobiliarias(nome) vem sempre; pra conta comum é só redundante
+  // (o próprio nome dela).
+  let consultaContratos = supabase
+    .from("contratos")
+    .select(
+      "id, locador, locatario, endereco_imovel, texto_gerado, created_at, laudo_modo, laudo_arquivo_nome, imobiliarias(nome)"
+    )
+    .order("created_at", { ascending: false });
+  let consultaAuditorias = supabase
+    .from("auditorias_contrato")
+    .select(
+      "id, nome_arquivo, status_geral, tipo_garantia_identificada, locador_identificado, locatario_identificado, endereco_identificado, relatorio, texto_contrato, created_at, imobiliarias(nome)"
+    )
+    .order("created_at", { ascending: false });
+
+  if (!vePermitidosDeTodos) {
+    consultaContratos = consultaContratos.eq("imobiliaria_id", imobiliaria.id);
+    consultaAuditorias = consultaAuditorias.eq("imobiliaria_id", imobiliaria.id);
+  }
+
   const [{ data: contratos }, { data: auditorias }] = await Promise.all([
-    supabase
-      .from("contratos")
-      .select(
-        "id, locador, locatario, endereco_imovel, texto_gerado, created_at, laudo_modo, laudo_arquivo_nome"
-      )
-      .eq("imobiliaria_id", imobiliaria.id)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("auditorias_contrato")
-      .select(
-        "id, nome_arquivo, status_geral, tipo_garantia_identificada, locador_identificado, locatario_identificado, endereco_identificado, relatorio, texto_contrato, created_at"
-      )
-      .eq("imobiliaria_id", imobiliaria.id)
-      .order("created_at", { ascending: false }),
+    consultaContratos,
+    consultaAuditorias,
   ]);
 
   return (
@@ -83,7 +102,11 @@ export default async function ContratosRealizadosPage({
           </p>
         )}
 
-        <ListaContratosRealizados contratos={contratos ?? []} auditorias={auditorias ?? []} />
+        <ListaContratosRealizados
+          contratos={contratos ?? []}
+          auditorias={auditorias ?? []}
+          mostrarImobiliaria={vePermitidosDeTodos}
+        />
       </main>
     </>
   );
