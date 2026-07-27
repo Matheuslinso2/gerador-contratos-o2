@@ -39,6 +39,12 @@ export default function FormularioContrato({
   const [laudoModo, setLaudoModo] = useState<"nenhum" | "link" | "arquivo_separado" | "arquivo_embutido">(
     "nenhum"
   );
+  const [valorAluguel, setValorAluguel] = useState("");
+  const [valorCaucao, setValorCaucao] = useState("");
+  const [caucaoEditadaManualmente, setCaucaoEditadaManualmente] = useState(false);
+
+  const sugestaoCaucao = valorAluguel ? (Number(valorAluguel) * 3).toFixed(2) : "";
+  const valorCaucaoExibido = caucaoEditadaManualmente ? valorCaucao : sugestaoCaucao;
 
   const produtosFiltrados = useMemo(
     () => produtos.filter((p) => p.tipo_garantia_id === tipoGarantiaId),
@@ -105,6 +111,8 @@ export default function FormularioContrato({
             step="0.01"
             placeholder="Valor do aluguel (R$)"
             required
+            value={valorAluguel}
+            onChange={(e) => setValorAluguel(e.target.value)}
             className="rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
           />
         </div>
@@ -196,11 +204,13 @@ export default function FormularioContrato({
         <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">4. Garantia da locação</h2>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <select
+            name="tipo_garantia_id"
             value={tipoGarantiaId}
             onChange={(e) => {
               setTipoGarantiaId(e.target.value);
               setProdutoId("");
             }}
+            required
             className="rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
           >
             <option value="">Tipo de garantia...</option>
@@ -211,24 +221,26 @@ export default function FormularioContrato({
             ))}
           </select>
 
-          <select
-            name="produto_id"
-            value={produtoId}
-            onChange={(e) => setProdutoId(e.target.value)}
-            required
-            className="rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
-          >
-            <option value="">Produto...</option>
-            {produtosFiltrados.map((p) => {
-              const seguradora = Array.isArray(p.seguradoras) ? p.seguradoras[0] : p.seguradoras;
-              return (
-                <option key={p.id} value={p.id}>
-                  {seguradora?.nome ? `${seguradora.nome} — ` : ""}
-                  {p.nome}
-                </option>
-              );
-            })}
-          </select>
+          {tipoGarantiaSelecionado !== NOME_TIPO_FIADOR && tipoGarantiaSelecionado !== NOME_TIPO_CAUCAO && (
+            <select
+              name="produto_id"
+              value={produtoId}
+              onChange={(e) => setProdutoId(e.target.value)}
+              required
+              className="rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+            >
+              <option value="">Produto...</option>
+              {produtosFiltrados.map((p) => {
+                const seguradora = Array.isArray(p.seguradoras) ? p.seguradoras[0] : p.seguradoras;
+                return (
+                  <option key={p.id} value={p.id}>
+                    {seguradora?.nome ? `${seguradora.nome} — ` : ""}
+                    {p.nome}
+                  </option>
+                );
+              })}
+            </select>
+          )}
         </div>
 
         {tipoGarantiaSelecionado === NOME_TIPO_FIADOR && (
@@ -247,8 +259,17 @@ export default function FormularioContrato({
               step="0.01"
               required
               placeholder="Valor da caução (R$)"
+              value={valorCaucaoExibido}
+              onChange={(e) => {
+                setValorCaucao(e.target.value);
+                setCaucaoEditadaManualmente(true);
+              }}
               className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
             />
+            <p className="mt-1 text-xs text-gray-500">
+              Preenchido automaticamente com 3x o valor do aluguel (o máximo permitido pela Lei
+              do Inquilinato, art. 38 §2º). Pode editar se o valor combinado for menor.
+            </p>
           </div>
         )}
 

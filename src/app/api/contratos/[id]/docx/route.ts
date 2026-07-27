@@ -29,27 +29,33 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Sem permissão para este contrato" }, { status: 403 });
   }
 
-  const [{ data: produto }, { data: produtoIncendio }, { data: coberturasVinculadas }] = await Promise.all([
-    supabase
-      .from("produtos")
-      .select("nome, clausula_base, seguradoras(nome), tipos_garantia(nome)")
-      .eq("id", contrato.produto_id)
-      .single(),
-    contrato.seguro_incendio_produto_id
-      ? supabase
-          .from("produtos")
-          .select("nome, clausula_base, seguradoras(nome)")
-          .eq("id", contrato.seguro_incendio_produto_id)
-          .single()
-      : Promise.resolve({ data: null }),
-    supabase
-      .from("contratos_coberturas")
-      .select("coberturas_adicionais(nome, texto, produto_id)")
-      .eq("contrato_id", id),
-  ]);
+  const [{ data: tipoGarantiaDireto }, { data: produto }, { data: produtoIncendio }, { data: coberturasVinculadas }] =
+    await Promise.all([
+      contrato.tipo_garantia_id
+        ? supabase.from("tipos_garantia").select("nome").eq("id", contrato.tipo_garantia_id).single()
+        : Promise.resolve({ data: null }),
+      contrato.produto_id
+        ? supabase
+            .from("produtos")
+            .select("nome, clausula_base, seguradoras(nome), tipos_garantia(nome)")
+            .eq("id", contrato.produto_id)
+            .single()
+        : Promise.resolve({ data: null }),
+      contrato.seguro_incendio_produto_id
+        ? supabase
+            .from("produtos")
+            .select("nome, clausula_base, seguradoras(nome)")
+            .eq("id", contrato.seguro_incendio_produto_id)
+            .single()
+        : Promise.resolve({ data: null }),
+      supabase
+        .from("contratos_coberturas")
+        .select("coberturas_adicionais(nome, texto, produto_id)")
+        .eq("contrato_id", id),
+    ]);
 
-  if (!produto) {
-    return NextResponse.json({ error: "Produto do contrato não encontrado" }, { status: 404 });
+  if (!produto && !tipoGarantiaDireto) {
+    return NextResponse.json({ error: "Garantia do contrato não encontrada" }, { status: 404 });
   }
 
   const todasCoberturas = (coberturasVinculadas ?? []).map((c) => {
@@ -57,15 +63,32 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     return cob!;
   });
 
-  const coberturas = todasCoberturas
-    .filter((c) => c.produto_id === contrato.produto_id)
-    .map((c) => ({ nome: c.nome, texto: c.texto }));
+  const coberturas = contrato.produto_id
+    ? todasCoberturas
+        .filter((c) => c.produto_id === contrato.produto_id)
+        .map((c) => ({ nome: c.nome, texto: c.texto }))
+    : [];
   const coberturasIncendio = todasCoberturas
     .filter((c) => c.produto_id === contrato.seguro_incendio_produto_id)
     .map((c) => ({ nome: c.nome, texto: c.texto }));
 
-  const seguradora = Array.isArray(produto.seguradoras) ? produto.seguradoras[0] : produto.seguradoras;
-  const tipoGarantia = Array.isArray(produto.tipos_garantia) ? produto.tipos_garantia[0] : produto.tipos_garantia;
+  const seguradora = produto ? (Array.isArray(produto.seguradoras) ? produto.seguradoras[0] : produto.seguradoras) : null;
+  const tipoGarantiaDoProduto = produto
+    ? Array.isArray(produto.tipos_garantia)
+      ? produto.tipos_garantia[0]
+      : produto.tipos_garantia
+    : null;
+  const tipoGarantiaNome = tipoGarantiaDireto?.nome ?? tipoGarantiaDoProduto?.nome ?? "";
+
+  const ehFiador = tipoGarantiaNome === "Fiador";
+  const ehCaucao = tipoGarantiaNome === "Caução";
+  const clausulaBase = produto
+    ? produto.clausula_base
+    : ehFiador
+      ? imobiliaria.clausula_fiador ?? ""
+      : ehCaucao
+        ? imobiliaria.clausula_caucao ?? ""
+        : "";
 
   const seguradoraIncendio = produtoIncendio
     ? Array.isArray(produtoIncendio.seguradoras)
@@ -75,10 +98,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   const buffer = await gerarContratoDocx({
     imobiliaria,
-    tipoGarantiaNome: tipoGarantia.nome,
+    tipoGarantiaNome,
     seguradoraNome: seguradora?.nome ?? null,
-    produtoNome: produto.nome,
-    clausulaBase: produto.clausula_base,
+    produtoNome: produto?.nome ?? null,
+    clausulaBase,
     coberturas,
     seguroIncendio: produtoIncendio
       ? {

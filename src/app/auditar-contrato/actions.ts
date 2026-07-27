@@ -53,9 +53,19 @@ export async function auditar(formData: FormData) {
     );
   }
 
+  const { data: produtosSeguro } = await supabase
+    .from("produtos")
+    .select("nome, clausula_base, seguradoras(nome)")
+    .not("seguradora_id", "is", null);
+
+  const bibliotecaClausulas = (produtosSeguro ?? []).map((p) => {
+    const seguradora = Array.isArray(p.seguradoras) ? p.seguradoras[0] : p.seguradoras;
+    return { seguradora: seguradora?.nome ?? "", produto: p.nome, clausulaBase: p.clausula_base };
+  });
+
   let relatorio;
   try {
-    relatorio = await auditarContrato(texto);
+    relatorio = await auditarContrato(texto, bibliotecaClausulas);
   } catch (e) {
     const mensagem = e instanceof Error ? e.message : "Falha ao analisar o contrato.";
     redirect(`/auditar-contrato?erro=${encodeURIComponent(mensagem)}`);

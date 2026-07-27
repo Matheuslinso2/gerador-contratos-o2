@@ -18,6 +18,8 @@ export async function salvarImobiliaria(formData: FormData) {
   const telefone = String(formData.get("telefone") ?? "").trim();
   const endereco = String(formData.get("endereco") ?? "").trim();
   const indice_reajuste = String(formData.get("indice_reajuste") ?? "").trim();
+  const clausula_fiador = String(formData.get("clausula_fiador") ?? "").trim();
+  const clausula_caucao = String(formData.get("clausula_caucao") ?? "").trim();
   const percentual_multa_atraso = Number(formData.get("percentual_multa_atraso"));
   const percentual_juros_mora = Number(formData.get("percentual_juros_mora"));
   const percentual_honorarios_advocaticios = Number(
@@ -65,6 +67,8 @@ export async function salvarImobiliaria(formData: FormData) {
     endereco: endereco || null,
     texto_base_contrato,
     indice_reajuste,
+    clausula_fiador: clausula_fiador || null,
+    clausula_caucao: clausula_caucao || null,
     percentual_multa_atraso,
     percentual_juros_mora,
     percentual_honorarios_advocaticios,

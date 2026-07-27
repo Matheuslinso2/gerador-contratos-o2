@@ -136,7 +136,39 @@ export default async function ImobiliariaPage({
 
         <section className="space-y-3 border-t border-gray-200 pt-6">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">
-            3. Configurações financeiras e de assinatura
+            3. Cláusulas de Fiador e Caução (opcional)
+          </h2>
+          <p className="text-xs text-gray-500">
+            Diferente das garantias por seguro (cadastradas pela O2), Fiador e Caução não têm um
+            texto único — cada imobiliária usa o seu. Preencha só se for oferecer essas garantias
+            aos seus clientes; o texto entra automaticamente no contrato quando essa opção for
+            escolhida.
+          </p>
+          <div>
+            <label className="text-sm text-gray-600">Cláusula de Fiador</label>
+            <textarea
+              name="clausula_fiador"
+              placeholder="Texto da cláusula de garantia por Fiador"
+              rows={4}
+              defaultValue={imobiliaria?.clausula_fiador ?? ""}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+            />
+          </div>
+          <div>
+            <label className="text-sm text-gray-600">Cláusula de Caução</label>
+            <textarea
+              name="clausula_caucao"
+              placeholder="Texto da cláusula de garantia por Caução"
+              rows={4}
+              defaultValue={imobiliaria?.clausula_caucao ?? ""}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+            />
+          </div>
+        </section>
+
+        <section className="space-y-3 border-t border-gray-200 pt-6">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">
+            4. Configurações financeiras e de assinatura
           </h2>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div>

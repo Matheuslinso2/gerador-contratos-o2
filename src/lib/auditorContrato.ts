@@ -15,6 +15,12 @@ export type RelatorioAuditoria = {
   observacoes: string[];
 };
 
+export type ClausulaReferencia = {
+  seguradora: string;
+  produto: string;
+  clausulaBase: string;
+};
+
 const SYSTEM_PROMPT = `Você é um Auditor Especialista em Contratos de Locação Imobiliária e Análise Jurídico-Documental brasileira. Sua função é analisar o texto de um contrato de locação para identificar incorreções, divergências, erros de digitação, falhas de formatação e inconformidades jurídicas.
 
 Execute uma verificação minuciosa nos seguintes pilares:
@@ -23,6 +29,8 @@ Execute uma verificação minuciosa nos seguintes pilares:
 - Locador(es) e Locatário(s): nome completo, CPF/CNPJ, RG, estado civil, nacionalidade, profissão e endereço, sem erros de digitação e completos.
 - Se o Locador não for o Proprietário citado, sinalize a necessidade de procuração ou contrato de administração.
 - Se houver Fiador ou Locador casado (a depender do regime de bens), verifique se o cônjuge está qualificado e incluído para assinatura (outorga uxória).
+- Verifique se HÁ PREVISÃO DE ASSINATURA de todas as partes qualificadas no corpo do contrato (locador(es), locatário(s), fiador(es) se houver) e de testemunhas. Se alguma parte qualificada no texto não aparecer na seção de assinaturas, ou faltar testemunha, sinalize.
+- Preste atenção a QUALQUER pessoa mencionada no texto (em cláusulas, na seção de assinaturas, num anexo) que pareça ser parte do contrato mas NÃO tenha sido plenamente qualificada nas seções de partes (ex.: um segundo locatário citado só na assinatura, um procurador, um cônjuge). Você não tem acesso aos dados oficiais de enquadramento da seguradora, então NUNCA afirme categoricamente que isso é um erro — inclua em "observacoes" um aviso de atenção recomendando que a imobiliária confirme se essa pessoa foi corretamente incluída no enquadramento do risco junto à seguradora/administradora.
 
 2. DADOS DO IMÓVEL E DA LOCAÇÃO
 - Endereço do imóvel completo (rua/av, número, complemento, bairro, cidade, estado, CEP) e coerente em todo o texto.
@@ -39,6 +47,7 @@ Execute uma verificação minuciosa nos seguintes pilares:
 - Fiador: dados do fiador (e cônjuge, se houver) e do imóvel dado em garantia completos.
 - Seguro-fiança/título de capitalização: condições e apólice compatíveis com o informado.
 - Seguro incêndio NÃO é uma garantia alternativa da locação — é item separado e não deve ser contado como "dupla garantia" se aparecer junto com a garantia locatícia.
+- Se a garantia for seguro-fiança ou título de capitalização E uma BIBLIOTECA DE CLÁUSULAS DE REFERÊNCIA for fornecida abaixo: identifique qual seguradora/produto o contrato diz usar e COMPARE o texto da cláusula de garantia do contrato com o texto oficial correspondente na biblioteca. Aponte em "divergencias" ou "inconsistencias_criticas" (conforme a gravidade) qualquer trecho essencial ausente, alterado ou incompatível com o texto oficial daquele produto. Se a seguradora/produto citado no contrato não constar na biblioteca fornecida, registre isso em "observacoes" (não há como validar o enquadramento).
 
 5. ERROS DE DIGITAÇÃO, FORMATAÇÃO E LÓGICA
 - Numeração de cláusulas fora de sequência (pula ou repete número).
@@ -118,7 +127,10 @@ const FERRAMENTA_RELATORIO: Anthropic.Tool = {
   },
 };
 
-export async function auditarContrato(textoContrato: string): Promise<RelatorioAuditoria> {
+export async function auditarContrato(
+  textoContrato: string,
+  bibliotecaClausulas: ClausulaReferencia[] = []
+): Promise<RelatorioAuditoria> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new Error(
@@ -127,6 +139,12 @@ export async function auditarContrato(textoContrato: string): Promise<RelatorioA
   }
 
   const anthropic = new Anthropic({ apiKey });
+
+  const blocoBiblioteca = bibliotecaClausulas.length
+    ? `BIBLIOTECA DE CLÁUSULAS DE REFERÊNCIA DA O2 (texto oficial de cada seguradora/produto — use para conferir o enquadramento da cláusula de garantia do contrato quando ela for baseada em seguro):\n\n${bibliotecaClausulas
+        .map((c) => `— ${c.seguradora} — ${c.produto} —\n${c.clausulaBase}`)
+        .join("\n\n")}\n\n---\n\n`
+    : "";
 
   const mensagem = await anthropic.messages.create({
     model: "claude-sonnet-5",
@@ -137,7 +155,7 @@ export async function auditarContrato(textoContrato: string): Promise<RelatorioA
     messages: [
       {
         role: "user",
-        content: `Analise o contrato de locação abaixo e reporte a auditoria:\n\n${textoContrato}`,
+        content: `${blocoBiblioteca}Analise o contrato de locação abaixo e reporte a auditoria:\n\n${textoContrato}`,
       },
     ],
   });

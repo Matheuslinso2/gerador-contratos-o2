@@ -61,7 +61,8 @@ export async function gerarContrato(formData: FormData) {
   }
   const imobiliaria_id = minhaImobiliaria.id;
 
-  const produto_id = String(formData.get("produto_id") ?? "");
+  const tipo_garantia_id = String(formData.get("tipo_garantia_id") ?? "");
+  const produto_id = String(formData.get("produto_id") ?? "") || null;
   const seguro_incendio_produto_id = String(formData.get("seguro_incendio_produto_id") ?? "") || null;
   const locador = qualificarPessoas(formData, "locador");
   const locador_procurador = formData.get("locador_procurador") === "on";
@@ -82,7 +83,7 @@ export async function gerarContrato(formData: FormData) {
   const cobertura_ids_incendio = formData.getAll("cobertura_ids_incendio").map(String);
 
   if (
-    !produto_id ||
+    !tipo_garantia_id ||
     !locador ||
     !locatario ||
     !endereco_imovel ||
@@ -120,14 +121,17 @@ export async function gerarContrato(formData: FormData) {
 
   const todosCoberturaIds = [...cobertura_ids, ...cobertura_ids_incendio];
 
-  const [{ data: imobiliaria }, { data: produto }, { data: produtoIncendio }, { data: coberturasTodas }] =
+  const [{ data: imobiliaria }, { data: tipoGarantia }, { data: produto }, { data: produtoIncendio }, { data: coberturasTodas }] =
     await Promise.all([
       supabase.from("imobiliarias").select("*").eq("id", imobiliaria_id).single(),
-      supabase
-        .from("produtos")
-        .select("nome, clausula_base, seguradoras(nome), tipos_garantia(nome)")
-        .eq("id", produto_id)
-        .single(),
+      supabase.from("tipos_garantia").select("nome").eq("id", tipo_garantia_id).single(),
+      produto_id
+        ? supabase
+            .from("produtos")
+            .select("nome, clausula_base, seguradoras(nome)")
+            .eq("id", produto_id)
+            .single()
+        : Promise.resolve({ data: null }),
       seguro_incendio_produto_id
         ? supabase
             .from("produtos")
@@ -140,18 +144,40 @@ export async function gerarContrato(formData: FormData) {
         : Promise.resolve({ data: [] as { id: string; nome: string; texto: string }[] }),
     ]);
 
-  if (!imobiliaria || !produto) {
-    redirect(`/gerar-contrato?erro=${encodeURIComponent("Imobiliária ou produto não encontrado.")}`);
+  if (!imobiliaria || !tipoGarantia) {
+    redirect(`/gerar-contrato?erro=${encodeURIComponent("Imobiliária ou tipo de garantia não encontrado.")}`);
   }
 
+  const ehFiador = tipoGarantia.nome === "Fiador";
+  const ehCaucao = tipoGarantia.nome === "Caução";
+
+  let produtoNome: string | null = null;
+  let seguradoraNome: string | null = null;
+  let clausulaGarantiaBase = "";
+  let coberturasGarantia: { id: string; nome: string; texto: string }[] = [];
+
   const coberturasPorId = new Map((coberturasTodas ?? []).map((c) => [c.id, c]));
-  const coberturasGarantia = cobertura_ids.map((id) => coberturasPorId.get(id)!).filter(Boolean);
   const coberturasIncendio = cobertura_ids_incendio.map((id) => coberturasPorId.get(id)!).filter(Boolean);
 
-  const seguradora = Array.isArray(produto.seguradoras) ? produto.seguradoras[0] : produto.seguradoras;
-  const tipoGarantia = Array.isArray(produto.tipos_garantia)
-    ? produto.tipos_garantia[0]
-    : produto.tipos_garantia;
+  if (ehFiador || ehCaucao) {
+    clausulaGarantiaBase = (ehFiador ? imobiliaria.clausula_fiador : imobiliaria.clausula_caucao) ?? "";
+    if (!clausulaGarantiaBase) {
+      redirect(
+        `/gerar-contrato?erro=${encodeURIComponent(
+          `Cadastre a cláusula de ${tipoGarantia.nome} no cadastro da imobiliária antes de gerar este contrato.`
+        )}`
+      );
+    }
+  } else {
+    if (!produto) {
+      redirect(`/gerar-contrato?erro=${encodeURIComponent("Produto não encontrado.")}`);
+    }
+    const seguradora = Array.isArray(produto.seguradoras) ? produto.seguradoras[0] : produto.seguradoras;
+    produtoNome = produto.nome;
+    seguradoraNome = seguradora?.nome ?? null;
+    clausulaGarantiaBase = produto.clausula_base;
+    coberturasGarantia = cobertura_ids.map((id) => coberturasPorId.get(id)!).filter(Boolean);
+  }
 
   const seguradoraIncendio = produtoIncendio
     ? Array.isArray(produtoIncendio.seguradoras)
@@ -184,8 +210,10 @@ export async function gerarContrato(formData: FormData) {
     .join("\n");
 
   const clausulasGarantia = [
-    `CLÁUSULA DE GARANTIA — ${tipoGarantia?.nome} (${seguradora?.nome ? `${seguradora.nome} — ` : ""}${produto.nome})`,
-    produto.clausula_base,
+    produtoNome
+      ? `CLÁUSULA DE GARANTIA — ${tipoGarantia.nome} (${seguradoraNome ? `${seguradoraNome} — ` : ""}${produtoNome})`
+      : `CLÁUSULA DE GARANTIA — ${tipoGarantia.nome}`,
+    clausulaGarantiaBase,
     ...coberturasGarantia.map((c) => `Cobertura adicional: ${c.nome}\n${c.texto}`),
   ].join("\n\n");
 
@@ -219,6 +247,7 @@ export async function gerarContrato(formData: FormData) {
     .from("contratos")
     .insert({
       imobiliaria_id,
+      tipo_garantia_id,
       produto_id,
       seguro_incendio_produto_id,
       locador,

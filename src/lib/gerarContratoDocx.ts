@@ -44,7 +44,7 @@ export type ContratoParaDocx = {
   imobiliaria: Imobiliaria;
   tipoGarantiaNome: string;
   seguradoraNome: string | null;
-  produtoNome: string;
+  produtoNome: string | null;
   clausulaBase: string;
   coberturas: Cobertura[];
   seguroIncendio: SeguroIncendio | null;
@@ -101,15 +101,19 @@ function linhaDado(rotulo: string, valor: string) {
 }
 
 function blocoClausulaComCoberturas(
-  subtitulo: string,
+  subtitulo: string | null,
   clausulaBase: string,
   coberturas: Cobertura[]
 ) {
   return [
-    new Paragraph({
-      spacing: { after: 160 },
-      children: [new TextRun({ text: subtitulo, bold: true, italics: true, color: COR_PRINCIPAL })],
-    }),
+    ...(subtitulo
+      ? [
+          new Paragraph({
+            spacing: { after: 160 },
+            children: [new TextRun({ text: subtitulo, bold: true, italics: true, color: COR_PRINCIPAL })],
+          }),
+        ]
+      : []),
     ...paragrafosDeTexto(clausulaBase),
     ...coberturas.flatMap((cob) => [
       new Paragraph({
@@ -274,9 +278,11 @@ export async function gerarContratoDocx(c: ContratoParaDocx): Promise<Buffer> {
     {
       titulo: `Da Garantia Locatícia — ${c.tipoGarantiaNome}`,
       corpo: blocoClausulaComCoberturas(
-        c.seguradoraNome
-          ? `Seguradora: ${c.seguradoraNome} — Produto: ${c.produtoNome}`
-          : `Produto: ${c.produtoNome}`,
+        c.produtoNome
+          ? c.seguradoraNome
+            ? `Seguradora: ${c.seguradoraNome} — Produto: ${c.produtoNome}`
+            : `Produto: ${c.produtoNome}`
+          : null,
         c.clausulaBase,
         c.coberturas
       ),

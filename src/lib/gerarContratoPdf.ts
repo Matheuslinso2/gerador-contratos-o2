@@ -196,10 +196,12 @@ export async function gerarContratoPdf(c: ContratoParaDocx): Promise<PDFDocument
   b.blocoTexto(c.imobiliaria.texto_base_contrato);
 
   b.tituloSecao(`${numero++}. Da Garantia Locatícia — ${c.tipoGarantiaNome}`);
-  b.paragrafo(
-    c.seguradoraNome ? `Seguradora: ${c.seguradoraNome} — Produto: ${c.produtoNome}` : `Produto: ${c.produtoNome}`,
-    { negrito: true, depois: 6 }
-  );
+  if (c.produtoNome) {
+    b.paragrafo(
+      c.seguradoraNome ? `Seguradora: ${c.seguradoraNome} — Produto: ${c.produtoNome}` : `Produto: ${c.produtoNome}`,
+      { negrito: true, depois: 6 }
+    );
+  }
   b.blocoTexto(c.clausulaBase);
   for (const cob of c.coberturas) {
     b.paragrafo(`Cobertura adicional: ${cob.nome}`, { negrito: true, antes: 6, depois: 4 });
