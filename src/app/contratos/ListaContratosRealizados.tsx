@@ -25,6 +25,9 @@ type Auditoria = {
   nome_arquivo: string | null;
   status_geral: string;
   tipo_garantia_identificada: string | null;
+  locador_identificado: string | null;
+  locatario_identificado: string | null;
+  endereco_identificado: string | null;
   relatorio: RelatorioAuditoria;
   texto_contrato: string | null;
   created_at: string;
@@ -49,6 +52,8 @@ export default function ListaContratosRealizados({
 }) {
   const [busca, setBusca] = useState("");
   const [filtroTipo, setFiltroTipo] = useState<"todos" | "gerado" | "auditado">("todos");
+  const [dataDe, setDataDe] = useState("");
+  const [dataAte, setDataAte] = useState("");
 
   const itens: Item[] = useMemo(() => {
     const gerados: Item[] = contratos.map((data) => ({ tipo: "gerado", data }));
@@ -62,6 +67,15 @@ export default function ListaContratosRealizados({
     let resultado = itens;
     if (filtroTipo !== "todos") resultado = resultado.filter((i) => i.tipo === filtroTipo);
 
+    if (dataDe) {
+      const inicio = new Date(dataDe).getTime();
+      resultado = resultado.filter((i) => new Date(i.data.created_at).getTime() >= inicio);
+    }
+    if (dataAte) {
+      const fim = new Date(dataAte).getTime() + 24 * 60 * 60 * 1000 - 1;
+      resultado = resultado.filter((i) => new Date(i.data.created_at).getTime() <= fim);
+    }
+
     const termo = busca.trim().toLowerCase();
     if (!termo) return resultado;
 
@@ -72,12 +86,12 @@ export default function ListaContratosRealizados({
           .includes(termo);
       }
       return `${i.data.nome_arquivo ?? ""} ${i.data.status_geral} ${i.data.tipo_garantia_identificada ?? ""} ${
-        i.data.texto_contrato ?? ""
-      }`
+        i.data.locador_identificado ?? ""
+      } ${i.data.locatario_identificado ?? ""} ${i.data.endereco_identificado ?? ""} ${i.data.texto_contrato ?? ""}`
         .toLowerCase()
         .includes(termo);
     });
-  }, [itens, busca, filtroTipo]);
+  }, [itens, busca, filtroTipo, dataDe, dataAte]);
 
   return (
     <div className="space-y-3">
@@ -102,6 +116,39 @@ export default function ListaContratosRealizados({
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <label className="text-sm text-gray-600">
+          De{" "}
+          <input
+            type="date"
+            value={dataDe}
+            onChange={(e) => setDataDe(e.target.value)}
+            className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-o2-coral focus:outline-none"
+          />
+        </label>
+        <label className="text-sm text-gray-600">
+          Até{" "}
+          <input
+            type="date"
+            value={dataAte}
+            onChange={(e) => setDataAte(e.target.value)}
+            className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-o2-coral focus:outline-none"
+          />
+        </label>
+        {(dataDe || dataAte) && (
+          <button
+            type="button"
+            onClick={() => {
+              setDataDe("");
+              setDataAte("");
+            }}
+            className="text-sm text-o2-navy underline"
+          >
+            Limpar datas
+          </button>
+        )}
       </div>
 
       {itensFiltrados.map((item) =>
@@ -150,6 +197,9 @@ export default function ListaContratosRealizados({
                 </button>
               </form>
             </div>
+            <p className="mt-2 text-xs text-gray-500">
+              Gerado em {new Date(item.data.created_at).toLocaleString("pt-BR")}
+            </p>
             <pre className="mt-2 whitespace-pre-wrap text-sm text-gray-700">{item.data.texto_gerado}</pre>
           </details>
         ) : (
@@ -158,10 +208,15 @@ export default function ListaContratosRealizados({
               <span className="mr-2 rounded-full bg-o2-navy/10 px-2 py-0.5 text-xs font-semibold text-o2-navy">
                 Auditado
               </span>
-              {item.data.nome_arquivo || "Texto colado"} —{" "}
-              {new Date(item.data.created_at).toLocaleString("pt-BR")}
+              {item.data.locador_identificado || "Locador não identificado"} ×{" "}
+              {item.data.locatario_identificado || "Locatário não identificado"} —{" "}
+              {item.data.endereco_identificado || "Endereço não identificado"}
             </summary>
             <div className="mt-3 space-y-3">
+              <p className="text-xs text-gray-500">
+                {item.data.nome_arquivo || "Texto colado"} — auditado em{" "}
+                {new Date(item.data.created_at).toLocaleString("pt-BR")}
+              </p>
               <RelatorioView relatorio={item.data.relatorio} />
               <form
                 action={excluirAuditoria}

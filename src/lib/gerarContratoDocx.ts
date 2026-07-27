@@ -11,6 +11,7 @@ import {
   PageNumber,
   BorderStyle,
 } from "docx";
+import { calcularDataTermino } from "./placeholdersContrato";
 
 const COR_PRINCIPAL = "1F3B57";
 const COR_TEXTO = "262626";
@@ -251,6 +252,7 @@ export async function gerarContratoDocx(c: ContratoParaDocx): Promise<Buffer> {
     linhaDado("Índice de reajuste", c.imobiliaria.indice_reajuste),
     linhaDado("Data de início", fmtData(c.dataInicio)),
     linhaDado("Prazo", `${c.prazoMeses} meses`),
+    linhaDado("Data de término", fmtData(calcularDataTermino(c.dataInicio, c.prazoMeses))),
     linhaDado("Dia de vencimento do aluguel", String(c.diaVencimentoAluguel)),
     ...(c.fiador ? [linhaDado("Fiador(es)", c.fiador)] : []),
     ...(c.valorCaucao ? [linhaDado("Valor da caução", fmtMoeda(c.valorCaucao))] : []),

@@ -134,8 +134,10 @@ export default async function ImobiliariaPage({
           />
           <p className="text-xs text-gray-500">
             Na cláusula de pagamento, use o código <code className="rounded bg-gray-100 px-1">{"{{dia_vencimento}}"}</code> no
-            lugar do dia (ex: &quot;deverá ser pago até o dia {"{{dia_vencimento}}"} de cada mês&quot;) — ao gerar
-            cada contrato, o sistema substitui automaticamente pelo dia escolhido naquela locação.
+            lugar do dia (ex: &quot;deverá ser pago até o dia {"{{dia_vencimento}}"} de cada mês&quot;). Na
+            cláusula de prazo, use <code className="rounded bg-gray-100 px-1">{"{{data_termino}}"}</code> pra
+            citar a data de encerramento (ex: &quot;findando-se em {"{{data_termino}}"}&quot;) — em ambos os
+            casos, o sistema substitui automaticamente pelo valor de cada locação ao gerar o contrato.
           </p>
         </section>
 

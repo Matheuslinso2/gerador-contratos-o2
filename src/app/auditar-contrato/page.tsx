@@ -46,7 +46,9 @@ export default async function AuditarContratoPage({
 
   const { data: auditorias } = await supabase
     .from("auditorias_contrato")
-    .select("id, nome_arquivo, status_geral, tipo_garantia_identificada, relatorio, created_at")
+    .select(
+      "id, nome_arquivo, status_geral, tipo_garantia_identificada, locador_identificado, locatario_identificado, endereco_identificado, relatorio, created_at"
+    )
     .eq("imobiliaria_id", imobiliaria.id)
     .order("created_at", { ascending: false });
 

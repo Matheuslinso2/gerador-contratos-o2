@@ -1,5 +1,6 @@
 import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from "pdf-lib";
 import type { ContratoParaDocx } from "./gerarContratoDocx";
+import { calcularDataTermino } from "./placeholdersContrato";
 
 // Gera uma versão em PDF do mesmo contrato (mais simples que o Word, sem frescura
 // visual) só para poder colar, ao final, as páginas ORIGINAIS do laudo de vistoria
@@ -177,6 +178,7 @@ export async function gerarContratoPdf(c: ContratoParaDocx): Promise<PDFDocument
   b.linhaDado("Índice de reajuste", c.imobiliaria.indice_reajuste);
   b.linhaDado("Data de início", fmtData(c.dataInicio));
   b.linhaDado("Prazo", `${c.prazoMeses} meses`);
+  b.linhaDado("Data de término", fmtData(calcularDataTermino(c.dataInicio, c.prazoMeses)));
   b.linhaDado("Dia de vencimento do aluguel", String(c.diaVencimentoAluguel));
   if (c.fiador) b.linhaDado("Fiador(es)", c.fiador);
   if (c.valorCaucao) b.linhaDado("Valor da caução", fmtMoeda(c.valorCaucao));

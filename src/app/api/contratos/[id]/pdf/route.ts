@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { gerarContratoPdf, mesclarLaudoNoPdf } from "@/lib/gerarContratoPdf";
-import { substituirPlaceholders } from "@/lib/placeholdersContrato";
+import { substituirPlaceholders, calcularDataTermino } from "@/lib/placeholdersContrato";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -117,6 +117,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     ...imobiliaria,
     texto_base_contrato: substituirPlaceholders(imobiliaria.texto_base_contrato, {
       diaVencimentoAluguel: contrato.dia_vencimento_aluguel,
+      dataTermino: calcularDataTermino(contrato.data_inicio, contrato.prazo_meses),
     }),
   };
 

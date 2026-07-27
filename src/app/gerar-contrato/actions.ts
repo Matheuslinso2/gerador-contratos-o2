@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { substituirPlaceholders } from "@/lib/placeholdersContrato";
+import { substituirPlaceholders, calcularDataTermino } from "@/lib/placeholdersContrato";
 
 function qualificarPessoas(formData: FormData, prefixo: string): string {
   const nomes = formData.getAll(`${prefixo}_nome`).map(String);
@@ -185,6 +185,7 @@ export async function gerarContrato(formData: FormData) {
     `VALOR DO ALUGUEL: R$ ${valor_aluguel.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
     `DATA DE INÍCIO: ${data_inicio}`,
     `PRAZO: ${prazo_meses} meses`,
+    `DATA DE TÉRMINO: ${calcularDataTermino(data_inicio, prazo_meses)}`,
     `DIA DE VENCIMENTO DO ALUGUEL: ${dia_vencimento_aluguel}`,
     fiador && `FIADOR(ES): ${fiador}`,
     valor_caucao && `VALOR DA CAUÇÃO: R$ ${valor_caucao.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
@@ -217,6 +218,7 @@ export async function gerarContrato(formData: FormData) {
 
   const textoBaseContrato = substituirPlaceholders(imobiliaria.texto_base_contrato, {
     diaVencimentoAluguel: dia_vencimento_aluguel,
+    dataTermino: calcularDataTermino(data_inicio, prazo_meses),
   });
 
   const textoGerado = [

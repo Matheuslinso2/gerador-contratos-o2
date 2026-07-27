@@ -53,7 +53,9 @@ export default async function ContratosRealizadosPage({
       .order("created_at", { ascending: false }),
     supabase
       .from("auditorias_contrato")
-      .select("id, nome_arquivo, status_geral, tipo_garantia_identificada, relatorio, texto_contrato, created_at")
+      .select(
+        "id, nome_arquivo, status_geral, tipo_garantia_identificada, locador_identificado, locatario_identificado, endereco_identificado, relatorio, texto_contrato, created_at"
+      )
       .eq("imobiliaria_id", imobiliaria.id)
       .order("created_at", { ascending: false }),
   ]);

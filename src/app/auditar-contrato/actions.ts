@@ -100,6 +100,9 @@ export async function auditar(formData: FormData) {
       nome_arquivo: nomeArquivo,
       status_geral: relatorio.status_geral,
       tipo_garantia_identificada: relatorio.tipo_garantia_identificada,
+      locador_identificado: relatorio.locador_identificado,
+      locatario_identificado: relatorio.locatario_identificado,
+      endereco_identificado: relatorio.endereco_identificado,
       relatorio,
       texto_contrato: texto,
     })

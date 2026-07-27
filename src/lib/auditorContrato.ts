@@ -9,6 +9,9 @@ export type ItemAuditoria = {
 export type RelatorioAuditoria = {
   status_geral: "APROVADO" | "REQUER_AJUSTES" | "ALERTA_CRITICO";
   tipo_garantia_identificada: string;
+  locador_identificado: string;
+  locatario_identificado: string;
+  endereco_identificado: string;
   inconsistencias_criticas: ItemAuditoria[];
   divergencias: ItemAuditoria[];
   erros_formatacao: ItemAuditoria[];
@@ -26,6 +29,7 @@ const SYSTEM_PROMPT = `Você é um Auditor Especialista em Contratos de Locaçã
 Execute uma verificação minuciosa nos seguintes pilares:
 
 1. QUALIFICAÇÃO DAS PARTES
+- Identifique o(s) nome(s) do(s) locador(es), do(s) locatário(s) e o endereço do imóvel locado (para os campos locador_identificado, locatario_identificado e endereco_identificado).
 - Locador(es) e Locatário(s): nome completo, CPF/CNPJ, RG, estado civil, nacionalidade, profissão e endereço, sem erros de digitação e completos.
 - Se o Locador não for o Proprietário citado, sinalize a necessidade de procuração ou contrato de administração.
 - Se houver Fiador ou Locador casado (a depender do regime de bens), verifique se o cônjuge está qualificado e incluído para assinatura (outorga uxória).
@@ -77,6 +81,18 @@ const FERRAMENTA_RELATORIO: Anthropic.Tool = {
         type: "string",
         description: 'Ex: "Fiador", "Caução", "Seguro Fiança", "Sem garantia identificada", ou "DUPLA GARANTIA (ERRO)" se houver mais de uma.',
       },
+      locador_identificado: {
+        type: "string",
+        description: 'Nome completo do(s) locador(es) identificado(s) no contrato, separados por "; " se houver mais de um. Se não conseguir identificar, use "Não identificado".',
+      },
+      locatario_identificado: {
+        type: "string",
+        description: 'Nome completo do(s) locatário(s) identificado(s) no contrato, separados por "; " se houver mais de um. Se não conseguir identificar, use "Não identificado".',
+      },
+      endereco_identificado: {
+        type: "string",
+        description: 'Endereço do imóvel locado, resumido em uma linha. Se não conseguir identificar, use "Não identificado".',
+      },
       inconsistencias_criticas: {
         type: "array",
         description: "Erros graves: incoerência de valores por extenso, prazos errados, conflito de garantias, dados essenciais ausentes.",
@@ -125,6 +141,9 @@ const FERRAMENTA_RELATORIO: Anthropic.Tool = {
     required: [
       "status_geral",
       "tipo_garantia_identificada",
+      "locador_identificado",
+      "locatario_identificado",
+      "endereco_identificado",
       "inconsistencias_criticas",
       "divergencias",
       "erros_formatacao",

@@ -9,6 +9,9 @@ type Auditoria = {
   nome_arquivo: string | null;
   status_geral: string;
   tipo_garantia_identificada: string | null;
+  locador_identificado: string | null;
+  locatario_identificado: string | null;
+  endereco_identificado: string | null;
   relatorio: RelatorioAuditoria;
   created_at: string;
 };
@@ -50,9 +53,12 @@ export default function ListaAuditorias({
           className="rounded-xl border border-o2-navy/10 bg-white p-3"
         >
           <summary className="cursor-pointer font-medium text-o2-navy">
-            {a.nome_arquivo || "Texto colado"} — {new Date(a.created_at).toLocaleString("pt-BR")}
+            {a.locador_identificado || "Locador não identificado"} × {a.locatario_identificado || "Locatário não identificado"} — {a.endereco_identificado || "Endereço não identificado"}
           </summary>
-          <div className="mt-3">
+          <div className="mt-3 space-y-3">
+            <p className="text-xs text-gray-500">
+              {a.nome_arquivo || "Texto colado"} — auditado em {new Date(a.created_at).toLocaleString("pt-BR")}
+            </p>
             <RelatorioView relatorio={a.relatorio} />
           </div>
         </details>
