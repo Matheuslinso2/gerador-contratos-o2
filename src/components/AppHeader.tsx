@@ -40,6 +40,7 @@ export default function AppHeader({
               items={[
                 { href: "/gerar-contrato", label: "Gerar contrato" },
                 { href: "/auditar-contrato", label: "Auditar contrato" },
+                { href: "/multa-rescisoria", label: "Cálculo de multa rescisória" },
               ]}
             />
             <NavLink href="/contratos" label="Contratos realizados" />
