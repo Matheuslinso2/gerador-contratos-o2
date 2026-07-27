@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { isAdmin } from "@/lib/admin";
 import NavLink from "./NavLink";
+import NavDropdown from "./NavDropdown";
 
 export default function AppHeader({
   userEmail,
@@ -32,14 +33,26 @@ export default function AppHeader({
 
       {userEmail && (
         <nav className="border-t border-white/10">
-          <div className="mx-auto flex max-w-4xl gap-4 overflow-x-auto px-6">
+          <div className="mx-auto flex max-w-4xl items-center gap-4 px-6">
             <NavLink href="/" label="Início" />
-            <NavLink href="/imobiliaria" label="Imobiliária" />
-            <NavLink href="/gerar-contrato" label="Gerar contrato" />
-            <NavLink href="/auditar-contrato" label="Auditar contrato" />
+            <NavDropdown
+              label="Ferramentas úteis"
+              items={[
+                { href: "/gerar-contrato", label: "Gerar contrato" },
+                { href: "/auditar-contrato", label: "Auditar contrato" },
+              ]}
+            />
             <NavLink href="/contratos" label="Contratos realizados" />
-            {isAdmin(userEmail) && <NavLink href="/clausulas" label="Cláusulas" />}
-            {isAdmin(userEmail) && <NavLink href="/admin/imobiliarias" label="Imobiliárias (admin)" />}
+            <NavDropdown
+              label="Configurações"
+              items={[
+                { href: "/imobiliaria", label: "Imobiliária" },
+                ...(isAdmin(userEmail) ? [{ href: "/clausulas", label: "Cláusulas (admin)" }] : []),
+                ...(isAdmin(userEmail)
+                  ? [{ href: "/admin/imobiliarias", label: "Imobiliárias cadastradas (admin)" }]
+                  : []),
+              ]}
+            />
           </div>
         </nav>
       )}
