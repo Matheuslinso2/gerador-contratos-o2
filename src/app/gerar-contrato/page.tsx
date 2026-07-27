@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import FormularioContrato from "./FormularioContrato";
+import ListaContratos from "./ListaContratos";
 import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
 import BackLink from "@/components/BackLink";
@@ -91,45 +92,7 @@ export default async function GerarContratoPage({
 
         <section className="space-y-3">
           <h2 className="text-lg font-semibold text-o2-navy">Contratos gerados</h2>
-          {contratos?.map((c) => (
-            <details
-              key={c.id}
-              open={c.id === sucesso}
-              className={`rounded-xl border bg-white p-3 ${
-                c.id === sucesso ? "border-green-400 ring-1 ring-green-300" : "border-o2-navy/10"
-              }`}
-            >
-              <summary className="cursor-pointer font-medium text-o2-navy">
-                {c.locador} × {c.locatario} — {c.endereco_imovel}
-              </summary>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <a
-                  href={`/api/contratos/${c.id}/docx`}
-                  className="inline-block rounded-full bg-o2-coral px-4 py-1.5 text-sm font-medium text-white transition hover:opacity-90"
-                >
-                  Baixar contrato em Word (.docx)
-                </a>
-                {c.laudo_modo === "arquivo_embutido" && (
-                  <a
-                    href={`/api/contratos/${c.id}/pdf`}
-                    className="inline-block rounded-full border border-o2-navy px-4 py-1.5 text-sm font-medium text-o2-navy transition hover:bg-o2-gray/40"
-                  >
-                    Baixar contrato completo com laudo (PDF)
-                  </a>
-                )}
-                {(c.laudo_modo === "arquivo_separado" || c.laudo_modo === "arquivo_embutido") && (
-                  <a
-                    href={`/api/contratos/${c.id}/laudo`}
-                    className="inline-block rounded-full border border-gray-300 px-4 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
-                  >
-                    Baixar laudo de vistoria (original{c.laudo_arquivo_nome ? `: ${c.laudo_arquivo_nome}` : ""})
-                  </a>
-                )}
-              </div>
-              <pre className="mt-2 whitespace-pre-wrap text-sm text-gray-700">{c.texto_gerado}</pre>
-            </details>
-          ))}
-          {!contratos?.length && <p className="text-sm text-gray-500">Nenhum contrato gerado ainda.</p>}
+          <ListaContratos contratos={contratos ?? []} destaque={sucesso} />
         </section>
       </main>
     </>

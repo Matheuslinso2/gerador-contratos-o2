@@ -1,5 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
+import { isAdmin } from "@/lib/admin";
+import NavLink from "./NavLink";
 
 export default function AppHeader({
   userEmail,
@@ -27,6 +29,18 @@ export default function AppHeader({
           </form>
         )}
       </div>
+
+      {userEmail && (
+        <nav className="border-t border-white/10">
+          <div className="mx-auto flex max-w-4xl gap-4 overflow-x-auto px-6">
+            <NavLink href="/" label="Início" />
+            <NavLink href="/imobiliaria" label="Imobiliária" />
+            <NavLink href="/gerar-contrato" label="Gerar contrato" />
+            <NavLink href="/auditar-contrato" label="Auditar contrato" />
+            {isAdmin(userEmail) && <NavLink href="/clausulas" label="Cláusulas" />}
+          </div>
+        </nav>
+      )}
     </header>
   );
 }

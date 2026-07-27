@@ -40,11 +40,28 @@ export default async function Home() {
     );
   }
 
+  const { data: imobiliaria } = await supabase
+    .from("imobiliarias")
+    .select("id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const cadastroCompleto = !!imobiliaria;
+
   return (
     <>
       <AppHeader userEmail={user.email} logoutAction={signOut} />
       <main className="mx-auto max-w-xl flex-1 space-y-4 p-8">
         <h1 className="text-xl font-semibold text-o2-navy">Painel</h1>
+
+        {!cadastroCompleto && (
+          <Link
+            href="/imobiliaria"
+            className="block rounded-xl border border-yellow-400 bg-yellow-50 p-4 text-sm text-yellow-800 transition hover:bg-yellow-100"
+          >
+            <span className="font-medium">Complete o cadastro da sua imobiliária</span> para
+            poder gerar e auditar contratos. Clique aqui para começar →
+          </Link>
+        )}
 
         <div className="flex flex-col gap-3">
           {isAdmin(user.email) && (
@@ -67,14 +84,28 @@ export default async function Home() {
             href="/gerar-contrato"
             className="rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm transition hover:shadow-md"
           >
-            <p className="font-medium text-o2-navy">Gerar contrato</p>
+            <div className="flex items-center justify-between">
+              <p className="font-medium text-o2-navy">Gerar contrato</p>
+              {!cadastroCompleto && (
+                <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800">
+                  cadastro pendente
+                </span>
+              )}
+            </div>
             <p className="text-sm text-gray-500">Monta o contrato final e exporta em Word</p>
           </Link>
           <Link
             href="/auditar-contrato"
             className="rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm transition hover:shadow-md"
           >
-            <p className="font-medium text-o2-navy">Auditar contrato</p>
+            <div className="flex items-center justify-between">
+              <p className="font-medium text-o2-navy">Auditar contrato</p>
+              {!cadastroCompleto && (
+                <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800">
+                  cadastro pendente
+                </span>
+              )}
+            </div>
             <p className="text-sm text-gray-500">Analisa um contrato pronto e aponta erros e inconsistências</p>
           </Link>
         </div>

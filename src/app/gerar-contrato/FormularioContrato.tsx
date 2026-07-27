@@ -54,136 +54,143 @@ export default function FormularioContrato({
   );
 
   return (
-    <form action={gerarContrato} className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="mb-1 block text-sm text-gray-600">Locador(es)</label>
-          <CampoPessoas fieldName="locador" placeholder="Locador" />
+    <form action={gerarContrato} className="space-y-6">
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">1. Partes</h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-sm text-gray-600">Locador(es)</label>
+            <CampoPessoas fieldName="locador" placeholder="Locador" />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm text-gray-600">Locatário(s)</label>
+            <CampoPessoas fieldName="locatario" placeholder="Locatário" />
+          </div>
         </div>
-        <div>
-          <label className="mb-1 block text-sm text-gray-600">Locatário(s)</label>
-          <CampoPessoas fieldName="locatario" placeholder="Locatário" />
-        </div>
-      </div>
 
-      <label className="flex items-center gap-2 text-sm text-gray-600">
-        <input type="checkbox" name="locador_procurador" />
-        Locador representado por procurador/administradora
-      </label>
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          <input type="checkbox" name="locador_procurador" />
+          Locador representado por procurador/administradora
+        </label>
 
-      <input
-        name="ocupantes_adicionais"
-        placeholder="Ocupantes adicionais autorizados (opcional)"
-        className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
-      />
-
-      <input
-        name="endereco_imovel"
-        placeholder="Endereço do imóvel"
-        required
-        className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
-      />
-
-      <div className="grid grid-cols-2 gap-2">
-        <select name="finalidade" required className="rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none" defaultValue="">
-          <option value="">Finalidade...</option>
-          <option value="residencial">Residencial</option>
-          <option value="nao_residencial">Não residencial</option>
-        </select>
         <input
-          name="valor_aluguel"
-          type="number"
-          step="0.01"
-          placeholder="Valor do aluguel (R$)"
-          required
-          className="rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+          name="ocupantes_adicionais"
+          placeholder="Ocupantes adicionais autorizados (opcional)"
+          className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
         />
-      </div>
+      </section>
 
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label className="text-sm text-gray-600">Data de início</label>
-          <input name="data_inicio" type="date" required className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none" />
-        </div>
-        <div>
-          <label className="text-sm text-gray-600">Prazo (meses)</label>
+      <section className="space-y-3 border-t border-gray-200 pt-6">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">2. Imóvel e locação</h2>
+        <input
+          name="endereco_imovel"
+          placeholder="Endereço do imóvel"
+          required
+          className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+        />
+
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <select name="finalidade" required className="rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none" defaultValue="">
+            <option value="">Finalidade...</option>
+            <option value="residencial">Residencial</option>
+            <option value="nao_residencial">Não residencial</option>
+          </select>
           <input
-            name="prazo_meses"
+            name="valor_aluguel"
             type="number"
-            min={1}
+            step="0.01"
+            placeholder="Valor do aluguel (R$)"
             required
-            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+            className="rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
           />
         </div>
-      </div>
 
-      <div className="rounded-lg border border-gray-200 p-3">
-        <p className="mb-2 text-sm font-medium text-o2-navy">Laudo de vistoria (opcional)</p>
-        <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {(
-            [
-              { valor: "nenhum", rotulo: "Não tem" },
-              { valor: "link", rotulo: "Link online" },
-              { valor: "arquivo_separado", rotulo: "Arquivo (anexo à parte)" },
-              { valor: "arquivo_embutido", rotulo: "Arquivo (incluir no contrato)" },
-            ] as const
-          ).map((opcao) => (
-            <label key={opcao.valor} className="flex items-center gap-1.5 text-sm text-gray-700">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div>
+            <label className="text-sm text-gray-600">Data de início</label>
+            <input name="data_inicio" type="date" required className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none" />
+          </div>
+          <div>
+            <label className="text-sm text-gray-600">Prazo (meses)</label>
+            <input
+              name="prazo_meses"
+              type="number"
+              min={1}
+              required
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+            />
+          </div>
+        </div>
+      </section>
+
+      <section className="space-y-3 border-t border-gray-200 pt-6">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">3. Laudo de vistoria</h2>
+        <div className="rounded-lg border border-gray-200 p-3">
+          <p className="mb-2 text-sm font-medium text-o2-navy">Como tratar o laudo desta locação?</p>
+          <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {(
+              [
+                { valor: "nenhum", rotulo: "Não tem" },
+                { valor: "link", rotulo: "Link online" },
+                { valor: "arquivo_separado", rotulo: "Arquivo (anexo à parte)" },
+                { valor: "arquivo_embutido", rotulo: "Arquivo (incluir no contrato)" },
+              ] as const
+            ).map((opcao) => (
+              <label key={opcao.valor} className="flex items-center gap-1.5 text-sm text-gray-700">
+                <input
+                  type="radio"
+                  name="laudo_modo"
+                  value={opcao.valor}
+                  checked={laudoModo === opcao.valor}
+                  onChange={() => setLaudoModo(opcao.valor)}
+                />
+                {opcao.rotulo}
+              </label>
+            ))}
+          </div>
+
+          {laudoModo === "link" && (
+            <input
+              name="laudo_vistoria_url"
+              placeholder="Link do laudo de vistoria (plataforma online)"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+            />
+          )}
+
+          {laudoModo === "arquivo_separado" && (
+            <div>
               <input
-                type="radio"
-                name="laudo_modo"
-                value={opcao.valor}
-                checked={laudoModo === opcao.valor}
-                onChange={() => setLaudoModo(opcao.valor)}
+                name="laudo_arquivo"
+                type="file"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
               />
-              {opcao.rotulo}
-            </label>
-          ))}
+              <p className="mt-1 text-xs text-gray-500">
+                O arquivo original não é alterado. Fica disponível para baixar à parte; o
+                contrato só cita que ele é parte integrante.
+              </p>
+            </div>
+          )}
+
+          {laudoModo === "arquivo_embutido" && (
+            <div>
+              <input
+                name="laudo_arquivo"
+                type="file"
+                accept=".pdf"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Precisa ser um PDF. As páginas originais do laudo (sem nenhuma alteração) são
+                coladas ao final do contrato, gerando um único PDF completo para baixar.
+              </p>
+            </div>
+          )}
         </div>
+      </section>
 
-        {laudoModo === "link" && (
-          <input
-            name="laudo_vistoria_url"
-            placeholder="Link do laudo de vistoria (plataforma online)"
-            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
-          />
-        )}
-
-        {laudoModo === "arquivo_separado" && (
-          <div>
-            <input
-              name="laudo_arquivo"
-              type="file"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
-            />
-            <p className="mt-1 text-xs text-gray-500">
-              O arquivo original não é alterado. Fica disponível para baixar à parte; o
-              contrato só cita que ele é parte integrante.
-            </p>
-          </div>
-        )}
-
-        {laudoModo === "arquivo_embutido" && (
-          <div>
-            <input
-              name="laudo_arquivo"
-              type="file"
-              accept=".pdf"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
-            />
-            <p className="mt-1 text-xs text-gray-500">
-              Precisa ser um PDF. As páginas originais do laudo (sem nenhuma alteração) são
-              coladas ao final do contrato, gerando um único PDF completo para baixar.
-            </p>
-          </div>
-        )}
-      </div>
-
-      <hr />
-
-      <div>
-        <p className="mb-2 text-sm font-semibold text-o2-navy">Garantia da locação</p>
-        <div className="grid grid-cols-2 gap-2">
+      <section className="space-y-3 border-t border-gray-200 pt-6">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">4. Garantia da locação</h2>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <select
             value={tipoGarantiaId}
             onChange={(e) => {
@@ -233,13 +240,12 @@ export default function FormularioContrato({
             )}
           </div>
         )}
-      </div>
+      </section>
 
-      <hr />
-
-      <div>
-        <p className="mb-2 text-sm font-semibold text-o2-navy">
-          Seguro Incêndio (item obrigatório à parte, protege o patrimônio do locador — não é a garantia da locação)
+      <section className="space-y-3 border-t border-gray-200 pt-6">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">5. Seguro incêndio</h2>
+        <p className="text-xs text-gray-500">
+          Item obrigatório à parte, protege o patrimônio do locador — não é a garantia da locação.
         </p>
         <select
           name="seguro_incendio_produto_id"
@@ -272,7 +278,7 @@ export default function FormularioContrato({
             )}
           </div>
         )}
-      </div>
+      </section>
 
       <button
         className="rounded-full bg-o2-coral px-6 py-2.5 font-medium text-white transition hover:opacity-90"

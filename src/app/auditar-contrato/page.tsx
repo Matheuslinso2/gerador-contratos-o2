@@ -4,8 +4,7 @@ import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
 import BackLink from "@/components/BackLink";
 import AuditorForm from "./AuditorForm";
-import RelatorioView from "./RelatorioView";
-import type { RelatorioAuditoria } from "@/lib/auditorContrato";
+import ListaAuditorias from "./ListaAuditorias";
 
 export const dynamic = "force-dynamic";
 
@@ -76,21 +75,7 @@ export default async function AuditarContratoPage({
 
         <section className="space-y-3">
           <h2 className="text-lg font-semibold text-o2-navy">Auditorias realizadas</h2>
-          {auditorias?.map((a) => (
-            <details
-              key={a.id}
-              open={a.id === ultimo}
-              className="rounded-xl border border-o2-navy/10 bg-white p-3"
-            >
-              <summary className="cursor-pointer font-medium text-o2-navy">
-                {a.nome_arquivo || "Texto colado"} — {new Date(a.created_at).toLocaleString("pt-BR")}
-              </summary>
-              <div className="mt-3">
-                <RelatorioView relatorio={a.relatorio as RelatorioAuditoria} />
-              </div>
-            </details>
-          ))}
-          {!auditorias?.length && <p className="text-sm text-gray-500">Nenhuma auditoria realizada ainda.</p>}
+          <ListaAuditorias auditorias={auditorias ?? []} destaque={ultimo} />
         </section>
       </main>
     </>
