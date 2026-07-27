@@ -39,7 +39,15 @@ export async function salvarImobiliaria(formData: FormData) {
       );
     }
     const buffer = Buffer.from(await contratoArquivo.arrayBuffer());
-    texto_base_contrato = await extrairTextoDocx(buffer);
+    try {
+      texto_base_contrato = await extrairTextoDocx(buffer);
+    } catch {
+      redirect(
+        `/imobiliaria?erro=${encodeURIComponent(
+          `Não foi possível ler o arquivo "${contratoArquivo.name}" — ele pode estar corrompido ou num formato inesperado.`
+        )}`
+      );
+    }
   }
 
   if (!nome || !cnpj || !texto_base_contrato || !indice_reajuste) {

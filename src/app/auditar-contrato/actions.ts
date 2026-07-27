@@ -18,15 +18,24 @@ async function extrairTextoDeCampo(
   if (arquivo && arquivo.size > 0) {
     nomeArquivo = arquivo.name;
     const nomeLower = arquivo.name.toLowerCase();
-    const buffer = Buffer.from(await arquivo.arrayBuffer());
-    if (nomeLower.endsWith(".docx")) {
-      texto = await extrairTextoDocx(buffer);
-    } else if (nomeLower.endsWith(".pdf")) {
-      texto = await extrairTextoPdf(buffer);
-    } else {
+
+    if (!nomeLower.endsWith(".docx") && !nomeLower.endsWith(".pdf")) {
       redirect(
         `/auditar-contrato?erro=${encodeURIComponent(
           "Envie um arquivo .docx ou .pdf, ou cole o texto diretamente."
+        )}`
+      );
+    }
+
+    const buffer = Buffer.from(await arquivo.arrayBuffer());
+    try {
+      texto = nomeLower.endsWith(".docx")
+        ? await extrairTextoDocx(buffer)
+        : await extrairTextoPdf(buffer);
+    } catch {
+      redirect(
+        `/auditar-contrato?erro=${encodeURIComponent(
+          `Não foi possível ler o arquivo "${arquivo.name}" — ele pode estar corrompido ou num formato inesperado.`
         )}`
       );
     }
