@@ -79,6 +79,7 @@ export async function auditar(formData: FormData) {
       status_geral: relatorio.status_geral,
       tipo_garantia_identificada: relatorio.tipo_garantia_identificada,
       relatorio,
+      texto_contrato: texto,
     })
     .select("id")
     .single();

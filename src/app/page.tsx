@@ -108,6 +108,13 @@ export default async function Home() {
             </div>
             <p className="text-sm text-gray-500">Analisa um contrato pronto e aponta erros e inconsistências</p>
           </Link>
+          <Link
+            href="/contratos"
+            className="rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm transition hover:shadow-md"
+          >
+            <p className="font-medium text-o2-navy">Contratos realizados</p>
+            <p className="text-sm text-gray-500">Busca contratos gerados e auditorias por CPF, nome ou endereço</p>
+          </Link>
         </div>
       </main>
     </>
