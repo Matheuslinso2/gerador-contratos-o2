@@ -14,6 +14,7 @@ type Produto = {
 const NOME_TIPO_INCENDIO = "Seguro Incêndio Imobiliário";
 const NOME_TIPO_FIADOR = "Fiador";
 const NOME_TIPO_CAUCAO = "Caução";
+const NOME_TIPO_TITULO = "Título de Capitalização";
 
 export default function FormularioContrato({
   tiposGarantia,
@@ -259,6 +260,23 @@ export default function FormularioContrato({
           <div>
             <label className="mb-1 block text-sm text-gray-600">Fiador(es)</label>
             <CampoPessoas fieldName="fiador" placeholder="Fiador" />
+          </div>
+        )}
+
+        {tipoGarantiaSelecionado === NOME_TIPO_TITULO && (
+          <div>
+            <label className="text-sm text-gray-600">Proposta do título de capitalização</label>
+            <input
+              name="titulo_capitalizacao_arquivo"
+              type="file"
+              accept=".pdf,.docx"
+              required
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              O valor do título e o número da proposta/garantia são lidos automaticamente do
+              arquivo e preenchidos na cláusula. O arquivo não é salvo, só usado nessa hora.
+            </p>
           </div>
         )}
 

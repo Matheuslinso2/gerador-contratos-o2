@@ -2,7 +2,12 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { substituirPlaceholders, calcularDataTermino } from "@/lib/placeholdersContrato";
+import { substituirPlaceholders, substituirPlaceholdersTitulo, calcularDataTermino } from "@/lib/placeholdersContrato";
+import { extrairTextoDocx } from "@/lib/extrairTextoDocx";
+import { extrairTextoPdf } from "@/lib/extrairTextoPdf";
+import { extrairDadosTitulo } from "@/lib/extrairDadosTitulo";
+
+const NOME_TIPO_TITULO = "Título de Capitalização";
 
 function qualificarPessoas(formData: FormData, prefixo: string): string {
   const nomes = formData.getAll(`${prefixo}_nome`).map(String);
@@ -168,6 +173,56 @@ export async function gerarContrato(formData: FormData) {
     produtoNome = produto.nome;
     seguradoraNome = seguradora?.nome ?? null;
     clausulaGarantiaBase = produto.clausula_base;
+  }
+
+  let valorTitulo: number | null = null;
+  let numeroPropostaTitulo: string | null = null;
+
+  if (tipoGarantia.nome === NOME_TIPO_TITULO) {
+    const arquivoTitulo = formData.get("titulo_capitalizacao_arquivo") as File | null;
+    if (!arquivoTitulo || arquivoTitulo.size === 0) {
+      redirect(
+        `/gerar-contrato?erro=${encodeURIComponent("Anexe a proposta do título de capitalização.")}`
+      );
+    }
+    const nomeLower = arquivoTitulo.name.toLowerCase();
+    if (!nomeLower.endsWith(".pdf") && !nomeLower.endsWith(".docx")) {
+      redirect(
+        `/gerar-contrato?erro=${encodeURIComponent("A proposta do título precisa ser um arquivo .pdf ou .docx.")}`
+      );
+    }
+    const buffer = Buffer.from(await arquivoTitulo.arrayBuffer());
+    let textoProposta: string;
+    try {
+      textoProposta = nomeLower.endsWith(".docx")
+        ? await extrairTextoDocx(buffer)
+        : await extrairTextoPdf(buffer);
+    } catch {
+      redirect(
+        `/gerar-contrato?erro=${encodeURIComponent(
+          `Não foi possível ler o arquivo "${arquivoTitulo.name}" — ele pode estar corrompido ou num formato inesperado.`
+        )}`
+      );
+    }
+    if (!textoProposta.trim()) {
+      redirect(
+        `/gerar-contrato?erro=${encodeURIComponent(
+          "Não foi possível ler texto da proposta do título (pode ser um PDF escaneado, sem texto real)."
+        )}`
+      );
+    }
+    try {
+      const dadosTitulo = await extrairDadosTitulo(textoProposta);
+      valorTitulo = dadosTitulo.valor_titulo;
+      numeroPropostaTitulo = dadosTitulo.numero_proposta;
+    } catch (e) {
+      const mensagem = e instanceof Error ? e.message : "Falha ao ler os dados da proposta do título.";
+      redirect(`/gerar-contrato?erro=${encodeURIComponent(mensagem)}`);
+    }
+    clausulaGarantiaBase = substituirPlaceholdersTitulo(clausulaGarantiaBase, {
+      valorTitulo,
+      numeroProposta: numeroPropostaTitulo,
+    });
   }
 
   const seguradoraIncendio = produtoIncendio

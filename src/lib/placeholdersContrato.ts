@@ -10,6 +10,19 @@ export function substituirPlaceholders(
     .replace(/\{\{\s*data[_ ]?t[ée]rmino\s*\}\}/gi, fmtDataBr(dados.dataTermino));
 }
 
+// Substitui os códigos usados na cláusula-base de produtos de Título de
+// Capitalização, onde o valor do título e o número da proposta/garantia
+// mudam a cada locação (extraídos da proposta anexada na hora de gerar).
+export function substituirPlaceholdersTitulo(
+  texto: string,
+  dados: { valorTitulo: number; numeroProposta: string }
+): string {
+  const valorFormatado = dados.valorTitulo.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+  return texto
+    .replace(/\{\{\s*valor[_ ]?t[ií]tulo\s*\}\}/gi, valorFormatado)
+    .replace(/\{\{\s*n[uú]mero[_ ]?proposta\s*\}\}/gi, dados.numeroProposta);
+}
+
 const fmtDataBr = (iso: string) => {
   const [ano, mes, dia] = iso.split("-");
   return `${dia}/${mes}/${ano}`;
