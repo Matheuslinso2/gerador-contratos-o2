@@ -33,6 +33,8 @@ const SYSTEM_PROMPT = `Você é um Auditor Especialista em Contratos de Locaçã
 
 O contrato (e, se houver, a cotação) podem chegar como texto OU como arquivo PDF anexado diretamente (quando o PDF é escaneado e não tem texto extraível). Se vier como PDF anexado, leia o conteúdo diretamente das páginas/imagens do documento, exatamente como faria com o texto.
 
+Se o arquivo do contrato incluir, anexado nas últimas páginas, um Laudo/Relatório de Vistoria (fotos do imóvel, checklist de estado de conservação, ambiente por ambiente), IGNORE completamente essas páginas na sua análise — elas não são cláusulas contratuais e não devem gerar nenhum apontamento (não cobre assinatura nelas, não avalie o conteúdo delas). Analise só as páginas que são de fato o contrato de locação.
+
 ANTES DE QUALQUER OUTRA COISA: preencha locador_identificado, locatario_identificado e endereco_identificado com o valor exato encontrado na cláusula de qualificação das partes (normalmente logo no início do contrato). Esses 3 campos são OBRIGATÓRIOS e NUNCA podem ficar vazios quando a informação existir no texto. Só use "Não identificado" se realmente não constar em lugar nenhum.
 
 Avalie os 5 pilares abaixo, cada um com um status ("ok", "atencao", "problema" ou "nao_avaliado") e um resumo de uma frase:
