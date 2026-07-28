@@ -31,13 +31,14 @@ const COR_ITEM: Record<StatusChecklist, string> = {
   nao_avaliado: "text-gray-400",
 };
 
-function LinhaChecklist({ titulo, item }: { titulo: string; item: ItemChecklist }) {
+function LinhaChecklist({ titulo, item }: { titulo: string; item: ItemChecklist | undefined }) {
+  const status = item?.status ?? "nao_avaliado";
   return (
     <div className="flex items-start gap-2 text-sm">
-      <span className={`mt-0.5 ${COR_ITEM[item.status]}`}>{ICONE_ITEM[item.status]}</span>
+      <span className={`mt-0.5 ${COR_ITEM[status]}`}>{ICONE_ITEM[status]}</span>
       <div>
         <span className="font-medium text-o2-navy">{titulo}: </span>
-        <span className="text-gray-700">{item.resumo}</span>
+        <span className="text-gray-700">{item?.resumo ?? "Não avaliado nesta auditoria."}</span>
       </div>
     </div>
   );
@@ -136,7 +137,7 @@ export default function RelatorioView({ relatorio }: { relatorio: RelatorioAudit
         <LinhaChecklist titulo="Assinaturas" item={relatorio.assinaturas} />
       </div>
 
-      {relatorio.pontos_criticos.length > 0 && (
+      {(relatorio.pontos_criticos?.length ?? 0) > 0 && (
         <div>
           <p className="mb-1.5 font-semibold text-o2-navy">Pontos de atenção</p>
           <ul className="list-inside list-disc space-y-1 text-sm text-gray-700">

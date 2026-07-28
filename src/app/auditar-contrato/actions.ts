@@ -142,6 +142,17 @@ export async function auditar(formData: FormData) {
   relatorio.locatario_identificado = naoVazio(relatorio.locatario_identificado);
   relatorio.endereco_identificado = naoVazio(relatorio.endereco_identificado);
 
+  // Defesa extra: a IA às vezes deixa algum campo do checklist de fora da
+  // resposta, mesmo sendo obrigatório no schema. Preenche com um valor
+  // neutro em vez de deixar a tela quebrar ao exibir o relatório.
+  const itemPadrao = { status: "nao_avaliado" as const, resumo: "Não avaliado nesta auditoria." };
+  relatorio.dados_cadastrais ??= itemPadrao;
+  relatorio.dados_locacao ??= itemPadrao;
+  relatorio.conferencia_cotacao ??= itemPadrao;
+  relatorio.clausulas_seguradora ??= itemPadrao;
+  relatorio.assinaturas ??= itemPadrao;
+  relatorio.pontos_criticos ??= [];
+
   const { data: auditoria, error } = await supabase
     .from("auditorias_contrato")
     .insert({
