@@ -61,7 +61,7 @@ export default async function GerarContratoPage({
       supabase
         .from("contratos")
         .select(
-          "id, locador, locatario, endereco_imovel, texto_gerado, created_at, laudo_modo, laudo_arquivo_nome"
+          "id, locador, locador_nomes, locatario, locatario_nomes, endereco_imovel, texto_gerado, created_at, laudo_modo, laudo_arquivo_nome"
         )
         .eq("imobiliaria_id", imobiliaria.id)
         .order("created_at", { ascending: false }),

@@ -23,7 +23,7 @@ export function substituirPlaceholdersTitulo(
     .replace(/\{\{\s*n[uú]mero[_ ]?proposta\s*\}\}/gi, dados.numeroProposta);
 }
 
-const fmtDataBr = (iso: string) => {
+export const fmtDataBr = (iso: string) => {
   const [ano, mes, dia] = iso.split("-");
   return `${dia}/${mes}/${ano}`;
 };

@@ -14,7 +14,9 @@ type ImobiliariaRef = { nome: string } | { nome: string }[] | null;
 type Contrato = {
   id: string;
   locador: string;
+  locador_nomes: string | null;
   locatario: string;
+  locatario_nomes: string | null;
   endereco_imovel: string;
   texto_gerado: string;
   created_at: string;
@@ -174,7 +176,7 @@ export default function ListaContratosRealizados({
                   {nomeImobiliaria(item.data.imobiliarias)}
                 </span>
               )}
-              {item.data.locador} × {item.data.locatario} — {item.data.endereco_imovel}
+              {item.data.locador_nomes || item.data.locador} × {item.data.locatario_nomes || item.data.locatario} — {item.data.endereco_imovel}
             </summary>
             <div className="mt-2 flex flex-wrap gap-2">
               <a

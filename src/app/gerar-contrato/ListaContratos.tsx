@@ -5,7 +5,9 @@ import { useMemo, useState } from "react";
 type Contrato = {
   id: string;
   locador: string;
+  locador_nomes: string | null;
   locatario: string;
+  locatario_nomes: string | null;
   endereco_imovel: string;
   texto_gerado: string;
   laudo_modo: string | null;
@@ -49,7 +51,7 @@ export default function ListaContratos({
           }`}
         >
           <summary className="cursor-pointer font-medium text-o2-navy">
-            {c.locador} × {c.locatario} — {c.endereco_imovel}
+            {c.locador_nomes || c.locador} × {c.locatario_nomes || c.locatario} — {c.endereco_imovel}
           </summary>
           <div className="mt-2 flex flex-wrap gap-2">
             <a

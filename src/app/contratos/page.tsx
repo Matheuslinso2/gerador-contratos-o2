@@ -59,7 +59,7 @@ export default async function ContratosRealizadosPage({
   let consultaContratos = supabase
     .from("contratos")
     .select(
-      "id, locador, locatario, endereco_imovel, texto_gerado, created_at, laudo_modo, laudo_arquivo_nome, imobiliarias(nome)"
+      "id, locador, locador_nomes, locatario, locatario_nomes, endereco_imovel, texto_gerado, created_at, laudo_modo, laudo_arquivo_nome, imobiliarias(nome)"
     )
     .order("created_at", { ascending: false });
   let consultaAuditorias = supabase

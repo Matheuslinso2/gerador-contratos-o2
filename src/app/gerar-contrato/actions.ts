@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { substituirPlaceholders, substituirPlaceholdersTitulo, calcularDataTermino } from "@/lib/placeholdersContrato";
+import { substituirPlaceholders, substituirPlaceholdersTitulo, calcularDataTermino, fmtDataBr } from "@/lib/placeholdersContrato";
 import { extrairTextoDocx } from "@/lib/extrairTextoDocx";
 import { extrairTextoPdf } from "@/lib/extrairTextoPdf";
 import { extrairDadosTitulo } from "@/lib/extrairDadosTitulo";
@@ -50,6 +50,16 @@ function qualificarPessoas(formData: FormData, prefixo: string): string {
     .join("; ");
 }
 
+// Só o(s) nome(s), sem o resto da qualificação — usado no resumo da listagem
+// e na busca, no mesmo padrão enxuto que o Auditor usa (locador_identificado).
+function nomesApenas(formData: FormData, prefixo: string): string {
+  return formData
+    .getAll(`${prefixo}_nome`)
+    .map((v) => String(v).trim())
+    .filter(Boolean)
+    .join("; ");
+}
+
 export async function gerarContrato(formData: FormData) {
   const supabase = await createClient();
   const {
@@ -71,8 +81,10 @@ export async function gerarContrato(formData: FormData) {
   const produto_id = String(formData.get("produto_id") ?? "") || null;
   const seguro_incendio_produto_id = String(formData.get("seguro_incendio_produto_id") ?? "") || null;
   const locador = qualificarPessoas(formData, "locador");
+  const locador_nomes = nomesApenas(formData, "locador");
   const locador_procurador = formData.get("locador_procurador") === "on";
   const locatario = qualificarPessoas(formData, "locatario");
+  const locatario_nomes = nomesApenas(formData, "locatario");
   const ocupantes_adicionais = String(formData.get("ocupantes_adicionais") ?? "").trim();
   const endereco_imovel = String(formData.get("endereco_imovel") ?? "").trim();
   const finalidade = String(formData.get("finalidade") ?? "");
@@ -238,9 +250,9 @@ export async function gerarContrato(formData: FormData) {
     `IMÓVEL: ${endereco_imovel}`,
     `FINALIDADE: ${finalidade === "residencial" ? "Residencial" : "Não residencial"}`,
     `VALOR DO ALUGUEL: R$ ${valor_aluguel.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
-    `DATA DE INÍCIO: ${data_inicio}`,
+    `DATA DE INÍCIO: ${fmtDataBr(data_inicio)}`,
     `PRAZO: ${prazo_meses} meses`,
-    `DATA DE TÉRMINO: ${calcularDataTermino(data_inicio, prazo_meses)}`,
+    `DATA DE TÉRMINO: ${fmtDataBr(calcularDataTermino(data_inicio, prazo_meses))}`,
     `DIA DE VENCIMENTO DO ALUGUEL: ${dia_vencimento_aluguel}`,
     fiador && `FIADOR(ES): ${fiador}`,
     valor_caucao && `VALOR DA CAUÇÃO: R$ ${valor_caucao.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
@@ -302,8 +314,10 @@ export async function gerarContrato(formData: FormData) {
       produto_id,
       seguro_incendio_produto_id,
       locador,
+      locador_nomes,
       locador_procurador,
       locatario,
+      locatario_nomes,
       ocupantes_adicionais: ocupantes_adicionais || null,
       endereco_imovel,
       finalidade,
