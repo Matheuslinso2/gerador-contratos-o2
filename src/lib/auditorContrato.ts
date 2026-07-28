@@ -1,21 +1,24 @@
 import Anthropic from "@anthropic-ai/sdk";
 
-export type ItemAuditoria = {
-  secao: string;
-  problema: string;
-  correcao: string;
+export type StatusChecklist = "ok" | "atencao" | "problema" | "nao_avaliado";
+
+export type ItemChecklist = {
+  status: StatusChecklist;
+  resumo: string;
 };
 
 export type RelatorioAuditoria = {
-  status_geral: "APROVADO" | "REQUER_AJUSTES" | "ALERTA_CRITICO";
+  status_geral: "APROVADO" | "APROVADO_RESSALVAS" | "REPROVADO";
   tipo_garantia_identificada: string;
   locador_identificado: string;
   locatario_identificado: string;
   endereco_identificado: string;
-  inconsistencias_criticas: ItemAuditoria[];
-  divergencias: ItemAuditoria[];
-  erros_formatacao: ItemAuditoria[];
-  observacoes: string[];
+  dados_cadastrais: ItemChecklist;
+  dados_locacao: ItemChecklist;
+  conferencia_cotacao: ItemChecklist;
+  clausulas_seguradora: ItemChecklist;
+  assinaturas: ItemChecklist;
+  pontos_criticos: string[];
 };
 
 export type ClausulaReferencia = {
@@ -24,135 +27,97 @@ export type ClausulaReferencia = {
   clausulaBase: string;
 };
 
-const SYSTEM_PROMPT = `Você é um Auditor Especialista em Contratos de Locação Imobiliária e Análise Jurídico-Documental brasileira. Sua função é analisar o texto de um contrato de locação para identificar incorreções, divergências, erros de digitação, falhas de formatação e inconformidades jurídicas.
+const SYSTEM_PROMPT = `Você é um Auditor Especialista em Contratos de Locação Imobiliária brasileira. Sua função é analisar o texto de um contrato de locação e devolver um checklist CURTO e direto — quem lê é a imobiliária, que não tem paciência para ler críticas longas. Cada item do checklist deve ter no máximo UMA frase curta, direto ao ponto. Só entre em detalhe (em "pontos_criticos") para os problemas realmente graves.
 
-ANTES DE QUALQUER OUTRA COISA: preencha os campos locador_identificado, locatario_identificado e endereco_identificado com o valor exato encontrado na cláusula de qualificação das partes (normalmente logo no início do contrato). Esses 3 campos são de preenchimento OBRIGATÓRIO e NUNCA podem ficar vazios ou em branco quando a informação existe no texto — isso vale mesmo que o contrato tenha erros graves, garantia mal identificada ou qualquer outro problema; a identificação das partes é sempre extraída primeiro, independente do restante da auditoria. Só use o texto literal "Não identificado" se a informação genuinamente não constar em lugar nenhum do contrato.
+ANTES DE QUALQUER OUTRA COISA: preencha locador_identificado, locatario_identificado e endereco_identificado com o valor exato encontrado na cláusula de qualificação das partes (normalmente logo no início do contrato). Esses 3 campos são OBRIGATÓRIOS e NUNCA podem ficar vazios quando a informação existir no texto. Só use "Não identificado" se realmente não constar em lugar nenhum.
 
-Execute uma verificação minuciosa nos seguintes pilares:
+Avalie os 5 pilares abaixo, cada um com um status ("ok", "atencao", "problema" ou "nao_avaliado") e um resumo de uma frase:
 
-1. QUALIFICAÇÃO DAS PARTES
-- Identifique o(s) nome(s) do(s) locador(es), do(s) locatário(s) e o endereço do imóvel locado (para os campos locador_identificado, locatario_identificado e endereco_identificado — copie os nomes exatamente como aparecem no contrato).
-- Locador(es) e Locatário(s): nome completo, CPF/CNPJ, RG, estado civil, nacionalidade, profissão e endereço, sem erros de digitação e completos.
-- Se o Locador não for o Proprietário citado, sinalize a necessidade de procuração ou contrato de administração.
-- Se houver Fiador ou Locador casado (a depender do regime de bens), verifique se o cônjuge está qualificado e incluído para assinatura (outorga uxória).
-- Verifique se HÁ PREVISÃO DE ASSINATURA de todas as partes qualificadas no corpo do contrato (locador(es), locatário(s), fiador(es) se houver) e de testemunhas. Se alguma parte qualificada no texto não aparecer na seção de assinaturas, ou faltar testemunha, sinalize.
-- Preste atenção a QUALQUER pessoa mencionada no texto (em cláusulas, na seção de assinaturas, num anexo) que pareça ser parte do contrato mas NÃO tenha sido plenamente qualificada nas seções de partes (ex.: um segundo locatário citado só na assinatura, um procurador, um cônjuge). Você não tem acesso aos dados oficiais de enquadramento da seguradora, então NUNCA afirme categoricamente que isso é um erro — inclua em "observacoes" um aviso de atenção recomendando que a imobiliária confirme se essa pessoa foi corretamente incluída no enquadramento do risco junto à seguradora/administradora.
+1. DADOS_CADASTRAIS — nome do(s) locatário(s), CPF/CNPJ, nome do(s) locador(es). "problema" se faltar ou estiver incompleto/incoerente algum desses dados.
 
-2. DADOS DO IMÓVEL E DA LOCAÇÃO
-- Endereço do imóvel completo (rua/av, número, complemento, bairro, cidade, estado, CEP) e coerente em todo o texto.
-- Finalidade (Residencial ou Não Residencial/Comercial) clara e coerente.
-- Datas de início, término e prazo total coerentes entre si.
+2. DADOS_LOCACAO — endereço completo do imóvel, tipo (residencial/não residencial), valor do aluguel, prazo da locação (datas de início/término coerentes). "problema" se algum desses dados estiver ausente, ambíguo ou incoerente.
 
-3. VALORES E CLÁUSULAS FINANCEIRAS
-- Valor do aluguel presente, claro e sem ambiguidade no contrato.
-- Divergência entre valor numérico e valor por extenso.
-- Data de vencimento, forma de pagamento, multa por atraso, índice de reajuste anual, responsabilidade por condomínio/IPTU.
+3. CONFERENCIA_COTACAO — só avalie se uma COTAÇÃO/PROPOSTA DE SEGURO for fornecida abaixo. Compare segurado/locatário, valor do aluguel, prazo e endereço entre o contrato e a cotação. Se NENHUMA cotação for fornecida, use status "nao_avaliado" e resumo "Nenhuma cotação/proposta anexada para conferência.".
 
-4. GARANTIAS LOCATÍCIAS
-- A Lei do Inquilinato (Lei 8.245/91, art. 37) proíbe mais de uma modalidade de garantia no mesmo contrato — verifique se há só UMA (fiador, caução ou seguro-fiança/título de capitalização).
-- Caução em dinheiro: valor não deve exceder 3 meses de aluguel; deve citar conta poupança conjunta.
-- Fiador: dados do fiador (e cônjuge, se houver) e do imóvel dado em garantia completos.
-- Seguro-fiança/título de capitalização: condições e apólice compatíveis com o informado.
-- Seguro incêndio NÃO é uma garantia alternativa da locação — é item separado e não deve ser contado como "dupla garantia" se aparecer junto com a garantia locatícia.
-- Se a garantia for seguro-fiança ou título de capitalização E uma BIBLIOTECA DE CLÁUSULAS DE REFERÊNCIA for fornecida abaixo: identifique qual seguradora/produto o contrato diz usar e COMPARE o texto da cláusula de garantia do contrato com o texto oficial correspondente na biblioteca. Aponte em "divergencias" ou "inconsistencias_criticas" (conforme a gravidade) qualquer trecho essencial ausente, alterado ou incompatível com o texto oficial daquele produto. Se a seguradora/produto citado no contrato não constar na biblioteca fornecida, registre isso em "observacoes" (não há como validar o enquadramento).
+4. CLAUSULAS_SEGURADORA — só se aplica quando a garantia for Seguro Fiança ou Título de Capitalização. Se a garantia for Fiador ou Caução, use status "nao_avaliado" e resumo "Não se aplica — garantia não é seguro-fiança nem título de capitalização.". Quando se aplicar e uma BIBLIOTECA DE CLÁUSULAS DE REFERÊNCIA for fornecida, verifique se a cláusula do contrato tem o mesmo conteúdo essencial do texto oficial daquele produto/seguradora (sem trechos essenciais alterados, removidos ou incompatíveis). Se a seguradora/produto citado não constar na biblioteca fornecida, use "nao_avaliado" com resumo explicando que não há como validar. A Lei do Inquilinato (art. 37) proíbe mais de uma modalidade de garantia no mesmo contrato — se houver DUPLA GARANTIA, isso é "problema" aqui E deve virar um item em pontos_criticos.
 
-5. CORRESPONDÊNCIA COM A COTAÇÃO/PROPOSTA DE SEGURO (somente se uma COTAÇÃO for fornecida abaixo)
-- Compare segurado/locatário, valor do aluguel, prazo da locação e endereço do imóvel entre o contrato e a cotação.
-- Aponte em "divergencias" ou "inconsistencias_criticas" (conforme a gravidade) qualquer dado do contrato que não bata com a cotação.
-- Se nenhuma cotação for fornecida, não avalie este pilar e não mencione a ausência dela.
+5. ASSINATURAS — verifique: (a) previsão/presença de assinatura do(s) locador(es) ou de seu representante legal; (b) do(s) locatário(s); (c) de testemunhas quando exigidas; (d) se há relatório/certificado de assinatura eletrônica (Clicksign, ZapSign, D4Sign, DocuSign ou similar) anexado ao texto, e se ele indica que TODOS os signatários concluíram a assinatura; (e) qualquer assinatura pendente, recusada ou inválida; (f) se os nomes nas assinaturas correspondem às partes qualificadas no contrato. "problema" se faltar assinatura de alguma parte qualificada, houver pendência/recusa, ou nome divergente. "atencao" se não for possível confirmar (ex: contrato sem página de assinatura no texto fornecido).
 
-6. ERROS DE DIGITAÇÃO, FORMATAÇÃO E LÓGICA
-- Numeração de cláusulas fora de sequência (pula ou repete número).
-- Erros gramaticais, nomes próprios grafados de formas diferentes ao longo do texto, datas impossíveis, CPF/CNPJ/RG com quantidade de dígitos incorreta.
-- Campos em branco, pontilhados "(...)" ou marcadores tipo "[INSERIR NOME]" não preenchidos.
+pontos_criticos: lista curta (pode ficar vazia) só com os problemas mais sérios que merecem destaque além do resumo de uma frase — cada item também deve ser curto (uma frase, cite a cláusula/seção quando possível). Não repita aqui o que já foi dito nos resumos dos 5 pilares, a menos que seja crítico o suficiente para reforçar.
 
-Responda SEMPRE chamando a ferramenta "reportar_auditoria" com o relatório estruturado. Nunca responda em texto livre. Se um pilar inteiro não apresentar problemas, deixe a lista correspondente vazia — não invente problema para preencher. Seja específico: cite a cláusula/seção exata sempre que possível.`;
+status_geral: "APROVADO" se todos os pilares avaliados estão "ok" (os "nao_avaliado" não contam contra); "APROVADO_RESSALVAS" se houver "atencao" ou "problema" leve/pontual; "REPROVADO" se houver "problema" grave (ex: dupla garantia, dado essencial ausente, assinatura de parte faltando).
+
+Responda SEMPRE chamando a ferramenta "reportar_auditoria". Nunca responda em texto livre.`;
+
+const ITEM_CHECKLIST_SCHEMA = {
+  type: "object" as const,
+  properties: {
+    status: {
+      type: "string",
+      enum: ["ok", "atencao", "problema", "nao_avaliado"],
+    },
+    resumo: {
+      type: "string",
+      minLength: 1,
+      description: "Uma frase curta, direto ao ponto.",
+    },
+  },
+  required: ["status", "resumo"],
+};
 
 const FERRAMENTA_RELATORIO: Anthropic.Tool = {
   name: "reportar_auditoria",
-  description: "Reporta o resultado estruturado da auditoria de um contrato de locação.",
+  description: "Reporta o checklist resumido da auditoria de um contrato de locação.",
   input_schema: {
     type: "object",
     properties: {
       locador_identificado: {
         type: "string",
         minLength: 1,
-        description: 'OBRIGATÓRIO, preencha sempre primeiro. Nome completo do(s) locador(es), copiado exatamente da cláusula de qualificação das partes, separados por "; " se houver mais de um. NUNCA deixe em branco quando a informação existir no contrato — use "Não identificado" só se realmente não constar em lugar nenhum do texto.',
+        description: 'OBRIGATÓRIO. Nome completo do(s) locador(es), separados por "; " se houver mais de um. NUNCA deixe em branco quando a informação existir no contrato.',
       },
       locatario_identificado: {
         type: "string",
         minLength: 1,
-        description: 'OBRIGATÓRIO, preencha sempre primeiro. Nome completo do(s) locatário(s), copiado exatamente da cláusula de qualificação das partes, separados por "; " se houver mais de um. NUNCA deixe em branco quando a informação existir no contrato — use "Não identificado" só se realmente não constar em lugar nenhum do texto.',
+        description: 'OBRIGATÓRIO. Nome completo do(s) locatário(s), separados por "; " se houver mais de um. NUNCA deixe em branco quando a informação existir no contrato.',
       },
       endereco_identificado: {
         type: "string",
         minLength: 1,
-        description: 'OBRIGATÓRIO, preencha sempre primeiro. Endereço do imóvel locado, resumido em uma linha. NUNCA deixe em branco quando a informação existir no contrato — use "Não identificado" só se realmente não constar em lugar nenhum do texto.',
+        description: "OBRIGATÓRIO. Endereço do imóvel locado, resumido em uma linha. NUNCA deixe em branco quando a informação existir no contrato.",
       },
       status_geral: {
         type: "string",
-        enum: ["APROVADO", "REQUER_AJUSTES", "ALERTA_CRITICO"],
-        description: "APROVADO se não há problemas relevantes; REQUER_AJUSTES se há divergências/erros menores; ALERTA_CRITICO se há inconsistência crítica (ex: dupla garantia, valores divergentes, dados essenciais ausentes).",
+        enum: ["APROVADO", "APROVADO_RESSALVAS", "REPROVADO"],
+        description: "Veredito final considerando os 5 pilares do checklist.",
       },
       tipo_garantia_identificada: {
         type: "string",
-        description: 'Ex: "Fiador", "Caução", "Seguro Fiança", "Sem garantia identificada", ou "DUPLA GARANTIA (ERRO)" se houver mais de uma.',
+        description: 'Ex: "Fiador", "Caução", "Seguro Fiança", "Título de Capitalização", "Sem garantia identificada", ou "DUPLA GARANTIA (ERRO)" se houver mais de uma.',
       },
-      inconsistencias_criticas: {
+      dados_cadastrais: ITEM_CHECKLIST_SCHEMA,
+      dados_locacao: ITEM_CHECKLIST_SCHEMA,
+      conferencia_cotacao: ITEM_CHECKLIST_SCHEMA,
+      clausulas_seguradora: ITEM_CHECKLIST_SCHEMA,
+      assinaturas: ITEM_CHECKLIST_SCHEMA,
+      pontos_criticos: {
         type: "array",
-        description: "Erros graves: incoerência de valores por extenso, prazos errados, conflito de garantias, dados essenciais ausentes.",
-        items: {
-          type: "object",
-          properties: {
-            secao: { type: "string" },
-            problema: { type: "string" },
-            correcao: { type: "string" },
-          },
-          required: ["secao", "problema", "correcao"],
-        },
-      },
-      divergencias: {
-        type: "array",
-        description: "Diferenças de grafia de nomes, divergência de endereços, CPFs/RGs ausentes ou incorretos.",
-        items: {
-          type: "object",
-          properties: {
-            secao: { type: "string" },
-            problema: { type: "string" },
-            correcao: { type: "string" },
-          },
-          required: ["secao", "problema", "correcao"],
-        },
-      },
-      erros_formatacao: {
-        type: "array",
-        description: "Numeração de cláusulas duplicada/saltada, erros ortográficos, campos não preenchidos.",
-        items: {
-          type: "object",
-          properties: {
-            secao: { type: "string" },
-            problema: { type: "string" },
-            correcao: { type: "string" },
-          },
-          required: ["secao", "problema", "correcao"],
-        },
-      },
-      observacoes: {
-        type: "array",
-        description: "Avisos gerais: ausência de rubricas, falta de testemunhas, prazos que exigem atenção etc.",
+        description: "Lista curta (pode ser vazia) só com os problemas mais graves, uma frase cada.",
         items: { type: "string" },
       },
     },
     required: [
-      "status_geral",
-      "tipo_garantia_identificada",
       "locador_identificado",
       "locatario_identificado",
       "endereco_identificado",
-      "inconsistencias_criticas",
-      "divergencias",
-      "erros_formatacao",
-      "observacoes",
+      "status_geral",
+      "tipo_garantia_identificada",
+      "dados_cadastrais",
+      "dados_locacao",
+      "conferencia_cotacao",
+      "clausulas_seguradora",
+      "assinaturas",
+      "pontos_criticos",
     ],
   },
 };
@@ -172,25 +137,25 @@ export async function auditarContrato(
   const anthropic = new Anthropic({ apiKey });
 
   const blocoBiblioteca = bibliotecaClausulas.length
-    ? `BIBLIOTECA DE CLÁUSULAS DE REFERÊNCIA DA O2 (texto oficial de cada seguradora/produto — use para conferir o enquadramento da cláusula de garantia do contrato quando ela for baseada em seguro):\n\n${bibliotecaClausulas
+    ? `BIBLIOTECA DE CLÁUSULAS DE REFERÊNCIA DA O2 (texto oficial de cada seguradora/produto — use para conferir o enquadramento da cláusula de garantia do contrato quando ela for baseada em seguro ou título de capitalização):\n\n${bibliotecaClausulas
         .map((c) => `— ${c.seguradora} — ${c.produto} —\n${c.clausulaBase}`)
         .join("\n\n")}\n\n---\n\n`
     : "";
 
   const blocoCotacao = textoCotacao
-    ? `COTAÇÃO/PROPOSTA DE SEGURO (documento de referência para o pilar 5 — compare contra o contrato abaixo):\n\n${textoCotacao}\n\n---\n\n`
+    ? `COTAÇÃO/PROPOSTA DE SEGURO (documento de referência para o pilar CONFERENCIA_COTACAO — compare contra o contrato abaixo):\n\n${textoCotacao}\n\n---\n\n`
     : "";
 
   const mensagem = await anthropic.messages.create({
     model: "claude-sonnet-5",
-    max_tokens: 8000,
+    max_tokens: 4000,
     system: SYSTEM_PROMPT,
     tools: [FERRAMENTA_RELATORIO],
     tool_choice: { type: "tool", name: "reportar_auditoria" },
     messages: [
       {
         role: "user",
-        content: `${blocoBiblioteca}${blocoCotacao}Analise o contrato de locação abaixo e reporte a auditoria:\n\n${textoContrato}`,
+        content: `${blocoBiblioteca}${blocoCotacao}Analise o contrato de locação abaixo e reporte o checklist:\n\n${textoContrato}`,
       },
     ],
   });
