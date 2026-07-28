@@ -6,11 +6,6 @@ import { extrairTextoDocx } from "@/lib/extrairTextoDocx";
 import { extrairTextoPdf } from "@/lib/extrairTextoPdf";
 import { auditarContrato, type FonteDocumento } from "@/lib/auditorContrato";
 
-// Analisar um PDF escaneado de várias páginas (a IA lendo direto das
-// imagens) demora bem mais que um contrato em texto — o padrão da Vercel
-// (10s) corta a operação no meio do caminho. Dá mais fôlego.
-export const maxDuration = 60;
-
 const BUCKET_TEMP = "auditoria-temp";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
