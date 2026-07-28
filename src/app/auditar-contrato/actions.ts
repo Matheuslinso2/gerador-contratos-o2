@@ -11,46 +11,64 @@ import { auditarContrato, type FonteDocumento } from "@/lib/auditorContrato";
 // (10s) corta a operação no meio do caminho. Dá mais fôlego.
 export const maxDuration = 60;
 
-async function extrairTextoDeCampo(
+const BUCKET_TEMP = "auditoria-temp";
+
+type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
+
+// O arquivo já chega no servidor só como um caminho no Storage — o upload
+// em si aconteceu direto do navegador (ver AuditorForm.tsx), porque o corpo
+// de uma Server Action na Vercel tem um teto de ~4,5 MB, e contratos
+// escaneados com laudo de vistoria passam disso fácil.
+async function extrairDeCampo(
+  supabase: SupabaseServerClient,
   formData: FormData,
   campoTexto: string,
-  campoArquivo: string
+  campoPath: string,
+  campoNome: string
 ): Promise<{ texto: string; nomeArquivo: string | null; pdfBase64: string | null }> {
-  const arquivo = formData.get(campoArquivo) as File | null;
-  let texto = String(formData.get(campoTexto) ?? "").trim();
-  let nomeArquivo: string | null = null;
-  let pdfBase64: string | null = null;
+  const texto0 = String(formData.get(campoTexto) ?? "").trim();
+  const path = String(formData.get(campoPath) ?? "").trim();
+  const nomeArquivo = String(formData.get(campoNome) ?? "").trim() || null;
 
-  if (arquivo && arquivo.size > 0) {
-    nomeArquivo = arquivo.name;
-    const nomeLower = arquivo.name.toLowerCase();
-    const ehPdf = nomeLower.endsWith(".pdf");
-
-    if (!nomeLower.endsWith(".docx") && !ehPdf) {
-      redirect(
-        `/auditar-contrato?erro=${encodeURIComponent(
-          "Envie um arquivo .docx ou .pdf, ou cole o texto diretamente."
-        )}`
-      );
-    }
-
-    const buffer = Buffer.from(await arquivo.arrayBuffer());
-    try {
-      texto = ehPdf ? await extrairTextoPdf(buffer) : await extrairTextoDocx(buffer);
-    } catch {
-      redirect(
-        `/auditar-contrato?erro=${encodeURIComponent(
-          `Não foi possível ler o arquivo "${arquivo.name}" — ele pode estar corrompido ou num formato inesperado.`
-        )}`
-      );
-    }
-
-    // PDF escaneado (sem texto real): guarda os bytes originais pra IA ler
-    // direto das páginas do documento, em vez de depender de texto extraído.
-    if (ehPdf && !texto.trim()) {
-      pdfBase64 = buffer.toString("base64");
-    }
+  if (!path) {
+    return { texto: texto0, nomeArquivo: null, pdfBase64: null };
   }
+
+  const nomeLower = (nomeArquivo ?? path).toLowerCase();
+  const ehPdf = nomeLower.endsWith(".pdf");
+  if (!nomeLower.endsWith(".docx") && !ehPdf) {
+    redirect(
+      `/auditar-contrato?erro=${encodeURIComponent(
+        "Envie um arquivo .docx ou .pdf, ou cole o texto diretamente."
+      )}`
+    );
+  }
+
+  const { data, error } = await supabase.storage.from(BUCKET_TEMP).download(path);
+  if (error || !data) {
+    redirect(
+      `/auditar-contrato?erro=${encodeURIComponent(
+        "Não foi possível recuperar o arquivo enviado. Tente novamente."
+      )}`
+    );
+  }
+  const buffer = Buffer.from(await data.arrayBuffer());
+  void supabase.storage.from(BUCKET_TEMP).remove([path]);
+
+  let texto = "";
+  try {
+    texto = ehPdf ? await extrairTextoPdf(buffer) : await extrairTextoDocx(buffer);
+  } catch {
+    redirect(
+      `/auditar-contrato?erro=${encodeURIComponent(
+        `Não foi possível ler o arquivo "${nomeArquivo}" — ele pode estar corrompido ou num formato inesperado.`
+      )}`
+    );
+  }
+
+  // PDF escaneado (sem texto real): guarda os bytes originais pra IA ler
+  // direto das páginas do documento, em vez de depender de texto extraído.
+  const pdfBase64 = ehPdf && !texto.trim() ? buffer.toString("base64") : null;
 
   return { texto, nomeArquivo, pdfBase64 };
 }
@@ -71,7 +89,13 @@ export async function auditar(formData: FormData) {
     redirect(`/auditar-contrato?erro=${encodeURIComponent("Cadastre sua imobiliária primeiro.")}`);
   }
 
-  const { texto, nomeArquivo, pdfBase64 } = await extrairTextoDeCampo(formData, "texto", "arquivo");
+  const { texto, nomeArquivo, pdfBase64 } = await extrairDeCampo(
+    supabase,
+    formData,
+    "texto",
+    "arquivo_path",
+    "arquivo_nome"
+  );
 
   let fonteContrato: FonteDocumento;
   if (texto) {
@@ -86,10 +110,12 @@ export async function auditar(formData: FormData) {
     );
   }
 
-  const { texto: textoCotacao, pdfBase64: pdfBase64Cotacao } = await extrairTextoDeCampo(
+  const { texto: textoCotacao, pdfBase64: pdfBase64Cotacao } = await extrairDeCampo(
+    supabase,
     formData,
     "texto_cotacao",
-    "arquivo_cotacao"
+    "arquivo_cotacao_path",
+    "arquivo_cotacao_nome"
   );
   const fonteCotacao: FonteDocumento | null = textoCotacao
     ? { tipo: "texto", texto: textoCotacao }

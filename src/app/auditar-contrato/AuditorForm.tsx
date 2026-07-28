@@ -1,24 +1,73 @@
 "use client";
 
-import { useFormStatus } from "react-dom";
+import { useState } from "react";
+import { createClient } from "@/lib/supabase/browser";
 import { auditar } from "./actions";
 
-function BotaoEnviar() {
-  const { pending } = useFormStatus();
-  return (
-    <button
-      type="submit"
-      disabled={pending}
-      className="rounded-full bg-o2-coral px-6 py-2.5 font-medium text-white transition hover:opacity-90 disabled:opacity-60"
-    >
-      {pending ? "Analisando... (pode levar até 1 minuto)" : "Analisar contrato"}
-    </button>
-  );
+const BUCKET_TEMP = "auditoria-temp";
+
+async function enviarArquivo(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  arquivo: File
+): Promise<string> {
+  const ext = arquivo.name.split(".").pop() || "bin";
+  const path = `${userId}/${crypto.randomUUID()}.${ext}`;
+  const { error } = await supabase.storage
+    .from(BUCKET_TEMP)
+    .upload(path, arquivo, { contentType: arquivo.type });
+  if (error) throw new Error(`Falha ao enviar "${arquivo.name}": ${error.message}`);
+  return path;
 }
 
-export default function AuditorForm() {
+export default function AuditorForm({ userId }: { userId: string }) {
+  const [etapa, setEtapa] = useState<"parado" | "enviando" | "analisando">("parado");
+  const [erro, setErro] = useState<string | null>(null);
+  const enviando = etapa !== "parado";
+
+  async function aoEnviar(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setErro(null);
+
+    const form = e.currentTarget;
+    const dados = new FormData(form);
+    const arquivo = dados.get("arquivo") as File | null;
+    const arquivoCotacao = dados.get("arquivo_cotacao") as File | null;
+    dados.delete("arquivo");
+    dados.delete("arquivo_cotacao");
+
+    try {
+      setEtapa("enviando");
+      const supabase = createClient();
+
+      if (arquivo && arquivo.size > 0) {
+        const path = await enviarArquivo(supabase, userId, arquivo);
+        dados.set("arquivo_path", path);
+        dados.set("arquivo_nome", arquivo.name);
+      }
+      if (arquivoCotacao && arquivoCotacao.size > 0) {
+        const path = await enviarArquivo(supabase, userId, arquivoCotacao);
+        dados.set("arquivo_cotacao_path", path);
+        dados.set("arquivo_cotacao_nome", arquivoCotacao.name);
+      }
+
+      setEtapa("analisando");
+      await auditar(dados);
+      // auditar() redireciona em caso de sucesso ou erro; se chegar aqui sem
+      // redirecionar (não deveria), só destrava o botão.
+      setEtapa("parado");
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Falha ao enviar os arquivos.");
+      setEtapa("parado");
+    }
+  }
+
   return (
-    <form action={auditar} className="space-y-3">
+    <form onSubmit={aoEnviar} className="space-y-3">
+      {erro && (
+        <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>
+      )}
+
       <div>
         <label className="text-sm text-gray-600">Cole o texto do contrato</label>
         <textarea
@@ -61,7 +110,15 @@ export default function AuditorForm() {
         />
       </div>
 
-      <BotaoEnviar />
+      <button
+        type="submit"
+        disabled={enviando}
+        className="rounded-full bg-o2-coral px-6 py-2.5 font-medium text-white transition hover:opacity-90 disabled:opacity-60"
+      >
+        {etapa === "enviando" && "Enviando arquivos..."}
+        {etapa === "analisando" && "Analisando... (pode levar até 1 minuto)"}
+        {etapa === "parado" && "Analisar contrato"}
+      </button>
     </form>
   );
 }
