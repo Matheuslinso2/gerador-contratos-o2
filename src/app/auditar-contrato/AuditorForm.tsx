@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { unstable_rethrow } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
 import { auditar } from "./actions";
 
@@ -57,6 +58,10 @@ export default function AuditorForm({ userId }: { userId: string }) {
       // redirecionar (não deveria), só destrava o botão.
       setEtapa("parado");
     } catch (e) {
+      // auditar() usa redirect() internamente (sucesso ou erro do servidor);
+      // isso lança um sinal especial do Next que precisa continuar subindo,
+      // não ser tratado como um erro de verdade.
+      unstable_rethrow(e);
       setErro(e instanceof Error ? e.message : "Falha ao enviar os arquivos.");
       setEtapa("parado");
     }
