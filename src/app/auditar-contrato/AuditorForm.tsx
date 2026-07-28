@@ -40,8 +40,8 @@ export default function AuditorForm() {
           className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
         />
         <p className="mt-1 text-xs text-gray-500">
-          Se enviar um arquivo, ele substitui o texto colado acima. PDFs escaneados (imagem, sem
-          texto real) não podem ser lidos.
+          Se enviar um arquivo, ele substitui o texto colado acima. PDFs escaneados (sem texto
+          real) também funcionam — a IA lê direto das páginas do documento.
         </p>
       </div>
 

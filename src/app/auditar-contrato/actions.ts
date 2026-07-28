@@ -4,22 +4,24 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { extrairTextoDocx } from "@/lib/extrairTextoDocx";
 import { extrairTextoPdf } from "@/lib/extrairTextoPdf";
-import { auditarContrato } from "@/lib/auditorContrato";
+import { auditarContrato, type FonteDocumento } from "@/lib/auditorContrato";
 
 async function extrairTextoDeCampo(
   formData: FormData,
   campoTexto: string,
   campoArquivo: string
-): Promise<{ texto: string; nomeArquivo: string | null }> {
+): Promise<{ texto: string; nomeArquivo: string | null; pdfBase64: string | null }> {
   const arquivo = formData.get(campoArquivo) as File | null;
   let texto = String(formData.get(campoTexto) ?? "").trim();
   let nomeArquivo: string | null = null;
+  let pdfBase64: string | null = null;
 
   if (arquivo && arquivo.size > 0) {
     nomeArquivo = arquivo.name;
     const nomeLower = arquivo.name.toLowerCase();
+    const ehPdf = nomeLower.endsWith(".pdf");
 
-    if (!nomeLower.endsWith(".docx") && !nomeLower.endsWith(".pdf")) {
+    if (!nomeLower.endsWith(".docx") && !ehPdf) {
       redirect(
         `/auditar-contrato?erro=${encodeURIComponent(
           "Envie um arquivo .docx ou .pdf, ou cole o texto diretamente."
@@ -29,9 +31,7 @@ async function extrairTextoDeCampo(
 
     const buffer = Buffer.from(await arquivo.arrayBuffer());
     try {
-      texto = nomeLower.endsWith(".docx")
-        ? await extrairTextoDocx(buffer)
-        : await extrairTextoPdf(buffer);
+      texto = ehPdf ? await extrairTextoPdf(buffer) : await extrairTextoDocx(buffer);
     } catch {
       redirect(
         `/auditar-contrato?erro=${encodeURIComponent(
@@ -39,9 +39,15 @@ async function extrairTextoDeCampo(
         )}`
       );
     }
+
+    // PDF escaneado (sem texto real): guarda os bytes originais pra IA ler
+    // direto das páginas do documento, em vez de depender de texto extraído.
+    if (ehPdf && !texto.trim()) {
+      pdfBase64 = buffer.toString("base64");
+    }
   }
 
-  return { texto, nomeArquivo };
+  return { texto, nomeArquivo, pdfBase64 };
 }
 
 export async function auditar(formData: FormData) {
@@ -60,20 +66,31 @@ export async function auditar(formData: FormData) {
     redirect(`/auditar-contrato?erro=${encodeURIComponent("Cadastre sua imobiliária primeiro.")}`);
   }
 
-  const arquivo = formData.get("arquivo") as File | null;
-  const { texto, nomeArquivo } = await extrairTextoDeCampo(formData, "texto", "arquivo");
+  const { texto, nomeArquivo, pdfBase64 } = await extrairTextoDeCampo(formData, "texto", "arquivo");
 
-  if (!texto) {
+  let fonteContrato: FonteDocumento;
+  if (texto) {
+    fonteContrato = { tipo: "texto", texto };
+  } else if (pdfBase64) {
+    fonteContrato = { tipo: "pdf", base64: pdfBase64 };
+  } else {
     redirect(
       `/auditar-contrato?erro=${encodeURIComponent(
-        arquivo && arquivo.size > 0
-          ? "Não foi possível ler texto deste arquivo (pode ser um PDF escaneado, sem texto real). Tente colar o texto manualmente."
-          : "Cole o texto do contrato ou envie um arquivo .docx/.pdf."
+        "Cole o texto do contrato ou envie um arquivo .docx/.pdf."
       )}`
     );
   }
 
-  const { texto: textoCotacao } = await extrairTextoDeCampo(formData, "texto_cotacao", "arquivo_cotacao");
+  const { texto: textoCotacao, pdfBase64: pdfBase64Cotacao } = await extrairTextoDeCampo(
+    formData,
+    "texto_cotacao",
+    "arquivo_cotacao"
+  );
+  const fonteCotacao: FonteDocumento | null = textoCotacao
+    ? { tipo: "texto", texto: textoCotacao }
+    : pdfBase64Cotacao
+      ? { tipo: "pdf", base64: pdfBase64Cotacao }
+      : null;
 
   const { data: produtosSeguro } = await supabase
     .from("produtos")
@@ -87,7 +104,7 @@ export async function auditar(formData: FormData) {
 
   let relatorio;
   try {
-    relatorio = await auditarContrato(texto, bibliotecaClausulas, textoCotacao || null);
+    relatorio = await auditarContrato(fonteContrato, bibliotecaClausulas, fonteCotacao);
   } catch (e) {
     const mensagem = e instanceof Error ? e.message : "Falha ao analisar o contrato.";
     redirect(`/auditar-contrato?erro=${encodeURIComponent(mensagem)}`);
@@ -110,7 +127,7 @@ export async function auditar(formData: FormData) {
       locatario_identificado: relatorio.locatario_identificado,
       endereco_identificado: relatorio.endereco_identificado,
       relatorio,
-      texto_contrato: texto,
+      texto_contrato: texto || "[Lido diretamente das páginas do PDF escaneado — sem texto extraído]",
     })
     .select("id")
     .single();

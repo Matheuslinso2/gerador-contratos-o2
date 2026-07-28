@@ -27,7 +27,11 @@ export type ClausulaReferencia = {
   clausulaBase: string;
 };
 
-const SYSTEM_PROMPT = `Você é um Auditor Especialista em Contratos de Locação Imobiliária brasileira. Sua função é analisar o texto de um contrato de locação e devolver um checklist CURTO e direto — quem lê é a imobiliária, que não tem paciência para ler críticas longas. Cada item do checklist deve ter no máximo UMA frase curta, direto ao ponto. Só entre em detalhe (em "pontos_criticos") para os problemas realmente graves.
+export type FonteDocumento = { tipo: "texto"; texto: string } | { tipo: "pdf"; base64: string };
+
+const SYSTEM_PROMPT = `Você é um Auditor Especialista em Contratos de Locação Imobiliária brasileira. Sua função é analisar um contrato de locação e devolver um checklist CURTO e direto — quem lê é a imobiliária, que não tem paciência para ler críticas longas. Cada item do checklist deve ter no máximo UMA frase curta, direto ao ponto. Só entre em detalhe (em "pontos_criticos") para os problemas realmente graves.
+
+O contrato (e, se houver, a cotação) podem chegar como texto OU como arquivo PDF anexado diretamente (quando o PDF é escaneado e não tem texto extraível). Se vier como PDF anexado, leia o conteúdo diretamente das páginas/imagens do documento, exatamente como faria com o texto.
 
 ANTES DE QUALQUER OUTRA COISA: preencha locador_identificado, locatario_identificado e endereco_identificado com o valor exato encontrado na cláusula de qualificação das partes (normalmente logo no início do contrato). Esses 3 campos são OBRIGATÓRIOS e NUNCA podem ficar vazios quando a informação existir no texto. Só use "Não identificado" se realmente não constar em lugar nenhum.
 
@@ -122,10 +126,22 @@ const FERRAMENTA_RELATORIO: Anthropic.Tool = {
   },
 };
 
+// PDF escaneado (sem texto extraível) vai como bloco de documento, pra IA ler
+// direto das páginas; texto normal só entra embutido no bloco de texto.
+function blocosDoDocumento(rotulo: string, fonte: FonteDocumento): Anthropic.ContentBlockParam[] {
+  if (fonte.tipo === "texto") {
+    return [{ type: "text", text: `${rotulo}:\n\n${fonte.texto}` }];
+  }
+  return [
+    { type: "text", text: `${rotulo} (arquivo PDF escaneado anexado abaixo — leia direto das páginas):` },
+    { type: "document", source: { type: "base64", media_type: "application/pdf", data: fonte.base64 } },
+  ];
+}
+
 export async function auditarContrato(
-  textoContrato: string,
+  contrato: FonteDocumento,
   bibliotecaClausulas: ClausulaReferencia[] = [],
-  textoCotacao: string | null = null
+  cotacao: FonteDocumento | null = null
 ): Promise<RelatorioAuditoria> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -142,9 +158,19 @@ export async function auditarContrato(
         .join("\n\n")}\n\n---\n\n`
     : "";
 
-  const blocoCotacao = textoCotacao
-    ? `COTAÇÃO/PROPOSTA DE SEGURO (documento de referência para o pilar CONFERENCIA_COTACAO — compare contra o contrato abaixo):\n\n${textoCotacao}\n\n---\n\n`
-    : "";
+  const conteudo: Anthropic.ContentBlockParam[] = [
+    { type: "text", text: `${blocoBiblioteca}Analise o contrato de locação a seguir e reporte o checklist.` },
+    ...blocosDoDocumento("CONTRATO DE LOCAÇÃO A SER AUDITADO", contrato),
+  ];
+
+  if (cotacao) {
+    conteudo.push(
+      ...blocosDoDocumento(
+        "COTAÇÃO/PROPOSTA DE SEGURO (documento de referência para o pilar CONFERENCIA_COTACAO — compare contra o contrato acima)",
+        cotacao
+      )
+    );
+  }
 
   const mensagem = await anthropic.messages.create({
     model: "claude-sonnet-5",
@@ -152,12 +178,7 @@ export async function auditarContrato(
     system: SYSTEM_PROMPT,
     tools: [FERRAMENTA_RELATORIO],
     tool_choice: { type: "tool", name: "reportar_auditoria" },
-    messages: [
-      {
-        role: "user",
-        content: `${blocoBiblioteca}${blocoCotacao}Analise o contrato de locação abaixo e reporte o checklist:\n\n${textoContrato}`,
-      },
-    ],
+    messages: [{ role: "user", content: conteudo }],
   });
 
   const chamada = mensagem.content.find(
