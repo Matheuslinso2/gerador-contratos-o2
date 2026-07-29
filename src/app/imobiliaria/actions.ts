@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { extrairTextoDocx } from "@/lib/extrairTextoDocx";
 import { enviarEmail } from "@/lib/email";
+import { limparClausulaGarantiaDoTextoBase } from "@/lib/limparTextoBase";
 
 export async function salvarImobiliaria(formData: FormData) {
   const supabase = await createClient();
@@ -57,10 +58,23 @@ export async function salvarImobiliaria(formData: FormData) {
 
   const { data: imobiliariaExistente } = await supabase
     .from("imobiliarias")
-    .select("id")
+    .select("id, texto_base_contrato")
     .eq("user_id", user.id)
     .maybeSingle();
   const primeiroCadastro = !imobiliariaExistente;
+
+  // Só roda a limpeza (via IA) quando o texto-base é novo/mudou — evita
+  // reprocessar à toa a cada salvamento do cadastro (custo de API e risco
+  // de reprocessar um texto que já passou por essa limpeza antes).
+  if (texto_base_contrato !== imobiliariaExistente?.texto_base_contrato) {
+    try {
+      const resultado = await limparClausulaGarantiaDoTextoBase(texto_base_contrato);
+      texto_base_contrato = resultado.texto_limpo;
+    } catch {
+      // Se a limpeza automática falhar, segue com o texto como veio —
+      // melhor salvar o cadastro do que travar por causa disso.
+    }
+  }
 
   let logo_url: string | null = null;
   if (logo && logo.size > 0) {
