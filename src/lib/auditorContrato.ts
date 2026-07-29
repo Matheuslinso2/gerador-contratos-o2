@@ -176,7 +176,11 @@ export async function auditarContrato(
 
   const mensagem = await anthropic.messages.create({
     model: "claude-sonnet-5",
-    max_tokens: 4000,
+    // PDFs escaneados grandes (a IA lendo página por página) consomem bem
+    // mais tokens de saída antes de chegar no relatório final — um limite
+    // baixo corta a resposta no meio, deixando os últimos campos do
+    // checklist vazios mesmo com a instrução de ser resumido.
+    max_tokens: 8000,
     system: SYSTEM_PROMPT,
     tools: [FERRAMENTA_RELATORIO],
     tool_choice: { type: "tool", name: "reportar_auditoria" },
