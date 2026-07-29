@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { traduzirErroAuth } from "@/lib/authErrors";
+import { origem } from "@/lib/origem";
 
 export async function signUp(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim();
@@ -22,6 +23,7 @@ export async function signUp(formData: FormData) {
     email,
     password,
     options: {
+      emailRedirectTo: `${await origem()}/`,
       data: {
         termos_aceitos_em: new Date().toISOString(),
       },

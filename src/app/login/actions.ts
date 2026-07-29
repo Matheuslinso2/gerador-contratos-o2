@@ -1,9 +1,9 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { traduzirErroAuth } from "@/lib/authErrors";
+import { origem } from "@/lib/origem";
 
 export async function signIn(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim();
@@ -15,13 +15,6 @@ export async function signIn(formData: FormData) {
     redirect(`/login?erro=${encodeURIComponent(traduzirErroAuth(error.message))}`);
   }
   redirect("/");
-}
-
-async function origem() {
-  const h = await headers();
-  const host = h.get("host") ?? "localhost:3000";
-  const proto = host.startsWith("localhost") ? "http" : h.get("x-forwarded-proto") ?? "https";
-  return `${proto}://${host}`;
 }
 
 export async function esqueciSenha(formData: FormData) {
