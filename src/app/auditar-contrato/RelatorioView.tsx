@@ -1,4 +1,4 @@
-import type { ItemChecklist, RelatorioAuditoria, StatusChecklist } from "@/lib/auditorContrato";
+import type { RelatorioAuditoria, StatusChecklist } from "@/lib/auditorContrato";
 
 const STATUS_ESTILO: Record<string, string> = {
   APROVADO: "border-green-300 bg-green-50 text-green-700",
@@ -31,14 +31,22 @@ const COR_ITEM: Record<StatusChecklist, string> = {
   nao_avaliado: "text-gray-400",
 };
 
-function LinhaChecklist({ titulo, item }: { titulo: string; item: ItemChecklist | undefined }) {
-  const status = item?.status ?? "nao_avaliado";
+function LinhaChecklist({
+  titulo,
+  status,
+  resumo,
+}: {
+  titulo: string;
+  status: StatusChecklist | undefined;
+  resumo: string | undefined;
+}) {
+  const statusFinal = status ?? "nao_avaliado";
   return (
     <div className="flex items-start gap-2 text-sm">
-      <span className={`mt-0.5 ${COR_ITEM[status]}`}>{ICONE_ITEM[status]}</span>
+      <span className={`mt-0.5 ${COR_ITEM[statusFinal]}`}>{ICONE_ITEM[statusFinal]}</span>
       <div>
         <span className="font-medium text-o2-navy">{titulo}: </span>
-        <span className="text-gray-700">{item?.resumo ?? "Não avaliado nesta auditoria."}</span>
+        <span className="text-gray-700">{resumo ?? "Não avaliado nesta auditoria."}</span>
       </div>
     </div>
   );
@@ -113,10 +121,36 @@ function RelatorioAntigoView({ relatorio }: { relatorio: RelatorioAntigo }) {
   );
 }
 
+// Versão intermediária do checklist (cada pilar era um objeto aninhado
+// {status, resumo}) — mantida só pra continuar mostrando corretamente
+// auditorias salvas nessa fase, antes do schema ser achatado.
+type PilarAninhado = { status: StatusChecklist; resumo: string };
+type RelatorioAninhado = {
+  dados_cadastrais?: PilarAninhado;
+  dados_locacao?: PilarAninhado;
+  conferencia_cotacao?: PilarAninhado;
+  clausulas_seguradora?: PilarAninhado;
+  assinaturas?: PilarAninhado;
+};
+
 export default function RelatorioView({ relatorio }: { relatorio: RelatorioAuditoria }) {
-  if (!("dados_cadastrais" in relatorio)) {
+  const semChecklist =
+    !("dados_cadastrais_status" in relatorio) && !("dados_cadastrais" in relatorio);
+  if (semChecklist) {
     return <RelatorioAntigoView relatorio={relatorio as unknown as RelatorioAntigo} />;
   }
+
+  const aninhado = relatorio as unknown as RelatorioAninhado;
+  const pilar = (chave: keyof RelatorioAninhado, statusPlano?: StatusChecklist, resumoPlano?: string) => ({
+    status: statusPlano ?? aninhado[chave]?.status,
+    resumo: resumoPlano ?? aninhado[chave]?.resumo,
+  });
+
+  const dadosCadastrais = pilar("dados_cadastrais", relatorio.dados_cadastrais_status, relatorio.dados_cadastrais_resumo);
+  const dadosLocacao = pilar("dados_locacao", relatorio.dados_locacao_status, relatorio.dados_locacao_resumo);
+  const conferenciaCotacao = pilar("conferencia_cotacao", relatorio.conferencia_cotacao_status, relatorio.conferencia_cotacao_resumo);
+  const clausulasSeguradora = pilar("clausulas_seguradora", relatorio.clausulas_seguradora_status, relatorio.clausulas_seguradora_resumo);
+  const assinaturas = pilar("assinaturas", relatorio.assinaturas_status, relatorio.assinaturas_resumo);
 
   return (
     <div className="space-y-3">
@@ -130,11 +164,11 @@ export default function RelatorioView({ relatorio }: { relatorio: RelatorioAudit
       </div>
 
       <div className="space-y-1.5 rounded-lg border border-gray-200 bg-white p-3">
-        <LinhaChecklist titulo="Dados cadastrais" item={relatorio.dados_cadastrais} />
-        <LinhaChecklist titulo="Dados da locação" item={relatorio.dados_locacao} />
-        <LinhaChecklist titulo="Conferência com a cotação" item={relatorio.conferencia_cotacao} />
-        <LinhaChecklist titulo="Cláusulas da seguradora" item={relatorio.clausulas_seguradora} />
-        <LinhaChecklist titulo="Assinaturas" item={relatorio.assinaturas} />
+        <LinhaChecklist titulo="Dados cadastrais" status={dadosCadastrais.status} resumo={dadosCadastrais.resumo} />
+        <LinhaChecklist titulo="Dados da locação" status={dadosLocacao.status} resumo={dadosLocacao.resumo} />
+        <LinhaChecklist titulo="Conferência com a cotação" status={conferenciaCotacao.status} resumo={conferenciaCotacao.resumo} />
+        <LinhaChecklist titulo="Cláusulas da seguradora" status={clausulasSeguradora.status} resumo={clausulasSeguradora.resumo} />
+        <LinhaChecklist titulo="Assinaturas" status={assinaturas.status} resumo={assinaturas.resumo} />
       </div>
 
       {(relatorio.pontos_criticos?.length ?? 0) > 0 && (

@@ -2,22 +2,22 @@ import Anthropic from "@anthropic-ai/sdk";
 
 export type StatusChecklist = "ok" | "atencao" | "problema" | "nao_avaliado";
 
-export type ItemChecklist = {
-  status: StatusChecklist;
-  resumo: string;
-};
-
 export type RelatorioAuditoria = {
   status_geral: "APROVADO" | "APROVADO_RESSALVAS" | "REPROVADO";
   tipo_garantia_identificada: string;
   locador_identificado: string;
   locatario_identificado: string;
   endereco_identificado: string;
-  dados_cadastrais: ItemChecklist;
-  dados_locacao: ItemChecklist;
-  conferencia_cotacao: ItemChecklist;
-  clausulas_seguradora: ItemChecklist;
-  assinaturas: ItemChecklist;
+  dados_cadastrais_status: StatusChecklist;
+  dados_cadastrais_resumo: string;
+  dados_locacao_status: StatusChecklist;
+  dados_locacao_resumo: string;
+  conferencia_cotacao_status: StatusChecklist;
+  conferencia_cotacao_resumo: string;
+  clausulas_seguradora_status: StatusChecklist;
+  clausulas_seguradora_resumo: string;
+  assinaturas_status: StatusChecklist;
+  assinaturas_resumo: string;
   pontos_criticos: string[];
 };
 
@@ -29,7 +29,7 @@ export type ClausulaReferencia = {
 
 export type FonteDocumento = { tipo: "texto"; texto: string } | { tipo: "pdf"; base64: string };
 
-const SYSTEM_PROMPT = `Você é um Auditor Especialista em Contratos de Locação Imobiliária brasileira. Sua função é analisar um contrato de locação e devolver um checklist CURTO e direto — quem lê é a imobiliária, que não tem paciência para ler críticas longas. Cada item do checklist deve ter no máximo UMA frase curta, direto ao ponto. Só entre em detalhe (em "pontos_criticos") para os problemas realmente graves.
+const SYSTEM_PROMPT = `Você é um Auditor Especialista em Contratos de Locação Imobiliária brasileira. Sua função é analisar um contrato de locação e devolver um checklist CURTO e direto — quem lê é a imobiliária, que não tem paciência para ler críticas longas. Cada resumo deve ter no máximo UMA frase curta, direto ao ponto. Só entre em detalhe (em "pontos_criticos") para os problemas realmente graves.
 
 O contrato (e, se houver, a cotação) podem chegar como texto OU como arquivo PDF anexado diretamente (quando o PDF é escaneado e não tem texto extraível). Se vier como PDF anexado, leia o conteúdo diretamente das páginas/imagens do documento, exatamente como faria com o texto.
 
@@ -37,43 +37,29 @@ Se o arquivo do contrato incluir, anexado nas últimas páginas, um Laudo/Relat�
 
 ANTES DE QUALQUER OUTRA COISA: preencha locador_identificado, locatario_identificado e endereco_identificado com o valor exato encontrado na cláusula de qualificação das partes (normalmente logo no início do contrato). Esses 3 campos são OBRIGATÓRIOS e NUNCA podem ficar vazios quando a informação existir no texto. Só use "Não identificado" se realmente não constar em lugar nenhum.
 
-Avalie os 5 pilares abaixo, cada um com um status ("ok", "atencao", "problema" ou "nao_avaliado") e um resumo de uma frase:
+Você precisa preencher TODOS OS 10 CAMPOS de status/resumo abaixo, um de cada vez, na ordem. Não pule nenhum — mesmo que o pilar não se aplique, preencha com status "nao_avaliado" e um resumo curto explicando por quê. Cada status é "ok", "atencao", "problema" ou "nao_avaliado".
 
-1. DADOS_CADASTRAIS — nome do(s) locatário(s), CPF/CNPJ, nome do(s) locador(es). "problema" se faltar ou estiver incompleto/incoerente algum desses dados.
+1. dados_cadastrais_status / dados_cadastrais_resumo — nome do(s) locatário(s), CPF/CNPJ, nome do(s) locador(es). "problema" se faltar ou estiver incompleto/incoerente algum desses dados.
 
-2. DADOS_LOCACAO — endereço completo do imóvel, tipo (residencial/não residencial), valor do aluguel, prazo da locação (datas de início/término coerentes). "problema" se algum desses dados estiver ausente, ambíguo ou incoerente.
+2. dados_locacao_status / dados_locacao_resumo — endereço completo do imóvel, tipo (residencial/não residencial), valor do aluguel, prazo da locação (datas de início/término coerentes). "problema" se algum desses dados estiver ausente, ambíguo ou incoerente.
 
-3. CONFERENCIA_COTACAO — só avalie se uma COTAÇÃO/PROPOSTA DE SEGURO for fornecida abaixo. Compare segurado/locatário, valor do aluguel, prazo e endereço entre o contrato e a cotação. Se NENHUMA cotação for fornecida, use status "nao_avaliado" e resumo "Nenhuma cotação/proposta anexada para conferência.".
+3. conferencia_cotacao_status / conferencia_cotacao_resumo — só avalie se uma COTAÇÃO/PROPOSTA DE SEGURO for fornecida abaixo. Compare segurado/locatário, valor do aluguel, prazo e endereço entre o contrato e a cotação. Se NENHUMA cotação for fornecida, use status "nao_avaliado" e resumo "Nenhuma cotação/proposta anexada para conferência.".
 
-4. CLAUSULAS_SEGURADORA — só se aplica quando a garantia for Seguro Fiança ou Título de Capitalização. Se a garantia for Fiador ou Caução, use status "nao_avaliado" e resumo "Não se aplica — garantia não é seguro-fiança nem título de capitalização.". Quando se aplicar e uma BIBLIOTECA DE CLÁUSULAS DE REFERÊNCIA for fornecida, verifique se a cláusula do contrato tem o mesmo conteúdo essencial do texto oficial daquele produto/seguradora (sem trechos essenciais alterados, removidos ou incompatíveis). Se a seguradora/produto citado não constar na biblioteca fornecida, use "nao_avaliado" com resumo explicando que não há como validar. A Lei do Inquilinato (art. 37) proíbe mais de uma modalidade de garantia no mesmo contrato — se houver DUPLA GARANTIA, isso é "problema" aqui E deve virar um item em pontos_criticos.
+4. clausulas_seguradora_status / clausulas_seguradora_resumo — só se aplica quando a garantia for Seguro Fiança ou Título de Capitalização. Se a garantia for Fiador ou Caução, use status "nao_avaliado" e resumo "Não se aplica — garantia não é seguro-fiança nem título de capitalização.". Quando se aplicar e uma BIBLIOTECA DE CLÁUSULAS DE REFERÊNCIA for fornecida, verifique se a cláusula do contrato tem o mesmo conteúdo essencial do texto oficial daquele produto/seguradora (sem trechos essenciais alterados, removidos ou incompatíveis). Se a seguradora/produto citado não constar na biblioteca fornecida, use "nao_avaliado" com resumo explicando que não há como validar. A Lei do Inquilinato (art. 37) proíbe mais de uma modalidade de garantia no mesmo contrato — se houver DUPLA GARANTIA, isso é "problema" aqui E deve virar um item em pontos_criticos.
 
-5. ASSINATURAS — verifique: (a) previsão/presença de assinatura do(s) locador(es) ou de seu representante legal; (b) do(s) locatário(s); (c) de testemunhas quando exigidas; (d) se há relatório/certificado de assinatura eletrônica (Clicksign, ZapSign, D4Sign, DocuSign ou similar) anexado ao texto, e se ele indica que TODOS os signatários concluíram a assinatura; (e) qualquer assinatura pendente, recusada ou inválida; (f) se os nomes nas assinaturas correspondem às partes qualificadas no contrato. "problema" se faltar assinatura de alguma parte qualificada, houver pendência/recusa, ou nome divergente. "atencao" se não for possível confirmar (ex: contrato sem página de assinatura no texto fornecido).
+5. assinaturas_status / assinaturas_resumo — verifique: (a) previsão/presença de assinatura do(s) locador(es) ou de seu representante legal; (b) do(s) locatário(s); (c) de testemunhas quando exigidas; (d) se há relatório/certificado de assinatura eletrônica (Clicksign, ZapSign, D4Sign, DocuSign ou similar) anexado ao texto, e se ele indica que TODOS os signatários concluíram a assinatura; (e) qualquer assinatura pendente, recusada ou inválida; (f) se os nomes nas assinaturas correspondem às partes qualificadas no contrato. "problema" se faltar assinatura de alguma parte qualificada, houver pendência/recusa, ou nome divergente. "atencao" se não for possível confirmar (ex: contrato sem página de assinatura no texto fornecido).
 
-pontos_criticos: lista curta (pode ficar vazia) só com os problemas mais sérios que merecem destaque além do resumo de uma frase — cada item também deve ser curto (uma frase, cite a cláusula/seção quando possível). Não repita aqui o que já foi dito nos resumos dos 5 pilares, a menos que seja crítico o suficiente para reforçar.
+pontos_criticos: lista curta (pode ficar vazia) só com os problemas mais sérios que merecem destaque além do resumo de uma frase — cada item também deve ser curto (uma frase, cite a cláusula/seção quando possível). Não repita aqui o que já foi dito nos resumos acima, a menos que seja crítico o suficiente para reforçar.
 
 status_geral: "APROVADO" se todos os pilares avaliados estão "ok" (os "nao_avaliado" não contam contra); "APROVADO_RESSALVAS" se houver "atencao" ou "problema" leve/pontual; "REPROVADO" se houver "problema" grave (ex: dupla garantia, dado essencial ausente, assinatura de parte faltando).
 
-Responda SEMPRE chamando a ferramenta "reportar_auditoria". Nunca responda em texto livre.`;
+Responda SEMPRE chamando a ferramenta "reportar_auditoria", preenchendo TODOS os campos do schema. Nunca responda em texto livre.`;
 
-const ITEM_CHECKLIST_SCHEMA = {
-  type: "object" as const,
-  properties: {
-    status: {
-      type: "string",
-      enum: ["ok", "atencao", "problema", "nao_avaliado"],
-    },
-    resumo: {
-      type: "string",
-      minLength: 1,
-      description: "Uma frase curta, direto ao ponto.",
-    },
-  },
-  required: ["status", "resumo"],
-};
+const STATUS_ENUM = ["ok", "atencao", "problema", "nao_avaliado"];
 
 const FERRAMENTA_RELATORIO: Anthropic.Tool = {
   name: "reportar_auditoria",
-  description: "Reporta o checklist resumido da auditoria de um contrato de locação.",
+  description: "Reporta o checklist resumido da auditoria de um contrato de locação. TODOS os campos são obrigatórios, incluindo os 10 campos de status/resumo dos 5 pilares.",
   input_schema: {
     type: "object",
     properties: {
@@ -101,11 +87,16 @@ const FERRAMENTA_RELATORIO: Anthropic.Tool = {
         type: "string",
         description: 'Ex: "Fiador", "Caução", "Seguro Fiança", "Título de Capitalização", "Sem garantia identificada", ou "DUPLA GARANTIA (ERRO)" se houver mais de uma.',
       },
-      dados_cadastrais: ITEM_CHECKLIST_SCHEMA,
-      dados_locacao: ITEM_CHECKLIST_SCHEMA,
-      conferencia_cotacao: ITEM_CHECKLIST_SCHEMA,
-      clausulas_seguradora: ITEM_CHECKLIST_SCHEMA,
-      assinaturas: ITEM_CHECKLIST_SCHEMA,
+      dados_cadastrais_status: { type: "string", enum: STATUS_ENUM, description: "Status do pilar 1 (dados cadastrais)." },
+      dados_cadastrais_resumo: { type: "string", minLength: 1, description: "Resumo de uma frase do pilar 1 (dados cadastrais)." },
+      dados_locacao_status: { type: "string", enum: STATUS_ENUM, description: "Status do pilar 2 (dados da locação)." },
+      dados_locacao_resumo: { type: "string", minLength: 1, description: "Resumo de uma frase do pilar 2 (dados da locação)." },
+      conferencia_cotacao_status: { type: "string", enum: STATUS_ENUM, description: "Status do pilar 3 (conferência com a cotação)." },
+      conferencia_cotacao_resumo: { type: "string", minLength: 1, description: "Resumo de uma frase do pilar 3 (conferência com a cotação)." },
+      clausulas_seguradora_status: { type: "string", enum: STATUS_ENUM, description: "Status do pilar 4 (cláusulas da seguradora)." },
+      clausulas_seguradora_resumo: { type: "string", minLength: 1, description: "Resumo de uma frase do pilar 4 (cláusulas da seguradora)." },
+      assinaturas_status: { type: "string", enum: STATUS_ENUM, description: "Status do pilar 5 (assinaturas)." },
+      assinaturas_resumo: { type: "string", minLength: 1, description: "Resumo de uma frase do pilar 5 (assinaturas)." },
       pontos_criticos: {
         type: "array",
         description: "Lista curta (pode ser vazia) só com os problemas mais graves, uma frase cada.",
@@ -118,11 +109,16 @@ const FERRAMENTA_RELATORIO: Anthropic.Tool = {
       "endereco_identificado",
       "status_geral",
       "tipo_garantia_identificada",
-      "dados_cadastrais",
-      "dados_locacao",
-      "conferencia_cotacao",
-      "clausulas_seguradora",
-      "assinaturas",
+      "dados_cadastrais_status",
+      "dados_cadastrais_resumo",
+      "dados_locacao_status",
+      "dados_locacao_resumo",
+      "conferencia_cotacao_status",
+      "conferencia_cotacao_resumo",
+      "clausulas_seguradora_status",
+      "clausulas_seguradora_resumo",
+      "assinaturas_status",
+      "assinaturas_resumo",
       "pontos_criticos",
     ],
   },
@@ -176,22 +172,13 @@ export async function auditarContrato(
 
   const mensagem = await anthropic.messages.create({
     model: "claude-sonnet-5",
-    // PDFs escaneados grandes (a IA lendo página por página) consomem bem
-    // mais tokens de saída antes de chegar no relatório final — um limite
-    // baixo corta a resposta no meio, deixando os últimos campos do
-    // checklist vazios mesmo com a instrução de ser resumido. 8000 ainda não
-    // era suficiente para um PDF real de 22 páginas escaneadas.
-    max_tokens: 16000,
+    max_tokens: 8000,
     system: SYSTEM_PROMPT,
     tools: [FERRAMENTA_RELATORIO],
     tool_choice: { type: "tool", name: "reportar_auditoria" },
     messages: [{ role: "user", content: conteudo }],
   });
 
-  // Se a resposta foi cortada por limite de tokens, os campos que vêm depois
-  // no schema (o checklist) ficam faltando silenciosamente — melhor avisar
-  // com clareza do que salvar um relatório incompleto disfarçado de "não
-  // avaliado".
   if (mensagem.stop_reason === "max_tokens") {
     throw new Error(
       "A análise deste contrato ficou grande demais e foi cortada pela IA antes de terminar. Tente novamente — se persistir, tente enviar só as páginas do contrato, sem anexos extras."
@@ -205,14 +192,15 @@ export async function auditarContrato(
     throw new Error("A IA não retornou um relatório estruturado.");
   }
 
-  // Diagnóstico temporário: o checklist tem vindo faltando mesmo sem
-  // estourar max_tokens. Loga o motivo real de parada e quais campos
-  // vieram, pra investigar direto pelos Runtime Logs da Vercel.
+  // Diagnóstico temporário: o checklist tinha vindo faltando mesmo sem
+  // estourar max_tokens (schema com blocos repetidos confundindo o
+  // modelo). Loga os campos retornados pra confirmar que o schema achatado
+  // resolveu.
   console.log(
     "[auditor] stop_reason:",
     mensagem.stop_reason,
-    "| usage:",
-    JSON.stringify(mensagem.usage),
+    "| output_tokens:",
+    mensagem.usage?.output_tokens,
     "| campos:",
     Object.keys(chamada.input as object).join(", ")
   );

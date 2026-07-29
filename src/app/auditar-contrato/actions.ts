@@ -145,12 +145,16 @@ export async function auditar(formData: FormData) {
   // Defesa extra: a IA às vezes deixa algum campo do checklist de fora da
   // resposta, mesmo sendo obrigatório no schema. Preenche com um valor
   // neutro em vez de deixar a tela quebrar ao exibir o relatório.
-  const itemPadrao = { status: "nao_avaliado" as const, resumo: "Não avaliado nesta auditoria." };
-  relatorio.dados_cadastrais ??= itemPadrao;
-  relatorio.dados_locacao ??= itemPadrao;
-  relatorio.conferencia_cotacao ??= itemPadrao;
-  relatorio.clausulas_seguradora ??= itemPadrao;
-  relatorio.assinaturas ??= itemPadrao;
+  relatorio.dados_cadastrais_status ??= "nao_avaliado";
+  relatorio.dados_cadastrais_resumo ??= "Não avaliado nesta auditoria.";
+  relatorio.dados_locacao_status ??= "nao_avaliado";
+  relatorio.dados_locacao_resumo ??= "Não avaliado nesta auditoria.";
+  relatorio.conferencia_cotacao_status ??= "nao_avaliado";
+  relatorio.conferencia_cotacao_resumo ??= "Não avaliado nesta auditoria.";
+  relatorio.clausulas_seguradora_status ??= "nao_avaliado";
+  relatorio.clausulas_seguradora_resumo ??= "Não avaliado nesta auditoria.";
+  relatorio.assinaturas_status ??= "nao_avaliado";
+  relatorio.assinaturas_resumo ??= "Não avaliado nesta auditoria.";
   relatorio.pontos_criticos ??= [];
 
   const { data: auditoria, error } = await supabase
