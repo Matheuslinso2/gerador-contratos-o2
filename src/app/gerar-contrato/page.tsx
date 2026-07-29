@@ -9,6 +9,11 @@ import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { garantirImobiliariaColaborador } from "@/lib/imobiliariaColaborador";
 
 export const dynamic = "force-dynamic";
+// Gerar contrato agora chama a IA (pra inserir a cláusula de garantia na
+// posição certa, e às vezes ler a proposta do título de capitalização) — o
+// padrão da Vercel (10s) pode cortar a operação no meio. Dá mais fôlego,
+// igual já foi feito no Auditor.
+export const maxDuration = 60;
 
 export default async function GerarContratoPage({
   searchParams,
