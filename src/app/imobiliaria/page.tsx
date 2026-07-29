@@ -144,9 +144,12 @@ export default async function ImobiliariaPage({
             <code className="rounded bg-gray-100 px-1">{"{{valor_aluguel}}"}</code>,{" "}
             <code className="rounded bg-gray-100 px-1">{"{{data_inicio}}"}</code>,{" "}
             <code className="rounded bg-gray-100 px-1">{"{{data_termino}}"}</code>,{" "}
-            <code className="rounded bg-gray-100 px-1">{"{{prazo_meses}}"}</code> e{" "}
-            <code className="rounded bg-gray-100 px-1">{"{{dia_vencimento}}"}</code> direto no
-            texto — o sistema substitui pelo valor de cada locação ao gerar o contrato.
+            <code className="rounded bg-gray-100 px-1">{"{{prazo_meses}}"}</code>,{" "}
+            <code className="rounded bg-gray-100 px-1">{"{{dia_vencimento}}"}</code>,{" "}
+            <code className="rounded bg-gray-100 px-1">{"{{valor_aluguel_extenso}}"}</code> e{" "}
+            <code className="rounded bg-gray-100 px-1">{"{{prazo_meses_extenso}}"}</code> (pro
+            valor/prazo por extenso, ex: &quot;dois mil e oitocentos reais&quot;) direto no texto —
+            o sistema substitui pelo valor de cada locação ao gerar o contrato.
           </p>
         </section>
 

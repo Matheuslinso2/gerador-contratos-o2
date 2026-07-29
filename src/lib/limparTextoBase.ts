@@ -24,6 +24,11 @@ Se algum desses dados não aparecer em lugar nenhum do texto, não crie o marcad
 NÃO troque nomes/dados que apareçam em rodapé, cabeçalho ou local de assinatura de forma genérica (ex: "LOCADOR(ES)" sozinho como rótulo de assinatura, sem o nome, fica como está).
 NÃO mexa em dados da IMOBILIÁRIA (nome, CNPJ, CRECI dela) nem de terceiros como testemunhas, fiador, procurador — só locador, locatário, imóvel, valores e datas da locação em si.
 
+ATENÇÃO — NÚMERO REPETIDO POR EXTENSO: contratos costumam repetir o valor do aluguel ou o prazo por extenso entre parênteses logo depois do número/valor (ex: "30 (trinta) meses", "R$ 3.500,00 (três mil e quinhentos reais)"). Nesses casos, troque o par INTEIRO (número + parênteses) pelos DOIS marcadores juntos, no mesmo formato:
+- "30 (trinta) meses" → "{{prazo_meses}} ({{prazo_meses_extenso}}) meses"
+- "R$ 3.500,00 (três mil e quinhentos reais)" → "{{valor_aluguel}} ({{valor_aluguel_extenso}})"
+Nunca deixe um número por extenso entre parênteses sem o marcador correspondente — ele ficaria incoerente quando o valor mudar (ex: "24 (trinta) meses" seria um erro grave).
+
 TAREFA 2 — CLÁUSULA DE GARANTIA:
 O texto-base NÃO PODE conter nenhuma cláusula de garantia locatícia já embutida (fiador, caução, seguro-fiança, título de capitalização) — o sistema anexa essa cláusula automaticamente depois, escolhida pra cada contrato específico. Se houver duplicaria a garantia.
 1. Procure uma ou mais cláusulas que tratem da GARANTIA DA LOCAÇÃO, incluindo textos de seguradora colados dentro dela (sub-itens numerados tipo "11.1", "11.2", ou blocos com numeração própria tipo "Cláusula 1 -", "Cláusula 2 -").

@@ -1,3 +1,5 @@
+import { numeroPorExtenso, valorPorExtensoReais } from "./numeroPorExtenso";
+
 // Substitui códigos que a imobiliária pode usar dentro do texto-base do
 // contrato, pra dado que varia por locação aparecer dentro da própria
 // cláusula (e não só isolado no bloco de Dados da Locação). Esses marcadores
@@ -24,15 +26,21 @@ export function substituirPlaceholders(
   if (dados.locatario !== undefined) resultado = resultado.replace(/\{\{\s*locat[aá]rio\s*\}\}/gi, dados.locatario);
   if (dados.enderecoImovel !== undefined)
     resultado = resultado.replace(/\{\{\s*endereco[_ ]?im[oó]vel\s*\}\}/gi, dados.enderecoImovel);
-  if (dados.valorAluguel !== undefined)
-    resultado = resultado.replace(
-      /\{\{\s*valor[_ ]?aluguel\s*\}\}/gi,
-      `R$ ${dados.valorAluguel.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
-    );
+  if (dados.valorAluguel !== undefined) {
+    resultado = resultado
+      .replace(
+        /\{\{\s*valor[_ ]?aluguel\s*\}\}/gi,
+        `R$ ${dados.valorAluguel.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+      )
+      .replace(/\{\{\s*valor[_ ]?aluguel[_ ]?extenso\s*\}\}/gi, valorPorExtensoReais(dados.valorAluguel));
+  }
   if (dados.dataInicio !== undefined)
     resultado = resultado.replace(/\{\{\s*data[_ ]?in[ií]cio\s*\}\}/gi, fmtDataBr(dados.dataInicio));
-  if (dados.prazoMeses !== undefined)
-    resultado = resultado.replace(/\{\{\s*prazo[_ ]?meses\s*\}\}/gi, String(dados.prazoMeses));
+  if (dados.prazoMeses !== undefined) {
+    resultado = resultado
+      .replace(/\{\{\s*prazo[_ ]?meses\s*\}\}/gi, String(dados.prazoMeses))
+      .replace(/\{\{\s*prazo[_ ]?meses[_ ]?extenso\s*\}\}/gi, numeroPorExtenso(dados.prazoMeses));
+  }
 
   return resultado;
 }
