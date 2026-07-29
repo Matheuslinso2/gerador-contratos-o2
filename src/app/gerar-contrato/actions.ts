@@ -6,6 +6,7 @@ import { substituirPlaceholders, substituirPlaceholdersTitulo, calcularDataTermi
 import { extrairTextoDocx } from "@/lib/extrairTextoDocx";
 import { extrairTextoPdf } from "@/lib/extrairTextoPdf";
 import { extrairDadosTitulo } from "@/lib/extrairDadosTitulo";
+import { inserirClausulaGarantiaNaPosicaoCorreta } from "@/lib/numerarClausulasFinais";
 
 const NOME_TIPO_TITULO = "Título de Capitalização";
 
@@ -269,12 +270,36 @@ export async function gerarContrato(formData: FormData) {
     .filter(Boolean)
     .join("\n");
 
-  const clausulasGarantia = [
-    produtoNome
-      ? `CLÁUSULA DE GARANTIA — ${tipoGarantia.nome} (${seguradoraNome ? `${seguradoraNome} — ` : ""}${produtoNome})`
-      : `CLÁUSULA DE GARANTIA — ${tipoGarantia.nome}`,
-    clausulaGarantiaBase,
+  const textoBaseContrato = substituirPlaceholders(imobiliaria.texto_base_contrato, {
+    diaVencimentoAluguel: dia_vencimento_aluguel,
+    dataTermino: calcularDataTermino(data_inicio, prazo_meses),
+  });
+
+  const rotuloGarantia = produtoNome
+    ? `${tipoGarantia.nome} (${seguradoraNome ? `${seguradoraNome} — ` : ""}${produtoNome})`
+    : tipoGarantia.nome;
+
+  // Insere a cláusula de garantia na mesma posição relativa em que ela
+  // estava no contrato original da imobiliária (gravada quando o texto-base
+  // foi limpo no cadastro), renumerando o restante coerentemente — em vez de
+  // só colar no final. Se a inserção automática falhar, cai de volta pro
+  // formato antigo (cabeçalho genérico ao final).
+  let textoBaseComGarantia = [
+    textoBaseContrato,
+    `CLÁUSULA DE GARANTIA — ${rotuloGarantia}\n\n${clausulaGarantiaBase}`,
   ].join("\n\n");
+  try {
+    const resultado = await inserirClausulaGarantiaNaPosicaoCorreta(
+      textoBaseContrato,
+      imobiliaria.garantia_posicao_apos_clausula ?? null,
+      rotuloGarantia,
+      clausulaGarantiaBase
+    );
+    textoBaseComGarantia = resultado.texto_final;
+  } catch {
+    // Mantém o texto com o cabeçalho genérico se a inserção automática
+    // falhar — não vale travar a geração do contrato por causa disso.
+  }
 
   const clausulaIncendio = produtoIncendio
     ? [
@@ -283,19 +308,12 @@ export async function gerarContrato(formData: FormData) {
       ].join("\n\n")
     : "";
 
-  const textoBaseContrato = substituirPlaceholders(imobiliaria.texto_base_contrato, {
-    diaVencimentoAluguel: dia_vencimento_aluguel,
-    dataTermino: calcularDataTermino(data_inicio, prazo_meses),
-  });
-
   const textoGerado = [
     "DADOS DA LOCAÇÃO",
     partes,
     "",
     "TEXTO-BASE DO CONTRATO (" + imobiliaria.nome + ")",
-    textoBaseContrato,
-    "",
-    clausulasGarantia,
+    textoBaseComGarantia,
     "",
     clausulaIncendio,
     "",

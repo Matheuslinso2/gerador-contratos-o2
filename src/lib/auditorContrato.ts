@@ -205,5 +205,17 @@ export async function auditarContrato(
     throw new Error("A IA não retornou um relatório estruturado.");
   }
 
+  // Diagnóstico temporário: o checklist tem vindo faltando mesmo sem
+  // estourar max_tokens. Loga o motivo real de parada e quais campos
+  // vieram, pra investigar direto pelos Runtime Logs da Vercel.
+  console.log(
+    "[auditor] stop_reason:",
+    mensagem.stop_reason,
+    "| usage:",
+    JSON.stringify(mensagem.usage),
+    "| campos:",
+    Object.keys(chamada.input as object).join(", ")
+  );
+
   return chamada.input as RelatorioAuditoria;
 }

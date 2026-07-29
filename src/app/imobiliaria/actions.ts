@@ -66,10 +66,14 @@ export async function salvarImobiliaria(formData: FormData) {
   // Só roda a limpeza (via IA) quando o texto-base é novo/mudou — evita
   // reprocessar à toa a cada salvamento do cadastro (custo de API e risco
   // de reprocessar um texto que já passou por essa limpeza antes).
+  // garantiaPosicao fica "undefined" (não mexe na coluna) quando o texto
+  // não mudou, pra não apagar a posição já salva de antes.
+  let garantiaPosicao: number | null | undefined;
   if (texto_base_contrato !== imobiliariaExistente?.texto_base_contrato) {
     try {
       const resultado = await limparClausulaGarantiaDoTextoBase(texto_base_contrato);
       texto_base_contrato = resultado.texto_limpo;
+      garantiaPosicao = resultado.clausulas_antes_da_removida;
     } catch {
       // Se a limpeza automática falhar, segue com o texto como veio —
       // melhor salvar o cadastro do que travar por causa disso.
@@ -105,6 +109,7 @@ export async function salvarImobiliaria(formData: FormData) {
     plataforma_assinatura: plataforma_assinatura || null,
   };
   if (logo_url) dados.logo_url = logo_url;
+  if (garantiaPosicao !== undefined) dados.garantia_posicao_apos_clausula = garantiaPosicao;
 
   const { error } = await supabase.from("imobiliarias").upsert(dados, { onConflict: "user_id" });
   if (error) redirect(`/imobiliaria?erro=${encodeURIComponent(error.message)}`);
