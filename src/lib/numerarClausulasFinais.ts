@@ -4,36 +4,98 @@ export type ResultadoInsercaoGarantia = {
   texto_final: string;
 };
 
-const SYSTEM_PROMPT = `Você recebe o texto-base de um contrato de locação (já sem nenhuma cláusula de garantia, pois ela foi removida antes) e o texto pronto de uma cláusula de garantia locatícia para inserir de volta numa posição exata.
+type Cabecalho = { linha: string; indiceLinha: number };
 
-REGRAS IMPORTANTES:
-1. NUNCA altere, resuma, parafraseie ou reescreva o conteúdo de nenhuma cláusula já existente no texto-base — reproduza cada uma delas exatamente como veio, palavra por palavra.
-2. NUNCA altere o texto da cláusula de garantia fornecida — cole exatamente como veio, palavra por palavra, só ajustando o número do cabeçalho dela pra se encaixar na sequência.
-3. Você vai receber a instrução exata de onde inserir (depois de quantas cláusulas). Se o texto-base tem cláusulas numeradas (ex: "CLÁUSULA 01 -", "CLÁUSULA 1°-", "CLÁUSULA PRIMEIRA –"), identifique o estilo exato de numeração usado e:
-   a. Insira a cláusula de garantia logo depois da cláusula na posição indicada (se a instrução for "depois de 0 cláusulas", ela vira a primeira cláusula do contrato).
-   b. Dê a ela o número que caberia nessa posição, no MESMO estilo de numeração do resto do documento.
-   c. RENUMERE sequencialmente (+1) todas as cláusulas que ficam depois dela, mantendo intactos o texto e a ordem de cada uma — só o número do cabeçalho muda.
-   d. Se alguma cláusula citar o número de outra por referência cruzada (ex: "conforme cláusula 18"), atualize esse número também para continuar apontando pra cláusula certa depois da renumeração.
-4. Se o texto-base NÃO tem nenhuma cláusula numerada (texto livre, sem esse padrão), ignore a posição indicada e apenas acrescente a cláusula de garantia ao final do texto, com um cabeçalho genérico "CLÁUSULA DE GARANTIA — [descrição]".
-5. Devolva o texto-base INTEIRO (todas as cláusulas, do início ao fim) com a cláusula de garantia já inserida — não devolva só um trecho.
+// Cláusulas costumam começar a linha com "CLÁUSULA"/"Cláusula" (numérico,
+// com grau, ordinal por extenso etc.) — pega só a LINHA do cabeçalho, não o
+// corpo, pra manter a chamada da IA pequena e rápida (reescrever o contrato
+// inteiro via IA pra inserir 1 cláusula era lento demais e estourava o
+// tempo limite da função em contratos grandes).
+function extrairCabecalhos(texto: string): Cabecalho[] {
+  const linhas = texto.split("\n");
+  const cabecalhos: Cabecalho[] = [];
+  linhas.forEach((linha, indiceLinha) => {
+    if (/^\s*cl[aá]usula\b/i.test(linha) && linha.trim().length < 200) {
+      cabecalhos.push({ linha, indiceLinha });
+    }
+  });
+  return cabecalhos;
+}
 
-Responda sempre chamando a ferramenta "reportar_texto_final".`;
+const SYSTEM_PROMPT = `Você recebe a lista NUMERADA dos cabeçalhos de cláusula (só o título de cada uma, não o corpo) de um contrato de locação, na ordem em que aparecem. Também recebe em que posição uma nova cláusula de garantia locatícia precisa ser inserida, e um rótulo pra ela.
+
+Sua tarefa:
+1. Identifique o estilo exato de numeração usado nos cabeçalhos (numérico com ou sem zero à esquerda, com símbolo de grau, ordinal por extenso, maiúsculas, pontuação depois do número, etc).
+2. Gere o cabeçalho da nova cláusula de garantia, no MESMO estilo, com o número que cabe na posição indicada.
+3. Para CADA cabeçalho que precisa ser renumerado por causa da inserção (todos que vêm depois da posição, +1 no número), devolva o texto ORIGINAL exato desse cabeçalho e o texto NOVO com o número atualizado. Não inclua cabeçalhos que não mudam.
+4. Não invente cabeçalhos que não estão na lista recebida.
+
+Responda sempre chamando a ferramenta "reportar_renumeracao".`;
 
 const FERRAMENTA: Anthropic.Tool = {
-  name: "reportar_texto_final",
-  description: "Reporta o contrato completo, com a cláusula de garantia inserida na posição indicada e a numeração ajustada.",
+  name: "reportar_renumeracao",
+  description: "Reporta o cabeçalho da nova cláusula de garantia e a lista de cabeçalhos existentes que precisam ser renumerados.",
   input_schema: {
     type: "object",
     properties: {
-      texto_final: {
+      cabecalho_novo: {
         type: "string",
         minLength: 1,
-        description: "O contrato completo (texto-base inteiro + cláusula de garantia inserida na posição indicada, com numeração ajustada).",
+        description: "Cabeçalho completo da nova cláusula de garantia, no mesmo estilo dos demais, com o número correto pra posição indicada.",
+      },
+      renumeracoes: {
+        type: "array",
+        description: "Lista de cabeçalhos existentes que mudam de número por causa da inserção, na ordem em que aparecem no documento.",
+        items: {
+          type: "object",
+          properties: {
+            original: { type: "string", description: "Texto exato do cabeçalho como está hoje na lista recebida." },
+            novo: { type: "string", description: "Texto do cabeçalho com o número renumerado." },
+          },
+          required: ["original", "novo"],
+        },
       },
     },
-    required: ["texto_final"],
+    required: ["cabecalho_novo", "renumeracoes"],
   },
 };
+
+async function planejarInsercao(
+  cabecalhos: Cabecalho[],
+  posicaoAposClausula: number,
+  rotuloGarantia: string,
+  anthropic: Anthropic
+): Promise<{ cabecalhoNovo: string; renumeracoes: { original: string; novo: string }[] }> {
+  const lista = cabecalhos.map((c, i) => `${i + 1}: ${c.linha.trim()}`).join("\n");
+
+  const mensagem = await anthropic.messages.create({
+    model: "claude-sonnet-5",
+    max_tokens: 4000,
+    system: SYSTEM_PROMPT,
+    tools: [FERRAMENTA],
+    tool_choice: { type: "tool", name: "reportar_renumeracao" },
+    messages: [
+      {
+        role: "user",
+        content: `CABEÇALHOS DO CONTRATO (só título, em ordem):\n\n${lista}\n\n---\n\nInserir a cláusula de garantia logo depois do item ${posicaoAposClausula} da lista (0 = antes do item 1; ou seja, ela vira o item ${posicaoAposClausula + 1}).\n\nRótulo da garantia: ${rotuloGarantia}`,
+      },
+    ],
+  });
+
+  if (mensagem.stop_reason === "max_tokens") {
+    throw new Error("O planejamento da inserção foi cortado antes de terminar.");
+  }
+
+  const chamada = mensagem.content.find(
+    (bloco): bloco is Anthropic.ToolUseBlock => bloco.type === "tool_use"
+  );
+  if (!chamada) {
+    throw new Error("A IA não retornou o plano de inserção.");
+  }
+
+  const resultado = chamada.input as { cabecalho_novo: string; renumeracoes: { original: string; novo: string }[] };
+  return { cabecalhoNovo: resultado.cabecalho_novo, renumeracoes: resultado.renumeracoes ?? [] };
+}
 
 export async function inserirClausulaGarantiaNaPosicaoCorreta(
   textoBase: string,
@@ -46,42 +108,38 @@ export async function inserirClausulaGarantiaNaPosicaoCorreta(
     throw new Error("Inserção automática não configurada: falta a variável de ambiente ANTHROPIC_API_KEY.");
   }
 
+  const blocoGarantia = `${rotuloGarantia}\n\n${corpoGarantia}`;
+  const cabecalhos = extrairCabecalhos(textoBase);
+
+  // Sem cláusulas numeradas detectadas, ou sem posição gravada: cai no
+  // comportamento simples (cola no final com cabeçalho genérico).
+  if (cabecalhos.length === 0 || posicaoAposClausula === null) {
+    return { texto_final: [textoBase, `CLÁUSULA DE GARANTIA — ${blocoGarantia}`].join("\n\n") };
+  }
+
   const anthropic = new Anthropic({ apiKey });
+  const posicao = Math.min(posicaoAposClausula, cabecalhos.length);
+  const { cabecalhoNovo, renumeracoes } = await planejarInsercao(cabecalhos, posicao, rotuloGarantia, anthropic);
 
-  const instrucaoPosicao =
-    posicaoAposClausula === null
-      ? "Este contrato não tem cláusulas numeradas identificadas — só acrescente a cláusula de garantia ao final, com cabeçalho genérico."
-      : `Insira a cláusula de garantia logo depois da ${posicaoAposClausula}ª cláusula numerada do texto-base (ou seja, depois de ${posicaoAposClausula} cláusulas). Se ${posicaoAposClausula} for 0, ela vira a primeira cláusula do contrato.`;
+  let linhas = textoBase.split("\n");
 
-  const mensagem = await anthropic.messages.create({
-    model: "claude-sonnet-5",
-    max_tokens: 16000,
-    system: SYSTEM_PROMPT,
-    tools: [FERRAMENTA],
-    tool_choice: { type: "tool", name: "reportar_texto_final" },
-    messages: [
-      {
-        role: "user",
-        content: `TEXTO-BASE DO CONTRATO (sem a cláusula de garantia):\n\n${textoBase}\n\n---\n\nONDE INSERIR: ${instrucaoPosicao}\n\n---\n\nCLÁUSULA DE GARANTIA A INSERIR (rótulo sugerido pro cabeçalho, ajuste o número conforme a posição: "${rotuloGarantia}"):\n\n${corpoGarantia}`,
-      },
-    ],
-  });
+  // Descobre onde inserir ANTES de aplicar qualquer renumeração (usando o
+  // texto original do cabeçalho que hoje ocupa essa posição).
+  const linhaSeguinte = posicao < cabecalhos.length ? cabecalhos[posicao].linha : null;
+  const indiceInsercao = linhaSeguinte !== null ? linhas.indexOf(linhaSeguinte) : linhas.length;
 
-  if (mensagem.stop_reason === "max_tokens") {
-    throw new Error("A inserção da cláusula de garantia foi cortada antes de terminar — contrato muito grande.");
+  // Renumera os cabeçalhos existentes (substituição exata de linha).
+  for (const { original, novo } of renumeracoes) {
+    const idx = linhas.indexOf(original);
+    if (idx !== -1) linhas[idx] = novo;
   }
 
-  const chamada = mensagem.content.find(
-    (bloco): bloco is Anthropic.ToolUseBlock => bloco.type === "tool_use"
-  );
-  if (!chamada) {
-    throw new Error("A IA não retornou o contrato com a cláusula inserida.");
+  const blocoNovasLinhas = ["", cabecalhoNovo, "", corpoGarantia, ""];
+  if (indiceInsercao === -1 || indiceInsercao >= linhas.length) {
+    linhas = [...linhas, ...blocoNovasLinhas];
+  } else {
+    linhas = [...linhas.slice(0, indiceInsercao), ...blocoNovasLinhas, ...linhas.slice(indiceInsercao)];
   }
 
-  const resultado = chamada.input as ResultadoInsercaoGarantia;
-  if (!resultado.texto_final?.trim()) {
-    throw new Error("A inserção automática retornou um texto vazio.");
-  }
-
-  return resultado;
+  return { texto_final: linhas.join("\n") };
 }
