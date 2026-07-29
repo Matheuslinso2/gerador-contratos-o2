@@ -179,13 +179,24 @@ export async function auditarContrato(
     // PDFs escaneados grandes (a IA lendo página por página) consomem bem
     // mais tokens de saída antes de chegar no relatório final — um limite
     // baixo corta a resposta no meio, deixando os últimos campos do
-    // checklist vazios mesmo com a instrução de ser resumido.
-    max_tokens: 8000,
+    // checklist vazios mesmo com a instrução de ser resumido. 8000 ainda não
+    // era suficiente para um PDF real de 22 páginas escaneadas.
+    max_tokens: 16000,
     system: SYSTEM_PROMPT,
     tools: [FERRAMENTA_RELATORIO],
     tool_choice: { type: "tool", name: "reportar_auditoria" },
     messages: [{ role: "user", content: conteudo }],
   });
+
+  // Se a resposta foi cortada por limite de tokens, os campos que vêm depois
+  // no schema (o checklist) ficam faltando silenciosamente — melhor avisar
+  // com clareza do que salvar um relatório incompleto disfarçado de "não
+  // avaliado".
+  if (mensagem.stop_reason === "max_tokens") {
+    throw new Error(
+      "A análise deste contrato ficou grande demais e foi cortada pela IA antes de terminar. Tente novamente — se persistir, tente enviar só as páginas do contrato, sem anexos extras."
+    );
+  }
 
   const chamada = mensagem.content.find(
     (bloco): bloco is Anthropic.ToolUseBlock => bloco.type === "tool_use"
