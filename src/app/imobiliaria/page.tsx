@@ -133,11 +133,20 @@ export default async function ImobiliariaPage({
             className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
           />
           <p className="text-xs text-gray-500">
-            Na cláusula de pagamento, use o código <code className="rounded bg-gray-100 px-1">{"{{dia_vencimento}}"}</code> no
-            lugar do dia (ex: &quot;deverá ser pago até o dia {"{{dia_vencimento}}"} de cada mês&quot;). Na
-            cláusula de prazo, use <code className="rounded bg-gray-100 px-1">{"{{data_termino}}"}</code> pra
-            citar a data de encerramento (ex: &quot;findando-se em {"{{data_termino}}"}&quot;) — em ambos os
-            casos, o sistema substitui automaticamente pelo valor de cada locação ao gerar o contrato.
+            Pode colar um contrato real que já usa — ao salvar, o sistema identifica sozinho os
+            nomes das partes, endereço do imóvel, valores e datas específicos desse contrato e
+            transforma em marcadores reutilizáveis, além de remover uma eventual cláusula de
+            garantia já embutida (ela é anexada à parte, escolhida em cada contrato). Se preferir
+            controlar manualmente, pode usar os códigos{" "}
+            <code className="rounded bg-gray-100 px-1">{"{{locador}}"}</code>,{" "}
+            <code className="rounded bg-gray-100 px-1">{"{{locatario}}"}</code>,{" "}
+            <code className="rounded bg-gray-100 px-1">{"{{endereco_imovel}}"}</code>,{" "}
+            <code className="rounded bg-gray-100 px-1">{"{{valor_aluguel}}"}</code>,{" "}
+            <code className="rounded bg-gray-100 px-1">{"{{data_inicio}}"}</code>,{" "}
+            <code className="rounded bg-gray-100 px-1">{"{{data_termino}}"}</code>,{" "}
+            <code className="rounded bg-gray-100 px-1">{"{{prazo_meses}}"}</code> e{" "}
+            <code className="rounded bg-gray-100 px-1">{"{{dia_vencimento}}"}</code> direto no
+            texto — o sistema substitui pelo valor de cada locação ao gerar o contrato.
           </p>
         </section>
 

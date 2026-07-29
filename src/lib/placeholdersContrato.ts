@@ -1,13 +1,40 @@
 // Substitui códigos que a imobiliária pode usar dentro do texto-base do
 // contrato, pra dado que varia por locação aparecer dentro da própria
-// cláusula (e não só isolado no bloco de Dados da Locação).
+// cláusula (e não só isolado no bloco de Dados da Locação). Esses marcadores
+// tanto podem ser digitados manualmente pela imobiliária quanto inseridos
+// automaticamente pelo preparo do texto-base (ver src/lib/limparTextoBase.ts).
 export function substituirPlaceholders(
   texto: string,
-  dados: { diaVencimentoAluguel: number; dataTermino: string }
+  dados: {
+    diaVencimentoAluguel: number;
+    dataTermino: string;
+    locador?: string;
+    locatario?: string;
+    enderecoImovel?: string;
+    valorAluguel?: number;
+    dataInicio?: string;
+    prazoMeses?: number;
+  }
 ): string {
-  return texto
+  let resultado = texto
     .replace(/\{\{\s*dia[_ ]?vencimento\s*\}\}/gi, String(dados.diaVencimentoAluguel))
     .replace(/\{\{\s*data[_ ]?t[ée]rmino\s*\}\}/gi, fmtDataBr(dados.dataTermino));
+
+  if (dados.locador !== undefined) resultado = resultado.replace(/\{\{\s*locador\s*\}\}/gi, dados.locador);
+  if (dados.locatario !== undefined) resultado = resultado.replace(/\{\{\s*locat[aá]rio\s*\}\}/gi, dados.locatario);
+  if (dados.enderecoImovel !== undefined)
+    resultado = resultado.replace(/\{\{\s*endereco[_ ]?im[oó]vel\s*\}\}/gi, dados.enderecoImovel);
+  if (dados.valorAluguel !== undefined)
+    resultado = resultado.replace(
+      /\{\{\s*valor[_ ]?aluguel\s*\}\}/gi,
+      `R$ ${dados.valorAluguel.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+    );
+  if (dados.dataInicio !== undefined)
+    resultado = resultado.replace(/\{\{\s*data[_ ]?in[ií]cio\s*\}\}/gi, fmtDataBr(dados.dataInicio));
+  if (dados.prazoMeses !== undefined)
+    resultado = resultado.replace(/\{\{\s*prazo[_ ]?meses\s*\}\}/gi, String(dados.prazoMeses));
+
+  return resultado;
 }
 
 // Substitui os códigos usados na cláusula-base de produtos de Título de

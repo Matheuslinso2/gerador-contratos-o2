@@ -273,6 +273,12 @@ export async function gerarContrato(formData: FormData) {
   const textoBaseContrato = substituirPlaceholders(imobiliaria.texto_base_contrato, {
     diaVencimentoAluguel: dia_vencimento_aluguel,
     dataTermino: calcularDataTermino(data_inicio, prazo_meses),
+    locador,
+    locatario,
+    enderecoImovel: endereco_imovel,
+    valorAluguel: valor_aluguel,
+    dataInicio: data_inicio,
+    prazoMeses: prazo_meses,
   });
 
   const rotuloGarantia = produtoNome

@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { extrairTextoDocx } from "@/lib/extrairTextoDocx";
 import { enviarEmail } from "@/lib/email";
-import { limparClausulaGarantiaDoTextoBase } from "@/lib/limparTextoBase";
+import { prepararTextoBase } from "@/lib/limparTextoBase";
 
 export async function salvarImobiliaria(formData: FormData) {
   const supabase = await createClient();
@@ -71,11 +71,11 @@ export async function salvarImobiliaria(formData: FormData) {
   let garantiaPosicao: number | null | undefined;
   if (texto_base_contrato !== imobiliariaExistente?.texto_base_contrato) {
     try {
-      const resultado = await limparClausulaGarantiaDoTextoBase(texto_base_contrato);
-      texto_base_contrato = resultado.texto_limpo;
-      garantiaPosicao = resultado.clausulas_antes_da_removida;
+      const resultado = await prepararTextoBase(texto_base_contrato);
+      texto_base_contrato = resultado.texto_preparado;
+      garantiaPosicao = resultado.clausulas_antes_da_garantia_removida;
     } catch {
-      // Se a limpeza automática falhar, segue com o texto como veio —
+      // Se o preparo automático falhar, segue com o texto como veio —
       // melhor salvar o cadastro do que travar por causa disso.
     }
   }
