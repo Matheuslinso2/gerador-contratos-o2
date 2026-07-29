@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { gerarContrato } from "./actions";
 import CampoPessoas from "./CampoPessoas";
+import CampoEndereco from "@/components/CampoEndereco";
 
 type TipoGarantia = { id: string; nome: string };
 type Produto = {
@@ -82,15 +83,7 @@ export default function FormularioContrato({
 
       <section className="space-y-3 border-t border-gray-200 pt-6">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">2. Imóvel e locação</h2>
-        <div>
-          <label className="text-sm text-gray-600">Endereço do imóvel</label>
-          <input
-            name="endereco_imovel"
-            placeholder="Endereço do imóvel"
-            required
-            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
-          />
-        </div>
+        <CampoEndereco name="endereco_imovel" label="Endereço do imóvel" required />
 
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <div>

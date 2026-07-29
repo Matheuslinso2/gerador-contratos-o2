@@ -4,6 +4,8 @@ import { salvarImobiliaria } from "./actions";
 import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
 import BackLink from "@/components/BackLink";
+import CampoCnpj from "@/components/CampoCnpj";
+import CampoEndereco from "@/components/CampoEndereco";
 
 export const dynamic = "force-dynamic";
 
@@ -62,13 +64,7 @@ export default async function ImobiliariaPage({
             </div>
             <div>
               <label className="text-sm text-gray-600">CNPJ *</label>
-              <input
-                name="cnpj"
-                placeholder="CNPJ"
-                required
-                defaultValue={imobiliaria?.cnpj}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
-              />
+              <CampoCnpj defaultValue={imobiliaria?.cnpj} />
             </div>
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -91,15 +87,11 @@ export default async function ImobiliariaPage({
               />
             </div>
           </div>
-          <div>
-            <label className="text-sm text-gray-600">Endereço do escritório</label>
-            <input
-              name="endereco"
-              placeholder="Endereço do escritório"
-              defaultValue={imobiliaria?.endereco ?? ""}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
-            />
-          </div>
+          <CampoEndereco
+            name="endereco"
+            label="Endereço do escritório"
+            defaultValue={imobiliaria?.endereco ?? ""}
+          />
           <div>
             <label className="text-sm text-gray-600">
               Logo da imobiliária (opcional, aparece no Word gerado)
