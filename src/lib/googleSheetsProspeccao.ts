@@ -16,6 +16,11 @@ function clienteDrive() {
   return drive({ version: "v3", auth: auth as never });
 }
 
+function clienteSheets() {
+  const auth = obterAutenticacaoGoogle(ESCOPOS);
+  return sheets({ version: "v4", auth: auth as never });
+}
+
 // As planilhas de cotação nem sempre ficam direto na pasta compartilhada —
 // às vezes tem uma subpasta por ano no meio do caminho (ex: "2025", "2026").
 // Entra recursivamente em qualquer subpasta encontrada, até um limite de
@@ -79,15 +84,107 @@ export function idsDePastasDoEnv(valor: string | undefined): string[] {
     .filter(Boolean);
 }
 
+const MESES = [
+  "janeiro", "fevereiro", "março", "marco", "abril", "maio", "junho",
+  "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
+];
+
+function semAcento(texto: string): string {
+  return texto.normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+
+// As pastas têm arquivos que não são planilhas mensais de cotação de
+// verdade: cópias de backup ("Cópia de ...") e planilhas de controle à
+// parte (ex: "PLANILHA CONTROLE NEGOCIAÇÕES"). Considera só arquivos cujo
+// nome tem um mês do ano (é como as planilhas mensais de verdade são
+// nomeadas nas duas pastas) e que não comecem com "Cópia de".
+export function ehPlanilhaMensalValida(nomeArquivo: string): boolean {
+  const nome = semAcento(nomeArquivo.toLowerCase());
+  if (nome.startsWith("copia de")) return false;
+  return MESES.some((mes) => nome.includes(semAcento(mes)));
+}
+
+export function normalizarTextoBusca(texto: string): string {
+  return semAcento(texto.toLowerCase()).replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+export function textoCorresponde(valor: string, busca: string): boolean {
+  const a = normalizarTextoBusca(valor);
+  const b = normalizarTextoBusca(busca);
+  if (!a || !b) return false;
+  return a.includes(b) || b.includes(a);
+}
+
+// Uma planilha pode ter mais de uma aba (ex: um "resumo" do lote e o
+// "detalhamento" linha a linha) — a aba com os dados de verdade nem sempre
+// é a primeira. Procura, entre todas as abas, a que tem mais colunas do
+// cabeçalho batendo com as colunas esperadas (busca por conterem o nome,
+// não exata, já que a grafia varia entre meses).
+export async function encontrarAbaDeDados(
+  spreadsheetId: string,
+  colunasEsperadas: string[]
+): Promise<{ aba: string; cabecalho: string[] } | null> {
+  const cliente = clienteSheets();
+  const metadados = await cliente.spreadsheets.get({ spreadsheetId });
+  const abas = (metadados.data.sheets ?? [])
+    .map((s) => s.properties?.title)
+    .filter((t): t is string => !!t);
+
+  let melhor: { aba: string; cabecalho: string[]; pontos: number } | null = null;
+
+  for (const aba of abas) {
+    let valores;
+    try {
+      valores = await cliente.spreadsheets.values.get({ spreadsheetId, range: `'${aba}'!A1:Z1` });
+    } catch {
+      continue;
+    }
+    const cabecalho = (valores.data.values?.[0] ?? []).map((v) => String(v ?? ""));
+    const cabecalhoNormalizado = cabecalho.map(normalizarTextoBusca);
+    const pontos = colunasEsperadas.filter((esperada) =>
+      cabecalhoNormalizado.some((col) => col.includes(normalizarTextoBusca(esperada)))
+    ).length;
+
+    if (pontos > 0 && (!melhor || pontos > melhor.pontos)) {
+      melhor = { aba, cabecalho, pontos };
+    }
+  }
+
+  return melhor ? { aba: melhor.aba, cabecalho: melhor.cabecalho } : null;
+}
+
+// Lê todas as linhas de dados de uma aba (a partir da linha 2) e devolve
+// cada linha como objeto {nomeDaColuna: valor}, usando o cabeçalho passado.
+export async function lerLinhasComoObjetos(
+  spreadsheetId: string,
+  aba: string,
+  cabecalho: string[]
+): Promise<Record<string, string>[]> {
+  const cliente = clienteSheets();
+  const ultimaColuna = String.fromCharCode(65 + Math.min(cabecalho.length - 1, 25));
+  const valores = await cliente.spreadsheets.values.get({
+    spreadsheetId,
+    range: `'${aba}'!A2:${ultimaColuna}100000`,
+  });
+
+  const linhas = valores.data.values ?? [];
+  return linhas
+    .filter((linha) => linha.some((v) => String(v ?? "").trim() !== ""))
+    .map((linha) => {
+      const objeto: Record<string, string> = {};
+      cabecalho.forEach((coluna, i) => {
+        objeto[coluna || `coluna_${i + 1}`] = String(linha[i] ?? "");
+      });
+      return objeto;
+    });
+}
+
 // Lê o cabeçalho (linha 1) e algumas linhas de amostra (2 a 6) da primeira
-// aba de uma planilha — usado tanto no diagnóstico inicial quanto, depois,
-// para saber em qual coluna procurar cada dado.
+// aba de uma planilha — usado só no diagnóstico inicial (página temporária).
 export async function lerCabecalhoEAmostra(
   spreadsheetId: string
 ): Promise<{ aba: string; cabecalho: string[]; amostra: string[][] }> {
-  const auth = obterAutenticacaoGoogle(ESCOPOS);
-  const cliente = sheets({ version: "v4", auth: auth as never });
-
+  const cliente = clienteSheets();
   const metadados = await cliente.spreadsheets.get({ spreadsheetId });
   const aba = metadados.data.sheets?.[0]?.properties?.title ?? "Página1";
 

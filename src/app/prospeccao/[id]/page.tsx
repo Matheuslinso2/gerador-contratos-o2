@@ -23,7 +23,7 @@ export default async function RelatorioProspeccaoPage({
   const { data: relatorio } = await supabase
     .from("relatorios_prospeccao")
     .select(
-      "nome_imobiliaria, cnpj_imobiliaria, url_site, url_instagram, notas_manuais, ficha, numeros_o2, created_at"
+      "nome_imobiliaria, cnpj_imobiliaria, url_site, url_instagram, notas_manuais, ficha, numeros_o2, historico_cotacoes, comparativo_regional, created_at"
     )
     .eq("id", id)
     .maybeSingle();

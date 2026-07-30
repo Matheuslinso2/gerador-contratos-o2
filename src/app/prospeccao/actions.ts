@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { montarFichaImobiliaria } from "@/lib/prospeccaoIA";
 import { obterNumerosO2 } from "@/lib/numerosO2";
+import { buscarHistoricoEComparativo, buscarImobiliariaConhecida } from "@/lib/prospeccaoDados";
 
 export async function criarRelatorioProspeccao(formData: FormData) {
   const supabase = await createClient();
@@ -15,7 +16,7 @@ export async function criarRelatorioProspeccao(formData: FormData) {
   if (!isAdmin(user.email) && !isColaboradorO2(user.email)) redirect("/");
 
   const nome = String(formData.get("nome") ?? "").trim();
-  const cnpj = String(formData.get("cnpj") ?? "").trim();
+  let cnpj = String(formData.get("cnpj") ?? "").trim();
   const url_site = String(formData.get("url_site") ?? "").trim();
   const url_instagram = String(formData.get("url_instagram") ?? "").trim();
   const notas_manuais = String(formData.get("notas_manuais") ?? "").trim();
@@ -29,12 +30,18 @@ export async function criarRelatorioProspeccao(formData: FormData) {
   const textoSite = "";
   const textoInstagram = "";
 
-  // Fase 3 vai cruzar com as planilhas do Google Sheets (histórico da
-  // imobiliária + comparativo regional). Por enquanto ficam vazios.
-  const historico_cotacoes = {};
-  const comparativo_regional = {};
+  const [{ historico: historico_cotacoes, regional: comparativo_regional }, numeros_o2, imobiliariaConhecida] =
+    await Promise.all([
+      buscarHistoricoEComparativo(nome),
+      obterNumerosO2(),
+      buscarImobiliariaConhecida(supabase, nome),
+    ]);
 
-  const numeros_o2 = await obterNumerosO2();
+  // Se o colaborador não informou o CNPJ, mas achamos uma correspondência
+  // única no registro interno de imobiliárias já conhecidas, usa esse CNPJ.
+  if (!cnpj && imobiliariaConhecida) {
+    cnpj = imobiliariaConhecida.cnpj;
+  }
 
   let ficha;
   try {
