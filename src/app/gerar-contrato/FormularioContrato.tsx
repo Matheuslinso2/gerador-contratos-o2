@@ -95,17 +95,22 @@ export default function FormularioContrato({
             </select>
           </div>
           <div>
-            <label className="text-sm text-gray-600">Valor do aluguel (R$)</label>
-            <input
-              name="valor_aluguel"
-              type="number"
-              step="0.01"
-              placeholder="Valor do aluguel (R$)"
-              required
-              value={valorAluguel}
-              onChange={(e) => setValorAluguel(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
-            />
+            <label className="text-sm text-gray-600">Valor do aluguel</label>
+            <div className="relative">
+              <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-500">
+                R$
+              </span>
+              <input
+                name="valor_aluguel"
+                type="number"
+                step="0.01"
+                placeholder="0,00"
+                required
+                value={valorAluguel}
+                onChange={(e) => setValorAluguel(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 py-2.5 pl-9 pr-3 focus:border-o2-coral focus:outline-none"
+              />
+            </div>
           </div>
         </div>
 
