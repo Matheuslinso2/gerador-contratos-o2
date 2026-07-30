@@ -15,11 +15,17 @@ export async function listarPlanilhasDaPasta(folderId: string): Promise<Planilha
   const auth = obterAutenticacaoGoogle(ESCOPOS);
   const cliente = drive({ version: "v3", auth: auth as never });
 
+  // As pastas de cotação ficam dentro de um Drive Compartilhado — sem essas
+  // duas flags, a API simplesmente não retorna nada de dentro de Drives
+  // Compartilhados, mesmo com a pasta compartilhada corretamente.
   const resposta = await cliente.files.list({
     q: `'${folderId}' in parents and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false`,
     fields: "files(id, name, modifiedTime)",
     orderBy: "modifiedTime desc",
     pageSize: 100,
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+    corpora: "allDrives",
   });
 
   return (resposta.data.files ?? [])
