@@ -5,7 +5,13 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { montarFichaImobiliaria } from "@/lib/prospeccaoIA";
 import { obterNumerosO2 } from "@/lib/numerosO2";
-import { buscarHistoricoEComparativo, buscarImobiliariaConhecida } from "@/lib/prospeccaoDados";
+import {
+  buscarHistoricoEComparativo,
+  buscarImobiliariaConhecida,
+  type HistoricoCotacoes,
+  type ComparativoRegional,
+  type ImobiliariaConhecida,
+} from "@/lib/prospeccaoDados";
 
 export async function criarRelatorioProspeccao(formData: FormData) {
   const supabase = await createClient();
@@ -30,12 +36,42 @@ export async function criarRelatorioProspeccao(formData: FormData) {
   const textoSite = "";
   const textoInstagram = "";
 
-  const [{ historico: historico_cotacoes, regional: comparativo_regional }, numeros_o2, imobiliariaConhecida] =
-    await Promise.all([
-      buscarHistoricoEComparativo(nome),
-      obterNumerosO2(),
-      buscarImobiliariaConhecida(supabase, nome),
-    ]);
+  let historico_cotacoes: HistoricoCotacoes = {
+    incendio_total_encontradas: 0,
+    incendio_efetivadas: 0,
+    incendio_exemplos: [],
+    fianca_total_encontradas: 0,
+    fianca_exemplos: [],
+  };
+  let comparativo_regional: ComparativoRegional = {
+    cidade_da_imobiliaria: null,
+    cotacoes_incendio_na_mesma_cidade: 0,
+    cidade_com_mais_cotacoes: null,
+    cotacoes_na_cidade_mais_frequente: 0,
+    total_cotacoes_incendio_analisadas: 0,
+    observacao: "Não foi possível consultar as planilhas do Google Sheets agora.",
+  };
+  let imobiliariaConhecida: ImobiliariaConhecida | null = null;
+
+  // Uma falha na integração com o Google Sheets (rate limit, planilha
+  // reorganizada, etc.) não pode derrubar a geração do relatório inteiro —
+  // nesse caso, segue só sem o histórico/comparativo, e loga o motivo real
+  // pra dar pra investigar depois via Vercel Runtime Logs.
+  try {
+    const resultado = await buscarHistoricoEComparativo(nome);
+    historico_cotacoes = resultado.historico;
+    comparativo_regional = resultado.regional;
+  } catch (e) {
+    console.error("[prospeccao] erro ao buscar histórico/comparativo nas planilhas:", e);
+  }
+
+  try {
+    imobiliariaConhecida = await buscarImobiliariaConhecida(supabase, nome);
+  } catch (e) {
+    console.error("[prospeccao] erro ao buscar imobiliária conhecida:", e);
+  }
+
+  const numeros_o2 = await obterNumerosO2();
 
   // Se o colaborador não informou o CNPJ, mas achamos uma correspondência
   // única no registro interno de imobiliárias já conhecidas, usa esse CNPJ.

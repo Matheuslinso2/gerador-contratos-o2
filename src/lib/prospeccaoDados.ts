@@ -29,6 +29,22 @@ function ehEfetivado(status: string): boolean {
   return s.includes("efetivado") && !s.includes("nao");
 }
 
+// A API do Google Sheets tem limite de requisições por minuto por usuário —
+// disparar todas as ~30 planilhas ao mesmo tempo estoura esse limite.
+// Processa só algumas por vez.
+async function mapComLimite<T, R>(itens: T[], limite: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const resultados: R[] = new Array(itens.length);
+  let indice = 0;
+  async function worker() {
+    while (indice < itens.length) {
+      const i = indice++;
+      resultados[i] = await fn(itens[i]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limite, itens.length) }, worker));
+  return resultados;
+}
+
 export type ExemploCotacao = { data: string; nome: string; local: string; status: string };
 
 export type HistoricoCotacoes = {
@@ -50,13 +66,26 @@ export type ComparativoRegional = {
 
 async function processarArquivoIncendio(
   arquivoId: string,
+  nomeArquivo: string,
   nomeBusca: string,
   contagemCidade: Map<string, number>
 ): Promise<{ total: number; efetivadas: number; exemplos: ExemploCotacao[]; cidadeDaImobiliaria: string | null }> {
-  const abaInfo = await encontrarAbaDeDados(arquivoId, COLUNAS_INCENDIO);
+  let abaInfo;
+  try {
+    abaInfo = await encontrarAbaDeDados(arquivoId, COLUNAS_INCENDIO);
+  } catch (e) {
+    console.error(`[prospeccao] falha ao ler planilha de incêndio "${nomeArquivo}":`, e);
+    return { total: 0, efetivadas: 0, exemplos: [], cidadeDaImobiliaria: null };
+  }
   if (!abaInfo) return { total: 0, efetivadas: 0, exemplos: [], cidadeDaImobiliaria: null };
 
-  const linhas = await lerLinhasComoObjetos(arquivoId, abaInfo.aba, abaInfo.cabecalho);
+  let linhas;
+  try {
+    linhas = await lerLinhasComoObjetos(arquivoId, abaInfo.aba, abaInfo.cabecalho);
+  } catch (e) {
+    console.error(`[prospeccao] falha ao ler linhas de "${nomeArquivo}":`, e);
+    return { total: 0, efetivadas: 0, exemplos: [], cidadeDaImobiliaria: null };
+  }
   let efetivadas = 0;
   const exemplos: ExemploCotacao[] = [];
   let cidadeDaImobiliaria: string | null = null;
@@ -84,12 +113,25 @@ async function processarArquivoIncendio(
 
 async function processarArquivoFianca(
   arquivoId: string,
+  nomeArquivo: string,
   nomeBusca: string
 ): Promise<{ total: number; exemplos: ExemploCotacao[] }> {
-  const abaInfo = await encontrarAbaDeDados(arquivoId, COLUNAS_FIANCA);
+  let abaInfo;
+  try {
+    abaInfo = await encontrarAbaDeDados(arquivoId, COLUNAS_FIANCA);
+  } catch (e) {
+    console.error(`[prospeccao] falha ao ler planilha de fiança "${nomeArquivo}":`, e);
+    return { total: 0, exemplos: [] };
+  }
   if (!abaInfo) return { total: 0, exemplos: [] };
 
-  const linhas = await lerLinhasComoObjetos(arquivoId, abaInfo.aba, abaInfo.cabecalho);
+  let linhas;
+  try {
+    linhas = await lerLinhasComoObjetos(arquivoId, abaInfo.aba, abaInfo.cabecalho);
+  } catch (e) {
+    console.error(`[prospeccao] falha ao ler linhas de "${nomeArquivo}":`, e);
+    return { total: 0, exemplos: [] };
+  }
   const exemplos: ExemploCotacao[] = [];
 
   for (const linha of linhas) {
@@ -127,11 +169,11 @@ export async function buscarHistoricoEComparativo(
 
   const contagemCidade = new Map<string, number>();
 
-  const resultadosIncendio = await Promise.all(
-    arquivosIncendioValidos.map((a) => processarArquivoIncendio(a.id, nomeImobiliaria, contagemCidade))
+  const resultadosIncendio = await mapComLimite(arquivosIncendioValidos, 4, (a) =>
+    processarArquivoIncendio(a.id, a.nome, nomeImobiliaria, contagemCidade)
   );
-  const resultadosFianca = await Promise.all(
-    arquivosFiancaValidos.map((a) => processarArquivoFianca(a.id, nomeImobiliaria))
+  const resultadosFianca = await mapComLimite(arquivosFiancaValidos, 4, (a) =>
+    processarArquivoFianca(a.id, a.nome, nomeImobiliaria)
   );
 
   const incendioTotal = resultadosIncendio.reduce((soma, r) => soma + r.total, 0);
