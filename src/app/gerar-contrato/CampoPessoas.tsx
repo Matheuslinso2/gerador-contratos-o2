@@ -1,8 +1,9 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { formatarCPF, validarCPF, formatarCEP, validarCEP, buscarEnderecoPorCep } from "@/lib/validacoesBr";
+import { formatarCPF, validarCPF } from "@/lib/validacoesBr";
 import { PROFISSOES } from "@/lib/profissoes";
+import CampoEndereco from "@/components/CampoEndereco";
 
 const inputClass =
   "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-o2-coral focus:outline-none";
@@ -22,36 +23,10 @@ function LinhaPessoa({
 }) {
   const [cpf, setCpf] = useState("");
   const [cpfTocado, setCpfTocado] = useState(false);
-  const [cep, setCep] = useState("");
-  const [buscandoCep, setBuscandoCep] = useState(false);
-  const [cepErro, setCepErro] = useState(false);
   const [profissao, setProfissao] = useState("");
   const [profissaoOutra, setProfissaoOutra] = useState(false);
-  const enderecoRef = useRef<HTMLInputElement>(null);
 
   const cpfInvalido = cpfTocado && cpf.trim() !== "" && !validarCPF(cpf);
-
-  async function aoSairDoCep() {
-    setCepErro(false);
-    if (!cep.trim()) return;
-    if (!validarCEP(cep)) {
-      setCepErro(true);
-      return;
-    }
-    setBuscandoCep(true);
-    const endereco = await buscarEnderecoPorCep(cep);
-    setBuscandoCep(false);
-    if (!endereco) {
-      setCepErro(true);
-      return;
-    }
-    if (enderecoRef.current) {
-      const partes = [endereco.logradouro, endereco.bairro, `${endereco.localidade}/${endereco.uf}`, `CEP ${formatarCEP(cep)}`]
-        .filter(Boolean)
-        .join(", ");
-      enderecoRef.current.value = partes;
-    }
-  }
 
   return (
     <div className="rounded-lg border border-gray-200 p-3">
@@ -127,25 +102,10 @@ function LinhaPessoa({
 
         <input name={`${fieldName}_rg`} placeholder="RG / Carteira de Identidade" className={inputClass} />
         <input name={`${fieldName}_rg_orgao`} placeholder="Órgão expedidor (ex: SSP/RJ)" className={inputClass} />
+      </div>
 
-        <div>
-          <input
-            placeholder="CEP (busca o endereço)"
-            value={cep}
-            onChange={(e) => setCep(formatarCEP(e.target.value))}
-            onBlur={aoSairDoCep}
-            inputMode="numeric"
-            className={cepErro ? inputErroClass : inputClass}
-          />
-          {buscandoCep && <p className="mt-0.5 text-xs text-gray-500">Buscando endereço...</p>}
-          {cepErro && <p className="mt-0.5 text-xs text-red-600">CEP não encontrado — preencha o endereço manualmente.</p>}
-        </div>
-        <input
-          ref={enderecoRef}
-          name={`${fieldName}_endereco`}
-          placeholder="Endereço residencial (residente e domiciliado em)"
-          className={inputClass}
-        />
+      <div className="mt-2">
+        <CampoEndereco name={`${fieldName}_endereco`} label="Endereço residencial" />
       </div>
     </div>
   );
