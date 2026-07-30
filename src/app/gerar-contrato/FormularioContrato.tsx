@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { gerarContrato } from "./actions";
 import CampoPessoas from "./CampoPessoas";
 import CampoEndereco from "@/components/CampoEndereco";
-import { limparDigitacaoMoeda, moedaParaNumero, formatarMoeda } from "@/lib/validacoesBr";
+import { formatarMoedaDigitada } from "@/lib/validacoesBr";
 
 type TipoGarantia = { id: string; nome: string };
 type Produto = {
@@ -104,16 +104,13 @@ export default function FormularioContrato({
               </span>
               <input
                 type="text"
-                inputMode="decimal"
+                inputMode="numeric"
                 placeholder="0,00"
                 value={valorAluguelExibido}
                 onChange={(e) => {
-                  const limpo = limparDigitacaoMoeda(e.target.value);
-                  setValorAluguelExibido(limpo);
-                  setValorAluguel(limpo ? String(moedaParaNumero(limpo)) : "");
-                }}
-                onBlur={() => {
-                  if (valorAluguelExibido) setValorAluguelExibido(formatarMoeda(moedaParaNumero(valorAluguelExibido)));
+                  const { exibicao, numero } = formatarMoedaDigitada(e.target.value);
+                  setValorAluguelExibido(exibicao);
+                  setValorAluguel(numero ? String(numero) : "");
                 }}
                 className="w-full rounded-lg border border-gray-300 py-2.5 pl-9 pr-3 focus:border-o2-coral focus:outline-none"
               />

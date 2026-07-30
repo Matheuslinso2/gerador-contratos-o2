@@ -65,25 +65,16 @@ export function validarCEP(valor: string): boolean {
   return apenasDigitos(valor).length === 8;
 }
 
-// Campo de valor em reais: mantém a digitação livre (número + vírgula, como a
-// pessoa já está acostumada a digitar), só limitando a 2 casas decimais.
-export function limparDigitacaoMoeda(valor: string): string {
-  let limpo = valor.replace(/[^\d,]/g, "");
-  const [inteiro, ...resto] = limpo.split(",");
-  if (resto.length > 0) limpo = `${inteiro},${resto.join("").slice(0, 2)}`;
-  return limpo;
-}
-
-export function moedaParaNumero(valor: string): number {
-  const normalizado = valor.replace(/\./g, "").replace(",", ".");
-  const numero = parseFloat(normalizado);
-  return Number.isNaN(numero) ? 0 : numero;
-}
-
-// Formata para exibição com separador de milhar e sempre 2 casas decimais
-// (usado ao sair do campo, para "fechar" o valor no formato dos contratos).
-export function formatarMoeda(valor: number): string {
-  return valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// Máscara de moeda ao estilo dos apps de banco: cada dígito digitado entra
+// pela direita, como centavos, então a vírgula e as 2 casas decimais já
+// aparecem durante a digitação (ex: digitar "2","8","0","0" mostra
+// 0,02 → 0,28 → 2,80 → 28,00).
+export function formatarMoedaDigitada(valor: string): { exibicao: string; numero: number } {
+  const digitos = apenasDigitos(valor);
+  const centavos = digitos === "" ? 0 : parseInt(digitos, 10);
+  const numero = centavos / 100;
+  const exibicao = numero.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return { exibicao, numero };
 }
 
 export type EnderecoViaCep = {
