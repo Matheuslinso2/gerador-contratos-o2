@@ -51,7 +51,12 @@ export default async function SincronizarProspeccaoPage({
           <p className="mb-3 text-sm text-gray-600">
             Linhas no cache hoje: <strong>{totalLinhas ?? 0}</strong>
           </p>
-          <form action={sincronizarAction}>
+          <form action={sincronizarAction} className="space-y-3">
+            <label className="flex items-center gap-2 text-sm text-gray-600">
+              <input type="checkbox" name="forcar_tudo" />
+              Forçar recarregar tudo (ignora o que já está sincronizado — use só se mudou algo
+              na lógica de extração, ou se ficou faltando algum dado)
+            </label>
             <BotaoSincronizar />
           </form>
         </div>

@@ -167,21 +167,28 @@ export async function buscarHistoricoEComparativo(
   };
 }
 
-export type ImobiliariaConhecida = { nome: string; cnpj: string; cidade: string | null; uf: string | null };
+export type ImobiliariaConhecida = {
+  nome: string;
+  cnpj: string;
+  cidade: string | null;
+  uf: string | null;
+  bairro: string | null;
+};
 
 // Nem toda cotação tem CNPJ da imobiliária — busca no registro interno
 // (imobiliarias_conhecidas, alimentado a partir do cadastro de produtores
-// da O2) pelo nome, pra sugerir o CNPJ quando o colaborador não souber.
+// da O2) pelo nome, pra sugerir o CNPJ e o bairro quando o colaborador não
+// souber.
 export async function buscarImobiliariaConhecida(
   supabase: SupabaseServerClient,
   nomeBusca: string
 ): Promise<ImobiliariaConhecida | null> {
-  const { data } = await supabase.from("imobiliarias_conhecidas").select("nome, cnpj, cidade, uf");
+  const { data } = await supabase.from("imobiliarias_conhecidas").select("nome, cnpj, cidade, uf, bairro");
   if (!data) return null;
 
   const correspondencias = data.filter((r) => r.nome && textoCorresponde(r.nome, nomeBusca));
   if (correspondencias.length !== 1) return null;
 
   const [r] = correspondencias;
-  return { nome: r.nome, cnpj: r.cnpj, cidade: r.cidade, uf: r.uf };
+  return { nome: r.nome, cnpj: r.cnpj, cidade: r.cidade, uf: r.uf, bairro: r.bairro };
 }

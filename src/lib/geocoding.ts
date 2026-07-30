@@ -34,24 +34,37 @@ async function geocodificarViaGoogle(endereco: string): Promise<ResultadoGeocodi
   }
 }
 
-// Consulta o cache primeiro; só chama o Google Maps (e grava no cache) se o
+export type CacheEnderecos = Map<string, ResultadoGeocodificacao>;
+
+// Carrega o cache de geocodificação inteiro numa única consulta — usado no
+// início de uma sincronização, pra depois checar cada endereço na memória
+// em vez de fazer uma consulta ao banco por linha (isso sozinho já estourava
+// o tempo de execução com milhares de cotações).
+export async function carregarCacheEnderecos(supabase: SupabaseServerClient): Promise<CacheEnderecos> {
+  const cache: CacheEnderecos = new Map();
+  const { data } = await supabase.from("enderecos_geocodificados").select("endereco_normalizado, bairro, cidade, uf");
+  for (const linha of data ?? []) {
+    cache.set(linha.endereco_normalizado, { bairro: linha.bairro, cidade: linha.cidade, uf: linha.uf });
+  }
+  return cache;
+}
+
+// Resolve um endereço usando o cache já carregado em memória; só chama o
+// Google Maps (e grava no cache, atualizando o mapa em memória também) se o
 // endereço nunca foi visto. `orcamentoNovasConsultas` limita quantas
-// chamadas novas ao Maps um único relatório pode disparar, pra não deixar a
-// geração lenta demais num cache ainda frio — o resto do histórico vai
-// sendo geocodificado aos poucos em gerações futuras.
+// chamadas novas ao Maps uma sincronização pode disparar de uma vez, pra
+// não deixar a execução lenta demais num cache ainda frio — o resto do
+// histórico vai sendo geocodificado aos poucos nas próximas sincronizações.
 export async function resolverEnderecoComCache(
   supabase: SupabaseServerClient,
   endereco: string,
+  cache: CacheEnderecos,
   orcamentoNovasConsultas: { restante: number }
 ): Promise<ResultadoGeocodificacao | null> {
   const chave = normalizarEndereco(endereco);
   if (!chave) return null;
 
-  const { data: existente } = await supabase
-    .from("enderecos_geocodificados")
-    .select("bairro, cidade, uf")
-    .eq("endereco_normalizado", chave)
-    .maybeSingle();
+  const existente = cache.get(chave);
   if (existente) return existente;
 
   if (orcamentoNovasConsultas.restante <= 0) return null;
@@ -60,6 +73,7 @@ export async function resolverEnderecoComCache(
   const resultado = await geocodificarViaGoogle(endereco);
   if (!resultado) return null;
 
+  cache.set(chave, resultado);
   await supabase
     .from("enderecos_geocodificados")
     .upsert({ endereco_normalizado: chave, ...resultado }, { onConflict: "endereco_normalizado" });

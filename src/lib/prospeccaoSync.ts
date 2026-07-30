@@ -7,7 +7,8 @@ import {
   type PlanilhaDaPasta,
 } from "@/lib/googleSheetsProspeccao";
 import { pegarCampo, paraNumero, COLUNAS_INCENDIO, COLUNAS_FIANCA } from "@/lib/prospeccaoExtracao";
-import { resolverEnderecoComCache } from "@/lib/geocoding";
+import { resolverEnderecoComCache, carregarCacheEnderecos, type CacheEnderecos } from "@/lib/geocoding";
+import { recalcularEstatisticas } from "@/lib/prospeccaoEstatisticas";
 import type { createClient } from "@/lib/supabase/server";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
@@ -34,6 +35,7 @@ export type ResultadoSincronizacao = {
   arquivos_processados: string[];
   arquivos_ja_atualizados: number;
   linhas_gravadas: number;
+  estatisticas_calculadas: number;
   erros: string[];
 };
 
@@ -75,6 +77,7 @@ async function sincronizarArquivoIncendio(
     bairro: pegarCampo(linha, "BAIRRO").trim() || null,
     uf: null,
     premio: paraNumero(pegarCampo(linha, "PRÊM. TOTAL", "PREM TOTAL", "PREMIO TOTAL")),
+    aluguel: paraNumero(pegarCampo(linha, "ALUGUEL")),
     status: pegarCampo(linha, "STATUS") || null,
     data_cotacao: pegarCampo(linha, "DT RECEBIDA", "DATA RECEB") || null,
     endereco: null,
@@ -94,6 +97,7 @@ async function sincronizarArquivoIncendio(
 async function sincronizarArquivoFianca(
   supabase: SupabaseServerClient,
   arquivo: PlanilhaDaPasta,
+  cacheEnderecos: CacheEnderecos,
   orcamentoGeocodificacao: { restante: number },
   erros: string[]
 ): Promise<number> {
@@ -116,7 +120,7 @@ async function sincronizarArquivoFianca(
     let bairro: string | null = null;
     let uf: string | null = null;
     if (endereco) {
-      const geo = await resolverEnderecoComCache(supabase, endereco, orcamentoGeocodificacao);
+      const geo = await resolverEnderecoComCache(supabase, endereco, cacheEnderecos, orcamentoGeocodificacao);
       cidade = geo?.cidade ?? null;
       bairro = geo?.bairro ?? null;
       uf = geo?.uf ?? null;
@@ -133,6 +137,7 @@ async function sincronizarArquivoFianca(
       bairro,
       uf,
       premio: paraNumero(pegarCampo(linha, "PREMIO LIQUIDO", "PRÊMIO LÍQUIDO")),
+      aluguel: paraNumero(pegarCampo(linha, "ALUGUEL")),
       status: null,
       data_cotacao: pegarCampo(linha, "DATA RECEB") || null,
       endereco,
@@ -155,7 +160,10 @@ async function sincronizarArquivoFianca(
 // gravada no cache) — planilhas de meses fechados não mudam mais, então na
 // prática só a planilha do mês corrente (e uma nova por mês) precisa ser
 // relida a cada chamada.
-export async function sincronizarPlanilhas(supabase: SupabaseServerClient): Promise<ResultadoSincronizacao> {
+export async function sincronizarPlanilhas(
+  supabase: SupabaseServerClient,
+  forcarTudo: boolean = false
+): Promise<ResultadoSincronizacao> {
   const pastasIncendio = idsDePastasDoEnv(process.env.GOOGLE_FOLDER_ID_INCENDIO);
   const pastasFianca = idsDePastasDoEnv(process.env.GOOGLE_FOLDER_ID_FIANCA);
 
@@ -166,6 +174,7 @@ export async function sincronizarPlanilhas(supabase: SupabaseServerClient): Prom
   ]);
 
   const precisaSincronizar = (a: PlanilhaDaPasta) => {
+    if (forcarTudo) return true;
     const jaSincronizado = estadoAtual.get(a.id);
     if (jaSincronizado === undefined) return true;
     if (!a.modificadoEm) return false;
@@ -197,10 +206,14 @@ export async function sincronizarPlanilhas(supabase: SupabaseServerClient): Prom
   });
   linhasGravadas += resultadosIncendio.reduce((a, b) => a + b, 0);
 
+  // Carrega o cache de geocodificação inteiro de uma vez (em vez de uma
+  // consulta ao banco por cotação) — com milhares de linhas de fiança, o
+  // custo de uma consulta por linha sozinho já estourava o tempo de execução.
+  const cacheEnderecos = await carregarCacheEnderecos(supabase);
   const orcamentoGeocodificacao = { restante: ORCAMENTO_GEOCODIFICACAO_POR_SYNC };
   const resultadosFianca = await mapComLimite(fiancaParaSincronizar, 4, async (a) => {
     try {
-      const n = await sincronizarArquivoFianca(supabase, a, orcamentoGeocodificacao, erros);
+      const n = await sincronizarArquivoFianca(supabase, a, cacheEnderecos, orcamentoGeocodificacao, erros);
       arquivosProcessados.push(a.nome);
       return n;
     } catch (e) {
@@ -210,10 +223,21 @@ export async function sincronizarPlanilhas(supabase: SupabaseServerClient): Prom
   });
   linhasGravadas += resultadosFianca.reduce((a, b) => a + b, 0);
 
+  // Recalcula as estatísticas prontas (bairro/região/cidade x faixa de
+  // aluguel) do zero, uma vez, a partir do cache atualizado — os relatórios
+  // só leem esse resultado depois, nunca recalculam na hora.
+  let estatisticasCalculadas = 0;
+  try {
+    estatisticasCalculadas = await recalcularEstatisticas(supabase);
+  } catch (e) {
+    erros.push(`Falha ao recalcular estatísticas: ${e instanceof Error ? e.message : "erro desconhecido"}`);
+  }
+
   return {
     arquivos_processados: arquivosProcessados,
     arquivos_ja_atualizados: jaAtualizados,
     linhas_gravadas: linhasGravadas,
+    estatisticas_calculadas: estatisticasCalculadas,
     erros,
   };
 }

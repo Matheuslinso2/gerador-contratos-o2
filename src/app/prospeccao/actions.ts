@@ -12,6 +12,7 @@ import {
   type ComparativoRegional,
   type ImobiliariaConhecida,
 } from "@/lib/prospeccaoDados";
+import { buscarTicketPorLocal, type TicketPorLocal } from "@/lib/prospeccaoEstatisticas";
 
 export async function criarRelatorioProspeccao(formData: FormData) {
   const supabase = await createClient();
@@ -23,6 +24,8 @@ export async function criarRelatorioProspeccao(formData: FormData) {
 
   const nome = String(formData.get("nome") ?? "").trim();
   let cnpj = String(formData.get("cnpj") ?? "").trim();
+  let bairros = formData.getAll("bairros").map((b) => String(b).trim()).filter(Boolean);
+  let cidadeInformada = String(formData.get("cidade") ?? "").trim();
   const url_site = String(formData.get("url_site") ?? "").trim();
   const url_instagram = String(formData.get("url_instagram") ?? "").trim();
   const notas_manuais = String(formData.get("notas_manuais") ?? "").trim();
@@ -82,6 +85,21 @@ export async function criarRelatorioProspeccao(formData: FormData) {
   if (!cnpj && imobiliariaConhecida) {
     cnpj = imobiliariaConhecida.cnpj;
   }
+  // Idem pro bairro/cidade — se o colaborador não selecionou nenhum bairro,
+  // usa o que está cadastrado pra essa imobiliária.
+  if (!bairros.length && imobiliariaConhecida?.bairro) {
+    bairros = [imobiliariaConhecida.bairro];
+  }
+  if (!cidadeInformada && imobiliariaConhecida?.cidade) {
+    cidadeInformada = imobiliariaConhecida.cidade;
+  }
+
+  let ticket_por_faixa: TicketPorLocal | null = null;
+  try {
+    ticket_por_faixa = await buscarTicketPorLocal(supabase, bairros, cidadeInformada);
+  } catch (e) {
+    console.error("[prospeccao] erro ao buscar ticket por bairro:", e);
+  }
 
   let ficha;
   try {
@@ -104,6 +122,7 @@ export async function criarRelatorioProspeccao(formData: FormData) {
       ficha,
       historico_cotacoes,
       comparativo_regional,
+      ticket_por_faixa,
       numeros_o2,
     })
     .select("id")
