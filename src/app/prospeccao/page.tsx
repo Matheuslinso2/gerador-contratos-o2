@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../actions";
@@ -33,12 +34,20 @@ export default async function ProspeccaoPage({
       <main className="mx-auto max-w-3xl flex-1 space-y-8 p-8">
         <div className="space-y-2">
           <BackLink />
-          <div>
-            <h1 className="text-xl font-semibold text-o2-navy">Prospecção — preparação de visita</h1>
-            <p className="text-sm text-gray-500">
-              Ferramenta interna O2: monta um relatório para se preparar antes de visitar uma
-              imobiliária que ainda não é parceira.
-            </p>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h1 className="text-xl font-semibold text-o2-navy">Prospecção — preparação de visita</h1>
+              <p className="text-sm text-gray-500">
+                Ferramenta interna O2: monta um relatório para se preparar antes de visitar uma
+                imobiliária que ainda não é parceira.
+              </p>
+            </div>
+            <Link
+              href="/prospeccao/sincronizar"
+              className="whitespace-nowrap rounded-full border border-o2-navy px-4 py-1.5 text-sm font-medium text-o2-navy transition hover:bg-o2-navy hover:text-white"
+            >
+              Sincronizar planilhas
+            </Link>
           </div>
         </div>
 

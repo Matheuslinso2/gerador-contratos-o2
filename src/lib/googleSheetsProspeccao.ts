@@ -9,7 +9,7 @@ const ESCOPOS = [
 
 const PROFUNDIDADE_MAXIMA = 4;
 
-export type PlanilhaDaPasta = { id: string; nome: string };
+export type PlanilhaDaPasta = { id: string; nome: string; modificadoEm: string | null };
 
 function clienteDrive() {
   const auth = obterAutenticacaoGoogle(ESCOPOS);
@@ -49,7 +49,7 @@ async function listarRecursivo(
 
   const planilhas: PlanilhaDaPasta[] = arquivos
     .filter((f) => f.mimeType === "application/vnd.google-apps.spreadsheet" && f.id && f.name)
-    .map((f) => ({ id: f.id!, nome: f.name! }));
+    .map((f) => ({ id: f.id!, nome: f.name!, modificadoEm: f.modifiedTime ?? null }));
 
   const subpastas = arquivos.filter((f) => f.mimeType === "application/vnd.google-apps.folder" && f.id);
   for (const sub of subpastas) {

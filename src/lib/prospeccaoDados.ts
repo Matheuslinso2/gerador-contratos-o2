@@ -1,49 +1,8 @@
-import {
-  listarPlanilhasDasPastas,
-  idsDePastasDoEnv,
-  ehPlanilhaMensalValida,
-  encontrarAbaDeDados,
-  lerLinhasComoObjetos,
-  textoCorresponde,
-  normalizarTextoBusca,
-} from "@/lib/googleSheetsProspeccao";
-import { resolverEnderecoComCache } from "@/lib/geocoding";
+import { textoCorresponde } from "@/lib/googleSheetsProspeccao";
+import { ehEfetivado } from "@/lib/prospeccaoExtracao";
 import type { createClient } from "@/lib/supabase/server";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
-
-const COLUNAS_INCENDIO = ["IMOBILIARIA", "SEGURADO", "CIDADE", "ALUGUEL"];
-const COLUNAS_FIANCA = ["ANALISTA", "LOCATARIO", "ENDERECO", "ALUGUEL"];
-
-// Quantos endereços de fiança sem cache podem ser geocodificados numa única
-// geração de relatório — limita o tempo/custo, o resto do histórico vai
-// sendo preenchido aos poucos em gerações futuras.
-const ORCAMENTO_GEOCODIFICACAO_POR_RELATORIO = 30;
-
-function pegarCampo(linha: Record<string, string>, ...nomesPossiveis: string[]): string {
-  const chaves = Object.keys(linha);
-  for (const nome of nomesPossiveis) {
-    const alvo = normalizarTextoBusca(nome);
-    const chave = chaves.find((k) => normalizarTextoBusca(k).includes(alvo));
-    if (chave && linha[chave]) return linha[chave];
-  }
-  return "";
-}
-
-function ehEfetivado(status: string): boolean {
-  const s = normalizarTextoBusca(status);
-  return s.includes("efetivado") && !s.includes("nao");
-}
-
-// Converte "R$ 2.370,00" / "778,97" (formato brasileiro) em número.
-function paraNumero(valor: string): number | null {
-  const limpo = valor
-    .replace(/[^\d,.-]/g, "")
-    .replace(/\.(?=\d{3}(?:\D|$))/g, "")
-    .replace(",", ".");
-  const n = parseFloat(limpo);
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
 
 type Acumulador = { soma: number; contagem: number };
 
@@ -56,22 +15,6 @@ function somar(mapa: Map<string, Acumulador>, chave: string, valor: number) {
 
 function media(acc: Acumulador): number | null {
   return acc.contagem > 0 ? Math.round((acc.soma / acc.contagem) * 100) / 100 : null;
-}
-
-// A API do Google Sheets tem limite de requisições por minuto por usuário —
-// disparar todas as ~30 planilhas ao mesmo tempo estoura esse limite.
-// Processa só algumas por vez.
-async function mapComLimite<T, R>(itens: T[], limite: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const resultados: R[] = new Array(itens.length);
-  let indice = 0;
-  async function worker() {
-    while (indice < itens.length) {
-      const i = indice++;
-      resultados[i] = await fn(itens[i]);
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limite, itens.length) }, worker));
-  return resultados;
 }
 
 export type ExemploCotacao = { data: string; nome: string; local: string; status: string };
@@ -97,173 +40,94 @@ export type ComparativoRegional = {
   observacao: string;
 };
 
-async function processarArquivoIncendio(
-  arquivoId: string,
-  nomeArquivo: string,
-  nomeBusca: string,
-  contagemCidade: Map<string, number>,
-  ticketPorCidade: Map<string, Acumulador>,
-  ticketGeral: Acumulador
-): Promise<{ total: number; efetivadas: number; exemplos: ExemploCotacao[]; cidadeDaImobiliaria: string | null }> {
-  let abaInfo;
-  try {
-    abaInfo = await encontrarAbaDeDados(arquivoId, COLUNAS_INCENDIO);
-  } catch (e) {
-    console.error(`[prospeccao] falha ao ler planilha de incêndio "${nomeArquivo}":`, e);
-    return { total: 0, efetivadas: 0, exemplos: [], cidadeDaImobiliaria: null };
-  }
-  if (!abaInfo) return { total: 0, efetivadas: 0, exemplos: [], cidadeDaImobiliaria: null };
+type LinhaCache = {
+  imobiliaria: string | null;
+  nome_pessoa: string | null;
+  cidade: string | null;
+  premio: number | null;
+  status: string | null;
+  data_cotacao: string | null;
+  endereco: string | null;
+};
 
-  let linhas;
-  try {
-    linhas = await lerLinhasComoObjetos(arquivoId, abaInfo.aba, abaInfo.cabecalho);
-  } catch (e) {
-    console.error(`[prospeccao] falha ao ler linhas de "${nomeArquivo}":`, e);
-    return { total: 0, efetivadas: 0, exemplos: [], cidadeDaImobiliaria: null };
-  }
-  let efetivadas = 0;
-  const exemplos: ExemploCotacao[] = [];
-  let cidadeDaImobiliaria: string | null = null;
-
-  for (const linha of linhas) {
-    const cidade = pegarCampo(linha, "CIDADE").trim();
-    if (cidade) contagemCidade.set(cidade, (contagemCidade.get(cidade) ?? 0) + 1);
-
-    const premio = paraNumero(pegarCampo(linha, "PRÊM. TOTAL", "PREM TOTAL", "PREMIO TOTAL"));
-    if (premio) {
-      ticketGeral.soma += premio;
-      ticketGeral.contagem += 1;
-      if (cidade) somar(ticketPorCidade, cidade, premio);
-    }
-
-    const imobiliaria = pegarCampo(linha, "IMOBILIARIA");
-    if (!imobiliaria || !textoCorresponde(imobiliaria, nomeBusca)) continue;
-
-    const status = pegarCampo(linha, "STATUS");
-    if (ehEfetivado(status)) efetivadas++;
-    if (cidade && !cidadeDaImobiliaria) cidadeDaImobiliaria = cidade;
-    exemplos.push({
-      data: pegarCampo(linha, "DT RECEBIDA", "DATA RECEB"),
-      nome: pegarCampo(linha, "SEGURADO"),
-      local: cidade,
-      status,
-    });
-  }
-
-  return { total: exemplos.length, efetivadas, exemplos, cidadeDaImobiliaria };
-}
-
-async function processarArquivoFianca(
-  supabase: SupabaseServerClient,
-  arquivoId: string,
-  nomeArquivo: string,
-  nomeBusca: string,
-  ticketPorCidade: Map<string, Acumulador>,
-  ticketGeral: Acumulador,
-  orcamentoGeocodificacao: { restante: number }
-): Promise<{ total: number; exemplos: ExemploCotacao[] }> {
-  let abaInfo;
-  try {
-    abaInfo = await encontrarAbaDeDados(arquivoId, COLUNAS_FIANCA);
-  } catch (e) {
-    console.error(`[prospeccao] falha ao ler planilha de fiança "${nomeArquivo}":`, e);
-    return { total: 0, exemplos: [] };
-  }
-  if (!abaInfo) {
-    console.error(`[prospeccao][fianca] "${nomeArquivo}": nenhuma aba com colunas reconhecidas.`);
-    return { total: 0, exemplos: [] };
-  }
-
-  let linhas;
-  try {
-    linhas = await lerLinhasComoObjetos(arquivoId, abaInfo.aba, abaInfo.cabecalho);
-  } catch (e) {
-    console.error(`[prospeccao] falha ao ler linhas de "${nomeArquivo}":`, e);
-    return { total: 0, exemplos: [] };
-  }
-  const exemplos: ExemploCotacao[] = [];
-
-  console.error(
-    `[prospeccao][fianca] "${nomeArquivo}" aba="${abaInfo.aba}" linhas=${linhas.length} amostraImobiliaria=${JSON.stringify(
-      linhas.slice(0, 3).map((l) => l["coluna_2"] ?? l["IMOBILIARIA"] ?? Object.values(l)[1])
-    )}`
-  );
-
-  for (const linha of linhas) {
-    // A coluna com o nome da imobiliária não tem cabeçalho nessa planilha —
-    // é sempre a segunda coluna (logo após o nome de quem iniciou o
-    // atendimento). lerLinhasComoObjetos nomeia colunas sem cabeçalho como
-    // "coluna_N" pela posição.
-    const imobiliaria = pegarCampo(linha, "IMOBILIARIA") || linha["coluna_2"] || "";
-
-    const premio = paraNumero(pegarCampo(linha, "PREMIO LIQUIDO", "PRÊMIO LÍQUIDO"));
-    const endereco = pegarCampo(linha, "ENDERECO").trim();
-    if (premio) {
-      ticketGeral.soma += premio;
-      ticketGeral.contagem += 1;
-      if (endereco) {
-        const geo = await resolverEnderecoComCache(supabase, endereco, orcamentoGeocodificacao);
-        if (geo?.cidade) somar(ticketPorCidade, geo.cidade, premio);
-      }
-    }
-
-    if (!imobiliaria || !textoCorresponde(imobiliaria, nomeBusca)) continue;
-
-    exemplos.push({
-      data: pegarCampo(linha, "DATA RECEB"),
-      nome: pegarCampo(linha, "LOCATARIO"),
-      local: endereco,
-      status: "",
-    });
-  }
-
-  return { total: exemplos.length, exemplos };
-}
-
+// Lê do cache local (tabela cotacoes_cache, alimentada pela sincronização
+// periódica com o Google Sheets — ver prospeccaoSync.ts) em vez de acessar
+// o Google Sheets ao vivo a cada relatório. Rápido e sem risco de estourar
+// o limite de requisições da API do Google.
 export async function buscarHistoricoEComparativo(
   supabase: SupabaseServerClient,
   nomeImobiliaria: string
 ): Promise<{ historico: HistoricoCotacoes; regional: ComparativoRegional }> {
-  const pastasIncendio = idsDePastasDoEnv(process.env.GOOGLE_FOLDER_ID_INCENDIO);
-  const pastasFianca = idsDePastasDoEnv(process.env.GOOGLE_FOLDER_ID_FIANCA);
-
-  const [arquivosIncendio, arquivosFianca] = await Promise.all([
-    pastasIncendio.length ? listarPlanilhasDasPastas(pastasIncendio) : Promise.resolve([]),
-    pastasFianca.length ? listarPlanilhasDasPastas(pastasFianca) : Promise.resolve([]),
+  const [{ data: incendioData }, { data: fiancaData }] = await Promise.all([
+    supabase
+      .from("cotacoes_cache")
+      .select("imobiliaria, nome_pessoa, cidade, premio, status, data_cotacao, endereco")
+      .eq("tipo", "incendio"),
+    supabase
+      .from("cotacoes_cache")
+      .select("imobiliaria, nome_pessoa, cidade, premio, status, data_cotacao, endereco")
+      .eq("tipo", "fianca"),
   ]);
 
-  const arquivosIncendioValidos = arquivosIncendio.filter((a) => ehPlanilhaMensalValida(a.nome));
-  const arquivosFiancaValidos = arquivosFianca.filter((a) => ehPlanilhaMensalValida(a.nome));
+  const incendio = (incendioData ?? []) as LinhaCache[];
+  const fianca = (fiancaData ?? []) as LinhaCache[];
 
   const contagemCidade = new Map<string, number>();
   const ticketIncendioPorCidade = new Map<string, Acumulador>();
   const ticketIncendioGeral: Acumulador = { soma: 0, contagem: 0 };
+
+  let incendioTotal = 0;
+  let incendioEfetivadas = 0;
+  let cidadeDaImobiliaria: string | null = null;
+  const incendioExemplos: ExemploCotacao[] = [];
+
+  for (const r of incendio) {
+    if (r.cidade) contagemCidade.set(r.cidade, (contagemCidade.get(r.cidade) ?? 0) + 1);
+    if (r.premio) {
+      ticketIncendioGeral.soma += r.premio;
+      ticketIncendioGeral.contagem += 1;
+      if (r.cidade) somar(ticketIncendioPorCidade, r.cidade, r.premio);
+    }
+
+    if (!r.imobiliaria || !textoCorresponde(r.imobiliaria, nomeImobiliaria)) continue;
+
+    incendioTotal++;
+    if (ehEfetivado(r.status ?? "")) incendioEfetivadas++;
+    if (r.cidade && !cidadeDaImobiliaria) cidadeDaImobiliaria = r.cidade;
+    if (incendioExemplos.length < 10) {
+      incendioExemplos.push({
+        data: r.data_cotacao ?? "",
+        nome: r.nome_pessoa ?? "",
+        local: r.cidade ?? "",
+        status: r.status ?? "",
+      });
+    }
+  }
+
   const ticketFiancaPorCidade = new Map<string, Acumulador>();
   const ticketFiancaGeral: Acumulador = { soma: 0, contagem: 0 };
-  const orcamentoGeocodificacao = { restante: ORCAMENTO_GEOCODIFICACAO_POR_RELATORIO };
+  let fiancaTotal = 0;
+  const fiancaExemplos: ExemploCotacao[] = [];
 
-  const resultadosIncendio = await mapComLimite(arquivosIncendioValidos, 4, (a) =>
-    processarArquivoIncendio(a.id, a.nome, nomeImobiliaria, contagemCidade, ticketIncendioPorCidade, ticketIncendioGeral)
-  );
-  const resultadosFianca = await mapComLimite(arquivosFiancaValidos, 4, (a) =>
-    processarArquivoFianca(
-      supabase,
-      a.id,
-      a.nome,
-      nomeImobiliaria,
-      ticketFiancaPorCidade,
-      ticketFiancaGeral,
-      orcamentoGeocodificacao
-    )
-  );
+  for (const r of fianca) {
+    if (r.premio) {
+      ticketFiancaGeral.soma += r.premio;
+      ticketFiancaGeral.contagem += 1;
+      if (r.cidade) somar(ticketFiancaPorCidade, r.cidade, r.premio);
+    }
 
-  const incendioTotal = resultadosIncendio.reduce((soma, r) => soma + r.total, 0);
-  const incendioEfetivadas = resultadosIncendio.reduce((soma, r) => soma + r.efetivadas, 0);
-  const incendioExemplos = resultadosIncendio.flatMap((r) => r.exemplos).slice(0, 10);
-  const cidadeDaImobiliaria = resultadosIncendio.find((r) => r.cidadeDaImobiliaria)?.cidadeDaImobiliaria ?? null;
+    if (!r.imobiliaria || !textoCorresponde(r.imobiliaria, nomeImobiliaria)) continue;
 
-  const fiancaTotal = resultadosFianca.reduce((soma, r) => soma + r.total, 0);
-  const fiancaExemplos = resultadosFianca.flatMap((r) => r.exemplos).slice(0, 10);
+    fiancaTotal++;
+    if (fiancaExemplos.length < 10) {
+      fiancaExemplos.push({
+        data: r.data_cotacao ?? "",
+        nome: r.nome_pessoa ?? "",
+        local: r.endereco ?? "",
+        status: "",
+      });
+    }
+  }
 
   let cidadeComMaisCotacoes: string | null = null;
   let maiorContagem = 0;
@@ -273,7 +137,6 @@ export async function buscarHistoricoEComparativo(
       cidadeComMaisCotacoes = cidade;
     }
   }
-
   const totalCotacoesGeral = Array.from(contagemCidade.values()).reduce((a, b) => a + b, 0);
 
   return {
@@ -299,7 +162,7 @@ export async function buscarHistoricoEComparativo(
         ? media(ticketFiancaPorCidade.get(cidadeDaImobiliaria) ?? { soma: 0, contagem: 0 })
         : null,
       observacao:
-        "Ticket médio de incêndio calculado sobre todas as cotações com valor preenchido (independente de terem sido efetivadas). Para fiança, a cidade é estimada a partir do endereço da cotação (Google Maps); cotações ainda não geocodificadas não entram na média por cidade.",
+        "Dados calculados a partir da última sincronização com as planilhas do Google Sheets. Ticket médio de incêndio considera todas as cotações com valor preenchido, independente de terem sido efetivadas. Para fiança, a cidade é estimada por geocodificação do endereço.",
     },
   };
 }
