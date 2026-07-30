@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { gerarContrato } from "./actions";
 import CampoPessoas from "./CampoPessoas";
 import CampoEndereco from "@/components/CampoEndereco";
+import { limparDigitacaoMoeda, moedaParaNumero, formatarMoeda } from "@/lib/validacoesBr";
 
 type TipoGarantia = { id: string; nome: string };
 type Produto = {
@@ -38,6 +39,7 @@ export default function FormularioContrato({
     "nenhum"
   );
   const [valorAluguel, setValorAluguel] = useState("");
+  const [valorAluguelExibido, setValorAluguelExibido] = useState("");
   const [valorCaucao, setValorCaucao] = useState("");
   const [caucaoEditadaManualmente, setCaucaoEditadaManualmente] = useState(false);
 
@@ -101,15 +103,21 @@ export default function FormularioContrato({
                 R$
               </span>
               <input
-                name="valor_aluguel"
-                type="number"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 placeholder="0,00"
-                required
-                value={valorAluguel}
-                onChange={(e) => setValorAluguel(e.target.value)}
+                value={valorAluguelExibido}
+                onChange={(e) => {
+                  const limpo = limparDigitacaoMoeda(e.target.value);
+                  setValorAluguelExibido(limpo);
+                  setValorAluguel(limpo ? String(moedaParaNumero(limpo)) : "");
+                }}
+                onBlur={() => {
+                  if (valorAluguelExibido) setValorAluguelExibido(formatarMoeda(moedaParaNumero(valorAluguelExibido)));
+                }}
                 className="w-full rounded-lg border border-gray-300 py-2.5 pl-9 pr-3 focus:border-o2-coral focus:outline-none"
               />
+              <input type="hidden" name="valor_aluguel" value={valorAluguel} />
             </div>
           </div>
         </div>
