@@ -7,12 +7,18 @@ import {
   textoCorresponde,
   normalizarTextoBusca,
 } from "@/lib/googleSheetsProspeccao";
+import { resolverEnderecoComCache } from "@/lib/geocoding";
 import type { createClient } from "@/lib/supabase/server";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
 const COLUNAS_INCENDIO = ["IMOBILIARIA", "SEGURADO", "CIDADE", "ALUGUEL"];
 const COLUNAS_FIANCA = ["ANALISTA", "LOCATARIO", "ENDERECO", "ALUGUEL"];
+
+// Quantos endereços de fiança sem cache podem ser geocodificados numa única
+// geração de relatório — limita o tempo/custo, o resto do histórico vai
+// sendo preenchido aos poucos em gerações futuras.
+const ORCAMENTO_GEOCODIFICACAO_POR_RELATORIO = 30;
 
 function pegarCampo(linha: Record<string, string>, ...nomesPossiveis: string[]): string {
   const chaves = Object.keys(linha);
@@ -27,6 +33,29 @@ function pegarCampo(linha: Record<string, string>, ...nomesPossiveis: string[]):
 function ehEfetivado(status: string): boolean {
   const s = normalizarTextoBusca(status);
   return s.includes("efetivado") && !s.includes("nao");
+}
+
+// Converte "R$ 2.370,00" / "778,97" (formato brasileiro) em número.
+function paraNumero(valor: string): number | null {
+  const limpo = valor
+    .replace(/[^\d,.-]/g, "")
+    .replace(/\.(?=\d{3}(?:\D|$))/g, "")
+    .replace(",", ".");
+  const n = parseFloat(limpo);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+type Acumulador = { soma: number; contagem: number };
+
+function somar(mapa: Map<string, Acumulador>, chave: string, valor: number) {
+  const atual = mapa.get(chave) ?? { soma: 0, contagem: 0 };
+  atual.soma += valor;
+  atual.contagem += 1;
+  mapa.set(chave, atual);
+}
+
+function media(acc: Acumulador): number | null {
+  return acc.contagem > 0 ? Math.round((acc.soma / acc.contagem) * 100) / 100 : null;
 }
 
 // A API do Google Sheets tem limite de requisições por minuto por usuário —
@@ -61,6 +90,10 @@ export type ComparativoRegional = {
   cidade_com_mais_cotacoes: string | null;
   cotacoes_na_cidade_mais_frequente: number;
   total_cotacoes_incendio_analisadas: number;
+  ticket_medio_incendio_geral: number | null;
+  ticket_medio_incendio_na_cidade: number | null;
+  ticket_medio_fianca_geral: number | null;
+  ticket_medio_fianca_na_cidade: number | null;
   observacao: string;
 };
 
@@ -68,7 +101,9 @@ async function processarArquivoIncendio(
   arquivoId: string,
   nomeArquivo: string,
   nomeBusca: string,
-  contagemCidade: Map<string, number>
+  contagemCidade: Map<string, number>,
+  ticketPorCidade: Map<string, Acumulador>,
+  ticketGeral: Acumulador
 ): Promise<{ total: number; efetivadas: number; exemplos: ExemploCotacao[]; cidadeDaImobiliaria: string | null }> {
   let abaInfo;
   try {
@@ -94,6 +129,13 @@ async function processarArquivoIncendio(
     const cidade = pegarCampo(linha, "CIDADE").trim();
     if (cidade) contagemCidade.set(cidade, (contagemCidade.get(cidade) ?? 0) + 1);
 
+    const premio = paraNumero(pegarCampo(linha, "PRÊM. TOTAL", "PREM TOTAL", "PREMIO TOTAL"));
+    if (premio) {
+      ticketGeral.soma += premio;
+      ticketGeral.contagem += 1;
+      if (cidade) somar(ticketPorCidade, cidade, premio);
+    }
+
     const imobiliaria = pegarCampo(linha, "IMOBILIARIA");
     if (!imobiliaria || !textoCorresponde(imobiliaria, nomeBusca)) continue;
 
@@ -112,9 +154,13 @@ async function processarArquivoIncendio(
 }
 
 async function processarArquivoFianca(
+  supabase: SupabaseServerClient,
   arquivoId: string,
   nomeArquivo: string,
-  nomeBusca: string
+  nomeBusca: string,
+  ticketPorCidade: Map<string, Acumulador>,
+  ticketGeral: Acumulador,
+  orcamentoGeocodificacao: { restante: number }
 ): Promise<{ total: number; exemplos: ExemploCotacao[] }> {
   let abaInfo;
   try {
@@ -137,10 +183,8 @@ async function processarArquivoFianca(
   }
   const exemplos: ExemploCotacao[] = [];
 
-  // Diagnóstico temporário: confirmar qual aba foi escolhida, o cabeçalho
-  // exato lido e os primeiros valores extraídos como "imobiliária".
   console.error(
-    `[prospeccao][fianca] "${nomeArquivo}" aba="${abaInfo.aba}" cabecalho=${JSON.stringify(abaInfo.cabecalho)} linhas=${linhas.length} amostraImobiliaria=${JSON.stringify(
+    `[prospeccao][fianca] "${nomeArquivo}" aba="${abaInfo.aba}" linhas=${linhas.length} amostraImobiliaria=${JSON.stringify(
       linhas.slice(0, 3).map((l) => l["coluna_2"] ?? l["IMOBILIARIA"] ?? Object.values(l)[1])
     )}`
   );
@@ -151,12 +195,24 @@ async function processarArquivoFianca(
     // atendimento). lerLinhasComoObjetos nomeia colunas sem cabeçalho como
     // "coluna_N" pela posição.
     const imobiliaria = pegarCampo(linha, "IMOBILIARIA") || linha["coluna_2"] || "";
+
+    const premio = paraNumero(pegarCampo(linha, "PREMIO LIQUIDO", "PRÊMIO LÍQUIDO"));
+    const endereco = pegarCampo(linha, "ENDERECO").trim();
+    if (premio) {
+      ticketGeral.soma += premio;
+      ticketGeral.contagem += 1;
+      if (endereco) {
+        const geo = await resolverEnderecoComCache(supabase, endereco, orcamentoGeocodificacao);
+        if (geo?.cidade) somar(ticketPorCidade, geo.cidade, premio);
+      }
+    }
+
     if (!imobiliaria || !textoCorresponde(imobiliaria, nomeBusca)) continue;
 
     exemplos.push({
       data: pegarCampo(linha, "DATA RECEB"),
       nome: pegarCampo(linha, "LOCATARIO"),
-      local: pegarCampo(linha, "ENDERECO"),
+      local: endereco,
       status: "",
     });
   }
@@ -165,6 +221,7 @@ async function processarArquivoFianca(
 }
 
 export async function buscarHistoricoEComparativo(
+  supabase: SupabaseServerClient,
   nomeImobiliaria: string
 ): Promise<{ historico: HistoricoCotacoes; regional: ComparativoRegional }> {
   const pastasIncendio = idsDePastasDoEnv(process.env.GOOGLE_FOLDER_ID_INCENDIO);
@@ -179,12 +236,25 @@ export async function buscarHistoricoEComparativo(
   const arquivosFiancaValidos = arquivosFianca.filter((a) => ehPlanilhaMensalValida(a.nome));
 
   const contagemCidade = new Map<string, number>();
+  const ticketIncendioPorCidade = new Map<string, Acumulador>();
+  const ticketIncendioGeral: Acumulador = { soma: 0, contagem: 0 };
+  const ticketFiancaPorCidade = new Map<string, Acumulador>();
+  const ticketFiancaGeral: Acumulador = { soma: 0, contagem: 0 };
+  const orcamentoGeocodificacao = { restante: ORCAMENTO_GEOCODIFICACAO_POR_RELATORIO };
 
   const resultadosIncendio = await mapComLimite(arquivosIncendioValidos, 4, (a) =>
-    processarArquivoIncendio(a.id, a.nome, nomeImobiliaria, contagemCidade)
+    processarArquivoIncendio(a.id, a.nome, nomeImobiliaria, contagemCidade, ticketIncendioPorCidade, ticketIncendioGeral)
   );
   const resultadosFianca = await mapComLimite(arquivosFiancaValidos, 4, (a) =>
-    processarArquivoFianca(a.id, a.nome, nomeImobiliaria)
+    processarArquivoFianca(
+      supabase,
+      a.id,
+      a.nome,
+      nomeImobiliaria,
+      ticketFiancaPorCidade,
+      ticketFiancaGeral,
+      orcamentoGeocodificacao
+    )
   );
 
   const incendioTotal = resultadosIncendio.reduce((soma, r) => soma + r.total, 0);
@@ -220,8 +290,16 @@ export async function buscarHistoricoEComparativo(
       cidade_com_mais_cotacoes: cidadeComMaisCotacoes,
       cotacoes_na_cidade_mais_frequente: maiorContagem,
       total_cotacoes_incendio_analisadas: totalCotacoesGeral,
+      ticket_medio_incendio_geral: media(ticketIncendioGeral),
+      ticket_medio_incendio_na_cidade: cidadeDaImobiliaria
+        ? media(ticketIncendioPorCidade.get(cidadeDaImobiliaria) ?? { soma: 0, contagem: 0 })
+        : null,
+      ticket_medio_fianca_geral: media(ticketFiancaGeral),
+      ticket_medio_fianca_na_cidade: cidadeDaImobiliaria
+        ? media(ticketFiancaPorCidade.get(cidadeDaImobiliaria) ?? { soma: 0, contagem: 0 })
+        : null,
       observacao:
-        "Comparativo regional disponível só para seguro incêndio — a planilha de fiança não tem uma coluna de cidade estruturada.",
+        "Ticket médio de incêndio calculado sobre todas as cotações com valor preenchido (independente de terem sido efetivadas). Para fiança, a cidade é estimada a partir do endereço da cotação (Google Maps); cotações ainda não geocodificadas não entram na média por cidade.",
     },
   };
 }

@@ -19,6 +19,11 @@ type Relatorio = {
 
 const cardClass = "rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm";
 
+function formatarReais(valor: number | null | undefined): string | null {
+  if (valor === null || valor === undefined) return null;
+  return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
 export default function RelatorioProspeccaoView({ relatorio }: { relatorio: Relatorio }) {
   const { ficha, numeros_o2 } = relatorio;
   const historico = relatorio.historico_cotacoes;
@@ -117,28 +122,66 @@ export default function RelatorioProspeccaoView({ relatorio }: { relatorio: Rela
         )}
       </div>
 
-      {regional && (regional.total_cotacoes_incendio_analisadas ?? 0) > 0 && (
-        <div className={cardClass}>
-          <h3 className="mb-2 font-semibold text-o2-navy">Comparativo regional (seguro incêndio)</h3>
-          <div className="space-y-1 text-sm text-gray-800">
-            {regional.cidade_da_imobiliaria && (
-              <p>
-                Na cidade de <strong>{regional.cidade_da_imobiliaria}</strong>, a O2 já tem{" "}
-                <strong>{regional.cotacoes_incendio_na_mesma_cidade}</strong> cotação(ões) de incêndio
-                registrada(s).
-              </p>
-            )}
-            {regional.cidade_com_mais_cotacoes && (
-              <p>
-                No geral, a cidade com mais cotações de incêndio é{" "}
-                <strong>{regional.cidade_com_mais_cotacoes}</strong> (
-                {regional.cotacoes_na_cidade_mais_frequente} cotações).
-              </p>
-            )}
-            <p className="text-xs text-gray-500">{regional.observacao}</p>
+      {regional &&
+        ((regional.total_cotacoes_incendio_analisadas ?? 0) > 0 ||
+          regional.ticket_medio_fianca_geral != null) && (
+          <div className={cardClass}>
+            <h3 className="mb-2 font-semibold text-o2-navy">Comparativo regional</h3>
+            <div className="space-y-1 text-sm text-gray-800">
+              {regional.cidade_da_imobiliaria && (
+                <p>
+                  Na cidade de <strong>{regional.cidade_da_imobiliaria}</strong>, a O2 já tem{" "}
+                  <strong>{regional.cotacoes_incendio_na_mesma_cidade}</strong> cotação(ões) de incêndio
+                  registrada(s).
+                </p>
+              )}
+              {regional.cidade_com_mais_cotacoes && (
+                <p>
+                  No geral, a cidade com mais cotações de incêndio é{" "}
+                  <strong>{regional.cidade_com_mais_cotacoes}</strong> (
+                  {regional.cotacoes_na_cidade_mais_frequente} cotações).
+                </p>
+              )}
+
+              <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {formatarReais(regional.ticket_medio_incendio_geral) && (
+                  <div>
+                    <p className="text-lg font-semibold text-o2-coral">
+                      {formatarReais(regional.ticket_medio_incendio_geral)}
+                    </p>
+                    <p className="text-xs text-gray-500">Ticket médio incêndio (geral)</p>
+                  </div>
+                )}
+                {formatarReais(regional.ticket_medio_incendio_na_cidade) && (
+                  <div>
+                    <p className="text-lg font-semibold text-o2-coral">
+                      {formatarReais(regional.ticket_medio_incendio_na_cidade)}
+                    </p>
+                    <p className="text-xs text-gray-500">Ticket médio incêndio ({regional.cidade_da_imobiliaria})</p>
+                  </div>
+                )}
+                {formatarReais(regional.ticket_medio_fianca_geral) && (
+                  <div>
+                    <p className="text-lg font-semibold text-o2-coral">
+                      {formatarReais(regional.ticket_medio_fianca_geral)}
+                    </p>
+                    <p className="text-xs text-gray-500">Ticket médio fiança (geral)</p>
+                  </div>
+                )}
+                {formatarReais(regional.ticket_medio_fianca_na_cidade) && (
+                  <div>
+                    <p className="text-lg font-semibold text-o2-coral">
+                      {formatarReais(regional.ticket_medio_fianca_na_cidade)}
+                    </p>
+                    <p className="text-xs text-gray-500">Ticket médio fiança ({regional.cidade_da_imobiliaria})</p>
+                  </div>
+                )}
+              </div>
+
+              <p className="mt-2 text-xs text-gray-500">{regional.observacao}</p>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
       <div className={cardClass}>
         <h3 className="mb-2 font-semibold text-o2-navy">Números da O2</h3>

@@ -49,6 +49,10 @@ export async function criarRelatorioProspeccao(formData: FormData) {
     cidade_com_mais_cotacoes: null,
     cotacoes_na_cidade_mais_frequente: 0,
     total_cotacoes_incendio_analisadas: 0,
+    ticket_medio_incendio_geral: null,
+    ticket_medio_incendio_na_cidade: null,
+    ticket_medio_fianca_geral: null,
+    ticket_medio_fianca_na_cidade: null,
     observacao: "Não foi possível consultar as planilhas do Google Sheets agora.",
   };
   let imobiliariaConhecida: ImobiliariaConhecida | null = null;
@@ -58,7 +62,7 @@ export async function criarRelatorioProspeccao(formData: FormData) {
   // nesse caso, segue só sem o histórico/comparativo, e loga o motivo real
   // pra dar pra investigar depois via Vercel Runtime Logs.
   try {
-    const resultado = await buscarHistoricoEComparativo(nome);
+    const resultado = await buscarHistoricoEComparativo(supabase, nome);
     historico_cotacoes = resultado.historico;
     comparativo_regional = resultado.regional;
   } catch (e) {
