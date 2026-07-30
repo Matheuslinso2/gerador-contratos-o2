@@ -125,31 +125,42 @@ export async function encontrarAbaDeDados(
   colunasEsperadas: string[]
 ): Promise<{ aba: string; cabecalho: string[] } | null> {
   const cliente = clienteSheets();
-  const metadados = await cliente.spreadsheets.get({ spreadsheetId });
+  const metadados = await cliente.spreadsheets.get({
+    spreadsheetId,
+    fields: "sheets.properties.title",
+  });
   const abas = (metadados.data.sheets ?? [])
     .map((s) => s.properties?.title)
     .filter((t): t is string => !!t);
+  if (!abas.length) return null;
+
+  // Uma chamada só pra buscar o cabeçalho de TODAS as abas de uma vez (em
+  // vez de uma chamada por aba) — a API do Google Sheets tem cota curta de
+  // requisições por minuto, e planilhas com várias abas (ex: "resumo" +
+  // "detalhamento") multiplicavam as chamadas rapidamente.
+  let respostas;
+  try {
+    respostas = await cliente.spreadsheets.values.batchGet({
+      spreadsheetId,
+      ranges: abas.map((aba) => `'${aba}'!1:1`),
+    });
+  } catch {
+    return null;
+  }
 
   let melhor: { aba: string; cabecalho: string[]; pontos: number } | null = null;
+  const intervalos = respostas.data.valueRanges ?? [];
 
-  for (const aba of abas) {
-    let valores;
-    try {
-      // Linha inteira (sem limite de coluna) — algumas planilhas têm mais
-      // de 26 colunas (ex: prêmio do seguro além da coluna Z), e um range
-      // limitado a A:Z cortava essas colunas sem avisar.
-      valores = await cliente.spreadsheets.values.get({ spreadsheetId, range: `'${aba}'!1:1` });
-    } catch {
-      continue;
-    }
-    const cabecalho = (valores.data.values?.[0] ?? []).map((v) => String(v ?? ""));
+  for (let i = 0; i < intervalos.length; i++) {
+    const cabecalho = (intervalos[i].values?.[0] ?? []).map((v) => String(v ?? ""));
+    if (!cabecalho.length) continue;
     const cabecalhoNormalizado = cabecalho.map(normalizarTextoBusca);
     const pontos = colunasEsperadas.filter((esperada) =>
       cabecalhoNormalizado.some((col) => col.includes(normalizarTextoBusca(esperada)))
     ).length;
 
     if (pontos > 0 && (!melhor || pontos > melhor.pontos)) {
-      melhor = { aba, cabecalho, pontos };
+      melhor = { aba: abas[i], cabecalho, pontos };
     }
   }
 
