@@ -173,7 +173,12 @@ export async function lerLinhasComoObjetos(
     .map((linha) => {
       const objeto: Record<string, string> = {};
       cabecalho.forEach((coluna, i) => {
-        objeto[coluna || `coluna_${i + 1}`] = String(linha[i] ?? "");
+        // Um cabeçalho com só um espaço em branco (comum em planilha
+        // editada manualmente) é "verdadeiro" em JS — sem o trim(), a
+        // coluna virava a chave " " em vez de "coluna_N", quebrando a
+        // busca posicional de colunas sem nome de verdade.
+        const nomeColuna = (coluna ?? "").trim();
+        objeto[nomeColuna || `coluna_${i + 1}`] = String(linha[i] ?? "");
       });
       return objeto;
     });
