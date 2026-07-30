@@ -1,5 +1,5 @@
 import { sheets } from "@googleapis/sheets";
-import { drive } from "@googleapis/drive";
+import { drive, type drive_v3 } from "@googleapis/drive";
 import { obterAutenticacaoGoogle } from "@/lib/googleAuth";
 
 const ESCOPOS = [
@@ -7,30 +7,76 @@ const ESCOPOS = [
   "https://www.googleapis.com/auth/spreadsheets.readonly",
 ];
 
+const PROFUNDIDADE_MAXIMA = 4;
+
 export type PlanilhaDaPasta = { id: string; nome: string };
 
-// Cada pasta (incêndio, fiança) tem uma planilha por mês. Lista todas as
-// planilhas (Google Sheets) dentro de uma pasta, mais recentes primeiro.
-export async function listarPlanilhasDaPasta(folderId: string): Promise<PlanilhaDaPasta[]> {
+function clienteDrive() {
   const auth = obterAutenticacaoGoogle(ESCOPOS);
-  const cliente = drive({ version: "v3", auth: auth as never });
+  return drive({ version: "v3", auth: auth as never });
+}
+
+// As planilhas de cotação nem sempre ficam direto na pasta compartilhada —
+// às vezes tem uma subpasta por ano no meio do caminho (ex: "2025", "2026").
+// Entra recursivamente em qualquer subpasta encontrada, até um limite de
+// profundidade, juntando todas as planilhas encontradas em qualquer nível.
+async function listarRecursivo(
+  cliente: drive_v3.Drive,
+  folderId: string,
+  profundidade: number
+): Promise<PlanilhaDaPasta[]> {
+  if (profundidade > PROFUNDIDADE_MAXIMA) return [];
 
   // As pastas de cotação ficam dentro de um Drive Compartilhado — sem essas
-  // duas flags, a API simplesmente não retorna nada de dentro de Drives
-  // Compartilhados, mesmo com a pasta compartilhada corretamente.
+  // três opções, a API simplesmente não retorna nada de dentro de Drives
+  // Compartilhados, mesmo com a pasta corretamente compartilhada.
   const resposta = await cliente.files.list({
-    q: `'${folderId}' in parents and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false`,
-    fields: "files(id, name, modifiedTime)",
+    q: `'${folderId}' in parents and trashed = false and (mimeType = 'application/vnd.google-apps.spreadsheet' or mimeType = 'application/vnd.google-apps.folder')`,
+    fields: "files(id, name, mimeType, modifiedTime)",
     orderBy: "modifiedTime desc",
-    pageSize: 100,
+    pageSize: 200,
     supportsAllDrives: true,
     includeItemsFromAllDrives: true,
     corpora: "allDrives",
   });
 
-  return (resposta.data.files ?? [])
-    .filter((f): f is { id: string; name: string } => !!f.id && !!f.name)
-    .map((f) => ({ id: f.id, nome: f.name }));
+  const arquivos = resposta.data.files ?? [];
+
+  const planilhas: PlanilhaDaPasta[] = arquivos
+    .filter((f) => f.mimeType === "application/vnd.google-apps.spreadsheet" && f.id && f.name)
+    .map((f) => ({ id: f.id!, nome: f.name! }));
+
+  const subpastas = arquivos.filter((f) => f.mimeType === "application/vnd.google-apps.folder" && f.id);
+  for (const sub of subpastas) {
+    planilhas.push(...(await listarRecursivo(cliente, sub.id!, profundidade + 1)));
+  }
+
+  return planilhas;
+}
+
+// Uma ou mais pastas-raiz (ex: uma pasta "Fiança 2025" e outra "Fiança
+// 2026", se a estrutura de subpastas não puder ser toda compartilhada de
+// uma vez) — junta e remove duplicatas.
+export async function listarPlanilhasDasPastas(folderIds: string[]): Promise<PlanilhaDaPasta[]> {
+  const cliente = clienteDrive();
+  const listas = await Promise.all(folderIds.map((id) => listarRecursivo(cliente, id, 0)));
+  const vistos = new Set<string>();
+  const resultado: PlanilhaDaPasta[] = [];
+  for (const planilha of listas.flat()) {
+    if (vistos.has(planilha.id)) continue;
+    vistos.add(planilha.id);
+    resultado.push(planilha);
+  }
+  return resultado;
+}
+
+// Lê IDs de pasta a partir de uma variável de ambiente, aceitando uma ou
+// várias pastas separadas por vírgula.
+export function idsDePastasDoEnv(valor: string | undefined): string[] {
+  return (valor ?? "")
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean);
 }
 
 // Lê o cabeçalho (linha 1) e algumas linhas de amostra (2 a 6) da primeira

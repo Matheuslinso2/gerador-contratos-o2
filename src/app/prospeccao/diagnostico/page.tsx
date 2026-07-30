@@ -4,7 +4,7 @@ import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../../actions";
 import AppHeader from "@/components/AppHeader";
 import BackLink from "@/components/BackLink";
-import { listarPlanilhasDaPasta, lerCabecalhoEAmostra } from "@/lib/googleSheetsProspeccao";
+import { listarPlanilhasDasPastas, idsDePastasDoEnv, lerCabecalhoEAmostra } from "@/lib/googleSheetsProspeccao";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -12,12 +12,13 @@ export const maxDuration = 60;
 // Página temporária, só para descobrir a estrutura real das planilhas do
 // Google Drive (nomes de arquivo + colunas) antes de escrever a lógica de
 // cruzamento da Fase 3. Remover depois que a Fase 3 estiver pronta.
-async function diagnosticarPasta(rotulo: string, folderId: string | undefined) {
-  if (!folderId) {
+async function diagnosticarPasta(rotulo: string, folderIdsEnv: string | undefined) {
+  const folderIds = idsDePastasDoEnv(folderIdsEnv);
+  if (!folderIds.length) {
     return { rotulo, erro: `Variável de ambiente da pasta de ${rotulo} não configurada.` };
   }
   try {
-    const planilhas = await listarPlanilhasDaPasta(folderId);
+    const planilhas = await listarPlanilhasDasPastas(folderIds);
     if (!planilhas.length) {
       return { rotulo, erro: "Nenhuma planilha encontrada nessa pasta (verifique o compartilhamento com a conta de serviço)." };
     }
