@@ -14,9 +14,16 @@ import type { createClient } from "@/lib/supabase/server";
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
 // Quantos endereços de fiança sem cache podem ser geocodificados numa única
-// sincronização — limita o tempo de uma execução; se sobrar backlog, o
-// próximo clique em "sincronizar" continua de onde parou.
+// sincronização — limita o tempo de uma execução; se sobrar backlog, a
+// próxima chamada continua de onde parou.
 const ORCAMENTO_GEOCODIFICACAO_POR_SYNC = 60;
+
+// O servidor (Vercel) mata a execução depois de 60s — processar todas as
+// planilhas de uma vez (principalmente numa ressincronização completa)
+// estourava esse tempo. Processa só um lote pequeno por chamada; o cliente
+// (BotaoSincronizar.tsx) chama de novo automaticamente até não sobrar nada,
+// sem precisar de clique manual repetido.
+const LIMITE_ARQUIVOS_POR_EXECUCAO = 10;
 
 async function mapComLimite<T, R>(itens: T[], limite: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const resultados: R[] = new Array(itens.length);
@@ -34,6 +41,7 @@ async function mapComLimite<T, R>(itens: T[], limite: number, fn: (item: T) => P
 export type ResultadoSincronizacao = {
   arquivos_processados: string[];
   arquivos_ja_atualizados: number;
+  arquivos_pendentes: number;
   linhas_gravadas: number;
   estatisticas_calculadas: number;
   erros: string[];
@@ -184,11 +192,21 @@ export async function sincronizarPlanilhas(
   const incendioValidos = arquivosIncendio.filter((a) => ehPlanilhaMensalValida(a.nome));
   const fiancaValidos = arquivosFianca.filter((a) => ehPlanilhaMensalValida(a.nome));
 
-  const incendioParaSincronizar = incendioValidos.filter(precisaSincronizar);
-  const fiancaParaSincronizar = fiancaValidos.filter(precisaSincronizar);
+  const incendioPendente = incendioValidos.filter(precisaSincronizar);
+  const fiancaPendente = fiancaValidos.filter(precisaSincronizar);
+  const totalPendente = incendioPendente.length + fiancaPendente.length;
 
-  const jaAtualizados =
-    incendioValidos.length + fiancaValidos.length - incendioParaSincronizar.length - fiancaParaSincronizar.length;
+  const jaAtualizados = incendioValidos.length + fiancaValidos.length - totalPendente;
+
+  // Processa só os primeiros N arquivos pendentes nessa chamada (incêndio
+  // primeiro, depois fiança) — o resto fica pra próxima chamada.
+  const incendioParaSincronizar = incendioPendente.slice(0, LIMITE_ARQUIVOS_POR_EXECUCAO);
+  const fiancaParaSincronizar = fiancaPendente.slice(
+    0,
+    Math.max(0, LIMITE_ARQUIVOS_POR_EXECUCAO - incendioParaSincronizar.length)
+  );
+  const arquivosPendentesDepois =
+    totalPendente - incendioParaSincronizar.length - fiancaParaSincronizar.length;
 
   const erros: string[] = [];
   const arquivosProcessados: string[] = [];
@@ -209,33 +227,41 @@ export async function sincronizarPlanilhas(
   // Carrega o cache de geocodificação inteiro de uma vez (em vez de uma
   // consulta ao banco por cotação) — com milhares de linhas de fiança, o
   // custo de uma consulta por linha sozinho já estourava o tempo de execução.
-  const cacheEnderecos = await carregarCacheEnderecos(supabase);
-  const orcamentoGeocodificacao = { restante: ORCAMENTO_GEOCODIFICACAO_POR_SYNC };
-  const resultadosFianca = await mapComLimite(fiancaParaSincronizar, 4, async (a) => {
-    try {
-      const n = await sincronizarArquivoFianca(supabase, a, cacheEnderecos, orcamentoGeocodificacao, erros);
-      arquivosProcessados.push(a.nome);
-      return n;
-    } catch (e) {
-      erros.push(`Fiança "${a.nome}": ${e instanceof Error ? e.message : "erro desconhecido"}`);
-      return 0;
-    }
-  });
-  linhasGravadas += resultadosFianca.reduce((a, b) => a + b, 0);
+  let linhasFianca = 0;
+  if (fiancaParaSincronizar.length) {
+    const cacheEnderecos = await carregarCacheEnderecos(supabase);
+    const orcamentoGeocodificacao = { restante: ORCAMENTO_GEOCODIFICACAO_POR_SYNC };
+    const resultadosFianca = await mapComLimite(fiancaParaSincronizar, 4, async (a) => {
+      try {
+        const n = await sincronizarArquivoFianca(supabase, a, cacheEnderecos, orcamentoGeocodificacao, erros);
+        arquivosProcessados.push(a.nome);
+        return n;
+      } catch (e) {
+        erros.push(`Fiança "${a.nome}": ${e instanceof Error ? e.message : "erro desconhecido"}`);
+        return 0;
+      }
+    });
+    linhasFianca = resultadosFianca.reduce((a, b) => a + b, 0);
+  }
+  linhasGravadas += linhasFianca;
 
-  // Recalcula as estatísticas prontas (bairro/região/cidade x faixa de
-  // aluguel) do zero, uma vez, a partir do cache atualizado — os relatórios
-  // só leem esse resultado depois, nunca recalculam na hora.
+  // Só recalcula as estatísticas prontas (bairro/região/cidade x faixa de
+  // aluguel) quando essa foi a última leva pendente — recalcular a cada
+  // lote parcial seria trabalho repetido à toa, e o objetivo é que essa
+  // conta pesada só rode uma vez no fim, nunca na hora do relatório.
   let estatisticasCalculadas = 0;
-  try {
-    estatisticasCalculadas = await recalcularEstatisticas(supabase);
-  } catch (e) {
-    erros.push(`Falha ao recalcular estatísticas: ${e instanceof Error ? e.message : "erro desconhecido"}`);
+  if (arquivosPendentesDepois === 0 && arquivosProcessados.length > 0) {
+    try {
+      estatisticasCalculadas = await recalcularEstatisticas(supabase);
+    } catch (e) {
+      erros.push(`Falha ao recalcular estatísticas: ${e instanceof Error ? e.message : "erro desconhecido"}`);
+    }
   }
 
   return {
     arquivos_processados: arquivosProcessados,
     arquivos_ja_atualizados: jaAtualizados,
+    arquivos_pendentes: arquivosPendentesDepois,
     linhas_gravadas: linhasGravadas,
     estatisticas_calculadas: estatisticasCalculadas,
     erros,

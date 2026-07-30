@@ -3,9 +3,13 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
-import { sincronizarPlanilhas } from "@/lib/prospeccaoSync";
+import { sincronizarPlanilhas, type ResultadoSincronizacao } from "@/lib/prospeccaoSync";
 
-export async function sincronizarAction(formData: FormData) {
+// Processa só um lote (ver LIMITE_ARQUIVOS_POR_EXECUCAO em prospeccaoSync.ts)
+// e devolve o resultado direto pro cliente — sem redirect — pra
+// BotaoSincronizar.tsx poder chamar de novo em loop até não sobrar nada,
+// sem estourar o limite de 60s do servidor numa chamada só.
+export async function sincronizarPasso(forcarTudo: boolean): Promise<ResultadoSincronizacao> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -13,19 +17,9 @@ export async function sincronizarAction(formData: FormData) {
   if (!user) redirect("/login");
   if (!isAdmin(user.email) && !isColaboradorO2(user.email)) redirect("/");
 
-  const forcarTudo = formData.get("forcar_tudo") === "on";
   const resultado = await sincronizarPlanilhas(supabase, forcarTudo);
-
   if (resultado.erros.length) {
     console.error("[prospeccao][sync] erros:", resultado.erros);
   }
-
-  const resumo =
-    `${resultado.arquivos_processados.length} planilha(s) atualizada(s), ` +
-    `${resultado.linhas_gravadas} linha(s) gravada(s), ` +
-    `${resultado.arquivos_ja_atualizados} já estavam em dia, ` +
-    `${resultado.estatisticas_calculadas} estatística(s) recalculada(s)` +
-    (resultado.erros.length ? `, ${resultado.erros.length} erro(s) (veja os Vercel Runtime Logs)` : ".");
-
-  redirect(`/prospeccao/sincronizar?resultado=${encodeURIComponent(resumo)}`);
+  return resultado;
 }

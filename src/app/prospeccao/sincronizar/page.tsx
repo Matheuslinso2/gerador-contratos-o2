@@ -4,18 +4,12 @@ import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../../actions";
 import AppHeader from "@/components/AppHeader";
 import BackLink from "@/components/BackLink";
-import { sincronizarAction } from "./actions";
 import BotaoSincronizar from "./BotaoSincronizar";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-export default async function SincronizarProspeccaoPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ resultado?: string }>;
-}) {
-  const { resultado } = await searchParams;
+export default async function SincronizarProspeccaoPage() {
   const supabase = await createClient();
   const {
     data: { user },
@@ -37,28 +31,16 @@ export default async function SincronizarProspeccaoPage({
             Atualiza o cache local com as planilhas novas ou modificadas desde a última
             sincronização. Os relatórios de prospecção usam esse cache, não leem o Google
             Sheets ao vivo — sincronize aqui de vez em quando (ex: toda vez que um mês novo
-            for adicionado nas pastas de cotação).
+            for adicionado nas pastas de cotação). Processa em lotes automaticamente até
+            terminar, sem precisar clicar de novo.
           </p>
         </div>
-
-        {resultado && (
-          <p className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-800">
-            {resultado}
-          </p>
-        )}
 
         <div className="rounded-xl border border-o2-navy/10 bg-white p-5 shadow-sm">
           <p className="mb-3 text-sm text-gray-600">
             Linhas no cache hoje: <strong>{totalLinhas ?? 0}</strong>
           </p>
-          <form action={sincronizarAction} className="space-y-3">
-            <label className="flex items-center gap-2 text-sm text-gray-600">
-              <input type="checkbox" name="forcar_tudo" />
-              Forçar recarregar tudo (ignora o que já está sincronizado — use só se mudou algo
-              na lógica de extração, ou se ficou faltando algum dado)
-            </label>
-            <BotaoSincronizar />
-          </form>
+          <BotaoSincronizar />
         </div>
       </main>
     </>
