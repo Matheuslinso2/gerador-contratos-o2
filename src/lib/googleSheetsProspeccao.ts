@@ -135,7 +135,10 @@ export async function encontrarAbaDeDados(
   for (const aba of abas) {
     let valores;
     try {
-      valores = await cliente.spreadsheets.values.get({ spreadsheetId, range: `'${aba}'!A1:Z1` });
+      // Linha inteira (sem limite de coluna) — algumas planilhas têm mais
+      // de 26 colunas (ex: prêmio do seguro além da coluna Z), e um range
+      // limitado a A:Z cortava essas colunas sem avisar.
+      valores = await cliente.spreadsheets.values.get({ spreadsheetId, range: `'${aba}'!1:1` });
     } catch {
       continue;
     }
@@ -161,10 +164,10 @@ export async function lerLinhasComoObjetos(
   cabecalho: string[]
 ): Promise<Record<string, string>[]> {
   const cliente = clienteSheets();
-  const ultimaColuna = String.fromCharCode(65 + Math.min(cabecalho.length - 1, 25));
+  // Linha inteira, sem limite de coluna — mesma razão do encontrarAbaDeDados.
   const valores = await cliente.spreadsheets.values.get({
     spreadsheetId,
-    range: `'${aba}'!A2:${ultimaColuna}100000`,
+    range: `'${aba}'!2:100000`,
   });
 
   const linhas = valores.data.values ?? [];
@@ -195,7 +198,7 @@ export async function lerCabecalhoEAmostra(
 
   const valores = await cliente.spreadsheets.values.get({
     spreadsheetId,
-    range: `'${aba}'!A1:Z6`,
+    range: `'${aba}'!1:6`,
   });
 
   const linhas = valores.data.values ?? [];

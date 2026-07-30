@@ -123,7 +123,10 @@ async function processarArquivoFianca(
     console.error(`[prospeccao] falha ao ler planilha de fiança "${nomeArquivo}":`, e);
     return { total: 0, exemplos: [] };
   }
-  if (!abaInfo) return { total: 0, exemplos: [] };
+  if (!abaInfo) {
+    console.error(`[prospeccao][fianca] "${nomeArquivo}": nenhuma aba com colunas reconhecidas.`);
+    return { total: 0, exemplos: [] };
+  }
 
   let linhas;
   try {
@@ -133,6 +136,14 @@ async function processarArquivoFianca(
     return { total: 0, exemplos: [] };
   }
   const exemplos: ExemploCotacao[] = [];
+
+  // Diagnóstico temporário: confirmar qual aba foi escolhida, o cabeçalho
+  // exato lido e os primeiros valores extraídos como "imobiliária".
+  console.error(
+    `[prospeccao][fianca] "${nomeArquivo}" aba="${abaInfo.aba}" cabecalho=${JSON.stringify(abaInfo.cabecalho)} linhas=${linhas.length} amostraImobiliaria=${JSON.stringify(
+      linhas.slice(0, 3).map((l) => l["coluna_2"] ?? l["IMOBILIARIA"] ?? Object.values(l)[1])
+    )}`
+  );
 
   for (const linha of linhas) {
     // A coluna com o nome da imobiliária não tem cabeçalho nessa planilha —
