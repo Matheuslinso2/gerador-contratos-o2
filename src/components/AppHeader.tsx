@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { isAdmin } from "@/lib/admin";
+import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import NavLink from "./NavLink";
 import NavDropdown from "./NavDropdown";
 
@@ -44,6 +44,9 @@ export default function AppHeader({
               ]}
             />
             <NavLink href="/contratos" label="Contratos realizados" />
+            {(isAdmin(userEmail) || isColaboradorO2(userEmail)) && (
+              <NavLink href="/prospeccao" label="Prospecção (uso interno)" />
+            )}
             <NavDropdown
               label="Configurações"
               items={[

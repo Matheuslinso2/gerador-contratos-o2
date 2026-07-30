@@ -20,3 +20,9 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
+
+@media print {
+  @page {
+    margin: 1.5cm;
+  }
+}
