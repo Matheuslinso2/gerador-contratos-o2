@@ -5,6 +5,7 @@ import { signOut } from "../../actions";
 import AppHeader from "@/components/AppHeader";
 import BackLink from "@/components/BackLink";
 import { sincronizarAction } from "./actions";
+import BotaoSincronizar from "./BotaoSincronizar";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -51,12 +52,7 @@ export default async function SincronizarProspeccaoPage({
             Linhas no cache hoje: <strong>{totalLinhas ?? 0}</strong>
           </p>
           <form action={sincronizarAction}>
-            <button
-              type="submit"
-              className="rounded-full bg-o2-coral px-6 py-2.5 font-medium text-white transition hover:opacity-90"
-            >
-              Sincronizar agora
-            </button>
+            <BotaoSincronizar />
           </form>
         </div>
       </main>
