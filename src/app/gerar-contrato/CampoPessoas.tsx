@@ -3,6 +3,8 @@
 import { useRef, useState } from "react";
 import { formatarCPF, validarCPF } from "@/lib/validacoesBr";
 import { PROFISSOES } from "@/lib/profissoes";
+import { NACIONALIDADES } from "@/lib/nacionalidades";
+import { ESTADOS_CIVIS } from "@/lib/estadosCivis";
 import CampoEndereco from "@/components/CampoEndereco";
 
 const inputClass =
@@ -25,6 +27,8 @@ function LinhaPessoa({
   const [cpfTocado, setCpfTocado] = useState(false);
   const [profissao, setProfissao] = useState("");
   const [profissaoOutra, setProfissaoOutra] = useState(false);
+  const [nacionalidade, setNacionalidade] = useState("");
+  const [nacionalidadeOutra, setNacionalidadeOutra] = useState(false);
 
   const cpfInvalido = cpfTocado && cpf.trim() !== "" && !validarCPF(cpf);
 
@@ -53,8 +57,45 @@ function LinhaPessoa({
           required={numero === null || numero === 1}
           className={`${inputClass} col-span-2`}
         />
-        <input name={`${fieldName}_nacionalidade`} placeholder="Nacionalidade (ex: brasileiro)" className={inputClass} />
-        <input name={`${fieldName}_estado_civil`} placeholder="Estado civil" className={inputClass} />
+        {nacionalidadeOutra ? (
+          <input
+            name={`${fieldName}_nacionalidade`}
+            placeholder="Nacionalidade"
+            defaultValue=""
+            className={inputClass}
+            autoFocus
+          />
+        ) : (
+          <select
+            name={`${fieldName}_nacionalidade`}
+            value={nacionalidade}
+            onChange={(e) => {
+              if (e.target.value === "Outra") {
+                setNacionalidadeOutra(true);
+                setNacionalidade("");
+              } else {
+                setNacionalidade(e.target.value);
+              }
+            }}
+            className={inputClass}
+          >
+            <option value="">Nacionalidade...</option>
+            {NACIONALIDADES.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        )}
+
+        <select name={`${fieldName}_estado_civil`} defaultValue="" className={inputClass}>
+          <option value="">Estado civil...</option>
+          {ESTADOS_CIVIS.map((e) => (
+            <option key={e} value={e}>
+              {e}
+            </option>
+          ))}
+        </select>
 
         {profissaoOutra ? (
           <input
