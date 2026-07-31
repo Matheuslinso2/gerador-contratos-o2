@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { sincronizarPlanilhas, type ResultadoSincronizacao } from "@/lib/prospeccaoSync";
 import { recalcularEstatisticas } from "@/lib/prospeccaoEstatisticas";
+import { alertarAdmin } from "@/lib/email";
 
 // Processa só um lote (ver LIMITE_ARQUIVOS_POR_EXECUCAO em prospeccaoSync.ts)
 // e devolve o resultado direto pro cliente — sem redirect — pra
@@ -21,6 +22,10 @@ export async function sincronizarPasso(forcarTudo: boolean): Promise<ResultadoSi
   const resultado = await sincronizarPlanilhas(supabase, forcarTudo);
   if (resultado.erros.length) {
     console.error("[prospeccao][sync] erros:", resultado.erros);
+    await alertarAdmin({
+      contexto: "Sincronização de planilhas (Prospecção)",
+      detalhe: resultado.erros.join("\n"),
+    });
   }
   return resultado;
 }

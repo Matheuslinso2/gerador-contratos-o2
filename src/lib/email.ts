@@ -36,3 +36,27 @@ export async function enviarEmail({
     console.error("Falha ao enviar e-mail:", erro);
   }
 }
+
+const EMAIL_ALERTA_ADMIN = "comercial@o2seguros.com.br";
+
+// Notifica a O2 quando algo dá erro de verdade no sistema, pra permitir
+// acompanhar sem precisar ficar checando os logs do Vercel. Reusa o mesmo
+// SMTP de enviarEmail — se não estiver configurado, só loga (não trava nada).
+export async function alertarAdmin({
+  contexto,
+  detalhe,
+}: {
+  contexto: string;
+  detalhe: string;
+}) {
+  await enviarEmail({
+    para: EMAIL_ALERTA_ADMIN,
+    assunto: `[Gerador de Contratos] Erro: ${contexto}`,
+    html: `
+      <p><strong>Contexto:</strong> ${contexto}</p>
+      <p><strong>Detalhe:</strong></p>
+      <pre style="white-space: pre-wrap; font-family: monospace; font-size: 13px; background: #f5f5f5; padding: 12px; border-radius: 6px;">${detalhe}</pre>
+      <p style="color: #888; font-size: 12px;">Enviado automaticamente pelo sistema.</p>
+    `,
+  });
+}

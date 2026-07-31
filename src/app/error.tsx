@@ -12,6 +12,15 @@ export default function ErrorBoundary({
 }) {
   useEffect(() => {
     console.error(error);
+    fetch("/api/erro-cliente", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mensagem: error.message,
+        digest: error.digest,
+        url: window.location.href,
+      }),
+    }).catch(() => {});
   }, [error]);
 
   return (
