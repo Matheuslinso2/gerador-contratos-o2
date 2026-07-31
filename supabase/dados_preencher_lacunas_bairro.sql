@@ -11,7 +11,7 @@ update imobiliarias_conhecidas set bairro = coalesce(bairro, 'Centro'), cidade =
 update imobiliarias_conhecidas set bairro = coalesce(bairro, 'Copacabana'), cidade = coalesce(cidade, 'Rio de Janeiro'), uf = coalesce(uf, 'RJ') where cnpj = '21162265000166';
 update imobiliarias_conhecidas set uf = coalesce(uf, 'RJ') where cnpj = '12003761000186';
 update imobiliarias_conhecidas set bairro = coalesce(bairro, 'Centro'), cidade = coalesce(cidade, 'Rio de Janeiro'), uf = coalesce(uf, 'RJ') where cnpj = '28495339000125';
-update imobiliarias_conhecidas set bairro = coalesce(bairro, 'Barra da Tijuca'), cidade = coalesce(cidade, 'RJ'), uf = coalesce(uf, 'RJ') where cnpj = '43165381000171';
+update imobiliarias_conhecidas set bairro = coalesce(bairro, 'Barra da Tijuca'), uf = coalesce(uf, 'RJ') where cnpj = '43165381000171';
 update imobiliarias_conhecidas set bairro = coalesce(bairro, 'Leblon'), cidade = coalesce(cidade, 'Rio de Janeiro'), uf = coalesce(uf, 'RJ') where cnpj = '42329995000189';
 update imobiliarias_conhecidas set bairro = coalesce(bairro, 'Icarai'), cidade = coalesce(cidade, 'Niterói'), uf = coalesce(uf, 'RJ') where cnpj = '31064477000164';
 update imobiliarias_conhecidas set cidade = coalesce(cidade, 'Macaé'), uf = coalesce(uf, 'RJ') where cnpj = '18900531000104';

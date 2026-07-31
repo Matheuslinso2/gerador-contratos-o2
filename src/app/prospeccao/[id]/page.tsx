@@ -5,6 +5,7 @@ import { signOut } from "../../actions";
 import AppHeader from "@/components/AppHeader";
 import BackLink from "@/components/BackLink";
 import RelatorioProspeccaoView from "../RelatorioProspeccaoView";
+import { registrarResultadoVisita } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,7 @@ export default async function RelatorioProspeccaoPage({
   const { data: relatorio } = await supabase
     .from("relatorios_prospeccao")
     .select(
-      "nome_imobiliaria, cnpj_imobiliaria, url_site, url_instagram, notas_manuais, ficha, numeros_o2, historico_cotacoes, comparativo_regional, ticket_por_faixa, created_at"
+      "nome_imobiliaria, cnpj_imobiliaria, url_site, url_instagram, notas_manuais, ficha, numeros_o2, historico_cotacoes, comparativo_regional, ticket_por_faixa, crm_classificacao, crm_responsavel, quantidade_imoveis, potencial_bruto_mensal, resultado_temperatura, resultado_estagio, resultado_proximo_passo, resultado_data_proximo_passo, resultado_observacoes, resultado_atualizado_em, created_at"
     )
     .eq("id", id)
     .maybeSingle();
@@ -39,7 +40,7 @@ export default async function RelatorioProspeccaoPage({
         <div className="print:hidden">
           <BackLink />
         </div>
-        <RelatorioProspeccaoView relatorio={relatorio} />
+        <RelatorioProspeccaoView relatorio={relatorio} salvarResultado={registrarResultadoVisita.bind(null, id)} />
       </main>
     </>
   );

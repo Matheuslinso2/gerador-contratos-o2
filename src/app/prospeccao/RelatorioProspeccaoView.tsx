@@ -16,6 +16,16 @@ type Relatorio = {
   historico_cotacoes?: Partial<HistoricoCotacoes> | null;
   comparativo_regional?: Partial<ComparativoRegional> | null;
   ticket_por_faixa?: TicketPorLocal | null;
+  crm_classificacao?: string | null;
+  crm_responsavel?: string | null;
+  quantidade_imoveis?: number | null;
+  potencial_bruto_mensal?: number | null;
+  resultado_temperatura?: string | null;
+  resultado_estagio?: string | null;
+  resultado_proximo_passo?: string | null;
+  resultado_data_proximo_passo?: string | null;
+  resultado_observacoes?: string | null;
+  resultado_atualizado_em?: string | null;
   created_at: string;
 };
 
@@ -25,6 +35,15 @@ const ROTULO_NIVEL: Record<string, string> = {
   cidade: "cidade toda",
 };
 
+const ROTEIRO_PERGUNTAS = [
+  "Quantos contratos de locação ativos vocês administram hoje, e quantos novos fecham por mês?",
+  "Quais garantias vocês mais usam hoje (fiador, caução, seguro fiança, título de capitalização)?",
+  "Como funciona o processo de cotação e contratação da garantia atualmente — quem faz, quanto tempo leva?",
+  "Vocês já trabalham com seguro incêndio obrigatório? Como é oferecido ao locatário hoje?",
+  "Qual a maior dor de vocês com inadimplência ou renovação de contratos?",
+  "Quem mais participa dessa decisão além de você — tem alguém responsável pela carteira de seguros?",
+];
+
 const cardClass = "rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm";
 
 function formatarReais(valor: number | null | undefined): string | null {
@@ -32,7 +51,13 @@ function formatarReais(valor: number | null | undefined): string | null {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-export default function RelatorioProspeccaoView({ relatorio }: { relatorio: Relatorio }) {
+export default function RelatorioProspeccaoView({
+  relatorio,
+  salvarResultado,
+}: {
+  relatorio: Relatorio;
+  salvarResultado?: (formData: FormData) => void;
+}) {
   const { ficha, numeros_o2 } = relatorio;
   const historico = relatorio.historico_cotacoes;
   const regional = relatorio.comparativo_regional;
@@ -61,7 +86,14 @@ export default function RelatorioProspeccaoView({ relatorio }: { relatorio: Rela
       </div>
 
       <div className={cardClass}>
-        <h2 className="text-lg font-semibold text-o2-navy">{relatorio.nome_imobiliaria}</h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-lg font-semibold text-o2-navy">{relatorio.nome_imobiliaria}</h2>
+          {relatorio.crm_classificacao && (
+            <span className="rounded-full bg-o2-navy/10 px-2.5 py-0.5 text-xs font-medium text-o2-navy">
+              CRM: {relatorio.crm_classificacao}
+            </span>
+          )}
+        </div>
         <p className="text-sm text-gray-500">
           {relatorio.cnpj_imobiliaria && <>CNPJ: {relatorio.cnpj_imobiliaria} · </>}
           {relatorio.url_site && (
@@ -71,6 +103,13 @@ export default function RelatorioProspeccaoView({ relatorio }: { relatorio: Rela
           )}
           {relatorio.url_instagram && <>Instagram: {relatorio.url_instagram}</>}
         </p>
+        {relatorio.crm_responsavel && (
+          <p className="mt-1 text-sm text-yellow-800">
+            ⚠ Já existe um responsável cadastrado no CRM para essa conta:{" "}
+            <strong>{relatorio.crm_responsavel}</strong> — verifique antes de prospectar, pra
+            evitar contato duplicado.
+          </p>
+        )}
       </div>
 
       <div className={cardClass}>
@@ -102,6 +141,15 @@ export default function RelatorioProspeccaoView({ relatorio }: { relatorio: Rela
             <li key={i}>{ponto}</li>
           ))}
         </ul>
+      </div>
+
+      <div className={cardClass}>
+        <h3 className="mb-2 font-semibold text-o2-navy">Roteiro de perguntas para a visita</h3>
+        <ol className="list-decimal space-y-1 pl-5 text-sm text-gray-800">
+          {ROTEIRO_PERGUNTAS.map((pergunta, i) => (
+            <li key={i}>{pergunta}</li>
+          ))}
+        </ol>
       </div>
 
       {relatorio.notas_manuais && (
@@ -203,6 +251,20 @@ export default function RelatorioProspeccaoView({ relatorio }: { relatorio: Rela
         </div>
       )}
 
+      {relatorio.potencial_bruto_mensal != null && (
+        <div className={cardClass}>
+          <h3 className="mb-1 font-semibold text-o2-navy">Potencial bruto estimado</h3>
+          <p className="text-2xl font-semibold text-o2-coral">
+            {formatarReais(relatorio.potencial_bruto_mensal)}
+            <span className="text-sm font-normal text-gray-500">/mês</span>
+          </p>
+          <p className="mt-1 text-xs text-gray-500">
+            {relatorio.quantidade_imoveis} imóveis × ticket médio de fiança da região — considera
+            100% de adesão, é só uma referência de tamanho, não uma projeção de vendas.
+          </p>
+        </div>
+      )}
+
       {regional &&
         ((regional.total_cotacoes_incendio_analisadas ?? 0) > 0 ||
           regional.ticket_medio_fianca_geral != null) && (
@@ -288,6 +350,93 @@ export default function RelatorioProspeccaoView({ relatorio }: { relatorio: Rela
             <p className="text-gray-500">Produtos ativos</p>
           </div>
         </div>
+      </div>
+
+      <div className={cardClass}>
+        <h3 className="mb-2 font-semibold text-o2-navy">Resultado da visita</h3>
+
+        {relatorio.resultado_atualizado_em && (
+          <div className="mb-3 space-y-1 rounded-lg bg-gray-50 p-3 text-sm text-gray-800">
+            {relatorio.resultado_temperatura && (
+              <p>
+                Temperatura: <strong>{relatorio.resultado_temperatura}</strong>
+              </p>
+            )}
+            {relatorio.resultado_estagio && (
+              <p>
+                Estágio: <strong>{relatorio.resultado_estagio}</strong>
+              </p>
+            )}
+            {relatorio.resultado_proximo_passo && (
+              <p>
+                Próximo passo: <strong>{relatorio.resultado_proximo_passo}</strong>
+                {relatorio.resultado_data_proximo_passo &&
+                  ` — até ${new Date(relatorio.resultado_data_proximo_passo + "T00:00:00").toLocaleDateString("pt-BR")}`}
+              </p>
+            )}
+            {relatorio.resultado_observacoes && (
+              <p className="whitespace-pre-wrap">{relatorio.resultado_observacoes}</p>
+            )}
+          </div>
+        )}
+
+        {salvarResultado && (
+          <form action={salvarResultado} className="space-y-2 print:hidden">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <select
+                name="resultado_temperatura"
+                defaultValue={relatorio.resultado_temperatura ?? ""}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-o2-coral focus:outline-none"
+              >
+                <option value="">Temperatura...</option>
+                <option value="quente">Quente</option>
+                <option value="morna">Morna</option>
+                <option value="fria">Fria</option>
+              </select>
+              <select
+                name="resultado_estagio"
+                defaultValue={relatorio.resultado_estagio ?? ""}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-o2-coral focus:outline-none"
+              >
+                <option value="">Estágio...</option>
+                <option value="prospeccao">Prospecção</option>
+                <option value="diagnostico">Diagnóstico</option>
+                <option value="cotacao">Cotação</option>
+                <option value="proposta">Proposta</option>
+                <option value="negociacao">Negociação</option>
+                <option value="fechamento">Fechamento</option>
+                <option value="implantacao">Implantação</option>
+              </select>
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <input
+                name="resultado_proximo_passo"
+                placeholder="Próximo passo combinado"
+                defaultValue={relatorio.resultado_proximo_passo ?? ""}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-o2-coral focus:outline-none"
+              />
+              <input
+                name="resultado_data_proximo_passo"
+                type="date"
+                defaultValue={relatorio.resultado_data_proximo_passo ?? ""}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-o2-coral focus:outline-none"
+              />
+            </div>
+            <textarea
+              name="resultado_observacoes"
+              rows={3}
+              placeholder="Observações da visita"
+              defaultValue={relatorio.resultado_observacoes ?? ""}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-o2-coral focus:outline-none"
+            />
+            <button
+              type="submit"
+              className="rounded-full bg-o2-navy px-5 py-2 text-sm font-medium text-white transition hover:opacity-90"
+            >
+              Salvar resultado
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );

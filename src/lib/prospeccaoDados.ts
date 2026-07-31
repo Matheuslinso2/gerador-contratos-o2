@@ -173,22 +173,36 @@ export type ImobiliariaConhecida = {
   cidade: string | null;
   uf: string | null;
   bairro: string | null;
+  classificacao_crm: string | null;
+  responsavel_crm: string | null;
+  quantidade_imoveis: number | null;
 };
 
 // Nem toda cotação tem CNPJ da imobiliária — busca no registro interno
 // (imobiliarias_conhecidas, alimentado a partir do cadastro de produtores
-// da O2) pelo nome, pra sugerir o CNPJ e o bairro quando o colaborador não
-// souber.
+// da O2 e do CRM Bitrix24) pelo nome, pra sugerir o CNPJ, o bairro e os
+// dados de CRM quando o colaborador não souber.
 export async function buscarImobiliariaConhecida(
   supabase: SupabaseServerClient,
   nomeBusca: string
 ): Promise<ImobiliariaConhecida | null> {
-  const { data } = await supabase.from("imobiliarias_conhecidas").select("nome, cnpj, cidade, uf, bairro");
+  const { data } = await supabase
+    .from("imobiliarias_conhecidas")
+    .select("nome, cnpj, cidade, uf, bairro, classificacao_crm, responsavel_crm, quantidade_imoveis");
   if (!data) return null;
 
   const correspondencias = data.filter((r) => r.nome && textoCorresponde(r.nome, nomeBusca));
   if (correspondencias.length !== 1) return null;
 
   const [r] = correspondencias;
-  return { nome: r.nome, cnpj: r.cnpj, cidade: r.cidade, uf: r.uf, bairro: r.bairro };
+  return {
+    nome: r.nome,
+    cnpj: r.cnpj,
+    cidade: r.cidade,
+    uf: r.uf,
+    bairro: r.bairro,
+    classificacao_crm: r.classificacao_crm,
+    responsavel_crm: r.responsavel_crm,
+    quantidade_imoveis: r.quantidade_imoveis,
+  };
 }

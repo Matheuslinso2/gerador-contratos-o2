@@ -101,6 +101,19 @@ export async function criarRelatorioProspeccao(formData: FormData) {
     console.error("[prospeccao] erro ao buscar ticket por bairro:", e);
   }
 
+  // Potencial bruto (referência, não projeção): quantidade de imóveis da
+  // imobiliária x ticket médio de fiança ponderado pelas faixas com dado —
+  // assume 100% de adesão de propósito, só pra dar uma noção de tamanho.
+  let potencial_bruto_mensal: number | null = null;
+  if (imobiliariaConhecida?.quantidade_imoveis && ticket_por_faixa) {
+    const faixasComDado = ticket_por_faixa.fianca_por_faixa.filter((f) => f.ticket_medio !== null);
+    const totalQtd = faixasComDado.reduce((s, f) => s + f.quantidade, 0);
+    if (totalQtd > 0) {
+      const ticketBlend = faixasComDado.reduce((s, f) => s + (f.ticket_medio ?? 0) * f.quantidade, 0) / totalQtd;
+      potencial_bruto_mensal = Math.round(imobiliariaConhecida.quantidade_imoveis * ticketBlend * 100) / 100;
+    }
+  }
+
   let ficha;
   try {
     ficha = await montarFichaImobiliaria(nome, cnpj, notas_manuais, textoSite, textoInstagram);
@@ -124,6 +137,10 @@ export async function criarRelatorioProspeccao(formData: FormData) {
       comparativo_regional,
       ticket_por_faixa,
       numeros_o2,
+      crm_classificacao: imobiliariaConhecida?.classificacao_crm ?? null,
+      crm_responsavel: imobiliariaConhecida?.responsavel_crm ?? null,
+      quantidade_imoveis: imobiliariaConhecida?.quantidade_imoveis ?? null,
+      potencial_bruto_mensal,
     })
     .select("id")
     .single();
