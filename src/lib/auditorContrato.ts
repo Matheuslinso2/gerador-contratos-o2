@@ -43,7 +43,7 @@ Você precisa preencher TODOS OS 10 CAMPOS de status/resumo abaixo, um de cada v
 
 2. dados_locacao_status / dados_locacao_resumo — endereço completo do imóvel, tipo (residencial/não residencial), valor do aluguel, prazo da locação (datas de início/término coerentes). "problema" se algum desses dados estiver ausente, ambíguo ou incoerente.
 
-3. conferencia_cotacao_status / conferencia_cotacao_resumo — só avalie se uma COTAÇÃO/PROPOSTA DE SEGURO for fornecida abaixo. Compare segurado/locatário, valor do aluguel, prazo e endereço entre o contrato e a cotação. Se NENHUMA cotação for fornecida, use status "nao_avaliado" e resumo "Nenhuma cotação/proposta anexada para conferência.".
+3. conferencia_cotacao_status / conferencia_cotacao_resumo — se uma COTAÇÃO/PROPOSTA DE SEGURO for fornecida abaixo, compare segurado/locatário, valor do aluguel, prazo e endereço entre o contrato e a cotação. Se NENHUMA cotação for fornecida, use status "nao_avaliado", mas o resumo NUNCA pode ser só um aviso genérico — ele precisa trazer o locador, o locatário e o endereço do imóvel identificados no contrato (os mesmos valores de locador_identificado/locatario_identificado/endereco_identificado), no formato "Sem cotação anexada para conferência automática — confira manualmente: Locador: [nome]. Locatário: [nome]. Endereço: [endereço].". Isso é pra quem está lendo poder comparar na hora com a cotação que tem em mãos, sem precisar procurar essa informação em outro lugar do relatório.
 
 4. clausulas_seguradora_status / clausulas_seguradora_resumo — só se aplica quando a garantia for Seguro Fiança ou Título de Capitalização. Se a garantia for Fiador ou Caução, use status "nao_avaliado" e resumo "Não se aplica — garantia não é seguro-fiança nem título de capitalização.". Quando se aplicar e uma BIBLIOTECA DE CLÁUSULAS DE REFERÊNCIA for fornecida, verifique se a cláusula do contrato tem o mesmo conteúdo essencial do texto oficial daquele produto/seguradora (sem trechos essenciais alterados, removidos ou incompatíveis). Se a seguradora/produto citado não constar na biblioteca fornecida, use "nao_avaliado" com resumo explicando que não há como validar. A Lei do Inquilinato (art. 37) proíbe mais de uma modalidade de garantia no mesmo contrato — se houver DUPLA GARANTIA, isso é "problema" aqui E deve virar um item em pontos_criticos.
 
@@ -92,7 +92,12 @@ const FERRAMENTA_RELATORIO: Anthropic.Tool = {
       dados_locacao_status: { type: "string", enum: STATUS_ENUM, description: "Status do pilar 2 (dados da locação)." },
       dados_locacao_resumo: { type: "string", minLength: 1, description: "Resumo de uma frase do pilar 2 (dados da locação)." },
       conferencia_cotacao_status: { type: "string", enum: STATUS_ENUM, description: "Status do pilar 3 (conferência com a cotação)." },
-      conferencia_cotacao_resumo: { type: "string", minLength: 1, description: "Resumo de uma frase do pilar 3 (conferência com a cotação)." },
+      conferencia_cotacao_resumo: {
+        type: "string",
+        minLength: 1,
+        description:
+          "Resumo de uma frase do pilar 3 (conferência com a cotação). Se não houver cotação anexada, mesmo assim inclua locador, locatário e endereço identificados no contrato, pra permitir conferência manual.",
+      },
       clausulas_seguradora_status: { type: "string", enum: STATUS_ENUM, description: "Status do pilar 4 (cláusulas da seguradora)." },
       clausulas_seguradora_resumo: { type: "string", minLength: 1, description: "Resumo de uma frase do pilar 4 (cláusulas da seguradora)." },
       assinaturas_status: { type: "string", enum: STATUS_ENUM, description: "Status do pilar 5 (assinaturas)." },
