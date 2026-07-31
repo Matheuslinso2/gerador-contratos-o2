@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { sincronizarPlanilhas, type ResultadoSincronizacao } from "@/lib/prospeccaoSync";
+import { recalcularEstatisticas } from "@/lib/prospeccaoEstatisticas";
 
 // Processa só um lote (ver LIMITE_ARQUIVOS_POR_EXECUCAO em prospeccaoSync.ts)
 // e devolve o resultado direto pro cliente — sem redirect — pra
@@ -22,4 +23,19 @@ export async function sincronizarPasso(forcarTudo: boolean): Promise<ResultadoSi
     console.error("[prospeccao][sync] erros:", resultado.erros);
   }
   return resultado;
+}
+
+// Recalcula só as estatísticas prontas (bairro/região/cidade x faixa) a
+// partir do que já está no cache local — não toca no Google Sheets, então é
+// rápido mesmo com milhares de linhas. Útil depois de corrigir um bug na
+// lógica de agregação, sem precisar reler as planilhas do zero.
+export async function recalcularEstatisticasAction(): Promise<number> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+  if (!isAdmin(user.email) && !isColaboradorO2(user.email)) redirect("/");
+
+  return recalcularEstatisticas(supabase);
 }

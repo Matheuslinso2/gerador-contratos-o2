@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { sincronizarPasso } from "./actions";
+import { sincronizarPasso, recalcularEstatisticasAction } from "./actions";
 import type { ResultadoSincronizacao } from "@/lib/prospeccaoSync";
 
 const LIMITE_VOLTAS_SEGURANCA = 30; // evita loop infinito em caso de bug
@@ -13,6 +13,21 @@ export default function BotaoSincronizar() {
   const [rodando, setRodando] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+
+  async function recalcularSoEstatisticas() {
+    setRodando(true);
+    setErro(null);
+    setStatus("Recalculando estatísticas...");
+    try {
+      const total = await recalcularEstatisticasAction();
+      setStatus(`Concluído: ${total} estatística(s) recalculada(s).`);
+      router.refresh();
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Falha ao recalcular estatísticas.");
+    } finally {
+      setRodando(false);
+    }
+  }
 
   async function iniciar() {
     setRodando(true);
@@ -75,14 +90,24 @@ export default function BotaoSincronizar() {
         lógica de extração, ou se ficou faltando algum dado)
       </label>
 
-      <button
-        type="button"
-        onClick={iniciar}
-        disabled={rodando}
-        className="rounded-full bg-o2-coral px-6 py-2.5 font-medium text-white transition hover:opacity-90 disabled:opacity-60"
-      >
-        {rodando ? "Sincronizando..." : "Sincronizar agora"}
-      </button>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={iniciar}
+          disabled={rodando}
+          className="rounded-full bg-o2-coral px-6 py-2.5 font-medium text-white transition hover:opacity-90 disabled:opacity-60"
+        >
+          {rodando ? "Sincronizando..." : "Sincronizar agora"}
+        </button>
+        <button
+          type="button"
+          onClick={recalcularSoEstatisticas}
+          disabled={rodando}
+          className="rounded-full border border-o2-navy px-6 py-2.5 font-medium text-o2-navy transition hover:bg-o2-navy hover:text-white disabled:opacity-60"
+        >
+          Só recalcular estatísticas
+        </button>
+      </div>
 
       {status && <p className="text-sm text-gray-600">{status}</p>}
       {erro && <p className="text-sm text-red-600">{erro}</p>}
