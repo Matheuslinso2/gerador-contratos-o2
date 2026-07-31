@@ -15,6 +15,14 @@ function faixaDoAluguel(aluguel: number): string | null {
   return f?.label ?? null;
 }
 
+// As planilhas mensais não têm um padrão único de maiúsculas/minúsculas pro
+// mesmo bairro/cidade ("RIO DE JANEIRO" num mês, "Rio de Janeiro" noutro) —
+// sem normalizar, a mesma cidade virava várias linhas diferentes na
+// agregação, e a busca por chave exata não encontrava nada.
+export function normalizarChave(s: string): string {
+  return s.trim().replace(/\s+/g, " ").toUpperCase();
+}
+
 type Chave = string; // `${nivel}|${chave}|${cidade}|${tipo}|${faixa}`
 type Acumulador = { soma: number; contagem: number; nivel: string; chave: string; cidade: string; tipo: string; faixa: string };
 
@@ -49,12 +57,13 @@ export async function recalcularEstatisticas(supabase: SupabaseServerClient): Pr
     const faixa = faixaDoAluguel(c.aluguel);
     if (!faixa) continue;
 
-    acumular("cidade", c.cidade, c.cidade, c.tipo, faixa, c.premio);
+    const cidadeChave = normalizarChave(c.cidade);
+    acumular("cidade", cidadeChave, cidadeChave, c.tipo, faixa, c.premio);
 
     if (c.bairro) {
-      acumular("bairro", c.bairro, c.cidade, c.tipo, faixa, c.premio);
+      acumular("bairro", normalizarChave(c.bairro), cidadeChave, c.tipo, faixa, c.premio);
       const regiao = regiaoPorBairroCidade.get(`${c.bairro.toLowerCase()}|${c.cidade.toLowerCase()}`);
-      if (regiao) acumular("regiao", regiao, c.cidade, c.tipo, faixa, c.premio);
+      if (regiao) acumular("regiao", normalizarChave(regiao), cidadeChave, c.tipo, faixa, c.premio);
     }
   }
 
@@ -138,7 +147,14 @@ export async function buscarTicketPorLocal(
   }
   const regioesArr = Array.from(regioes);
 
-  const chaves = [...bairrosValidos, ...regioesArr, cidade].filter((v): v is string => !!v);
+  // As chaves de busca precisam da mesma normalização usada ao gravar as
+  // estatísticas (ver normalizarChave), senão uma diferença de
+  // maiúsculas/minúsculas faz a consulta não encontrar nada.
+  const bairrosChave = bairrosValidos.map(normalizarChave);
+  const regioesChave = regioesArr.map(normalizarChave);
+  const cidadeChave = cidade ? normalizarChave(cidade) : "";
+
+  const chaves = [...bairrosChave, ...regioesChave, cidadeChave].filter((v): v is string => !!v);
   if (!chaves.length) return null;
 
   const { data: linhas } = await supabase
@@ -148,24 +164,20 @@ export async function buscarTicketPorLocal(
 
   const porNivel = (nivel: string, chavesAceitas: string[], tipo: string, faixa: string) =>
     (linhas ?? []).filter(
-      (l) =>
-        l.nivel === nivel &&
-        l.tipo === tipo &&
-        l.faixa === faixa &&
-        chavesAceitas.some((c) => c.toLowerCase() === l.chave.toLowerCase())
+      (l) => l.nivel === nivel && l.tipo === tipo && l.faixa === faixa && chavesAceitas.includes(l.chave)
     );
 
   function montarFaixas(tipo: string): FaixaTicket[] {
     return FAIXAS_ALUGUEL.map(({ label }) => {
-      const doBairro = combinar(porNivel("bairro", bairrosValidos, tipo, label));
+      const doBairro = combinar(porNivel("bairro", bairrosChave, tipo, label));
       if (doBairro && doBairro.quantidade >= AMOSTRA_MINIMA) {
         return { faixa: label, ...doBairro, nivel: "bairro" as const };
       }
-      const daRegiao = combinar(porNivel("regiao", regioesArr, tipo, label));
+      const daRegiao = combinar(porNivel("regiao", regioesChave, tipo, label));
       if (daRegiao && daRegiao.quantidade >= AMOSTRA_MINIMA) {
         return { faixa: label, ...daRegiao, nivel: "regiao" as const };
       }
-      const daCidade = combinar(porNivel("cidade", cidade ? [cidade] : [], tipo, label));
+      const daCidade = combinar(porNivel("cidade", cidadeChave ? [cidadeChave] : [], tipo, label));
       if (daCidade) {
         return { faixa: label, ...daCidade, nivel: "cidade" as const };
       }
