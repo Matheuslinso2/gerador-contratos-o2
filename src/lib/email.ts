@@ -37,7 +37,7 @@ export async function enviarEmail({
   }
 }
 
-const EMAIL_ALERTA_ADMIN = "comercial@o2seguros.com.br";
+const EMAIL_ALERTA_ADMIN = "matheus@o2seguros.com.br";
 
 // Notifica a O2 quando algo dá erro de verdade no sistema, pra permitir
 // acompanhar sem precisar ficar checando os logs do Vercel. Reusa o mesmo
