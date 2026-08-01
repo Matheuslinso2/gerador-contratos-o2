@@ -7,14 +7,31 @@ import { formatarCNPJ } from "@/lib/validacoesBr";
 const inputClass =
   "w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none";
 
-export default function ProspeccaoForm({ bairrosDisponiveis }: { bairrosDisponiveis: string[] }) {
+export default function ProspeccaoForm({
+  bairrosDisponiveis,
+  imobiliariasConhecidas,
+}: {
+  bairrosDisponiveis: string[];
+  imobiliariasConhecidas: string[];
+}) {
   const [cnpj, setCnpj] = useState("");
 
   return (
     <form action={criarRelatorioProspeccao} className="space-y-4">
       <div>
         <label className="mb-1 block text-sm text-gray-600">Nome da imobiliária</label>
-        <input name="nome" required placeholder="Nome da imobiliária a visitar" className={inputClass} />
+        <input
+          name="nome"
+          required
+          list="imobiliarias-lista"
+          placeholder="Selecione uma imobiliária já conhecida ou digite o nome de uma nova"
+          className={inputClass}
+        />
+        <datalist id="imobiliarias-lista">
+          {imobiliariasConhecidas.map((nome) => (
+            <option key={nome} value={nome} />
+          ))}
+        </datalist>
       </div>
 
       <div>

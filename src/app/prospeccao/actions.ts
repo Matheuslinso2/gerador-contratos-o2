@@ -8,6 +8,7 @@ import { obterNumerosO2 } from "@/lib/numerosO2";
 import {
   buscarHistoricoEComparativo,
   buscarImobiliariaConhecida,
+  buscarMetricasImobiliaria,
   type HistoricoCotacoes,
   type ComparativoRegional,
   type ImobiliariaConhecida,
@@ -70,6 +71,12 @@ export async function criarRelatorioProspeccao(formData: FormData) {
     comparativo_regional = resultado.regional;
   } catch (e) {
     console.error("[prospeccao] erro ao buscar histórico/comparativo nas planilhas:", e);
+  }
+
+  try {
+    historico_cotacoes.metricas_por_produto = await buscarMetricasImobiliaria(supabase, nome);
+  } catch (e) {
+    console.error("[prospeccao] erro ao buscar métricas por imobiliária:", e);
   }
 
   try {

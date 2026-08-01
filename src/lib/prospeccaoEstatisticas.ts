@@ -1,4 +1,6 @@
 import type { createClient } from "@/lib/supabase/server";
+import { normalizarTextoBusca } from "@/lib/googleSheetsProspeccao";
+import { ehEfetivado } from "@/lib/prospeccaoExtracao";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -84,6 +86,84 @@ export async function recalcularEstatisticas(supabase: SupabaseServerClient): Pr
     const TAMANHO_LOTE = 500;
     for (let i = 0; i < linhas.length; i += TAMANHO_LOTE) {
       await supabase.from("estatisticas_ticket").insert(linhas.slice(i, i + TAMANHO_LOTE));
+    }
+  }
+
+  return linhas.length;
+}
+
+type MetricasProduto = {
+  realizadas: number;
+  convertidas: number;
+  premioSoma: number;
+  statusDisponivel: boolean;
+};
+
+function novaMetricaProduto(): MetricasProduto {
+  return { realizadas: 0, convertidas: 0, premioSoma: 0, statusDisponivel: false };
+}
+
+type MetricasImobiliaria = {
+  nomeExemplo: string;
+  incendio: MetricasProduto;
+  fianca: MetricasProduto;
+  renovacao: MetricasProduto;
+};
+
+// Recalcula do zero imobiliarias_metricas a partir de todo o cache de
+// cotações — roda só ao final de uma sincronização (mesmo gatilho de
+// recalcularEstatisticas), nunca a cada relatório de Prospecção. Uma vez
+// que o mês de origem de uma cotação está fechado, esse número não muda
+// mais até a próxima sincronização trazer dado novo.
+export async function recalcularMetricasImobiliarias(supabase: SupabaseServerClient): Promise<number> {
+  const { data: cotacoes } = await supabase.from("cotacoes_cache").select("tipo, imobiliaria, premio, status");
+
+  const porImobiliaria = new Map<string, MetricasImobiliaria>();
+
+  for (const c of cotacoes ?? []) {
+    if (!c.imobiliaria || !c.tipo) continue;
+    const chave = normalizarTextoBusca(c.imobiliaria);
+    if (!chave) continue;
+
+    let m = porImobiliaria.get(chave);
+    if (!m) {
+      m = { nomeExemplo: c.imobiliaria, incendio: novaMetricaProduto(), fianca: novaMetricaProduto(), renovacao: novaMetricaProduto() };
+      porImobiliaria.set(chave, m);
+    }
+
+    const produto = c.tipo === "incendio" ? m.incendio : c.tipo === "fianca" ? m.fianca : c.tipo === "renovacao" ? m.renovacao : null;
+    if (!produto) continue;
+
+    produto.realizadas += 1;
+    if (c.status) produto.statusDisponivel = true;
+    if (ehEfetivado(c.status ?? "")) {
+      produto.convertidas += 1;
+      if (c.premio) produto.premioSoma += c.premio;
+    }
+  }
+
+  const linhas = Array.from(porImobiliaria.entries()).map(([nome_normalizado, m]) => ({
+    nome_normalizado,
+    nome_exemplo: m.nomeExemplo,
+    incendio_realizadas: m.incendio.realizadas,
+    incendio_convertidas: m.incendio.convertidas,
+    incendio_premio_convertido: m.incendio.convertidas ? Math.round(m.incendio.premioSoma * 100) / 100 : null,
+    fianca_realizadas: m.fianca.realizadas,
+    fianca_convertidas: m.fianca.convertidas,
+    fianca_premio_convertido: m.fianca.convertidas ? Math.round(m.fianca.premioSoma * 100) / 100 : null,
+    fianca_status_disponivel: m.fianca.statusDisponivel,
+    renovacao_realizadas: m.renovacao.realizadas,
+    renovacao_convertidas: m.renovacao.convertidas,
+    renovacao_premio_convertido: m.renovacao.convertidas ? Math.round(m.renovacao.premioSoma * 100) / 100 : null,
+    renovacao_status_disponivel: m.renovacao.statusDisponivel,
+    calculado_em: new Date().toISOString(),
+  }));
+
+  await supabase.from("imobiliarias_metricas").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+  if (linhas.length) {
+    const TAMANHO_LOTE = 500;
+    for (let i = 0; i < linhas.length; i += TAMANHO_LOTE) {
+      await supabase.from("imobiliarias_metricas").insert(linhas.slice(i, i + TAMANHO_LOTE));
     }
   }
 

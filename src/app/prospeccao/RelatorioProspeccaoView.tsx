@@ -2,7 +2,7 @@
 
 import type { FichaImobiliaria } from "@/lib/prospeccaoIA";
 import type { NumerosO2 } from "@/lib/numerosO2";
-import type { HistoricoCotacoes, ComparativoRegional } from "@/lib/prospeccaoDados";
+import type { HistoricoCotacoes, ComparativoRegional, MetricaProduto } from "@/lib/prospeccaoDados";
 import type { TicketPorLocal } from "@/lib/prospeccaoEstatisticas";
 
 type Relatorio = {
@@ -46,9 +46,33 @@ const ROTEIRO_PERGUNTAS = [
 
 const cardClass = "rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm";
 
+const ROTULO_PRODUTO: Record<string, string> = {
+  incendio: "Seguro incêndio",
+  fianca: "Seguro fiança",
+  renovacao: "Renovação de fiança",
+};
+
 function formatarReais(valor: number | null | undefined): string | null {
   if (valor === null || valor === undefined) return null;
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function LinhaMetricaProduto({ produto, metrica }: { produto: string; metrica: MetricaProduto }) {
+  if (metrica.realizadas === 0) return null;
+  const percentual = metrica.status_disponivel
+    ? `${Math.round((metrica.convertidas / metrica.realizadas) * 100)}%`
+    : "—";
+  return (
+    <tr className="border-t border-gray-100">
+      <td className="py-1.5 text-gray-800">{ROTULO_PRODUTO[produto] ?? produto}</td>
+      <td className="py-1.5 text-gray-800">{metrica.realizadas}</td>
+      <td className="py-1.5 text-gray-800">{metrica.status_disponivel ? metrica.convertidas : "indisponível"}</td>
+      <td className="py-1.5 text-gray-800">{percentual}</td>
+      <td className="py-1.5 text-gray-800">
+        {metrica.premio_convertido !== null ? formatarReais(metrica.premio_convertido) : "—"}
+      </td>
+    </tr>
+  );
 }
 
 export default function RelatorioProspeccaoView({
@@ -62,6 +86,7 @@ export default function RelatorioProspeccaoView({
   const historico = relatorio.historico_cotacoes;
   const regional = relatorio.comparativo_regional;
   const ticketPorFaixa = relatorio.ticket_por_faixa;
+  const metricas = historico?.metricas_por_produto ?? null;
   const temTicketPorFaixa =
     !!ticketPorFaixa &&
     [...(ticketPorFaixa.incendio_por_faixa ?? []), ...(ticketPorFaixa.fianca_por_faixa ?? [])].some(
@@ -159,95 +184,104 @@ export default function RelatorioProspeccaoView({
         </div>
       )}
 
-      <div className={cardClass}>
-        <h3 className="mb-2 font-semibold text-o2-navy">Histórico com a O2</h3>
-        {temHistorico ? (
-          <div className="space-y-3 text-sm">
-            {(historico!.incendio_total_encontradas ?? 0) > 0 && (
-              <p className="text-gray-800">
-                <strong>{historico!.incendio_total_encontradas}</strong> cotação(ões) de seguro incêndio
-                encontrada(s) com essa imobiliária, sendo <strong>{historico!.incendio_efetivadas}</strong>{" "}
-                efetivada(s).
-              </p>
-            )}
-            {(historico!.fianca_total_encontradas ?? 0) > 0 && (
-              <p className="text-gray-800">
-                <strong>{historico!.fianca_total_encontradas}</strong> cotação(ões) de seguro fiança
-                encontrada(s) com essa imobiliária.
-              </p>
-            )}
-          </div>
-        ) : (
+      {temHistorico ? (
+        <div className={cardClass}>
+          <h3 className="mb-3 font-semibold text-o2-navy">Dashboard da imobiliária</h3>
+
+          {metricas && (
+            <div className="mb-4 overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="text-gray-500">
+                    <th className="pb-1 font-medium">Produto</th>
+                    <th className="pb-1 font-medium">Realizadas</th>
+                    <th className="pb-1 font-medium">Convertidas</th>
+                    <th className="pb-1 font-medium">% conversão</th>
+                    <th className="pb-1 font-medium">Prêmio convertido</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <LinhaMetricaProduto produto="incendio" metrica={metricas.incendio} />
+                  <LinhaMetricaProduto produto="fianca" metrica={metricas.fianca} />
+                  <LinhaMetricaProduto produto="renovacao" metrica={metricas.renovacao} />
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {temTicketPorFaixa && (
+            <div className="space-y-3 text-sm">
+              <div>
+                <p className="mb-1 font-medium text-o2-navy">Ticket médio — seguro incêndio</p>
+                <p className="mb-1 text-xs text-gray-500">
+                  {ticketPorFaixa!.bairro_informado
+                    ? `Baseado em: ${ticketPorFaixa!.bairro_informado}`
+                    : ticketPorFaixa!.cidade_informada
+                      ? `Baseado na cidade: ${ticketPorFaixa!.cidade_informada}`
+                      : ""}
+                </p>
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="text-gray-500">
+                      <th className="pb-1 font-medium">Faixa de aluguel</th>
+                      <th className="pb-1 font-medium">Ticket médio</th>
+                      <th className="pb-1 font-medium">Base</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ticketPorFaixa!.incendio_por_faixa.map((f) => (
+                      <tr key={f.faixa} className="border-t border-gray-100">
+                        <td className="py-1 text-gray-800">{f.faixa}</td>
+                        <td className="py-1 text-gray-800">
+                          {f.ticket_medio !== null ? formatarReais(f.ticket_medio) : "sem dados"}
+                        </td>
+                        <td className="py-1 text-gray-500">
+                          {f.nivel ? `${ROTULO_NIVEL[f.nivel]} (${f.quantidade})` : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div>
+                <p className="mb-1 font-medium text-o2-navy">Ticket médio — seguro fiança</p>
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="text-gray-500">
+                      <th className="pb-1 font-medium">Faixa de aluguel</th>
+                      <th className="pb-1 font-medium">Ticket médio</th>
+                      <th className="pb-1 font-medium">Base</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ticketPorFaixa!.fianca_por_faixa.map((f) => (
+                      <tr key={f.faixa} className="border-t border-gray-100">
+                        <td className="py-1 text-gray-800">{f.faixa}</td>
+                        <td className="py-1 text-gray-800">
+                          {f.ticket_medio !== null ? formatarReais(f.ticket_medio) : "sem dados"}
+                        </td>
+                        <td className="py-1 text-gray-500">
+                          {f.nivel ? `${ROTULO_NIVEL[f.nivel]} (${f.quantidade})` : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          <p className="mt-3 text-xs text-gray-500">
+            Conversões fechadas em um mês posterior ao da cotação podem ainda não estar refletidas aqui.
+          </p>
+        </div>
+      ) : (
+        <div className={cardClass}>
+          <h3 className="mb-2 font-semibold text-o2-navy">Histórico com a O2</h3>
           <p className="text-sm text-gray-500">
             Nenhuma cotação encontrada com essa imobiliária nas planilhas da O2 — parece ser um contato novo.
           </p>
-        )}
-      </div>
-
-      {temTicketPorFaixa && (
-        <div className={cardClass}>
-          <h3 className="mb-1 font-semibold text-o2-navy">Ticket médio por faixa de aluguel</h3>
-          <p className="mb-3 text-xs text-gray-500">
-            {ticketPorFaixa!.bairro_informado
-              ? `Baseado em: ${ticketPorFaixa!.bairro_informado}`
-              : ticketPorFaixa!.cidade_informada
-                ? `Baseado na cidade: ${ticketPorFaixa!.cidade_informada}`
-                : ""}
-          </p>
-
-          <div className="space-y-3 text-sm">
-            <div>
-              <p className="mb-1 font-medium text-o2-navy">Seguro incêndio</p>
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="text-gray-500">
-                    <th className="pb-1 font-medium">Faixa de aluguel</th>
-                    <th className="pb-1 font-medium">Ticket médio</th>
-                    <th className="pb-1 font-medium">Base</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ticketPorFaixa!.incendio_por_faixa.map((f) => (
-                    <tr key={f.faixa} className="border-t border-gray-100">
-                      <td className="py-1 text-gray-800">{f.faixa}</td>
-                      <td className="py-1 text-gray-800">
-                        {f.ticket_medio !== null ? formatarReais(f.ticket_medio) : "sem dados"}
-                      </td>
-                      <td className="py-1 text-gray-500">
-                        {f.nivel ? `${ROTULO_NIVEL[f.nivel]} (${f.quantidade})` : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div>
-              <p className="mb-1 font-medium text-o2-navy">Seguro fiança</p>
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="text-gray-500">
-                    <th className="pb-1 font-medium">Faixa de aluguel</th>
-                    <th className="pb-1 font-medium">Ticket médio</th>
-                    <th className="pb-1 font-medium">Base</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ticketPorFaixa!.fianca_por_faixa.map((f) => (
-                    <tr key={f.faixa} className="border-t border-gray-100">
-                      <td className="py-1 text-gray-800">{f.faixa}</td>
-                      <td className="py-1 text-gray-800">
-                        {f.ticket_medio !== null ? formatarReais(f.ticket_medio) : "sem dados"}
-                      </td>
-                      <td className="py-1 text-gray-500">
-                        {f.nivel ? `${ROTULO_NIVEL[f.nivel]} (${f.quantidade})` : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
         </div>
       )}
 

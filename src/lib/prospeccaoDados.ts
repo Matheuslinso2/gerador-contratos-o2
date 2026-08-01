@@ -25,7 +25,74 @@ export type HistoricoCotacoes = {
   incendio_exemplos: ExemploCotacao[];
   fianca_total_encontradas: number;
   fianca_exemplos: ExemploCotacao[];
+  metricas_por_produto?: MetricasPorProduto;
 };
+
+export type MetricaProduto = {
+  realizadas: number;
+  convertidas: number;
+  premio_convertido: number | null;
+  status_disponivel: boolean;
+};
+
+export type MetricasPorProduto = {
+  incendio: MetricaProduto;
+  fianca: MetricaProduto;
+  renovacao: MetricaProduto;
+} | null;
+
+type LinhaMetrica = {
+  nome_exemplo: string;
+  incendio_realizadas: number;
+  incendio_convertidas: number;
+  incendio_premio_convertido: number | null;
+  fianca_realizadas: number;
+  fianca_convertidas: number;
+  fianca_premio_convertido: number | null;
+  fianca_status_disponivel: boolean;
+  renovacao_realizadas: number;
+  renovacao_convertidas: number;
+  renovacao_premio_convertido: number | null;
+  renovacao_status_disponivel: boolean;
+};
+
+// Lê imobiliarias_metricas, já pré-computada pela sincronização (ver
+// recalcularMetricasImobiliarias em prospeccaoEstatisticas.ts) — nunca
+// recalcula somando cotacoes_cache aqui. A tabela guarda uma linha por
+// variação de nome encontrada nas planilhas (o mesmo jeito de escrever o
+// nome da imobiliária muda de mês pra mês), então o casamento por nome
+// aqui é sobre poucas linhas (uma por variação), não sobre o cache inteiro.
+export async function buscarMetricasImobiliaria(
+  supabase: SupabaseServerClient,
+  nomeImobiliaria: string
+): Promise<MetricasPorProduto> {
+  const { data } = await supabase
+    .from("imobiliarias_metricas")
+    .select(
+      "nome_exemplo, incendio_realizadas, incendio_convertidas, incendio_premio_convertido, fianca_realizadas, fianca_convertidas, fianca_premio_convertido, fianca_status_disponivel, renovacao_realizadas, renovacao_convertidas, renovacao_premio_convertido, renovacao_status_disponivel"
+    );
+
+  const correspondencias = ((data ?? []) as LinhaMetrica[]).filter((r) =>
+    textoCorresponde(r.nome_exemplo, nomeImobiliaria)
+  );
+  if (!correspondencias.length) return null;
+
+  const somar = (campo: keyof LinhaMetrica) =>
+    correspondencias.reduce((s, r) => s + ((r[campo] as number | null) ?? 0), 0);
+  const algumStatusDisponivel = (campo: keyof LinhaMetrica) => correspondencias.some((r) => !!r[campo]);
+
+  const montar = (prefixo: "incendio" | "fianca" | "renovacao"): MetricaProduto => {
+    const convertidas = somar(`${prefixo}_convertidas`);
+    return {
+      realizadas: somar(`${prefixo}_realizadas`),
+      convertidas,
+      premio_convertido: convertidas ? Math.round(somar(`${prefixo}_premio_convertido`) * 100) / 100 : null,
+      status_disponivel: prefixo === "incendio" ? true : algumStatusDisponivel(`${prefixo}_status_disponivel`),
+    };
+  };
+
+  return { incendio: montar("incendio"), fianca: montar("fianca"), renovacao: montar("renovacao") };
+}
 
 export type ComparativoRegional = {
   cidade_da_imobiliaria: string | null;

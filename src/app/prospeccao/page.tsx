@@ -23,14 +23,16 @@ export default async function ProspeccaoPage({
   } = await supabase.auth.getUser();
   if (!isAdmin(user?.email) && !isColaboradorO2(user?.email)) redirect("/");
 
-  const [{ data: relatorios }, { data: bairrosData }] = await Promise.all([
+  const [{ data: relatorios }, { data: bairrosData }, { data: imobiliariasData }] = await Promise.all([
     supabase
       .from("relatorios_prospeccao")
       .select("id, nome_imobiliaria, cnpj_imobiliaria, criado_por_email, created_at")
       .order("created_at", { ascending: false }),
     supabase.from("bairros_regioes").select("bairro").order("bairro"),
+    supabase.from("imobiliarias_conhecidas").select("nome").order("nome"),
   ]);
   const bairrosDisponiveis = Array.from(new Set((bairrosData ?? []).map((b) => b.bairro)));
+  const imobiliariasConhecidas = Array.from(new Set((imobiliariasData ?? []).map((i) => i.nome)));
 
   return (
     <>
@@ -60,7 +62,7 @@ export default async function ProspeccaoPage({
         )}
 
         <div className="rounded-xl border border-o2-navy/10 bg-white p-5 shadow-sm">
-          <ProspeccaoForm bairrosDisponiveis={bairrosDisponiveis} />
+          <ProspeccaoForm bairrosDisponiveis={bairrosDisponiveis} imobiliariasConhecidas={imobiliariasConhecidas} />
         </div>
 
         <section className="space-y-3">

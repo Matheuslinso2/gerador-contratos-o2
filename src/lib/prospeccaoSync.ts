@@ -3,12 +3,13 @@ import {
   idsDePastasDoEnv,
   ehPlanilhaMensalValida,
   encontrarAbaDeDados,
+  encontrarAbaPorNome,
   lerLinhasComoObjetos,
   type PlanilhaDaPasta,
 } from "@/lib/googleSheetsProspeccao";
 import { pegarCampo, paraNumero, COLUNAS_INCENDIO, COLUNAS_FIANCA } from "@/lib/prospeccaoExtracao";
 import { resolverEnderecoComCache, carregarCacheEnderecos, type CacheEnderecos } from "@/lib/geocoding";
-import { recalcularEstatisticas } from "@/lib/prospeccaoEstatisticas";
+import { recalcularEstatisticas, recalcularMetricasImobiliarias } from "@/lib/prospeccaoEstatisticas";
 import type { createClient } from "@/lib/supabase/server";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
@@ -109,7 +110,12 @@ async function sincronizarArquivoFianca(
   orcamentoGeocodificacao: { restante: number },
   erros: string[]
 ): Promise<number> {
-  const abaInfo = await encontrarAbaDeDados(arquivo.id, COLUNAS_FIANCA);
+  // Prioriza achar a aba pelo NOME ("Análises") — mais confiável do que
+  // pontuar pelo cabeçalho quando o arquivo também tem uma aba de
+  // carry-over do mês anterior com colunas parecidas. Planilhas anteriores
+  // a out/2025 têm nomes de aba mais variáveis, por isso o fallback.
+  const abaInfo =
+    (await encontrarAbaPorNome(arquivo.id, ["analise"])) ?? (await encontrarAbaDeDados(arquivo.id, COLUNAS_FIANCA));
   if (!abaInfo) {
     erros.push(`Fiança "${arquivo.nome}": nenhuma aba com colunas reconhecidas.`);
     return 0;
@@ -146,7 +152,10 @@ async function sincronizarArquivoFianca(
       uf,
       premio: paraNumero(pegarCampo(linha, "PREMIO LIQUIDO", "PRÊMIO LÍQUIDO")),
       aluguel: paraNumero(pegarCampo(linha, "ALUGUEL")),
-      status: null,
+      // Confirmado com o Matheus: nessa aba o status sempre fica na coluna
+      // B, mesmo quando não tem nome de cabeçalho reconhecível — por isso o
+      // fallback posicional além da busca por nome.
+      status: pegarCampo(linha, "STATUS", "SITUACAO") || linha["coluna_2"] || null,
       data_cotacao: pegarCampo(linha, "DATA RECEB") || null,
       endereco,
     });
@@ -157,6 +166,52 @@ async function sincronizarArquivoFianca(
     const { error } = await supabase.from("cotacoes_cache").insert(registros);
     if (error) {
       erros.push(`Fiança "${arquivo.nome}": erro ao gravar — ${error.message}`);
+      return 0;
+    }
+  }
+  return registros.length;
+}
+
+// Aba "Renovações" do mesmo arquivo de fiança — fluxo separado (renovar uma
+// fiança existente, não uma cotação nova), mas com estrutura parecida.
+// Nunca inspecionei essa aba de verdade: os nomes de coluna abaixo são a
+// melhor tentativa combinada com o Matheus, com fallback posicional pro
+// status (coluna A, confirmado) — ajusto se a primeira sincronização vier
+// vazia.
+async function sincronizarArquivoRenovacao(
+  supabase: SupabaseServerClient,
+  arquivo: PlanilhaDaPasta,
+  erros: string[]
+): Promise<number> {
+  const abaInfo = await encontrarAbaPorNome(arquivo.id, ["renovac"]);
+  if (!abaInfo) return 0; // nem toda planilha tem essa aba — não é erro
+
+  const linhas = await lerLinhasComoObjetos(arquivo.id, abaInfo.aba, abaInfo.cabecalho);
+
+  const registros = linhas.map((linha) => ({
+    tipo: "renovacao",
+    arquivo_id: `${arquivo.id}-renovacao`,
+    arquivo_nome: arquivo.nome,
+    arquivo_modificado_em: arquivo.modificadoEm,
+    imobiliaria: pegarCampo(linha, "IMOBILIARIA") || null,
+    nome_pessoa: pegarCampo(linha, "LOCATARIO", "CLIENTE", "SEGURADO") || null,
+    cidade: null,
+    bairro: null,
+    uf: null,
+    premio: paraNumero(pegarCampo(linha, "PREMIO LIQUIDO", "PRÊMIO LÍQUIDO", "PREMIO")),
+    aluguel: paraNumero(pegarCampo(linha, "ALUGUEL")),
+    status: pegarCampo(linha, "STATUS", "SITUACAO") || linha["coluna_1"] || null,
+    data_cotacao: pegarCampo(linha, "DATA RECEB", "DATA") || null,
+    endereco: pegarCampo(linha, "ENDERECO").trim() || null,
+  }));
+
+  // Usa um arquivo_id derivado (não o mesmo da aba de Análises) pra não
+  // apagar as linhas de fiança "normais" quando essa função roda.
+  await supabase.from("cotacoes_cache").delete().eq("arquivo_id", `${arquivo.id}-renovacao`);
+  if (registros.length) {
+    const { error } = await supabase.from("cotacoes_cache").insert(registros);
+    if (error) {
+      erros.push(`Renovações "${arquivo.nome}": erro ao gravar — ${error.message}`);
       return 0;
     }
   }
@@ -234,8 +289,9 @@ export async function sincronizarPlanilhas(
     const resultadosFianca = await mapComLimite(fiancaParaSincronizar, 4, async (a) => {
       try {
         const n = await sincronizarArquivoFianca(supabase, a, cacheEnderecos, orcamentoGeocodificacao, erros);
+        const nRenovacao = await sincronizarArquivoRenovacao(supabase, a, erros);
         arquivosProcessados.push(a.nome);
-        return n;
+        return n + nRenovacao;
       } catch (e) {
         erros.push(`Fiança "${a.nome}": ${e instanceof Error ? e.message : "erro desconhecido"}`);
         return 0;
@@ -255,6 +311,11 @@ export async function sincronizarPlanilhas(
       estatisticasCalculadas = await recalcularEstatisticas(supabase);
     } catch (e) {
       erros.push(`Falha ao recalcular estatísticas: ${e instanceof Error ? e.message : "erro desconhecido"}`);
+    }
+    try {
+      await recalcularMetricasImobiliarias(supabase);
+    } catch (e) {
+      erros.push(`Falha ao recalcular métricas por imobiliária: ${e instanceof Error ? e.message : "erro desconhecido"}`);
     }
   }
 

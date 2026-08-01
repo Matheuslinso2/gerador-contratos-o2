@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { sincronizarPlanilhas, type ResultadoSincronizacao } from "@/lib/prospeccaoSync";
-import { recalcularEstatisticas } from "@/lib/prospeccaoEstatisticas";
+import { recalcularEstatisticas, recalcularMetricasImobiliarias } from "@/lib/prospeccaoEstatisticas";
 import { alertarAdmin } from "@/lib/email";
 
 // Processa só um lote (ver LIMITE_ARQUIVOS_POR_EXECUCAO em prospeccaoSync.ts)
@@ -42,5 +42,7 @@ export async function recalcularEstatisticasAction(): Promise<number> {
   if (!user) redirect("/login");
   if (!isAdmin(user.email) && !isColaboradorO2(user.email)) redirect("/");
 
-  return recalcularEstatisticas(supabase);
+  const total = await recalcularEstatisticas(supabase);
+  await recalcularMetricasImobiliarias(supabase);
+  return total;
 }

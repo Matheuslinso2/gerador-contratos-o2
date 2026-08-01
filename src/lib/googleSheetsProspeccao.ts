@@ -167,6 +167,38 @@ export async function encontrarAbaDeDados(
   return melhor ? { aba: melhor.aba, cabecalho: melhor.cabecalho } : null;
 }
 
+// Acha uma aba pelo NOME (não pelo cabeçalho) — usado quando várias abas de
+// uma mesma planilha têm colunas parecidas (ex: "Análises" do mês atual e a
+// aba de carry-over do mês anterior), onde a pontuação por cabeçalho do
+// encontrarAbaDeDados não é confiável o bastante pra escolher a certa.
+// Confirma tanto o nome quanto lê o cabeçalho real da aba escolhida.
+export async function encontrarAbaPorNome(
+  spreadsheetId: string,
+  palavrasChave: string[]
+): Promise<{ aba: string; cabecalho: string[] } | null> {
+  const cliente = clienteSheets();
+  const metadados = await cliente.spreadsheets.get({
+    spreadsheetId,
+    fields: "sheets.properties.title",
+  });
+  const abas = (metadados.data.sheets ?? [])
+    .map((s) => s.properties?.title)
+    .filter((t): t is string => !!t);
+  if (!abas.length) return null;
+
+  const alvo = abas.find((aba) => {
+    const normalizado = normalizarTextoBusca(aba);
+    return palavrasChave.some((p) => normalizado.includes(normalizarTextoBusca(p)));
+  });
+  if (!alvo) return null;
+
+  const resposta = await cliente.spreadsheets.values.get({ spreadsheetId, range: `'${alvo}'!1:1` });
+  const cabecalho = (resposta.data.values?.[0] ?? []).map((v) => String(v ?? ""));
+  if (!cabecalho.length) return null;
+
+  return { aba: alvo, cabecalho };
+}
+
 // Lê todas as linhas de dados de uma aba (a partir da linha 2) e devolve
 // cada linha como objeto {nomeDaColuna: valor}, usando o cabeçalho passado.
 export async function lerLinhasComoObjetos(
