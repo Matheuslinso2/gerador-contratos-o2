@@ -37,7 +37,11 @@ export async function enviarEmail({
   }
 }
 
-const EMAIL_ALERTA_ADMIN = "comercial@o2seguros.com.br";
+// Temporário: enquanto ainda estamos em fase de teste (e o Matheus não tem
+// acesso à caixa comercial@ no momento), os alertas vão pro e-mail dele
+// direto. Trocar de volta pra comercial@o2seguros.com.br quando encerrar
+// os testes.
+const EMAIL_ALERTA_ADMIN = "matheus@o2seguros.com.br";
 
 // Notifica a O2 quando algo dá erro de verdade no sistema, pra permitir
 // acompanhar sem precisar ficar checando os logs do Vercel. Reusa o mesmo
