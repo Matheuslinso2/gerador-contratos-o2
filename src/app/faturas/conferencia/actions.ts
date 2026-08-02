@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
-import { abrirTextoPdfComSenha, apenasDigitos } from "@/lib/pdfComSenha";
+import { abrirTextoPdfComSenha, apenasDigitos, variantesSenhaDeCnpj } from "@/lib/pdfComSenha";
 import { extrairDadosFatura } from "@/lib/faturasIA";
 
 const BUCKET_FINAL = "faturas";
@@ -90,7 +90,8 @@ export async function tentarReabrirComCnpj(formData: FormData) {
   }
   const buffer = Buffer.from(await baixado.arrayBuffer());
 
-  const resultado = await abrirTextoPdfComSenha(buffer, [cnpjDigitado]);
+  const candidatos = variantesSenhaDeCnpj(cnpjDigitado).map((senha) => ({ chave: "manual", senha }));
+  const resultado = await abrirTextoPdfComSenha(buffer, candidatos);
   if (!resultado) {
     redirect(`/faturas/conferencia?erro=${encodeURIComponent("Esse CNPJ não abriu o arquivo. Confira o número.")}`);
   }

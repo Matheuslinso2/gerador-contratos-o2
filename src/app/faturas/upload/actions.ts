@@ -4,12 +4,12 @@ import { redirect } from "next/navigation";
 import crypto from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
-import { abrirTextoPdfComSenha, apenasDigitos } from "@/lib/pdfComSenha";
+import { abrirTextoPdfComSenha, variantesSenhaDeCnpj, type CandidatoSenha } from "@/lib/pdfComSenha";
 import { extrairDadosFatura } from "@/lib/faturasIA";
 import {
-  buscarImobiliariaPorCnpj,
   sugerirImobiliariaPorTexto,
   type ImobiliariaBasica,
+  type ResultadoIdentificacao,
 } from "@/lib/faturasIdentificacao";
 
 const BUCKET_TEMP = "faturas-temp";
@@ -62,9 +62,11 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
 
   const { data: imobiliariasData } = await supabase.from("imobiliarias").select("id, nome, cnpj");
   const imobiliarias = (imobiliariasData ?? []) as ImobiliariaBasica[];
-  const senhasCandidatas = imobiliarias.map((i) => (i.cnpj ? apenasDigitos(i.cnpj) : "")).filter(Boolean);
+  const candidatos: CandidatoSenha[] = imobiliarias.flatMap((i) =>
+    i.cnpj ? variantesSenhaDeCnpj(i.cnpj).map((senha) => ({ chave: i.id, senha })) : []
+  );
 
-  const resultado = await abrirTextoPdfComSenha(buffer, senhasCandidatas);
+  const resultado = await abrirTextoPdfComSenha(buffer, candidatos);
 
   const pathFinal = `${competencia}/${crypto.randomUUID()}.pdf`;
   const { error: erroUpload } = await supabase.storage
@@ -99,9 +101,11 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
     };
   }
 
-  const { texto, senhaCorreta } = resultado;
+  const { texto, chaveCorreta } = resultado;
 
-  let identificacao = senhaCorreta ? buscarImobiliariaPorCnpj(senhaCorreta, imobiliarias) : null;
+  let identificacao: ResultadoIdentificacao | null = chaveCorreta
+    ? { imobiliaria_id: chaveCorreta, confianca: "alta" }
+    : null;
 
   let dadosIA = null;
   try {
