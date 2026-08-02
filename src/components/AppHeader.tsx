@@ -45,7 +45,10 @@ export default function AppHeader({
             />
             <NavLink href="/contratos" label="Contratos realizados" />
             {(isAdmin(userEmail) || isColaboradorO2(userEmail)) && (
-              <NavLink href="/prospeccao" label="Prospecção (uso interno)" />
+              <>
+                <NavLink href="/prospeccao" label="Prospecção (uso interno)" />
+                <NavLink href="/faturas" label="Faturas (uso interno)" />
+              </>
             )}
             <NavDropdown
               label="Configurações"
