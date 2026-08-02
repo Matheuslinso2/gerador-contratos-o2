@@ -1,6 +1,45 @@
 import { textoCorresponde } from "@/lib/googleSheetsProspeccao";
+import { apenasDigitos } from "@/lib/pdfComSenha";
+import type { createClient } from "@/lib/supabase/server";
+
+type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
 export type ImobiliariaBasica = { id: string; nome: string; cnpj: string | null };
+
+// A senha do PDF é validada contra a base grande (imobiliarias_conhecidas,
+// ~445 registros vindos do CRM/Produtores), não contra a tabela de contas
+// com login — a maioria das imobiliárias reais ainda não tem conta aqui.
+// Depois de identificar por lá, resolve (ou cria) o registro correspondente
+// em `imobiliarias`, que é quem a fatura referencia de verdade (é lá que vai
+// morar o e-mail de destino do envio, na Fase 2).
+export async function resolverOuCriarImobiliaria(
+  supabase: SupabaseServerClient,
+  nome: string,
+  cnpj: string
+): Promise<string> {
+  const cnpjDigits = apenasDigitos(cnpj);
+
+  const { data: todas } = await supabase.from("imobiliarias").select("id, cnpj");
+  const existente = todas?.find((i) => i.cnpj && apenasDigitos(i.cnpj) === cnpjDigits);
+  if (existente) return existente.id;
+
+  const { data: nova, error } = await supabase
+    .from("imobiliarias")
+    .insert({
+      nome,
+      cnpj: cnpjDigits,
+      texto_base_contrato: "",
+      indice_reajuste: "",
+      percentual_multa_atraso: 0,
+      percentual_juros_mora: 0,
+      percentual_honorarios_advocaticios: 0,
+      dia_vencimento_aluguel: 1,
+    })
+    .select("id")
+    .single();
+  if (error || !nova) throw new Error(`Não foi possível registrar a imobiliária "${nome}": ${error?.message}`);
+  return nova.id;
+}
 
 export type ResultadoIdentificacao = {
   imobiliaria_id: string | null;

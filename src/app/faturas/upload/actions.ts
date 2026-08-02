@@ -8,8 +8,8 @@ import { abrirTextoPdfComSenha, variantesSenhaDeCnpj, type CandidatoSenha } from
 import { extrairDadosFatura } from "@/lib/faturasIA";
 import {
   sugerirImobiliariaPorTexto,
+  resolverOuCriarImobiliaria,
   type ImobiliariaBasica,
-  type ResultadoIdentificacao,
 } from "@/lib/faturasIdentificacao";
 
 const BUCKET_TEMP = "faturas-temp";
@@ -60,9 +60,13 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
     .eq("arquivo_hash", hash)
     .maybeSingle();
 
-  const { data: imobiliariasData } = await supabase.from("imobiliarias").select("id, nome, cnpj");
-  const imobiliarias = (imobiliariasData ?? []) as ImobiliariaBasica[];
-  const candidatos: CandidatoSenha[] = imobiliarias.flatMap((i) =>
+  // A senha é validada contra a base grande de imobiliárias conhecidas
+  // (~445 registros, vindos do CRM/Produtores) — a maioria ainda não tem
+  // conta em `imobiliarias`. Depois de achar a senha certa, resolve (ou
+  // cria) o registro correspondente em `imobiliarias`.
+  const { data: conhecidasData } = await supabase.from("imobiliarias_conhecidas").select("id, nome, cnpj");
+  const conhecidas = (conhecidasData ?? []) as ImobiliariaBasica[];
+  const candidatos: CandidatoSenha[] = conhecidas.flatMap((i) =>
     i.cnpj ? variantesSenhaDeCnpj(i.cnpj).map((senha) => ({ chave: i.id, senha })) : []
   );
 
@@ -103,9 +107,7 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
 
   const { texto, chaveCorreta } = resultado;
 
-  let identificacao: ResultadoIdentificacao | null = chaveCorreta
-    ? { imobiliaria_id: chaveCorreta, confianca: "alta" }
-    : null;
+  const conhecidaAbriu = chaveCorreta ? conhecidas.find((c) => c.id === chaveCorreta) : null;
 
   let dadosIA = null;
   try {
@@ -114,15 +116,33 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
     console.error("[faturas] erro ao extrair dados por IA:", e);
   }
 
-  if (!identificacao && dadosIA?.identificacao_texto) {
-    identificacao = sugerirImobiliariaPorTexto(dadosIA.identificacao_texto, imobiliarias);
+  // Se não abriu por senha conhecida (raro, PDF sem senha), tenta sugerir
+  // pelo texto extraído contra a mesma base grande.
+  const sugestaoPorTexto =
+    !conhecidaAbriu && dadosIA?.identificacao_texto
+      ? sugerirImobiliariaPorTexto(dadosIA.identificacao_texto, conhecidas)
+      : null;
+  const conhecidaSugerida = sugestaoPorTexto?.imobiliaria_id
+    ? conhecidas.find((c) => c.id === sugestaoPorTexto.imobiliaria_id)
+    : null;
+
+  const conhecidaEscolhida = conhecidaAbriu ?? conhecidaSugerida;
+  const confianca = conhecidaAbriu ? "alta" : sugestaoPorTexto?.confianca ?? null;
+
+  let imobiliariaId: string | null = null;
+  if (conhecidaEscolhida && conhecidaEscolhida.cnpj) {
+    try {
+      imobiliariaId = await resolverOuCriarImobiliaria(supabase, conhecidaEscolhida.nome, conhecidaEscolhida.cnpj);
+    } catch (e) {
+      console.error("[faturas] erro ao resolver/criar imobiliária:", e);
+    }
   }
 
   const status = duplicata
     ? "duplicada"
-    : !identificacao?.imobiliaria_id
+    : !imobiliariaId
       ? "aguardando_identificacao"
-      : identificacao.confianca === "alta"
+      : confianca === "alta"
         ? "fatura_carregada"
         : "aguardando_conferencia";
 
@@ -131,13 +151,13 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
     arquivo_bucket_path: pathFinal,
     arquivo_nome: nomeArquivo,
     arquivo_hash: hash,
-    imobiliaria_id: identificacao?.imobiliaria_id ?? null,
+    imobiliaria_id: imobiliariaId,
     seguradora: dadosIA?.seguradora ?? null,
     codigo_produtor: dadosIA?.codigo_produtor ?? null,
     vencimento: dadosIA?.vencimento ?? null,
     valor: dadosIA?.valor ?? null,
     numero_documento: dadosIA?.numero_documento ?? null,
-    confianca: identificacao?.confianca ?? null,
+    confianca,
     status,
     possivel_duplicidade_de: duplicata?.id ?? null,
     texto_bruto_extraido: texto || null,
