@@ -12,14 +12,17 @@ export const maxDuration = 60;
 
 const SEGURADORAS_PADRAO = ["TOKIO", "PORTO FIANÇA", "PORTO RE", "TOO", "POTTENCIAL", "YELUM"];
 
-// Progressão: Upload pendente -> Carregada -> Pendente de envio -> Fatura
-// enviada. "Upload pendente" não tem status próprio (é a ausência de linha
-// em `faturas`), tratado à parte onde a tabela é montada. Identificação
+// Progressão: Imob com fatura aberta -> Carregada -> Pendente de envio ->
+// Fatura enviada. O primeiro estágio não tem status próprio (é a ausência
+// de linha em `faturas` pra essa competência), tratado à parte onde a
+// tabela é montada — só aparece aqui quem já está ativo (tem fatura aberta
+// com a seguradora, conforme a planilha), então esse é o "ainda não subiu
+// o arquivo desse mês", não uma pendência de cadastro. Identificação
 // incerta (precisa de conferência manual) é a única exceção com rótulo
 // próprio — na maioria dos casos upload e identificação acontecem juntos,
 // não precisam de dois estágios separados.
 const ROTULO_STATUS: Record<string, string> = {
-  aguardando_upload: "Upload pendente",
+  aguardando_upload: "Imob com fatura aberta",
   aguardando_identificacao: "Aguardando conferência",
   aguardando_conferencia: "Aguardando conferência",
   fatura_carregada: "Carregada",
@@ -249,7 +252,7 @@ export default async function FaturasPage({
                         </span>
                       ) : (
                         <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-500">
-                          Upload pendente
+                          Imob com fatura aberta
                         </span>
                       )}
                     </td>
