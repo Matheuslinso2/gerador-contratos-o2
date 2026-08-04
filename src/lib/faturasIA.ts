@@ -10,7 +10,8 @@ export type DadosFaturaExtraidos = {
   vencimento: string | null; // "AAAA-MM-DD"
   valor: number | null;
   numero_documento: string | null;
-  identificacao_texto: string | null; // razão social / nome fantasia / CNPJ como aparecem no boleto
+  cnpj_tomador: string | null; // CNPJ da imobiliária/tomador, se aparecer explicitamente no documento
+  identificacao_texto: string | null; // razão social / nome fantasia como aparecem no boleto
 };
 
 const SYSTEM_PROMPT = `Você extrai dados estruturados de um boleto/fatura de seguradora que a O2 Seguros (corretora) precisa repassar para a imobiliária correspondente.
@@ -24,7 +25,8 @@ Preencha:
 - vencimento: data de vencimento do boleto, no formato "AAAA-MM-DD".
 - valor: valor total do boleto, como número (ex: 1234.56), sem símbolo de moeda.
 - numero_documento: número/identificador do boleto ou da apólice, se houver.
-- identificacao_texto: como a imobiliária/tomador aparece no documento — razão social, nome fantasia e/ou CNPJ, tudo que ajudar a identificar de qual imobiliária é essa fatura (mesmo que o CNPJ já tenha sido usado pra abrir o arquivo).
+- cnpj_tomador: CNPJ da imobiliária/tomador/segurado (NÃO o CNPJ da O2 Seguros, que é a corretora — procure o CNPJ da empresa que vai RECEBER esse boleto), só os números, se aparecer explicitamente no documento.
+- identificacao_texto: razão social e/ou nome fantasia da imobiliária/tomador, como aparecem no documento.
 
 Responda SEMPRE chamando a ferramenta "extrair_fatura". Nunca responda em texto livre.`;
 
@@ -40,9 +42,13 @@ const FERRAMENTA_EXTRACAO: Anthropic.Tool = {
       vencimento: { type: ["string", "null"], description: "Data de vencimento, formato AAAA-MM-DD." },
       valor: { type: ["number", "null"], description: "Valor total do boleto." },
       numero_documento: { type: ["string", "null"], description: "Número do boleto/apólice, se houver." },
+      cnpj_tomador: {
+        type: ["string", "null"],
+        description: "CNPJ da imobiliária/tomador (não da O2), só números, se aparecer no documento.",
+      },
       identificacao_texto: {
         type: ["string", "null"],
-        description: "Razão social, nome fantasia e/ou CNPJ da imobiliária/tomador como aparecem no documento.",
+        description: "Razão social e/ou nome fantasia da imobiliária/tomador como aparecem no documento.",
       },
     },
     required: [
@@ -52,6 +58,7 @@ const FERRAMENTA_EXTRACAO: Anthropic.Tool = {
       "vencimento",
       "valor",
       "numero_documento",
+      "cnpj_tomador",
       "identificacao_texto",
     ],
   },

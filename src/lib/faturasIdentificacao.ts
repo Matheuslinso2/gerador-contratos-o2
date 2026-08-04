@@ -46,6 +46,19 @@ export type ResultadoIdentificacao = {
   confianca: "alta" | "media" | "baixa" | null;
 };
 
+// CNPJ é o sinal mais forte de identificação (depois do código de
+// produtor já confirmado antes, tratado em faturas_esperadas) — usado
+// quando a IA conseguiu ler um CNPJ de tomador no texto do documento.
+export function buscarImobiliariaPorCnpjNoTexto(
+  cnpjTexto: string | null,
+  imobiliarias: ImobiliariaBasica[]
+): ResultadoIdentificacao {
+  const alvo = apenasDigitos(cnpjTexto ?? "");
+  if (!alvo) return { imobiliaria_id: null, confianca: null };
+  const encontrada = imobiliarias.find((i) => i.cnpj && apenasDigitos(i.cnpj) === alvo);
+  return encontrada ? { imobiliaria_id: encontrada.id, confianca: "alta" } : { imobiliaria_id: null, confianca: null };
+}
+
 // Usado só quando o arquivo foi aberto (senha certa) mas o CNPJ não bate
 // com nenhuma imobiliária já cadastrada (ex: imobiliária nova) — tenta
 // sugerir por razão social/nome fantasia extraídos do texto pela IA.

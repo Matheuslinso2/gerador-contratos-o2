@@ -52,3 +52,14 @@ export function variantesSenhaDeCnpj(cnpj: string): string[] {
   if (digitos.length > 5) variantes.add(digitos.slice(0, 5));
   return Array.from(variantes);
 }
+
+// CNPJs da própria O2 Seguros — a senha do PDF (quando existe, ex: faturas
+// da Porto) é derivada de um desses, não do CNPJ da imobiliária. Abrir o
+// arquivo não identifica quem é a imobiliária (a senha é sempre a mesma
+// pra todo mundo) — a identificação continua vindo do conteúdo do
+// documento depois de aberto.
+const CNPJS_O2 = ["20001784000180", "54493758000138"];
+
+export function candidatosSenhaO2(): CandidatoSenha[] {
+  return CNPJS_O2.flatMap((cnpj) => variantesSenhaDeCnpj(cnpj).map((senha) => ({ chave: "o2", senha })));
+}

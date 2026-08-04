@@ -4,9 +4,10 @@ import { redirect } from "next/navigation";
 import crypto from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
-import { abrirTextoPdfComSenha, variantesSenhaDeCnpj, type CandidatoSenha } from "@/lib/pdfComSenha";
+import { abrirTextoPdfComSenha, candidatosSenhaO2 } from "@/lib/pdfComSenha";
 import { extrairDadosFatura } from "@/lib/faturasIA";
 import {
+  buscarImobiliariaPorCnpjNoTexto,
   sugerirImobiliariaPorTexto,
   resolverOuCriarImobiliaria,
   type ImobiliariaBasica,
@@ -60,17 +61,10 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
     .eq("arquivo_hash", hash)
     .maybeSingle();
 
-  // A senha é validada contra a base grande de imobiliárias conhecidas
-  // (~445 registros, vindos do CRM/Produtores) — a maioria ainda não tem
-  // conta em `imobiliarias`. Depois de achar a senha certa, resolve (ou
-  // cria) o registro correspondente em `imobiliarias`.
-  const { data: conhecidasData } = await supabase.from("imobiliarias_conhecidas").select("id, nome, cnpj");
-  const conhecidas = (conhecidasData ?? []) as ImobiliariaBasica[];
-  const candidatos: CandidatoSenha[] = conhecidas.flatMap((i) =>
-    i.cnpj ? variantesSenhaDeCnpj(i.cnpj).map((senha) => ({ chave: i.id, senha })) : []
-  );
-
-  const resultado = await abrirTextoPdfComSenha(buffer, candidatos);
+  // A senha (quando o PDF tem uma, ex: Porto) é sempre derivada do CNPJ da
+  // própria O2 — não identifica a imobiliária. Só destrava a leitura do
+  // conteúdo, que é de onde vem a identificação de verdade.
+  const resultado = await abrirTextoPdfComSenha(buffer, candidatosSenhaO2());
 
   const pathFinal = `${competencia}/${crypto.randomUUID()}.pdf`;
   const { error: erroUpload } = await supabase.storage
@@ -83,8 +77,8 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
   const historico = [{ usuario: user.email, data: new Date().toISOString(), acao: "upload", detalhe: nomeArquivo }];
 
   if (!resultado) {
-    // Não abriu com nenhum CNPJ já cadastrado — fica pra conferência manual
-    // informar a senha certa.
+    // Nenhum dos CNPJs da O2 abriu — provavelmente uma senha de outro tipo,
+    // fica pra conferência manual investigar.
     const { error } = await supabase.from("faturas").insert({
       competencia,
       arquivo_bucket_path: pathFinal,
@@ -98,16 +92,10 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
       criado_por_email: user.email,
     });
     if (error) return { ok: false, nomeArquivo, mensagem: error.message };
-    return {
-      ok: true,
-      nomeArquivo,
-      mensagem: "Não abriu com nenhum CNPJ cadastrado — precisa de conferência manual.",
-    };
+    return { ok: true, nomeArquivo, mensagem: "Não conseguimos abrir esse PDF — precisa de conferência manual." };
   }
 
-  const { texto, chaveCorreta } = resultado;
-
-  const conhecidaAbriu = chaveCorreta ? conhecidas.find((c) => c.id === chaveCorreta) : null;
+  const { texto } = resultado;
 
   let dadosIA = null;
   try {
@@ -116,21 +104,21 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
     console.error("[faturas] erro ao extrair dados por IA:", e);
   }
 
-  // Se não abriu por senha conhecida (raro, PDF sem senha), tenta sugerir
-  // pelo texto extraído contra a mesma base grande.
-  const sugestaoPorTexto =
-    !conhecidaAbriu && dadosIA?.identificacao_texto
-      ? sugerirImobiliariaPorTexto(dadosIA.identificacao_texto, conhecidas)
-      : null;
-  const conhecidaSugerida = sugestaoPorTexto?.imobiliaria_id
-    ? conhecidas.find((c) => c.id === sugestaoPorTexto.imobiliaria_id)
+  const { data: conhecidasData } = await supabase.from("imobiliarias_conhecidas").select("id, nome, cnpj");
+  const conhecidas = (conhecidasData ?? []) as ImobiliariaBasica[];
+
+  // Prioridade: CNPJ lido no documento (mais confiável) > nome/razão social.
+  let resultadoIdent = buscarImobiliariaPorCnpjNoTexto(dadosIA?.cnpj_tomador ?? null, conhecidas);
+  if (!resultadoIdent.imobiliaria_id && dadosIA?.identificacao_texto) {
+    resultadoIdent = sugerirImobiliariaPorTexto(dadosIA.identificacao_texto, conhecidas);
+  }
+
+  const conhecidaEscolhida = resultadoIdent.imobiliaria_id
+    ? conhecidas.find((c) => c.id === resultadoIdent.imobiliaria_id)
     : null;
 
-  const conhecidaEscolhida = conhecidaAbriu ?? conhecidaSugerida;
-  const confianca = conhecidaAbriu ? "alta" : sugestaoPorTexto?.confianca ?? null;
-
   let imobiliariaId: string | null = null;
-  if (conhecidaEscolhida && conhecidaEscolhida.cnpj) {
+  if (conhecidaEscolhida?.cnpj) {
     try {
       imobiliariaId = await resolverOuCriarImobiliaria(supabase, conhecidaEscolhida.nome, conhecidaEscolhida.cnpj);
     } catch (e) {
@@ -138,6 +126,7 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
     }
   }
 
+  const confianca = imobiliariaId ? resultadoIdent.confianca : null;
   const status = duplicata
     ? "duplicada"
     : !imobiliariaId

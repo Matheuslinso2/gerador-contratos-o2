@@ -3,8 +3,14 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
-import { abrirTextoPdfComSenha, apenasDigitos, variantesSenhaDeCnpj } from "@/lib/pdfComSenha";
+import { abrirTextoPdfComSenha } from "@/lib/pdfComSenha";
 import { extrairDadosFatura } from "@/lib/faturasIA";
+import {
+  buscarImobiliariaPorCnpjNoTexto,
+  sugerirImobiliariaPorTexto,
+  resolverOuCriarImobiliaria,
+  type ImobiliariaBasica,
+} from "@/lib/faturasIdentificacao";
 
 const BUCKET_FINAL = "faturas";
 
@@ -56,7 +62,7 @@ export async function confirmarIdentificacao(formData: FormData) {
     await supabase
       .from("faturas_esperadas")
       .upsert(
-        { imobiliaria_id: imobiliariaId, seguradora: fatura.seguradora, codigo_produtor: fatura.codigo_produtor ?? null, ativo: true },
+        { imobiliaria_id: imobiliariaId, seguradora: fatura.seguradora, codigo_produtor: fatura.codigo_produtor ?? "", ativo: true },
         { onConflict: "imobiliaria_id, seguradora, codigo_produtor" }
       );
   }
@@ -64,15 +70,17 @@ export async function confirmarIdentificacao(formData: FormData) {
   redirect(`/faturas/conferencia?ok=${encodeURIComponent("Identificação confirmada.")}`);
 }
 
-// Usado quando o PDF nunca abriu (nenhum CNPJ cadastrado bateu) — tenta de
-// novo com o CNPJ informado manualmente, e se abrir já processa a fatura.
-export async function tentarReabrirComCnpj(formData: FormData) {
+// Usado quando o PDF nunca abriu com os CNPJs da O2 — tenta de novo com uma
+// senha informada manualmente (não necessariamente um CNPJ; algumas
+// seguradoras podem ter um padrão diferente). Se abrir, roda a mesma
+// identificação por conteúdo usada no upload normal.
+export async function tentarReabrirComSenha(formData: FormData) {
   const { supabase, user } = await checarAcesso();
 
   const faturaId = String(formData.get("fatura_id") ?? "");
-  const cnpjDigitado = apenasDigitos(String(formData.get("cnpj") ?? ""));
-  if (!faturaId || !cnpjDigitado) {
-    redirect(`/faturas/conferencia?erro=${encodeURIComponent("Informe um CNPJ.")}`);
+  const senhaDigitada = String(formData.get("senha") ?? "").trim();
+  if (!faturaId || !senhaDigitada) {
+    redirect(`/faturas/conferencia?erro=${encodeURIComponent("Informe uma senha.")}`);
   }
 
   const { data: fatura } = await supabase
@@ -90,22 +98,9 @@ export async function tentarReabrirComCnpj(formData: FormData) {
   }
   const buffer = Buffer.from(await baixado.arrayBuffer());
 
-  const candidatos = variantesSenhaDeCnpj(cnpjDigitado).map((senha) => ({ chave: "manual", senha }));
-  const resultado = await abrirTextoPdfComSenha(buffer, candidatos);
+  const resultado = await abrirTextoPdfComSenha(buffer, [{ chave: "manual", senha: senhaDigitada }]);
   if (!resultado) {
-    redirect(`/faturas/conferencia?erro=${encodeURIComponent("Esse CNPJ não abriu o arquivo. Confira o número.")}`);
-  }
-
-  const { data: imobiliariaEncontrada } = await supabase
-    .from("imobiliarias")
-    .select("id")
-    .eq("cnpj", cnpjDigitado)
-    .maybeSingle();
-  // CNPJ pode estar salvo formatado — tenta também comparando só dígitos.
-  let imobiliariaId = imobiliariaEncontrada?.id ?? null;
-  if (!imobiliariaId) {
-    const { data: todas } = await supabase.from("imobiliarias").select("id, cnpj");
-    imobiliariaId = todas?.find((i) => i.cnpj && apenasDigitos(i.cnpj) === cnpjDigitado)?.id ?? null;
+    redirect(`/faturas/conferencia?erro=${encodeURIComponent("Essa senha não abriu o arquivo.")}`);
   }
 
   let dadosIA = null;
@@ -115,9 +110,30 @@ export async function tentarReabrirComCnpj(formData: FormData) {
     console.error("[faturas] erro ao extrair dados por IA (reabertura):", e);
   }
 
+  const { data: conhecidasData } = await supabase.from("imobiliarias_conhecidas").select("id, nome, cnpj");
+  const conhecidas = (conhecidasData ?? []) as ImobiliariaBasica[];
+
+  let resultadoIdent = buscarImobiliariaPorCnpjNoTexto(dadosIA?.cnpj_tomador ?? null, conhecidas);
+  if (!resultadoIdent.imobiliaria_id && dadosIA?.identificacao_texto) {
+    resultadoIdent = sugerirImobiliariaPorTexto(dadosIA.identificacao_texto, conhecidas);
+  }
+  const conhecidaEscolhida = resultadoIdent.imobiliaria_id
+    ? conhecidas.find((c) => c.id === resultadoIdent.imobiliaria_id)
+    : null;
+
+  let imobiliariaId: string | null = null;
+  if (conhecidaEscolhida?.cnpj) {
+    try {
+      imobiliariaId = await resolverOuCriarImobiliaria(supabase, conhecidaEscolhida.nome, conhecidaEscolhida.cnpj);
+    } catch (e) {
+      console.error("[faturas] erro ao resolver/criar imobiliária:", e);
+    }
+  }
+  const confianca = imobiliariaId ? resultadoIdent.confianca : null;
+
   const historico = [
     ...(fatura.historico_identificacao ?? []),
-    { usuario: user.email, data: new Date().toISOString(), acao: "reabertura_manual_cnpj", detalhe: cnpjDigitado },
+    { usuario: user.email, data: new Date().toISOString(), acao: "reabertura_manual_senha", detalhe: "" },
   ];
 
   const { error } = await supabase
@@ -130,8 +146,8 @@ export async function tentarReabrirComCnpj(formData: FormData) {
       valor: dadosIA?.valor ?? null,
       numero_documento: dadosIA?.numero_documento ?? null,
       texto_bruto_extraido: resultado.texto,
-      confianca: imobiliariaId ? "alta" : null,
-      status: imobiliariaId ? "fatura_carregada" : "aguardando_identificacao",
+      confianca,
+      status: imobiliariaId ? (confianca === "alta" ? "fatura_carregada" : "aguardando_conferencia") : "aguardando_identificacao",
       historico_identificacao: historico,
     })
     .eq("id", faturaId);

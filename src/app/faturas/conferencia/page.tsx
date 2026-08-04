@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../../actions";
 import AppHeader from "@/components/AppHeader";
-import { confirmarIdentificacao, tentarReabrirComCnpj } from "./actions";
+import { confirmarIdentificacao, tentarReabrirComSenha } from "./actions";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -66,13 +66,13 @@ export default async function ConferenciaFaturasPage({
                 {f.seguradora && <p className="mb-2 text-xs text-gray-500">Seguradora: {f.seguradora}</p>}
 
                 {arquivoNuncaAbriu ? (
-                  <form action={tentarReabrirComCnpj} className="flex flex-wrap items-end gap-2">
+                  <form action={tentarReabrirComSenha} className="flex flex-wrap items-end gap-2">
                     <input type="hidden" name="fatura_id" value={f.id} />
                     <div className="flex-1">
                       <label className="mb-1 block text-xs text-gray-600">
-                        Não conseguimos abrir esse arquivo — informe o CNPJ (senha) da imobiliária
+                        Não conseguimos abrir esse arquivo com os CNPJs da O2 — informe a senha manualmente
                       </label>
-                      <input name="cnpj" placeholder="Só números" className={inputClass} />
+                      <input name="senha" placeholder="Senha do PDF" className={inputClass} />
                     </div>
                     <button
                       type="submit"
