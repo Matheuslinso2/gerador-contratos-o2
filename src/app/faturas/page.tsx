@@ -5,7 +5,7 @@ import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
 import SeletorCompetencia from "./SeletorCompetencia";
-import { adicionarEsperada, editarEsperada, vincularCnpjProvisoria } from "./actions";
+import { adicionarEsperada, vincularCnpjProvisoria } from "./actions";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -215,36 +215,9 @@ export default async function FaturasPage({
                         </form>
                       )}
                     </td>
-                    <form action={editarEsperada} id={`form-${e.id}`}>
-                      <input type="hidden" name="id" value={e.id} />
-                      <input type="hidden" name="seguradora" value={seguradora} />
-                    </form>
-                    <td className="px-3 py-2">
-                      <input
-                        form={`form-${e.id}`}
-                        name="dia_vencimento"
-                        type="number"
-                        min={1}
-                        max={31}
-                        defaultValue={e.dia_vencimento ?? ""}
-                        className={`${inputClass} w-14`}
-                      />
-                    </td>
-                    <td className="px-3 py-2">
-                      <select form={`form-${e.id}`} name="cnpj_o2" defaultValue={e.cnpj_o2 ?? ""} className={inputClass}>
-                        <option value="">—</option>
-                        <option value="O2 Seguros">O2 Seguros</option>
-                        <option value="O2 Capitalização">O2 Capitalização</option>
-                      </select>
-                    </td>
-                    <td className="px-3 py-2">
-                      <input
-                        form={`form-${e.id}`}
-                        name="observacao"
-                        defaultValue={e.observacao ?? ""}
-                        className={`${inputClass} w-40`}
-                      />
-                    </td>
+                    <td className="px-3 py-2 text-gray-800">{e.dia_vencimento ?? "—"}</td>
+                    <td className="px-3 py-2 text-gray-800">{e.cnpj_o2 ?? "—"}</td>
+                    <td className="px-3 py-2 text-gray-800">{e.observacao ?? "—"}</td>
                     <td className="px-3 py-2">
                       {fatura ? (
                         <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${COR_STATUS[fatura.status] ?? "bg-gray-100 text-gray-700"}`}>
@@ -257,23 +230,13 @@ export default async function FaturasPage({
                       )}
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap">
-                      <button
-                        form={`form-${e.id}`}
-                        type="submit"
-                        className="text-xs font-medium text-o2-navy hover:underline"
-                      >
-                        Salvar
-                      </button>
                       {e.imobiliaria_id && (
-                        <>
-                          {" · "}
-                          <Link
-                            href={`/faturas/imobiliaria/${e.imobiliaria_id}`}
-                            className="text-xs font-medium text-o2-navy hover:underline"
-                          >
-                            Gerenciar
-                          </Link>
-                        </>
+                        <Link
+                          href={`/faturas/imobiliaria/${e.imobiliaria_id}`}
+                          className="text-xs font-medium text-o2-navy hover:underline"
+                        >
+                          Editar
+                        </Link>
                       )}
                     </td>
                   </tr>

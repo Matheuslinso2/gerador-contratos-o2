@@ -57,35 +57,39 @@ export async function adicionarEsperada(formData: FormData) {
   redirect(`/faturas?ok=${encodeURIComponent("Imobiliária salva.")}${voltarPara}`);
 }
 
-// Liga/desliga quais seguradoras uma imobiliária tem habilitadas — quando
-// desmarcada, a linha correspondente vira inativa (não é apagada, só some
-// das telas, preservando o histórico) em vez de excluir.
+// Único lugar onde vencimento/CNPJ da O2/observação/ativo de uma
+// imobiliária podem ser alterados — a tela principal de Faturas é só
+// leitura, tudo passa por aqui (botão "Editar" por imobiliária).
 export async function salvarSeguradorasImobiliaria(formData: FormData) {
   const supabase = await checarAcesso();
 
   const imobiliariaId = String(formData.get("imobiliaria_id") ?? "");
-  const todasSeguradoras = formData.getAll("todas_seguradoras").map(String);
-  const marcadas = new Set(formData.getAll("seguradoras").map(String));
+  const qtd = Number(formData.get("qtd") ?? 0);
   if (!imobiliariaId) redirect(`/faturas?erro=${encodeURIComponent("Imobiliária inválida.")}`);
 
-  for (const seguradora of todasSeguradoras) {
-    if (marcadas.has(seguradora)) {
-      await supabase
-        .from("faturas_esperadas")
-        .upsert(
-          { imobiliaria_id: imobiliariaId, seguradora, codigo_produtor: "", ativo: true },
-          { onConflict: "imobiliaria_id, seguradora, codigo_produtor", ignoreDuplicates: false }
-        );
-    } else {
-      await supabase
-        .from("faturas_esperadas")
-        .update({ ativo: false })
-        .eq("imobiliaria_id", imobiliariaId)
-        .eq("seguradora", seguradora);
-    }
+  for (let i = 0; i < qtd; i++) {
+    const seguradora = String(formData.get(`seguradora_${i}`) ?? "").trim();
+    if (!seguradora) continue;
+    const ativo = formData.get(`ativo_${i}`) === "on";
+    const diaVencimento = String(formData.get(`dia_vencimento_${i}`) ?? "").trim();
+    const cnpjO2 = String(formData.get(`cnpj_o2_${i}`) ?? "").trim();
+    const observacao = String(formData.get(`observacao_${i}`) ?? "").trim();
+
+    await supabase.from("faturas_esperadas").upsert(
+      {
+        imobiliaria_id: imobiliariaId,
+        seguradora,
+        codigo_produtor: "",
+        ativo,
+        dia_vencimento: diaVencimento ? Number(diaVencimento) : null,
+        cnpj_o2: cnpjO2 || null,
+        observacao: observacao || null,
+      },
+      { onConflict: "imobiliaria_id, seguradora, codigo_produtor" }
+    );
   }
 
-  redirect(`/faturas/imobiliaria/${imobiliariaId}?ok=${encodeURIComponent("Seguradoras atualizadas.")}`);
+  redirect(`/faturas/imobiliaria/${imobiliariaId}?ok=${encodeURIComponent("Dados salvos.")}`);
 }
 
 // Vincula um registro provisório (nome_provisorio, sem CNPJ conhecido) a
@@ -120,31 +124,4 @@ export async function vincularCnpjProvisoria(formData: FormData) {
   if (error) redirect(`/faturas?erro=${encodeURIComponent(error.message)}&seguradora=${encodeURIComponent(seguradora)}`);
 
   redirect(`/faturas?ok=${encodeURIComponent("CNPJ vinculado.")}&seguradora=${encodeURIComponent(seguradora)}`);
-}
-
-// Edita dia de vencimento, CNPJ da O2 e observação de um vínculo já
-// existente — os colaboradores vão precisar ajustar isso aos poucos.
-export async function editarEsperada(formData: FormData) {
-  const supabase = await checarAcesso();
-
-  const id = String(formData.get("id") ?? "");
-  const seguradora = String(formData.get("seguradora") ?? "").trim();
-  const diaVencimento = String(formData.get("dia_vencimento") ?? "").trim();
-  const cnpjO2 = String(formData.get("cnpj_o2") ?? "").trim();
-  const observacao = String(formData.get("observacao") ?? "").trim();
-  if (!id) redirect(`/faturas?erro=${encodeURIComponent("Registro inválido.")}`);
-
-  const { error } = await supabase
-    .from("faturas_esperadas")
-    .update({
-      dia_vencimento: diaVencimento ? Number(diaVencimento) : null,
-      cnpj_o2: cnpjO2 || null,
-      observacao: observacao || null,
-    })
-    .eq("id", id);
-  if (error) {
-    redirect(`/faturas?erro=${encodeURIComponent(error.message)}&seguradora=${encodeURIComponent(seguradora)}`);
-  }
-
-  redirect(`/faturas?ok=${encodeURIComponent("Atualizado.")}&seguradora=${encodeURIComponent(seguradora)}`);
 }
