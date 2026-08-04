@@ -64,7 +64,7 @@ export async function confirmarIdentificacao(formData: FormData) {
       .from("faturas_esperadas")
       .upsert(
         { imobiliaria_id: imobiliariaId, seguradora: fatura.seguradora, codigo_produtor: fatura.codigo_produtor ?? "", ativo: true },
-        { onConflict: "imobiliaria_id, seguradora, codigo_produtor" }
+        { onConflict: "imobiliaria_id, seguradora" }
       );
   }
 

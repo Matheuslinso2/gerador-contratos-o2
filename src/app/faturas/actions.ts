@@ -44,12 +44,11 @@ export async function adicionarEsperada(formData: FormData) {
   const linhas = seguradorasSelecionadas.map((seguradora) => ({
     imobiliaria_id: imobiliariaId,
     seguradora,
-    codigo_produtor: "",
     ativo: true,
   }));
   const { error } = await supabase
     .from("faturas_esperadas")
-    .upsert(linhas, { onConflict: "imobiliaria_id, seguradora, codigo_produtor" });
+    .upsert(linhas, { onConflict: "imobiliaria_id, seguradora" });
   if (error) {
     redirect(`/faturas?erro=${encodeURIComponent(error.message)}${voltarPara}`);
   }
@@ -79,13 +78,12 @@ export async function salvarSeguradorasImobiliaria(formData: FormData) {
       {
         imobiliaria_id: imobiliariaId,
         seguradora,
-        codigo_produtor: "",
         ativo,
         dia_vencimento: diaVencimento ? Number(diaVencimento) : null,
         cnpj_o2: cnpjO2 || null,
         observacao: observacao || null,
       },
-      { onConflict: "imobiliaria_id, seguradora, codigo_produtor" }
+      { onConflict: "imobiliaria_id, seguradora" }
     );
   }
 
