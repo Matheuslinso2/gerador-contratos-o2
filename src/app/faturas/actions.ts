@@ -92,6 +92,26 @@ export async function salvarSeguradorasImobiliaria(formData: FormData) {
   redirect(`/faturas/imobiliaria/${imobiliariaId}?ok=${encodeURIComponent("Dados salvos.")}`);
 }
 
+// E-mail pra onde as faturas dessa imobiliária serão enviadas — separado
+// do e-mail de login dela (esse aqui é só pro fluxo de Faturas).
+export async function atualizarEmailFaturas(formData: FormData) {
+  const supabase = await checarAcesso();
+
+  const imobiliariaId = String(formData.get("imobiliaria_id") ?? "");
+  const email = String(formData.get("email_faturas") ?? "").trim();
+  if (!imobiliariaId) redirect(`/faturas?erro=${encodeURIComponent("Imobiliária inválida.")}`);
+
+  const { error } = await supabase
+    .from("imobiliarias")
+    .update({ email_faturas: email || null })
+    .eq("id", imobiliariaId);
+  if (error) {
+    redirect(`/faturas/imobiliaria/${imobiliariaId}?erro=${encodeURIComponent(error.message)}`);
+  }
+
+  redirect(`/faturas/imobiliaria/${imobiliariaId}?ok=${encodeURIComponent("E-mail salvo.")}`);
+}
+
 // Vincula um registro provisório (nome_provisorio, sem CNPJ conhecido) a
 // um registro de verdade em imobiliarias, assim que alguém descobre/digita
 // o CNPJ.

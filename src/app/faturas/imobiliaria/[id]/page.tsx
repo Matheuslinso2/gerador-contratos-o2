@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../../../actions";
 import AppHeader from "@/components/AppHeader";
-import { salvarSeguradorasImobiliaria } from "../../actions";
+import { salvarSeguradorasImobiliaria, atualizarEmailFaturas } from "../../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +36,7 @@ export default async function ImobiliariaFaturasPage({
   if (!isAdmin(user?.email) && !isColaboradorO2(user?.email)) redirect("/");
 
   const [{ data: imobiliaria }, { data: vinculosData }] = await Promise.all([
-    supabase.from("imobiliarias").select("id, nome, cnpj").eq("id", id).single(),
+    supabase.from("imobiliarias").select("id, nome, cnpj, email_faturas").eq("id", id).single(),
     supabase
       .from("faturas_esperadas")
       .select("seguradora, ativo, dia_vencimento, cnpj_o2, observacao")
@@ -65,6 +65,29 @@ export default async function ImobiliariaFaturasPage({
 
         {ok && <p className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-700">✅ {ok}</p>}
         {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">⚠️ {erro}</p>}
+
+        <div className="rounded-xl border border-o2-navy/10 bg-white p-5 shadow-sm">
+          <h2 className="mb-1 text-sm font-semibold text-o2-navy">E-mail para envio de faturas</h2>
+          <p className="mb-3 text-xs text-gray-500">
+            Pra onde as faturas dessa imobiliária serão enviadas — diferente do e-mail de login dela.
+          </p>
+          <form action={atualizarEmailFaturas} className="flex flex-wrap items-end gap-2">
+            <input type="hidden" name="imobiliaria_id" value={imobiliaria.id} />
+            <input
+              name="email_faturas"
+              type="email"
+              placeholder="financeiro@imobiliaria.com.br"
+              defaultValue={imobiliaria.email_faturas ?? ""}
+              className={`${inputClass} max-w-sm`}
+            />
+            <button
+              type="submit"
+              className="rounded-full bg-o2-navy px-4 py-1.5 text-sm font-medium text-white transition hover:opacity-90"
+            >
+              Salvar e-mail
+            </button>
+          </form>
+        </div>
 
         <div className="rounded-xl border border-o2-navy/10 bg-white p-5 shadow-sm">
           <h2 className="mb-1 text-sm font-semibold text-o2-navy">Seguradoras e dados de cada uma</h2>
