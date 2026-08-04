@@ -22,7 +22,7 @@ export default async function EsqueciSenhaPage({
       </div>
 
       {erro && (
-        <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>
+        <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">⚠️ {erro}</p>
       )}
 
       <form action={esqueciSenha} className="space-y-3">

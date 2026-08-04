@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { signIn } from "./actions";
+import CampoSenha from "@/components/CampoSenha";
 
 export default async function LoginPage({
   searchParams,
@@ -17,10 +18,10 @@ export default async function LoginPage({
       <h1 className="text-center text-xl font-semibold text-o2-navy">Entrar</h1>
 
       {erro && (
-        <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>
+        <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">⚠️ {erro}</p>
       )}
       {aviso && (
-        <p className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-700">{aviso}</p>
+        <p className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-700">✅ {aviso}</p>
       )}
 
       <form action={signIn} className="space-y-3">
@@ -34,14 +35,7 @@ export default async function LoginPage({
           className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
         />
         <label htmlFor="password" className="sr-only">Senha</label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          placeholder="Senha"
-          required
-          className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
-        />
+        <CampoSenha id="password" name="password" placeholder="Senha" required autoComplete="current-password" />
         <button
           className="w-full rounded-full bg-o2-coral px-4 py-2.5 font-medium text-white transition hover:opacity-90"
           type="submit"

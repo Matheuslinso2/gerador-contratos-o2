@@ -5,6 +5,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
+import { traduzirErroAuth } from "@/lib/authErrors";
+import CampoSenha from "@/components/CampoSenha";
 
 type Estado = "verificando" | "invalido" | "pronto" | "enviando" | "sucesso";
 
@@ -48,7 +50,7 @@ export default function RedefinirSenhaPage() {
     const supabase = createClient();
     const { error } = await supabase.auth.updateUser({ password: senha });
     if (error) {
-      setErro(error.message);
+      setErro(traduzirErroAuth(error.message));
       setEstado("pronto");
       return;
     }
@@ -70,7 +72,7 @@ export default function RedefinirSenhaPage() {
       {estado === "invalido" && (
         <div className="space-y-3 text-center">
           <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">
-            Este link é inválido ou já expirou.
+            ⚠️ Este link é inválido ou já expirou.
           </p>
           <Link href="/esqueci-senha" className="font-medium text-o2-navy underline">
             Solicitar um novo link
@@ -80,25 +82,25 @@ export default function RedefinirSenhaPage() {
 
       {estado === "sucesso" && (
         <p className="rounded-lg border border-green-300 bg-green-50 p-3 text-center text-sm text-green-700">
-          Senha redefinida! Entrando...
+          ✅ Senha redefinida! Entrando...
         </p>
       )}
 
       {(estado === "pronto" || estado === "enviando") && (
         <form onSubmit={handleSubmit} className="space-y-3">
           {erro && (
-            <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>
+            <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">⚠️ {erro}</p>
           )}
           <label htmlFor="nova-senha" className="sr-only">Nova senha</label>
-          <input
+          <CampoSenha
             id="nova-senha"
-            type="password"
+            name="nova-senha"
             placeholder="Nova senha (mín. 6 caracteres)"
             required
             minLength={6}
+            autoComplete="new-password"
             value={senha}
             onChange={(e) => setSenha(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
           />
           <button
             type="submit"

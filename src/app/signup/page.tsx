@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { signUp } from "./actions";
+import CampoSenha from "@/components/CampoSenha";
 
 export default async function SignupPage({
   searchParams,
@@ -20,7 +21,7 @@ export default async function SignupPage({
       </div>
 
       {erro && (
-        <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>
+        <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">⚠️ {erro}</p>
       )}
 
       <form action={signUp} className="space-y-3">
@@ -34,14 +35,13 @@ export default async function SignupPage({
           className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
         />
         <label htmlFor="password" className="sr-only">Senha</label>
-        <input
+        <CampoSenha
           id="password"
           name="password"
-          type="password"
           placeholder="Senha (mín. 6 caracteres)"
           required
           minLength={6}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+          autoComplete="new-password"
         />
         <label className="flex items-start gap-2 text-sm text-gray-600">
           <input type="checkbox" name="aceite_termos" required className="mt-0.5" />
