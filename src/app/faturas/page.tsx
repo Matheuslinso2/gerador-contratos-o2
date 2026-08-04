@@ -243,11 +243,11 @@ export default async function FaturasPage({
                         </span>
                       ) : (
                         <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-500">
-                          Sem fatura
+                          Não tem fatura
                         </span>
                       )}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 whitespace-nowrap">
                       <button
                         form={`form-${e.id}`}
                         type="submit"
@@ -255,6 +255,17 @@ export default async function FaturasPage({
                       >
                         Salvar
                       </button>
+                      {e.imobiliaria_id && (
+                        <>
+                          {" · "}
+                          <Link
+                            href={`/faturas/imobiliaria/${e.imobiliaria_id}`}
+                            className="text-xs font-medium text-o2-navy hover:underline"
+                          >
+                            Gerenciar
+                          </Link>
+                        </>
+                      )}
                     </td>
                   </tr>
                 );
@@ -299,22 +310,28 @@ export default async function FaturasPage({
         )}
 
         <details className="rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm">
-          <summary className="cursor-pointer text-sm font-medium text-o2-navy">
-            + Adicionar imobiliária em {seguradora}
-          </summary>
-          <form action={adicionarEsperada} className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-5">
-            <input type="hidden" name="seguradora" value={seguradora} />
-            <input name="nome" placeholder="Nome da imobiliária" required className={inputClass} />
-            <input name="cnpj" placeholder="CNPJ" required className={inputClass} />
-            <input name="dia_vencimento" type="number" min={1} max={31} placeholder="Dia venc." className={inputClass} />
-            <select name="cnpj_o2" defaultValue="" className={inputClass}>
-              <option value="">CNPJ O2...</option>
-              <option value="O2 Seguros">O2 Seguros</option>
-              <option value="O2 Cap">O2 Cap</option>
-            </select>
+          <summary className="cursor-pointer text-sm font-medium text-o2-navy">+ Adicionar imobiliária</summary>
+          <p className="mt-1 text-xs text-gray-500">
+            Um cadastro só, marcando quais seguradoras essa imobiliária tem — não precisa repetir
+            aba por aba.
+          </p>
+          <form action={adicionarEsperada} className="mt-3 space-y-3">
+            <input type="hidden" name="voltar_para" value={`&competencia=${competencia}&seguradora=${encodeURIComponent(seguradora)}`} />
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <input name="nome" placeholder="Nome da imobiliária" required className={inputClass} />
+              <input name="cnpj" placeholder="CNPJ" required className={inputClass} />
+            </div>
+            <div className="flex flex-wrap gap-3">
+              {seguradoras.map((s) => (
+                <label key={s} className="flex items-center gap-1.5 text-xs text-gray-700">
+                  <input type="checkbox" name="seguradoras" value={s} defaultChecked={s === seguradora} />
+                  {s}
+                </label>
+              ))}
+            </div>
             <button
               type="submit"
-              className="rounded bg-o2-coral px-3 py-1.5 text-xs font-medium text-white transition hover:opacity-90"
+              className="rounded-full bg-o2-coral px-4 py-1.5 text-xs font-medium text-white transition hover:opacity-90"
             >
               Adicionar
             </button>
