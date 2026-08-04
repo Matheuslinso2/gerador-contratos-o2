@@ -12,15 +12,17 @@ export const maxDuration = 60;
 
 const SEGURADORAS_PADRAO = ["TOKIO", "PORTO FIANÇA", "PORTO RE", "TOO", "POTTENCIAL", "YELUM"];
 
-// Progressão pedida: Upload pendente -> Upload realizado -> Imobiliária
-// identificada -> Pendente de envio -> Fatura enviada. "Upload pendente"
-// não tem status próprio (é a ausência de linha em `faturas`), tratado à
-// parte onde a tabela é montada.
+// Progressão: Upload pendente -> Carregada -> Pendente de envio -> Fatura
+// enviada. "Upload pendente" não tem status próprio (é a ausência de linha
+// em `faturas`), tratado à parte onde a tabela é montada. Identificação
+// incerta (precisa de conferência manual) é a única exceção com rótulo
+// próprio — na maioria dos casos upload e identificação acontecem juntos,
+// não precisam de dois estágios separados.
 const ROTULO_STATUS: Record<string, string> = {
   aguardando_upload: "Upload pendente",
-  aguardando_identificacao: "Upload realizado",
-  aguardando_conferencia: "Upload realizado",
-  fatura_carregada: "Imobiliária identificada",
+  aguardando_identificacao: "Aguardando conferência",
+  aguardando_conferencia: "Aguardando conferência",
+  fatura_carregada: "Carregada",
   pronta_para_envio: "Pendente de envio",
   enviada: "Fatura enviada",
   erro_no_envio: "Erro no envio",
@@ -229,7 +231,7 @@ export default async function FaturasPage({
                       <select form={`form-${e.id}`} name="cnpj_o2" defaultValue={e.cnpj_o2 ?? ""} className={inputClass}>
                         <option value="">—</option>
                         <option value="O2 Seguros">O2 Seguros</option>
-                        <option value="O2 Cap">O2 Cap</option>
+                        <option value="O2 Capitalização">O2 Capitalização</option>
                       </select>
                     </td>
                     <td className="px-3 py-2">
