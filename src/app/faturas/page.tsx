@@ -5,7 +5,7 @@ import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
 import SeletorCompetencia from "./SeletorCompetencia";
-import { adicionarEsperada, editarEsperada } from "./actions";
+import { adicionarEsperada, editarEsperada, vincularCnpjProvisoria } from "./actions";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -43,22 +43,40 @@ function mesAtualDefault(): string {
   return `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}`;
 }
 
+const POR_PAGINA = 20;
+
 type EsperadaRow = {
   id: string;
-  imobiliaria_id: string;
+  imobiliaria_id: string | null;
   dia_vencimento: number | null;
   cnpj_o2: string | null;
   observacao: string | null;
+  nome_provisorio: string | null;
   imobiliarias: { nome: string; cnpj: string | null } | { nome: string; cnpj: string | null }[] | null;
 };
 
 export default async function FaturasPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ok?: string; aviso?: string; erro?: string; competencia?: string; seguradora?: string }>;
+  searchParams: Promise<{
+    ok?: string;
+    aviso?: string;
+    erro?: string;
+    competencia?: string;
+    seguradora?: string;
+    limite?: string;
+  }>;
 }) {
-  const { ok, aviso, erro, competencia: competenciaParam, seguradora: seguradoraParam } = await searchParams;
+  const {
+    ok,
+    aviso,
+    erro,
+    competencia: competenciaParam,
+    seguradora: seguradoraParam,
+    limite: limiteParam,
+  } = await searchParams;
   const competencia = competenciaParam || mesAtualDefault();
+  const limite = Math.max(POR_PAGINA, Number(limiteParam) || POR_PAGINA);
 
   const supabase = await createClient();
   const {
@@ -76,13 +94,16 @@ export default async function FaturasPage({
     : SEGURADORAS_PADRAO;
   const seguradora = seguradoraParam && seguradoras.includes(seguradoraParam) ? seguradoraParam : seguradoras[0];
 
-  const [{ data: esperadasData }, { data: faturasData }, { data: pendentesData }] = await Promise.all([
+  const [{ data: esperadasData, count: totalEsperadas }, { data: faturasData }, { data: pendentesData }] = await Promise.all([
     supabase
       .from("faturas_esperadas")
-      .select("id, imobiliaria_id, dia_vencimento, cnpj_o2, observacao, imobiliarias(nome, cnpj)")
+      .select("id, imobiliaria_id, dia_vencimento, cnpj_o2, observacao, nome_provisorio, imobiliarias(nome, cnpj)", {
+        count: "exact",
+      })
       .eq("seguradora", seguradora)
       .eq("ativo", true)
-      .order("id"),
+      .order("id")
+      .range(0, limite - 1),
     supabase
       .from("faturas")
       .select("id, imobiliaria_id, valor, vencimento, status, arquivo_nome")
@@ -168,11 +189,23 @@ export default async function FaturasPage({
             <tbody>
               {esperadas.map((e) => {
                 const imob = Array.isArray(e.imobiliarias) ? e.imobiliarias[0] : e.imobiliarias;
-                const fatura = faturasPorImobiliaria.get(e.imobiliaria_id);
+                const fatura = e.imobiliaria_id ? faturasPorImobiliaria.get(e.imobiliaria_id) : undefined;
+                const pendente = !imob && !!e.nome_provisorio;
                 return (
-                  <tr key={e.id} className="border-b border-gray-50 last:border-0 align-top">
-                    <td className="px-3 py-2 text-gray-800">{imob?.nome ?? "—"}</td>
-                    <td className="px-3 py-2 text-gray-500">{imob?.cnpj ?? "—"}</td>
+                  <tr key={e.id} className={`border-b border-gray-50 last:border-0 align-top ${pendente ? "bg-orange-50/40" : ""}`}>
+                    <td className="px-3 py-2 text-gray-800">{imob?.nome ?? e.nome_provisorio ?? "—"}</td>
+                    <td className="px-3 py-2 text-gray-500">
+                      {imob?.cnpj ?? (
+                        <form action={vincularCnpjProvisoria} className="flex items-center gap-1">
+                          <input type="hidden" name="id" value={e.id} />
+                          <input type="hidden" name="seguradora" value={seguradora} />
+                          <input name="cnpj" placeholder="CNPJ" className={`${inputClass} w-28`} />
+                          <button type="submit" className="whitespace-nowrap text-xs font-medium text-o2-navy hover:underline">
+                            Vincular
+                          </button>
+                        </form>
+                      )}
+                    </td>
                     <form action={editarEsperada} id={`form-${e.id}`}>
                       <input type="hidden" name="id" value={e.id} />
                       <input type="hidden" name="seguradora" value={seguradora} />
@@ -252,6 +285,18 @@ export default async function FaturasPage({
             </tbody>
           </table>
         </div>
+
+        {totalEsperadas != null && totalEsperadas > esperadas.length && (
+          <div className="text-center">
+            <Link
+              href={`/faturas?competencia=${competencia}&seguradora=${encodeURIComponent(seguradora)}&limite=${limite + POR_PAGINA}`}
+              className="text-sm font-medium text-o2-navy hover:underline"
+            >
+              Mostrar mais {Math.min(POR_PAGINA, totalEsperadas - esperadas.length)} (
+              {esperadas.length} de {totalEsperadas})
+            </Link>
+          </div>
+        )}
 
         <details className="rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm">
           <summary className="cursor-pointer text-sm font-medium text-o2-navy">
