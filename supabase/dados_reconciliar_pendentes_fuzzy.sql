@@ -51,10 +51,19 @@ candidatos as (
       or p.nome_provisorio ilike '%' || ic.nome || '%'
     )
 ),
-unicos as (
+unicos_brutos as (
   select id, seguradora, cnpj
   from candidatos
   where qtd = 1
+),
+-- Se duas linhas pendentes diferentes (nomes quase iguais) baterem pro
+-- mesmo CNPJ na mesma seguradora, só a de menor id é resolvida agora — a
+-- outra fica pendente pra conferência manual, em vez de derrubar o UPDATE
+-- inteiro por violar a proteção contra duplicidade.
+unicos as (
+  select distinct on (seguradora, cnpj) id, seguradora, cnpj
+  from unicos_brutos
+  order by seguradora, cnpj, id
 )
 update faturas_esperadas fe
 set imobiliaria_id = i.id, nome_provisorio = null
