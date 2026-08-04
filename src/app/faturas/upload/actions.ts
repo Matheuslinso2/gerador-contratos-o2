@@ -116,6 +116,7 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
   const conhecidaEscolhida = resultadoIdent.imobiliaria_id
     ? conhecidas.find((c) => c.id === resultadoIdent.imobiliaria_id)
     : null;
+  const nomeIdentificado = conhecidaEscolhida?.nome ?? null;
 
   let imobiliariaId: string | null = null;
   if (conhecidaEscolhida?.cnpj) {
@@ -156,11 +157,12 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
   });
   if (error) return { ok: false, nomeArquivo, mensagem: error.message };
 
+  const seguradoraTexto = dadosIA?.seguradora ? ` (${dadosIA.seguradora})` : "";
   const mensagens: Record<string, string> = {
     duplicada: "Parece duplicada de uma fatura já enviada.",
-    aguardando_identificacao: "Aberta, mas não identificamos a imobiliária — precisa de conferência.",
-    aguardando_conferencia: "Aberta, identificação incerta — precisa de conferência.",
-    fatura_carregada: "Identificada com sucesso.",
+    aguardando_identificacao: `Aberta${seguradoraTexto}, mas não identificamos a imobiliária — precisa de conferência.`,
+    aguardando_conferencia: `Aberta${seguradoraTexto}, sugestão: ${nomeIdentificado ?? "?"} — confirme na conferência.`,
+    fatura_carregada: `Identificada: ${nomeIdentificado}${seguradoraTexto}.`,
   };
 
   return { ok: true, nomeArquivo, mensagem: mensagens[status] ?? "Processada." };
