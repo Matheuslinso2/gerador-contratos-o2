@@ -45,6 +45,19 @@ const COR_STATUS: Record<string, string> = {
   cancelada: "bg-gray-100 text-gray-500",
 };
 
+// Opções do filtro de situação — "aguardando_upload" representa "sem
+// fatura carregada ainda" (não tem status próprio na tabela faturas).
+const OPCOES_STATUS_FILTRO = [
+  "aguardando_upload",
+  "aguardando_conferencia",
+  "fatura_carregada",
+  "pronta_para_envio",
+  "enviada",
+  "erro_no_envio",
+  "duplicada",
+  "cancelada",
+];
+
 const inputClass = "w-full rounded border border-gray-300 px-2 py-1 text-xs focus:border-o2-coral focus:outline-none";
 
 function mesAtualDefault(): string {
@@ -74,6 +87,8 @@ export default async function FaturasPage({
     competencia?: string;
     seguradora?: string;
     limite?: string;
+    busca?: string;
+    status?: string;
   }>;
 }) {
   const {
@@ -83,9 +98,13 @@ export default async function FaturasPage({
     competencia: competenciaParam,
     seguradora: seguradoraParam,
     limite: limiteParam,
+    busca: buscaParam,
+    status: statusParam,
   } = await searchParams;
   const competencia = competenciaParam || mesAtualDefault();
   const limite = Math.max(POR_PAGINA, Number(limiteParam) || POR_PAGINA);
+  const busca = (buscaParam ?? "").trim();
+  const statusFiltro = (statusParam ?? "").trim();
 
   const supabase = await createClient();
   const {
@@ -103,16 +122,13 @@ export default async function FaturasPage({
     : SEGURADORAS_PADRAO;
   const seguradora = seguradoraParam && seguradoras.includes(seguradoraParam) ? seguradoraParam : seguradoras[0];
 
-  const [{ data: esperadasData, count: totalEsperadas }, { data: faturasData }, { data: pendentesData }] = await Promise.all([
+  const [{ data: esperadasTodasData }, { data: faturasData }, { data: pendentesData }] = await Promise.all([
     supabase
       .from("faturas_esperadas")
-      .select("id, imobiliaria_id, dia_vencimento, cnpj_o2, observacao, nome_provisorio, imobiliarias(nome, cnpj)", {
-        count: "exact",
-      })
+      .select("id, imobiliaria_id, dia_vencimento, cnpj_o2, observacao, nome_provisorio, imobiliarias(nome, cnpj)")
       .eq("seguradora", seguradora)
       .eq("ativo", true)
-      .order("id")
-      .range(0, limite - 1),
+      .order("id"),
     supabase
       .from("faturas")
       .select("id, imobiliaria_id, valor, vencimento, status, arquivo_nome")
@@ -120,14 +136,32 @@ export default async function FaturasPage({
       .eq("competencia", competencia),
     supabase.from("faturas").select("status").in("status", ["aguardando_identificacao", "aguardando_conferencia"]),
   ]);
-  const esperadas = (esperadasData ?? []) as EsperadaRow[];
+  const esperadasTodas = (esperadasTodasData ?? []) as EsperadaRow[];
   const faturasPorImobiliaria = new Map((faturasData ?? []).map((f) => [f.imobiliaria_id, f]));
   const pendentes = pendentesData?.length ?? 0;
+
+  // Busca por nome e filtro de situação aplicados em memória — o total de
+  // linhas por seguradora é pequeno (algumas centenas), não compensa a
+  // complexidade de filtrar isso via join no banco.
+  const buscaNormalizada = busca.toLowerCase();
+  const esperadasFiltradas = esperadasTodas.filter((e) => {
+    const imob = Array.isArray(e.imobiliarias) ? e.imobiliarias[0] : e.imobiliarias;
+    const nome = (imob?.nome ?? e.nome_provisorio ?? "").toLowerCase();
+    if (buscaNormalizada && !nome.includes(buscaNormalizada)) return false;
+    if (statusFiltro) {
+      const fatura = e.imobiliaria_id ? faturasPorImobiliaria.get(e.imobiliaria_id) : undefined;
+      const statusChave = fatura ? fatura.status : "aguardando_upload";
+      if (statusChave !== statusFiltro) return false;
+    }
+    return true;
+  });
+  const totalEsperadas = esperadasFiltradas.length;
+  const esperadas = esperadasFiltradas.slice(0, limite);
 
   // Faturas carregadas nessa seguradora/competência mas cuja imobiliária
   // ainda não está na lista de esperadas (parceiro novo, ainda sem
   // registro fixo) — mostra também, marcado.
-  const idsEsperadas = new Set(esperadas.map((e) => e.imobiliaria_id));
+  const idsEsperadas = new Set(esperadasTodas.map((e) => e.imobiliaria_id));
   const extras = (faturasData ?? []).filter((f) => f.imobiliaria_id && !idsEsperadas.has(f.imobiliaria_id));
 
   return (
@@ -181,6 +215,49 @@ export default async function FaturasPage({
             </Link>
           ))}
         </div>
+
+        <form className="flex flex-wrap items-end gap-2" action="/faturas">
+          <input type="hidden" name="competencia" value={competencia} />
+          <input type="hidden" name="seguradora" value={seguradora} />
+          <div>
+            <label className="mb-0.5 block text-xs text-gray-500">Buscar imobiliária</label>
+            <input
+              name="busca"
+              defaultValue={busca}
+              placeholder="Nome..."
+              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-o2-coral focus:outline-none"
+            />
+          </div>
+          <div>
+            <label className="mb-0.5 block text-xs text-gray-500">Situação</label>
+            <select
+              name="status"
+              defaultValue={statusFiltro}
+              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-o2-coral focus:outline-none"
+            >
+              <option value="">Todas</option>
+              {OPCOES_STATUS_FILTRO.map((s) => (
+                <option key={s} value={s}>
+                  {ROTULO_STATUS[s]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="submit"
+            className="rounded-full border border-o2-navy px-4 py-1.5 text-sm font-medium text-o2-navy transition hover:bg-o2-navy hover:text-white"
+          >
+            Filtrar
+          </button>
+          {(busca || statusFiltro) && (
+            <Link
+              href={`/faturas?competencia=${competencia}&seguradora=${encodeURIComponent(seguradora)}`}
+              className="text-sm text-gray-500 hover:text-o2-navy hover:underline"
+            >
+              Limpar filtro
+            </Link>
+          )}
+        </form>
 
         <div className="overflow-x-auto rounded-xl rounded-tl-none border border-o2-navy/10 bg-white shadow-sm">
           <table className="w-full text-left text-sm">
@@ -269,10 +346,10 @@ export default async function FaturasPage({
           </table>
         </div>
 
-        {totalEsperadas != null && totalEsperadas > esperadas.length && (
+        {totalEsperadas > esperadas.length && (
           <div className="text-center">
             <Link
-              href={`/faturas?competencia=${competencia}&seguradora=${encodeURIComponent(seguradora)}&limite=${limite + POR_PAGINA}`}
+              href={`/faturas?competencia=${competencia}&seguradora=${encodeURIComponent(seguradora)}&limite=${limite + POR_PAGINA}&busca=${encodeURIComponent(busca)}&status=${encodeURIComponent(statusFiltro)}`}
               className="text-sm font-medium text-o2-navy hover:underline"
             >
               Mostrar mais {Math.min(POR_PAGINA, totalEsperadas - esperadas.length)} (
