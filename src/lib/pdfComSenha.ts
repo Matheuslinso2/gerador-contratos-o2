@@ -12,11 +12,16 @@ export async function abrirTextoPdfComSenha(
   buffer: Buffer,
   candidatos: CandidatoSenha[]
 ): Promise<{ texto: string; chaveCorreta: string | null } | null> {
-  const dados = new Uint8Array(buffer);
+  // Uma cópia nova do buffer a cada tentativa — reaproveitar a mesma
+  // Uint8Array entre chamadas ao getDocumentProxy pode deixá-la inutilizável
+  // depois da primeira tentativa (a lib parece "consumir"/transferir os
+  // dados internamente), fazendo tentativas seguintes falharem mesmo com a
+  // senha certa.
+  const novaCopia = () => new Uint8Array(buffer);
 
   // PDF pode não ter senha nenhuma (raro nesse fluxo, mas não custa tentar).
   try {
-    const pdf = await getDocumentProxy(dados);
+    const pdf = await getDocumentProxy(novaCopia());
     const { text } = await extractText(pdf, { mergePages: true });
     return { texto: text.trim(), chaveCorreta: null };
   } catch {
@@ -26,7 +31,7 @@ export async function abrirTextoPdfComSenha(
   for (const candidato of candidatos) {
     if (!candidato.senha) continue;
     try {
-      const pdf = await getDocumentProxy(dados, { password: candidato.senha });
+      const pdf = await getDocumentProxy(novaCopia(), { password: candidato.senha });
       const { text } = await extractText(pdf, { mergePages: true });
       return { texto: text.trim(), chaveCorreta: candidato.chave };
     } catch {
