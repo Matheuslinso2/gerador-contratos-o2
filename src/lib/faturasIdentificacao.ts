@@ -41,6 +41,30 @@ export async function resolverOuCriarImobiliaria(
   return nova.id;
 }
 
+// Nomes exatos das abas/seguradoras usadas na planilha de controle — a IA
+// lê o nome livre que aparece no PDF (ex: "Porto Seguro"), que quase nunca
+// bate exatamente com isso. Sem normalizar, a fatura fica presa numa
+// seguradora "fantasma" que nunca casa com faturas_esperadas (chegou a
+// criar uma aba nova errada na tela, ao confirmar uma identificação
+// incerta na Conferência). "Porto Seguro" sozinho vira PORTO FIANÇA por
+// padrão (é o produto de longe mais comum das duas linhas da Porto) — se
+// for PORTO RE, corrige manualmente depois pela tela.
+export function normalizarSeguradora(nomeExtraido: string | null): string | null {
+  if (!nomeExtraido) return null;
+  const alvo = nomeExtraido
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase();
+
+  if (alvo.includes("tokio")) return "TOKIO";
+  if (alvo.includes("pottencial") || alvo.includes("potencial")) return "POTTENCIAL";
+  if (alvo.includes("yelum")) return "YELUM";
+  if (alvo.includes("porto")) return alvo.includes(" re") || alvo.includes("resseguro") ? "PORTO RE" : "PORTO FIANÇA";
+  if (/\btoo\b/.test(alvo)) return "TOO";
+
+  return nomeExtraido; // desconhecida — mantém como veio, fica como "extra" pra conferência
+}
+
 export type ResultadoIdentificacao = {
   imobiliaria_id: string | null;
   confianca: "alta" | "media" | "baixa" | null;

@@ -10,6 +10,7 @@ import {
   buscarImobiliariaPorCnpjNoTexto,
   sugerirImobiliariaPorTexto,
   resolverOuCriarImobiliaria,
+  normalizarSeguradora,
   type ImobiliariaBasica,
 } from "@/lib/faturasIdentificacao";
 
@@ -104,6 +105,8 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
     console.error("[faturas] erro ao extrair dados por IA:", e);
   }
 
+  const seguradoraNormalizada = normalizarSeguradora(dadosIA?.seguradora ?? null);
+
   const { data: conhecidasData } = await supabase.from("imobiliarias_conhecidas").select("id, nome, cnpj");
   const conhecidas = (conhecidasData ?? []) as ImobiliariaBasica[];
 
@@ -142,7 +145,7 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
     arquivo_nome: nomeArquivo,
     arquivo_hash: hash,
     imobiliaria_id: imobiliariaId,
-    seguradora: dadosIA?.seguradora ?? null,
+    seguradora: seguradoraNormalizada,
     codigo_produtor: dadosIA?.codigo_produtor ?? null,
     vencimento: dadosIA?.vencimento ?? null,
     valor: dadosIA?.valor ?? null,
@@ -157,7 +160,7 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
   });
   if (error) return { ok: false, nomeArquivo, mensagem: error.message };
 
-  const seguradoraTexto = dadosIA?.seguradora ? ` (${dadosIA.seguradora})` : "";
+  const seguradoraTexto = seguradoraNormalizada ? ` (${seguradoraNormalizada})` : "";
   const mensagens: Record<string, string> = {
     duplicada: "Parece duplicada de uma fatura já enviada.",
     aguardando_identificacao: `Aberta${seguradoraTexto}, mas não identificamos a imobiliária — precisa de conferência.`,

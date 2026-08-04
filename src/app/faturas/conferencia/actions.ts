@@ -9,6 +9,7 @@ import {
   buscarImobiliariaPorCnpjNoTexto,
   sugerirImobiliariaPorTexto,
   resolverOuCriarImobiliaria,
+  normalizarSeguradora,
   type ImobiliariaBasica,
 } from "@/lib/faturasIdentificacao";
 
@@ -127,7 +128,7 @@ export async function reprocessarIdentificacao(formData: FormData) {
     .from("faturas")
     .update({
       imobiliaria_id: imobiliariaId,
-      seguradora: dadosIA?.seguradora ?? null,
+      seguradora: normalizarSeguradora(dadosIA?.seguradora ?? null),
       codigo_produtor: dadosIA?.codigo_produtor ?? null,
       vencimento: dadosIA?.vencimento ?? null,
       valor: dadosIA?.valor ?? null,
@@ -212,7 +213,7 @@ export async function tentarReabrirComSenha(formData: FormData) {
     .from("faturas")
     .update({
       imobiliaria_id: imobiliariaId,
-      seguradora: dadosIA?.seguradora ?? null,
+      seguradora: normalizarSeguradora(dadosIA?.seguradora ?? null),
       codigo_produtor: dadosIA?.codigo_produtor ?? null,
       vencimento: dadosIA?.vencimento ?? null,
       valor: dadosIA?.valor ?? null,
