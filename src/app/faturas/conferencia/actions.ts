@@ -70,6 +70,78 @@ export async function confirmarIdentificacao(formData: FormData) {
   redirect(`/faturas/conferencia?ok=${encodeURIComponent("Identificação confirmada.")}`);
 }
 
+// Reprocessa a identificação de uma fatura que já tem texto extraído
+// (não precisa baixar/decriptar o PDF de novo) — útil pra faturas que
+// ficaram com resultado antigo de antes de algum ajuste na extração/
+// identificação, sem precisar reenviar o arquivo (o que cairia como
+// duplicada pelo hash).
+export async function reprocessarIdentificacao(formData: FormData) {
+  const { supabase, user } = await checarAcesso();
+
+  const faturaId = String(formData.get("fatura_id") ?? "");
+  if (!faturaId) redirect(`/faturas/conferencia?erro=${encodeURIComponent("Fatura inválida.")}`);
+
+  const { data: fatura } = await supabase
+    .from("faturas")
+    .select("texto_bruto_extraido, historico_identificacao")
+    .eq("id", faturaId)
+    .single();
+  if (!fatura?.texto_bruto_extraido) {
+    redirect(`/faturas/conferencia?erro=${encodeURIComponent("Essa fatura ainda não tem texto extraído.")}`);
+  }
+
+  let dadosIA = null;
+  try {
+    dadosIA = await extrairDadosFatura(fatura.texto_bruto_extraido);
+  } catch (e) {
+    console.error("[faturas] erro ao extrair dados por IA (reprocessamento):", e);
+  }
+
+  const { data: conhecidasData } = await supabase.from("imobiliarias_conhecidas").select("id, nome, cnpj");
+  const conhecidas = (conhecidasData ?? []) as ImobiliariaBasica[];
+
+  let resultadoIdent = buscarImobiliariaPorCnpjNoTexto(dadosIA?.cnpj_tomador ?? null, conhecidas);
+  if (!resultadoIdent.imobiliaria_id && dadosIA?.identificacao_texto) {
+    resultadoIdent = sugerirImobiliariaPorTexto(dadosIA.identificacao_texto, conhecidas);
+  }
+  const conhecidaEscolhida = resultadoIdent.imobiliaria_id
+    ? conhecidas.find((c) => c.id === resultadoIdent.imobiliaria_id)
+    : null;
+
+  let imobiliariaId: string | null = null;
+  if (conhecidaEscolhida?.cnpj) {
+    try {
+      imobiliariaId = await resolverOuCriarImobiliaria(supabase, conhecidaEscolhida.nome, conhecidaEscolhida.cnpj);
+    } catch (e) {
+      console.error("[faturas] erro ao resolver/criar imobiliária:", e);
+    }
+  }
+  const confianca = imobiliariaId ? resultadoIdent.confianca : null;
+
+  const historico = [
+    ...(fatura.historico_identificacao ?? []),
+    { usuario: user.email, data: new Date().toISOString(), acao: "reprocessamento", detalhe: "" },
+  ];
+
+  const { error } = await supabase
+    .from("faturas")
+    .update({
+      imobiliaria_id: imobiliariaId,
+      seguradora: dadosIA?.seguradora ?? null,
+      codigo_produtor: dadosIA?.codigo_produtor ?? null,
+      vencimento: dadosIA?.vencimento ?? null,
+      valor: dadosIA?.valor ?? null,
+      numero_documento: dadosIA?.numero_documento ?? null,
+      confianca,
+      status: imobiliariaId ? (confianca === "alta" ? "fatura_carregada" : "aguardando_conferencia") : "aguardando_identificacao",
+      historico_identificacao: historico,
+    })
+    .eq("id", faturaId);
+  if (error) redirect(`/faturas/conferencia?erro=${encodeURIComponent(error.message)}`);
+
+  redirect(`/faturas/conferencia?ok=${encodeURIComponent("Reprocessado.")}`);
+}
+
 // Usado quando o PDF nunca abriu com os CNPJs da O2 — tenta de novo com uma
 // senha informada manualmente (não necessariamente um CNPJ; algumas
 // seguradoras podem ter um padrão diferente). Se abrir, roda a mesma

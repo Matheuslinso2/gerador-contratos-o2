@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../../actions";
 import AppHeader from "@/components/AppHeader";
-import { confirmarIdentificacao, tentarReabrirComSenha } from "./actions";
+import { confirmarIdentificacao, tentarReabrirComSenha, reprocessarIdentificacao } from "./actions";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -91,6 +91,12 @@ export default async function ConferenciaFaturasPage({
                         {f.texto_bruto_extraido?.slice(0, 4000)}
                       </pre>
                     </details>
+                    <form action={reprocessarIdentificacao} className="mb-2">
+                      <input type="hidden" name="fatura_id" value={f.id} />
+                      <button type="submit" className="text-xs font-medium text-o2-navy hover:underline">
+                        Reprocessar identificação (usa o texto já extraído, não baixa o arquivo de novo)
+                      </button>
+                    </form>
                     <form action={confirmarIdentificacao} className="flex flex-wrap items-end gap-2">
                     <input type="hidden" name="fatura_id" value={f.id} />
                     <div className="flex-1">
