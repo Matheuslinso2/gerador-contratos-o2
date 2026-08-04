@@ -82,7 +82,16 @@ export default async function ConferenciaFaturasPage({
                     </button>
                   </form>
                 ) : (
-                  <form action={confirmarIdentificacao} className="flex flex-wrap items-end gap-2">
+                  <>
+                    <details className="mb-2">
+                      <summary className="cursor-pointer text-xs text-gray-400">
+                        Ver texto extraído (diagnóstico)
+                      </summary>
+                      <pre className="mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap rounded bg-gray-50 p-2 text-[11px] text-gray-600">
+                        {f.texto_bruto_extraido?.slice(0, 4000)}
+                      </pre>
+                    </details>
+                    <form action={confirmarIdentificacao} className="flex flex-wrap items-end gap-2">
                     <input type="hidden" name="fatura_id" value={f.id} />
                     <div className="flex-1">
                       <label className="mb-1 block text-xs text-gray-600">
@@ -103,7 +112,8 @@ export default async function ConferenciaFaturasPage({
                     >
                       Confirmar
                     </button>
-                  </form>
+                    </form>
+                  </>
                 )}
               </div>
             );
