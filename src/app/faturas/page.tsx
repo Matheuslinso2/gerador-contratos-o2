@@ -12,20 +12,22 @@ export const maxDuration = 60;
 
 const SEGURADORAS_PADRAO = ["TOKIO", "PORTO FIANÇA", "PORTO RE", "TOO", "POTTENCIAL", "YELUM"];
 
-// Progressão: Imob com fatura aberta -> Carregada -> Pendente de envio ->
-// Fatura enviada. O primeiro estágio não tem status próprio (é a ausência
-// de linha em `faturas` pra essa competência), tratado à parte onde a
-// tabela é montada — só aparece aqui quem já está ativo (tem fatura aberta
-// com a seguradora, conforme a planilha), então esse é o "ainda não subiu
-// o arquivo desse mês", não uma pendência de cadastro. Identificação
+// Progressão: Imob com fatura aberta -> Pendente de envio -> Fatura
+// enviada. O primeiro estágio não tem status próprio (é a ausência de
+// linha em `faturas` pra essa competência), tratado à parte onde a tabela
+// é montada — só aparece aqui quem já está ativo (tem fatura aberta com a
+// seguradora, conforme a planilha), então esse é o "ainda não subiu o
+// arquivo desse mês", não uma pendência de cadastro. Assim que carrega e
+// identifica corretamente (fatura_carregada), já é "Pendente de envio" —
+// não existe hoje nenhuma etapa real entre as duas (isso só passa a
+// existir quando o envio de verdade for construído). Identificação
 // incerta (precisa de conferência manual) é a única exceção com rótulo
-// próprio — na maioria dos casos upload e identificação acontecem juntos,
-// não precisam de dois estágios separados.
+// próprio.
 const ROTULO_STATUS: Record<string, string> = {
   aguardando_upload: "Imob com fatura aberta",
   aguardando_identificacao: "Aguardando conferência",
   aguardando_conferencia: "Aguardando conferência",
-  fatura_carregada: "Carregada",
+  fatura_carregada: "Pendente de envio",
   pronta_para_envio: "Pendente de envio",
   enviada: "Fatura enviada",
   erro_no_envio: "Erro no envio",
@@ -37,7 +39,7 @@ const COR_STATUS: Record<string, string> = {
   aguardando_upload: "bg-gray-100 text-gray-700",
   aguardando_identificacao: "bg-yellow-100 text-yellow-800",
   aguardando_conferencia: "bg-yellow-100 text-yellow-800",
-  fatura_carregada: "bg-blue-100 text-blue-700",
+  fatura_carregada: "bg-green-100 text-green-700",
   pronta_para_envio: "bg-green-100 text-green-700",
   enviada: "bg-green-100 text-green-700",
   erro_no_envio: "bg-red-100 text-red-700",
@@ -47,11 +49,12 @@ const COR_STATUS: Record<string, string> = {
 
 // Opções do filtro de situação — "aguardando_upload" representa "sem
 // fatura carregada ainda" (não tem status próprio na tabela faturas).
+// "pronta_para_envio" fica fora da lista: hoje nenhuma fatura recebe esse
+// status (fatura_carregada já é exibida como "Pendente de envio").
 const OPCOES_STATUS_FILTRO = [
   "aguardando_upload",
   "aguardando_conferencia",
   "fatura_carregada",
-  "pronta_para_envio",
   "enviada",
   "erro_no_envio",
   "duplicada",
