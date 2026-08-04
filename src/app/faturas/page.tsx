@@ -12,13 +12,17 @@ export const maxDuration = 60;
 
 const SEGURADORAS_PADRAO = ["TOKIO", "PORTO FIANÇA", "PORTO RE", "TOO", "POTTENCIAL", "YELUM"];
 
+// Progressão pedida: Upload pendente -> Upload realizado -> Imobiliária
+// identificada -> Pendente de envio -> Fatura enviada. "Upload pendente"
+// não tem status próprio (é a ausência de linha em `faturas`), tratado à
+// parte onde a tabela é montada.
 const ROTULO_STATUS: Record<string, string> = {
-  aguardando_upload: "Aguardando upload",
-  fatura_carregada: "Carregada",
-  aguardando_identificacao: "Aguardando identificação",
-  aguardando_conferencia: "Aguardando conferência",
-  pronta_para_envio: "Pronta para envio",
-  enviada: "Enviada",
+  aguardando_upload: "Upload pendente",
+  aguardando_identificacao: "Upload realizado",
+  aguardando_conferencia: "Upload realizado",
+  fatura_carregada: "Imobiliária identificada",
+  pronta_para_envio: "Pendente de envio",
+  enviada: "Fatura enviada",
   erro_no_envio: "Erro no envio",
   duplicada: "Duplicada",
   cancelada: "Cancelada",
@@ -26,9 +30,9 @@ const ROTULO_STATUS: Record<string, string> = {
 
 const COR_STATUS: Record<string, string> = {
   aguardando_upload: "bg-gray-100 text-gray-700",
-  fatura_carregada: "bg-blue-100 text-blue-700",
   aguardando_identificacao: "bg-yellow-100 text-yellow-800",
   aguardando_conferencia: "bg-yellow-100 text-yellow-800",
+  fatura_carregada: "bg-blue-100 text-blue-700",
   pronta_para_envio: "bg-green-100 text-green-700",
   enviada: "bg-green-100 text-green-700",
   erro_no_envio: "bg-red-100 text-red-700",
@@ -243,7 +247,7 @@ export default async function FaturasPage({
                         </span>
                       ) : (
                         <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-500">
-                          Não tem fatura
+                          Upload pendente
                         </span>
                       )}
                     </td>
