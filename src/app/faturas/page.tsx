@@ -219,9 +219,16 @@ export default async function FaturasPage({
   }
   const listaMestre = Array.from(mestrePorChave.values()).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 
-  const esperadaSeguradoraPorChave = new Map<string, EsperadaSeguradoraRow>(
-    ((esperadasSeguradoraData ?? []) as EsperadaSeguradoraRow[]).map((e) => [chaveDe(e.imobiliaria_id, e.nome_provisorio), e])
-  );
+  // Uma imobiliária pode ter mais de 1 relação com a MESMA seguradora --
+  // ex: Tokio via O2 Seguros e via SegImob, cada uma com vencimento
+  // próprio -- por isso é uma lista, não um valor único.
+  const esperadaSeguradoraPorChave = new Map<string, EsperadaSeguradoraRow[]>();
+  for (const e of (esperadasSeguradoraData ?? []) as EsperadaSeguradoraRow[]) {
+    const chave = chaveDe(e.imobiliaria_id, e.nome_provisorio);
+    const lista = esperadaSeguradoraPorChave.get(chave) ?? [];
+    lista.push(e);
+    esperadaSeguradoraPorChave.set(chave, lista);
+  }
 
   // Uma linha por imobiliária, escolhendo a de status mais relevante quando
   // existir mais de uma pra mesma competência (ver PRIORIDADE_STATUS acima)
@@ -247,39 +254,43 @@ export default async function FaturasPage({
   }
   const pendentes = pendentesData?.length ?? 0;
 
-  // Status dessa imobiliária NA SEGURADORA selecionada -- "sem_vinculo"
-  // quando ela nem tem essa seguradora, senão o status real da fatura (ou
-  // "aguardando_upload" quando o vínculo existe mas ainda não tem arquivo).
+  // Status dessa imobiliária NA SEGURADORA selecionada -- "aguardando_upload"
+  // quando o vínculo existe mas ainda não tem arquivo carregado essa
+  // competência. Como a lista já vem filtrada por quem tem vínculo, não
+  // existe mais o caso "sem_vinculo" aqui (ver expansão abaixo).
   function statusChaveDe(m: LinhaMestre): string {
-    const esperadaSeg = esperadaSeguradoraPorChave.get(m.chave);
-    if (!esperadaSeg) return "sem_vinculo";
     const fatura = m.imobiliaria_id ? faturasPorImobiliaria.get(m.imobiliaria_id) : undefined;
     return fatura ? fatura.status : "aguardando_upload";
   }
 
-  // Só entra na lista quem tem vínculo (faturas_esperadas ativo) com a
-  // seguradora selecionada -- conforme a planilha de controle original,
-  // cada aba mostra só as imobiliárias daquela seguradora, não todas.
+  // Expande 1 linha por RELAÇÃO (imobiliária + origem), não por
+  // imobiliária -- uma mesma imobiliária pode ter 2 linhas na mesma
+  // seguradora (ex: Tokio via O2 Seguros e via SegImob), cada uma com seu
+  // próprio vencimento/origem/observação.
+  type LinhaExibicao = { m: LinhaMestre; esperada: EsperadaSeguradoraRow };
   const buscaNormalizada = busca.toLowerCase();
-  const linhasFiltradas = listaMestre.filter((m) => {
-    if (!esperadaSeguradoraPorChave.has(m.chave)) return false;
-    if (buscaNormalizada && !m.nome.toLowerCase().includes(buscaNormalizada)) return false;
-    if (statusFiltro && statusChaveDe(m) !== statusFiltro) return false;
-    return true;
-  });
+  const linhasExpandidas: LinhaExibicao[] = [];
+  for (const m of listaMestre) {
+    const esperadas = esperadaSeguradoraPorChave.get(m.chave);
+    if (!esperadas) continue;
+    if (buscaNormalizada && !m.nome.toLowerCase().includes(buscaNormalizada)) continue;
+    if (statusFiltro && statusChaveDe(m) !== statusFiltro) continue;
+    for (const esperada of esperadas) linhasExpandidas.push({ m, esperada });
+  }
 
   // Quem precisa de alguma ação (upload, conferência, envio) sobe pro
   // topo; quem já foi enviado desce pro final -- dentro de cada grupo
-  // mantém a ordem alfabética.
-  const PRIORIDADE_EXIBICAO: Record<string, number> = { sem_vinculo: 4, enviada: 5, cancelada: 6 };
-  const linhasOrdenadas = [...linhasFiltradas].sort(
-    (a, b) => (PRIORIDADE_EXIBICAO[statusChaveDe(a)] ?? 0) - (PRIORIDADE_EXIBICAO[statusChaveDe(b)] ?? 0)
+  // mantém a ordem alfabética (as 2 linhas da mesma imobiliária ficam
+  // juntas, já que têm o mesmo status/prioridade).
+  const PRIORIDADE_EXIBICAO: Record<string, number> = { enviada: 5, cancelada: 6 };
+  const linhasOrdenadas = [...linhasExpandidas].sort(
+    (a, b) => (PRIORIDADE_EXIBICAO[statusChaveDe(a.m)] ?? 0) - (PRIORIDADE_EXIBICAO[statusChaveDe(b.m)] ?? 0)
   );
 
   const totalLinhas = linhasOrdenadas.length;
   const linhas = linhasOrdenadas.slice(0, limite);
   const prontasParaEnvio = linhas.filter(
-    (m) => STATUS_PRONTO_PARA_ENVIO.includes(statusChaveDe(m)) && m.email_faturas
+    ({ m }) => STATUS_PRONTO_PARA_ENVIO.includes(statusChaveDe(m)) && m.email_faturas
   );
 
   // Faturas carregadas nessa seguradora/competência mas cuja imobiliária
@@ -428,13 +439,12 @@ export default async function FaturasPage({
                 </tr>
               </thead>
               <tbody>
-                {linhas.map((m) => {
-                  const esperadaSeg = esperadaSeguradoraPorChave.get(m.chave);
+                {linhas.map(({ m, esperada }) => {
                   const fatura = m.imobiliaria_id ? faturasPorImobiliaria.get(m.imobiliaria_id) : undefined;
                   const pendenteCnpj = !m.imobiliaria_id && !!m.nome_provisorio;
                   const pronta = fatura ? STATUS_PRONTO_PARA_ENVIO.includes(fatura.status) : false;
                   return (
-                    <tr key={m.chave} className={`border-b border-gray-50 last:border-0 align-top ${pendenteCnpj ? "bg-orange-50/40" : ""}`}>
+                    <tr key={esperada.id} className={`border-b border-gray-50 last:border-0 align-top ${pendenteCnpj ? "bg-orange-50/40" : ""}`}>
                       <td className="px-3 py-2">
                         {pronta && m.imobiliaria_id && m.email_faturas ? (
                           <input type="checkbox" name="imob" value={m.imobiliaria_id} defaultChecked />
@@ -446,9 +456,9 @@ export default async function FaturasPage({
                       </td>
                       <td className="px-3 py-2 text-gray-800">{m.nome}</td>
                       <td className="px-3 py-2 text-gray-500">{m.cnpj ?? "—"}</td>
-                      <td className="px-3 py-2 text-gray-800">{esperadaSeg?.dia_vencimento ?? "—"}</td>
-                      <td className="px-3 py-2 text-gray-800">{esperadaSeg?.cnpj_o2 ?? "—"}</td>
-                      <td className="px-3 py-2 text-gray-800">{esperadaSeg?.observacao ?? "—"}</td>
+                      <td className="px-3 py-2 text-gray-800">{esperada.dia_vencimento ?? "—"}</td>
+                      <td className="px-3 py-2 text-gray-800">{esperada.cnpj_o2 || "—"}</td>
+                      <td className="px-3 py-2 text-gray-800">{esperada.observacao ?? "—"}</td>
                       <td className="px-3 py-2">
                         {fatura ? (
                           <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${COR_STATUS[fatura.status] ?? "bg-gray-100 text-gray-700"}`}>
