@@ -1,22 +1,36 @@
 import nodemailer from "nodemailer";
 
+export type AnexoEmail = { nome: string; conteudo: Buffer; tipo?: string };
+
 // Envia e-mail via Gmail/Google Workspace (SMTP com senha de app). Falha
-// silenciosamente (só loga) se não estiver configurado ou se o envio der
-// errado — nunca deve travar o cadastro da imobiliária por causa disso.
+// silenciosamente (só loga) se não estiver configurado — nunca deve travar
+// o cadastro da imobiliária por causa disso. Já quem chama com `throw:
+// true` (ex: envio de fatura, onde o usuário precisa saber na hora se
+// falhou) recebe o erro de volta pra decidir o que fazer.
 export async function enviarEmail({
   para,
+  cc,
   assunto,
   html,
+  anexos,
+  remetente = "Gerador de Contratos O2",
+  throwSeFalhar = false,
 }: {
   para: string;
+  cc?: string[];
   assunto: string;
   html: string;
+  anexos?: AnexoEmail[];
+  remetente?: string;
+  throwSeFalhar?: boolean;
 }) {
   const usuario = process.env.GMAIL_USER;
   const senha = process.env.GMAIL_APP_PASSWORD;
 
   if (!usuario || !senha) {
-    console.error("Envio de e-mail não configurado: faltam GMAIL_USER/GMAIL_APP_PASSWORD.");
+    const msg = "Envio de e-mail não configurado: faltam GMAIL_USER/GMAIL_APP_PASSWORD.";
+    console.error(msg);
+    if (throwSeFalhar) throw new Error(msg);
     return;
   }
 
@@ -27,13 +41,16 @@ export async function enviarEmail({
     });
 
     await transportador.sendMail({
-      from: `Gerador de Contratos O2 <${usuario}>`,
+      from: `${remetente} <${usuario}>`,
       to: para,
+      cc: cc?.length ? cc : undefined,
       subject: assunto,
       html,
+      attachments: anexos?.map((a) => ({ filename: a.nome, content: a.conteudo, contentType: a.tipo })),
     });
   } catch (erro) {
     console.error("Falha ao enviar e-mail:", erro);
+    if (throwSeFalhar) throw erro;
   }
 }
 
