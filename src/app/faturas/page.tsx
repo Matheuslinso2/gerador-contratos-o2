@@ -257,22 +257,20 @@ export default async function FaturasPage({
     return fatura ? fatura.status : "aguardando_upload";
   }
 
-  // Busca por nome e filtro de situação aplicados em memória — o total de
-  // linhas é pequeno (algumas centenas), não compensa a complexidade de
-  // filtrar isso via join no banco. Filtro de situação é relativo à
-  // seguradora selecionada -- quem não tem vínculo com ela some do filtro
-  // (não faz sentido aparecer numa busca por status de uma seguradora que
-  // não é dela), mas sem filtro nenhum a lista mestre fica sempre inteira.
+  // Só entra na lista quem tem vínculo (faturas_esperadas ativo) com a
+  // seguradora selecionada -- conforme a planilha de controle original,
+  // cada aba mostra só as imobiliárias daquela seguradora, não todas.
   const buscaNormalizada = busca.toLowerCase();
   const linhasFiltradas = listaMestre.filter((m) => {
+    if (!esperadaSeguradoraPorChave.has(m.chave)) return false;
     if (buscaNormalizada && !m.nome.toLowerCase().includes(buscaNormalizada)) return false;
     if (statusFiltro && statusChaveDe(m) !== statusFiltro) return false;
     return true;
   });
 
   // Quem precisa de alguma ação (upload, conferência, envio) sobe pro
-  // topo; quem já foi enviado ou não se aplica a essa seguradora desce pro
-  // final -- dentro de cada grupo mantém a ordem alfabética.
+  // topo; quem já foi enviado desce pro final -- dentro de cada grupo
+  // mantém a ordem alfabética.
   const PRIORIDADE_EXIBICAO: Record<string, number> = { sem_vinculo: 4, enviada: 5, cancelada: 6 };
   const linhasOrdenadas = [...linhasFiltradas].sort(
     (a, b) => (PRIORIDADE_EXIBICAO[statusChaveDe(a)] ?? 0) - (PRIORIDADE_EXIBICAO[statusChaveDe(b)] ?? 0)
@@ -334,9 +332,6 @@ export default async function FaturasPage({
         {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
 
         <div>
-          <p className="mb-1 text-xs text-gray-500">
-            A lista de imobiliárias abaixo não muda ao trocar de seguradora — só a coluna de situação atualiza.
-          </p>
           <div className="flex flex-wrap gap-1 border-b border-gray-200">
             {seguradoras.map((s) => (
               <Link
@@ -436,7 +431,6 @@ export default async function FaturasPage({
                 {linhas.map((m) => {
                   const esperadaSeg = esperadaSeguradoraPorChave.get(m.chave);
                   const fatura = m.imobiliaria_id ? faturasPorImobiliaria.get(m.imobiliaria_id) : undefined;
-                  const semVinculoNestaSeguradora = !esperadaSeg;
                   const pendenteCnpj = !m.imobiliaria_id && !!m.nome_provisorio;
                   const pronta = fatura ? STATUS_PRONTO_PARA_ENVIO.includes(fatura.status) : false;
                   return (
@@ -452,21 +446,11 @@ export default async function FaturasPage({
                       </td>
                       <td className="px-3 py-2 text-gray-800">{m.nome}</td>
                       <td className="px-3 py-2 text-gray-500">{m.cnpj ?? "—"}</td>
-                      {semVinculoNestaSeguradora ? (
-                        <td className="px-3 py-2 text-gray-300" colSpan={3}>
-                          não se aplica em {seguradora}
-                        </td>
-                      ) : (
-                        <>
-                          <td className="px-3 py-2 text-gray-800">{esperadaSeg.dia_vencimento ?? "—"}</td>
-                          <td className="px-3 py-2 text-gray-800">{esperadaSeg.cnpj_o2 ?? "—"}</td>
-                          <td className="px-3 py-2 text-gray-800">{esperadaSeg.observacao ?? "—"}</td>
-                        </>
-                      )}
+                      <td className="px-3 py-2 text-gray-800">{esperadaSeg?.dia_vencimento ?? "—"}</td>
+                      <td className="px-3 py-2 text-gray-800">{esperadaSeg?.cnpj_o2 ?? "—"}</td>
+                      <td className="px-3 py-2 text-gray-800">{esperadaSeg?.observacao ?? "—"}</td>
                       <td className="px-3 py-2">
-                        {semVinculoNestaSeguradora ? (
-                          <span className="text-xs text-gray-300">—</span>
-                        ) : fatura ? (
+                        {fatura ? (
                           <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${COR_STATUS[fatura.status] ?? "bg-gray-100 text-gray-700"}`}>
                             {ROTULO_STATUS[fatura.status] ?? fatura.status}
                           </span>
