@@ -48,7 +48,7 @@ export async function adicionarEsperada(formData: FormData) {
   }));
   const { error } = await supabase
     .from("faturas_esperadas")
-    .upsert(linhas, { onConflict: "imobiliaria_id, seguradora" });
+    .upsert(linhas, { onConflict: "imobiliaria_id, seguradora, cnpj_o2" });
   if (error) {
     redirect(`/faturas?erro=${encodeURIComponent(error.message)}${voltarPara}`);
   }
@@ -74,16 +74,21 @@ export async function salvarSeguradorasImobiliaria(formData: FormData) {
     const cnpjO2 = String(formData.get(`cnpj_o2_${i}`) ?? "").trim();
     const observacao = String(formData.get(`observacao_${i}`) ?? "").trim();
 
+    // Linha extra em branco (pra dar espaço de adicionar uma 2ª origem na
+    // mesma seguradora) que ninguém preencheu -- não grava nada, senão
+    // acumula lixo toda vez que a tela é salva.
+    if (!ativo && !diaVencimento && !cnpjO2 && !observacao) continue;
+
     await supabase.from("faturas_esperadas").upsert(
       {
         imobiliaria_id: imobiliariaId,
         seguradora,
         ativo,
         dia_vencimento: diaVencimento ? Number(diaVencimento) : null,
-        cnpj_o2: cnpjO2 || null,
+        cnpj_o2: cnpjO2,
         observacao: observacao || null,
       },
-      { onConflict: "imobiliaria_id, seguradora" }
+      { onConflict: "imobiliaria_id, seguradora, cnpj_o2" }
     );
   }
 
@@ -156,16 +161,18 @@ export async function resolverImobiliariaProvisoria(formData: FormData) {
     const cnpjO2 = String(formData.get(`cnpj_o2_${i}`) ?? "").trim();
     const observacao = String(formData.get(`observacao_${i}`) ?? "").trim();
 
+    if (!ativo && !diaVencimento && !cnpjO2 && !observacao) continue;
+
     await supabase.from("faturas_esperadas").upsert(
       {
         imobiliaria_id: imobiliariaId,
         seguradora,
         ativo,
         dia_vencimento: diaVencimento ? Number(diaVencimento) : null,
-        cnpj_o2: cnpjO2 || null,
+        cnpj_o2: cnpjO2,
         observacao: observacao || null,
       },
-      { onConflict: "imobiliaria_id, seguradora" }
+      { onConflict: "imobiliaria_id, seguradora, cnpj_o2" }
     );
   }
 

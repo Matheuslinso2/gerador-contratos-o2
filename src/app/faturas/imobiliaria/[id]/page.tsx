@@ -44,8 +44,23 @@ export default async function ImobiliariaFaturasPage({
   if (!imobiliaria) redirect("/faturas");
 
   const vinculos = (vinculosData ?? []) as Vinculo[];
-  const porSeguradora = new Map(vinculos.map((v) => [v.seguradora, v]));
+  const vinculosPorSeguradora = new Map<string, Vinculo[]>();
+  for (const v of vinculos) {
+    const lista = vinculosPorSeguradora.get(v.seguradora) ?? [];
+    lista.push(v);
+    vinculosPorSeguradora.set(v.seguradora, lista);
+  }
   const seguradoras = Array.from(new Set([...SEGURADORAS_CANONICAS, ...vinculos.map((v) => v.seguradora)]));
+
+  // Uma linha por vínculo já existente + sempre 1 linha extra em branco por
+  // seguradora -- é como se cadastra uma 2ª origem (ex: uma imobiliária que
+  // recebe fatura da Tokio tanto via O2 Seguros quanto via SegImob, cada
+  // uma com vencimento próprio). Linha em branco não preenchida não grava
+  // nada (ver salvarSeguradorasImobiliaria).
+  const linhasFormulario: { seguradora: string; vinculo: Vinculo | null }[] = seguradoras.flatMap((s) => [
+    ...(vinculosPorSeguradora.get(s) ?? []).map((vinculo) => ({ seguradora: s, vinculo })),
+    { seguradora: s, vinculo: null },
+  ]);
 
   return (
     <>
@@ -104,45 +119,47 @@ export default async function ImobiliariaFaturasPage({
           </p>
           <form action={salvarSeguradorasImobiliaria} className="space-y-4">
             <input type="hidden" name="imobiliaria_id" value={imobiliaria.id} />
-            <input type="hidden" name="qtd" value={seguradoras.length} />
-            {seguradoras.map((s, i) => {
-              const v = porSeguradora.get(s);
-              return (
-                <div key={s} className="rounded-lg border border-gray-200 p-3">
-                  <input type="hidden" name={`seguradora_${i}`} value={s} />
-                  <label className="flex items-center gap-2 text-sm font-medium text-gray-800">
-                    <input type="checkbox" name={`ativo_${i}`} defaultChecked={v?.ativo ?? false} />
-                    {s}
-                  </label>
-                  <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                    <div>
-                      <label className="mb-0.5 block text-xs text-gray-500">Dia de vencimento</label>
-                      <input
-                        name={`dia_vencimento_${i}`}
-                        type="number"
-                        min={1}
-                        max={31}
-                        defaultValue={v?.dia_vencimento ?? ""}
-                        className={inputClass}
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-0.5 block text-xs text-gray-500">Origem da fatura</label>
-                      <select name={`cnpj_o2_${i}`} defaultValue={v?.cnpj_o2 ?? ""} className={inputClass}>
-                        <option value="">—</option>
-                        <option value="O2 Seguros">O2 Seguros</option>
-                        <option value="O2 Capitalização">O2 Capitalização</option>
-                        <option value="SegImob">SegImob</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="mb-0.5 block text-xs text-gray-500">Observação</label>
-                      <input name={`observacao_${i}`} defaultValue={v?.observacao ?? ""} className={inputClass} />
-                    </div>
+            <input type="hidden" name="qtd" value={linhasFormulario.length} />
+            {linhasFormulario.map(({ seguradora: s, vinculo: v }, i) => (
+              <div key={`${s}-${i}`} className="rounded-lg border border-gray-200 p-3">
+                <input type="hidden" name={`seguradora_${i}`} value={s} />
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-800">
+                  <input type="checkbox" name={`ativo_${i}`} defaultChecked={v?.ativo ?? false} />
+                  {s}
+                  {v?.cnpj_o2 ? (
+                    <span className="text-xs font-normal text-gray-400">— {v.cnpj_o2}</span>
+                  ) : !v ? (
+                    <span className="text-xs font-normal text-gray-400">— nova origem</span>
+                  ) : null}
+                </label>
+                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <div>
+                    <label className="mb-0.5 block text-xs text-gray-500">Dia de vencimento</label>
+                    <input
+                      name={`dia_vencimento_${i}`}
+                      type="number"
+                      min={1}
+                      max={31}
+                      defaultValue={v?.dia_vencimento ?? ""}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-0.5 block text-xs text-gray-500">Origem da fatura</label>
+                    <select name={`cnpj_o2_${i}`} defaultValue={v?.cnpj_o2 ?? ""} className={inputClass}>
+                      <option value="">—</option>
+                      <option value="O2 Seguros">O2 Seguros</option>
+                      <option value="O2 Capitalização">O2 Capitalização</option>
+                      <option value="SegImob">SegImob</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-0.5 block text-xs text-gray-500">Observação</label>
+                    <input name={`observacao_${i}`} defaultValue={v?.observacao ?? ""} className={inputClass} />
                   </div>
                 </div>
-              );
-            })}
+              </div>
+            ))}
             <button
               type="submit"
               className="rounded-full bg-o2-coral px-5 py-2 text-sm font-medium text-white transition hover:opacity-90"
