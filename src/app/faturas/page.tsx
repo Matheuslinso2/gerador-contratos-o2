@@ -5,7 +5,7 @@ import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
 import SeletorCompetencia from "./SeletorCompetencia";
-import { adicionarEsperada, vincularCnpjProvisoria } from "./actions";
+import { adicionarEsperada } from "./actions";
 import { SEGURADORAS_CANONICAS } from "@/lib/faturasIdentificacao";
 
 export const dynamic = "force-dynamic";
@@ -399,18 +399,7 @@ export default async function FaturasPage({
                 return (
                   <tr key={m.chave} className={`border-b border-gray-50 last:border-0 align-top ${pendenteCnpj ? "bg-orange-50/40" : ""}`}>
                     <td className="px-3 py-2 text-gray-800">{m.nome}</td>
-                    <td className="px-3 py-2 text-gray-500">
-                      {m.cnpj ?? (
-                        <form action={vincularCnpjProvisoria} className="flex items-center gap-1">
-                          <input type="hidden" name="nome_provisorio" value={m.nome_provisorio ?? ""} />
-                          <input type="hidden" name="seguradora" value={seguradora} />
-                          <input name="cnpj" placeholder="CNPJ ou CPF" className={`${inputClass} w-28`} />
-                          <button type="submit" className="whitespace-nowrap text-xs font-medium text-o2-navy hover:underline">
-                            Vincular
-                          </button>
-                        </form>
-                      )}
-                    </td>
+                    <td className="px-3 py-2 text-gray-500">{m.cnpj ?? "—"}</td>
                     {semVinculoNestaSeguradora ? (
                       <td className="px-3 py-2 text-gray-300" colSpan={3}>
                         não se aplica em {seguradora}
@@ -444,14 +433,16 @@ export default async function FaturasPage({
                       )}
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap">
-                      {m.imobiliaria_id && (
-                        <Link
-                          href={`/faturas/imobiliaria/${m.imobiliaria_id}`}
-                          className="text-xs font-medium text-o2-navy hover:underline"
-                        >
-                          Editar
-                        </Link>
-                      )}
+                      <Link
+                        href={
+                          m.imobiliaria_id
+                            ? `/faturas/imobiliaria/${m.imobiliaria_id}`
+                            : `/faturas/imobiliaria/novo?nome=${encodeURIComponent(m.nome_provisorio ?? "")}`
+                        }
+                        className="text-xs font-medium text-o2-navy hover:underline"
+                      >
+                        Editar
+                      </Link>
                     </td>
                   </tr>
                 );

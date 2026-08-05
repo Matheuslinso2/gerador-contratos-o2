@@ -110,20 +110,21 @@ export async function atualizarEmailFaturas(formData: FormData) {
   redirect(`/faturas/imobiliaria/${imobiliariaId}?ok=${encodeURIComponent("E-mail salvo.")}`);
 }
 
-// Vincula um registro provisório (nome_provisorio, sem CNPJ/CPF conhecido)
-// a um registro de verdade em imobiliarias, assim que alguém descobre/
-// digita o documento. Atualiza TODAS as linhas de faturas_esperadas com
-// esse mesmo nome_provisorio (pode haver uma por seguradora) de uma vez —
-// a lista principal agora é única entre seguradoras, então vincular numa
-// aba já resolve nas outras também.
-export async function vincularCnpjProvisoria(formData: FormData) {
+// "Editar" de quem ainda não tem CNPJ/CPF vinculado (nome_provisorio) —
+// resolve/cria o registro de verdade em imobiliarias E já salva tudo que
+// foi preenchido na mesma tela (e-mail de faturas + dados de cada
+// seguradora), como um cadastro completo de uma vez só. Converte TODAS as
+// linhas provisórias com esse nome (pode haver uma por seguradora, já que
+// a lista principal é única entre seguradoras).
+export async function resolverImobiliariaProvisoria(formData: FormData) {
   const supabase = await checarAcesso();
 
   const nomeProvisorio = String(formData.get("nome_provisorio") ?? "").trim();
   const cnpj = String(formData.get("cnpj") ?? "").trim();
-  const seguradora = String(formData.get("seguradora") ?? "").trim();
   if (!nomeProvisorio || !cnpj) {
-    redirect(`/faturas?erro=${encodeURIComponent("Informe o CNPJ ou CPF.")}&seguradora=${encodeURIComponent(seguradora)}`);
+    redirect(
+      `/faturas/imobiliaria/novo?erro=${encodeURIComponent("Informe o CNPJ ou CPF.")}&nome=${encodeURIComponent(nomeProvisorio)}`
+    );
   }
 
   let imobiliariaId: string;
@@ -131,16 +132,42 @@ export async function vincularCnpjProvisoria(formData: FormData) {
     imobiliariaId = await resolverOuCriarImobiliaria(supabase, nomeProvisorio, cnpj);
   } catch (e) {
     redirect(
-      `/faturas?erro=${encodeURIComponent(e instanceof Error ? e.message : "Falha ao registrar imobiliária.")}&seguradora=${encodeURIComponent(seguradora)}`
+      `/faturas/imobiliaria/novo?erro=${encodeURIComponent(e instanceof Error ? e.message : "Falha ao registrar imobiliária.")}&nome=${encodeURIComponent(nomeProvisorio)}`
     );
   }
 
-  const { error } = await supabase
+  await supabase
     .from("faturas_esperadas")
     .update({ imobiliaria_id: imobiliariaId, nome_provisorio: null })
     .eq("nome_provisorio", nomeProvisorio)
     .is("imobiliaria_id", null);
-  if (error) redirect(`/faturas?erro=${encodeURIComponent(error.message)}&seguradora=${encodeURIComponent(seguradora)}`);
 
-  redirect(`/faturas?ok=${encodeURIComponent("CNPJ/CPF vinculado.")}&seguradora=${encodeURIComponent(seguradora)}`);
+  const emailFaturas = String(formData.get("email_faturas") ?? "").trim();
+  if (emailFaturas) {
+    await supabase.from("imobiliarias").update({ email_faturas: emailFaturas }).eq("id", imobiliariaId);
+  }
+
+  const qtd = Number(formData.get("qtd") ?? 0);
+  for (let i = 0; i < qtd; i++) {
+    const seguradora = String(formData.get(`seguradora_${i}`) ?? "").trim();
+    if (!seguradora) continue;
+    const ativo = formData.get(`ativo_${i}`) === "on";
+    const diaVencimento = String(formData.get(`dia_vencimento_${i}`) ?? "").trim();
+    const cnpjO2 = String(formData.get(`cnpj_o2_${i}`) ?? "").trim();
+    const observacao = String(formData.get(`observacao_${i}`) ?? "").trim();
+
+    await supabase.from("faturas_esperadas").upsert(
+      {
+        imobiliaria_id: imobiliariaId,
+        seguradora,
+        ativo,
+        dia_vencimento: diaVencimento ? Number(diaVencimento) : null,
+        cnpj_o2: cnpjO2 || null,
+        observacao: observacao || null,
+      },
+      { onConflict: "imobiliaria_id, seguradora" }
+    );
+  }
+
+  redirect(`/faturas/imobiliaria/${imobiliariaId}?ok=${encodeURIComponent("Imobiliária cadastrada.")}`);
 }
