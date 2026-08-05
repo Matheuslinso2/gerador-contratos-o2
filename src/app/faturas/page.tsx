@@ -13,6 +13,18 @@ export const maxDuration = 60;
 
 const SEGURADORAS_PADRAO = SEGURADORAS_CANONICAS;
 
+const MESES_PT = [
+  "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+  "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
+];
+
+function formatarCompetencia(competencia: string): string {
+  const [anoTexto, mesTexto] = competencia.split("-");
+  const mes = Number(mesTexto);
+  const nomeMes = MESES_PT[mes - 1];
+  return nomeMes ? `${nomeMes} de ${anoTexto}` : competencia;
+}
+
 // Prioridade pra decidir qual fatura "vale" quando existe mais de uma linha
 // pra mesma imobiliária/seguradora/competência (não deveria mais acontecer
 // depois da checagem de duplicidade por conteúdo no upload, mas se
@@ -86,15 +98,34 @@ function mesAtualDefault(): string {
 
 const POR_PAGINA = 20;
 
-type EsperadaRow = {
+type ImobiliariaJoin = { nome: string; cnpj: string | null };
+
+type EsperadaBrutaRow = {
+  imobiliaria_id: string | null;
+  nome_provisorio: string | null;
+  imobiliarias: ImobiliariaJoin | ImobiliariaJoin[] | null;
+};
+
+type EsperadaSeguradoraRow = {
   id: string;
   imobiliaria_id: string | null;
+  nome_provisorio: string | null;
   dia_vencimento: number | null;
   cnpj_o2: string | null;
   observacao: string | null;
-  nome_provisorio: string | null;
-  imobiliarias: { nome: string; cnpj: string | null } | { nome: string; cnpj: string | null }[] | null;
 };
+
+type LinhaMestre = {
+  chave: string;
+  imobiliaria_id: string | null;
+  nome_provisorio: string | null;
+  nome: string;
+  cnpj: string | null;
+};
+
+function chaveDe(imobiliariaId: string | null, nomeProvisorio: string | null): string {
+  return imobiliariaId ?? `prov:${nomeProvisorio}`;
+}
 
 export default async function FaturasPage({
   searchParams,
@@ -141,21 +172,48 @@ export default async function FaturasPage({
     : SEGURADORAS_PADRAO;
   const seguradora = seguradoraParam && seguradoras.includes(seguradoraParam) ? seguradoraParam : seguradoras[0];
 
-  const [{ data: esperadasTodasData }, { data: faturasData }, { data: pendentesData }] = await Promise.all([
-    supabase
-      .from("faturas_esperadas")
-      .select("id, imobiliaria_id, dia_vencimento, cnpj_o2, observacao, nome_provisorio, imobiliarias(nome, cnpj)")
-      .eq("seguradora", seguradora)
-      .eq("ativo", true)
-      .order("id"),
-    supabase
-      .from("faturas")
-      .select("id, imobiliaria_id, valor, vencimento, status, arquivo_nome, tipo_documento")
-      .eq("seguradora", seguradora)
-      .eq("competencia", competencia),
-    supabase.from("faturas").select("status").in("status", ["aguardando_identificacao", "aguardando_conferencia"]),
-  ]);
-  const esperadasTodas = (esperadasTodasData ?? []) as EsperadaRow[];
+  const [{ data: todasEsperadasData }, { data: esperadasSeguradoraData }, { data: faturasData }, { data: pendentesData }] =
+    await Promise.all([
+      // Lista mestre: TODAS as imobiliárias com alguma seguradora ativa,
+      // independente de qual está selecionada -- é o que fica "congelado"
+      // à esquerda ao trocar de aba.
+      supabase.from("faturas_esperadas").select("imobiliaria_id, nome_provisorio, imobiliarias(nome, cnpj)").eq("ativo", true),
+      // Dados específicos da seguradora selecionada (vencimento/origem/observação).
+      supabase
+        .from("faturas_esperadas")
+        .select("id, imobiliaria_id, nome_provisorio, dia_vencimento, cnpj_o2, observacao")
+        .eq("seguradora", seguradora)
+        .eq("ativo", true),
+      supabase
+        .from("faturas")
+        .select("id, imobiliaria_id, valor, vencimento, status, arquivo_nome, tipo_documento")
+        .eq("seguradora", seguradora)
+        .eq("competencia", competencia),
+      supabase.from("faturas").select("status").in("status", ["aguardando_identificacao", "aguardando_conferencia"]),
+    ]);
+
+  // Dedup pra lista mestre -- uma imobiliária pode ter várias linhas em
+  // faturas_esperadas (uma por seguradora), aqui só interessa 1 por
+  // imobiliária/provisório, ordenada por nome.
+  const mestrePorChave = new Map<string, LinhaMestre>();
+  for (const e of (todasEsperadasData ?? []) as EsperadaBrutaRow[]) {
+    const imob = Array.isArray(e.imobiliarias) ? e.imobiliarias[0] : e.imobiliarias;
+    const chave = chaveDe(e.imobiliaria_id, e.nome_provisorio);
+    if (!mestrePorChave.has(chave)) {
+      mestrePorChave.set(chave, {
+        chave,
+        imobiliaria_id: e.imobiliaria_id,
+        nome_provisorio: e.nome_provisorio,
+        nome: imob?.nome ?? e.nome_provisorio ?? "—",
+        cnpj: imob?.cnpj ?? null,
+      });
+    }
+  }
+  const listaMestre = Array.from(mestrePorChave.values()).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+
+  const esperadaSeguradoraPorChave = new Map<string, EsperadaSeguradoraRow>(
+    ((esperadasSeguradoraData ?? []) as EsperadaSeguradoraRow[]).map((e) => [chaveDe(e.imobiliaria_id, e.nome_provisorio), e])
+  );
 
   // Uma linha por imobiliária, escolhendo a de status mais relevante quando
   // existir mais de uma pra mesma competência (ver PRIORIDADE_STATUS acima)
@@ -182,44 +240,52 @@ export default async function FaturasPage({
   const pendentes = pendentesData?.length ?? 0;
 
   // Busca por nome e filtro de situação aplicados em memória — o total de
-  // linhas por seguradora é pequeno (algumas centenas), não compensa a
-  // complexidade de filtrar isso via join no banco.
+  // linhas é pequeno (algumas centenas), não compensa a complexidade de
+  // filtrar isso via join no banco. Filtro de situação é relativo à
+  // seguradora selecionada -- quem não tem vínculo com ela some do filtro
+  // (não faz sentido aparecer numa busca por status de uma seguradora que
+  // não é dela), mas sem filtro nenhum a lista mestre fica sempre inteira.
   const buscaNormalizada = busca.toLowerCase();
-  const esperadasFiltradas = esperadasTodas.filter((e) => {
-    const imob = Array.isArray(e.imobiliarias) ? e.imobiliarias[0] : e.imobiliarias;
-    const nome = (imob?.nome ?? e.nome_provisorio ?? "").toLowerCase();
-    if (buscaNormalizada && !nome.includes(buscaNormalizada)) return false;
+  const linhasFiltradas = listaMestre.filter((m) => {
+    if (buscaNormalizada && !m.nome.toLowerCase().includes(buscaNormalizada)) return false;
     if (statusFiltro) {
-      const fatura = e.imobiliaria_id ? faturasPorImobiliaria.get(e.imobiliaria_id) : undefined;
+      const esperadaSeg = esperadaSeguradoraPorChave.get(m.chave);
+      if (!esperadaSeg) return false;
+      const fatura = m.imobiliaria_id ? faturasPorImobiliaria.get(m.imobiliaria_id) : undefined;
       const statusChave = fatura ? fatura.status : "aguardando_upload";
       if (statusChave !== statusFiltro) return false;
     }
     return true;
   });
-  const totalEsperadas = esperadasFiltradas.length;
-  const esperadas = esperadasFiltradas.slice(0, limite);
+  const totalLinhas = linhasFiltradas.length;
+  const linhas = linhasFiltradas.slice(0, limite);
 
   // Faturas carregadas nessa seguradora/competência mas cuja imobiliária
-  // ainda não está na lista de esperadas (parceiro novo, ainda sem
-  // registro fixo) — mostra também, marcado.
-  const idsEsperadas = new Set(esperadasTodas.map((e) => e.imobiliaria_id));
+  // ainda não está na lista mestre (parceiro totalmente novo) — mostra
+  // também, marcado.
+  const idsNaListaMestre = new Set(listaMestre.map((m) => m.imobiliaria_id).filter(Boolean));
   const extras = (faturasData ?? []).filter(
-    (f) => f.imobiliaria_id && f.status !== "cancelada" && !idsEsperadas.has(f.imobiliaria_id)
+    (f) => f.imobiliaria_id && f.status !== "cancelada" && !idsNaListaMestre.has(f.imobiliaria_id)
   );
 
   return (
     <>
       <AppHeader userEmail={user?.email} logoutAction={signOut} />
       <main className="mx-auto max-w-5xl flex-1 space-y-6 p-8">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-o2-navy">Faturas mensais</h1>
+          <p className="text-sm text-gray-500">
+            Boletos de seguradora recebidos para reenvio às imobiliárias — uso interno O2.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-o2-navy/15 bg-white p-4 shadow-sm">
           <div>
-            <h1 className="text-xl font-semibold text-o2-navy">Faturas mensais</h1>
-            <p className="text-sm text-gray-500">
-              Boletos de seguradora recebidos para reenvio às imobiliárias — uso interno O2.
-            </p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Mês que você está vendo/fechando</p>
+            <p className="mb-1 text-lg font-semibold text-o2-navy">{formatarCompetencia(competencia)}</p>
+            <SeletorCompetencia competencia={competencia} />
           </div>
           <div className="flex items-center gap-2">
-            <SeletorCompetencia competencia={competencia} />
             {pendentes > 0 && (
               <Link
                 href="/faturas/conferencia"
@@ -243,20 +309,25 @@ export default async function FaturasPage({
         )}
         {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
 
-        <div className="flex flex-wrap gap-1 border-b border-gray-200">
-          {seguradoras.map((s) => (
-            <Link
-              key={s}
-              href={`/faturas?competencia=${competencia}&seguradora=${encodeURIComponent(s)}`}
-              className={`rounded-t-lg border border-b-0 px-3 py-1.5 text-sm font-medium ${
-                s === seguradora
-                  ? "border-gray-200 bg-white text-o2-navy"
-                  : "border-transparent text-gray-500 hover:text-o2-navy"
-              }`}
-            >
-              {s}
-            </Link>
-          ))}
+        <div>
+          <p className="mb-1 text-xs text-gray-500">
+            A lista de imobiliárias abaixo não muda ao trocar de seguradora — só a coluna de situação atualiza.
+          </p>
+          <div className="flex flex-wrap gap-1 border-b border-gray-200">
+            {seguradoras.map((s) => (
+              <Link
+                key={s}
+                href={`/faturas?competencia=${competencia}&seguradora=${encodeURIComponent(s)}`}
+                className={`rounded-t-lg border border-b-0 px-3 py-1.5 text-sm font-medium ${
+                  s === seguradora
+                    ? "border-gray-200 bg-white text-o2-navy"
+                    : "border-transparent text-gray-500 hover:text-o2-navy"
+                }`}
+              >
+                {s}
+              </Link>
+            ))}
+          </div>
         </div>
 
         <form className="flex flex-wrap items-end gap-2" action="/faturas">
@@ -272,7 +343,7 @@ export default async function FaturasPage({
             />
           </div>
           <div>
-            <label className="mb-0.5 block text-xs text-gray-500">Situação</label>
+            <label className="mb-0.5 block text-xs text-gray-500">Situação em {seguradora}</label>
             <select
               name="status"
               defaultValue={statusFiltro}
@@ -307,39 +378,54 @@ export default async function FaturasPage({
             <thead>
               <tr className="border-b border-gray-100 text-xs text-gray-500">
                 <th className="px-3 py-2 font-medium">Parceiro</th>
-                <th className="px-3 py-2 font-medium">CNPJ</th>
-                <th className="px-3 py-2 font-medium">Venc.</th>
+                <th className="px-3 py-2 font-medium">CNPJ/CPF</th>
+                <th className="px-3 py-2 font-medium">
+                  Venc. <span className="font-normal text-gray-400">({seguradora})</span>
+                </th>
                 <th className="px-3 py-2 font-medium">Origem</th>
                 <th className="px-3 py-2 font-medium">Observação</th>
-                <th className="px-3 py-2 font-medium">Situação ({competencia})</th>
+                <th className="px-3 py-2 font-medium">
+                  Situação <span className="font-normal text-gray-400">({seguradora}, {competencia})</span>
+                </th>
                 <th className="px-3 py-2 font-medium"></th>
               </tr>
             </thead>
             <tbody>
-              {esperadas.map((e) => {
-                const imob = Array.isArray(e.imobiliarias) ? e.imobiliarias[0] : e.imobiliarias;
-                const fatura = e.imobiliaria_id ? faturasPorImobiliaria.get(e.imobiliaria_id) : undefined;
-                const pendente = !imob && !!e.nome_provisorio;
+              {linhas.map((m) => {
+                const esperadaSeg = esperadaSeguradoraPorChave.get(m.chave);
+                const fatura = m.imobiliaria_id ? faturasPorImobiliaria.get(m.imobiliaria_id) : undefined;
+                const semVinculoNestaSeguradora = !esperadaSeg;
+                const pendenteCnpj = !m.imobiliaria_id && !!m.nome_provisorio;
                 return (
-                  <tr key={e.id} className={`border-b border-gray-50 last:border-0 align-top ${pendente ? "bg-orange-50/40" : ""}`}>
-                    <td className="px-3 py-2 text-gray-800">{imob?.nome ?? e.nome_provisorio ?? "—"}</td>
+                  <tr key={m.chave} className={`border-b border-gray-50 last:border-0 align-top ${pendenteCnpj ? "bg-orange-50/40" : ""}`}>
+                    <td className="px-3 py-2 text-gray-800">{m.nome}</td>
                     <td className="px-3 py-2 text-gray-500">
-                      {imob?.cnpj ?? (
+                      {m.cnpj ?? (
                         <form action={vincularCnpjProvisoria} className="flex items-center gap-1">
-                          <input type="hidden" name="id" value={e.id} />
+                          <input type="hidden" name="nome_provisorio" value={m.nome_provisorio ?? ""} />
                           <input type="hidden" name="seguradora" value={seguradora} />
-                          <input name="cnpj" placeholder="CNPJ" className={`${inputClass} w-28`} />
+                          <input name="cnpj" placeholder="CNPJ ou CPF" className={`${inputClass} w-28`} />
                           <button type="submit" className="whitespace-nowrap text-xs font-medium text-o2-navy hover:underline">
                             Vincular
                           </button>
                         </form>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-gray-800">{e.dia_vencimento ?? "—"}</td>
-                    <td className="px-3 py-2 text-gray-800">{e.cnpj_o2 ?? "—"}</td>
-                    <td className="px-3 py-2 text-gray-800">{e.observacao ?? "—"}</td>
+                    {semVinculoNestaSeguradora ? (
+                      <td className="px-3 py-2 text-gray-300" colSpan={3}>
+                        não se aplica em {seguradora}
+                      </td>
+                    ) : (
+                      <>
+                        <td className="px-3 py-2 text-gray-800">{esperadaSeg.dia_vencimento ?? "—"}</td>
+                        <td className="px-3 py-2 text-gray-800">{esperadaSeg.cnpj_o2 ?? "—"}</td>
+                        <td className="px-3 py-2 text-gray-800">{esperadaSeg.observacao ?? "—"}</td>
+                      </>
+                    )}
                     <td className="px-3 py-2">
-                      {fatura ? (
+                      {semVinculoNestaSeguradora ? (
+                        <span className="text-xs text-gray-300">—</span>
+                      ) : fatura ? (
                         <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${COR_STATUS[fatura.status] ?? "bg-gray-100 text-gray-700"}`}>
                           {ROTULO_STATUS[fatura.status] ?? fatura.status}
                         </span>
@@ -348,19 +434,19 @@ export default async function FaturasPage({
                           Imob com fatura aberta
                         </span>
                       )}
-                      {e.imobiliaria_id && (duplicatasPorImobiliaria.get(e.imobiliaria_id) ?? 0) > 0 && (
+                      {m.imobiliaria_id && (duplicatasPorImobiliaria.get(m.imobiliaria_id) ?? 0) > 0 && (
                         <Link
                           href="/faturas/conferencia"
                           className="ml-1.5 whitespace-nowrap text-xs font-medium text-orange-700 hover:underline"
                         >
-                          +{duplicatasPorImobiliaria.get(e.imobiliaria_id)} possível duplicata
+                          +{duplicatasPorImobiliaria.get(m.imobiliaria_id)} possível duplicata
                         </Link>
                       )}
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap">
-                      {e.imobiliaria_id && (
+                      {m.imobiliaria_id && (
                         <Link
-                          href={`/faturas/imobiliaria/${e.imobiliaria_id}`}
+                          href={`/faturas/imobiliaria/${m.imobiliaria_id}`}
                           className="text-xs font-medium text-o2-navy hover:underline"
                         >
                           Editar
@@ -386,10 +472,10 @@ export default async function FaturasPage({
                 </tr>
               ))}
 
-              {!esperadas.length && !extras.length && (
+              {!linhas.length && !extras.length && (
                 <tr>
                   <td colSpan={7} className="px-3 py-8 text-center text-sm text-gray-500">
-                    Nenhuma imobiliária cadastrada ainda pra {seguradora}.
+                    Nenhuma imobiliária cadastrada ainda.
                   </td>
                 </tr>
               )}
@@ -397,14 +483,14 @@ export default async function FaturasPage({
           </table>
         </div>
 
-        {totalEsperadas > esperadas.length && (
+        {totalLinhas > linhas.length && (
           <div className="text-center">
             <Link
               href={`/faturas?competencia=${competencia}&seguradora=${encodeURIComponent(seguradora)}&limite=${limite + POR_PAGINA}&busca=${encodeURIComponent(busca)}&status=${encodeURIComponent(statusFiltro)}`}
               className="text-sm font-medium text-o2-navy hover:underline"
             >
-              Mostrar mais {Math.min(POR_PAGINA, totalEsperadas - esperadas.length)} (
-              {esperadas.length} de {totalEsperadas})
+              Mostrar mais {Math.min(POR_PAGINA, totalLinhas - linhas.length)} (
+              {linhas.length} de {totalLinhas})
             </Link>
           </div>
         )}
@@ -419,7 +505,7 @@ export default async function FaturasPage({
             <input type="hidden" name="voltar_para" value={`&competencia=${competencia}&seguradora=${encodeURIComponent(seguradora)}`} />
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <input name="nome" placeholder="Nome da imobiliária" required className={inputClass} />
-              <input name="cnpj" placeholder="CNPJ" required className={inputClass} />
+              <input name="cnpj" placeholder="CNPJ ou CPF" required className={inputClass} />
             </div>
             <div className="flex flex-wrap gap-3">
               {seguradoras.map((s) => (
