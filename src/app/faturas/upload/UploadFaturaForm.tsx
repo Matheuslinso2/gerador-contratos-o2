@@ -44,10 +44,11 @@ export default function UploadFaturaForm({ userId }: { userId: string }) {
       setResultados((prev) => prev.map((r, idx) => (idx === i ? { ...r, estado: "processando" } : r)));
 
       try {
-        const path = `${userId}/${crypto.randomUUID()}.pdf`;
+        const extensao = arquivo.name.split(".").pop()?.toLowerCase() || "pdf";
+        const path = `${userId}/${crypto.randomUUID()}.${extensao}`;
         const { error } = await supabase.storage
           .from(BUCKET_TEMP)
-          .upload(path, arquivo, { contentType: "application/pdf" });
+          .upload(path, arquivo, { contentType: arquivo.type || "application/octet-stream" });
         if (error) throw new Error(`Falha ao enviar: ${error.message}`);
 
         const dados = new FormData();
@@ -91,19 +92,20 @@ export default function UploadFaturaForm({ userId }: { userId: string }) {
         </div>
 
         <div>
-          <label className="mb-1 block text-sm text-gray-600">Arquivos das faturas (PDF)</label>
+          <label className="mb-1 block text-sm text-gray-600">Arquivos das faturas (PDF ou planilha)</label>
           <input
             name="arquivos"
             type="file"
-            accept=".pdf"
+            accept=".pdf,.xls,.xlsx"
             multiple
             required
             disabled={enviando}
             className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none disabled:bg-gray-50"
           />
           <p className="mt-1 text-xs text-gray-500">
-            Pode selecionar vários PDFs de uma vez. O sistema tenta abrir cada um testando o CNPJ
-            das imobiliárias já cadastradas como senha.
+            Pode selecionar boleto e demonstrativo juntos, de várias imobiliárias de uma vez —
+            o sistema identifica cada um e junta os dois automaticamente. Algumas seguradoras
+            mandam o demonstrativo em planilha (.xls/.xlsx), aceito também.
           </p>
         </div>
 

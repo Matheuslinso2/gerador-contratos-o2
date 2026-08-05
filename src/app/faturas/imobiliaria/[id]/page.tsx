@@ -127,11 +127,12 @@ export default async function ImobiliariaFaturasPage({
                       />
                     </div>
                     <div>
-                      <label className="mb-0.5 block text-xs text-gray-500">CNPJ O2</label>
+                      <label className="mb-0.5 block text-xs text-gray-500">Origem da fatura</label>
                       <select name={`cnpj_o2_${i}`} defaultValue={v?.cnpj_o2 ?? ""} className={inputClass}>
                         <option value="">—</option>
                         <option value="O2 Seguros">O2 Seguros</option>
                         <option value="O2 Capitalização">O2 Capitalização</option>
+                        <option value="SegImob">SegImob</option>
                       </select>
                     </div>
                     <div>

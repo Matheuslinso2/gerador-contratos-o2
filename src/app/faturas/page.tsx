@@ -150,7 +150,7 @@ export default async function FaturasPage({
       .order("id"),
     supabase
       .from("faturas")
-      .select("id, imobiliaria_id, valor, vencimento, status, arquivo_nome")
+      .select("id, imobiliaria_id, valor, vencimento, status, arquivo_nome, tipo_documento")
       .eq("seguradora", seguradora)
       .eq("competencia", competencia),
     supabase.from("faturas").select("status").in("status", ["aguardando_identificacao", "aguardando_conferencia"]),
@@ -169,7 +169,13 @@ export default async function FaturasPage({
       duplicatasPorImobiliaria.set(f.imobiliaria_id, (duplicatasPorImobiliaria.get(f.imobiliaria_id) ?? 0) + 1);
     }
     const atual = faturasPorImobiliaria.get(f.imobiliaria_id);
-    if (!atual || (PRIORIDADE_STATUS[f.status] ?? 99) < (PRIORIDADE_STATUS[atual.status] ?? 99)) {
+    const prioridadeNova = PRIORIDADE_STATUS[f.status] ?? 99;
+    const prioridadeAtual = atual ? (PRIORIDADE_STATUS[atual.status] ?? 99) : 100;
+    // Em empate de status (ex: boleto e demonstrativo os dois
+    // fatura_carregada), o boleto é quem manda no vencimento/valor
+    // exibido -- o demonstrativo é só o anexo de apoio.
+    const empateFavoreceBoleto = prioridadeNova === prioridadeAtual && f.tipo_documento === "boleto" && atual?.tipo_documento !== "boleto";
+    if (!atual || prioridadeNova < prioridadeAtual || empateFavoreceBoleto) {
       faturasPorImobiliaria.set(f.imobiliaria_id, f);
     }
   }
@@ -303,7 +309,7 @@ export default async function FaturasPage({
                 <th className="px-3 py-2 font-medium">Parceiro</th>
                 <th className="px-3 py-2 font-medium">CNPJ</th>
                 <th className="px-3 py-2 font-medium">Venc.</th>
-                <th className="px-3 py-2 font-medium">CNPJ O2</th>
+                <th className="px-3 py-2 font-medium">Origem</th>
                 <th className="px-3 py-2 font-medium">Observação</th>
                 <th className="px-3 py-2 font-medium">Situação ({competencia})</th>
                 <th className="px-3 py-2 font-medium"></th>

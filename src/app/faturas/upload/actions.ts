@@ -5,6 +5,7 @@ import crypto from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { abrirTextoPdfComSenha, candidatosSenhaO2 } from "@/lib/pdfComSenha";
+import { extrairTextoPlanilha, ehArquivoPlanilha } from "@/lib/planilhaFatura";
 import { extrairDadosFatura } from "@/lib/faturasIA";
 import {
   buscarImobiliariaPorCnpjNoTexto,
@@ -68,23 +69,43 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
     .eq("arquivo_hash", hash)
     .maybeSingle();
 
-  // A senha (quando o PDF tem uma, ex: Porto) é sempre derivada do CNPJ da
-  // própria O2 — não identifica a imobiliária. Só destrava a leitura do
-  // conteúdo, que é de onde vem a identificação de verdade.
-  const resultado = await abrirTextoPdfComSenha(buffer, candidatosSenhaO2());
+  // Algumas seguradoras (Pottencial) mandam o demonstrativo em planilha em
+  // vez de PDF -- não tem senha, então pula direto pra leitura.
+  const ehPlanilha = ehArquivoPlanilha(nomeArquivo);
+  const extensao = ehPlanilha ? (nomeArquivo.toLowerCase().endsWith(".xlsx") ? "xlsx" : "xls") : "pdf";
+  const contentType = ehPlanilha
+    ? extensao === "xlsx"
+      ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      : "application/vnd.ms-excel"
+    : "application/pdf";
 
-  const pathFinal = `${competencia}/${crypto.randomUUID()}.pdf`;
+  let texto: string | null = null;
+  if (ehPlanilha) {
+    try {
+      texto = extrairTextoPlanilha(buffer);
+    } catch (e) {
+      console.error("[faturas] erro ao ler planilha:", e);
+    }
+  } else {
+    // A senha (quando o PDF tem uma, ex: Porto) é sempre derivada do CNPJ da
+    // própria O2 — não identifica a imobiliária. Só destrava a leitura do
+    // conteúdo, que é de onde vem a identificação de verdade.
+    const resultado = await abrirTextoPdfComSenha(buffer, candidatosSenhaO2());
+    texto = resultado?.texto ?? null;
+  }
+
+  const pathFinal = `${competencia}/${crypto.randomUUID()}.${extensao}`;
   const { error: erroUpload } = await supabase.storage
     .from(BUCKET_FINAL)
-    .upload(pathFinal, buffer, { contentType: "application/pdf" });
+    .upload(pathFinal, buffer, { contentType });
   if (erroUpload) {
     return { ok: false, nomeArquivo, mensagem: `Falha ao salvar o arquivo: ${erroUpload.message}` };
   }
 
   const historico = [{ usuario: user.email, data: new Date().toISOString(), acao: "upload", detalhe: nomeArquivo }];
 
-  if (!resultado) {
-    // Nenhum dos CNPJs da O2 abriu — provavelmente uma senha de outro tipo,
+  if (!texto) {
+    // PDF nunca abriu com os CNPJs da O2 (ou a planilha veio corrompida) —
     // fica pra conferência manual investigar.
     const { error } = await supabase.from("faturas").insert({
       competencia,
@@ -99,10 +120,14 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
       criado_por_email: user.email,
     });
     if (error) return { ok: false, nomeArquivo, mensagem: error.message };
-    return { ok: true, nomeArquivo, mensagem: "Não conseguimos abrir esse PDF — precisa de conferência manual." };
+    return {
+      ok: true,
+      nomeArquivo,
+      mensagem: ehPlanilha
+        ? "Não conseguimos ler essa planilha — precisa de conferência manual."
+        : "Não conseguimos abrir esse PDF — precisa de conferência manual.",
+    };
   }
-
-  const { texto } = resultado;
 
   let dadosIA = null;
   try {
@@ -112,6 +137,7 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
   }
 
   const seguradoraNormalizada = normalizarSeguradora(dadosIA?.seguradora ?? null);
+  const tipoDocumento = dadosIA?.tipo_documento ?? null;
 
   const { data: conhecidasData } = await supabase.from("imobiliarias_conhecidas").select("id, nome, cnpj");
   const conhecidas = (conhecidasData ?? []) as ImobiliariaBasica[];
@@ -139,16 +165,20 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
   // Duplicidade também por conteúdo, não só por arquivo idêntico -- pega o
   // caso de reemissão/redownload do mesmo boleto (bytes diferentes, mesma
   // imobiliária+seguradora+competência já com uma fatura viva carregada).
+  // Sempre filtrado também por tipo_documento: boleto e demonstrativo da
+  // mesma competência são um PAR legítimo (ex: Pottencial/Too/Tokio), não
+  // uma duplicata um do outro.
   let duplicataConteudo: { id: string } | null = null;
   if (!duplicata && imobiliariaId && seguradoraNormalizada) {
-    const { data } = await supabase
+    let consulta = supabase
       .from("faturas")
       .select("id")
       .eq("imobiliaria_id", imobiliariaId)
       .eq("seguradora", seguradoraNormalizada)
       .eq("competencia", competencia)
-      .in("status", STATUS_ATIVOS)
-      .maybeSingle();
+      .in("status", STATUS_ATIVOS);
+    consulta = tipoDocumento ? consulta.eq("tipo_documento", tipoDocumento) : consulta.is("tipo_documento", null);
+    const { data } = await consulta.maybeSingle();
     duplicataConteudo = data;
   }
   const duplicataFinal = duplicata ?? duplicataConteudo;
@@ -158,13 +188,17 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
   // sem aba pra aparecer na tela principal (nenhuma faturas_esperadas
   // referencia esse nome) e desaparece de vista. Força conferência manual.
   const seguradoraReconhecida = seguradoraNormalizada ? SEGURADORAS_CANONICAS.includes(seguradoraNormalizada) : false;
+  // Mesma lógica pro tipo de documento -- se a IA não conseguiu dizer se é
+  // boleto ou demonstrativo, alguém precisa olhar antes de confiar no
+  // vencimento/valor extraído.
+  const tipoDocumentoReconhecido = tipoDocumento === "boleto" || tipoDocumento === "demonstrativo";
 
   const confianca = imobiliariaId ? resultadoIdent.confianca : null;
   const status = duplicataFinal
     ? "duplicada"
     : !imobiliariaId
       ? "aguardando_identificacao"
-      : confianca === "alta" && seguradoraReconhecida
+      : confianca === "alta" && seguradoraReconhecida && tipoDocumentoReconhecido
         ? "fatura_carregada"
         : "aguardando_conferencia";
 
@@ -175,6 +209,7 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
     arquivo_hash: hash,
     imobiliaria_id: imobiliariaId,
     seguradora: seguradoraNormalizada,
+    tipo_documento: tipoDocumento,
     codigo_produtor: dadosIA?.codigo_produtor ?? null,
     vencimento: dadosIA?.vencimento ?? null,
     valor: dadosIA?.valor ?? null,
@@ -190,6 +225,7 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
   if (error) return { ok: false, nomeArquivo, mensagem: error.message };
 
   const seguradoraTexto = seguradoraNormalizada ? ` (${seguradoraNormalizada})` : "";
+  const tipoDocumentoTexto = tipoDocumento ? `, ${tipoDocumento}` : "";
   const mensagens: Record<string, string> = {
     duplicada: duplicataConteudo
       ? `Já existe uma fatura viva dessa imobiliária${seguradoraTexto} nessa competência — marcada como duplicata pra conferência.`
@@ -197,8 +233,10 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
     aguardando_identificacao: `Aberta${seguradoraTexto}, mas não identificamos a imobiliária — precisa de conferência.`,
     aguardando_conferencia: !seguradoraReconhecida && imobiliariaId && confianca === "alta"
       ? `Identificada: ${nomeIdentificado}, mas a seguradora "${seguradoraNormalizada}" não é uma das conhecidas — confirme na conferência.`
-      : `Aberta${seguradoraTexto}, sugestão: ${nomeIdentificado ?? "?"} — confirme na conferência.`,
-    fatura_carregada: `Identificada: ${nomeIdentificado}${seguradoraTexto}.`,
+      : !tipoDocumentoReconhecido && imobiliariaId && confianca === "alta"
+        ? `Identificada: ${nomeIdentificado}${seguradoraTexto}, mas não identificamos se é boleto ou demonstrativo — confirme na conferência.`
+        : `Aberta${seguradoraTexto}, sugestão: ${nomeIdentificado ?? "?"} — confirme na conferência.`,
+    fatura_carregada: `Identificada: ${nomeIdentificado}${seguradoraTexto}${tipoDocumentoTexto}.`,
   };
 
   return { ok: true, nomeArquivo, mensagem: mensagens[status] ?? "Processada." };
