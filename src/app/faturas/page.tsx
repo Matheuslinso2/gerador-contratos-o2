@@ -6,11 +6,27 @@ import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
 import SeletorCompetencia from "./SeletorCompetencia";
 import { adicionarEsperada, vincularCnpjProvisoria } from "./actions";
+import { SEGURADORAS_CANONICAS } from "@/lib/faturasIdentificacao";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const SEGURADORAS_PADRAO = ["TOKIO", "PORTO FIANÇA", "PORTO RE", "TOO", "POTTENCIAL", "YELUM"];
+const SEGURADORAS_PADRAO = SEGURADORAS_CANONICAS;
+
+// Prioridade pra decidir qual fatura "vale" quando existe mais de uma linha
+// pra mesma imobiliária/seguradora/competência (não deveria mais acontecer
+// depois da checagem de duplicidade por conteúdo no upload, mas se
+// acontecer, não pode depender da ordem que o banco devolveu as linhas).
+const PRIORIDADE_STATUS: Record<string, number> = {
+  enviada: 0,
+  pronta_para_envio: 1,
+  fatura_carregada: 2,
+  erro_no_envio: 3,
+  aguardando_conferencia: 4,
+  aguardando_identificacao: 5,
+  duplicada: 6,
+  cancelada: 7,
+};
 
 // Progressão: Imob com fatura aberta -> Pendente de envio -> Fatura
 // enviada. O primeiro estágio não tem status próprio (é a ausência de
@@ -140,7 +156,23 @@ export default async function FaturasPage({
     supabase.from("faturas").select("status").in("status", ["aguardando_identificacao", "aguardando_conferencia"]),
   ]);
   const esperadasTodas = (esperadasTodasData ?? []) as EsperadaRow[];
-  const faturasPorImobiliaria = new Map((faturasData ?? []).map((f) => [f.imobiliaria_id, f]));
+
+  // Uma linha por imobiliária, escolhendo a de status mais relevante quando
+  // existir mais de uma pra mesma competência (ver PRIORIDADE_STATUS acima)
+  // -- nunca deixa uma fatura "viva" ficar escondida atrás de outra por
+  // causa da ordem em que o banco devolveu as linhas.
+  const faturasPorImobiliaria = new Map<string, NonNullable<typeof faturasData>[number]>();
+  const duplicatasPorImobiliaria = new Map<string, number>();
+  for (const f of faturasData ?? []) {
+    if (!f.imobiliaria_id) continue;
+    if (f.status === "duplicada") {
+      duplicatasPorImobiliaria.set(f.imobiliaria_id, (duplicatasPorImobiliaria.get(f.imobiliaria_id) ?? 0) + 1);
+    }
+    const atual = faturasPorImobiliaria.get(f.imobiliaria_id);
+    if (!atual || (PRIORIDADE_STATUS[f.status] ?? 99) < (PRIORIDADE_STATUS[atual.status] ?? 99)) {
+      faturasPorImobiliaria.set(f.imobiliaria_id, f);
+    }
+  }
   const pendentes = pendentesData?.length ?? 0;
 
   // Busca por nome e filtro de situação aplicados em memória — o total de
@@ -165,7 +197,9 @@ export default async function FaturasPage({
   // ainda não está na lista de esperadas (parceiro novo, ainda sem
   // registro fixo) — mostra também, marcado.
   const idsEsperadas = new Set(esperadasTodas.map((e) => e.imobiliaria_id));
-  const extras = (faturasData ?? []).filter((f) => f.imobiliaria_id && !idsEsperadas.has(f.imobiliaria_id));
+  const extras = (faturasData ?? []).filter(
+    (f) => f.imobiliaria_id && f.status !== "cancelada" && !idsEsperadas.has(f.imobiliaria_id)
+  );
 
   return (
     <>
@@ -192,7 +226,7 @@ export default async function FaturasPage({
               href="/faturas/upload"
               className="whitespace-nowrap rounded-full bg-o2-coral px-4 py-1.5 text-sm font-medium text-white transition hover:opacity-90"
             >
-              Enviar fatura
+              Carregar fatura
             </Link>
           </div>
         </div>
@@ -307,6 +341,14 @@ export default async function FaturasPage({
                         <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-500">
                           Imob com fatura aberta
                         </span>
+                      )}
+                      {e.imobiliaria_id && (duplicatasPorImobiliaria.get(e.imobiliaria_id) ?? 0) > 0 && (
+                        <Link
+                          href="/faturas/conferencia"
+                          className="ml-1.5 whitespace-nowrap text-xs font-medium text-orange-700 hover:underline"
+                        >
+                          +{duplicatasPorImobiliaria.get(e.imobiliaria_id)} possível duplicata
+                        </Link>
                       )}
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap">

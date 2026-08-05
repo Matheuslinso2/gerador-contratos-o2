@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../../actions";
 import AppHeader from "@/components/AppHeader";
-import { confirmarIdentificacao, tentarReabrirComSenha, reprocessarIdentificacao } from "./actions";
+import { confirmarIdentificacao, tentarReabrirComSenha, reprocessarIdentificacao, resolverDuplicata } from "./actions";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -27,12 +27,15 @@ export default async function ConferenciaFaturasPage({
   const [{ data: pendentes }, { data: imobiliariasData }] = await Promise.all([
     supabase
       .from("faturas")
-      .select("id, competencia, arquivo_nome, seguradora, valor, texto_bruto_extraido, confianca, imobiliaria_id")
-      .in("status", ["aguardando_identificacao", "aguardando_conferencia"])
+      .select(
+        "id, competencia, arquivo_nome, seguradora, valor, texto_bruto_extraido, confianca, imobiliaria_id, status, possivel_duplicidade_de"
+      )
+      .in("status", ["aguardando_identificacao", "aguardando_conferencia", "duplicada"])
       .order("created_at", { ascending: false }),
     supabase.from("imobiliarias").select("id, nome").order("nome"),
   ]);
   const imobiliarias = imobiliariasData ?? [];
+  const imobiliariasPorId = new Map(imobiliarias.map((i) => [i.id, i.nome]));
 
   return (
     <>
@@ -65,7 +68,39 @@ export default async function ConferenciaFaturasPage({
                 </div>
                 {f.seguradora && <p className="mb-2 text-xs text-gray-500">Seguradora: {f.seguradora}</p>}
 
-                {arquivoNuncaAbriu ? (
+                {f.status === "duplicada" ? (
+                  <>
+                    <p className="mb-2 rounded-lg border border-orange-200 bg-orange-50 p-2 text-xs text-orange-800">
+                      Parece duplicata de uma fatura já carregada
+                      {f.possivel_duplicidade_de && f.imobiliaria_id && imobiliariasPorId.get(f.imobiliaria_id)
+                        ? ` de ${imobiliariasPorId.get(f.imobiliaria_id)}`
+                        : ""}{" "}
+                      nessa competência. Confira antes de decidir.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <form action={resolverDuplicata}>
+                        <input type="hidden" name="fatura_id" value={f.id} />
+                        <input type="hidden" name="acao" value="manter" />
+                        <button
+                          type="submit"
+                          className="rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+                        >
+                          É duplicata mesmo — arquivar
+                        </button>
+                      </form>
+                      <form action={resolverDuplicata}>
+                        <input type="hidden" name="fatura_id" value={f.id} />
+                        <input type="hidden" name="acao" value="substituir" />
+                        <button
+                          type="submit"
+                          className="rounded-full bg-o2-coral px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
+                        >
+                          Não é duplicata — processar essa e arquivar a antiga
+                        </button>
+                      </form>
+                    </div>
+                  </>
+                ) : arquivoNuncaAbriu ? (
                   <form action={tentarReabrirComSenha} className="flex flex-wrap items-end gap-2">
                     <input type="hidden" name="fatura_id" value={f.id} />
                     <div className="flex-1">
@@ -97,13 +132,23 @@ export default async function ConferenciaFaturasPage({
                         Reprocessar identificação (usa o texto já extraído, não baixa o arquivo de novo)
                       </button>
                     </form>
+                    {f.confianca === "baixa" && (
+                      <p className="mb-2 rounded-lg border border-yellow-200 bg-yellow-50 p-2 text-xs text-yellow-800">
+                        ⚠️ Mais de uma imobiliária parecida com o nome no documento — não pré-selecionamos
+                        nenhuma, confira o texto extraído acima antes de escolher.
+                      </p>
+                    )}
                     <form action={confirmarIdentificacao} className="flex flex-wrap items-end gap-2">
                     <input type="hidden" name="fatura_id" value={f.id} />
                     <div className="flex-1">
                       <label className="mb-1 block text-xs text-gray-600">
                         Imobiliária {f.confianca ? `(sugestão: confiança ${f.confianca})` : ""}
                       </label>
-                      <select name="imobiliaria_id" defaultValue={f.imobiliaria_id ?? ""} className={inputClass}>
+                      <select
+                        name="imobiliaria_id"
+                        defaultValue={f.confianca === "baixa" ? "" : f.imobiliaria_id ?? ""}
+                        className={inputClass}
+                      >
                         <option value="">Selecione...</option>
                         {imobiliarias.map((i) => (
                           <option key={i.id} value={i.id}>

@@ -6,6 +6,11 @@ type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
 export type ImobiliariaBasica = { id: string; nome: string; cnpj: string | null };
 
+// Lista única das seguradoras que o sistema reconhece de verdade — usada
+// tanto pra normalizar o texto livre da IA quanto pras abas da tela
+// principal e do formulário de edição, pra nunca ficarem fora de sincronia.
+export const SEGURADORAS_CANONICAS = ["TOKIO", "PORTO FIANÇA", "PORTO RE", "TOO", "POTTENCIAL", "YELUM"];
+
 // A senha do PDF é validada contra a base grande (imobiliarias_conhecidas,
 // ~445 registros vindos do CRM/Produtores), não contra a tabela de contas
 // com login — a maioria das imobiliárias reais ainda não tem conta aqui.
@@ -34,6 +39,7 @@ export async function resolverOuCriarImobiliaria(
       percentual_juros_mora: 0,
       percentual_honorarios_advocaticios: 0,
       dia_vencimento_aluguel: 1,
+      cadastro_incompleto: true,
     })
     .select("id")
     .single();

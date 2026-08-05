@@ -5,10 +5,9 @@ import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../../../actions";
 import AppHeader from "@/components/AppHeader";
 import { salvarSeguradorasImobiliaria, atualizarEmailFaturas } from "../../actions";
+import { SEGURADORAS_CANONICAS } from "@/lib/faturasIdentificacao";
 
 export const dynamic = "force-dynamic";
-
-const SEGURADORAS_PADRAO = ["TOKIO", "PORTO FIANÇA", "PORTO RE", "TOO", "POTTENCIAL", "YELUM"];
 
 const inputClass = "w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-o2-coral focus:outline-none";
 
@@ -36,7 +35,7 @@ export default async function ImobiliariaFaturasPage({
   if (!isAdmin(user?.email) && !isColaboradorO2(user?.email)) redirect("/");
 
   const [{ data: imobiliaria }, { data: vinculosData }] = await Promise.all([
-    supabase.from("imobiliarias").select("id, nome, cnpj, email_faturas").eq("id", id).single(),
+    supabase.from("imobiliarias").select("id, nome, cnpj, email_faturas, cadastro_incompleto").eq("id", id).single(),
     supabase
       .from("faturas_esperadas")
       .select("seguradora, ativo, dia_vencimento, cnpj_o2, observacao")
@@ -46,7 +45,7 @@ export default async function ImobiliariaFaturasPage({
 
   const vinculos = (vinculosData ?? []) as Vinculo[];
   const porSeguradora = new Map(vinculos.map((v) => [v.seguradora, v]));
-  const seguradoras = Array.from(new Set([...SEGURADORAS_PADRAO, ...vinculos.map((v) => v.seguradora)]));
+  const seguradoras = Array.from(new Set([...SEGURADORAS_CANONICAS, ...vinculos.map((v) => v.seguradora)]));
 
   return (
     <>
@@ -62,6 +61,14 @@ export default async function ImobiliariaFaturasPage({
           <h1 className="text-xl font-semibold text-o2-navy">{imobiliaria.nome}</h1>
           <p className="text-sm text-gray-500">CNPJ: {imobiliaria.cnpj}</p>
         </div>
+
+        {imobiliaria.cadastro_incompleto && (
+          <p className="rounded-lg border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800">
+            ⚠️ Esse registro foi criado automaticamente pelo Faturas ao identificar uma fatura — ainda não
+            tem contrato/índice de reajuste configurados. Não usar pra gerar contrato sem completar o
+            cadastro antes.
+          </p>
+        )}
 
         {ok && <p className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-700">✅ {ok}</p>}
         {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">⚠️ {erro}</p>}

@@ -11,11 +11,17 @@ import {
   sugerirImobiliariaPorTexto,
   resolverOuCriarImobiliaria,
   normalizarSeguradora,
+  SEGURADORAS_CANONICAS,
   type ImobiliariaBasica,
 } from "@/lib/faturasIdentificacao";
 
 const BUCKET_TEMP = "faturas-temp";
 const BUCKET_FINAL = "faturas";
+
+// Status que ainda representam uma fatura "viva" pra fins de checar
+// duplicidade de conteúdo -- uma fatura já duplicada ou cancelada não
+// conta como a "original" pra comparar contra.
+const STATUS_ATIVOS = ["aguardando_identificacao", "aguardando_conferencia", "fatura_carregada", "pronta_para_envio", "enviada"];
 
 export type ResultadoProcessamento = {
   ok: boolean;
@@ -130,12 +136,35 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
     }
   }
 
+  // Duplicidade também por conteúdo, não só por arquivo idêntico -- pega o
+  // caso de reemissão/redownload do mesmo boleto (bytes diferentes, mesma
+  // imobiliária+seguradora+competência já com uma fatura viva carregada).
+  let duplicataConteudo: { id: string } | null = null;
+  if (!duplicata && imobiliariaId && seguradoraNormalizada) {
+    const { data } = await supabase
+      .from("faturas")
+      .select("id")
+      .eq("imobiliaria_id", imobiliariaId)
+      .eq("seguradora", seguradoraNormalizada)
+      .eq("competencia", competencia)
+      .in("status", STATUS_ATIVOS)
+      .maybeSingle();
+    duplicataConteudo = data;
+  }
+  const duplicataFinal = duplicata ?? duplicataConteudo;
+
+  // Seguradora que a IA leu mas não bate com nenhuma das 6 conhecidas
+  // nunca deve sair como "pronta" automaticamente -- senão a fatura fica
+  // sem aba pra aparecer na tela principal (nenhuma faturas_esperadas
+  // referencia esse nome) e desaparece de vista. Força conferência manual.
+  const seguradoraReconhecida = seguradoraNormalizada ? SEGURADORAS_CANONICAS.includes(seguradoraNormalizada) : false;
+
   const confianca = imobiliariaId ? resultadoIdent.confianca : null;
-  const status = duplicata
+  const status = duplicataFinal
     ? "duplicada"
     : !imobiliariaId
       ? "aguardando_identificacao"
-      : confianca === "alta"
+      : confianca === "alta" && seguradoraReconhecida
         ? "fatura_carregada"
         : "aguardando_conferencia";
 
@@ -152,7 +181,7 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
     numero_documento: dadosIA?.numero_documento ?? null,
     confianca,
     status,
-    possivel_duplicidade_de: duplicata?.id ?? null,
+    possivel_duplicidade_de: duplicataFinal?.id ?? null,
     texto_bruto_extraido: texto || null,
     historico_identificacao: historico,
     criado_por: user.id,
@@ -162,9 +191,13 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
 
   const seguradoraTexto = seguradoraNormalizada ? ` (${seguradoraNormalizada})` : "";
   const mensagens: Record<string, string> = {
-    duplicada: "Parece duplicada de uma fatura já enviada.",
+    duplicada: duplicataConteudo
+      ? `Já existe uma fatura viva dessa imobiliária${seguradoraTexto} nessa competência — marcada como duplicata pra conferência.`
+      : "Parece duplicada de uma fatura já enviada.",
     aguardando_identificacao: `Aberta${seguradoraTexto}, mas não identificamos a imobiliária — precisa de conferência.`,
-    aguardando_conferencia: `Aberta${seguradoraTexto}, sugestão: ${nomeIdentificado ?? "?"} — confirme na conferência.`,
+    aguardando_conferencia: !seguradoraReconhecida && imobiliariaId && confianca === "alta"
+      ? `Identificada: ${nomeIdentificado}, mas a seguradora "${seguradoraNormalizada}" não é uma das conhecidas — confirme na conferência.`
+      : `Aberta${seguradoraTexto}, sugestão: ${nomeIdentificado ?? "?"} — confirme na conferência.`,
     fatura_carregada: `Identificada: ${nomeIdentificado}${seguradoraTexto}.`,
   };
 

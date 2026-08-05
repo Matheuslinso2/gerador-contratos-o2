@@ -10,6 +10,7 @@ import {
   sugerirImobiliariaPorTexto,
   resolverOuCriarImobiliaria,
   normalizarSeguradora,
+  SEGURADORAS_CANONICAS,
   type ImobiliariaBasica,
 } from "@/lib/faturasIdentificacao";
 
@@ -118,6 +119,8 @@ export async function reprocessarIdentificacao(formData: FormData) {
     }
   }
   const confianca = imobiliariaId ? resultadoIdent.confianca : null;
+  const seguradoraNormalizada = normalizarSeguradora(dadosIA?.seguradora ?? null);
+  const seguradoraReconhecida = seguradoraNormalizada ? SEGURADORAS_CANONICAS.includes(seguradoraNormalizada) : false;
 
   const historico = [
     ...(fatura.historico_identificacao ?? []),
@@ -128,13 +131,13 @@ export async function reprocessarIdentificacao(formData: FormData) {
     .from("faturas")
     .update({
       imobiliaria_id: imobiliariaId,
-      seguradora: normalizarSeguradora(dadosIA?.seguradora ?? null),
+      seguradora: seguradoraNormalizada,
       codigo_produtor: dadosIA?.codigo_produtor ?? null,
       vencimento: dadosIA?.vencimento ?? null,
       valor: dadosIA?.valor ?? null,
       numero_documento: dadosIA?.numero_documento ?? null,
       confianca,
-      status: imobiliariaId ? (confianca === "alta" ? "fatura_carregada" : "aguardando_conferencia") : "aguardando_identificacao",
+      status: imobiliariaId ? (confianca === "alta" && seguradoraReconhecida ? "fatura_carregada" : "aguardando_conferencia") : "aguardando_identificacao",
       historico_identificacao: historico,
     })
     .eq("id", faturaId);
@@ -203,6 +206,8 @@ export async function tentarReabrirComSenha(formData: FormData) {
     }
   }
   const confianca = imobiliariaId ? resultadoIdent.confianca : null;
+  const seguradoraNormalizada = normalizarSeguradora(dadosIA?.seguradora ?? null);
+  const seguradoraReconhecida = seguradoraNormalizada ? SEGURADORAS_CANONICAS.includes(seguradoraNormalizada) : false;
 
   const historico = [
     ...(fatura.historico_identificacao ?? []),
@@ -213,18 +218,73 @@ export async function tentarReabrirComSenha(formData: FormData) {
     .from("faturas")
     .update({
       imobiliaria_id: imobiliariaId,
-      seguradora: normalizarSeguradora(dadosIA?.seguradora ?? null),
+      seguradora: seguradoraNormalizada,
       codigo_produtor: dadosIA?.codigo_produtor ?? null,
       vencimento: dadosIA?.vencimento ?? null,
       valor: dadosIA?.valor ?? null,
       numero_documento: dadosIA?.numero_documento ?? null,
       texto_bruto_extraido: resultado.texto,
       confianca,
-      status: imobiliariaId ? (confianca === "alta" ? "fatura_carregada" : "aguardando_conferencia") : "aguardando_identificacao",
+      status: imobiliariaId ? (confianca === "alta" && seguradoraReconhecida ? "fatura_carregada" : "aguardando_conferencia") : "aguardando_identificacao",
       historico_identificacao: historico,
     })
     .eq("id", faturaId);
   if (error) redirect(`/faturas/conferencia?erro=${encodeURIComponent(error.message)}`);
 
   redirect(`/faturas/conferencia?ok=${encodeURIComponent("Arquivo aberto e processado.")}`);
+}
+
+// Resolve uma fatura marcada como possível duplicata (mesma
+// imobiliária+seguradora+competência de uma fatura já viva, ou mesmo
+// arquivo). "Manter" confirma que é lixo e arquiva (cancelada, some da
+// tela). "Substituir" assume que essa é a válida (ex: reemissão com valor
+// corrigido) -- recalcula o status normal dela e arquiva a antiga.
+export async function resolverDuplicata(formData: FormData) {
+  const { supabase, user } = await checarAcesso();
+
+  const faturaId = String(formData.get("fatura_id") ?? "");
+  const acao = String(formData.get("acao") ?? "");
+  if (!faturaId || !["manter", "substituir"].includes(acao)) {
+    redirect(`/faturas/conferencia?erro=${encodeURIComponent("Ação inválida.")}`);
+  }
+
+  const { data: fatura } = await supabase
+    .from("faturas")
+    .select("imobiliaria_id, confianca, seguradora, possivel_duplicidade_de, historico_identificacao")
+    .eq("id", faturaId)
+    .single();
+  if (!fatura) redirect(`/faturas/conferencia?erro=${encodeURIComponent("Fatura não encontrada.")}`);
+
+  const historico = [
+    ...(fatura!.historico_identificacao ?? []),
+    { usuario: user.email, data: new Date().toISOString(), acao: `duplicata_${acao}`, detalhe: "" },
+  ];
+
+  if (acao === "manter") {
+    const { error } = await supabase
+      .from("faturas")
+      .update({ status: "cancelada", historico_identificacao: historico })
+      .eq("id", faturaId);
+    if (error) redirect(`/faturas/conferencia?erro=${encodeURIComponent(error.message)}`);
+    redirect(`/faturas/conferencia?ok=${encodeURIComponent("Marcada como duplicata e arquivada.")}`);
+  }
+
+  const seguradoraReconhecida = fatura!.seguradora ? SEGURADORAS_CANONICAS.includes(fatura!.seguradora) : false;
+  const statusNovo = !fatura!.imobiliaria_id
+    ? "aguardando_identificacao"
+    : fatura!.confianca === "alta" && seguradoraReconhecida
+      ? "fatura_carregada"
+      : "aguardando_conferencia";
+
+  const { error: erroUpdate } = await supabase
+    .from("faturas")
+    .update({ status: statusNovo, historico_identificacao: historico })
+    .eq("id", faturaId);
+  if (erroUpdate) redirect(`/faturas/conferencia?erro=${encodeURIComponent(erroUpdate.message)}`);
+
+  if (fatura!.possivel_duplicidade_de) {
+    await supabase.from("faturas").update({ status: "cancelada" }).eq("id", fatura!.possivel_duplicidade_de);
+  }
+
+  redirect(`/faturas/conferencia?ok=${encodeURIComponent("Processada normalmente; a fatura anterior foi arquivada.")}`);
 }
