@@ -441,7 +441,7 @@ export default async function FaturasPage({
   return (
     <>
       <AppHeader userEmail={user?.email} logoutAction={signOut} />
-      <main className="mx-auto max-w-5xl flex-1 space-y-6 p-8">
+      <main className="mx-auto max-w-[1400px] flex-1 space-y-6 p-8">
         <div>
           <h1 className="text-xl font-semibold text-o2-navy">Faturas mensais</h1>
           <p className="text-sm text-gray-500">
