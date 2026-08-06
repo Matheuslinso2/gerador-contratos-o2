@@ -11,11 +11,12 @@ import { montarEmailFatura, type FaturaParaEmail } from "@/lib/faturasEmail";
 const BUCKET_FINAL = "faturas";
 const STATUS_PRONTO_PARA_ENVIO = ["fatura_carregada", "pronta_para_envio"];
 
-// Logo branca (fica certa no cabeçalho navy do e-mail) -- mesma usada no
-// resto do sistema, só que embutida via CID em vez de link externo (não
+// Mesma variante usada no cabeçalho navy do app (AppHeader) -- preserva o
+// laranja da marca e só converte o texto escuro em branco, em vez de vazar
+// tudo em branco/preto. Embutida via CID em vez de link externo (não
 // depende do cliente de e-mail carregar imagem de fora).
 async function anexoLogoO2() {
-  const conteudo = await fs.readFile(path.join(process.cwd(), "public", "o2-logo-white.png"));
+  const conteudo = await fs.readFile(path.join(process.cwd(), "public", "o2-logo-navy.png"));
   return { nome: "o2-logo.png", conteudo, tipo: "image/png", cid: "o2-logo" };
 }
 
