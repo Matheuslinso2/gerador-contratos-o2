@@ -26,6 +26,7 @@ export type FaturaParaEmail = {
   vencimento: string | null;
   valor: number | null;
   numero_documento: string | null;
+  senha_pdf: string | null;
 };
 
 // E-mail de envio de fatura pra imobiliária -- identidade visual O2
@@ -58,6 +59,18 @@ export function montarEmailFatura({
     .map((f) => `<li style="margin-bottom: 4px;">${f.arquivo_nome}${f.tipo_documento ? ` (${f.tipo_documento})` : ""}</li>`)
     .join("");
 
+  // Nem toda seguradora protege o PDF com senha (hoje só a Porto) -- só
+  // mostra esse aviso quando pelo menos um dos anexos realmente precisou
+  // de senha pra abrir.
+  const senha = faturas.map((f) => f.senha_pdf).find((s): s is string => !!s) ?? null;
+  const blocoSenha = senha
+    ? `
+        <div style="background: #fff3f0; border: 1px solid #ff5a3b; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px;">
+          <p style="margin: 0; font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 0.5px;">Senha para abrir o PDF</p>
+          <p style="margin: 4px 0 0; font-size: 18px; font-weight: bold; color: #ff5a3b; letter-spacing: 1px;">${senha}</p>
+        </div>`
+    : "";
+
   const html = `
     <div style="max-width: 560px; margin: 0 auto; font-family: Arial, sans-serif;">
       <div style="background: #00213a; padding: 20px 24px; border-radius: 10px 10px 0 0;">
@@ -89,6 +102,7 @@ export function montarEmailFatura({
             </tr>
           </table>
         </div>
+        ${blocoSenha}
         <p style="margin: 0 0 6px; font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 0.5px;">
           Anexo${faturas.length > 1 ? "s" : ""} (${faturas.length})
         </p>

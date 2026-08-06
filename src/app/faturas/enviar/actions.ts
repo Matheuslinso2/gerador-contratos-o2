@@ -53,7 +53,7 @@ export async function confirmarEnvio(formData: FormData) {
 
       const { data: faturas } = await supabase
         .from("faturas")
-        .select("id, arquivo_bucket_path, arquivo_nome, tipo_documento, vencimento, valor, numero_documento")
+        .select("id, arquivo_bucket_path, arquivo_nome, tipo_documento, vencimento, valor, numero_documento, senha_pdf")
         .eq("imobiliaria_id", imobiliariaId)
         .eq("seguradora", seguradora)
         .eq("competencia", competencia)

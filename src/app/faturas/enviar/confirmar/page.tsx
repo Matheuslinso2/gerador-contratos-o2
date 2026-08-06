@@ -17,6 +17,7 @@ type FaturaPronta = {
   tipo_documento: string | null;
   vencimento: string | null;
   valor: number | null;
+  senha_pdf: string | null;
 };
 
 function formatarValor(valor: number | null): string {
@@ -46,7 +47,7 @@ export default async function ConfirmarEnvioPage({
     supabase.from("imobiliarias").select("id, nome, email_faturas").in("id", imobiliariaIds),
     supabase
       .from("faturas")
-      .select("id, imobiliaria_id, arquivo_nome, tipo_documento, vencimento, valor, status")
+      .select("id, imobiliaria_id, arquivo_nome, tipo_documento, vencimento, valor, status, senha_pdf")
       .eq("seguradora", seguradora)
       .eq("competencia", competencia)
       .in("imobiliaria_id", imobiliariaIds)
@@ -96,6 +97,7 @@ export default async function ConfirmarEnvioPage({
           {prontas.map((i) => {
             const arquivos = faturasPorImobiliaria.get(i.id) ?? [];
             const referencia = arquivos.find((a) => a.tipo_documento === "boleto") ?? arquivos[0];
+            const senha = arquivos.map((a) => a.senha_pdf).find(Boolean) ?? null;
             return (
               <div key={i.id} className="rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm">
                 <div className="mb-2 flex items-center justify-between">
@@ -105,6 +107,9 @@ export default async function ConfirmarEnvioPage({
                 <p className="mb-1 text-xs text-gray-500">
                   Vencimento {referencia?.vencimento ?? "—"} · {formatarValor(referencia?.valor ?? null)}
                 </p>
+                {senha && (
+                  <p className="mb-1 text-xs font-medium text-o2-coral">Senha do PDF que vai no e-mail: {senha}</p>
+                )}
                 <ul className="text-xs text-gray-600">
                   {arquivos.map((a) => (
                     <li key={a.id}>

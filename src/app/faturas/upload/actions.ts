@@ -81,6 +81,7 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
     : "application/pdf";
 
   let texto: string | null = null;
+  let senhaPdf: string | null = null;
   if (ehPlanilha) {
     try {
       texto = extrairTextoPlanilha(buffer);
@@ -90,9 +91,12 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
   } else {
     // A senha (quando o PDF tem uma, ex: Porto) é sempre derivada do CNPJ da
     // própria O2 — não identifica a imobiliária. Só destrava a leitura do
-    // conteúdo, que é de onde vem a identificação de verdade.
+    // conteúdo, que é de onde vem a identificação de verdade. Guarda qual
+    // senha exatamente abriu (chaveCorreta) pra poder avisar no e-mail de
+    // envio -- sem isso a imobiliária recebe o PDF e não consegue abrir.
     const resultado = await abrirTextoPdfComSenha(buffer, candidatosSenhaO2());
     texto = resultado?.texto ?? null;
+    senhaPdf = resultado?.chaveCorreta ?? null;
   }
 
   const pathFinal = `${competencia}/${crypto.randomUUID()}.${extensao}`;
@@ -228,6 +232,7 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
     seguradora: seguradoraNormalizada,
     origem: origemFatura,
     tipo_documento: tipoDocumento,
+    senha_pdf: senhaPdf,
     codigo_produtor: dadosIA?.codigo_produtor ?? null,
     vencimento: dadosIA?.vencimento ?? null,
     valor: dadosIA?.valor ?? null,

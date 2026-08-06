@@ -66,5 +66,7 @@ export function variantesSenhaDeCnpj(cnpj: string): string[] {
 const CNPJS_O2 = ["20001784000180", "54493758000138"];
 
 export function candidatosSenhaO2(): CandidatoSenha[] {
-  return CNPJS_O2.flatMap((cnpj) => variantesSenhaDeCnpj(cnpj).map((senha) => ({ chave: "o2", senha })));
+  // chave = a própria senha -- assim quem chama sabe exatamente qual delas
+  // abriu o arquivo (importa pra avisar a senha certa no e-mail de envio).
+  return CNPJS_O2.flatMap((cnpj) => variantesSenhaDeCnpj(cnpj).map((senha) => ({ chave: senha, senha })));
 }

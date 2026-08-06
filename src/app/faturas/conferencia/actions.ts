@@ -193,7 +193,7 @@ export async function tentarReabrirComSenha(formData: FormData) {
   }
   const buffer = Buffer.from(await baixado.arrayBuffer());
 
-  const resultado = await abrirTextoPdfComSenha(buffer, [{ chave: "manual", senha: senhaDigitada }]);
+  const resultado = await abrirTextoPdfComSenha(buffer, [{ chave: senhaDigitada, senha: senhaDigitada }]);
   if (!resultado) {
     redirect(`/faturas/conferencia?erro=${encodeURIComponent("Essa senha não abriu o arquivo.")}`);
   }
@@ -248,6 +248,7 @@ export async function tentarReabrirComSenha(formData: FormData) {
       seguradora: seguradoraNormalizada,
       origem: origemFatura,
       tipo_documento: dadosIA?.tipo_documento ?? null,
+      senha_pdf: senhaDigitada,
       codigo_produtor: dadosIA?.codigo_produtor ?? null,
       vencimento: dadosIA?.vencimento ?? null,
       valor: dadosIA?.valor ?? null,
