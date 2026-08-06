@@ -1,6 +1,6 @@
 import nodemailer from "nodemailer";
 
-export type AnexoEmail = { nome: string; conteudo: Buffer; tipo?: string };
+export type AnexoEmail = { nome: string; conteudo: Buffer; tipo?: string; cid?: string };
 
 // Envia e-mail via Gmail/Google Workspace (SMTP com senha de app). Falha
 // silenciosamente (só loga) se não estiver configurado — nunca deve travar
@@ -46,7 +46,13 @@ export async function enviarEmail({
       cc: cc?.length ? cc : undefined,
       subject: assunto,
       html,
-      attachments: anexos?.map((a) => ({ filename: a.nome, content: a.conteudo, contentType: a.tipo })),
+      attachments: anexos?.map((a) => ({
+        filename: a.nome,
+        content: a.conteudo,
+        contentType: a.tipo,
+        cid: a.cid,
+        contentDisposition: a.cid ? "inline" : "attachment",
+      })),
     });
   } catch (erro) {
     console.error("Falha ao enviar e-mail:", erro);

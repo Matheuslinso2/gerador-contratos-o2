@@ -1,13 +1,23 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
-import { enviarEmail } from "@/lib/email";
+import { enviarEmail, type AnexoEmail } from "@/lib/email";
 import { montarEmailFatura, type FaturaParaEmail } from "@/lib/faturasEmail";
 
 const BUCKET_FINAL = "faturas";
 const STATUS_PRONTO_PARA_ENVIO = ["fatura_carregada", "pronta_para_envio"];
+
+// Logo branca (fica certa no cabeçalho navy do e-mail) -- mesma usada no
+// resto do sistema, só que embutida via CID em vez de link externo (não
+// depende do cliente de e-mail carregar imagem de fora).
+async function anexoLogoO2() {
+  const conteudo = await fs.readFile(path.join(process.cwd(), "public", "o2-logo-white.png"));
+  return { nome: "o2-logo.png", conteudo, tipo: "image/png", cid: "o2-logo" };
+}
 
 function tipoMime(nomeArquivo: string): string {
   const ext = nomeArquivo.toLowerCase().split(".").pop();
@@ -63,7 +73,7 @@ export async function confirmarEnvio(formData: FormData) {
         continue;
       }
 
-      const anexos = [];
+      const anexos: AnexoEmail[] = [await anexoLogoO2()];
       for (const f of faturas) {
         const { data: baixado, error } = await supabase.storage.from(BUCKET_FINAL).download(f.arquivo_bucket_path);
         if (error || !baixado) throw new Error(`Falha ao baixar ${f.arquivo_nome}: ${error?.message ?? "arquivo não encontrado"}`);

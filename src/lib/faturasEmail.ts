@@ -74,13 +74,12 @@ export function montarEmailFatura({
   const html = `
     <div style="max-width: 560px; margin: 0 auto; font-family: Arial, sans-serif;">
       <div style="background: #00213a; padding: 20px 24px; border-radius: 10px 10px 0 0;">
-        <p style="margin: 0; color: #fff; font-size: 18px; font-weight: bold; letter-spacing: 0.5px;">O2 Seguros</p>
+        <img src="cid:o2-logo" alt="O2 Seguros" height="28" style="display: block;" />
       </div>
       <div style="border: 1px solid #eee; border-top: none; border-radius: 0 0 10px 10px; padding: 24px;">
         <p style="margin: 0 0 16px; font-size: 15px; color: #00213a;">Olá, ${nomeImobiliaria}!</p>
         <p style="margin: 0 0 20px; font-size: 14px; color: #333; line-height: 1.5;">
-          Segue em anexo a fatura da <strong>${seguradora}</strong> referente a <strong>${competenciaTexto}</strong>,
-          para os devidos repasses.
+          Segue em anexo a fatura da <strong>${seguradora}</strong> referente a <strong>${competenciaTexto}</strong>.
         </p>
         <div style="background: #f7f9fb; border: 1px solid #e5e9ee; border-radius: 8px; padding: 16px 20px; margin-bottom: 20px;">
           <table style="width: 100%; border-collapse: collapse; font-size: 14px; color: #00213a;">
