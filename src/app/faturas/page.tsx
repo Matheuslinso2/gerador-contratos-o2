@@ -197,7 +197,7 @@ export default async function FaturasPage({
         .eq("ativo", true),
       supabase
         .from("faturas")
-        .select("id, imobiliaria_id, valor, vencimento, status, arquivo_nome, tipo_documento, origem")
+        .select("id, imobiliaria_id, valor, vencimento, status, arquivo_nome, arquivo_bucket_path, tipo_documento, origem")
         .eq("seguradora", seguradora)
         .eq("competencia", competencia),
       supabase
@@ -245,10 +245,21 @@ export default async function FaturasPage({
   const faturasPorImobiliariaOrigem = new Map<string, NonNullable<typeof faturasData>[number]>();
   const faturasAguardandoOrigemPorImobiliaria = new Map<string, NonNullable<typeof faturasData>[number]>();
   const duplicatasPorImobiliaria = new Map<string, number>();
+  // Todos os arquivos vivos (não duplicada/cancelada) por imobiliária+origem
+  // -- pra mostrar os ícones de download de boleto/fatura por linha, sem
+  // depender de qual dos dois "venceu" a prioridade de status acima.
+  const arquivosPorImobiliariaOrigem = new Map<string, NonNullable<typeof faturasData>>();
+  const STATUS_ARQUIVO_VISIVEL = ["aguardando_conferencia", "aguardando_origem", "fatura_carregada", "pronta_para_envio", "enviada"];
   for (const f of faturasData ?? []) {
     if (!f.imobiliaria_id) continue;
     if (f.status === "duplicada") {
       duplicatasPorImobiliaria.set(f.imobiliaria_id, (duplicatasPorImobiliaria.get(f.imobiliaria_id) ?? 0) + 1);
+    }
+    if (STATUS_ARQUIVO_VISIVEL.includes(f.status)) {
+      const chaveArquivo = `${f.imobiliaria_id}|${f.status === "aguardando_origem" ? "" : f.origem ?? ""}`;
+      const lista = arquivosPorImobiliariaOrigem.get(chaveArquivo) ?? [];
+      lista.push(f);
+      arquivosPorImobiliariaOrigem.set(chaveArquivo, lista);
     }
     if (f.status === "aguardando_origem") {
       faturasAguardandoOrigemPorImobiliaria.set(f.imobiliaria_id, f);
@@ -278,6 +289,16 @@ export default async function FaturasPage({
     return faturasPorImobiliariaOrigem.get(chave) ?? faturasAguardandoOrigemPorImobiliaria.get(m.imobiliaria_id);
   }
 
+  // Arquivos vivos dessa linha específica -- separa por tipo_documento pra
+  // mostrar 2 ícones (Boleto / Fatura) em vez de uma lista genérica.
+  function arquivosDaLinha(m: LinhaMestre, esperada: EsperadaSeguradoraRow) {
+    if (!m.imobiliaria_id) return [];
+    const chave = `${m.imobiliaria_id}|${esperada.cnpj_o2 ?? ""}`;
+    const proprios = arquivosPorImobiliariaOrigem.get(chave) ?? [];
+    const flutuantes = arquivosPorImobiliariaOrigem.get(`${m.imobiliaria_id}|`) ?? [];
+    return esperada.cnpj_o2 ? [...proprios, ...flutuantes.filter((f) => f.status === "aguardando_origem")] : proprios;
+  }
+
   // Expande 1 linha por RELAÇÃO (imobiliária + origem), não por
   // imobiliária -- uma mesma imobiliária pode ter 2 linhas na mesma
   // seguradora (ex: Tokio via O2 Seguros e via SegImob), cada uma com seu
@@ -287,6 +308,7 @@ export default async function FaturasPage({
     esperada: EsperadaSeguradoraRow;
     fatura: NonNullable<typeof faturasData>[number] | undefined;
     statusChave: string;
+    arquivos: NonNullable<typeof faturasData>;
   };
   const buscaNormalizada = busca.toLowerCase();
   const linhasExpandidas: LinhaExibicao[] = [];
@@ -298,7 +320,7 @@ export default async function FaturasPage({
       const fatura = faturaDaLinha(m, esperada);
       const statusChave = fatura ? fatura.status : "aguardando_upload";
       if (statusFiltro && statusChave !== statusFiltro) continue;
-      linhasExpandidas.push({ m, esperada, fatura, statusChave });
+      linhasExpandidas.push({ m, esperada, fatura, statusChave, arquivos: arquivosDaLinha(m, esperada) });
     }
   }
 
@@ -315,6 +337,21 @@ export default async function FaturasPage({
   const prontasParaEnvio = linhas.filter(
     ({ m, statusChave }) => STATUS_PRONTO_PARA_ENVIO.includes(statusChave) && m.email_faturas
   );
+
+  // Link de download por arquivo -- só pra quem está sendo exibido nessa
+  // página (não vale a pena gerar link assinado pra tudo, só pro que o
+  // usuário está vendo agora), pra conferir visualmente que o arquivo
+  // certo está na imobiliária certa.
+  const caminhosNaPagina = Array.from(
+    new Set(linhas.flatMap((l) => l.arquivos.map((a) => a.arquivo_bucket_path)))
+  );
+  const urlPorCaminho = new Map<string, string>();
+  if (caminhosNaPagina.length) {
+    const { data: assinados } = await supabase.storage.from("faturas").createSignedUrls(caminhosNaPagina, 300);
+    for (const item of assinados ?? []) {
+      if (item.signedUrl && item.path) urlPorCaminho.set(item.path, item.signedUrl);
+    }
+  }
 
   // Faturas carregadas nessa seguradora/competência mas cuja imobiliária
   // ainda não está na lista mestre (parceiro totalmente novo) — mostra
@@ -457,6 +494,8 @@ export default async function FaturasPage({
                   </th>
                   <th className="px-3 py-2 font-medium">Origem</th>
                   <th className="px-3 py-2 font-medium">Observação</th>
+                  <th className="px-3 py-2 font-medium">Boleto</th>
+                  <th className="px-3 py-2 font-medium">Fatura</th>
                   <th className="px-3 py-2 font-medium">
                     Situação <span className="font-normal text-gray-400">({seguradora}, {competencia})</span>
                   </th>
@@ -464,7 +503,9 @@ export default async function FaturasPage({
                 </tr>
               </thead>
               <tbody>
-                {linhas.map(({ m, esperada, fatura, statusChave }) => {
+                {linhas.map(({ m, esperada, fatura, statusChave, arquivos }) => {
+                  const boleto = arquivos.find((a) => a.tipo_documento === "boleto");
+                  const demonstrativo = arquivos.find((a) => a.tipo_documento === "demonstrativo");
                   const pendenteCnpj = !m.imobiliaria_id && !!m.nome_provisorio;
                   const pronta = STATUS_PRONTO_PARA_ENVIO.includes(statusChave);
                   return (
@@ -484,6 +525,36 @@ export default async function FaturasPage({
                       <td className="px-3 py-2 text-gray-800">{esperada.dia_vencimento ?? "—"}</td>
                       <td className="px-3 py-2 text-gray-800">{esperada.cnpj_o2 || "—"}</td>
                       <td className="px-3 py-2 text-gray-800">{esperada.observacao ?? "—"}</td>
+                      <td className="px-3 py-2 text-center">
+                        {boleto && urlPorCaminho.get(boleto.arquivo_bucket_path) ? (
+                          <a
+                            href={urlPorCaminho.get(boleto.arquivo_bucket_path)}
+                            target="_blank"
+                            rel="noreferrer"
+                            title={boleto.arquivo_nome}
+                            className="text-lg"
+                          >
+                            📄
+                          </a>
+                        ) : (
+                          <span className="text-gray-300">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        {demonstrativo && urlPorCaminho.get(demonstrativo.arquivo_bucket_path) ? (
+                          <a
+                            href={urlPorCaminho.get(demonstrativo.arquivo_bucket_path)}
+                            target="_blank"
+                            rel="noreferrer"
+                            title={demonstrativo.arquivo_nome}
+                            className="text-lg"
+                          >
+                            🧾
+                          </a>
+                        ) : (
+                          <span className="text-gray-300">—</span>
+                        )}
+                      </td>
                       <td className="px-3 py-2">
                         {fatura ? (
                           <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${COR_STATUS[fatura.status] ?? "bg-gray-100 text-gray-700"}`}>
@@ -526,6 +597,8 @@ export default async function FaturasPage({
                       Parceiro novo (não cadastrado ainda) — {f.arquivo_nome}
                     </td>
                     <td className="px-3 py-2 text-xs text-gray-500">Confirme na Conferência</td>
+                    <td />
+                    <td />
                     <td className="px-3 py-2">
                       <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${COR_STATUS[f.status] ?? "bg-gray-100 text-gray-700"}`}>
                         {ROTULO_STATUS[f.status] ?? f.status}
@@ -537,7 +610,7 @@ export default async function FaturasPage({
 
                 {!linhas.length && !extras.length && (
                   <tr>
-                    <td colSpan={9} className="px-3 py-8 text-center text-sm text-gray-500">
+                    <td colSpan={11} className="px-3 py-8 text-center text-sm text-gray-500">
                       Nenhuma imobiliária cadastrada ainda.
                     </td>
                   </tr>
