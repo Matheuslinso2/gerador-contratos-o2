@@ -35,6 +35,7 @@ const PRIORIDADE_STATUS: Record<string, number> = {
   fatura_carregada: 2,
   erro_no_envio: 3,
   aguardando_conferencia: 4,
+  aguardando_origem: 4,
   aguardando_identificacao: 5,
   duplicada: 6,
   cancelada: 7,
@@ -55,6 +56,7 @@ const ROTULO_STATUS: Record<string, string> = {
   aguardando_upload: "Imob com fatura aberta",
   aguardando_identificacao: "Aguardando conferência",
   aguardando_conferencia: "Aguardando conferência",
+  aguardando_origem: "Aguardando origem (SegImob/O2)",
   fatura_carregada: "Pendente de envio",
   pronta_para_envio: "Pendente de envio",
   enviada: "Fatura enviada",
@@ -67,6 +69,7 @@ const COR_STATUS: Record<string, string> = {
   aguardando_upload: "bg-gray-100 text-gray-700",
   aguardando_identificacao: "bg-yellow-100 text-yellow-800",
   aguardando_conferencia: "bg-yellow-100 text-yellow-800",
+  aguardando_origem: "bg-blue-100 text-blue-800",
   fatura_carregada: "bg-green-100 text-green-700",
   pronta_para_envio: "bg-green-100 text-green-700",
   enviada: "bg-green-100 text-green-700",
@@ -82,6 +85,7 @@ const COR_STATUS: Record<string, string> = {
 const OPCOES_STATUS_FILTRO = [
   "aguardando_upload",
   "aguardando_conferencia",
+  "aguardando_origem",
   "fatura_carregada",
   "enviada",
   "erro_no_envio",
@@ -193,10 +197,13 @@ export default async function FaturasPage({
         .eq("ativo", true),
       supabase
         .from("faturas")
-        .select("id, imobiliaria_id, valor, vencimento, status, arquivo_nome, tipo_documento")
+        .select("id, imobiliaria_id, valor, vencimento, status, arquivo_nome, tipo_documento, origem")
         .eq("seguradora", seguradora)
         .eq("competencia", competencia),
-      supabase.from("faturas").select("status").in("status", ["aguardando_identificacao", "aguardando_conferencia"]),
+      supabase
+        .from("faturas")
+        .select("status")
+        .in("status", ["aguardando_identificacao", "aguardando_conferencia", "aguardando_origem"]),
     ]);
 
   // Dedup pra lista mestre -- uma imobiliária pode ter várias linhas em
@@ -230,18 +237,25 @@ export default async function FaturasPage({
     esperadaSeguradoraPorChave.set(chave, lista);
   }
 
-  // Uma linha por imobiliária, escolhendo a de status mais relevante quando
-  // existir mais de uma pra mesma competência (ver PRIORIDADE_STATUS acima)
-  // -- nunca deixa uma fatura "viva" ficar escondida atrás de outra por
-  // causa da ordem em que o banco devolveu as linhas.
-  const faturasPorImobiliaria = new Map<string, NonNullable<typeof faturasData>[number]>();
+  // Uma fatura só sabe a qual ORIGEM pertence depois de resolvida (ver
+  // status aguardando_origem) -- por isso duas estruturas: uma por
+  // imobiliária+origem exata, outra pra quem ainda não foi respondida (fica
+  // "flutuando" em todas as linhas de origem daquela imobiliária até
+  // alguém escolher na Conferência).
+  const faturasPorImobiliariaOrigem = new Map<string, NonNullable<typeof faturasData>[number]>();
+  const faturasAguardandoOrigemPorImobiliaria = new Map<string, NonNullable<typeof faturasData>[number]>();
   const duplicatasPorImobiliaria = new Map<string, number>();
   for (const f of faturasData ?? []) {
     if (!f.imobiliaria_id) continue;
     if (f.status === "duplicada") {
       duplicatasPorImobiliaria.set(f.imobiliaria_id, (duplicatasPorImobiliaria.get(f.imobiliaria_id) ?? 0) + 1);
     }
-    const atual = faturasPorImobiliaria.get(f.imobiliaria_id);
+    if (f.status === "aguardando_origem") {
+      faturasAguardandoOrigemPorImobiliaria.set(f.imobiliaria_id, f);
+      continue;
+    }
+    const chave = `${f.imobiliaria_id}|${f.origem ?? ""}`;
+    const atual = faturasPorImobiliariaOrigem.get(chave);
     const prioridadeNova = PRIORIDADE_STATUS[f.status] ?? 99;
     const prioridadeAtual = atual ? (PRIORIDADE_STATUS[atual.status] ?? 99) : 100;
     // Em empate de status (ex: boleto e demonstrativo os dois
@@ -249,48 +263,57 @@ export default async function FaturasPage({
     // exibido -- o demonstrativo é só o anexo de apoio.
     const empateFavoreceBoleto = prioridadeNova === prioridadeAtual && f.tipo_documento === "boleto" && atual?.tipo_documento !== "boleto";
     if (!atual || prioridadeNova < prioridadeAtual || empateFavoreceBoleto) {
-      faturasPorImobiliaria.set(f.imobiliaria_id, f);
+      faturasPorImobiliariaOrigem.set(chave, f);
     }
   }
   const pendentes = pendentesData?.length ?? 0;
 
-  // Status dessa imobiliária NA SEGURADORA selecionada -- "aguardando_upload"
-  // quando o vínculo existe mas ainda não tem arquivo carregado essa
-  // competência. Como a lista já vem filtrada por quem tem vínculo, não
-  // existe mais o caso "sem_vinculo" aqui (ver expansão abaixo).
-  function statusChaveDe(m: LinhaMestre): string {
-    const fatura = m.imobiliaria_id ? faturasPorImobiliaria.get(m.imobiliaria_id) : undefined;
-    return fatura ? fatura.status : "aguardando_upload";
+  // Fatura dessa linha específica (imobiliária + origem daquela relação) --
+  // prioriza o match exato de origem; se ainda não tiver origem definida
+  // (aguardando_origem), aparece em todas as linhas de origem dessa
+  // imobiliária até ser resolvida.
+  function faturaDaLinha(m: LinhaMestre, esperada: EsperadaSeguradoraRow) {
+    if (!m.imobiliaria_id) return undefined;
+    const chave = `${m.imobiliaria_id}|${esperada.cnpj_o2 ?? ""}`;
+    return faturasPorImobiliariaOrigem.get(chave) ?? faturasAguardandoOrigemPorImobiliaria.get(m.imobiliaria_id);
   }
 
   // Expande 1 linha por RELAÇÃO (imobiliária + origem), não por
   // imobiliária -- uma mesma imobiliária pode ter 2 linhas na mesma
   // seguradora (ex: Tokio via O2 Seguros e via SegImob), cada uma com seu
-  // próprio vencimento/origem/observação.
-  type LinhaExibicao = { m: LinhaMestre; esperada: EsperadaSeguradoraRow };
+  // próprio vencimento/origem/observação/status.
+  type LinhaExibicao = {
+    m: LinhaMestre;
+    esperada: EsperadaSeguradoraRow;
+    fatura: NonNullable<typeof faturasData>[number] | undefined;
+    statusChave: string;
+  };
   const buscaNormalizada = busca.toLowerCase();
   const linhasExpandidas: LinhaExibicao[] = [];
   for (const m of listaMestre) {
     const esperadas = esperadaSeguradoraPorChave.get(m.chave);
     if (!esperadas) continue;
     if (buscaNormalizada && !m.nome.toLowerCase().includes(buscaNormalizada)) continue;
-    if (statusFiltro && statusChaveDe(m) !== statusFiltro) continue;
-    for (const esperada of esperadas) linhasExpandidas.push({ m, esperada });
+    for (const esperada of esperadas) {
+      const fatura = faturaDaLinha(m, esperada);
+      const statusChave = fatura ? fatura.status : "aguardando_upload";
+      if (statusFiltro && statusChave !== statusFiltro) continue;
+      linhasExpandidas.push({ m, esperada, fatura, statusChave });
+    }
   }
 
   // Quem precisa de alguma ação (upload, conferência, envio) sobe pro
   // topo; quem já foi enviado desce pro final -- dentro de cada grupo
-  // mantém a ordem alfabética (as 2 linhas da mesma imobiliária ficam
-  // juntas, já que têm o mesmo status/prioridade).
+  // mantém a ordem alfabética.
   const PRIORIDADE_EXIBICAO: Record<string, number> = { enviada: 5, cancelada: 6 };
   const linhasOrdenadas = [...linhasExpandidas].sort(
-    (a, b) => (PRIORIDADE_EXIBICAO[statusChaveDe(a.m)] ?? 0) - (PRIORIDADE_EXIBICAO[statusChaveDe(b.m)] ?? 0)
+    (a, b) => (PRIORIDADE_EXIBICAO[a.statusChave] ?? 0) - (PRIORIDADE_EXIBICAO[b.statusChave] ?? 0)
   );
 
   const totalLinhas = linhasOrdenadas.length;
   const linhas = linhasOrdenadas.slice(0, limite);
   const prontasParaEnvio = linhas.filter(
-    ({ m }) => STATUS_PRONTO_PARA_ENVIO.includes(statusChaveDe(m)) && m.email_faturas
+    ({ m, statusChave }) => STATUS_PRONTO_PARA_ENVIO.includes(statusChave) && m.email_faturas
   );
 
   // Faturas carregadas nessa seguradora/competência mas cuja imobiliária
@@ -317,6 +340,7 @@ export default async function FaturasPage({
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Mês que você está vendo/fechando</p>
             <p className="mb-1 text-lg font-semibold text-o2-navy">{formatarCompetencia(competencia)}</p>
             <SeletorCompetencia competencia={competencia} />
+            <p className="mt-1 text-xs text-gray-400">Refere-se ao mês de vencimento da fatura, não ao mês de upload.</p>
           </div>
           <div className="flex items-center gap-2">
             {pendentes > 0 && (
@@ -427,6 +451,7 @@ export default async function FaturasPage({
                   <th className="px-3 py-2 font-medium"></th>
                   <th className="px-3 py-2 font-medium">Parceiro</th>
                   <th className="px-3 py-2 font-medium">CNPJ/CPF</th>
+                  <th className="px-3 py-2 font-medium">E-mail de faturas</th>
                   <th className="px-3 py-2 font-medium">
                     Venc. <span className="font-normal text-gray-400">({seguradora})</span>
                   </th>
@@ -439,10 +464,9 @@ export default async function FaturasPage({
                 </tr>
               </thead>
               <tbody>
-                {linhas.map(({ m, esperada }) => {
-                  const fatura = m.imobiliaria_id ? faturasPorImobiliaria.get(m.imobiliaria_id) : undefined;
+                {linhas.map(({ m, esperada, fatura, statusChave }) => {
                   const pendenteCnpj = !m.imobiliaria_id && !!m.nome_provisorio;
-                  const pronta = fatura ? STATUS_PRONTO_PARA_ENVIO.includes(fatura.status) : false;
+                  const pronta = STATUS_PRONTO_PARA_ENVIO.includes(statusChave);
                   return (
                     <tr key={esperada.id} className={`border-b border-gray-50 last:border-0 align-top ${pendenteCnpj ? "bg-orange-50/40" : ""}`}>
                       <td className="px-3 py-2">
@@ -456,6 +480,7 @@ export default async function FaturasPage({
                       </td>
                       <td className="px-3 py-2 text-gray-800">{m.nome}</td>
                       <td className="px-3 py-2 text-gray-500">{m.cnpj ?? "—"}</td>
+                      <td className="px-3 py-2 text-gray-500">{m.email_faturas ?? "—"}</td>
                       <td className="px-3 py-2 text-gray-800">{esperada.dia_vencimento ?? "—"}</td>
                       <td className="px-3 py-2 text-gray-800">{esperada.cnpj_o2 || "—"}</td>
                       <td className="px-3 py-2 text-gray-800">{esperada.observacao ?? "—"}</td>
@@ -497,7 +522,7 @@ export default async function FaturasPage({
                 {extras.map((f) => (
                   <tr key={f.id} className="border-b border-gray-50 bg-amber-50/40 last:border-0">
                     <td />
-                    <td className="px-3 py-2 text-gray-800" colSpan={4}>
+                    <td className="px-3 py-2 text-gray-800" colSpan={5}>
                       Parceiro novo (não cadastrado ainda) — {f.arquivo_nome}
                     </td>
                     <td className="px-3 py-2 text-xs text-gray-500">Confirme na Conferência</td>
@@ -512,7 +537,7 @@ export default async function FaturasPage({
 
                 {!linhas.length && !extras.length && (
                   <tr>
-                    <td colSpan={8} className="px-3 py-8 text-center text-sm text-gray-500">
+                    <td colSpan={9} className="px-3 py-8 text-center text-sm text-gray-500">
                       Nenhuma imobiliária cadastrada ainda.
                     </td>
                   </tr>

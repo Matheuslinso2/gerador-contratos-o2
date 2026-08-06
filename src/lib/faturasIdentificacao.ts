@@ -71,6 +71,26 @@ export function normalizarSeguradora(nomeExtraido: string | null): string | null
   return nomeExtraido; // desconhecida — mantém como veio, fica como "extra" pra conferência
 }
 
+// Quando a imobiliária tem mais de 1 relação ativa com a MESMA seguradora
+// (ex: Tokio via O2 Seguros e via SegImob, cada uma com vencimento
+// próprio), não tem como saber pelo conteúdo do arquivo a qual das duas
+// origens ele pertence -- precisa perguntar na Conferência. Retorna a
+// lista de origens possíveis (vazio ou 1 item = não precisa perguntar).
+export async function origensAtivasDaImobiliaria(
+  supabase: SupabaseServerClient,
+  imobiliariaId: string,
+  seguradora: string
+): Promise<string[]> {
+  const { data } = await supabase
+    .from("faturas_esperadas")
+    .select("cnpj_o2")
+    .eq("imobiliaria_id", imobiliariaId)
+    .eq("seguradora", seguradora)
+    .eq("ativo", true);
+  const origens = Array.from(new Set((data ?? []).map((d) => d.cnpj_o2 ?? "").filter(Boolean)));
+  return origens;
+}
+
 export type ResultadoIdentificacao = {
   imobiliaria_id: string | null;
   confianca: "alta" | "media" | "baixa" | null;

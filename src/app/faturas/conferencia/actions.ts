@@ -10,11 +10,14 @@ import {
   sugerirImobiliariaPorTexto,
   resolverOuCriarImobiliaria,
   normalizarSeguradora,
+  origensAtivasDaImobiliaria,
   SEGURADORAS_CANONICAS,
   type ImobiliariaBasica,
 } from "@/lib/faturasIdentificacao";
 
 const BUCKET_FINAL = "faturas";
+
+const STATUS_ATIVOS = ["aguardando_identificacao", "aguardando_conferencia", "aguardando_origem", "fatura_carregada", "pronta_para_envio", "enviada"];
 
 async function checarAcesso() {
   const supabase = await createClient();
@@ -121,6 +124,14 @@ export async function reprocessarIdentificacao(formData: FormData) {
   const confianca = imobiliariaId ? resultadoIdent.confianca : null;
   const seguradoraNormalizada = normalizarSeguradora(dadosIA?.seguradora ?? null);
   const seguradoraReconhecida = seguradoraNormalizada ? SEGURADORAS_CANONICAS.includes(seguradoraNormalizada) : false;
+  const tipoDocumentoReconhecido = dadosIA?.tipo_documento === "boleto" || dadosIA?.tipo_documento === "demonstrativo";
+
+  let origensPossiveis: string[] = [];
+  if (imobiliariaId && seguradoraNormalizada) {
+    origensPossiveis = await origensAtivasDaImobiliaria(supabase, imobiliariaId, seguradoraNormalizada);
+  }
+  const precisaEscolherOrigem = origensPossiveis.length > 1;
+  const origemFatura = origensPossiveis.length === 1 ? origensPossiveis[0] : null;
 
   const historico = [
     ...(fatura.historico_identificacao ?? []),
@@ -132,12 +143,20 @@ export async function reprocessarIdentificacao(formData: FormData) {
     .update({
       imobiliaria_id: imobiliariaId,
       seguradora: seguradoraNormalizada,
+      origem: origemFatura,
+      tipo_documento: dadosIA?.tipo_documento ?? null,
       codigo_produtor: dadosIA?.codigo_produtor ?? null,
       vencimento: dadosIA?.vencimento ?? null,
       valor: dadosIA?.valor ?? null,
       numero_documento: dadosIA?.numero_documento ?? null,
       confianca,
-      status: imobiliariaId ? (confianca === "alta" && seguradoraReconhecida ? "fatura_carregada" : "aguardando_conferencia") : "aguardando_identificacao",
+      status: !imobiliariaId
+        ? "aguardando_identificacao"
+        : precisaEscolherOrigem
+          ? "aguardando_origem"
+          : confianca === "alta" && seguradoraReconhecida && tipoDocumentoReconhecido
+            ? "fatura_carregada"
+            : "aguardando_conferencia",
       historico_identificacao: historico,
     })
     .eq("id", faturaId);
@@ -208,6 +227,14 @@ export async function tentarReabrirComSenha(formData: FormData) {
   const confianca = imobiliariaId ? resultadoIdent.confianca : null;
   const seguradoraNormalizada = normalizarSeguradora(dadosIA?.seguradora ?? null);
   const seguradoraReconhecida = seguradoraNormalizada ? SEGURADORAS_CANONICAS.includes(seguradoraNormalizada) : false;
+  const tipoDocumentoReconhecido = dadosIA?.tipo_documento === "boleto" || dadosIA?.tipo_documento === "demonstrativo";
+
+  let origensPossiveis: string[] = [];
+  if (imobiliariaId && seguradoraNormalizada) {
+    origensPossiveis = await origensAtivasDaImobiliaria(supabase, imobiliariaId, seguradoraNormalizada);
+  }
+  const precisaEscolherOrigem = origensPossiveis.length > 1;
+  const origemFatura = origensPossiveis.length === 1 ? origensPossiveis[0] : null;
 
   const historico = [
     ...(fatura.historico_identificacao ?? []),
@@ -219,13 +246,21 @@ export async function tentarReabrirComSenha(formData: FormData) {
     .update({
       imobiliaria_id: imobiliariaId,
       seguradora: seguradoraNormalizada,
+      origem: origemFatura,
+      tipo_documento: dadosIA?.tipo_documento ?? null,
       codigo_produtor: dadosIA?.codigo_produtor ?? null,
       vencimento: dadosIA?.vencimento ?? null,
       valor: dadosIA?.valor ?? null,
       numero_documento: dadosIA?.numero_documento ?? null,
       texto_bruto_extraido: resultado.texto,
       confianca,
-      status: imobiliariaId ? (confianca === "alta" && seguradoraReconhecida ? "fatura_carregada" : "aguardando_conferencia") : "aguardando_identificacao",
+      status: !imobiliariaId
+        ? "aguardando_identificacao"
+        : precisaEscolherOrigem
+          ? "aguardando_origem"
+          : confianca === "alta" && seguradoraReconhecida && tipoDocumentoReconhecido
+            ? "fatura_carregada"
+            : "aguardando_conferencia",
       historico_identificacao: historico,
     })
     .eq("id", faturaId);
@@ -287,4 +322,62 @@ export async function resolverDuplicata(formData: FormData) {
   }
 
   redirect(`/faturas/conferencia?ok=${encodeURIComponent("Processada normalmente; a fatura anterior foi arquivada.")}`);
+}
+
+// Resolve a pergunta "qual origem" de uma fatura que ficou em
+// aguardando_origem -- a imobiliária tem mais de 1 relação ativa com essa
+// seguradora (ex: O2 Seguros, O2 Capitalização, SegImob) e não dá pra
+// saber pelo conteúdo do arquivo qual delas essa fatura é.
+export async function escolherOrigemFatura(formData: FormData) {
+  const { supabase, user } = await checarAcesso();
+
+  const faturaId = String(formData.get("fatura_id") ?? "");
+  const origem = String(formData.get("origem") ?? "").trim();
+  if (!faturaId || !origem) {
+    redirect(`/faturas/conferencia?erro=${encodeURIComponent("Selecione a origem.")}`);
+  }
+
+  const { data: fatura } = await supabase
+    .from("faturas")
+    .select("imobiliaria_id, seguradora, competencia, confianca, tipo_documento, historico_identificacao")
+    .eq("id", faturaId)
+    .single();
+  if (!fatura) redirect(`/faturas/conferencia?erro=${encodeURIComponent("Fatura não encontrada.")}`);
+
+  // Só agora, com a origem conhecida, dá pra checar duplicidade de verdade
+  // -- outra fatura viva da mesma imobiliária+seguradora+competência+
+  // origem+tipo de documento.
+  let consulta = supabase
+    .from("faturas")
+    .select("id")
+    .eq("imobiliaria_id", fatura!.imobiliaria_id)
+    .eq("seguradora", fatura!.seguradora)
+    .eq("competencia", fatura!.competencia)
+    .eq("origem", origem)
+    .neq("id", faturaId)
+    .in("status", STATUS_ATIVOS);
+  consulta = fatura!.tipo_documento ? consulta.eq("tipo_documento", fatura!.tipo_documento) : consulta.is("tipo_documento", null);
+  const { data: duplicataConteudo } = await consulta.maybeSingle();
+
+  const seguradoraReconhecida = fatura!.seguradora ? SEGURADORAS_CANONICAS.includes(fatura!.seguradora) : false;
+  const tipoDocumentoReconhecido = fatura!.tipo_documento === "boleto" || fatura!.tipo_documento === "demonstrativo";
+
+  const status = duplicataConteudo
+    ? "duplicada"
+    : fatura!.confianca === "alta" && seguradoraReconhecida && tipoDocumentoReconhecido
+      ? "fatura_carregada"
+      : "aguardando_conferencia";
+
+  const historico = [
+    ...(fatura!.historico_identificacao ?? []),
+    { usuario: user.email, data: new Date().toISOString(), acao: "origem_escolhida", detalhe: origem },
+  ];
+
+  const { error } = await supabase
+    .from("faturas")
+    .update({ origem, status, possivel_duplicidade_de: duplicataConteudo?.id ?? null, historico_identificacao: historico })
+    .eq("id", faturaId);
+  if (error) redirect(`/faturas/conferencia?erro=${encodeURIComponent(error.message)}`);
+
+  redirect(`/faturas/conferencia?ok=${encodeURIComponent("Origem confirmada.")}`);
 }

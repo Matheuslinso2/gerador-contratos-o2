@@ -4,7 +4,13 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../../actions";
 import AppHeader from "@/components/AppHeader";
-import { confirmarIdentificacao, tentarReabrirComSenha, reprocessarIdentificacao, resolverDuplicata } from "./actions";
+import {
+  confirmarIdentificacao,
+  tentarReabrirComSenha,
+  reprocessarIdentificacao,
+  resolverDuplicata,
+  escolherOrigemFatura,
+} from "./actions";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -30,12 +36,34 @@ export default async function ConferenciaFaturasPage({
       .select(
         "id, competencia, arquivo_nome, seguradora, valor, texto_bruto_extraido, confianca, imobiliaria_id, status, possivel_duplicidade_de"
       )
-      .in("status", ["aguardando_identificacao", "aguardando_conferencia", "duplicada"])
+      .in("status", ["aguardando_identificacao", "aguardando_conferencia", "aguardando_origem", "duplicada"])
       .order("created_at", { ascending: false }),
     supabase.from("imobiliarias").select("id, nome").order("nome"),
   ]);
   const imobiliarias = imobiliariasData ?? [];
   const imobiliariasPorId = new Map(imobiliarias.map((i) => [i.id, i.nome]));
+
+  // Pra quem está esperando escolher a origem, busca quais origens são
+  // possíveis (vem do cadastro, não é uma lista fixa -- pode ser 2 ou 3).
+  const pendentesOrigem = (pendentes ?? []).filter((f) => f.status === "aguardando_origem" && f.imobiliaria_id && f.seguradora);
+  const origensPorChave = new Map<string, string[]>();
+  if (pendentesOrigem.length) {
+    const { data: esperadas } = await supabase
+      .from("faturas_esperadas")
+      .select("imobiliaria_id, seguradora, cnpj_o2")
+      .in(
+        "imobiliaria_id",
+        pendentesOrigem.map((f) => f.imobiliaria_id as string)
+      )
+      .eq("ativo", true);
+    for (const e of esperadas ?? []) {
+      if (!e.cnpj_o2) continue;
+      const chave = `${e.imobiliaria_id}|${e.seguradora}`;
+      const lista = origensPorChave.get(chave) ?? [];
+      lista.push(e.cnpj_o2);
+      origensPorChave.set(chave, lista);
+    }
+  }
 
   return (
     <>
@@ -98,6 +126,27 @@ export default async function ConferenciaFaturasPage({
                           Não é duplicata — processar essa e arquivar a antiga
                         </button>
                       </form>
+                    </div>
+                  </>
+                ) : f.status === "aguardando_origem" ? (
+                  <>
+                    <p className="mb-2 rounded-lg border border-blue-200 bg-blue-50 p-2 text-xs text-blue-800">
+                      {f.imobiliaria_id && imobiliariasPorId.get(f.imobiliaria_id)} tem mais de uma origem em{" "}
+                      {f.seguradora} — essa fatura é de qual delas?
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {((f.imobiliaria_id && origensPorChave.get(`${f.imobiliaria_id}|${f.seguradora}`)) || []).map((origem: string) => (
+                        <form key={origem} action={escolherOrigemFatura}>
+                          <input type="hidden" name="fatura_id" value={f.id} />
+                          <input type="hidden" name="origem" value={origem} />
+                          <button
+                            type="submit"
+                            className="rounded-full border border-o2-navy px-4 py-2 text-sm font-medium text-o2-navy transition hover:bg-o2-navy hover:text-white"
+                          >
+                            {origem}
+                          </button>
+                        </form>
+                      ))}
                     </div>
                   </>
                 ) : arquivoNuncaAbriu ? (

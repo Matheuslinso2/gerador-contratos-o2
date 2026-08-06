@@ -12,6 +12,7 @@ import {
   sugerirImobiliariaPorTexto,
   resolverOuCriarImobiliaria,
   normalizarSeguradora,
+  origensAtivasDaImobiliaria,
   SEGURADORAS_CANONICAS,
   type ImobiliariaBasica,
 } from "@/lib/faturasIdentificacao";
@@ -162,14 +163,25 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
     }
   }
 
+  // Se a imobiliária tem mais de 1 relação ativa com essa seguradora (ex:
+  // Tokio via O2 Seguros e via SegImob, cada uma com vencimento próprio),
+  // não tem como saber pelo conteúdo do arquivo a qual origem ele pertence
+  // -- precisa perguntar na Conferência antes de decidir status/duplicidade.
+  let origensPossiveis: string[] = [];
+  if (imobiliariaId && seguradoraNormalizada) {
+    origensPossiveis = await origensAtivasDaImobiliaria(supabase, imobiliariaId, seguradoraNormalizada);
+  }
+  const precisaEscolherOrigem = origensPossiveis.length > 1;
+
   // Duplicidade também por conteúdo, não só por arquivo idêntico -- pega o
   // caso de reemissão/redownload do mesmo boleto (bytes diferentes, mesma
   // imobiliária+seguradora+competência já com uma fatura viva carregada).
   // Sempre filtrado também por tipo_documento: boleto e demonstrativo da
   // mesma competência são um PAR legítimo (ex: Pottencial/Too/Tokio), não
-  // uma duplicata um do outro.
+  // uma duplicata um do outro. Pulado quando ainda não se sabe a origem --
+  // a comparação certa só é possível depois que a origem for escolhida.
   let duplicataConteudo: { id: string } | null = null;
-  if (!duplicata && imobiliariaId && seguradoraNormalizada) {
+  if (!duplicata && imobiliariaId && seguradoraNormalizada && !precisaEscolherOrigem) {
     let consulta = supabase
       .from("faturas")
       .select("id")
@@ -198,9 +210,14 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
     ? "duplicada"
     : !imobiliariaId
       ? "aguardando_identificacao"
-      : confianca === "alta" && seguradoraReconhecida && tipoDocumentoReconhecido
-        ? "fatura_carregada"
-        : "aguardando_conferencia";
+      : precisaEscolherOrigem
+        ? "aguardando_origem"
+        : confianca === "alta" && seguradoraReconhecida && tipoDocumentoReconhecido
+          ? "fatura_carregada"
+          : "aguardando_conferencia";
+  // Quando só existe 1 origem possível, já preenche sozinho -- a pergunta
+  // só aparece quando existe ambiguidade de verdade.
+  const origemFatura = origensPossiveis.length === 1 ? origensPossiveis[0] : null;
 
   const { error } = await supabase.from("faturas").insert({
     competencia,
@@ -209,6 +226,7 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
     arquivo_hash: hash,
     imobiliaria_id: imobiliariaId,
     seguradora: seguradoraNormalizada,
+    origem: origemFatura,
     tipo_documento: tipoDocumento,
     codigo_produtor: dadosIA?.codigo_produtor ?? null,
     vencimento: dadosIA?.vencimento ?? null,
@@ -231,6 +249,7 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
       ? `Já existe uma fatura viva dessa imobiliária${seguradoraTexto} nessa competência — marcada como duplicata pra conferência.`
       : "Parece duplicada de uma fatura já enviada.",
     aguardando_identificacao: `Aberta${seguradoraTexto}, mas não identificamos a imobiliária — precisa de conferência.`,
+    aguardando_origem: `Identificada: ${nomeIdentificado}${seguradoraTexto}, mas essa imobiliária tem mais de uma origem nessa seguradora — confirme qual na conferência.`,
     aguardando_conferencia: !seguradoraReconhecida && imobiliariaId && confianca === "alta"
       ? `Identificada: ${nomeIdentificado}, mas a seguradora "${seguradoraNormalizada}" não é uma das conhecidas — confirme na conferência.`
       : !tipoDocumentoReconhecido && imobiliariaId && confianca === "alta"
