@@ -7,6 +7,7 @@ import AppHeader from "@/components/AppHeader";
 import SeletorCompetencia from "./SeletorCompetencia";
 import { adicionarEsperada } from "./actions";
 import { SEGURADORAS_CANONICAS } from "@/lib/faturasIdentificacao";
+import { IconCalendar, IconChecklist, IconUpload, IconInvoice, IconReceipt } from "./icons";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -442,35 +443,53 @@ export default async function FaturasPage({
     <>
       <AppHeader userEmail={user?.email} logoutAction={signOut} />
       <main className="mx-auto max-w-[1400px] flex-1 space-y-6 p-8">
-        <div>
-          <h1 className="text-xl font-semibold text-o2-navy">Faturas mensais</h1>
-          <p className="text-sm text-gray-500">
-            Boletos de seguradora recebidos para reenvio às imobiliárias — uso interno O2.
-          </p>
+        <div className="flex items-center gap-3">
+          <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-o2-coral to-orange-400 text-white shadow-sm">
+            <IconInvoice />
+          </span>
+          <div>
+            <h1 className="text-xl font-semibold text-o2-navy">Faturas mensais</h1>
+            <p className="text-sm text-gray-500">
+              Boletos de seguradora recebidos para reenvio às imobiliárias — uso interno O2.
+            </p>
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-o2-navy/15 bg-white p-4 shadow-sm">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Mês que você está vendo/fechando</p>
-            <p className="mb-1 text-lg font-semibold text-o2-navy">{formatarCompetencia(competencia)}</p>
-            <SeletorCompetencia competencia={competencia} />
-            <p className="mt-1 text-xs text-gray-400">Refere-se ao mês de vencimento da fatura, não ao mês de upload.</p>
-          </div>
-          <div className="flex items-center gap-2">
-            {pendentes > 0 && (
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-o2-indigo to-o2-navy p-5 text-white shadow-md sm:p-6">
+          <div className="relative flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/15">
+                <IconCalendar />
+              </span>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-white/60">
+                  Mês que você está vendo/fechando
+                </p>
+                <p className="mb-1 text-lg font-semibold text-white">{formatarCompetencia(competencia)}</p>
+                <SeletorCompetencia competencia={competencia} />
+                <p className="mt-1 text-xs text-white/50">
+                  Refere-se ao mês de vencimento da fatura, não ao mês de upload.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {pendentes > 0 && (
+                <Link
+                  href="/faturas/conferencia"
+                  className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-white/30 bg-white/10 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-white/20"
+                >
+                  <IconChecklist className="h-4 w-4" />
+                  Conferência ({pendentes})
+                </Link>
+              )}
               <Link
-                href="/faturas/conferencia"
-                className="whitespace-nowrap rounded-full border border-o2-navy px-4 py-1.5 text-sm font-medium text-o2-navy transition hover:bg-o2-navy hover:text-white"
+                href="/faturas/upload"
+                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-4 py-1.5 text-sm font-medium text-o2-navy shadow-sm transition hover:bg-white/90"
               >
-                Conferência ({pendentes})
+                <IconUpload className="h-4 w-4" />
+                Carregar fatura
               </Link>
-            )}
-            <Link
-              href="/faturas/upload"
-              className="whitespace-nowrap rounded-full bg-o2-coral px-4 py-1.5 text-sm font-medium text-white transition hover:opacity-90"
-            >
-              Carregar fatura
-            </Link>
+            </div>
           </div>
         </div>
 
@@ -480,34 +499,32 @@ export default async function FaturasPage({
         )}
         {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
 
-        <div>
-          <div className="flex flex-wrap gap-1 border-b border-gray-200">
-            {seguradoras.map((s) => {
-              const pendentesAba = pendentesPorSeguradora.get(s) ?? 0;
-              return (
-                <Link
-                  key={s}
-                  href={`/faturas?competencia=${competencia}&seguradora=${encodeURIComponent(s)}`}
-                  className={`flex items-center gap-1.5 rounded-t-lg border border-b-0 px-3 py-1.5 text-sm font-medium ${
-                    s === seguradora
-                      ? "border-gray-200 bg-white text-o2-navy"
-                      : "border-transparent text-gray-500 hover:text-o2-navy"
-                  }`}
-                >
-                  {s}
-                  {pendentesAba > 0 && (
-                    <span
-                      className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none ${
-                        s === seguradora ? "bg-o2-coral text-white" : "bg-gray-200 text-gray-600"
-                      }`}
-                    >
-                      {pendentesAba}
-                    </span>
-                  )}
-                </Link>
-              );
-            })}
-          </div>
+        <div className="flex flex-wrap gap-1.5 rounded-full bg-o2-gray/60 p-1.5">
+          {seguradoras.map((s) => {
+            const pendentesAba = pendentesPorSeguradora.get(s) ?? 0;
+            return (
+              <Link
+                key={s}
+                href={`/faturas?competencia=${competencia}&seguradora=${encodeURIComponent(s)}`}
+                className={`flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-medium transition ${
+                  s === seguradora
+                    ? "bg-o2-navy text-white shadow-sm"
+                    : "text-gray-600 hover:bg-white/70 hover:text-o2-navy"
+                }`}
+              >
+                {s}
+                {pendentesAba > 0 && (
+                  <span
+                    className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none ${
+                      s === seguradora ? "bg-o2-coral text-white" : "bg-o2-navy/10 text-o2-navy"
+                    }`}
+                  >
+                    {pendentesAba}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
         </div>
 
         {(pendentesPorSeguradora.get(seguradora) ?? 0) === 0 && (
@@ -516,7 +533,10 @@ export default async function FaturasPage({
           </p>
         )}
 
-        <form className="flex flex-wrap items-end gap-2" action="/faturas">
+        <form
+          className="flex flex-wrap items-end gap-2 rounded-xl border border-o2-navy/10 bg-white p-3 shadow-sm"
+          action="/faturas"
+        >
           <input type="hidden" name="competencia" value={competencia} />
           <input type="hidden" name="seguradora" value={seguradora} />
           <div>
@@ -582,10 +602,10 @@ export default async function FaturasPage({
               Linha destacada = imobiliária ainda sem CNPJ/CPF vinculado (clique em &quot;Editar&quot; pra completar)
             </p>
           )}
-          <div className="overflow-x-auto rounded-xl rounded-tl-none border border-o2-navy/10 bg-white shadow-sm">
+          <div className="overflow-x-auto rounded-xl border border-o2-navy/10 bg-white shadow-sm">
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-gray-100 text-xs text-gray-500">
+                <tr className="border-b border-gray-100 bg-o2-gray/30 text-xs text-gray-500">
                   <th className="px-3 py-2 font-medium"></th>
                   <th className="px-3 py-2 font-medium">Parceiro</th>
                   <th className="px-3 py-2 font-medium">CNPJ/CPF</th>
@@ -633,9 +653,9 @@ export default async function FaturasPage({
                             target="_blank"
                             rel="noreferrer"
                             title={boleto.arquivo_nome}
-                            className="text-lg"
+                            className="inline-flex text-o2-navy/70 transition hover:text-o2-coral"
                           >
-                            📄
+                            <IconInvoice className="h-4 w-4" />
                           </a>
                         ) : (
                           <span className="text-gray-300">—</span>
@@ -648,9 +668,9 @@ export default async function FaturasPage({
                             target="_blank"
                             rel="noreferrer"
                             title={demonstrativo.arquivo_nome}
-                            className="text-lg"
+                            className="inline-flex text-o2-navy/70 transition hover:text-o2-coral"
                           >
-                            🧾
+                            <IconReceipt className="h-4 w-4" />
                           </a>
                         ) : (
                           <span className="text-gray-300">—</span>
@@ -733,7 +753,7 @@ export default async function FaturasPage({
           </div>
         )}
 
-        <details className="rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm">
+        <details className="rounded-2xl border border-o2-navy/10 bg-white p-5 shadow-sm">
           <summary className="cursor-pointer text-sm font-medium text-o2-navy">+ Adicionar imobiliária</summary>
           <p className="mt-1 text-xs text-gray-500">
             Um cadastro só, marcando quais seguradoras essa imobiliária tem — não precisa repetir

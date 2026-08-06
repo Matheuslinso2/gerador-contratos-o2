@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../../actions";
@@ -12,6 +11,8 @@ import {
   escolherOrigemFatura,
 } from "./actions";
 import SeletorImobiliaria from "./SeletorImobiliaria";
+import FaturasSubHeader from "../FaturasSubHeader";
+import { IconChecklist } from "../icons";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -70,18 +71,11 @@ export default async function ConferenciaFaturasPage({
     <>
       <AppHeader userEmail={user?.email} logoutAction={signOut} />
       <main className="mx-auto max-w-3xl flex-1 space-y-6 p-8">
-        <div className="space-y-1">
-          <Link
-            href="/faturas"
-            className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-o2-navy hover:underline"
-          >
-            ← Voltar para Faturas
-          </Link>
-          <h1 className="text-xl font-semibold text-o2-navy">Conferência de faturas</h1>
-          <p className="text-sm text-gray-500">
-            Faturas que precisam de confirmação manual da imobiliária.
-          </p>
-        </div>
+        <FaturasSubHeader
+          icon={<IconChecklist />}
+          titulo="Conferência de faturas"
+          subtitulo="Faturas que precisam de confirmação manual da imobiliária."
+        />
 
         {ok && <p className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-700">{ok}</p>}
         {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>}

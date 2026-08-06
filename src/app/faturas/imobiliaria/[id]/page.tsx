@@ -1,11 +1,12 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../../../actions";
 import AppHeader from "@/components/AppHeader";
 import { salvarSeguradorasImobiliaria, atualizarEmailFaturas } from "../../actions";
 import { SEGURADORAS_CANONICAS } from "@/lib/faturasIdentificacao";
+import FaturasSubHeader from "../../FaturasSubHeader";
+import { IconBuilding, IconMail, IconChecklist } from "../../icons";
 
 export const dynamic = "force-dynamic";
 
@@ -74,16 +75,7 @@ export default async function ImobiliariaFaturasPage({
     <>
       <AppHeader userEmail={user?.email} logoutAction={signOut} />
       <main className="mx-auto max-w-2xl flex-1 space-y-6 p-8">
-        <div className="space-y-1">
-          <Link
-            href="/faturas"
-            className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-o2-navy hover:underline"
-          >
-            ← Voltar para Faturas
-          </Link>
-          <h1 className="text-xl font-semibold text-o2-navy">{imobiliaria.nome}</h1>
-          <p className="text-sm text-gray-500">CNPJ: {imobiliaria.cnpj}</p>
-        </div>
+        <FaturasSubHeader icon={<IconBuilding />} titulo={imobiliaria.nome} subtitulo={`CNPJ: ${imobiliaria.cnpj}`} />
 
         {imobiliaria.cadastro_incompleto && (
           <p className="rounded-lg border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800">
@@ -96,8 +88,13 @@ export default async function ImobiliariaFaturasPage({
         {ok && <p className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-700">✅ {ok}</p>}
         {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">⚠️ {erro}</p>}
 
-        <div className="rounded-xl border border-o2-navy/10 bg-white p-5 shadow-sm">
-          <h2 className="mb-1 text-sm font-semibold text-o2-navy">E-mail para envio de faturas</h2>
+        <div className="rounded-2xl border border-o2-navy/10 bg-white p-6 shadow-sm">
+          <div className="mb-1 flex items-center gap-2">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-o2-navy/5 text-o2-navy">
+              <IconMail className="h-4 w-4" />
+            </span>
+            <h2 className="text-sm font-semibold text-o2-navy">E-mail para envio de faturas</h2>
+          </div>
           <p className="mb-3 text-xs text-gray-500">
             Pra onde as faturas dessa imobiliária serão enviadas — diferente do e-mail de login dela.
           </p>
@@ -119,8 +116,13 @@ export default async function ImobiliariaFaturasPage({
           </form>
         </div>
 
-        <div className="rounded-xl border border-o2-navy/10 bg-white p-5 shadow-sm">
-          <h2 className="mb-1 text-sm font-semibold text-o2-navy">Seguradoras e dados de cada uma</h2>
+        <div className="rounded-2xl border border-o2-navy/10 bg-white p-6 shadow-sm">
+          <div className="mb-1 flex items-center gap-2">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-o2-navy/5 text-o2-navy">
+              <IconChecklist className="h-4 w-4" />
+            </span>
+            <h2 className="text-sm font-semibold text-o2-navy">Seguradoras e dados de cada uma</h2>
+          </div>
           <p className="mb-4 text-xs text-gray-500">
             Desmarcar uma seguradora não apaga o histórico — só faz essa imobiliária parar de
             aparecer como esperada nela. Esses campos só são editáveis aqui, não na tela principal.

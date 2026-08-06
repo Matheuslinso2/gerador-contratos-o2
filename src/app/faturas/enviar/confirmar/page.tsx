@@ -5,6 +5,8 @@ import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../../../actions";
 import AppHeader from "@/components/AppHeader";
 import { confirmarEnvio } from "../actions";
+import FaturasSubHeader from "../../FaturasSubHeader";
+import { IconSend } from "../../icons";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -72,18 +74,12 @@ export default async function ConfirmarEnvioPage({
     <>
       <AppHeader userEmail={user?.email} logoutAction={signOut} />
       <main className="mx-auto max-w-2xl flex-1 space-y-6 p-8">
-        <div className="space-y-1">
-          <Link
-            href={`/faturas?seguradora=${encodeURIComponent(seguradora)}&competencia=${competencia}`}
-            className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-o2-navy hover:underline"
-          >
-            ← Voltar para Faturas
-          </Link>
-          <h1 className="text-xl font-semibold text-o2-navy">Confirmar envio — {seguradora}</h1>
-          <p className="text-sm text-gray-500">
-            Revise antes de enviar: {prontas.length} e-mail(s) serão disparados agora, cada um pra 1 imobiliária.
-          </p>
-        </div>
+        <FaturasSubHeader
+          icon={<IconSend />}
+          titulo={`Confirmar envio — ${seguradora}`}
+          subtitulo={`Revise antes de enviar: ${prontas.length} e-mail(s) serão disparados agora, cada um pra 1 imobiliária.`}
+          voltarHref={`/faturas?seguradora=${encodeURIComponent(seguradora)}&competencia=${competencia}`}
+        />
 
         {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">⚠️ {erro}</p>}
 

@@ -1,11 +1,12 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../../../actions";
 import AppHeader from "@/components/AppHeader";
 import { resolverImobiliariaProvisoria } from "../../actions";
 import { SEGURADORAS_CANONICAS } from "@/lib/faturasIdentificacao";
+import FaturasSubHeader from "../../FaturasSubHeader";
+import { IconBuilding, IconInvoice, IconMail, IconChecklist } from "../../icons";
 
 export const dynamic = "force-dynamic";
 
@@ -72,16 +73,11 @@ export default async function NovaImobiliariaFaturasPage({
     <>
       <AppHeader userEmail={user?.email} logoutAction={signOut} />
       <main className="mx-auto max-w-2xl flex-1 space-y-6 p-8">
-        <div className="space-y-1">
-          <Link
-            href="/faturas"
-            className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-o2-navy hover:underline"
-          >
-            ← Voltar para Faturas
-          </Link>
-          <h1 className="text-xl font-semibold text-o2-navy">{nomeProvisorio}</h1>
-          <p className="text-sm text-gray-500">Ainda sem CNPJ/CPF vinculado — complete o cadastro abaixo.</p>
-        </div>
+        <FaturasSubHeader
+          icon={<IconBuilding />}
+          titulo={nomeProvisorio}
+          subtitulo="Ainda sem CNPJ/CPF vinculado — complete o cadastro abaixo."
+        />
 
         {ok && <p className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-700">✅ {ok}</p>}
         {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">⚠️ {erro}</p>}
@@ -89,16 +85,26 @@ export default async function NovaImobiliariaFaturasPage({
         <form action={resolverImobiliariaProvisoria} className="space-y-6">
           <input type="hidden" name="nome_provisorio" value={nomeProvisorio} />
 
-          <div className="rounded-xl border border-o2-navy/10 bg-white p-5 shadow-sm">
-            <h2 className="mb-1 text-sm font-semibold text-o2-navy">CNPJ ou CPF</h2>
+          <div className="rounded-2xl border border-o2-navy/10 bg-white p-6 shadow-sm">
+            <div className="mb-1 flex items-center gap-2">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-o2-navy/5 text-o2-navy">
+                <IconInvoice className="h-4 w-4" />
+              </span>
+              <h2 className="text-sm font-semibold text-o2-navy">CNPJ ou CPF</h2>
+            </div>
             <p className="mb-3 text-xs text-gray-500">
               Obrigatório pra criar o cadastro definitivo — pode ser CPF, se for corretor autônomo.
             </p>
             <input name="cnpj" placeholder="Só números" required className={`${inputClass} max-w-xs`} />
           </div>
 
-          <div className="rounded-xl border border-o2-navy/10 bg-white p-5 shadow-sm">
-            <h2 className="mb-1 text-sm font-semibold text-o2-navy">E-mail para envio de faturas</h2>
+          <div className="rounded-2xl border border-o2-navy/10 bg-white p-6 shadow-sm">
+            <div className="mb-1 flex items-center gap-2">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-o2-navy/5 text-o2-navy">
+                <IconMail className="h-4 w-4" />
+              </span>
+              <h2 className="text-sm font-semibold text-o2-navy">E-mail para envio de faturas</h2>
+            </div>
             <p className="mb-3 text-xs text-gray-500">
               Pra onde as faturas dessa imobiliária serão enviadas — diferente do e-mail de login dela.
             </p>
@@ -110,8 +116,13 @@ export default async function NovaImobiliariaFaturasPage({
             />
           </div>
 
-          <div className="rounded-xl border border-o2-navy/10 bg-white p-5 shadow-sm">
-            <h2 className="mb-1 text-sm font-semibold text-o2-navy">Seguradoras e dados de cada uma</h2>
+          <div className="rounded-2xl border border-o2-navy/10 bg-white p-6 shadow-sm">
+            <div className="mb-1 flex items-center gap-2">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-o2-navy/5 text-o2-navy">
+                <IconChecklist className="h-4 w-4" />
+              </span>
+              <h2 className="text-sm font-semibold text-o2-navy">Seguradoras e dados de cada uma</h2>
+            </div>
             <p className="mb-4 text-xs text-gray-500">
               Já vem marcado quem tinha fatura pendente de identificação. Pode ajustar ou adicionar outras.
             </p>
