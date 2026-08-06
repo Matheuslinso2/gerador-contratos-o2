@@ -105,8 +105,13 @@ const POR_PAGINA = 20;
 type ImobiliariaJoin = { nome: string; cnpj: string | null; email_faturas: string | null };
 
 type EsperadaBrutaRow = {
+  id: string;
   imobiliaria_id: string | null;
   nome_provisorio: string | null;
+  seguradora: string;
+  dia_vencimento: number | null;
+  cnpj_o2: string | null;
+  observacao: string | null;
   imobiliarias: ImobiliariaJoin | ImobiliariaJoin[] | null;
 };
 
@@ -117,6 +122,13 @@ type EsperadaSeguradoraRow = {
   dia_vencimento: number | null;
   cnpj_o2: string | null;
   observacao: string | null;
+};
+
+type FaturaCompetenciaRow = {
+  imobiliaria_id: string | null;
+  seguradora: string | null;
+  origem: string | null;
+  status: string;
 };
 
 type LinhaMestre = {
@@ -130,6 +142,58 @@ type LinhaMestre = {
 
 // Status "prontos pra enviar" -- só esses habilitam a caixinha de seleção.
 const STATUS_PRONTO_PARA_ENVIO = ["fatura_carregada", "pronta_para_envio"];
+
+// Quantas relações imobiliária+seguradora ainda precisam de alguma ação
+// (upload, conferência ou envio) em cada seguradora -- pra mostrar um
+// contador na aba, sem precisar clicar em cada uma pra saber se tem algo
+// pendente ali. Reaproveita a mesma lógica de "qual fatura vale" usada no
+// corpo da página, só que rodada pra todas as seguradoras de uma vez.
+function contarPendentesPorSeguradora(
+  seguradorasList: string[],
+  esperadasTodas: EsperadaBrutaRow[],
+  faturasCompetencia: FaturaCompetenciaRow[],
+  idsNaListaMestre: Set<string>
+): Map<string, number> {
+  const contagem = new Map<string, number>();
+  for (const seg of seguradorasList) {
+    const esperadas = esperadasTodas.filter((e) => e.seguradora === seg);
+    const faturasDaSeguradora = faturasCompetencia.filter((f) => f.seguradora === seg);
+
+    const porChaveOrigem = new Map<string, FaturaCompetenciaRow>();
+    const aguardandoOrigemPorImob = new Map<string, FaturaCompetenciaRow>();
+    for (const f of faturasDaSeguradora) {
+      if (!f.imobiliaria_id) continue;
+      if (f.status === "aguardando_origem") {
+        aguardandoOrigemPorImob.set(f.imobiliaria_id, f);
+        continue;
+      }
+      const chave = `${f.imobiliaria_id}|${f.origem ?? ""}`;
+      const atual = porChaveOrigem.get(chave);
+      const prioridadeNova = PRIORIDADE_STATUS[f.status] ?? 99;
+      const prioridadeAtual = atual ? (PRIORIDADE_STATUS[atual.status] ?? 99) : 100;
+      if (!atual || prioridadeNova < prioridadeAtual) porChaveOrigem.set(chave, f);
+    }
+
+    let pendentes = 0;
+    for (const e of esperadas) {
+      if (!e.imobiliaria_id) {
+        pendentes++;
+        continue;
+      }
+      const chave = `${e.imobiliaria_id}|${e.cnpj_o2 ?? ""}`;
+      const fatura = porChaveOrigem.get(chave) ?? aguardandoOrigemPorImob.get(e.imobiliaria_id);
+      const status = fatura ? fatura.status : "aguardando_upload";
+      if (status !== "enviada" && status !== "cancelada") pendentes++;
+    }
+    // Faturas de imobiliárias totalmente novas (ainda sem nenhum vínculo cadastrado).
+    for (const f of faturasDaSeguradora) {
+      if (f.imobiliaria_id && f.status !== "cancelada" && !idsNaListaMestre.has(f.imobiliaria_id)) pendentes++;
+    }
+
+    contagem.set(seg, pendentes);
+  }
+  return contagem;
+}
 
 function chaveDe(imobiliariaId: string | null, nomeProvisorio: string | null): string {
   return imobiliariaId ?? `prov:${nomeProvisorio}`;
@@ -180,25 +244,21 @@ export default async function FaturasPage({
     : SEGURADORAS_PADRAO;
   const seguradora = seguradoraParam && seguradoras.includes(seguradoraParam) ? seguradoraParam : seguradoras[0];
 
-  const [{ data: todasEsperadasData }, { data: esperadasSeguradoraData }, { data: faturasData }, { data: pendentesData }] =
+  const [{ data: esperadasTodasData }, { data: faturasCompetenciaData }, { data: pendentesData }] =
     await Promise.all([
-      // Lista mestre: TODAS as imobiliárias com alguma seguradora ativa,
-      // independente de qual está selecionada -- é o que fica "congelado"
-      // à esquerda ao trocar de aba.
+      // TODAS as relações imobiliária+seguradora ativas, de todas as
+      // seguradoras -- serve tanto pra montar a lista mestre (congelada à
+      // esquerda ao trocar de aba) quanto pros dados da seguradora
+      // selecionada e pro contador de pendentes de cada aba.
       supabase
         .from("faturas_esperadas")
-        .select("imobiliaria_id, nome_provisorio, imobiliarias(nome, cnpj, email_faturas)")
+        .select("id, imobiliaria_id, nome_provisorio, seguradora, dia_vencimento, cnpj_o2, observacao, imobiliarias(nome, cnpj, email_faturas)")
         .eq("ativo", true),
-      // Dados específicos da seguradora selecionada (vencimento/origem/observação).
-      supabase
-        .from("faturas_esperadas")
-        .select("id, imobiliaria_id, nome_provisorio, dia_vencimento, cnpj_o2, observacao")
-        .eq("seguradora", seguradora)
-        .eq("ativo", true),
+      // Faturas dessa competência em TODAS as seguradoras -- idem, serve
+      // pra tela detalhada da seguradora selecionada e pro contador das abas.
       supabase
         .from("faturas")
-        .select("id, imobiliaria_id, valor, vencimento, status, arquivo_nome, arquivo_bucket_path, tipo_documento, origem")
-        .eq("seguradora", seguradora)
+        .select("id, imobiliaria_id, valor, vencimento, status, arquivo_nome, arquivo_bucket_path, tipo_documento, origem, seguradora")
         .eq("competencia", competencia),
       supabase
         .from("faturas")
@@ -206,11 +266,16 @@ export default async function FaturasPage({
         .in("status", ["aguardando_identificacao", "aguardando_conferencia", "aguardando_origem"]),
     ]);
 
+  const esperadasTodas = (esperadasTodasData ?? []) as EsperadaBrutaRow[];
+  const esperadasSeguradoraData = esperadasTodas.filter((e) => e.seguradora === seguradora);
+  const faturasCompetencia = (faturasCompetenciaData ?? []) as FaturaCompetenciaRow[];
+  const faturasData = (faturasCompetenciaData ?? []).filter((f) => f.seguradora === seguradora);
+
   // Dedup pra lista mestre -- uma imobiliária pode ter várias linhas em
   // faturas_esperadas (uma por seguradora), aqui só interessa 1 por
   // imobiliária/provisório, ordenada por nome.
   const mestrePorChave = new Map<string, LinhaMestre>();
-  for (const e of (todasEsperadasData ?? []) as EsperadaBrutaRow[]) {
+  for (const e of esperadasTodas) {
     const imob = Array.isArray(e.imobiliarias) ? e.imobiliarias[0] : e.imobiliarias;
     const chave = chaveDe(e.imobiliaria_id, e.nome_provisorio);
     if (!mestrePorChave.has(chave)) {
@@ -225,12 +290,20 @@ export default async function FaturasPage({
     }
   }
   const listaMestre = Array.from(mestrePorChave.values()).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+  const idsNaListaMestre = new Set(listaMestre.map((m) => m.imobiliaria_id).filter(Boolean));
+
+  const pendentesPorSeguradora = contarPendentesPorSeguradora(
+    seguradoras,
+    esperadasTodas,
+    faturasCompetencia,
+    idsNaListaMestre as Set<string>
+  );
 
   // Uma imobiliária pode ter mais de 1 relação com a MESMA seguradora --
   // ex: Tokio via O2 Seguros e via SegImob, cada uma com vencimento
   // próprio -- por isso é uma lista, não um valor único.
   const esperadaSeguradoraPorChave = new Map<string, EsperadaSeguradoraRow[]>();
-  for (const e of (esperadasSeguradoraData ?? []) as EsperadaSeguradoraRow[]) {
+  for (const e of esperadasSeguradoraData as EsperadaSeguradoraRow[]) {
     const chave = chaveDe(e.imobiliaria_id, e.nome_provisorio);
     const lista = esperadaSeguradoraPorChave.get(chave) ?? [];
     lista.push(e);
@@ -244,7 +317,7 @@ export default async function FaturasPage({
   // alguém escolher na Conferência).
   const faturasPorImobiliariaOrigem = new Map<string, NonNullable<typeof faturasData>[number]>();
   const faturasAguardandoOrigemPorImobiliaria = new Map<string, NonNullable<typeof faturasData>[number]>();
-  const duplicatasPorImobiliaria = new Map<string, number>();
+  const duplicatasPorImobiliaria = new Map<string, { qtd: number; primeiraId: string }>();
   // Todos os arquivos vivos (não duplicada/cancelada) por imobiliária+origem
   // -- pra mostrar os ícones de download de boleto/fatura por linha, sem
   // depender de qual dos dois "venceu" a prioridade de status acima.
@@ -253,7 +326,11 @@ export default async function FaturasPage({
   for (const f of faturasData ?? []) {
     if (!f.imobiliaria_id) continue;
     if (f.status === "duplicada") {
-      duplicatasPorImobiliaria.set(f.imobiliaria_id, (duplicatasPorImobiliaria.get(f.imobiliaria_id) ?? 0) + 1);
+      const atual = duplicatasPorImobiliaria.get(f.imobiliaria_id);
+      duplicatasPorImobiliaria.set(f.imobiliaria_id, {
+        qtd: (atual?.qtd ?? 0) + 1,
+        primeiraId: atual?.primeiraId ?? f.id,
+      });
     }
     if (STATUS_ARQUIVO_VISIVEL.includes(f.status)) {
       const chaveArquivo = `${f.imobiliaria_id}|${f.status === "aguardando_origem" ? "" : f.origem ?? ""}`;
@@ -356,10 +433,10 @@ export default async function FaturasPage({
   // Faturas carregadas nessa seguradora/competência mas cuja imobiliária
   // ainda não está na lista mestre (parceiro totalmente novo) — mostra
   // também, marcado.
-  const idsNaListaMestre = new Set(listaMestre.map((m) => m.imobiliaria_id).filter(Boolean));
   const extras = (faturasData ?? []).filter(
     (f) => f.imobiliaria_id && f.status !== "cancelada" && !idsNaListaMestre.has(f.imobiliaria_id)
   );
+  const temPendenteCnpj = linhas.some((l) => !l.m.imobiliaria_id && !!l.m.nome_provisorio);
 
   return (
     <>
@@ -405,21 +482,39 @@ export default async function FaturasPage({
 
         <div>
           <div className="flex flex-wrap gap-1 border-b border-gray-200">
-            {seguradoras.map((s) => (
-              <Link
-                key={s}
-                href={`/faturas?competencia=${competencia}&seguradora=${encodeURIComponent(s)}`}
-                className={`rounded-t-lg border border-b-0 px-3 py-1.5 text-sm font-medium ${
-                  s === seguradora
-                    ? "border-gray-200 bg-white text-o2-navy"
-                    : "border-transparent text-gray-500 hover:text-o2-navy"
-                }`}
-              >
-                {s}
-              </Link>
-            ))}
+            {seguradoras.map((s) => {
+              const pendentesAba = pendentesPorSeguradora.get(s) ?? 0;
+              return (
+                <Link
+                  key={s}
+                  href={`/faturas?competencia=${competencia}&seguradora=${encodeURIComponent(s)}`}
+                  className={`flex items-center gap-1.5 rounded-t-lg border border-b-0 px-3 py-1.5 text-sm font-medium ${
+                    s === seguradora
+                      ? "border-gray-200 bg-white text-o2-navy"
+                      : "border-transparent text-gray-500 hover:text-o2-navy"
+                  }`}
+                >
+                  {s}
+                  {pendentesAba > 0 && (
+                    <span
+                      className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none ${
+                        s === seguradora ? "bg-o2-coral text-white" : "bg-gray-200 text-gray-600"
+                      }`}
+                    >
+                      {pendentesAba}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
           </div>
         </div>
+
+        {(pendentesPorSeguradora.get(seguradora) ?? 0) === 0 && (
+          <p className="rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-sm text-green-700">
+            ✅ Tudo em dia em {seguradora} nesse mês — nenhuma fatura pendente de upload, conferência ou envio.
+          </p>
+        )}
 
         <form className="flex flex-wrap items-end gap-2" action="/faturas">
           <input type="hidden" name="competencia" value={competencia} />
@@ -481,6 +576,12 @@ export default async function FaturasPage({
               Enviar selecionadas
             </button>
           </div>
+          {temPendenteCnpj && (
+            <p className="flex items-center gap-1.5 text-xs text-gray-500">
+              <span className="inline-block h-3 w-3 rounded-sm bg-orange-50 ring-1 ring-orange-200" />
+              Linha destacada = imobiliária ainda sem CNPJ/CPF vinculado (clique em &quot;Editar&quot; pra completar)
+            </p>
+          )}
           <div className="overflow-x-auto rounded-xl rounded-tl-none border border-o2-navy/10 bg-white shadow-sm">
             <table className="w-full text-left text-sm">
               <thead>
@@ -565,12 +666,12 @@ export default async function FaturasPage({
                             Imob com fatura aberta
                           </span>
                         )}
-                        {m.imobiliaria_id && (duplicatasPorImobiliaria.get(m.imobiliaria_id) ?? 0) > 0 && (
+                        {m.imobiliaria_id && duplicatasPorImobiliaria.get(m.imobiliaria_id) && (
                           <Link
-                            href="/faturas/conferencia"
+                            href={`/faturas/conferencia#fatura-${duplicatasPorImobiliaria.get(m.imobiliaria_id)!.primeiraId}`}
                             className="ml-1.5 whitespace-nowrap text-xs font-medium text-orange-700 hover:underline"
                           >
-                            +{duplicatasPorImobiliaria.get(m.imobiliaria_id)} possível duplicata
+                            +{duplicatasPorImobiliaria.get(m.imobiliaria_id)!.qtd} possível duplicata
                           </Link>
                         )}
                       </td>
@@ -636,13 +737,24 @@ export default async function FaturasPage({
           <summary className="cursor-pointer text-sm font-medium text-o2-navy">+ Adicionar imobiliária</summary>
           <p className="mt-1 text-xs text-gray-500">
             Um cadastro só, marcando quais seguradoras essa imobiliária tem — não precisa repetir
-            aba por aba.
+            aba por aba. Se o dia de vencimento variar entre seguradoras, ajuste depois em cada uma
+            pelo &quot;Editar&quot;.
           </p>
           <form action={adicionarEsperada} className="mt-3 space-y-3">
             <input type="hidden" name="voltar_para" value={`&competencia=${competencia}&seguradora=${encodeURIComponent(seguradora)}`} />
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <input name="nome" placeholder="Nome da imobiliária" required className={inputClass} />
               <input name="cnpj" placeholder="CNPJ ou CPF" required className={inputClass} />
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div>
+                <label className="mb-0.5 block text-xs text-gray-500">Dia de vencimento (todas as marcadas abaixo)</label>
+                <input name="dia_vencimento" type="number" min={1} max={31} placeholder="Ex: 10" required className={inputClass} />
+              </div>
+              <div>
+                <label className="mb-0.5 block text-xs text-gray-500">E-mail de faturas (opcional agora, mas necessário pra enviar)</label>
+                <input name="email_faturas" type="email" placeholder="financeiro@imobiliaria.com.br" className={inputClass} />
+              </div>
             </div>
             <div className="flex flex-wrap gap-3">
               {seguradoras.map((s) => (

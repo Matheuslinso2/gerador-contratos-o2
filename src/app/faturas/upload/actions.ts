@@ -29,6 +29,7 @@ export type ResultadoProcessamento = {
   ok: boolean;
   nomeArquivo: string;
   mensagem: string;
+  status?: string;
 };
 
 // O upload do PDF em si acontece direto do navegador pro bucket temporário
@@ -128,6 +129,7 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
     return {
       ok: true,
       nomeArquivo,
+      status: duplicata ? "duplicada" : "aguardando_conferencia",
       mensagem: ehPlanilha
         ? "Não conseguimos ler essa planilha — precisa de conferência manual."
         : "Não conseguimos abrir esse PDF — precisa de conferência manual.",
@@ -263,5 +265,5 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
     fatura_carregada: `Identificada: ${nomeIdentificado}${seguradoraTexto}${tipoDocumentoTexto}.`,
   };
 
-  return { ok: true, nomeArquivo, mensagem: mensagens[status] ?? "Processada." };
+  return { ok: true, nomeArquivo, status, mensagem: mensagens[status] ?? "Processada." };
 }

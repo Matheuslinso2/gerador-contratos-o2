@@ -11,6 +11,7 @@ import {
   resolverDuplicata,
   escolherOrigemFatura,
 } from "./actions";
+import SeletorImobiliaria from "./SeletorImobiliaria";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -89,7 +90,11 @@ export default async function ConferenciaFaturasPage({
           {(pendentes ?? []).map((f) => {
             const arquivoNuncaAbriu = !f.texto_bruto_extraido;
             return (
-              <div key={f.id} className="rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm">
+              <div
+                key={f.id}
+                id={`fatura-${f.id}`}
+                className="rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm target:ring-2 target:ring-o2-coral"
+              >
                 <div className="mb-2 flex items-center justify-between">
                   <p className="text-sm font-medium text-o2-navy">{f.arquivo_nome}</p>
                   <span className="text-xs text-gray-500">Competência: {f.competencia}</span>
@@ -193,18 +198,11 @@ export default async function ConferenciaFaturasPage({
                       <label className="mb-1 block text-xs text-gray-600">
                         Imobiliária {f.confianca ? `(sugestão: confiança ${f.confianca})` : ""}
                       </label>
-                      <select
-                        name="imobiliaria_id"
-                        defaultValue={f.confianca === "baixa" ? "" : f.imobiliaria_id ?? ""}
-                        className={inputClass}
-                      >
-                        <option value="">Selecione...</option>
-                        {imobiliarias.map((i) => (
-                          <option key={i.id} value={i.id}>
-                            {i.nome}
-                          </option>
-                        ))}
-                      </select>
+                      <SeletorImobiliaria
+                        imobiliarias={imobiliarias}
+                        defaultImobiliariaId={f.confianca === "baixa" ? null : f.imobiliaria_id}
+                        listId={`imob-lista-${f.id}`}
+                      />
                     </div>
                     <button
                       type="submit"

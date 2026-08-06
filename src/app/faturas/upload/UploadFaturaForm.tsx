@@ -118,6 +118,23 @@ export default function UploadFaturaForm({ userId }: { userId: string }) {
         </button>
       </form>
 
+      {!enviando && resultados.length > 0 && (
+        <div className="rounded-lg border border-o2-navy/15 bg-o2-navy/5 p-3 text-sm text-o2-navy">
+          {(() => {
+            const STATUS_CONFERENCIA = ["duplicada", "aguardando_identificacao", "aguardando_origem", "aguardando_conferencia"];
+            const falhas = resultados.filter((r) => !r.ok).length;
+            const conferencia = resultados.filter((r) => r.ok && r.status && STATUS_CONFERENCIA.includes(r.status)).length;
+            const prontas = resultados.length - falhas - conferencia;
+            const partes = [
+              prontas > 0 ? `${prontas} pronta(s) pra envio` : null,
+              conferencia > 0 ? `${conferencia} foram pra conferência` : null,
+              falhas > 0 ? `${falhas} com falha` : null,
+            ].filter(Boolean);
+            return `${resultados.length} arquivo(s) processado(s): ${partes.join(", ")}.`;
+          })()}
+        </div>
+      )}
+
       {resultados.length > 0 && (
         <div className="space-y-2 rounded-lg border border-gray-200 p-3">
           {resultados.map((r, i) => (

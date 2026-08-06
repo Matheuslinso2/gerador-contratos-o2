@@ -61,6 +61,12 @@ export default async function NovaImobiliariaFaturasPage({
     ...(vinculosPorSeguradora.get(s) ?? []).map((vinculo) => ({ seguradora: s, vinculo })),
     { seguradora: s, vinculo: null },
   ]);
+  const linhasComIndice = linhasFormulario.map((linha, i) => ({ ...linha, i }));
+  const seguradorasComVinculo = new Set(vinculos.map((v) => v.seguradora));
+  // Só mostra de cara quem já tinha fatura pendente pra essa seguradora --
+  // o resto fica atrás do "+ Adicionar outra seguradora".
+  const linhasExistentes = linhasComIndice.filter((l) => seguradorasComVinculo.has(l.seguradora));
+  const linhasNovas = linhasComIndice.filter((l) => !seguradorasComVinculo.has(l.seguradora));
 
   return (
     <>
@@ -111,7 +117,7 @@ export default async function NovaImobiliariaFaturasPage({
             </p>
             <input type="hidden" name="qtd" value={linhasFormulario.length} />
             <div className="space-y-4">
-              {linhasFormulario.map(({ seguradora: s, vinculo: v }, i) => (
+              {linhasExistentes.map(({ seguradora: s, vinculo: v, i }) => (
                 <div key={`${s}-${i}`} className="rounded-lg border border-gray-200 p-3">
                   <input type="hidden" name={`seguradora_${i}`} value={s} />
                   <label className="flex items-center gap-2 text-sm font-medium text-gray-800">
@@ -151,6 +157,51 @@ export default async function NovaImobiliariaFaturasPage({
                   </div>
                 </div>
               ))}
+
+              {linhasNovas.length > 0 && (
+                <details className="rounded-lg border border-dashed border-gray-300 p-3">
+                  <summary className="cursor-pointer text-sm font-medium text-o2-navy">
+                    + Adicionar outra seguradora
+                  </summary>
+                  <div className="mt-3 space-y-4">
+                    {linhasNovas.map(({ seguradora: s, vinculo: v, i }) => (
+                      <div key={`${s}-${i}`} className="rounded-lg border border-gray-200 p-3">
+                        <input type="hidden" name={`seguradora_${i}`} value={s} />
+                        <label className="flex items-center gap-2 text-sm font-medium text-gray-800">
+                          <input type="checkbox" name={`ativo_${i}`} defaultChecked={v?.ativo ?? false} />
+                          {s}
+                        </label>
+                        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                          <div>
+                            <label className="mb-0.5 block text-xs text-gray-500">Dia de vencimento</label>
+                            <input
+                              name={`dia_vencimento_${i}`}
+                              type="number"
+                              min={1}
+                              max={31}
+                              defaultValue={v?.dia_vencimento ?? ""}
+                              className={inputClass}
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-0.5 block text-xs text-gray-500">Origem da fatura</label>
+                            <select name={`cnpj_o2_${i}`} defaultValue={v?.cnpj_o2 ?? ""} className={inputClass}>
+                              <option value="">—</option>
+                              <option value="O2 Seguros">O2 Seguros</option>
+                              <option value="O2 Capitalização">O2 Capitalização</option>
+                              <option value="SegImob">SegImob</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="mb-0.5 block text-xs text-gray-500">Observação</label>
+                            <input name={`observacao_${i}`} defaultValue={v?.observacao ?? ""} className={inputClass} />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
             </div>
           </div>
 

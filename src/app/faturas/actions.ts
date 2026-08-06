@@ -23,12 +23,14 @@ export async function adicionarEsperada(formData: FormData) {
 
   const nome = String(formData.get("nome") ?? "").trim();
   const cnpj = String(formData.get("cnpj") ?? "").trim();
+  const diaVencimento = String(formData.get("dia_vencimento") ?? "").trim();
+  const emailFaturas = String(formData.get("email_faturas") ?? "").trim();
   const seguradorasSelecionadas = formData.getAll("seguradoras").map(String).filter(Boolean);
   const voltarPara = String(formData.get("voltar_para") ?? "").trim();
 
-  if (!nome || !cnpj || !seguradorasSelecionadas.length) {
+  if (!nome || !cnpj || !diaVencimento || !seguradorasSelecionadas.length) {
     redirect(
-      `/faturas?erro=${encodeURIComponent("Informe nome, CNPJ e marque ao menos uma seguradora.")}${voltarPara}`
+      `/faturas?erro=${encodeURIComponent("Informe nome, CNPJ, dia de vencimento e marque ao menos uma seguradora.")}${voltarPara}`
     );
   }
 
@@ -41,10 +43,15 @@ export async function adicionarEsperada(formData: FormData) {
     );
   }
 
+  if (emailFaturas) {
+    await supabase.from("imobiliarias").update({ email_faturas: emailFaturas }).eq("id", imobiliariaId);
+  }
+
   const linhas = seguradorasSelecionadas.map((seguradora) => ({
     imobiliaria_id: imobiliariaId,
     seguradora,
     ativo: true,
+    dia_vencimento: Number(diaVencimento),
   }));
   const { error } = await supabase
     .from("faturas_esperadas")

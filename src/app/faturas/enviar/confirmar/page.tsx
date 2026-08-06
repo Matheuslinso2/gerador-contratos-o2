@@ -98,11 +98,20 @@ export default async function ConfirmarEnvioPage({
             const arquivos = faturasPorImobiliaria.get(i.id) ?? [];
             const referencia = arquivos.find((a) => a.tipo_documento === "boleto") ?? arquivos[0];
             const senha = arquivos.map((a) => a.senha_pdf).find(Boolean) ?? null;
+            const hrefSemEsta = `/faturas/enviar/confirmar?seguradora=${encodeURIComponent(seguradora)}&competencia=${competencia}${prontas
+              .filter((p) => p.id !== i.id)
+              .map((p) => `&imob=${p.id}`)
+              .join("")}`;
             return (
               <div key={i.id} className="rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm">
                 <div className="mb-2 flex items-center justify-between">
                   <p className="text-sm font-semibold text-o2-navy">{i.nome}</p>
-                  <p className="text-xs text-gray-500">{i.email_faturas}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs text-gray-500">{i.email_faturas}</p>
+                    <Link href={hrefSemEsta} className="text-xs font-medium text-gray-400 hover:text-red-600 hover:underline">
+                      Remover da leva
+                    </Link>
+                  </div>
                 </div>
                 <p className="mb-1 text-xs text-gray-500">
                   Vencimento {referencia?.vencimento ?? "—"} · {formatarValor(referencia?.valor ?? null)}
