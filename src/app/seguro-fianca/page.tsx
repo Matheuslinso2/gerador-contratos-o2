@@ -4,6 +4,7 @@ import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
 import SeletorCompetencia from "./SeletorCompetencia";
+import ImobiliariasTabela from "./ImobiliariasTabela";
 import styles from "./seguro-fianca.module.css";
 import {
   buscarDefinicaoCampos,
@@ -147,6 +148,13 @@ function ProdutividadeTabela({ dados }: { dados: AnaliseGerencial["porResponsave
               </td>
             </tr>
           ))}
+          {linhas.length === 0 && (
+            <tr>
+              <td colSpan={5} style={{ color: "var(--ink-faint)" }}>
+                Nenhum card neste funil no período.
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>
@@ -172,6 +180,7 @@ export default async function SeguroFiancaPage({
   let gerencial: (AnaliseGerencial & { totalMovimentacoes: number }) | null = null;
   let atualizadoEm: string | null = null;
   let erro: string | null = null;
+  let semRegistroNoPeriodo = false;
 
   if (ehCompetenciaAtual) {
     try {
@@ -191,6 +200,13 @@ export default async function SeguroFiancaPage({
     if (data) {
       gerencial = data.payload as AnaliseGerencial & { totalMovimentacoes: number };
       atualizadoEm = data.atualizado_em;
+    } else {
+      // Nenhum snapshot foi salvo pra esse mês (a página nunca foi aberta
+      // durante essa competência) — mostra os painéis normalmente, todos
+      // zerados, em vez de uma tela em branco. É uma informação real (zero
+      // cards registrados), não falta de dado.
+      gerencial = { ...montarAnaliseGerencial([]), totalMovimentacoes: 0 };
+      semRegistroNoPeriodo = true;
     }
   }
 
@@ -208,6 +224,7 @@ export default async function SeguroFiancaPage({
               <SeletorCompetencia competencia={competencia} />
               <br />
               {atualizadoEm && <>Atualizado em {new Date(atualizadoEm).toLocaleString("pt-BR")}</>}
+              {semRegistroNoPeriodo && <>Nenhum card registrado nesta competência</>}
             </div>
           </div>
 
@@ -218,10 +235,6 @@ export default async function SeguroFiancaPage({
                 <div>Não consegui buscar os dados do Bitrix agora: {erro}</div>
               </div>
             </div>
-          )}
-
-          {!gerencial && !erro && (
-            <div className={styles.panel}>Sem dados salvos para {competencia}.</div>
           )}
 
           {gerencial && (
@@ -500,6 +513,13 @@ export default async function SeguroFiancaPage({
                               <td className={`${styles.numCol} ${styles.num}`}>{t.max}</td>
                             </tr>
                           ))}
+                          {Object.keys(gerencial.tempoPorEtapa).length === 0 && (
+                            <tr>
+                              <td colSpan={4} style={{ color: "var(--ink-faint)" }}>
+                                Nenhum card em aberto neste período.
+                              </td>
+                            </tr>
+                          )}
                         </tbody>
                       </table>
                     </div>
@@ -567,6 +587,9 @@ export default async function SeguroFiancaPage({
                       {gerencial.motivosPerdaFunil2.semMotivo > 0 && (
                         <BarraProporcional label="Sem motivo registrado" value={gerencial.motivosPerdaFunil2.semMotivo} max={gerencial.motivosPerdaFunil2.total} warning />
                       )}
+                      {gerencial.motivosPerdaFunil2.total === 0 && (
+                        <div style={{ color: "var(--ink-faint)", fontSize: 12.5 }}>Nenhuma perda registrada neste período.</div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -574,15 +597,11 @@ export default async function SeguroFiancaPage({
 
               <section className={styles.section}>
                 <div className={styles.sectionHead}>
-                  <h2>Top imobiliárias por volume</h2>
-                  <div className={styles.note}>{gerencial.kpis.imobiliarias} imobiliárias distintas — mostrando as 10 maiores</div>
+                  <h2>Imobiliárias — status de todos os cards</h2>
+                  <div className={styles.note}>{gerencial.kpis.imobiliarias} imobiliárias com pelo menos 1 cotação no período</div>
                 </div>
                 <div className={styles.panel}>
-                  <div className={styles.barlist}>
-                    {gerencial.topImobiliarias.map((i) => (
-                      <BarraProporcional key={i.nome} label={i.nome} value={i.cards} max={gerencial.topImobiliarias[0]?.cards ?? 1} />
-                    ))}
-                  </div>
+                  <ImobiliariasTabela imobiliarias={gerencial.topImobiliarias} />
                 </div>
               </section>
 

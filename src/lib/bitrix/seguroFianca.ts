@@ -308,7 +308,7 @@ export type AnaliseGerencial = {
   taxaPorSeguradora: Record<string, { n: number; pctLocacao: number; pctAluguel: number }>;
   motivosRecusaFunil1: { total: number; semMotivo: number }; // decisão de compliance, sem motivo interno — só o total importa
   motivosPerdaFunil2: { porMotivo: Record<string, number>; semMotivo: number; total: number };
-  topImobiliarias: { nome: string; cards: number }[];
+  topImobiliarias: { nome: string; total: number; recusados: number; emAndamento: number; perdidos: number; convertidos: number }[];
   valoresTrabalhados: { aluguel: number; pacoteLocacao: number };
   faixasPacoteLocacao: { faixa: string; cards: number; pacoteMedio: number; seguroMedio: number }[];
   tempoPorEtapa: Record<string, { media: number; mediana: number; min: number; max: number; n: number }>;
@@ -400,19 +400,29 @@ export function montarAnaliseGerencial(linhas: LinhaContagem[]): AnaliseGerencia
     motivosPerdaFunil2[l.motivoRecusaPerda] = (motivosPerdaFunil2[l.motivoRecusaPerda] ?? 0) + 1;
   }
 
-  const porImobiliaria: Record<string, number> = {};
+  const porImobiliaria: Record<
+    string,
+    { total: number; recusados: number; emAndamento: number; perdidos: number; convertidos: number }
+  > = {};
   let semImobiliaria = 0;
   for (const l of linhas) {
     if (!l.imobiliaria) {
       semImobiliaria++;
       continue;
     }
-    porImobiliaria[l.imobiliaria] = (porImobiliaria[l.imobiliaria] ?? 0) + 1;
+    porImobiliaria[l.imobiliaria] ??= { total: 0, recusados: 0, emAndamento: 0, perdidos: 0, convertidos: 0 };
+    const d = porImobiliaria[l.imobiliaria];
+    d.total++;
+    if (l.resultado === "Recusado") d.recusados++;
+    else if (l.resultado === "Perdido") d.perdidos++;
+    else if (l.resultado === "Convertido") d.convertidos++;
+    else d.emAndamento++; // "Aprovado" é transitório (card já está no funil 2, contado lá pelo resultado real dele)
   }
+  // Todas as imobiliárias com pelo menos 1 card, ordenadas por volume — a
+  // UI decide quantas mostrar por padrão (ver ImobiliariasTabela.tsx).
   const topImobiliarias = Object.entries(porImobiliaria)
-    .map(([nome, cards]) => ({ nome, cards }))
-    .sort((a, b) => b.cards - a.cards)
-    .slice(0, 10);
+    .map(([nome, d]) => ({ nome, ...d }))
+    .sort((a, b) => b.total - a.total);
 
   const valoresTrabalhados = {
     aluguel: linhas.reduce((a, l) => a + (typeof l.aluguel === "number" ? l.aluguel : 0), 0),
