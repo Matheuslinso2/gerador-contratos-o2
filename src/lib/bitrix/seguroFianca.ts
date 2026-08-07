@@ -44,6 +44,14 @@ export const ETAPAS: Etapa[] = [
 ];
 const etapaPorStatusId = new Map(ETAPAS.map((e) => [e.statusId, e]));
 
+// Ordem de progressão dos funis (funil 1 do primeiro ao último status, depois
+// funil 2 do primeiro ao último) — usada pra ordenar o painel "Tempo em
+// aberto por etapa" na mesma sequência em que o card realmente avança.
+const ORDEM_CHAVES_ETAPA = ETAPAS.map((e) => {
+  const funil = e.statusId.startsWith("DT1042_18") ? "Análise e Cotação" : "Negociação e Contrato";
+  return `${funil} | ${e.nome}`;
+});
+
 type ConfigSeguradora = {
   nome: string;
   status: [string, string][]; // [rótulo do plano, código do campo] — mais de um item quando a seguradora tem planos com status separado (ex: Porto)
@@ -168,7 +176,7 @@ export type LinhaContagem = {
   resultado: "Recusado" | "Aprovado" | "Perdido" | "Convertido" | "Em andamento";
   dataCriacao: string;
   ultimaMovimentacao: string;
-  diasEmAberto: number;
+  minutosEmAberto: number;
   qtdMovimentacoes: number;
   responsavelAtual: string;
   criadoPor: string;
@@ -228,7 +236,7 @@ export function montarContagemMensal(
 
     const criadoEm = new Date(item.createdTime);
     const fimContagem = resultado === "Em andamento" ? agora : new Date(item.movedTime || item.updatedTime);
-    const diasEmAberto = Math.max(0, Math.round((fimContagem.getTime() - criadoEm.getTime()) / 86_400_000));
+    const minutosEmAberto = Math.max(0, Math.round((fimContagem.getTime() - criadoEm.getTime()) / 60_000));
 
     const motivoRecusaPerda = enumLabel(defs, CAMPO_MOTIVO_RECUSA, item[CAMPO_MOTIVO_RECUSA]);
     const alertas: string[] = [];
@@ -266,7 +274,7 @@ export function montarContagemMensal(
       resultado,
       dataCriacao: apenasData(item.createdTime),
       ultimaMovimentacao: apenasData(item.movedTime),
-      diasEmAberto,
+      minutosEmAberto,
       qtdMovimentacoes: eventos.length,
       responsavelAtual: nomeUsuario(usuarios, item.assignedById),
       criadoPor: nomeUsuario(usuarios, item.createdBy),
@@ -312,7 +320,7 @@ export type AnaliseGerencial = {
   valoresTrabalhados: { aluguel: number; pacoteLocacao: number };
   faixasPacoteLocacao: { faixa: string; cards: number; pacoteMedio: number; seguroMedio: number }[];
   tempoPorEtapa: Record<string, { media: number; mediana: number; min: number; max: number; n: number }>;
-  cardsQuePedemAtencao: { id: number; nome: string; etapa: string; dias: number; mediaEtapa: number; responsavel: string }[];
+  cardsQuePedemAtencao: { id: number; nome: string; etapa: string; minutos: number; mediaEtapa: number; responsavel: string }[];
   qualidade: { semImobiliaria: number; perdidosFunil2SemMotivo: number; totalPerdidosFunil2: number };
 };
 
@@ -453,34 +461,39 @@ export function montarAnaliseGerencial(linhas: LinhaContagem[]): AnaliseGerencia
     };
   });
 
-  const diasPorEtapa: Record<string, number[]> = {};
+  const minutosPorEtapa: Record<string, number[]> = {};
   for (const l of linhas) {
     const chave = `${l.funil} | ${l.etapaAtual}`;
-    (diasPorEtapa[chave] ??= []).push(l.diasEmAberto);
+    (minutosPorEtapa[chave] ??= []).push(l.minutosEmAberto);
   }
   const tempoPorEtapa: AnaliseGerencial["tempoPorEtapa"] = {};
-  for (const [chave, dias] of Object.entries(diasPorEtapa)) {
-    const ordenado = [...dias].sort((a, b) => a - b);
-    tempoPorEtapa[chave] = { media: media(dias), mediana: mediana(dias), min: ordenado[0], max: ordenado[ordenado.length - 1], n: dias.length };
+  const chavesOrdenadas = [
+    ...ORDEM_CHAVES_ETAPA.filter((chave) => chave in minutosPorEtapa),
+    ...Object.keys(minutosPorEtapa).filter((chave) => !ORDEM_CHAVES_ETAPA.includes(chave)),
+  ];
+  for (const chave of chavesOrdenadas) {
+    const minutos = minutosPorEtapa[chave];
+    const ordenado = [...minutos].sort((a, b) => a - b);
+    tempoPorEtapa[chave] = { media: media(minutos), mediana: mediana(minutos), min: ordenado[0], max: ordenado[ordenado.length - 1], n: minutos.length };
   }
 
   // Cards em andamento parados bem acima da média da própria etapa (não é
-  // "dias corridos" isolado — é relativo ao ritmo normal daquela etapa).
+  // "tempo corrido" isolado — é relativo ao ritmo normal daquela etapa).
   const candidatosAtencao = linhas
     .filter((l) => l.resultado === "Em andamento")
     .map((l) => {
       const stats = tempoPorEtapa[`${l.funil} | ${l.etapaAtual}`];
-      const razao = stats && stats.media > 0 ? l.diasEmAberto / stats.media : 0;
-      return { id: l.id, nome: l.nome, etapa: l.etapaAtual, dias: l.diasEmAberto, mediaEtapa: stats?.media ?? 0, responsavel: l.responsavelAtual, razao };
+      const razao = stats && stats.media > 0 ? l.minutosEmAberto / stats.media : 0;
+      return { id: l.id, nome: l.nome, etapa: l.etapaAtual, minutos: l.minutosEmAberto, mediaEtapa: stats?.media ?? 0, responsavel: l.responsavelAtual, razao };
     })
-    .filter((c) => c.razao > 1.3 && c.dias >= 2)
-    .sort((a, b) => b.dias - a.dias || b.razao - a.razao)
+    .filter((c) => c.razao > 1.3 && c.minutos >= 2880) // pelo menos 2 dias corridos, pra não gerar ruído com card recém-criado
+    .sort((a, b) => b.minutos - a.minutos || b.razao - a.razao)
     .slice(0, 8);
   const cardsQuePedemAtencao = candidatosAtencao.map((c) => ({
     id: c.id,
     nome: c.nome,
     etapa: c.etapa,
-    dias: c.dias,
+    minutos: c.minutos,
     mediaEtapa: c.mediaEtapa,
     responsavel: c.responsavel,
   }));

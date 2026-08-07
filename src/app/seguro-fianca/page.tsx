@@ -38,6 +38,13 @@ function fmtBRL(v: number): string {
 function fmtPct(v: number): string {
   return v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "%";
 }
+function fmtDuracao(minutosTotais: number): string {
+  const min = Math.round(minutosTotais);
+  const horas = Math.floor(min / 60);
+  const minutos = min % 60;
+  if (horas === 0) return `${minutos}min`;
+  return `${horas}h${String(minutos).padStart(2, "0")}min`;
+}
 
 async function buscarDadosAoVivo(): Promise<AnaliseGerencial & { totalMovimentacoes: number }> {
   const [items, historico, defs] = await Promise.all([
@@ -500,7 +507,7 @@ export default async function SeguroFiancaPage({
                           <tr>
                             <th>Etapa</th>
                             <th className={styles.numCol}>Cards</th>
-                            <th className={styles.numCol}>Média (dias)</th>
+                            <th className={styles.numCol}>Média</th>
                             <th className={styles.numCol}>Máx.</th>
                           </tr>
                         </thead>
@@ -509,8 +516,8 @@ export default async function SeguroFiancaPage({
                             <tr key={etapa}>
                               <td>{etapa}</td>
                               <td className={`${styles.numCol} ${styles.num}`}>{t.n}</td>
-                              <td className={`${styles.numCol} ${styles.num}`}>{t.media}</td>
-                              <td className={`${styles.numCol} ${styles.num}`}>{t.max}</td>
+                              <td className={`${styles.numCol} ${styles.num}`}>{fmtDuracao(t.media)}</td>
+                              <td className={`${styles.numCol} ${styles.num}`}>{fmtDuracao(t.max)}</td>
                             </tr>
                           ))}
                           {Object.keys(gerencial.tempoPorEtapa).length === 0 && (
@@ -533,7 +540,7 @@ export default async function SeguroFiancaPage({
                           <tr>
                             <th>Card</th>
                             <th>Etapa</th>
-                            <th className={styles.numCol}>Dias</th>
+                            <th className={styles.numCol}>Tempo</th>
                             <th>Responsável</th>
                           </tr>
                         </thead>
@@ -544,7 +551,7 @@ export default async function SeguroFiancaPage({
                                 #{c.id} {c.nome}
                               </td>
                               <td>{c.etapa}</td>
-                              <td className={`${styles.numCol} ${styles.num}`}>{c.dias}</td>
+                              <td className={`${styles.numCol} ${styles.num}`}>{fmtDuracao(c.minutos)}</td>
                               <td>{c.responsavel}</td>
                             </tr>
                           ))}
