@@ -234,7 +234,7 @@ export default async function SeguroFiancaPage({
                 {ehCompetenciaAtual && <AtualizarAgora />}
               </div>
               <br />
-              {atualizadoEm && <>Atualizado em {new Date(atualizadoEm).toLocaleString("pt-BR")}</>}
+              {atualizadoEm && <>Atualizado em {new Date(atualizadoEm).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</>}
               {semRegistroNoPeriodo && <>Nenhum card registrado nesta competência</>}
             </div>
           </div>
