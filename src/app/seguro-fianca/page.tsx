@@ -589,7 +589,7 @@ export default async function SeguroFiancaPage({
                   <div className={styles.panelSub} style={{ marginTop: 12 }}>
                     {gerencial.qualidade.cotacaoTempoInconsistente > 0 ? (
                       <>
-                        {gerencial.qualidade.cotacaoTempoInconsistente} card(s) com HORA FIM registrada antes da HORA INICIO (provável erro de digitação) foram excluídos das médias.
+                        {gerencial.qualidade.cotacaoTempoInconsistente} card(s) com HORA INICIO e HORA FIM aparentemente preenchidos trocados — duração corrigida automaticamente (valor absoluto), já incluída nas médias.
                       </>
                     ) : (
                       <>Campo recente (desde 05/08/2026) — a amostra cresce a cada dia.</>

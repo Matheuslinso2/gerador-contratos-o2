@@ -189,6 +189,7 @@ export type LinhaContagem = {
   minutosFunil2: number | null;
   minutosCotacao: number | null; // HORA FIM - HORA INICIO; null se um dos dois não estiver preenchido ainda
   dataCotacao: string; // data (YYYY-MM-DD) da HORA FIM — dia em que a cotação foi concluída; "" se não preenchida
+  cotacaoCamposTrocados: boolean; // HORA INICIO/HORA FIM aparentam estar invertidos (duração já vem em valor absoluto)
   qtdMovimentacoes: number;
   responsavelAtual: string;
   criadoPor: string;
@@ -312,10 +313,17 @@ export function montarContagemMensal(
 
     const inicioCotacaoRaw = item[CAMPO_INICIO_COTACAO];
     const fimCotacaoRaw = item[CAMPO_FIM_COTACAO];
-    const minutosCotacao =
+    // O card pode ter HORA INICIO/HORA FIM preenchidos trocados (a pessoa
+    // digitou os campos invertidos) — confirmado comparando com "Tempo
+    // Gasto", campo calculado pelo próprio Bitrix, que sempre mostra a
+    // duração real independente da ordem. Usamos valor absoluto pela mesma
+    // razão, e marcamos o card pra aparecer na qualidade dos dados.
+    const minutosCotacaoBruto =
       inicioCotacaoRaw && fimCotacaoRaw
         ? Math.round((new Date(String(fimCotacaoRaw)).getTime() - new Date(String(inicioCotacaoRaw)).getTime()) / 60_000)
         : null;
+    const minutosCotacao = minutosCotacaoBruto !== null ? Math.abs(minutosCotacaoBruto) : null;
+    const cotacaoCamposTrocados = minutosCotacaoBruto !== null && minutosCotacaoBruto < 0;
     const dataCotacao = fimCotacaoRaw ? apenasData(String(fimCotacaoRaw)) : "";
 
     const motivoRecusaPerda = enumLabel(defs, CAMPO_MOTIVO_RECUSA, item[CAMPO_MOTIVO_RECUSA]);
@@ -360,6 +368,7 @@ export function montarContagemMensal(
       minutosFunil2,
       minutosCotacao,
       dataCotacao,
+      cotacaoCamposTrocados,
       qtdMovimentacoes: eventos.length,
       responsavelAtual: nomeUsuario(usuarios, item.assignedById),
       criadoPor: nomeUsuario(usuarios, item.createdBy),
@@ -597,17 +606,15 @@ export function montarAnaliseGerencial(
   // adicionados pela supervisora em 05/08/2026), por responsável ATUAL do
   // card — separado em recusado/aprovado porque são naturalmente muito
   // diferentes (recusar é rápido, cotar de verdade com várias seguradoras
-  // demora mais). Cards com HORA FIM antes de HORA INICIO (inconsistente,
-  // provável erro de digitação) entram só na contagem de qualidade, não na
-  // média.
+  // demora mais). Cards com HORA INICIO/FIM aparentemente trocados (o campo
+  // "Tempo Gasto", calculado pelo próprio Bitrix, confirma que a duração
+  // real bate com o valor absoluto) entram normalmente na média — só ficam
+  // marcados como alerta de qualidade, não são mais excluídos.
   const porCotador: Record<string, { recusado: number[]; aprovado: number[] }> = {};
   let cotacaoTempoInconsistente = 0;
   for (const l of linhas) {
     if (l.minutosCotacao === null) continue;
-    if (l.minutosCotacao < 0) {
-      cotacaoTempoInconsistente++;
-      continue;
-    }
+    if (l.cotacaoCamposTrocados) cotacaoTempoInconsistente++;
     const jaPassouPelaCotacao = l.funil === "Negociação e Contrato" || l.resultado === "Aprovado";
     const resultadoCotacao = l.resultado === "Recusado" ? "recusado" : jaPassouPelaCotacao ? "aprovado" : null;
     if (!resultadoCotacao) continue; // ainda em andamento na cotação — não deveria ter os 2 campos preenchidos ainda
