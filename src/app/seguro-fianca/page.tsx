@@ -47,7 +47,7 @@ function fmtDuracao(minutosTotais: number): string {
   return `${horas}h${String(minutos).padStart(2, "0")}min`;
 }
 
-async function buscarDadosAoVivo(): Promise<AnaliseGerencial & { totalMovimentacoes: number }> {
+async function buscarDadosAoVivo(competencia: string): Promise<AnaliseGerencial & { totalMovimentacoes: number }> {
   const [items, historico, defs] = await Promise.all([
     listarItensSpa(ENTITY_TYPE_ID),
     listarHistoricoEtapas(ENTITY_TYPE_ID),
@@ -59,7 +59,7 @@ async function buscarDadosAoVivo(): Promise<AnaliseGerencial & { totalMovimentac
   const [empresas, usuarios] = await Promise.all([buscarEmpresas(idsEmpresa), buscarUsuarios(idsUsuario)]);
 
   const contagem = montarContagemMensal(items, historico, usuarios, empresas, defs);
-  const gerencial = montarAnaliseGerencial(contagem);
+  const gerencial = montarAnaliseGerencial(contagem, historico, competencia);
   return { ...gerencial, totalMovimentacoes: historico.length };
 }
 
@@ -192,7 +192,7 @@ export default async function SeguroFiancaPage({
 
   if (ehCompetenciaAtual) {
     try {
-      gerencial = await buscarDadosAoVivo();
+      gerencial = await buscarDadosAoVivo(competencia);
       atualizadoEm = new Date().toISOString();
       const { error: erroUpsert } = await supabase
         .from("seguro_fianca_snapshots")
@@ -213,7 +213,7 @@ export default async function SeguroFiancaPage({
       // durante essa competência) — mostra os painéis normalmente, todos
       // zerados, em vez de uma tela em branco. É uma informação real (zero
       // cards registrados), não falta de dado.
-      gerencial = { ...montarAnaliseGerencial([]), totalMovimentacoes: 0 };
+      gerencial = { ...montarAnaliseGerencial([], [], competencia), totalMovimentacoes: 0 };
       semRegistroNoPeriodo = true;
     }
   }
@@ -594,6 +594,100 @@ export default async function SeguroFiancaPage({
                     ) : (
                       <>Campo recente (desde 05/08/2026) — a amostra cresce a cada dia.</>
                     )}
+                  </div>
+                </div>
+              </section>
+
+              <section className={styles.section}>
+                <div className={styles.sectionHead}>
+                  <h2>Quantitativo de análises diárias</h2>
+                  <div className={styles.note}>
+                    cotações concluídas por dia (HORA FIM), por responsável — só tem dado a partir de 05/08/2026, quando o campo foi criado
+                  </div>
+                </div>
+                <div className={styles.panel}>
+                  <div className={styles.tableWrap}>
+                    <table className={styles.data}>
+                      <thead>
+                        <tr>
+                          <th>Data</th>
+                          <th className={styles.numCol}>Quant.</th>
+                          {gerencial.analisesDiariasPorResponsavel.responsaveis.map((nome) => (
+                            <th key={nome} className={styles.numCol}>
+                              {nome}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {gerencial.analisesDiariasPorResponsavel.dias.map((d) => (
+                          <tr key={d.data}>
+                            <td>{d.data.split("-").reverse().join("/")}</td>
+                            <td className={`${styles.numCol} ${styles.num}`} style={{ fontWeight: 700 }}>
+                              {d.total}
+                            </td>
+                            {gerencial.analisesDiariasPorResponsavel.responsaveis.map((nome) => (
+                              <td key={nome} className={`${styles.numCol} ${styles.num}`}>
+                                {d.porResponsavel[nome] ?? 0}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr>
+                          <td style={{ fontWeight: 700 }}>Total</td>
+                          <td className={`${styles.numCol} ${styles.num}`} style={{ fontWeight: 700 }}>
+                            {gerencial.analisesDiariasPorResponsavel.dias.reduce((a, d) => a + d.total, 0)}
+                          </td>
+                          {gerencial.analisesDiariasPorResponsavel.responsaveis.map((nome) => (
+                            <td key={nome} className={`${styles.numCol} ${styles.num}`} style={{ fontWeight: 700 }}>
+                              {gerencial.analisesDiariasPorResponsavel.dias.reduce((a, d) => a + (d.porResponsavel[nome] ?? 0), 0)}
+                            </td>
+                          ))}
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                  {gerencial.analisesDiariasPorResponsavel.responsaveis.length === 0 && (
+                    <div className={styles.panelSub} style={{ marginTop: 12 }}>
+                      Nenhuma cotação concluída registrada neste período (campo recente, desde 05/08/2026).
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              <section className={styles.section}>
+                <div className={styles.sectionHead}>
+                  <h2>Contratos recebidos por dia</h2>
+                  <div className={styles.note}>cards que entraram na etapa "Contrato Recebido" (Negociação e Contrato) em cada dia do mês</div>
+                </div>
+                <div className={styles.panel}>
+                  <div className={styles.tableWrap}>
+                    <table className={styles.data}>
+                      <thead>
+                        <tr>
+                          <th>Data</th>
+                          <th className={styles.numCol}>Quant.</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {gerencial.contratosRecebidosPorDia.map((d) => (
+                          <tr key={d.data}>
+                            <td>{d.data.split("-").reverse().join("/")}</td>
+                            <td className={`${styles.numCol} ${styles.num}`}>{d.quantidade}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr>
+                          <td style={{ fontWeight: 700 }}>Total</td>
+                          <td className={`${styles.numCol} ${styles.num}`} style={{ fontWeight: 700 }}>
+                            {gerencial.contratosRecebidosPorDia.reduce((a, d) => a + d.quantidade, 0)}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
                   </div>
                 </div>
               </section>

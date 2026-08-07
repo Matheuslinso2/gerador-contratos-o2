@@ -188,6 +188,7 @@ export type LinhaContagem = {
   minutosFunil1: number;
   minutosFunil2: number | null;
   minutosCotacao: number | null; // HORA FIM - HORA INICIO; null se um dos dois não estiver preenchido ainda
+  dataCotacao: string; // data (YYYY-MM-DD) da HORA FIM — dia em que a cotação foi concluída; "" se não preenchida
   qtdMovimentacoes: number;
   responsavelAtual: string;
   criadoPor: string;
@@ -315,6 +316,7 @@ export function montarContagemMensal(
       inicioCotacaoRaw && fimCotacaoRaw
         ? Math.round((new Date(String(fimCotacaoRaw)).getTime() - new Date(String(inicioCotacaoRaw)).getTime()) / 60_000)
         : null;
+    const dataCotacao = fimCotacaoRaw ? apenasData(String(fimCotacaoRaw)) : "";
 
     const motivoRecusaPerda = enumLabel(defs, CAMPO_MOTIVO_RECUSA, item[CAMPO_MOTIVO_RECUSA]);
     const alertas: string[] = [];
@@ -357,6 +359,7 @@ export function montarContagemMensal(
       minutosFunil1,
       minutosFunil2,
       minutosCotacao,
+      dataCotacao,
       qtdMovimentacoes: eventos.length,
       responsavelAtual: nomeUsuario(usuarios, item.assignedById),
       criadoPor: nomeUsuario(usuarios, item.createdBy),
@@ -411,10 +414,24 @@ export type AnaliseGerencial = {
   tempoPorFunil: { analiseECotacao: EstatisticaTempo; negociacaoEContrato: EstatisticaTempo };
   cardsQuePedemAtencao: { id: number; nome: string; etapa: string; minutos: number; mediaEtapa: number; responsavel: string }[];
   tempoCotacaoPorResponsavel: Record<string, { recusado: EstatisticaTempo; aprovado: EstatisticaTempo }>;
+  analisesDiariasPorResponsavel: { responsaveis: string[]; dias: { data: string; porResponsavel: Record<string, number>; total: number }[] };
+  contratosRecebidosPorDia: { data: string; quantidade: number }[];
   qualidade: { semImobiliaria: number; perdidosFunil2SemMotivo: number; totalPerdidosFunil2: number; cotacaoTempoInconsistente: number };
 };
 
-export function montarAnaliseGerencial(linhas: LinhaContagem[]): AnaliseGerencial {
+function diasDoMes(competencia: string): string[] {
+  const [ano, mes] = competencia.split("-").map(Number);
+  const ultimoDia = new Date(ano, mes, 0).getDate();
+  return Array.from({ length: ultimoDia }, (_, i) => `${competencia}-${String(i + 1).padStart(2, "0")}`);
+}
+
+const ETAPA_CONTRATO_RECEBIDO = "DT1042_20:UC_RD3MTL";
+
+export function montarAnaliseGerencial(
+  linhas: LinhaContagem[],
+  historico: BitrixStageHistoryEvent[],
+  competencia: string
+): AnaliseGerencial {
   const total = linhas.length;
   const recusados = linhas.filter((l) => l.resultado === "Recusado").length;
   const aprovados = linhas.filter((l) => l.funil === "Negociação e Contrato").length; // todo card no funil 2 já foi aprovado no funil 1
@@ -602,6 +619,43 @@ export function montarAnaliseGerencial(linhas: LinhaContagem[]): AnaliseGerencia
     tempoCotacaoPorResponsavel[nome] = { recusado: estatisticasTempo(d.recusado), aprovado: estatisticasTempo(d.aprovado) };
   }
 
+  // Calendário diário — "quantas cotações cada pessoa concluiu por dia"
+  // (dia da HORA FIM), reconstruindo a visão que existia na planilha antiga.
+  // Só existe dado a partir de 05/08/2026 (data em que os campos HORA
+  // INICIO/FIM foram criados) — mostra o mês inteiro zerado até lá.
+  const porDiaResponsavel: Record<string, Record<string, number>> = {};
+  const responsaveisCotacao = new Set<string>();
+  for (const l of linhas) {
+    if (!l.dataCotacao || !l.dataCotacao.startsWith(competencia)) continue;
+    porDiaResponsavel[l.dataCotacao] ??= {};
+    porDiaResponsavel[l.dataCotacao][l.responsavelAtual] = (porDiaResponsavel[l.dataCotacao][l.responsavelAtual] ?? 0) + 1;
+    responsaveisCotacao.add(l.responsavelAtual);
+  }
+  const responsaveisOrdenados = [...responsaveisCotacao].sort();
+  const analisesDiariasPorResponsavel: AnaliseGerencial["analisesDiariasPorResponsavel"] = {
+    responsaveis: responsaveisOrdenados,
+    dias: diasDoMes(competencia).map((data) => {
+      const porResponsavel = porDiaResponsavel[data] ?? {};
+      const total = Object.values(porResponsavel).reduce((a, b) => a + b, 0);
+      return { data, porResponsavel, total };
+    }),
+  };
+
+  // Calendário diário de "Contrato Recebido" (etapa do funil 2) — direto do
+  // histórico nativo de mudança de etapa, não depende de campo nenhum novo,
+  // então tem histórico completo desde que o Bitrix começou a ser usado.
+  const contagemRecebimentos: Record<string, number> = {};
+  for (const h of historico) {
+    if (h.STAGE_ID !== ETAPA_CONTRATO_RECEBIDO) continue;
+    const dia = h.CREATED_TIME.slice(0, 10);
+    if (!dia.startsWith(competencia)) continue;
+    contagemRecebimentos[dia] = (contagemRecebimentos[dia] ?? 0) + 1;
+  }
+  const contratosRecebidosPorDia: AnaliseGerencial["contratosRecebidosPorDia"] = diasDoMes(competencia).map((data) => ({
+    data,
+    quantidade: contagemRecebimentos[data] ?? 0,
+  }));
+
   // Cards em andamento parados bem acima da média da própria etapa (não é
   // "tempo corrido" isolado — é relativo ao ritmo normal daquela etapa, e
   // conta só o tempo na passagem ATUAL, não a idade total do card).
@@ -641,6 +695,8 @@ export function montarAnaliseGerencial(linhas: LinhaContagem[]): AnaliseGerencia
     tempoPorFunil,
     cardsQuePedemAtencao,
     tempoCotacaoPorResponsavel,
+    analisesDiariasPorResponsavel,
+    contratosRecebidosPorDia,
     qualidade: {
       semImobiliaria,
       perdidosFunil2SemMotivo: perdasSemMotivo,
