@@ -176,7 +176,10 @@ export type LinhaContagem = {
   resultado: "Recusado" | "Aprovado" | "Perdido" | "Convertido" | "Em andamento";
   dataCriacao: string;
   ultimaMovimentacao: string;
-  minutosEmAberto: number;
+  segmentosEtapa: { funil: "Análise e Cotação" | "Negociação e Contrato"; etapa: string; minutos: number }[];
+  minutosEtapaAtual: number;
+  minutosFunil1: number;
+  minutosFunil2: number | null;
   qtdMovimentacoes: number;
   responsavelAtual: string;
   criadoPor: string;
@@ -212,6 +215,65 @@ function resultadoNoFunil(categoryId: number, semantica: Etapa["semantica"]): Li
   return "Em andamento";
 }
 
+function nomeFunil(categoryId: number): LinhaContagem["funil"] {
+  return categoryId === CATEGORIA_ANALISE ? "Análise e Cotação" : "Negociação e Contrato";
+}
+
+// Reconstrói, a partir do histórico real de mudança de etapa (crm.stagehistory.list),
+// quanto tempo o card passou em cada etapa por onde já passou — não é "idade
+// do card", é o tempo entre entrar numa etapa e sair dela (ou "agora"/fim de
+// contagem, na etapa em que está atualmente). Se o card voltar pra uma etapa
+// já visitada, cada passagem vira um segmento separado (soma nas agregações).
+function construirSegmentosEtapa(
+  item: BitrixItemRaw,
+  eventos: BitrixStageHistoryEvent[],
+  fimCard: Date
+): { funil: LinhaContagem["funil"]; etapa: string; minutos: number }[] {
+  const ordenados = [...eventos].sort((a, b) => new Date(a.CREATED_TIME).getTime() - new Date(b.CREATED_TIME).getTime());
+  const pontos = ordenados.length
+    ? ordenados.map((e) => ({
+        funil: nomeFunil(e.CATEGORY_ID),
+        etapa: etapaPorStatusId.get(e.STAGE_ID)?.nome ?? e.STAGE_ID,
+        inicio: new Date(e.CREATED_TIME),
+      }))
+    : [{ funil: nomeFunil(item.categoryId), etapa: etapaPorStatusId.get(item.stageId)?.nome ?? item.stageId, inicio: new Date(item.createdTime) }];
+
+  // O primeiro ponto conhecido é a etapa em que o card nasceu — conta a
+  // partir da criação do card, não do timestamp do primeiro evento (que às
+  // vezes fica alguns segundos depois, por processamento interno do Bitrix).
+  pontos[0] = { ...pontos[0], inicio: new Date(item.createdTime) };
+
+  return pontos.map((p, i) => {
+    const fim = i + 1 < pontos.length ? pontos[i + 1].inicio : fimCard;
+    const minutos = Math.max(0, Math.round((fim.getTime() - p.inicio.getTime()) / 60_000));
+    return { funil: p.funil, etapa: p.etapa, minutos };
+  });
+}
+
+// Dois marcos do processo, além do tempo por etapa: quanto tempo o card
+// levou do início até sair de Análise e Cotação (aprovado ou recusado), e
+// quanto tempo passou dentro de Negociação e Contrato até finalizar (ou até
+// agora, se ainda estiver lá). minutosFunil2 é null pra quem nunca chegou
+// no funil 2 (recusado ainda em Análise e Cotação).
+function calcularTemposFunil(
+  item: BitrixItemRaw,
+  eventos: BitrixStageHistoryEvent[],
+  fimCard: Date
+): { minutosFunil1: number; minutosFunil2: number | null } {
+  const ordenados = [...eventos].sort((a, b) => new Date(a.CREATED_TIME).getTime() - new Date(b.CREATED_TIME).getTime());
+  const inicioCard = new Date(item.createdTime);
+  const primeiroFunil2 = ordenados.find((e) => nomeFunil(e.CATEGORY_ID) === "Negociação e Contrato");
+
+  if (!primeiroFunil2) {
+    return { minutosFunil1: Math.max(0, Math.round((fimCard.getTime() - inicioCard.getTime()) / 60_000)), minutosFunil2: null };
+  }
+  const entradaFunil2 = new Date(primeiroFunil2.CREATED_TIME);
+  return {
+    minutosFunil1: Math.max(0, Math.round((entradaFunil2.getTime() - inicioCard.getTime()) / 60_000)),
+    minutosFunil2: Math.max(0, Math.round((fimCard.getTime() - entradaFunil2.getTime()) / 60_000)),
+  };
+}
+
 export function montarContagemMensal(
   items: BitrixItemRaw[],
   historico: BitrixStageHistoryEvent[],
@@ -234,9 +296,10 @@ export function montarContagemMensal(
     const semantica = etapa?.semantica ?? "P";
     const resultado = resultadoNoFunil(item.categoryId, semantica);
 
-    const criadoEm = new Date(item.createdTime);
-    const fimContagem = resultado === "Em andamento" ? agora : new Date(item.movedTime || item.updatedTime);
-    const minutosEmAberto = Math.max(0, Math.round((fimContagem.getTime() - criadoEm.getTime()) / 60_000));
+    const fimCard = resultado === "Em andamento" ? agora : new Date(item.movedTime || item.updatedTime);
+    const segmentosEtapa = construirSegmentosEtapa(item, eventos, fimCard);
+    const minutosEtapaAtual = segmentosEtapa[segmentosEtapa.length - 1]?.minutos ?? 0;
+    const { minutosFunil1, minutosFunil2 } = calcularTemposFunil(item, eventos, fimCard);
 
     const motivoRecusaPerda = enumLabel(defs, CAMPO_MOTIVO_RECUSA, item[CAMPO_MOTIVO_RECUSA]);
     const alertas: string[] = [];
@@ -274,7 +337,10 @@ export function montarContagemMensal(
       resultado,
       dataCriacao: apenasData(item.createdTime),
       ultimaMovimentacao: apenasData(item.movedTime),
-      minutosEmAberto,
+      segmentosEtapa,
+      minutosEtapaAtual,
+      minutosFunil1,
+      minutosFunil2,
       qtdMovimentacoes: eventos.length,
       responsavelAtual: nomeUsuario(usuarios, item.assignedById),
       criadoPor: nomeUsuario(usuarios, item.createdBy),
@@ -306,6 +372,12 @@ function mediana(valores: number[]): number {
   return ordenado.length % 2 ? ordenado[meio] : (ordenado[meio - 1] + ordenado[meio]) / 2;
 }
 
+type EstatisticaTempo = { media: number; mediana: number; min: number; max: number; n: number };
+function estatisticasTempo(minutos: number[]): EstatisticaTempo {
+  const ordenado = [...minutos].sort((a, b) => a - b);
+  return { media: media(minutos), mediana: mediana(minutos), min: ordenado[0] ?? 0, max: ordenado[ordenado.length - 1] ?? 0, n: minutos.length };
+}
+
 export type AnaliseGerencial = {
   kpis: { total: number; emAndamento: number; recusados: number; aprovados: number; perdidos: number; convertidos: number; comAlerta: number; imobiliarias: number };
   porFunilEtapa: Record<string, number>;
@@ -319,7 +391,8 @@ export type AnaliseGerencial = {
   topImobiliarias: { nome: string; total: number; recusados: number; emAndamento: number; perdidos: number; convertidos: number }[];
   valoresTrabalhados: { aluguel: number; pacoteLocacao: number };
   faixasPacoteLocacao: { faixa: string; cards: number; pacoteMedio: number; seguroMedio: number }[];
-  tempoPorEtapa: Record<string, { media: number; mediana: number; min: number; max: number; n: number }>;
+  tempoPorEtapa: Record<string, EstatisticaTempo>;
+  tempoPorFunil: { analiseECotacao: EstatisticaTempo; negociacaoEContrato: EstatisticaTempo };
   cardsQuePedemAtencao: { id: number; nome: string; etapa: string; minutos: number; mediaEtapa: number; responsavel: string }[];
   qualidade: { semImobiliaria: number; perdidosFunil2SemMotivo: number; totalPerdidosFunil2: number };
 };
@@ -461,10 +534,16 @@ export function montarAnaliseGerencial(linhas: LinhaContagem[]): AnaliseGerencia
     };
   });
 
+  // Tempo por etapa = soma de todas as PASSAGENS por ela (não de cards
+  // únicos) — reconstruído do histórico real de mudança de etapa, ver
+  // construirSegmentosEtapa. Um card que voltou pra uma etapa já visitada
+  // entra mais de uma vez aqui.
   const minutosPorEtapa: Record<string, number[]> = {};
   for (const l of linhas) {
-    const chave = `${l.funil} | ${l.etapaAtual}`;
-    (minutosPorEtapa[chave] ??= []).push(l.minutosEmAberto);
+    for (const seg of l.segmentosEtapa) {
+      const chave = `${seg.funil} | ${seg.etapa}`;
+      (minutosPorEtapa[chave] ??= []).push(seg.minutos);
+    }
   }
   const tempoPorEtapa: AnaliseGerencial["tempoPorEtapa"] = {};
   const chavesOrdenadas = [
@@ -472,19 +551,23 @@ export function montarAnaliseGerencial(linhas: LinhaContagem[]): AnaliseGerencia
     ...Object.keys(minutosPorEtapa).filter((chave) => !ORDEM_CHAVES_ETAPA.includes(chave)),
   ];
   for (const chave of chavesOrdenadas) {
-    const minutos = minutosPorEtapa[chave];
-    const ordenado = [...minutos].sort((a, b) => a - b);
-    tempoPorEtapa[chave] = { media: media(minutos), mediana: mediana(minutos), min: ordenado[0], max: ordenado[ordenado.length - 1], n: minutos.length };
+    tempoPorEtapa[chave] = estatisticasTempo(minutosPorEtapa[chave]);
   }
 
+  const tempoPorFunil: AnaliseGerencial["tempoPorFunil"] = {
+    analiseECotacao: estatisticasTempo(linhas.map((l) => l.minutosFunil1)),
+    negociacaoEContrato: estatisticasTempo(linhas.map((l) => l.minutosFunil2).filter((v): v is number => v !== null)),
+  };
+
   // Cards em andamento parados bem acima da média da própria etapa (não é
-  // "tempo corrido" isolado — é relativo ao ritmo normal daquela etapa).
+  // "tempo corrido" isolado — é relativo ao ritmo normal daquela etapa, e
+  // conta só o tempo na passagem ATUAL, não a idade total do card).
   const candidatosAtencao = linhas
     .filter((l) => l.resultado === "Em andamento")
     .map((l) => {
       const stats = tempoPorEtapa[`${l.funil} | ${l.etapaAtual}`];
-      const razao = stats && stats.media > 0 ? l.minutosEmAberto / stats.media : 0;
-      return { id: l.id, nome: l.nome, etapa: l.etapaAtual, minutos: l.minutosEmAberto, mediaEtapa: stats?.media ?? 0, responsavel: l.responsavelAtual, razao };
+      const razao = stats && stats.media > 0 ? l.minutosEtapaAtual / stats.media : 0;
+      return { id: l.id, nome: l.nome, etapa: l.etapaAtual, minutos: l.minutosEtapaAtual, mediaEtapa: stats?.media ?? 0, responsavel: l.responsavelAtual, razao };
     })
     .filter((c) => c.razao > 1.3 && c.minutos >= 2880) // pelo menos 2 dias corridos, pra não gerar ruído com card recém-criado
     .sort((a, b) => b.minutos - a.minutos || b.razao - a.razao)
@@ -512,6 +595,7 @@ export function montarAnaliseGerencial(linhas: LinhaContagem[]): AnaliseGerencia
     valoresTrabalhados,
     faixasPacoteLocacao,
     tempoPorEtapa,
+    tempoPorFunil,
     cardsQuePedemAtencao,
     qualidade: { semImobiliaria, perdidosFunil2SemMotivo: perdasSemMotivo, totalPerdidosFunil2: perdasFunil2.length },
   };

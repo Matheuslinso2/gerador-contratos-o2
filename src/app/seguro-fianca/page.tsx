@@ -498,15 +498,60 @@ export default async function SeguroFiancaPage({
               </section>
 
               <section className={styles.section}>
+                <div className={styles.sectionHead}>
+                  <h2>Tempo de ciclo por funil</h2>
+                  <div className={styles.note}>do início até sair de cada funil (aprovado/recusado em Análise e Cotação, convertido/perdido em Negociação e Contrato)</div>
+                </div>
+                <div className={styles.panel}>
+                  <div className={styles.tableWrap}>
+                    <table className={styles.data}>
+                      <thead>
+                        <tr>
+                          <th>Funil</th>
+                          <th className={styles.numCol}>Cards</th>
+                          <th className={styles.numCol}>Média</th>
+                          <th className={styles.numCol}>Mediana</th>
+                          <th className={styles.numCol}>Mín.</th>
+                          <th className={styles.numCol}>Máx.</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td>Análise e Cotação (até aprovar/recusar)</td>
+                          <td className={`${styles.numCol} ${styles.num}`}>{gerencial.tempoPorFunil.analiseECotacao.n}</td>
+                          <td className={`${styles.numCol} ${styles.num}`}>{fmtDuracao(gerencial.tempoPorFunil.analiseECotacao.media)}</td>
+                          <td className={`${styles.numCol} ${styles.num}`}>{fmtDuracao(gerencial.tempoPorFunil.analiseECotacao.mediana)}</td>
+                          <td className={`${styles.numCol} ${styles.num}`}>{fmtDuracao(gerencial.tempoPorFunil.analiseECotacao.min)}</td>
+                          <td className={`${styles.numCol} ${styles.num}`}>{fmtDuracao(gerencial.tempoPorFunil.analiseECotacao.max)}</td>
+                        </tr>
+                        <tr>
+                          <td>Negociação e Contrato (até converter/perder)</td>
+                          <td className={`${styles.numCol} ${styles.num}`}>{gerencial.tempoPorFunil.negociacaoEContrato.n}</td>
+                          <td className={`${styles.numCol} ${styles.num}`}>{fmtDuracao(gerencial.tempoPorFunil.negociacaoEContrato.media)}</td>
+                          <td className={`${styles.numCol} ${styles.num}`}>{fmtDuracao(gerencial.tempoPorFunil.negociacaoEContrato.mediana)}</td>
+                          <td className={`${styles.numCol} ${styles.num}`}>{fmtDuracao(gerencial.tempoPorFunil.negociacaoEContrato.min)}</td>
+                          <td className={`${styles.numCol} ${styles.num}`}>{fmtDuracao(gerencial.tempoPorFunil.negociacaoEContrato.max)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className={styles.panelSub} style={{ marginTop: 12 }}>
+                    "Cards" aqui conta quem já tem esse tempo definido — Negociação e Contrato só existe pra quem foi aprovado em Análise e Cotação.
+                  </div>
+                </div>
+              </section>
+
+              <section className={styles.section}>
                 <div className={styles.grid2}>
                   <div className={styles.panel}>
                     <h3>Tempo em aberto por etapa</h3>
+                    <div className={styles.panelSub}>tempo de cada passagem pela etapa (se o card voltou, conta mais de uma vez)</div>
                     <div className={styles.tableWrap}>
                       <table className={styles.data}>
                         <thead>
                           <tr>
                             <th>Etapa</th>
-                            <th className={styles.numCol}>Cards</th>
+                            <th className={styles.numCol}>Passagens</th>
                             <th className={styles.numCol}>Média</th>
                             <th className={styles.numCol}>Máx.</th>
                           </tr>
