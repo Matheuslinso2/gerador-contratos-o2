@@ -546,6 +546,59 @@ export default async function SeguroFiancaPage({
               </section>
 
               <section className={styles.section}>
+                <div className={styles.sectionHead}>
+                  <h2>Tempo de cotação por responsável</h2>
+                  <div className={styles.note}>
+                    HORA INICIO → HORA FIM da fase de cotação (campo adicionado em 05/08/2026) — separado por resultado porque recusar é mais rápido que cotar de verdade
+                  </div>
+                </div>
+                <div className={styles.panel}>
+                  <div className={styles.tableWrap}>
+                    <table className={styles.data}>
+                      <thead>
+                        <tr>
+                          <th>Responsável</th>
+                          <th className={styles.numCol}>Recusados</th>
+                          <th className={styles.numCol}>Tempo médio</th>
+                          <th className={styles.numCol}>Aprovados/Liberados</th>
+                          <th className={styles.numCol}>Tempo médio</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Object.entries(gerencial.tempoCotacaoPorResponsavel)
+                          .sort((a, b) => b[1].recusado.n + b[1].aprovado.n - (a[1].recusado.n + a[1].aprovado.n))
+                          .map(([nome, d]) => (
+                            <tr key={nome}>
+                              <td>{nome}</td>
+                              <td className={`${styles.numCol} ${styles.num}`}>{d.recusado.n}</td>
+                              <td className={`${styles.numCol} ${styles.num}`}>{d.recusado.n > 0 ? fmtDuracao(d.recusado.media) : "—"}</td>
+                              <td className={`${styles.numCol} ${styles.num}`}>{d.aprovado.n}</td>
+                              <td className={`${styles.numCol} ${styles.num}`}>{d.aprovado.n > 0 ? fmtDuracao(d.aprovado.media) : "—"}</td>
+                            </tr>
+                          ))}
+                        {Object.keys(gerencial.tempoCotacaoPorResponsavel).length === 0 && (
+                          <tr>
+                            <td colSpan={5} style={{ color: "var(--ink-faint)" }}>
+                              Nenhum card com HORA INICIO e HORA FIM de cotação preenchidos neste período.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className={styles.panelSub} style={{ marginTop: 12 }}>
+                    {gerencial.qualidade.cotacaoTempoInconsistente > 0 ? (
+                      <>
+                        {gerencial.qualidade.cotacaoTempoInconsistente} card(s) com HORA FIM registrada antes da HORA INICIO (provável erro de digitação) foram excluídos das médias.
+                      </>
+                    ) : (
+                      <>Campo recente (desde 05/08/2026) — a amostra cresce a cada dia.</>
+                    )}
+                  </div>
+                </div>
+              </section>
+
+              <section className={styles.section}>
                 <div className={styles.grid2}>
                   <div className={styles.panel}>
                     <h3>Tempo em aberto por etapa</h3>

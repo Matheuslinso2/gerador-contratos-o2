@@ -135,6 +135,13 @@ const CAMPO_COMISSAO_FINAL = "ufCrm10_1779820737";
 const CAMPO_COMISSAO_FINAL_LEGADO = "ufCrm10_1778258780";
 const CAMPO_DESCONTO = "ufCrm10_1781029891735";
 const CAMPO_DESCONTO_LEGADO = "ufCrm10_1779820897";
+// Adicionados pela supervisora em 05/08/2026 pra medir quanto tempo o
+// cotador (Kelly/Cassia, normalmente) leva pra executar a fase de Análise e
+// Cotação de um card — confirmados via crm.item.fields, únicos dos vários
+// campos "HORA INICIO/FIM" testados naquele dia que de fato têm dado (os
+// outros ficaram vazios, foram tentativas abandonadas).
+const CAMPO_INICIO_COTACAO = "ufCrm10_1785946291045";
+const CAMPO_FIM_COTACAO = "ufCrm10_1785946326148";
 
 function enumLabel(defs: Record<string, BitrixDefinicaoCampo>, campo: string, valor: unknown): string {
   if (valor === null || valor === undefined || valor === "") return "";
@@ -180,6 +187,7 @@ export type LinhaContagem = {
   minutosEtapaAtual: number;
   minutosFunil1: number;
   minutosFunil2: number | null;
+  minutosCotacao: number | null; // HORA FIM - HORA INICIO; null se um dos dois não estiver preenchido ainda
   qtdMovimentacoes: number;
   responsavelAtual: string;
   criadoPor: string;
@@ -301,6 +309,13 @@ export function montarContagemMensal(
     const minutosEtapaAtual = segmentosEtapa[segmentosEtapa.length - 1]?.minutos ?? 0;
     const { minutosFunil1, minutosFunil2 } = calcularTemposFunil(item, eventos, fimCard);
 
+    const inicioCotacaoRaw = item[CAMPO_INICIO_COTACAO];
+    const fimCotacaoRaw = item[CAMPO_FIM_COTACAO];
+    const minutosCotacao =
+      inicioCotacaoRaw && fimCotacaoRaw
+        ? Math.round((new Date(String(fimCotacaoRaw)).getTime() - new Date(String(inicioCotacaoRaw)).getTime()) / 60_000)
+        : null;
+
     const motivoRecusaPerda = enumLabel(defs, CAMPO_MOTIVO_RECUSA, item[CAMPO_MOTIVO_RECUSA]);
     const alertas: string[] = [];
     // Recusa em Análise e Cotação (categoryId 18) não exige motivo — só perdas em Negociação e Contrato (categoryId 20).
@@ -341,6 +356,7 @@ export function montarContagemMensal(
       minutosEtapaAtual,
       minutosFunil1,
       minutosFunil2,
+      minutosCotacao,
       qtdMovimentacoes: eventos.length,
       responsavelAtual: nomeUsuario(usuarios, item.assignedById),
       criadoPor: nomeUsuario(usuarios, item.createdBy),
@@ -394,7 +410,8 @@ export type AnaliseGerencial = {
   tempoPorEtapa: Record<string, EstatisticaTempo>;
   tempoPorFunil: { analiseECotacao: EstatisticaTempo; negociacaoEContrato: EstatisticaTempo };
   cardsQuePedemAtencao: { id: number; nome: string; etapa: string; minutos: number; mediaEtapa: number; responsavel: string }[];
-  qualidade: { semImobiliaria: number; perdidosFunil2SemMotivo: number; totalPerdidosFunil2: number };
+  tempoCotacaoPorResponsavel: Record<string, { recusado: EstatisticaTempo; aprovado: EstatisticaTempo }>;
+  qualidade: { semImobiliaria: number; perdidosFunil2SemMotivo: number; totalPerdidosFunil2: number; cotacaoTempoInconsistente: number };
 };
 
 export function montarAnaliseGerencial(linhas: LinhaContagem[]): AnaliseGerencial {
@@ -559,6 +576,32 @@ export function montarAnaliseGerencial(linhas: LinhaContagem[]): AnaliseGerencia
     negociacaoEContrato: estatisticasTempo(linhas.map((l) => l.minutosFunil2).filter((v): v is number => v !== null)),
   };
 
+  // Tempo de execução da fase de cotação (HORA INICIO -> HORA FIM, campos
+  // adicionados pela supervisora em 05/08/2026), por responsável ATUAL do
+  // card — separado em recusado/aprovado porque são naturalmente muito
+  // diferentes (recusar é rápido, cotar de verdade com várias seguradoras
+  // demora mais). Cards com HORA FIM antes de HORA INICIO (inconsistente,
+  // provável erro de digitação) entram só na contagem de qualidade, não na
+  // média.
+  const porCotador: Record<string, { recusado: number[]; aprovado: number[] }> = {};
+  let cotacaoTempoInconsistente = 0;
+  for (const l of linhas) {
+    if (l.minutosCotacao === null) continue;
+    if (l.minutosCotacao < 0) {
+      cotacaoTempoInconsistente++;
+      continue;
+    }
+    const jaPassouPelaCotacao = l.funil === "Negociação e Contrato" || l.resultado === "Aprovado";
+    const resultadoCotacao = l.resultado === "Recusado" ? "recusado" : jaPassouPelaCotacao ? "aprovado" : null;
+    if (!resultadoCotacao) continue; // ainda em andamento na cotação — não deveria ter os 2 campos preenchidos ainda
+    porCotador[l.responsavelAtual] ??= { recusado: [], aprovado: [] };
+    porCotador[l.responsavelAtual][resultadoCotacao].push(l.minutosCotacao);
+  }
+  const tempoCotacaoPorResponsavel: AnaliseGerencial["tempoCotacaoPorResponsavel"] = {};
+  for (const [nome, d] of Object.entries(porCotador)) {
+    tempoCotacaoPorResponsavel[nome] = { recusado: estatisticasTempo(d.recusado), aprovado: estatisticasTempo(d.aprovado) };
+  }
+
   // Cards em andamento parados bem acima da média da própria etapa (não é
   // "tempo corrido" isolado — é relativo ao ritmo normal daquela etapa, e
   // conta só o tempo na passagem ATUAL, não a idade total do card).
@@ -597,6 +640,12 @@ export function montarAnaliseGerencial(linhas: LinhaContagem[]): AnaliseGerencia
     tempoPorEtapa,
     tempoPorFunil,
     cardsQuePedemAtencao,
-    qualidade: { semImobiliaria, perdidosFunil2SemMotivo: perdasSemMotivo, totalPerdidosFunil2: perdasFunil2.length },
+    tempoCotacaoPorResponsavel,
+    qualidade: {
+      semImobiliaria,
+      perdidosFunil2SemMotivo: perdasSemMotivo,
+      totalPerdidosFunil2: perdasFunil2.length,
+      cotacaoTempoInconsistente,
+    },
   };
 }
