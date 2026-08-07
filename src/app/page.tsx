@@ -121,6 +121,64 @@ export default async function Home() {
     },
   ];
 
+  const usoInterno = isAdmin(user.email) || isColaboradorO2(user.email);
+
+  const aplicacoesInternas: {
+    href: string;
+    titulo: string;
+    descricao: string;
+    gradiente: string;
+    icone: ReactNode;
+  }[] = [
+    {
+      href: "/prospeccao",
+      titulo: "Prospecção",
+      descricao: "Ticket médio e roteiro de abordagem por imobiliária",
+      gradiente: "from-cyan-500 to-o2-navy",
+      icone: (
+        <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
+          <circle cx="12" cy="12" r="7" stroke="currentColor" strokeWidth="1.6" />
+          <circle cx="12" cy="12" r="2.2" fill="currentColor" />
+          <path d="M12 3v2.5M12 18.5V21M21 12h-2.5M5.5 12H3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+      ),
+    },
+    {
+      href: "/faturas",
+      titulo: "Faturas",
+      descricao: "Boletos de seguradora recebidos, prontos pra reenviar às imobiliárias",
+      gradiente: "from-o2-coral to-amber-500",
+      icone: (
+        <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
+          <path
+            d="M6 3.5h12v17l-2.2-1.5-2.2 1.5-2.1-1.5-2.1 1.5-2.2-1.5-1.2.8V3.5z"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinejoin="round"
+          />
+          <path d="M8.5 8h7M8.5 11.5h7M8.5 15h4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+      ),
+    },
+    {
+      href: "/seguro-fianca",
+      titulo: "Seguro Fiança",
+      descricao: "Acompanhamento das propostas de fiança em andamento",
+      gradiente: "from-teal-500 to-o2-navy",
+      icone: (
+        <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
+          <path
+            d="M12 3.5l7 2.5v5.2c0 4.6-3 7.9-7 9.3-4-1.4-7-4.7-7-9.3V6l7-2.5z"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinejoin="round"
+          />
+          <path d="M8.7 12l2.2 2.2 4.4-4.4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      ),
+    },
+  ];
+
   const configuracoes: { href: string; titulo: string; descricao: string }[] = [
     ...(isAdmin(user.email)
       ? [
@@ -195,6 +253,41 @@ export default async function Home() {
             ))}
           </div>
         </section>
+
+        {usoInterno && (
+          <section className="space-y-3">
+            <div>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-400">Aplicações internas</h2>
+              <p className="text-xs text-gray-400">Só aparece pra administradores e colaboradores O2.</p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {aplicacoesInternas.map((a) => (
+                <Link
+                  key={a.href}
+                  href={a.href}
+                  className={`group relative overflow-hidden rounded-2xl bg-gradient-to-br p-5 text-white shadow-md transition duration-200 hover:-translate-y-0.5 hover:shadow-xl ${a.gradiente}`}
+                >
+                  <span className="mb-3 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-white/15">
+                    {a.icone}
+                  </span>
+                  <p className="font-semibold">{a.titulo}</p>
+                  <p className="mt-1 text-sm text-white/80">{a.descricao}</p>
+                  <svg
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    className="absolute bottom-4 right-4 h-5 w-5 text-white/40 transition group-hover:translate-x-1 group-hover:text-white/80"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
 
         <section className="space-y-3">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-400">Configurações</h2>

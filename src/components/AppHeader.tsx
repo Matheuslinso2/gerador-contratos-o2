@@ -48,6 +48,7 @@ export default function AppHeader({
               <>
                 <NavLink href="/prospeccao" label="Prospecção (uso interno)" />
                 <NavLink href="/faturas" label="Faturas (uso interno)" />
+                <NavLink href="/seguro-fianca" label="Seguro Fiança (uso interno)" />
               </>
             )}
             <NavDropdown
