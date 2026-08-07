@@ -4,6 +4,7 @@ import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
 import SeletorCompetencia from "./SeletorCompetencia";
+import AtualizarAgora from "./AtualizarAgora";
 import ImobiliariasTabela from "./ImobiliariasTabela";
 import styles from "./seguro-fianca.module.css";
 import {
@@ -228,7 +229,10 @@ export default async function SeguroFiancaPage({
               <h1 className={styles.title}>Painel de Produção — {competencia}</h1>
             </div>
             <div className={styles.meta}>
-              <SeletorCompetencia competencia={competencia} />
+              <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "flex-end" }}>
+                <SeletorCompetencia competencia={competencia} />
+                {ehCompetenciaAtual && <AtualizarAgora />}
+              </div>
               <br />
               {atualizadoEm && <>Atualizado em {new Date(atualizadoEm).toLocaleString("pt-BR")}</>}
               {semRegistroNoPeriodo && <>Nenhum card registrado nesta competência</>}
