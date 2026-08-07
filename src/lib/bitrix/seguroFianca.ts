@@ -626,17 +626,21 @@ export function montarAnaliseGerencial(
     tempoCotacaoPorResponsavel[nome] = { recusado: estatisticasTempo(d.recusado), aprovado: estatisticasTempo(d.aprovado) };
   }
 
-  // Calendário diário — "quantas cotações cada pessoa concluiu por dia"
-  // (dia da HORA FIM), reconstruindo a visão que existia na planilha antiga.
-  // Só existe dado a partir de 05/08/2026 (data em que os campos HORA
-  // INICIO/FIM foram criados) — mostra o mês inteiro zerado até lá.
+  // Calendário diário — todas as análises que ENTRARAM por dia (inclusive
+  // recusadas), atribuídas ao responsável ATUAL do card — não depende de
+  // HORA INICIO/FIM (que nem todo mundo preenche), cobre 100% dos cards.
+  // Mesma lógica/limitação de porResponsavelFunil1: é o responsável atual,
+  // não necessariamente quem especificamente cotou (API não guarda
+  // histórico de troca de responsável). Se aparecer alguém além da Kelly e
+  // Cassia, normalmente é reforço em dia de demanda alta.
   const porDiaResponsavel: Record<string, Record<string, number>> = {};
   const responsaveisCotacao = new Set<string>();
   for (const l of linhas) {
-    if (!l.dataCotacao || !l.dataCotacao.startsWith(competencia)) continue;
-    porDiaResponsavel[l.dataCotacao] ??= {};
-    porDiaResponsavel[l.dataCotacao][l.responsavelAtual] = (porDiaResponsavel[l.dataCotacao][l.responsavelAtual] ?? 0) + 1;
-    responsaveisCotacao.add(l.responsavelAtual);
+    if (!l.dataCriacao || !l.dataCriacao.startsWith(competencia)) continue;
+    const nome = l.responsavelAtual || "(sem responsável)";
+    porDiaResponsavel[l.dataCriacao] ??= {};
+    porDiaResponsavel[l.dataCriacao][nome] = (porDiaResponsavel[l.dataCriacao][nome] ?? 0) + 1;
+    responsaveisCotacao.add(nome);
   }
   const responsaveisOrdenados = [...responsaveisCotacao].sort();
   const analisesDiariasPorResponsavel: AnaliseGerencial["analisesDiariasPorResponsavel"] = {

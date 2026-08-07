@@ -603,7 +603,7 @@ export default async function SeguroFiancaPage({
                   <div className={styles.panel}>
                     <h3>Quantitativo de análises diárias</h3>
                     <div className={styles.panelSub}>
-                      cotações concluídas por dia (HORA FIM), por responsável — só tem dado a partir de 05/08/2026
+                      todas as análises que entraram por dia (inclusive recusadas), pelo responsável atual do card
                     </div>
                     <div className={styles.tableWrap}>
                       <table className={styles.data}>
@@ -650,7 +650,7 @@ export default async function SeguroFiancaPage({
                     </div>
                     {gerencial.analisesDiariasPorResponsavel.responsaveis.length === 0 && (
                       <div className={styles.panelSub} style={{ marginTop: 12 }}>
-                        Nenhuma cotação concluída registrada neste período (campo recente, desde 05/08/2026).
+                        Nenhuma análise registrada neste período.
                       </div>
                     )}
                   </div>
