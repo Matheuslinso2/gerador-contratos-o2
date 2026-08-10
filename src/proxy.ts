@@ -8,6 +8,11 @@ const ROTAS_PUBLICAS = [
   "/esqueci-senha",
   "/redefinir-senha",
   "/api/erro-cliente",
+  // Buscadas sem sessão: o Instagram busca a imagem do card direto, e o
+  // Vercel Cron chama a coleta de notícias sem cookie — cada uma se
+  // protege com o próprio segredo (CRON_SECRET) ou não expõe dado interno.
+  "/api/social/imagem",
+  "/api/cron",
 ];
 const ROTAS_SO_DESLOGADO = ["/login", "/signup"];
 
