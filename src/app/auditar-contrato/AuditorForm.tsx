@@ -105,12 +105,13 @@ export default function AuditorForm({ userId }: { userId: string }) {
         </p>
         <p className="mb-2 text-xs text-gray-500">
           Se enviar, o Auditor confere se segurado, valor do aluguel, prazo e endereço batem
-          entre o contrato e a cotação.
+          entre o contrato e a cotação. Pode ser um PDF/Word da cotação, uma ficha cadastral, ou
+          até um print de tela do sistema — a IA lê o que estiver visível no arquivo.
         </p>
         <input
           name="arquivo_cotacao"
           type="file"
-          accept=".docx,.pdf"
+          accept=".docx,.pdf,.png,.jpg,.jpeg,.webp"
           className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
         />
       </div>

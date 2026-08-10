@@ -27,11 +27,14 @@ export type ClausulaReferencia = {
   clausulaBase: string;
 };
 
-export type FonteDocumento = { tipo: "texto"; texto: string } | { tipo: "pdf"; base64: string };
+export type FonteDocumento =
+  | { tipo: "texto"; texto: string }
+  | { tipo: "pdf"; base64: string }
+  | { tipo: "imagem"; base64: string; mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp" };
 
 const SYSTEM_PROMPT = `Você é um Auditor Especialista em Contratos de Locação Imobiliária brasileira. Sua função é analisar um contrato de locação e devolver um checklist CURTO e direto — quem lê é a imobiliária, que não tem paciência para ler críticas longas. Cada resumo deve ter no máximo UMA frase curta, direto ao ponto. Só entre em detalhe (em "pontos_criticos") para os problemas realmente graves.
 
-O contrato (e, se houver, a cotação) podem chegar como texto OU como arquivo PDF anexado diretamente (quando o PDF é escaneado e não tem texto extraível). Se vier como PDF anexado, leia o conteúdo diretamente das páginas/imagens do documento, exatamente como faria com o texto.
+O contrato (e, se houver, a cotação) podem chegar como texto, como arquivo PDF anexado diretamente (quando o PDF é escaneado e não tem texto extraível), ou como imagem/print de tela (comum para a cotação, quando a imobiliária só tem um print do sistema da seguradora/CRM em vez de um PDF formal). Se vier como PDF ou imagem anexada, leia o conteúdo diretamente das páginas/imagem, exatamente como faria com o texto.
 
 Se o arquivo do contrato incluir, anexado nas últimas páginas, um Laudo/Relatório de Vistoria (fotos do imóvel, checklist de estado de conservação, ambiente por ambiente), IGNORE completamente essas páginas na sua análise — elas não são cláusulas contratuais e não devem gerar nenhum apontamento (não cobre assinatura nelas, não avalie o conteúdo delas). Analise só as páginas que são de fato o contrato de locação.
 
@@ -45,7 +48,8 @@ Você precisa preencher TODOS OS 10 CAMPOS de status/resumo abaixo, um de cada v
 
 3. conferencia_cotacao_status / conferencia_cotacao_resumo — o resumo deste pilar SEMPRE precisa trazer, de forma explícita, o nome do locador, o nome de TODOS os locatários e o endereço (com CEP) do imóvel identificados no contrato — em todo relatório, tenha cotação anexada ou não. Isso é pra quem está lendo poder comparar na hora com a cotação que tem em mãos, sem precisar procurar essa informação em outro lugar do relatório.
 
-   - Se uma COTAÇÃO/PROPOSTA DE SEGURO for fornecida abaixo, compare PONTO A PONTO entre contrato e cotação:
+   - Se um documento de referência for fornecido abaixo (rotulado "COTAÇÃO/PROPOSTA DE SEGURO"), NUNCA julgue ou questione se o arquivo É de fato uma cotação formal — ele pode ser um print de tela do sistema, uma ficha cadastral do locatário/fiador parcialmente preenchida, um formulário do CRM, ou qualquer outro documento que a imobiliária tinha em mãos no momento. Sua tarefa não é classificar o tipo do arquivo, é EXTRAIR dele qualquer nome, endereço, CEP, valor de aluguel ou prazo que estiver preenchido/legível e comparar com o contrato. Nunca responda com algo como "este documento não é uma cotação válida para comparação" ou "confira manualmente" quando um documento de referência foi anexado — isso só vale para quando NENHUM documento foi anexado (ver abaixo). Se o documento anexado estiver parcial ou majoritariamente em branco, compare o que houver preenchido e diga explicitamente, campo a campo, o que não foi possível conferir por estar ausente/em branco NESSE documento (não porque "não é uma cotação") — nunca deixe de tentar a comparação.
+   - Compare PONTO A PONTO entre contrato e documento de referência:
      a) Locatário(s) — primeiro confira a QUANTIDADE de locatários citados na cotação contra a quantidade qualificada no contrato (ex: cotação cita 2 segurados/locatários e o contrato só qualifica 1 — isso é "problema", mesmo que o nome do primeiro bata perfeitamente). Depois confira o nome de cada um. Nunca diga só "diverge" ou "não confere" sem apontar os nomes dos dois lados. Ex: "Locatários no contrato: João Silva; na cotação constam 2 segurados: João Silva e Maria Souza — Maria não aparece qualificada no contrato.".
      b) Endereço do local de risco, incluindo o CEP — o CEP do contrato precisa bater exatamente com o CEP da cotação, não só o logradouro. Ex: "Endereço do contrato: Rua X, 100, CEP 20000-000; da cotação: Rua X, 100, CEP 20000-001 — CEP diverge, confirme se é o mesmo imóvel.".
      c) Valor do aluguel — compare o valor exato; qualquer diferença é "atencao" ou "problema" conforme a magnitude, e cite os dois valores.
@@ -143,6 +147,12 @@ const FERRAMENTA_RELATORIO: Anthropic.Tool = {
 function blocosDoDocumento(rotulo: string, fonte: FonteDocumento): Anthropic.ContentBlockParam[] {
   if (fonte.tipo === "texto") {
     return [{ type: "text", text: `${rotulo}:\n\n${fonte.texto}` }];
+  }
+  if (fonte.tipo === "imagem") {
+    return [
+      { type: "text", text: `${rotulo} (imagem/print de tela anexado abaixo — leia o conteúdo visível na imagem):` },
+      { type: "image", source: { type: "base64", media_type: fonte.mediaType, data: fonte.base64 } },
+    ];
   }
   return [
     { type: "text", text: `${rotulo} (arquivo PDF escaneado anexado abaixo — leia direto das páginas):` },

@@ -14,27 +14,42 @@ type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 // em si aconteceu direto do navegador (ver AuditorForm.tsx), porque o corpo
 // de uma Server Action na Vercel tem um teto de ~4,5 MB, e contratos
 // escaneados com laudo de vistoria passam disso fácil.
+const EXTENSOES_IMAGEM: Record<string, "image/jpeg" | "image/png" | "image/gif" | "image/webp"> = {
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".png": "image/png",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+};
+
 async function extrairDeCampo(
   supabase: SupabaseServerClient,
   formData: FormData,
   campoTexto: string,
   campoPath: string,
   campoNome: string
-): Promise<{ texto: string; nomeArquivo: string | null; pdfBase64: string | null }> {
+): Promise<{
+  texto: string;
+  nomeArquivo: string | null;
+  pdfBase64: string | null;
+  imagemBase64: string | null;
+  imagemMediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp" | null;
+}> {
   const texto0 = String(formData.get(campoTexto) ?? "").trim();
   const path = String(formData.get(campoPath) ?? "").trim();
   const nomeArquivo = String(formData.get(campoNome) ?? "").trim() || null;
 
   if (!path) {
-    return { texto: texto0, nomeArquivo: null, pdfBase64: null };
+    return { texto: texto0, nomeArquivo: null, pdfBase64: null, imagemBase64: null, imagemMediaType: null };
   }
 
   const nomeLower = (nomeArquivo ?? path).toLowerCase();
   const ehPdf = nomeLower.endsWith(".pdf");
-  if (!nomeLower.endsWith(".docx") && !ehPdf) {
+  const extensaoImagem = Object.keys(EXTENSOES_IMAGEM).find((ext) => nomeLower.endsWith(ext));
+  if (!nomeLower.endsWith(".docx") && !ehPdf && !extensaoImagem) {
     redirect(
       `/auditar-contrato?erro=${encodeURIComponent(
-        "Envie um arquivo .docx ou .pdf, ou cole o texto diretamente."
+        "Envie um arquivo .docx, .pdf ou uma imagem (print de tela em .png/.jpg), ou cole o texto diretamente."
       )}`
     );
   }
@@ -49,6 +64,18 @@ async function extrairDeCampo(
   }
   const buffer = Buffer.from(await data.arrayBuffer());
   void supabase.storage.from(BUCKET_TEMP).remove([path]);
+
+  // Imagem/print de tela: não tem texto pra extrair, manda os bytes direto
+  // pra IA "ver" o conteúdo, igual já fazíamos com PDF escaneado.
+  if (extensaoImagem) {
+    return {
+      texto: "",
+      nomeArquivo,
+      pdfBase64: null,
+      imagemBase64: buffer.toString("base64"),
+      imagemMediaType: EXTENSOES_IMAGEM[extensaoImagem],
+    };
+  }
 
   let texto = "";
   try {
@@ -65,7 +92,7 @@ async function extrairDeCampo(
   // direto das páginas do documento, em vez de depender de texto extraído.
   const pdfBase64 = ehPdf && !texto.trim() ? buffer.toString("base64") : null;
 
-  return { texto, nomeArquivo, pdfBase64 };
+  return { texto, nomeArquivo, pdfBase64, imagemBase64: null, imagemMediaType: null };
 }
 
 export async function auditar(formData: FormData) {
@@ -84,7 +111,7 @@ export async function auditar(formData: FormData) {
     redirect(`/auditar-contrato?erro=${encodeURIComponent("Cadastre sua imobiliária primeiro.")}`);
   }
 
-  const { texto, nomeArquivo, pdfBase64 } = await extrairDeCampo(
+  const { texto, nomeArquivo, pdfBase64, imagemBase64, imagemMediaType } = await extrairDeCampo(
     supabase,
     formData,
     "texto",
@@ -97,6 +124,8 @@ export async function auditar(formData: FormData) {
     fonteContrato = { tipo: "texto", texto };
   } else if (pdfBase64) {
     fonteContrato = { tipo: "pdf", base64: pdfBase64 };
+  } else if (imagemBase64 && imagemMediaType) {
+    fonteContrato = { tipo: "imagem", base64: imagemBase64, mediaType: imagemMediaType };
   } else {
     redirect(
       `/auditar-contrato?erro=${encodeURIComponent(
@@ -105,18 +134,19 @@ export async function auditar(formData: FormData) {
     );
   }
 
-  const { texto: textoCotacao, pdfBase64: pdfBase64Cotacao } = await extrairDeCampo(
-    supabase,
-    formData,
-    "texto_cotacao",
-    "arquivo_cotacao_path",
-    "arquivo_cotacao_nome"
-  );
+  const {
+    texto: textoCotacao,
+    pdfBase64: pdfBase64Cotacao,
+    imagemBase64: imagemBase64Cotacao,
+    imagemMediaType: imagemMediaTypeCotacao,
+  } = await extrairDeCampo(supabase, formData, "texto_cotacao", "arquivo_cotacao_path", "arquivo_cotacao_nome");
   const fonteCotacao: FonteDocumento | null = textoCotacao
     ? { tipo: "texto", texto: textoCotacao }
     : pdfBase64Cotacao
       ? { tipo: "pdf", base64: pdfBase64Cotacao }
-      : null;
+      : imagemBase64Cotacao && imagemMediaTypeCotacao
+        ? { tipo: "imagem", base64: imagemBase64Cotacao, mediaType: imagemMediaTypeCotacao }
+        : null;
 
   const { data: produtosSeguro } = await supabase
     .from("produtos")
