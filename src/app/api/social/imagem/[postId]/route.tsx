@@ -20,8 +20,8 @@ const ROTULO_TIPO: Record<string, string> = {
   autoridade_pessoal: "Ponto de vista",
 };
 
-// Cor de destaque por tipo de post — cada layout tem sua própria paleta,
-// além da diferenciação por categoria.
+// Cor de destaque por tipo de post — cada layout tem sua própria cor,
+// usada com força (crachá/cunha diagonal), não só como detalhe.
 const COR_TIPO: Record<string, string> = {
   dica_mercado: "#f4b400",
   atualizacao_tecnologia: "#14b8a6",
@@ -29,6 +29,8 @@ const COR_TIPO: Record<string, string> = {
   dado_mercado: "#10b981",
   autoridade_pessoal: "#ff5a3b",
 };
+
+const FUNDO_ESCURO = "#0b1626";
 
 // Logo branca oficial embutida como data URI — satori (motor do ImageResponse)
 // não busca arquivos relativos do /public, precisa de URL absoluta ou data URI.
@@ -50,8 +52,13 @@ type DadosPost = {
   criado_em: string;
 };
 
+type LayoutProps = { post: DadosPost; rotulo: string; cor: string; data: string };
+
 // --- peças reaproveitadas entre os 5 layouts ------------------------------
 
+// Fundo escuro liso + cunha diagonal na cor do tipo, no estilo "pôster de
+// evento" (referência: cards de palestrante do setor imobiliário) — nada de
+// gradiente/anéis finos, que estava lendo como slide corporativo.
 function Fundo({ cor, children }: { cor: string; children: ReactNode }) {
   return (
     <div
@@ -61,8 +68,8 @@ function Fundo({ cor, children }: { cor: string; children: ReactNode }) {
         height: "100%",
         display: "flex",
         flexDirection: "column",
-        background: "linear-gradient(135deg, #012a49 0%, #00213a 55%, #001526 100%)",
-        padding: "72px",
+        backgroundColor: FUNDO_ESCURO,
+        padding: "76px",
         fontFamily: "sans-serif",
         overflow: "hidden",
       }}
@@ -70,12 +77,12 @@ function Fundo({ cor, children }: { cor: string; children: ReactNode }) {
       <div
         style={{
           position: "absolute",
-          top: -160,
-          right: -160,
-          width: 460,
-          height: 460,
-          borderRadius: 9999,
-          border: `36px solid ${cor}33`,
+          top: -420,
+          left: -420,
+          width: 780,
+          height: 780,
+          backgroundColor: cor,
+          transform: "rotate(45deg)",
           display: "flex",
         }}
       />
@@ -84,213 +91,109 @@ function Fundo({ cor, children }: { cor: string; children: ReactNode }) {
   );
 }
 
-function Cabecalho({ rotulo, cor }: { rotulo: string; cor: string }) {
+function Logo() {
+  // Logo real tem proporção ~1.82:1 (3046x1678) — largura calculada pra não esticar.
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={LOGO_BRANCA_DATA_URI} width={96} height={53} alt="" style={{ objectFit: "contain" }} />;
+}
+
+function Rodape({ data }: { data: string }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-      {/* Logo real tem proporção ~1.82:1 (3046x1678) — largura calculada pra não esticar. */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={LOGO_BRANCA_DATA_URI} width={112} height={62} alt="" style={{ objectFit: "contain" }} />
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          backgroundColor: cor,
-          borderRadius: 999,
-          padding: "12px 24px",
-        }}
-      >
-        <div style={{ width: 10, height: 10, borderRadius: 999, backgroundColor: "white", display: "flex" }} />
-        <span style={{ color: "white", fontSize: 24, fontWeight: 700, letterSpacing: 1 }}>
-          {rotulo.toUpperCase()}
-        </span>
+    <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        <span style={{ color: "white", fontSize: 27, fontWeight: 700 }}>Matheus Lins</span>
+        <span style={{ color: "rgba(255,255,255,0.5)", fontSize: 20 }}>Sócio-diretor · O2 Seguros</span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 10 }}>
+        <Logo />
+        <span style={{ color: "rgba(255,255,255,0.35)", fontSize: 18 }}>{data}</span>
       </div>
     </div>
   );
 }
 
-function Rodape({ cor, data }: { cor: string; data: string }) {
+function Rotulo({ texto, cor }: { texto: string; cor: string }) {
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        borderTop: "2px solid rgba(255,255,255,0.14)",
-        paddingTop: 32,
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
-        <div
-          style={{
-            width: 56,
-            height: 56,
-            borderRadius: 999,
-            backgroundColor: "rgba(255,255,255,0.08)",
-            border: `2px solid ${cor}`,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: cor,
-            fontSize: 26,
-            fontWeight: 800,
-          }}
-        >
-          M
-        </div>
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          <span style={{ color: "white", fontSize: 26, fontWeight: 700 }}>Matheus Lino</span>
-          <span style={{ color: "rgba(255,255,255,0.55)", fontSize: 21 }}>Sócio-diretor · O2 Seguros</span>
-        </div>
-      </div>
-      <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 22 }}>{data}</span>
-    </div>
+    <span style={{ display: "flex", color: cor, fontSize: 30, fontWeight: 800, letterSpacing: 1 }}>
+      {texto.toUpperCase()}
+    </span>
   );
 }
 
 // --- os 5 layouts ----------------------------------------------------------
 
-// 1. Dica de mercado — aspas gigantes desbotadas atrás do texto, tom âmbar.
-function LayoutDica({ post, rotulo, cor, data }: { post: DadosPost; rotulo: string; cor: string; data: string }) {
+// 1. Dica de mercado — rótulo grande sobre a cunha, aspa de apoio, tom âmbar.
+function LayoutDica({ post, rotulo, cor, data }: LayoutProps) {
   return (
     <Fundo cor={cor}>
-      <div
-        style={{
-          position: "absolute",
-          top: 20,
-          left: 40,
-          fontSize: 320,
-          color: `${cor}22`,
-          fontWeight: 800,
-          display: "flex",
-          lineHeight: 1,
-        }}
-      >
-        “
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <Rotulo texto={rotulo} cor={cor} />
       </div>
-      <Cabecalho rotulo={rotulo} cor={cor} />
-      <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: "center", gap: 32 }}>
-        <div style={{ width: 96, height: 10, borderRadius: 6, backgroundColor: cor, display: "flex" }} />
-        <div
-          style={{ display: "flex", color: "white", fontSize: 58, fontWeight: 800, lineHeight: 1.2, letterSpacing: -1 }}
-        >
+      <div style={{ display: "flex", flex: 1, flexDirection: "column", justifyContent: "center", gap: 16 }}>
+        <span style={{ display: "flex", color: cor, fontSize: 96, fontWeight: 800, lineHeight: 0.6 }}>“</span>
+        <div style={{ display: "flex", color: "white", fontSize: 62, fontWeight: 800, lineHeight: 1.18, letterSpacing: -1 }}>
           {post.titulo_card}
         </div>
       </div>
-      <Rodape cor={cor} data={data} />
+      <Rodape data={data} />
     </Fundo>
   );
 }
 
-// 2. Atualização de tecnologia — grade de pontos (feel "digital") + barra segmentada.
-function LayoutTecnologia({ post, rotulo, cor, data }: { post: DadosPost; rotulo: string; cor: string; data: string }) {
-  const linhas = 5;
-  const colunas = 6;
-  const pontos = Array.from({ length: linhas * colunas });
+// 2. Atualização de tecnologia — rótulo + trilha de passos, tom teal.
+function LayoutTecnologia({ post, rotulo, cor, data }: LayoutProps) {
   return (
     <Fundo cor={cor}>
-      <div style={{ position: "absolute", top: 120, right: 60, display: "flex", flexDirection: "column", gap: 14 }}>
-        {Array.from({ length: linhas }).map((_, linha) => (
-          <div key={linha} style={{ display: "flex", gap: 14 }}>
-            {Array.from({ length: colunas }).map((_, coluna) => (
-              <div
-                key={coluna}
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: 999,
-                  backgroundColor: `${cor}${(linha + coluna) % 3 === 0 ? "55" : "22"}`,
-                  display: "flex",
-                }}
-              />
-            ))}
-          </div>
-        ))}
-        {pontos.length === 0 && null}
-      </div>
-      <Cabecalho rotulo={rotulo} cor={cor} />
-      <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: "center", gap: 32 }}>
-        <div style={{ display: "flex", gap: 8 }}>
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} style={{ width: 40, height: 8, borderRadius: 4, backgroundColor: cor, display: "flex" }} />
+      <Rotulo texto={rotulo} cor={cor} />
+      <div style={{ display: "flex", flex: 1, flexDirection: "column", justifyContent: "center", gap: 28 }}>
+        <div style={{ display: "flex", gap: 10 }}>
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div key={i} style={{ width: 46, height: 6, borderRadius: 3, backgroundColor: cor, display: "flex" }} />
           ))}
         </div>
-        <div
-          style={{ display: "flex", color: "white", fontSize: 58, fontWeight: 800, lineHeight: 1.2, letterSpacing: -1 }}
-        >
+        <div style={{ display: "flex", color: "white", fontSize: 62, fontWeight: 800, lineHeight: 1.18, letterSpacing: -1 }}>
           {post.titulo_card}
         </div>
       </div>
-      <Rodape cor={cor} data={data} />
+      <Rodape data={data} />
     </Fundo>
   );
 }
 
-// 3. Apresentação de produto — cartão central estilo "vitrine", tom coral.
-function LayoutProduto({ post, rotulo, cor, data }: { post: DadosPost; rotulo: string; cor: string; data: string }) {
+// 3. Apresentação de produto — rótulo grande, 2 chips soltos (sem caixa pesada), tom coral.
+function LayoutProduto({ post, rotulo, cor, data }: LayoutProps) {
   return (
     <Fundo cor={cor}>
-      <Cabecalho rotulo={rotulo} cor={cor} />
-      <div style={{ display: "flex", flex: 1, alignItems: "center", justifyContent: "center" }}>
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 24,
-            backgroundColor: "rgba(255,255,255,0.06)",
-            border: `2px solid ${cor}66`,
-            borderRadius: 28,
-            padding: "56px 52px",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              color: "white",
-              fontSize: 52,
-              fontWeight: 800,
-              lineHeight: 1.2,
-              letterSpacing: -1,
-            }}
-          >
-            {post.titulo_card}
-          </div>
-          <div style={{ display: "flex", gap: 14 }}>
-            {["Cotação rápida", "Time humano", "Regulado SUSEP"].map((item) => (
-              <div
-                key={item}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  backgroundColor: `${cor}22`,
-                  borderRadius: 999,
-                  padding: "8px 16px",
-                }}
-              >
-                <span style={{ color: cor, fontSize: 20, fontWeight: 800 }}>✓</span>
-                <span style={{ color: "rgba(255,255,255,0.85)", fontSize: 18 }}>{item}</span>
-              </div>
-            ))}
-          </div>
+      <Rotulo texto={rotulo} cor={cor} />
+      <div style={{ display: "flex", flex: 1, flexDirection: "column", justifyContent: "center", gap: 28 }}>
+        <div style={{ display: "flex", color: "white", fontSize: 62, fontWeight: 800, lineHeight: 1.18, letterSpacing: -1 }}>
+          {post.titulo_card}
+        </div>
+        <div style={{ display: "flex", gap: 28 }}>
+          {["Cotação rápida", "Regulado SUSEP"].map((item) => (
+            <div key={item} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ display: "flex", color: cor, fontSize: 26, fontWeight: 800 }}>✓</span>
+              <span style={{ display: "flex", color: "rgba(255,255,255,0.8)", fontSize: 22 }}>{item}</span>
+            </div>
+          ))}
         </div>
       </div>
-      <Rodape cor={cor} data={data} />
+      <Rodape data={data} />
     </Fundo>
   );
 }
 
-// 4. Dado de mercado — o número domina o card, título vira legenda de apoio.
-function LayoutDado({ post, rotulo, cor, data }: { post: DadosPost; rotulo: string; cor: string; data: string }) {
+// 4. Dado de mercado — o número vira o rótulo em si, gigante, tom esmeralda.
+function LayoutDado({ post, rotulo, cor, data }: LayoutProps) {
   return (
     <Fundo cor={cor}>
-      <Cabecalho rotulo={rotulo} cor={cor} />
-      <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: "center", gap: 20 }}>
+      <Rotulo texto={rotulo} cor={cor} />
+      <div style={{ display: "flex", flex: 1, flexDirection: "column", justifyContent: "center", gap: 16 }}>
         <div
           style={{
             display: "flex",
             color: cor,
-            fontSize: post.numero_destaque && post.numero_destaque.length > 8 ? 130 : 190,
+            fontSize: post.numero_destaque && post.numero_destaque.length > 8 ? 140 : 200,
             fontWeight: 800,
             lineHeight: 1,
             letterSpacing: -2,
@@ -298,53 +201,27 @@ function LayoutDado({ post, rotulo, cor, data }: { post: DadosPost; rotulo: stri
         >
           {post.numero_destaque ?? "—"}
         </div>
-        <div style={{ display: "flex", color: "white", fontSize: 40, fontWeight: 700, lineHeight: 1.3 }}>
+        <div style={{ display: "flex", color: "white", fontSize: 38, fontWeight: 700, lineHeight: 1.3 }}>
           {post.titulo_card}
         </div>
       </div>
-      <Rodape cor={cor} data={data} />
+      <Rodape data={data} />
     </Fundo>
   );
 }
 
-// 5. Autoridade pessoal — estilo depoimento, avatar grande, tom navy contido.
-function LayoutAutoridade({ post, rotulo, cor, data }: { post: DadosPost; rotulo: string; cor: string; data: string }) {
+// 5. Autoridade pessoal — abertura de aspas grande + frase, sem crachá de avatar.
+function LayoutAutoridade({ post, rotulo, cor, data }: LayoutProps) {
   return (
     <Fundo cor={cor}>
-      <Cabecalho rotulo={rotulo} cor={cor} />
-      <div style={{ display: "flex", alignItems: "center", gap: 40, flex: 1 }}>
-        <div
-          style={{
-            width: 160,
-            height: 160,
-            borderRadius: 9999,
-            backgroundColor: "rgba(255,255,255,0.08)",
-            border: `3px solid ${cor}`,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: cor,
-            fontSize: 72,
-            fontWeight: 800,
-            flexShrink: 0,
-          }}
-        >
-          M
-        </div>
-        <div
-          style={{
-            display: "flex",
-            color: "white",
-            fontSize: 48,
-            fontWeight: 800,
-            lineHeight: 1.25,
-            letterSpacing: -1,
-          }}
-        >
+      <Rotulo texto={rotulo} cor={cor} />
+      <div style={{ display: "flex", flex: 1, flexDirection: "column", justifyContent: "center", gap: 12 }}>
+        <span style={{ display: "flex", color: cor, fontSize: 110, fontWeight: 800, lineHeight: 0.5 }}>“</span>
+        <div style={{ display: "flex", color: "white", fontSize: 54, fontWeight: 800, lineHeight: 1.22, letterSpacing: -1 }}>
           {post.titulo_card}
         </div>
       </div>
-      <Rodape cor={cor} data={data} />
+      <Rodape data={data} />
     </Fundo>
   );
 }
