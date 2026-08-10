@@ -179,6 +179,19 @@ export default async function Home() {
         </svg>
       ),
     },
+    {
+      href: "/ramos-elementares",
+      titulo: "Ramos Elementares",
+      descricao: "Novos negócios, renovações, endossos e qualidade da produção",
+      gradiente: "from-emerald-500 to-o2-navy",
+      icone: (
+        <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
+          <path d="M4 19.5h16" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          <path d="M6.5 17V11M11 17V6M15.5 17V9M20 17V3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          <path d="M5.5 8.5l4-3 4 1.8 5-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      ),
+    },
   ];
 
   const configuracoes: { href: string; titulo: string; descricao: string }[] = [
