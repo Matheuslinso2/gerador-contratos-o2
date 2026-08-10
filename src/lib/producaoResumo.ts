@@ -55,7 +55,7 @@ export async function recalcularResumoProducao(supabase: SupabaseServerClient): 
 
   type AcMensal = { ramo: string; competencia: string; tipo: string; quantidade: number; premio_total: number; comissao_corretora: number };
   type AcProdutor = { produtor: string; ramo: string; quantidade: number; premio_total: number; comissao_corretora: number; comissao_produtor: number };
-  type AcSeguradora = { seguradora: string; ramo: string; quantidade: number; premio_total: number };
+  type AcSeguradora = { seguradora: string; ramo: string; quantidade: number; premio_total: number; comissao_corretora: number };
 
   const mensal = new Map<string, AcMensal>();
   const produtor = new Map<string, AcProdutor>();
@@ -93,9 +93,10 @@ export async function recalcularResumoProducao(supabase: SupabaseServerClient): 
       };
       const seguradoraNome = SINONIMOS_SEGURADORA[l.seguradora] ?? l.seguradora;
       const chave = `${seguradoraNome}|${l.ramo}`;
-      const atual = seguradora.get(chave) ?? { seguradora: seguradoraNome, ramo: l.ramo, quantidade: 0, premio_total: 0 };
+      const atual = seguradora.get(chave) ?? { seguradora: seguradoraNome, ramo: l.ramo, quantidade: 0, premio_total: 0, comissao_corretora: 0 };
       atual.quantidade += 1;
       atual.premio_total += premio;
+      atual.comissao_corretora += comissaoCorretora;
       seguradora.set(chave, atual);
     }
   }

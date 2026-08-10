@@ -6,7 +6,7 @@ const TAMANHO_LOTE = 500;
 const TAMANHO_PAGINA = 1000;
 
 type LinhaEndereco = { ramo: string; nosso_numero: string; bairro: string | null; cidade: string | null; uf: string | null; valor_aluguel: number | null };
-type LinhaErp = { ramo: string; nosso_numero: string; premio_total: number | null };
+type LinhaErp = { ramo: string; nosso_numero: string; premio_total: number | null; valor_comissao: number | null };
 
 // O Supabase (PostgREST) devolve no máximo 1000 linhas por consulta sem
 // paginação explícita -- ver o mesmo comentário em producaoResumo.ts
@@ -34,7 +34,7 @@ async function buscarPremiosErp(supabase: SupabaseServerClient): Promise<LinhaEr
   for (;;) {
     const { data, error } = await supabase
       .from("producao_erp")
-      .select("ramo, nosso_numero, premio_total")
+      .select("ramo, nosso_numero, premio_total, valor_comissao")
       .range(inicio, inicio + TAMANHO_PAGINA - 1);
     if (error) throw new Error(`Falha ao ler producao_erp: ${error.message}`);
     linhas.push(...((data ?? []) as LinhaErp[]));
@@ -52,11 +52,23 @@ export async function recalcularResumoBairro(supabase: SupabaseServerClient): Pr
   const [enderecosData, erpData] = await Promise.all([buscarEnderecosComBairro(supabase), buscarPremiosErp(supabase)]);
 
   const premioPorChave = new Map<string, number>();
+  const comissaoPorChave = new Map<string, number>();
   for (const l of erpData) {
     premioPorChave.set(`${l.ramo}|${l.nosso_numero}`, l.premio_total ?? 0);
+    comissaoPorChave.set(`${l.ramo}|${l.nosso_numero}`, l.valor_comissao ?? 0);
   }
 
-  type Ac = { ramo: string; bairro: string; cidade: string | null; uf: string | null; quantidade: number; premio_total: number; aluguel_soma: number; aluguel_quantidade: number };
+  type Ac = {
+    ramo: string;
+    bairro: string;
+    cidade: string | null;
+    uf: string | null;
+    quantidade: number;
+    premio_total: number;
+    comissao_soma: number;
+    aluguel_soma: number;
+    aluguel_quantidade: number;
+  };
   const acumulado = new Map<string, Ac>();
 
   // Normaliza bairro/cidade só pra fins de agrupamento (maiúsculo, sem
@@ -83,9 +95,11 @@ export async function recalcularResumoBairro(supabase: SupabaseServerClient): Pr
     const cidadeNorm = normalizar(e.cidade);
     const chave = `${e.ramo}|${bairroNorm}|${cidadeNorm}`;
     const atual =
-      acumulado.get(chave) ?? { ramo: e.ramo, bairro: bairroNorm, cidade: cidadeNorm || null, uf: e.uf, quantidade: 0, premio_total: 0, aluguel_soma: 0, aluguel_quantidade: 0 };
+      acumulado.get(chave) ??
+      { ramo: e.ramo, bairro: bairroNorm, cidade: cidadeNorm || null, uf: e.uf, quantidade: 0, premio_total: 0, comissao_soma: 0, aluguel_soma: 0, aluguel_quantidade: 0 };
     atual.quantidade += 1;
     atual.premio_total += premioPorChave.get(`${e.ramo}|${e.nosso_numero}`) ?? 0;
+    atual.comissao_soma += comissaoPorChave.get(`${e.ramo}|${e.nosso_numero}`) ?? 0;
     if (e.valor_aluguel !== null && e.valor_aluguel !== undefined) {
       atual.aluguel_soma += e.valor_aluguel;
       atual.aluguel_quantidade += 1;
@@ -97,6 +111,7 @@ export async function recalcularResumoBairro(supabase: SupabaseServerClient): Pr
   const linhas = Array.from(acumulado.values()).map((a) => ({
     ...a,
     premio_total: arredondar(a.premio_total),
+    comissao_soma: arredondar(a.comissao_soma),
     aluguel_soma: arredondar(a.aluguel_soma),
   }));
 
