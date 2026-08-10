@@ -2,9 +2,18 @@ import Anthropic from "@anthropic-ai/sdk";
 
 export type CategoriaPost = "mercado_imobiliario" | "seguro_imobiliario" | "institucional";
 
+export type TipoPost =
+  | "dica_mercado"
+  | "atualizacao_tecnologia"
+  | "apresentacao_produto"
+  | "dado_mercado"
+  | "autoridade_pessoal";
+
 export type ConteudoGerado = {
   titulo_card: string;
   legenda: string;
+  tipo_post: TipoPost;
+  numero_destaque: string | null;
 };
 
 // Mesmo padrão de schema achatado + tool_choice forçado usado em
@@ -12,7 +21,7 @@ export type ConteudoGerado = {
 // depender de parsing de texto livre.
 const FERRAMENTA_POST: Anthropic.Tool = {
   name: "gerar_post",
-  description: "Reporta o texto de um post pronto pra publicar no Instagram.",
+  description: "Reporta o texto de um post pronto pra publicar no Instagram, já classificado no layout visual certo.",
   input_schema: {
     type: "object",
     properties: {
@@ -24,8 +33,30 @@ const FERRAMENTA_POST: Anthropic.Tool = {
         type: "string",
         description: "Legenda completa do post, pronta pra publicar, incluindo as hashtags no fim.",
       },
+      tipo_post: {
+        type: "string",
+        enum: [
+          "dica_mercado",
+          "atualizacao_tecnologia",
+          "apresentacao_produto",
+          "dado_mercado",
+          "autoridade_pessoal",
+        ],
+        description:
+          "Qual dos 5 layouts visuais combina com esse post: " +
+          "dica_mercado = insight/orientação prática (ex: como avaliar um inquilino, o que olhar num contrato); " +
+          "atualizacao_tecnologia = novidade de proptech/insurtech, automação, digitalização do setor; " +
+          "apresentacao_produto = post institucional destacando um produto da O2 (Seguro Fiança, Incêndio, Capitalização etc.); " +
+          "dado_mercado = a notícia tem um número/estatística forte que vale destacar em tamanho grande (só use se houver um número claro no material); " +
+          "autoridade_pessoal = opinião/comentário pessoal do Matheus como especialista, sem um número ou produto específico em destaque.",
+      },
+      numero_destaque: {
+        type: ["string", "null"],
+        description:
+          "Preencha SOMENTE quando tipo_post = dado_mercado: o número/estatística em si, bem curto e formatado pra ficar grande na imagem (ex: \"35%\", \"R$ 853 mi\", \"2 em cada 3\"). Nos outros casos, null.",
+      },
     },
-    required: ["titulo_card", "legenda"],
+    required: ["titulo_card", "legenda", "tipo_post", "numero_destaque"],
   },
 };
 

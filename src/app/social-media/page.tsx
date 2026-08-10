@@ -38,7 +38,13 @@ function fmtData(iso: string | null): string {
   return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
 
-export default async function SocialMediaPage() {
+export default async function SocialMediaPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ fonte?: string; q?: string }>;
+}) {
+  const { fonte: fonteId, q } = await searchParams;
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -46,12 +52,16 @@ export default async function SocialMediaPage() {
   if (!user) redirect("/login");
   if (!(isAdmin(user.email) || isColaboradorO2(user.email))) redirect("/");
 
-  const { data: noticias } = await supabase
+  let consultaNoticias = supabase
     .from("social_media_noticias")
     .select("id, titulo, link, resumo, publicado_em, coletado_em, usado, social_media_fontes(nome, categoria)")
     .order("coletado_em", { ascending: false })
-    .limit(100)
-    .returns<Noticia[]>();
+    .limit(100);
+
+  if (fonteId) consultaNoticias = consultaNoticias.eq("fonte_id", fonteId);
+  if (q?.trim()) consultaNoticias = consultaNoticias.or(`titulo.ilike.%${q.trim()}%,resumo.ilike.%${q.trim()}%`);
+
+  const { data: noticias } = await consultaNoticias.returns<Noticia[]>();
 
   const { data: fontes } = await supabase
     .from("social_media_fontes")
@@ -148,6 +158,41 @@ export default async function SocialMediaPage() {
           </ul>
         </section>
 
+        <section className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white p-3">
+          <form action="/social-media" method="get" className="flex flex-wrap items-center gap-2">
+            <select
+              name="fonte"
+              defaultValue={fonteId ?? ""}
+              className="rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-700"
+            >
+              <option value="">Todas as fontes</option>
+              {(fontes ?? []).map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.nome}
+                </option>
+              ))}
+            </select>
+            <input
+              type="text"
+              name="q"
+              defaultValue={q ?? ""}
+              placeholder="Palavra-chave no título ou resumo"
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+            />
+            <button
+              type="submit"
+              className="rounded-md bg-o2-navy px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
+            >
+              Filtrar
+            </button>
+            {(fonteId || q) && (
+              <a href="/social-media" className="text-sm text-slate-400 hover:underline">
+                Limpar filtro
+              </a>
+            )}
+          </form>
+        </section>
+
         <section className="rounded-lg border border-slate-200 bg-white">
           <div className="divide-y divide-slate-100">
             {(noticias ?? []).map((n) => (
@@ -179,7 +224,12 @@ export default async function SocialMediaPage() {
                 )}
               </div>
             ))}
-            {!noticias?.length && (
+            {!noticias?.length && (fonteId || q) && (
+              <p className="px-4 py-8 text-center text-sm text-slate-400">
+                Nenhuma notícia encontrada com esse filtro.
+              </p>
+            )}
+            {!noticias?.length && !fonteId && !q && (
               <p className="px-4 py-8 text-center text-sm text-slate-400">
                 Nenhuma notícia coletada ainda. Clique em &quot;Coletar agora&quot; pra testar.
               </p>

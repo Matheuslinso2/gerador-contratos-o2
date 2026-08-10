@@ -54,6 +54,8 @@ export async function gerarRascunho(formData: FormData) {
     categoria: fonte?.categoria ?? "mercado_imobiliario",
     titulo_card: conteudo.titulo_card,
     legenda: conteudo.legenda,
+    tipo_post: conteudo.tipo_post,
+    numero_destaque: conteudo.numero_destaque,
   });
   await supabase.from("social_media_noticias").update({ usado: true }).eq("id", noticiaId);
 
@@ -73,6 +75,8 @@ export async function gerarRascunhoInstitucional(formData: FormData) {
     categoria: "institucional",
     titulo_card: conteudo.titulo_card,
     legenda: conteudo.legenda,
+    tipo_post: conteudo.tipo_post,
+    numero_destaque: conteudo.numero_destaque,
   });
 
   revalidatePath("/social-media");
