@@ -13,7 +13,7 @@ export async function enviarEmail({
   assunto,
   html,
   anexos,
-  remetente = "Gerador de Contratos O2",
+  remetente = "Workspace O2",
   throwSeFalhar = false,
 }: {
   para: string;
@@ -84,7 +84,7 @@ export async function alertarAdmin({
     html: `
       <div style="max-width: 560px; margin: 0 auto; font-family: Arial, sans-serif;">
         <div style="background: #00213a; padding: 16px 20px; border-radius: 10px 10px 0 0;">
-          <p style="margin: 0; color: #fff; font-size: 16px; font-weight: bold;">⚠️ Erro no Gerador de Contratos</p>
+          <p style="margin: 0; color: #fff; font-size: 16px; font-weight: bold;">⚠️ Erro no Workspace O2</p>
         </div>
         <div style="border: 1px solid #eee; border-top: none; border-radius: 0 0 10px 10px; padding: 20px;">
           ${

@@ -119,7 +119,7 @@ export async function salvarImobiliaria(formData: FormData) {
       para: "comercial@o2seguros.com.br",
       assunto: `Nova imobiliária cadastrada: ${nome}`,
       html: `
-        <h2>Nova imobiliária cadastrada no Gerador de Contratos</h2>
+        <h2>Nova imobiliária cadastrada no Workspace O2</h2>
         <p><strong>Nome:</strong> ${nome}</p>
         <p><strong>CNPJ:</strong> ${cnpj}</p>
         <p><strong>CRECI:</strong> ${creci || "não informado"}</p>

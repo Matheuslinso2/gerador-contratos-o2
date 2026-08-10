@@ -1,4 +1,4 @@
-import { textoCorresponde } from "@/lib/googleSheetsProspeccao";
+import { textoCorresponde } from "@/lib/textoCorresponde";
 import { apenasDigitos } from "@/lib/pdfComSenha";
 import type { createClient } from "@/lib/supabase/server";
 

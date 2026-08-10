@@ -10,12 +10,12 @@ export default function TermosPage() {
         <BackLink />
         <div>
           <h1 className="text-xl font-semibold text-o2-navy">Termos de Uso e Política de Privacidade</h1>
-          <p className="mt-1 text-sm text-gray-500">Gerador de Contratos de Locação — O2 Seguros</p>
+          <p className="mt-1 text-sm text-gray-500">Workspace O2 — O2 Seguros</p>
         </div>
 
         <div className="space-y-4 text-sm leading-relaxed text-gray-700">
           <p>
-            Este Gerador de Contratos de Locação ("Ferramenta") é oferecido pela O2 Seguros
+            Este Workspace O2 ("Ferramenta") é oferecido pela O2 Seguros
             ("O2", "nós") para uso por imobiliárias e administradoras de locação parceiras
             ("Usuário", "você"), com a finalidade de auxiliar na montagem de contratos de
             locação que incluam corretamente as cláusulas de garantia locatícia exigidas por

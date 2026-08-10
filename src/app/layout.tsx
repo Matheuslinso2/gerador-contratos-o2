@@ -11,8 +11,8 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  title: "Gerador de Contratos | O2 Seguros",
-  description: "Geração de contratos de locação para imobiliárias parceiras da O2 Seguros",
+  title: "Workspace O2",
+  description: "Ferramentas internas e para imobiliárias parceiras da O2 Seguros",
 };
 
 export default function RootLayout({

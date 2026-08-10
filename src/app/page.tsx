@@ -19,7 +19,7 @@ export default async function Home() {
         <main className="mx-auto flex max-w-xl flex-1 flex-col items-center justify-center gap-6 p-8 text-center">
           <Image src="/o2-logo-color.png" alt="O2 Seguros" width={168} height={100} priority />
           <div>
-            <h1 className="text-2xl font-bold text-o2-navy">Gerador de Contratos de Locação</h1>
+            <h1 className="text-2xl font-bold text-o2-navy">Workspace O2</h1>
             <p className="mt-1 text-sm text-gray-600">Painel para imobiliárias parceiras da O2 Seguros</p>
           </div>
           <div className="flex gap-3">
@@ -131,15 +131,17 @@ export default async function Home() {
     icone: ReactNode;
   }[] = [
     {
-      href: "/prospeccao",
-      titulo: "Prospecção",
-      descricao: "Ticket médio e roteiro de abordagem por imobiliária",
+      href: "/producao",
+      titulo: "Produção",
+      descricao: "Dashboard de prêmio, comissão e volume da produção da corretora",
       gradiente: "from-cyan-500 to-o2-navy",
       icone: (
         <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
-          <circle cx="12" cy="12" r="7" stroke="currentColor" strokeWidth="1.6" />
-          <circle cx="12" cy="12" r="2.2" fill="currentColor" />
-          <path d="M12 3v2.5M12 18.5V21M21 12h-2.5M5.5 12H3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          <path d="M4 20V4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          <path d="M4 20h16" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          <rect x="7" y="13" width="3" height="7" rx="0.8" stroke="currentColor" strokeWidth="1.6" />
+          <rect x="12.5" y="9" width="3" height="11" rx="0.8" stroke="currentColor" strokeWidth="1.6" />
+          <rect x="18" y="5.5" width="3" height="14.5" rx="0.8" stroke="currentColor" strokeWidth="1.6" />
         </svg>
       ),
     },

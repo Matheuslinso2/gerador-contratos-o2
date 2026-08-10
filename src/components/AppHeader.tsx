@@ -17,7 +17,7 @@ export default function AppHeader({
         <Link href="/" className="flex items-center gap-3">
           <Image src="/o2-logo-navy.png" alt="O2 Seguros" width={100} height={60} priority />
           <div className="hidden border-l border-white/20 pl-3 sm:block">
-            <p className="text-sm font-medium text-white">Gerador de Contratos</p>
+            <p className="text-sm font-medium text-white">Workspace O2</p>
             <p className="text-xs text-white/50">Painel para imobiliárias</p>
           </div>
         </Link>
@@ -48,7 +48,7 @@ export default function AppHeader({
               <NavDropdown
                 label="Uso interno"
                 items={[
-                  { href: "/prospeccao", label: "Prospecção" },
+                  { href: "/producao", label: "Produção" },
                   { href: "/faturas", label: "Faturas" },
                   { href: "/seguro-fianca", label: "Seguro Fiança" },
                 ]}

@@ -1,8 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 
 // Schema achatado (sem objetos aninhados) — mesmo cuidado já tomado em
-// prospeccaoIA.ts/auditorContrato.ts nesse projeto: schema aninhado
-// confundiu o modelo em versões anteriores.
+// auditorContrato.ts nesse projeto: schema aninhado confundiu o modelo em
+// versões anteriores.
 export type DadosFaturaExtraidos = {
   seguradora: string | null;
   tipo_documento: "boleto" | "demonstrativo" | null;
