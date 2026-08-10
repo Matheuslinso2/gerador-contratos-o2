@@ -52,6 +52,7 @@ export default function AppHeader({
                   { href: "/faturas", label: "Faturas" },
                   { href: "/seguro-fianca", label: "Seguro Fiança" },
                   { href: "/ramos-elementares", label: "Ramos Elementares" },
+                  { href: "/social-media", label: "Social Media" },
                 ]}
               />
             )}

@@ -192,6 +192,19 @@ export default async function Home() {
         </svg>
       ),
     },
+    {
+      href: "/social-media",
+      titulo: "Social Media",
+      descricao: "Notícias de mercado imobiliário e seguros, coletadas automaticamente",
+      gradiente: "from-fuchsia-500 to-o2-navy",
+      icone: (
+        <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
+          <rect x="4" y="4" width="16" height="16" rx="4" stroke="currentColor" strokeWidth="1.6" />
+          <circle cx="12" cy="12" r="3.2" stroke="currentColor" strokeWidth="1.6" />
+          <circle cx="16.3" cy="7.7" r="0.9" fill="currentColor" />
+        </svg>
+      ),
+    },
   ];
 
   const configuracoes: { href: string; titulo: string; descricao: string }[] = [
