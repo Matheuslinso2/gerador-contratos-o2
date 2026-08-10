@@ -335,18 +335,41 @@ export function montarContagemMensal(
       alertas.push("Convertido sem seguradora escolhida");
     }
 
+    const alugCard = valorMonetario(item[CAMPO_ALUGUEL]);
+    const pacoteCard = valorMonetario(item[CAMPO_PACOTE_LOCACAO]);
+
     const seguradoras: LinhaContagem["seguradoras"] = {};
     for (const seg of SEGURADORAS) {
       const status: Record<string, string> = {};
       for (const [rotulo, campo] of seg.status) status[rotulo] = enumLabel(defs, campo, item[campo]);
-      const pAluguel = item[seg.pAluguel];
-      const pLocacao = item[seg.pLocacao];
+      const valorPlano = valorMonetario(item[seg.valor]);
+
+      // Pottencial (Taxa Fixa) e Pottencial (Tradicional) compartilham o
+      // MESMO campo de "% do Aluguel"/"% da Locação" no Bitrix -- não existe
+      // um campo separado por plano lá (confirmado via crm.item.fields).
+      // Ler esse campo direto sempre dá o mesmo número pros dois planos.
+      // Como o campo "Valor" já é separado corretamente por plano, calculamos
+      // a taxa real (valor da cotação ÷ pacote/aluguel) em vez de ler o
+      // campo % compartilhado -- mesma regra já documentada no topo do
+      // arquivo, só que agora aplicada de fato pra esse caso.
+      let pctAluguel: number | "" = "";
+      let pctLocacao: number | "" = "";
+      if (seg.nome.startsWith("Pottencial")) {
+        pctAluguel = typeof valorPlano === "number" && typeof alugCard === "number" && alugCard > 0 ? (valorPlano / alugCard) * 100 : "";
+        pctLocacao = typeof valorPlano === "number" && typeof pacoteCard === "number" && pacoteCard > 0 ? (valorPlano / pacoteCard) * 100 : "";
+      } else {
+        const pAluguel = item[seg.pAluguel];
+        const pLocacao = item[seg.pLocacao];
+        pctAluguel = typeof pAluguel === "number" ? pAluguel : "";
+        pctLocacao = typeof pLocacao === "number" ? pLocacao : "";
+      }
+
       seguradoras[seg.nome] = {
         status,
-        valor: valorMonetario(item[seg.valor]),
+        valor: valorPlano,
         comissaoPct: seg.comissao ? valorMonetario(item[seg.comissao]) : "",
-        pctAluguel: typeof pAluguel === "number" ? pAluguel : "",
-        pctLocacao: typeof pLocacao === "number" ? pLocacao : "",
+        pctAluguel,
+        pctLocacao,
       };
     }
 
@@ -373,8 +396,8 @@ export function montarContagemMensal(
       responsavelAtual: nomeUsuario(usuarios, item.assignedById),
       criadoPor: nomeUsuario(usuarios, item.createdBy),
       ultimaMovimentacaoPor: nomeUsuario(usuarios, item.movedBy),
-      aluguel: valorMonetario(item[CAMPO_ALUGUEL]),
-      pacoteLocacao: valorMonetario(item[CAMPO_PACOTE_LOCACAO]),
+      aluguel: alugCard,
+      pacoteLocacao: pacoteCard,
       seguradoras,
       seguradoraEscolhida: enumLabel(defs, CAMPO_SEGURADORA_ESCOLHIDA, item[CAMPO_SEGURADORA_ESCOLHIDA]),
       motivoRecusaPerda,
