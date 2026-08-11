@@ -13,6 +13,7 @@ export type FonteRamosBruta = {
     titulo: string;
     url: string;
     modificadaEm: string | null;
+    tipo?: "google_sheets" | "bitrix24";
   };
   abas: {
     novosPendentes: CelulaGoogle[][];
@@ -251,6 +252,7 @@ export async function lerFonteRamosElementares(competencia: string): Promise<Fon
       titulo: metadados.data.properties?.title || planilha.titulo,
       url: metadados.data.spreadsheetUrl || planilha.url,
       modificadaEm: planilha.modificadaEm,
+      tipo: "google_sheets",
     },
     abas,
     nomesAbas,

@@ -198,6 +198,9 @@ function ramoCanonico(valor: string): string {
   if (normal === "2IMO") normal = "IMO";
   if (normal === "2POR") normal = "POR";
   const mapa: Record<string, string> = {
+    "INCENDIO IMOBILIARIO": "IMOBILIÁRIO",
+    "INCENDIO INDIVIDUAL RESIDENCIAL": "RESIDENCIAL",
+    "INCENDIO INDIVIDUAL EMPRESARIAL": "EMPRESARIAL",
     COND: "CONDOMÍNIO",
     CONDOMINIO: "CONDOMÍNIO",
     EMPR: "EMPRESARIAL",
@@ -255,6 +258,11 @@ function cotadorCanonico(valor: string): string {
   const normal = chave(valor);
   if (normal === "ISA" || normal === "ISABELLE") return "ISABELLE";
   if (normal === "ANA" || normal === "ANA INGRID") return "ANA INGRID";
+  if (normal.startsWith("AMANDA ")) return "AMANDA";
+  if (normal.startsWith("BRUNA ")) return "BRUNA";
+  if (normal.startsWith("ISABELLE ")) return "ISABELLE";
+  if (normal.startsWith("ANA INGRID ")) return "ANA INGRID";
+  if (normal.startsWith("JOAO ")) return "JOÃO";
   if (normal === "IMOBILIARIA") return "PRODUÇÃO DIRETA PELA IMOBILIÁRIA";
   return texto(valor).toUpperCase() || "NÃO INFORMADO";
 }
@@ -596,7 +604,11 @@ export function montarAnaliseRamosElementares(fonte: FonteRamosBruta, agora = ne
     fonte: fonte.planilha,
     avisosFonte: [
       ...fonte.avisos,
-      "A aba ENDOSSOS não possui um campo estruturado de tipo de movimentação; o painel não classifica observações por texto livre.",
+      ...(fonte.planilha.tipo === "bitrix24"
+        ? []
+        : [
+            "A aba ENDOSSOS não possui um campo estruturado de tipo de movimentação; o painel não classifica observações por texto livre.",
+          ]),
     ],
     semAmostra: novosConsolidados.length + rnAtual.length + rnFutura.length + endossos.length === 0,
     visaoGeral: {

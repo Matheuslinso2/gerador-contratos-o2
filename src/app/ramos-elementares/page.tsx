@@ -4,6 +4,7 @@ import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "../actions";
 import { lerFonteRamosElementares } from "@/lib/ramos-elementares/fonteGoogle";
+import { lerFonteRamosElementaresBitrix } from "@/lib/ramos-elementares/fonteBitrix";
 import {
   analiseRamosVazia,
   montarAnaliseRamosElementares,
@@ -13,6 +14,8 @@ import PainelRamosElementares from "./PainelRamosElementares";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
+
+const COMPETENCIA_INICIO_BITRIX = "2026-09";
 
 function competenciaAtual(): string {
   const partes = new Intl.DateTimeFormat("en-CA", {
@@ -44,11 +47,14 @@ export default async function RamosElementaresPage({
   if (!isAdmin(user?.email) && !isColaboradorO2(user?.email)) redirect("/");
 
   let analise: AnaliseRamosElementares;
-  let origem: "ao_vivo" | "snapshot" | "indisponivel" = "ao_vivo";
+  const usarBitrix = competencia >= COMPETENCIA_INICIO_BITRIX;
+  let origem: "planilha" | "bitrix" | "snapshot" | "indisponivel" = usarBitrix ? "bitrix" : "planilha";
   let erroFonte: string | null = null;
 
   try {
-    const fonte = await lerFonteRamosElementares(competencia);
+    const fonte = usarBitrix
+      ? await lerFonteRamosElementaresBitrix(competencia)
+      : await lerFonteRamosElementares(competencia);
     analise = montarAnaliseRamosElementares(fonte);
 
     const { error: erroSnapshot } = await supabase.from("ramos_elementares_snapshots").upsert(
@@ -75,6 +81,15 @@ export default async function RamosElementaresPage({
       origem = "snapshot";
     } else {
       analise = analiseRamosVazia(competencia, erroFonte);
+      analise.fonte = usarBitrix
+        ? {
+            id: "bitrix-spa-1046",
+            titulo: "Bitrix24 — Produção Incêndio",
+            url: "https://o2seguros.bitrix24.com.br/crm/type/1046/list/category/22/",
+            modificadaEm: null,
+            tipo: "bitrix24",
+          }
+        : { ...analise.fonte, tipo: "google_sheets" };
       origem = "indisponivel";
     }
   }
