@@ -223,7 +223,7 @@ function LayoutDica({ post, rotulo, cor, data }: LayoutProps) {
       <Rotulo texto={rotulo} cor={cor} />
       <div style={{ display: "flex", flex: 1, flexDirection: "column", justifyContent: "center", gap: 8 }}>
         <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-          <div style={{ position: "absolute", left: -20, top: -30 }}>
+          <div style={{ position: "absolute", left: -20, top: -30, display: "flex" }}>
             <Glow cor={cor} tamanho={220} />
           </div>
           <span style={{ display: "flex", color: cor, fontSize: 170, fontFamily: "Archivo Black", lineHeight: 0.5 }}>
@@ -244,7 +244,7 @@ function LayoutTecnologia({ post, rotulo, cor, data }: LayoutProps) {
       <Rotulo texto={rotulo} cor={cor} />
       <div style={{ display: "flex", flex: 1, flexDirection: "column", justifyContent: "center", gap: 24 }}>
         <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 18 }}>
-          <div style={{ position: "absolute", left: -30, top: -30 }}>
+          <div style={{ position: "absolute", left: -30, top: -30, display: "flex" }}>
             <Glow cor={cor} tamanho={180} />
           </div>
           <span style={{ display: "flex", color: cor, fontSize: 92, fontFamily: "Archivo Black", lineHeight: 0.5 }}>
@@ -308,7 +308,7 @@ function LayoutDado({ post, rotulo, cor, data }: LayoutProps) {
       <Rotulo texto={rotulo} cor={cor} />
       <div style={{ display: "flex", flex: 1, flexDirection: "column", justifyContent: "center", gap: 16 }}>
         <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 14 }}>
-          <div style={{ position: "absolute", left: -40, top: -40 }}>
+          <div style={{ position: "absolute", left: -40, top: -40, display: "flex" }}>
             <Glow cor={cor} tamanho={280} />
           </div>
           <span
@@ -340,7 +340,7 @@ function LayoutAutoridade({ post, rotulo, cor, data }: LayoutProps) {
       <Rotulo texto={rotulo} cor={cor} />
       <div style={{ display: "flex", flex: 1, flexDirection: "column", justifyContent: "center", gap: 4 }}>
         <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-          <div style={{ position: "absolute", left: -20, top: -20 }}>
+          <div style={{ position: "absolute", left: -20, top: -20, display: "flex" }}>
             <Glow cor={cor} tamanho={200} />
           </div>
           <span style={{ display: "flex", color: cor, fontSize: 150, fontFamily: "Archivo Black", lineHeight: 0.4 }}>
@@ -397,13 +397,19 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pos
       layout = <LayoutAutoridade {...props} />;
   }
 
-  return new ImageResponse(layout, {
-    width: 1080,
-    height: 1080,
-    fonts: [
-      { name: "Archivo Black", data: FONTE_ARCHIVO_BLACK, weight: 400, style: "normal" },
-      { name: "Inter", data: FONTE_INTER_800, weight: 800, style: "normal" },
-      { name: "Inter", data: FONTE_INTER_600, weight: 600, style: "normal" },
-    ],
-  });
+  try {
+    return new ImageResponse(layout, {
+      width: 1080,
+      height: 1080,
+      fonts: [
+        { name: "Archivo Black", data: FONTE_ARCHIVO_BLACK, weight: 400, style: "normal" },
+        { name: "Inter", data: FONTE_INTER_800, weight: 800, style: "normal" },
+        { name: "Inter", data: FONTE_INTER_600, weight: 600, style: "normal" },
+      ],
+    });
+  } catch (erro) {
+    console.error("Falha ao gerar imagem do post", postId, erro);
+    const mensagem = erro instanceof Error ? erro.message : String(erro);
+    return new Response(`Erro ao gerar imagem: ${mensagem}`, { status: 500 });
+  }
 }
