@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { coletarNoticias } from "@/lib/social/news";
 import { gerarConteudoDeNoticia, gerarConteudoInstitucional } from "@/lib/social/gerarConteudo";
+import { publicarPost } from "@/lib/instagram";
 
 async function exigirAcessoInterno() {
   const supabase = await createClient();
@@ -83,6 +84,44 @@ export async function gerarRascunhoInstitucional(formData: FormData) {
     tipo_post: conteudo.tipo_post,
     numero_destaque: conteudo.numero_destaque,
   });
+
+  revalidatePath("/social-media");
+}
+
+// Publica de verdade no Instagram — só roda quando você clica, nunca
+// sozinho (ver plano da Fase 3/4: automação total fica pausada até você
+// pedir). Guarda o resultado (sucesso ou erro) no próprio post.
+export async function aprovarEPublicar(formData: FormData) {
+  const supabase = await exigirAcessoInterno();
+  const postId = Number(formData.get("post_id"));
+  if (!postId) return;
+
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+  if (!siteUrl) {
+    await supabase
+      .from("social_media_posts")
+      .update({ status: "erro", erro: "NEXT_PUBLIC_SITE_URL não configurada no Vercel" })
+      .eq("id", postId);
+    revalidatePath("/social-media");
+    return;
+  }
+
+  const { data: post } = await supabase.from("social_media_posts").select("legenda").eq("id", postId).single();
+  if (!post) return;
+
+  try {
+    const imageUrl = `${siteUrl}/api/social/imagem/${postId}`;
+    const instagramPostId = await publicarPost(imageUrl, post.legenda);
+    await supabase
+      .from("social_media_posts")
+      .update({ status: "publicado", publicado_em: new Date().toISOString(), instagram_post_id: instagramPostId, erro: null })
+      .eq("id", postId);
+  } catch (erro) {
+    await supabase
+      .from("social_media_posts")
+      .update({ status: "erro", erro: erro instanceof Error ? erro.message : String(erro) })
+      .eq("id", postId);
+  }
 
   revalidatePath("/social-media");
 }

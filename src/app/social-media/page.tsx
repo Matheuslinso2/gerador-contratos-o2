@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
-import { coletarAgora, gerarRascunho, gerarRascunhoInstitucional, descartarRascunho } from "./actions";
+import { coletarAgora, gerarRascunho, gerarRascunhoInstitucional, descartarRascunho, aprovarEPublicar } from "./actions";
 import SubmitButton from "./SubmitButton";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +26,13 @@ type Post = {
   legenda: string;
   status: string;
   criado_em: string;
+  erro: string | null;
+};
+
+const ROTULO_STATUS: Record<string, string> = {
+  rascunho: "Rascunho",
+  publicado: "Publicado",
+  erro: "Erro ao publicar",
 };
 
 const ROTULO_CATEGORIA: Record<string, string> = {
@@ -72,7 +79,7 @@ export default async function SocialMediaPage({
 
   const { data: posts } = await supabase
     .from("social_media_posts")
-    .select("id, categoria, titulo_card, legenda, status, criado_em")
+    .select("id, categoria, titulo_card, legenda, status, criado_em, erro")
     .order("criado_em", { ascending: false })
     .limit(30)
     .returns<Post[]>();
@@ -86,7 +93,8 @@ export default async function SocialMediaPage({
           <div>
             <h1 className="text-xl font-semibold text-o2-navy">Social Media</h1>
             <p className="text-sm text-slate-500">
-              Notícias coletadas automaticamente + rascunhos de post gerados por IA. Ainda nada é publicado sozinho.
+              Notícias coletadas automaticamente + rascunhos gerados por IA. Nada vai pro Instagram sem você clicar em
+              &quot;Aprovar e publicar&quot;.
             </p>
           </div>
           <form action={coletarAgora}>
@@ -132,15 +140,41 @@ export default async function SocialMediaPage({
                   <div className="mb-1 flex items-center gap-2 text-xs text-slate-400">
                     <span>{ROTULO_CATEGORIA[p.categoria] ?? p.categoria}</span>
                     <span>·</span>
-                    <span className="capitalize">{p.status}</span>
+                    <span
+                      className={
+                        p.status === "publicado"
+                          ? "font-medium text-emerald-600"
+                          : p.status === "erro"
+                            ? "font-medium text-red-600"
+                            : ""
+                      }
+                    >
+                      {ROTULO_STATUS[p.status] ?? p.status}
+                    </span>
                   </div>
                   <p className="whitespace-pre-wrap text-sm text-slate-700">{p.legenda}</p>
-                  <form action={descartarRascunho} className="mt-2">
-                    <input type="hidden" name="post_id" value={p.id} />
-                    <SubmitButton textoCarregando="Descartando…" className="text-xs text-red-500 hover:underline">
-                      Descartar
-                    </SubmitButton>
-                  </form>
+                  {p.status === "erro" && p.erro && (
+                    <p className="mt-1 text-xs text-red-600">Erro: {p.erro}</p>
+                  )}
+                  {p.status !== "publicado" && (
+                    <div className="mt-2 flex items-center gap-3">
+                      <form action={aprovarEPublicar}>
+                        <input type="hidden" name="post_id" value={p.id} />
+                        <SubmitButton
+                          textoCarregando="Publicando…"
+                          className="rounded-md bg-o2-navy px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
+                        >
+                          {p.status === "erro" ? "Tentar de novo" : "Aprovar e publicar"}
+                        </SubmitButton>
+                      </form>
+                      <form action={descartarRascunho}>
+                        <input type="hidden" name="post_id" value={p.id} />
+                        <SubmitButton textoCarregando="Descartando…" className="text-xs text-red-500 hover:underline">
+                          Descartar
+                        </SubmitButton>
+                      </form>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
