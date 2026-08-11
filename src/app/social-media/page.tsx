@@ -41,9 +41,10 @@ function fmtData(iso: string | null): string {
 export default async function SocialMediaPage({
   searchParams,
 }: {
-  searchParams: Promise<{ fonte?: string; q?: string }>;
+  searchParams: Promise<{ fonte?: string; q?: string; coleta?: string }>;
 }) {
-  const { fonte: fonteId, q } = await searchParams;
+  const { fonte: fonteId, q, coleta } = await searchParams;
+  const resultadoColeta = coleta ? coleta.split(";;") : null;
 
   const supabase = await createClient();
   const {
@@ -96,6 +97,23 @@ export default async function SocialMediaPage({
             </button>
           </form>
         </div>
+
+        {resultadoColeta && (
+          <section className="mb-6 rounded-lg border border-slate-200 bg-white p-4">
+            <h2 className="mb-2 text-sm font-medium text-slate-700">Resultado da última coleta</h2>
+            <ul className="space-y-1 text-sm">
+              {resultadoColeta.map((linha) => {
+                const [fonte, resto] = linha.split(": ");
+                const deuErro = resto?.startsWith("erro");
+                return (
+                  <li key={linha} className={deuErro ? "text-red-600" : "text-slate-600"}>
+                    <span className="font-medium">{fonte}:</span> {resto}
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
 
         <section className="mb-6 rounded-lg border border-slate-200 bg-white p-4">
           <h2 className="mb-2 text-sm font-medium text-slate-700">Rascunhos gerados</h2>

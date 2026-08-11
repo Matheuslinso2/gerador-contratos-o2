@@ -18,11 +18,16 @@ async function exigirAcessoInterno() {
 
 // Mesmo pipeline do cron (src/app/api/cron/coletar-noticias/route.ts), só
 // que disparado manualmente pela página — útil pra testar sem esperar o
-// horário do cron.
+// horário do cron. Resume o resultado por fonte na URL (ver page.tsx) pra
+// dar pra ver na hora se algum feed quebrou, sem precisar olhar log.
 export async function coletarAgora() {
   await exigirAcessoInterno();
-  await coletarNoticias();
+  const resultados = await coletarNoticias();
+  const resumo = resultados
+    .map((r) => `${r.fonte}: ${r.erro ? `erro (${r.erro})` : `${r.novas} novas`}`)
+    .join(";;");
   revalidatePath("/social-media");
+  redirect(`/social-media?coleta=${encodeURIComponent(resumo)}`);
 }
 
 // Gera um rascunho de post a partir de uma notícia coletada e marca a
