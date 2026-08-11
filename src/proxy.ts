@@ -13,6 +13,9 @@ const ROTAS_PUBLICAS = [
   // protege com o próprio segredo (CRON_SECRET) ou não expõe dado interno.
   "/api/social/imagem",
   "/api/cron",
+  // Recebe eventos do Google Forms sem cookie de usuário. A rota valida um
+  // token secreto próprio antes de ler o conteúdo ou criar qualquer card.
+  "/api/integracoes/google-forms",
 ];
 const ROTAS_SO_DESLOGADO = ["/login", "/signup"];
 
