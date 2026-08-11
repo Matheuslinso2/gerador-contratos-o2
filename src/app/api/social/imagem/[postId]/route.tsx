@@ -55,25 +55,44 @@ type LayoutProps = { post: DadosPost; rotulo: string; data: string };
 
 // --- peças reaproveitadas (mas cada layout as combina de um jeito diferente) --
 
-// Casa simples construída só com formas — triângulo do telhado é o clássico
-// truque de borda (3 lados transparentes, 1 colorido).
+// Casa simples construída só com formas. O truque de borda pra triângulo
+// (3 lados transparentes) não renderiza direito no satori — vira um
+// retângulo — então o telhado é um quadrado girado 45° "espetado" atrás do
+// corpo (a própria casa, desenhada por cima, corta a metade de baixo do
+// losango e sobra só o pico triangular).
 function Casa({ cor, tamanho }: { cor: string; tamanho: number }) {
+  const corpoLargura = tamanho * 0.78;
+  const corpoAltura = tamanho * 0.58;
+  const telhado = tamanho * 0.62;
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+    <div
+      style={{
+        position: "relative",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        width: corpoLargura,
+        height: tamanho,
+      }}
+    >
       <div
         style={{
-          width: 0,
-          height: 0,
-          borderLeft: `${tamanho * 0.52}px solid transparent`,
-          borderRight: `${tamanho * 0.52}px solid transparent`,
-          borderBottom: `${tamanho * 0.4}px solid ${cor}`,
+          position: "absolute",
+          top: 0,
+          left: (corpoLargura - telhado) / 2,
+          width: telhado,
+          height: telhado,
+          backgroundColor: cor,
+          transform: "rotate(45deg)",
           display: "flex",
         }}
       />
       <div
         style={{
-          width: tamanho * 0.78,
-          height: tamanho * 0.58,
+          position: "absolute",
+          bottom: 0,
+          width: corpoLargura,
+          height: corpoAltura,
           backgroundColor: cor,
           display: "flex",
           alignItems: "flex-end",
@@ -309,7 +328,7 @@ function LayoutProduto({ post, rotulo, data }: LayoutProps) {
 
       <div style={{ display: "flex", flex: 1, alignItems: "center", gap: 44 }}>
         <Casa cor={CORAL} tamanho={220} />
-        <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+        <div style={{ display: "flex", flex: 1, minWidth: 0, flexDirection: "column", gap: 22 }}>
           <div
             style={{
               display: "flex",
@@ -380,15 +399,18 @@ function LayoutDado({ post, rotulo, data }: LayoutProps) {
         overflow: "hidden",
       }}
     >
+      {/* Quadrado gigante girado 45°, centralizado no canto superior direito
+          — a metade que sobra dentro do card vira uma divisão diagonal
+          limpa cortando o card ao meio. */}
       <div
         style={{
           position: "absolute",
-          top: 0,
-          right: 0,
-          width: "140%",
-          height: "140%",
+          top: -864,
+          right: -864,
+          width: 1728,
+          height: 1728,
           backgroundColor: NAVY,
-          transform: "rotate(28deg) translate(10%, -18%)",
+          transform: "rotate(45deg)",
           display: "flex",
         }}
       />
