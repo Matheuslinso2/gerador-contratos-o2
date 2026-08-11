@@ -4,6 +4,7 @@ import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
 import { coletarAgora, gerarRascunho, gerarRascunhoInstitucional, descartarRascunho } from "./actions";
+import SubmitButton from "./SubmitButton";
 
 export const dynamic = "force-dynamic";
 
@@ -89,12 +90,12 @@ export default async function SocialMediaPage({
             </p>
           </div>
           <form action={coletarAgora}>
-            <button
-              type="submit"
+            <SubmitButton
+              textoCarregando="Coletando…"
               className="rounded-md bg-o2-navy px-4 py-2 text-sm font-medium text-white hover:opacity-90"
             >
               Coletar agora
-            </button>
+            </SubmitButton>
           </form>
         </div>
 
@@ -136,9 +137,9 @@ export default async function SocialMediaPage({
                   <p className="whitespace-pre-wrap text-sm text-slate-700">{p.legenda}</p>
                   <form action={descartarRascunho} className="mt-2">
                     <input type="hidden" name="post_id" value={p.id} />
-                    <button type="submit" className="text-xs text-red-500 hover:underline">
+                    <SubmitButton textoCarregando="Descartando…" className="text-xs text-red-500 hover:underline">
                       Descartar
-                    </button>
+                    </SubmitButton>
                   </form>
                 </div>
               </div>
@@ -153,12 +154,12 @@ export default async function SocialMediaPage({
               className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
               required
             />
-            <button
-              type="submit"
+            <SubmitButton
+              textoCarregando="Gerando…"
               className="rounded-md bg-o2-coral px-4 py-2 text-sm font-medium text-white hover:opacity-90"
             >
               Gerar institucional
-            </button>
+            </SubmitButton>
           </form>
         </section>
 
@@ -232,12 +233,12 @@ export default async function SocialMediaPage({
                 {!n.usado && (
                   <form action={gerarRascunho} className="shrink-0">
                     <input type="hidden" name="noticia_id" value={n.id} />
-                    <button
-                      type="submit"
+                    <SubmitButton
+                      textoCarregando="Gerando…"
                       className="rounded-md border border-o2-navy px-3 py-1.5 text-xs font-medium text-o2-navy hover:bg-o2-navy hover:text-white"
                     >
                       Gerar post
-                    </button>
+                    </SubmitButton>
                   </form>
                 )}
               </div>
