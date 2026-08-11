@@ -27,7 +27,15 @@ async function extrairDeCampo(
   formData: FormData,
   campoTexto: string,
   campoPath: string,
-  campoNome: string
+  campoNome: string,
+  // Fichas/formulários PDF preenchíveis (comum em documentos que passaram
+  // por assinatura eletrônica) costumam ter os RÓTULOS como texto normal da
+  // página, mas os VALORES digitados nos campos ficam como dado de
+  // formulário (AcroForm) que a extração de texto simples não lê -- o
+  // resultado parece "todo mundo em branco" mesmo com o PDF preenchido.
+  // Quando true, ignora o texto extraído e sempre manda o PDF pra IA ler
+  // direto da página (visualmente), onde os valores aparecem normalmente.
+  sempreLerPdfVisualmente = false
 ): Promise<{
   texto: string;
   nomeArquivo: string | null;
@@ -88,11 +96,12 @@ async function extrairDeCampo(
     );
   }
 
-  // PDF escaneado (sem texto real): guarda os bytes originais pra IA ler
-  // direto das páginas do documento, em vez de depender de texto extraído.
-  const pdfBase64 = ehPdf && !texto.trim() ? buffer.toString("base64") : null;
+  // PDF escaneado (sem texto real) OU formulário preenchível cujos valores
+  // não vieram na extração (ver comentário do parâmetro acima): nos dois
+  // casos, guarda os bytes originais pra IA ler direto das páginas.
+  const pdfBase64 = ehPdf && (!texto.trim() || sempreLerPdfVisualmente) ? buffer.toString("base64") : null;
 
-  return { texto, nomeArquivo, pdfBase64, imagemBase64: null, imagemMediaType: null };
+  return { texto: pdfBase64 ? "" : texto, nomeArquivo, pdfBase64, imagemBase64: null, imagemMediaType: null };
 }
 
 export async function auditar(formData: FormData) {
@@ -139,7 +148,7 @@ export async function auditar(formData: FormData) {
     pdfBase64: pdfBase64Cotacao,
     imagemBase64: imagemBase64Cotacao,
     imagemMediaType: imagemMediaTypeCotacao,
-  } = await extrairDeCampo(supabase, formData, "texto_cotacao", "arquivo_cotacao_path", "arquivo_cotacao_nome");
+  } = await extrairDeCampo(supabase, formData, "texto_cotacao", "arquivo_cotacao_path", "arquivo_cotacao_nome", true);
   const fonteCotacao: FonteDocumento | null = textoCotacao
     ? { tipo: "texto", texto: textoCotacao }
     : pdfBase64Cotacao
