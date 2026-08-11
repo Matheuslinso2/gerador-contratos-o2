@@ -20,28 +20,11 @@ const ROTULO_TIPO: Record<string, string> = {
   autoridade_pessoal: "Ponto de vista",
 };
 
-// Cor de destaque por tipo de post — cada layout tem sua própria cor,
-// usada com força (cunha diagonal + elemento gráfico), não só como detalhe.
-const COR_TIPO: Record<string, string> = {
-  dica_mercado: "#f4b400",
-  atualizacao_tecnologia: "#14b8a6",
-  apresentacao_produto: "#ff5a3b",
-  dado_mercado: "#10b981",
-  autoridade_pessoal: "#ff5a3b",
-};
-
-const FUNDO_ESCURO = "#0b1626";
-const FUNDO_ESCURO_2 = "#040a12";
-
-// Caminhos escritos por extenso (não via helper genérico) de propósito: o
-// tracer de arquivos da Vercel precisa conseguir "ver" a chamada em tempo de
-// build pra incluir o arquivo no bundle da função — path.join(process.cwd(),
-// ...variável) não é rastreável e o arquivo some em produção (ficou faltando
-// a logo e as fontes até eu perceber isso).
-const LOGO_BRANCA_DATA_URI = (() => {
-  const base64 = fs.readFileSync(path.join(process.cwd(), "public", "marca-o2", "o2-logo-branco.png")).toString("base64");
-  return `data:image/png;base64,${base64}`;
-})();
+// Caminhos escritos por extenso (não via helper com args dinâmicos) de
+// propósito: o tracer de arquivos da Vercel precisa "ver" a chamada em tempo
+// de build pra incluir o arquivo no bundle da função.
+const LOGO_BRANCA = `data:image/png;base64,${fs.readFileSync(path.join(process.cwd(), "public", "marca-o2", "o2-logo-branco.png")).toString("base64")}`;
+const LOGO_COLORIDA = `data:image/png;base64,${fs.readFileSync(path.join(process.cwd(), "public", "marca-o2", "o2-logo-horizontal.png")).toString("base64")}`;
 
 const FONTE_ARCHIVO_BLACK = fs.readFileSync(
   path.join(process.cwd(), "src", "lib", "social", "fonts", "ArchivoBlack-Regular.woff")
@@ -52,6 +35,9 @@ const FONTE_INTER_800 = fs.readFileSync(
 const FONTE_INTER_600 = fs.readFileSync(
   path.join(process.cwd(), "src", "lib", "social", "fonts", "Inter-SemiBold.woff")
 );
+
+const NAVY = "#00213a";
+const CORAL = "#ff5a3b";
 
 function fmtData(iso: string): string {
   return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }).replace(".", "");
@@ -65,122 +51,72 @@ type DadosPost = {
   criado_em: string;
 };
 
-type LayoutProps = { post: DadosPost; rotulo: string; cor: string; data: string };
+type LayoutProps = { post: DadosPost; rotulo: string; data: string };
 
-// --- peças reaproveitadas entre os 5 layouts ------------------------------
+// --- peças reaproveitadas (mas cada layout as combina de um jeito diferente) --
 
-// Grade esparsa de pontos bem sutis — dá textura/profundidade ao fundo sem
-// competir com o texto (referência: grão sutil dos posters de evento).
-function Textura() {
-  const linhas = 9;
-  const colunas = 9;
+// Casa simples construída só com formas — triângulo do telhado é o clássico
+// truque de borda (3 lados transparentes, 1 colorido).
+function Casa({ cor, tamanho }: { cor: string; tamanho: number }) {
   return (
-    <div style={{ position: "absolute", inset: 0, display: "flex", flexWrap: "wrap", padding: "60px" }}>
-      {Array.from({ length: linhas * colunas }).map((_, i) => (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+      <div
+        style={{
+          width: 0,
+          height: 0,
+          borderLeft: `${tamanho * 0.52}px solid transparent`,
+          borderRight: `${tamanho * 0.52}px solid transparent`,
+          borderBottom: `${tamanho * 0.4}px solid ${cor}`,
+          display: "flex",
+        }}
+      />
+      <div
+        style={{
+          width: tamanho * 0.78,
+          height: tamanho * 0.58,
+          backgroundColor: cor,
+          display: "flex",
+          alignItems: "flex-end",
+          justifyContent: "center",
+          paddingBottom: tamanho * 0.06,
+        }}
+      >
+        <div
+          style={{
+            width: tamanho * 0.16,
+            height: tamanho * 0.28,
+            backgroundColor: "rgba(0,0,0,0.22)",
+            borderRadius: "3px 3px 0 0",
+            display: "flex",
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// Silhueta de prédios (skyline) — barras de altura variável.
+function Skyline({ cor, alturaBase }: { cor: string; alturaBase: number }) {
+  const fatores = [0.45, 0.75, 0.55, 1, 0.65, 0.85, 0.5, 0.7];
+  return (
+    <div style={{ display: "flex", alignItems: "flex-end", gap: 10 }}>
+      {fatores.map((f, i) => (
         <div
           key={i}
           style={{
-            width: "11.1%",
-            height: "11.1%",
+            width: 26,
+            height: alturaBase * f,
+            backgroundColor: cor,
+            borderRadius: "3px 3px 0 0",
             display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
           }}
-        >
-          <div style={{ width: 3, height: 3, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.16)", display: "flex" }} />
-        </div>
+        />
       ))}
     </div>
   );
 }
 
-// Fundo escuro com profundidade: gradiente radial + textura de pontos +
-// cunha diagonal na cor do tipo, com uma "sombra" da própria cunha por
-// baixo pra dar sensação de camada (não é mais um bloco chapado).
-function Fundo({ cor, children }: { cor: string; children: ReactNode }) {
-  return (
-    <div
-      style={{
-        position: "relative",
-        width: "100%",
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-        background: `radial-gradient(circle at 78% 88%, ${FUNDO_ESCURO} 0%, ${FUNDO_ESCURO_2} 65%)`,
-        padding: "76px",
-        fontFamily: "Inter",
-        overflow: "hidden",
-      }}
-    >
-      <Textura />
-      <div
-        style={{
-          position: "absolute",
-          top: -395,
-          left: -395,
-          width: 780,
-          height: 780,
-          backgroundColor: "#000",
-          opacity: 0.35,
-          transform: "rotate(45deg)",
-          display: "flex",
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          top: -420,
-          left: -420,
-          width: 780,
-          height: 780,
-          backgroundColor: cor,
-          transform: "rotate(45deg)",
-          display: "flex",
-        }}
-      />
-      {children}
-    </div>
-  );
-}
-
-function Logo() {
-  // Logo real tem proporção ~1.82:1 (3046x1678) — largura calculada pra não esticar.
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src={LOGO_BRANCA_DATA_URI} width={96} height={53} alt="" style={{ objectFit: "contain" }} />;
-}
-
-function Rodape({ data }: { data: string }) {
-  return (
-    <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
-      <div style={{ display: "flex", flexDirection: "column" }}>
-        <span style={{ display: "flex", color: "white", fontSize: 27, fontFamily: "Inter", fontWeight: 600 }}>
-          Matheus Lins
-        </span>
-        <span style={{ display: "flex", color: "rgba(255,255,255,0.5)", fontSize: 20, fontFamily: "Inter", fontWeight: 600 }}>
-          Sócio-diretor · O2 Seguros
-        </span>
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 10 }}>
-        <Logo />
-        <span style={{ display: "flex", color: "rgba(255,255,255,0.35)", fontSize: 18, fontFamily: "Inter", fontWeight: 600 }}>
-          {data}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function Rotulo({ texto, cor }: { texto: string; cor: string }) {
-  return (
-    <span style={{ display: "flex", color: cor, fontSize: 30, fontFamily: "Archivo Black", letterSpacing: 0.5 }}>
-      {texto.toUpperCase()}
-    </span>
-  );
-}
-
-// Círculo desfocado-simulado (camadas translúcidas) atrás de um elemento
-// gráfico — o "glow" que dá profundidade sem depender de blur real.
-function Glow({ cor, tamanho }: { cor: string; tamanho: number }) {
+function Glow({ cor, tamanho, opacidade = 0.22 }: { cor: string; tamanho: number; opacidade?: number }) {
   return (
     <div
       style={{
@@ -189,170 +125,368 @@ function Glow({ cor, tamanho }: { cor: string; tamanho: number }) {
         height: tamanho,
         borderRadius: 9999,
         backgroundColor: cor,
-        opacity: 0.16,
+        opacity: opacidade,
         display: "flex",
       }}
     />
   );
 }
 
-function Titulo({ children }: { children: ReactNode }) {
+function Pill({ texto, bg, corTexto }: { texto: string; bg: string; corTexto: string }) {
   return (
-    <div
-      style={{
-        display: "flex",
-        color: "white",
-        fontSize: 60,
-        fontFamily: "Inter",
-        fontWeight: 800,
-        lineHeight: 1.16,
-        letterSpacing: -1.5,
-      }}
-    >
-      {children}
+    <div style={{ display: "flex", alignSelf: "flex-start", backgroundColor: bg, borderRadius: 999, padding: "10px 22px" }}>
+      <span style={{ display: "flex", color: corTexto, fontSize: 22, fontFamily: "Archivo Black", letterSpacing: 0.5 }}>
+        {texto.toUpperCase()}
+      </span>
     </div>
   );
 }
 
-// --- os 5 layouts ----------------------------------------------------------
-
-// 1. Dica de mercado — aspa enorme com glow atrás, tom âmbar.
-function LayoutDica({ post, rotulo, cor, data }: LayoutProps) {
+function RodapeBase({
+  data,
+  corNome,
+  corCargo,
+  logo,
+  logoLargura,
+  logoAltura,
+}: {
+  data: string;
+  corNome: string;
+  corCargo: string;
+  logo: string;
+  logoLargura: number;
+  logoAltura: number;
+}) {
   return (
-    <Fundo cor={cor}>
-      <Rotulo texto={rotulo} cor={cor} />
-      <div style={{ display: "flex", flex: 1, flexDirection: "column", justifyContent: "center", gap: 8 }}>
-        <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-          <div style={{ position: "absolute", left: -20, top: -30, display: "flex" }}>
-            <Glow cor={cor} tamanho={220} />
-          </div>
-          <span style={{ display: "flex", color: cor, fontSize: 170, fontFamily: "Archivo Black", lineHeight: 0.5 }}>
-            “
-          </span>
-        </div>
-        <Titulo>{post.titulo_card}</Titulo>
+    <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        <span style={{ display: "flex", color: corNome, fontSize: 26, fontFamily: "Inter", fontWeight: 600 }}>
+          Matheus Lins
+        </span>
+        <span style={{ display: "flex", color: corCargo, fontSize: 19, fontFamily: "Inter", fontWeight: 600 }}>
+          Sócio-diretor · O2 Seguros
+        </span>
       </div>
-      <Rodape data={data} />
-    </Fundo>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={logo} width={logoLargura} height={logoAltura} alt="" style={{ objectFit: "contain" }} />
+        <span style={{ display: "flex", color: corCargo, fontSize: 17, fontFamily: "Inter", fontWeight: 600, opacity: 0.7 }}>
+          {data}
+        </span>
+      </div>
+    </div>
   );
 }
 
-// 2. Atualização de tecnologia — seta grande estilo "próximo passo", tom teal.
-function LayoutTecnologia({ post, rotulo, cor, data }: LayoutProps) {
+// --- os 5 layouts, cada um com composição própria (não é o mesmo esqueleto) --
+
+// 1. Dica de mercado — fundo claro em gradiente quente, texto escuro, ícone
+// de casa coral. Tom "app fintech jovem", nada de fundo escuro.
+function LayoutDica({ post, rotulo, data }: LayoutProps) {
   return (
-    <Fundo cor={cor}>
-      <Rotulo texto={rotulo} cor={cor} />
-      <div style={{ display: "flex", flex: 1, flexDirection: "column", justifyContent: "center", gap: 24 }}>
-        <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 18 }}>
-          <div style={{ position: "absolute", left: -30, top: -30, display: "flex" }}>
-            <Glow cor={cor} tamanho={180} />
+    <div
+      style={{
+        position: "relative",
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        background: "linear-gradient(150deg, #fff1e4 0%, #ffd9a8 55%, #ffc078 100%)",
+        padding: "76px",
+        fontFamily: "Inter",
+        overflow: "hidden",
+      }}
+    >
+      <div style={{ position: "absolute", right: -60, bottom: -40, display: "flex" }}>
+        <Casa cor="rgba(255,90,59,0.16)" tamanho={340} />
+      </div>
+
+      <Pill texto={rotulo} bg={NAVY} corTexto="white" />
+
+      <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: "center", gap: 26 }}>
+        <div
+          style={{
+            display: "flex",
+            color: NAVY,
+            fontSize: 62,
+            fontFamily: "Inter",
+            fontWeight: 800,
+            lineHeight: 1.14,
+            letterSpacing: -1.5,
+          }}
+        >
+          {post.titulo_card}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <Casa cor={CORAL} tamanho={56} />
+        </div>
+      </div>
+
+      <RodapeBase
+        data={data}
+        corNome={NAVY}
+        corCargo="rgba(0,33,58,0.65)"
+        logo={LOGO_COLORIDA}
+        logoLargura={104}
+        logoAltura={57}
+      />
+    </div>
+  );
+}
+
+// 2. Atualização de tecnologia — quase preto, neon ciano, skyline com glow.
+function LayoutTecnologia({ post, rotulo, data }: LayoutProps) {
+  const CIANO = "#2fe6e6";
+  return (
+    <div
+      style={{
+        position: "relative",
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        backgroundColor: "#05080c",
+        padding: "76px",
+        fontFamily: "Inter",
+        overflow: "hidden",
+      }}
+    >
+      <div style={{ position: "absolute", left: "50%", top: 380, display: "flex" }}>
+        <Glow cor={CIANO} tamanho={520} opacidade={0.16} />
+      </div>
+
+      <Pill texto={rotulo} bg={CIANO} corTexto="#05080c" />
+
+      <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: "flex-end", gap: 28 }}>
+        <div style={{ display: "flex" }}>
+          <Skyline cor={CIANO} alturaBase={150} />
+        </div>
+        <div
+          style={{
+            display: "flex",
+            color: "white",
+            fontSize: 58,
+            fontFamily: "Archivo Black",
+            lineHeight: 1.1,
+          }}
+        >
+          {post.titulo_card}
+        </div>
+      </div>
+
+      <div style={{ marginTop: 32, display: "flex" }}>
+        <RodapeBase
+          data={data}
+          corNome="white"
+          corCargo="rgba(255,255,255,0.5)"
+          logo={LOGO_BRANCA}
+          logoLargura={96}
+          logoAltura={53}
+        />
+      </div>
+    </div>
+  );
+}
+
+// 3. Apresentação de produto — fundo claro tipo catálogo, ícone de casa
+// grande, grade de benefícios. Bem diferente dos dois de fundo escuro.
+function LayoutProduto({ post, rotulo, data }: LayoutProps) {
+  return (
+    <div
+      style={{
+        position: "relative",
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        backgroundColor: "#faf3ea",
+        padding: "76px",
+        fontFamily: "Inter",
+        overflow: "hidden",
+      }}
+    >
+      <Pill texto={rotulo} bg={CORAL} corTexto="white" />
+
+      <div style={{ display: "flex", flex: 1, alignItems: "center", gap: 44 }}>
+        <Casa cor={CORAL} tamanho={220} />
+        <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+          <div
+            style={{
+              display: "flex",
+              color: NAVY,
+              fontSize: 46,
+              fontFamily: "Inter",
+              fontWeight: 800,
+              lineHeight: 1.18,
+              letterSpacing: -1,
+            }}
+          >
+            {post.titulo_card}
           </div>
-          <span style={{ display: "flex", color: cor, fontSize: 92, fontFamily: "Archivo Black", lineHeight: 0.5 }}>
-            →
-          </span>
-          <div style={{ display: "flex", gap: 8 }}>
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} style={{ width: 44, height: 8, borderRadius: 4, backgroundColor: cor, opacity: 0.35 + i * 0.2, display: "flex" }} />
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {["Cotação rápida", "Regulado SUSEP"].map((item) => (
+              <div key={item} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div
+                  style={{
+                    width: 26,
+                    height: 26,
+                    borderRadius: 999,
+                    backgroundColor: NAVY,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <span style={{ display: "flex", color: "white", fontSize: 14, fontFamily: "Archivo Black" }}>✓</span>
+                </div>
+                <span style={{ display: "flex", color: NAVY, fontSize: 22, fontFamily: "Inter", fontWeight: 600 }}>
+                  {item}
+                </span>
+              </div>
             ))}
           </div>
         </div>
-        <Titulo>{post.titulo_card}</Titulo>
       </div>
-      <Rodape data={data} />
-    </Fundo>
+
+      <div style={{ borderTop: `2px solid ${NAVY}22`, paddingTop: 28, display: "flex" }}>
+        <RodapeBase
+          data={data}
+          corNome={NAVY}
+          corCargo="rgba(0,33,58,0.6)"
+          logo={LOGO_COLORIDA}
+          logoLargura={104}
+          logoAltura={57}
+        />
+      </div>
+    </div>
   );
 }
 
-// 3. Apresentação de produto — faixa/ribbon com o nome do rótulo, tom coral.
-function LayoutProduto({ post, rotulo, cor, data }: LayoutProps) {
+// 4. Dado de mercado — divisão diagonal duotone (esmeralda/navy), número
+// gigante atravessando a divisão.
+function LayoutDado({ post, rotulo, data }: LayoutProps) {
+  const ESMERALDA = "#10b981";
   return (
-    <Fundo cor={cor}>
+    <div
+      style={{
+        position: "relative",
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        backgroundColor: ESMERALDA,
+        padding: "76px",
+        fontFamily: "Inter",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          right: 0,
+          width: "140%",
+          height: "140%",
+          backgroundColor: NAVY,
+          transform: "rotate(28deg) translate(10%, -18%)",
+          display: "flex",
+        }}
+      />
+
+      <Pill texto={rotulo} bg="rgba(255,255,255,0.16)" corTexto="white" />
+
+      <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: "center", gap: 20 }}>
+        <div
+          style={{
+            display: "flex",
+            color: "white",
+            fontSize: post.numero_destaque && post.numero_destaque.length > 8 ? 140 : 210,
+            fontFamily: "Archivo Black",
+            lineHeight: 1,
+          }}
+        >
+          {post.numero_destaque ?? "—"}
+        </div>
+        <div style={{ display: "flex", color: "white", fontSize: 36, fontFamily: "Inter", fontWeight: 800, lineHeight: 1.3, maxWidth: 760 }}>
+          {post.titulo_card}
+        </div>
+      </div>
+
+      <RodapeBase
+        data={data}
+        corNome="white"
+        corCargo="rgba(255,255,255,0.65)"
+        logo={LOGO_BRANCA}
+        logoLargura={96}
+        logoAltura={53}
+      />
+    </div>
+  );
+}
+
+// 5. Autoridade pessoal — fundo claro e quente, composição centralizada tipo
+// citação editorial (bem diferente da grade à esquerda dos outros).
+function LayoutAutoridade({ post, rotulo, data }: LayoutProps) {
+  return (
+    <div
+      style={{
+        position: "relative",
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        backgroundColor: "#f3ede3",
+        padding: "76px",
+        fontFamily: "Inter",
+        overflow: "hidden",
+      }}
+    >
+      <Pill texto={rotulo} bg={NAVY} corTexto="white" />
+
       <div
         style={{
           display: "flex",
-          alignSelf: "flex-start",
+          flex: 1,
+          flexDirection: "column",
           alignItems: "center",
-          gap: 10,
-          backgroundColor: cor,
-          borderRadius: 10,
-          padding: "10px 22px",
-          transform: "rotate(-2deg)",
+          justifyContent: "center",
+          gap: 20,
+          textAlign: "center",
         }}
       >
-        <span style={{ display: "flex", color: "#0b1626", fontSize: 26, fontFamily: "Archivo Black" }}>
-          {rotulo.toUpperCase()}
+        <span style={{ display: "flex", color: CORAL, fontSize: 140, fontFamily: "Archivo Black", lineHeight: 0.4 }}>
+          “
+        </span>
+        <div
+          style={{
+            display: "flex",
+            color: NAVY,
+            fontSize: 50,
+            fontFamily: "Inter",
+            fontWeight: 800,
+            lineHeight: 1.25,
+            letterSpacing: -1,
+            textAlign: "center",
+            maxWidth: 820,
+          }}
+        >
+          {post.titulo_card}
+        </div>
+        <div style={{ width: 80, height: 6, borderRadius: 3, backgroundColor: CORAL, display: "flex" }} />
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={LOGO_COLORIDA} width={104} height={57} alt="" style={{ objectFit: "contain" }} />
+        <span style={{ display: "flex", color: NAVY, fontSize: 24, fontFamily: "Inter", fontWeight: 700 }}>
+          Matheus Lins
+        </span>
+        <span style={{ display: "flex", color: "rgba(0,33,58,0.6)", fontSize: 18, fontFamily: "Inter", fontWeight: 600 }}>
+          Sócio-diretor · O2 Seguros · {data}
         </span>
       </div>
-      <div style={{ display: "flex", flex: 1, flexDirection: "column", justifyContent: "center", gap: 30 }}>
-        <Titulo>{post.titulo_card}</Titulo>
-        <div style={{ display: "flex", gap: 28 }}>
-          {["Cotação rápida", "Regulado SUSEP"].map((item) => (
-            <div key={item} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ display: "flex", color: cor, fontSize: 26, fontFamily: "Archivo Black" }}>✓</span>
-              <span style={{ display: "flex", color: "rgba(255,255,255,0.8)", fontSize: 22, fontFamily: "Inter", fontWeight: 600 }}>
-                {item}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-      <Rodape data={data} />
-    </Fundo>
-  );
-}
-
-// 4. Dado de mercado — número gigante com glow e seta de crescimento, tom esmeralda.
-function LayoutDado({ post, rotulo, cor, data }: LayoutProps) {
-  return (
-    <Fundo cor={cor}>
-      <Rotulo texto={rotulo} cor={cor} />
-      <div style={{ display: "flex", flex: 1, flexDirection: "column", justifyContent: "center", gap: 16 }}>
-        <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 14 }}>
-          <div style={{ position: "absolute", left: -40, top: -40, display: "flex" }}>
-            <Glow cor={cor} tamanho={280} />
-          </div>
-          <span
-            style={{
-              display: "flex",
-              color: cor,
-              fontSize: post.numero_destaque && post.numero_destaque.length > 8 ? 128 : 176,
-              fontFamily: "Archivo Black",
-              lineHeight: 1,
-            }}
-          >
-            {post.numero_destaque ?? "—"}
-          </span>
-          <span style={{ display: "flex", color: cor, fontSize: 64, fontFamily: "Archivo Black" }}>↑</span>
-        </div>
-        <div style={{ display: "flex", color: "white", fontSize: 38, fontFamily: "Inter", fontWeight: 800, lineHeight: 1.3 }}>
-          {post.titulo_card}
-        </div>
-      </div>
-      <Rodape data={data} />
-    </Fundo>
-  );
-}
-
-// 5. Autoridade pessoal — aspa grande com glow, frase estilo depoimento, tom coral.
-function LayoutAutoridade({ post, rotulo, cor, data }: LayoutProps) {
-  return (
-    <Fundo cor={cor}>
-      <Rotulo texto={rotulo} cor={cor} />
-      <div style={{ display: "flex", flex: 1, flexDirection: "column", justifyContent: "center", gap: 4 }}>
-        <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-          <div style={{ position: "absolute", left: -20, top: -20, display: "flex" }}>
-            <Glow cor={cor} tamanho={200} />
-          </div>
-          <span style={{ display: "flex", color: cor, fontSize: 150, fontFamily: "Archivo Black", lineHeight: 0.4 }}>
-            “
-          </span>
-        </div>
-        <div style={{ display: "flex", color: "white", fontSize: 54, fontFamily: "Inter", fontWeight: 800, lineHeight: 1.22, letterSpacing: -1 }}>
-          {post.titulo_card}
-        </div>
-      </div>
-      <Rodape data={data} />
-    </Fundo>
+    </div>
   );
 }
 
@@ -374,10 +508,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pos
   }
 
   const rotulo = post.tipo_post ? ROTULO_TIPO[post.tipo_post] : (ROTULO_CATEGORIA[post.categoria] ?? "O2 Seguros");
-  const cor = (post.tipo_post && COR_TIPO[post.tipo_post]) ?? "#ff5a3b";
   const data = fmtData(post.criado_em);
 
-  const props = { post, rotulo, cor, data };
+  const props = { post, rotulo, data };
 
   let layout: ReactNode;
   switch (post.tipo_post) {
