@@ -33,20 +33,25 @@ const COR_TIPO: Record<string, string> = {
 const FUNDO_ESCURO = "#0b1626";
 const FUNDO_ESCURO_2 = "#040a12";
 
-function lerArquivo(...partes: string[]) {
-  return fs.readFileSync(path.join(process.cwd(), ...partes));
-}
-
-// Logo branca oficial embutida como data URI — satori (motor do ImageResponse)
-// não busca arquivos relativos do /public, precisa de URL absoluta ou data URI.
+// Caminhos escritos por extenso (não via helper genérico) de propósito: o
+// tracer de arquivos da Vercel precisa conseguir "ver" a chamada em tempo de
+// build pra incluir o arquivo no bundle da função — path.join(process.cwd(),
+// ...variável) não é rastreável e o arquivo some em produção (ficou faltando
+// a logo e as fontes até eu perceber isso).
 const LOGO_BRANCA_DATA_URI = (() => {
-  const base64 = lerArquivo("public", "marca-o2", "o2-logo-branco.png").toString("base64");
+  const base64 = fs.readFileSync(path.join(process.cwd(), "public", "marca-o2", "o2-logo-branco.png")).toString("base64");
   return `data:image/png;base64,${base64}`;
 })();
 
-const FONTE_ARCHIVO_BLACK = lerArquivo("src", "lib", "social", "fonts", "ArchivoBlack-Regular.woff");
-const FONTE_INTER_800 = lerArquivo("src", "lib", "social", "fonts", "Inter-ExtraBold.woff");
-const FONTE_INTER_600 = lerArquivo("src", "lib", "social", "fonts", "Inter-SemiBold.woff");
+const FONTE_ARCHIVO_BLACK = fs.readFileSync(
+  path.join(process.cwd(), "src", "lib", "social", "fonts", "ArchivoBlack-Regular.woff")
+);
+const FONTE_INTER_800 = fs.readFileSync(
+  path.join(process.cwd(), "src", "lib", "social", "fonts", "Inter-ExtraBold.woff")
+);
+const FONTE_INTER_600 = fs.readFileSync(
+  path.join(process.cwd(), "src", "lib", "social", "fonts", "Inter-SemiBold.woff")
+);
 
 function fmtData(iso: string): string {
   return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }).replace(".", "");

@@ -10,6 +10,13 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "25mb",
     },
   },
+  // Reforço: garante que a logo e as fontes usadas em
+  // src/app/api/social/imagem/[postId]/route.tsx entrem no bundle da
+  // função, mesmo que o rastreio automático da Vercel não capture os
+  // fs.readFileSync (já aconteceu de sumir em produção).
+  outputFileTracingIncludes: {
+    "/api/social/imagem/*": ["public/marca-o2/**/*", "src/lib/social/fonts/**/*"],
+  },
 };
 
 export default nextConfig;
