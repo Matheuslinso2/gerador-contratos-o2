@@ -20,6 +20,11 @@ const ROTAS_PUBLICAS = [
   // corretores e proprietários que não têm (nem precisam ter) conta na
   // Plataforma O2.
   "/capitalizacao",
+  // Formulário público de Seguro Fiança — mesma lógica da Capitalização.
+  // O Google Forms "Ficha Fiança 5G" continua ativo em paralelo, sem
+  // nenhuma alteração; esta é só uma via alternativa de entrada que já
+  // cria o card diretamente no Bitrix.
+  "/ficha-fianca",
 ];
 const ROTAS_SO_DESLOGADO = ["/login", "/signup"];
 
