@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import styles from "./seguro-fianca.module.css";
 
 type LinhaImobiliaria = {
@@ -10,16 +10,55 @@ type LinhaImobiliaria = {
   emAndamento: number;
   perdidos: number;
   convertidos: number;
+  premioCotado: number;
+  comissaoCotada: number;
+  premioEfetivado: number;
+  comissaoEfetivada: number;
 };
+
+function fmtBRL(v: number): string {
+  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function normalizar(s: string): string {
+  return s
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
+}
 
 export default function ImobiliariasTabela({ imobiliarias }: { imobiliarias: LinhaImobiliaria[] }) {
   const [expandido, setExpandido] = useState(false);
+  const [busca, setBusca] = useState("");
   const LIMITE = 10;
-  const visiveis = expandido ? imobiliarias : imobiliarias.slice(0, LIMITE);
-  const restantes = imobiliarias.length - LIMITE;
+
+  const filtradas = useMemo(() => {
+    const termo = normalizar(busca);
+    if (!termo) return imobiliarias;
+    return imobiliarias.filter((i) => normalizar(i.nome).includes(termo));
+  }, [imobiliarias, busca]);
+
+  const visiveis = expandido || busca ? filtradas : filtradas.slice(0, LIMITE);
+  const restantes = filtradas.length - LIMITE;
 
   return (
     <div className={styles.tableWrap}>
+      <input
+        type="text"
+        value={busca}
+        onChange={(e) => setBusca(e.target.value)}
+        placeholder="Buscar imobiliária..."
+        style={{
+          marginBottom: 10,
+          width: "100%",
+          maxWidth: 320,
+          border: "1px solid var(--line)",
+          borderRadius: 6,
+          padding: "6px 10px",
+          fontSize: 13,
+        }}
+      />
       <table className={styles.data}>
         <thead>
           <tr>
@@ -29,6 +68,10 @@ export default function ImobiliariasTabela({ imobiliarias }: { imobiliarias: Lin
             <th className={styles.numCol}>Recusados</th>
             <th className={styles.numCol}>Perdidos</th>
             <th className={styles.numCol}>Convertidos</th>
+            <th className={styles.numCol}>Prêmio Cotado</th>
+            <th className={styles.numCol}>Comissão Cotada</th>
+            <th className={styles.numCol}>Prêmio Efetivado</th>
+            <th className={styles.numCol}>Comissão Efetivada</th>
           </tr>
         </thead>
         <tbody>
@@ -42,18 +85,26 @@ export default function ImobiliariasTabela({ imobiliarias }: { imobiliarias: Lin
               <td className={`${styles.numCol} ${styles.num}`}>{i.recusados}</td>
               <td className={`${styles.numCol} ${styles.num}`}>{i.perdidos}</td>
               <td className={`${styles.numCol} ${styles.num}`}>{i.convertidos}</td>
+              <td className={`${styles.numCol} ${styles.num}`}>{fmtBRL(i.premioCotado)}</td>
+              <td className={`${styles.numCol} ${styles.num}`}>{fmtBRL(i.comissaoCotada)}</td>
+              <td className={`${styles.numCol} ${styles.num}`} style={{ color: "var(--negative)" }}>
+                {fmtBRL(i.premioEfetivado)}
+              </td>
+              <td className={`${styles.numCol} ${styles.num}`} style={{ color: "var(--negative)" }}>
+                {fmtBRL(i.comissaoEfetivada)}
+              </td>
             </tr>
           ))}
-          {imobiliarias.length === 0 && (
+          {filtradas.length === 0 && (
             <tr>
-              <td colSpan={6} style={{ color: "var(--ink-faint)" }}>
-                Nenhuma imobiliária com cotação registrada neste período.
+              <td colSpan={10} style={{ color: "var(--ink-faint)" }}>
+                {busca ? "Nenhuma imobiliária encontrada com esse nome." : "Nenhuma imobiliária com cotação registrada neste período."}
               </td>
             </tr>
           )}
         </tbody>
       </table>
-      {restantes > 0 && (
+      {!busca && restantes > 0 && (
         <button
           type="button"
           onClick={() => setExpandido((v) => !v)}

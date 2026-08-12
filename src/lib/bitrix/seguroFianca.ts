@@ -451,7 +451,18 @@ export type AnaliseGerencial = {
   taxaPorSeguradora: Record<string, { n: number; pctLocacao: number; pctAluguel: number }>;
   motivosRecusaFunil1: { total: number; semMotivo: number }; // decisão de compliance, sem motivo interno — só o total importa
   motivosPerdaFunil2: { porMotivo: Record<string, number>; semMotivo: number; total: number };
-  topImobiliarias: { nome: string; total: number; recusados: number; emAndamento: number; perdidos: number; convertidos: number }[];
+  topImobiliarias: {
+    nome: string;
+    total: number;
+    recusados: number;
+    emAndamento: number;
+    perdidos: number;
+    convertidos: number;
+    premioCotado: number;
+    comissaoCotada: number;
+    premioEfetivado: number;
+    comissaoEfetivada: number;
+  }[];
   valoresTrabalhados: { aluguel: number; pacoteLocacao: number };
   faixasPacoteLocacao: { faixa: string; cards: number; pacoteMedio: number; seguroMedio: number }[];
   tempoPorEtapa: Record<string, EstatisticaTempo>;
@@ -578,7 +589,17 @@ export function montarAnaliseGerencial(
 
   const porImobiliaria: Record<
     string,
-    { total: number; recusados: number; emAndamento: number; perdidos: number; convertidos: number }
+    {
+      total: number;
+      recusados: number;
+      emAndamento: number;
+      perdidos: number;
+      convertidos: number;
+      premioCotado: number;
+      comissaoCotada: number;
+      premioEfetivado: number;
+      comissaoEfetivada: number;
+    }
   > = {};
   let semImobiliaria = 0;
   for (const l of linhas) {
@@ -586,13 +607,45 @@ export function montarAnaliseGerencial(
       semImobiliaria++;
       continue;
     }
-    porImobiliaria[l.imobiliaria] ??= { total: 0, recusados: 0, emAndamento: 0, perdidos: 0, convertidos: 0 };
+    porImobiliaria[l.imobiliaria] ??= {
+      total: 0,
+      recusados: 0,
+      emAndamento: 0,
+      perdidos: 0,
+      convertidos: 0,
+      premioCotado: 0,
+      comissaoCotada: 0,
+      premioEfetivado: 0,
+      comissaoEfetivada: 0,
+    };
     const d = porImobiliaria[l.imobiliaria];
     d.total++;
     if (l.resultado === "Recusado") d.recusados++;
     else if (l.resultado === "Perdido") d.perdidos++;
     else if (l.resultado === "Convertido") d.convertidos++;
     else d.emAndamento++; // "Aprovado" é transitório (card já está no funil 2, contado lá pelo resultado real dele)
+
+    // Prêmio/comissão cotado -- soma de TODAS as seguradoras cotadas nesse
+    // card (mesmo critério já usado no "Total cotado" de Cotado x
+    // Convertido: um card cotado com 3 seguradoras conta as 3, não é
+    // deduplicado por card).
+    for (const seg of SEGURADORAS) {
+      const s = l.seguradoras[seg.nome];
+      if (typeof s?.valor !== "number") continue;
+      d.premioCotado += s.valor;
+      const pct = typeof s.comissaoPct === "number" ? s.comissaoPct : 0;
+      d.comissaoCotada += s.valor * (pct / 100);
+    }
+
+    // Prêmio/comissão efetivado -- só cards convertidos, com o prêmio
+    // líquido e o percentual de comissão registrados no fechamento (mesmo
+    // cálculo de convertidoPorSeguradora).
+    if (l.resultado === "Convertido") {
+      const premio = typeof l.premioLiquido === "number" ? l.premioLiquido : 0;
+      const pct = typeof l.comissaoFinalPct === "number" ? l.comissaoFinalPct : 0;
+      d.premioEfetivado += premio;
+      d.comissaoEfetivada += premio * (pct / 100);
+    }
   }
   // Todas as imobiliárias com pelo menos 1 card, ordenadas por volume — a
   // UI decide quantas mostrar por padrão (ver ImobiliariasTabela.tsx).
