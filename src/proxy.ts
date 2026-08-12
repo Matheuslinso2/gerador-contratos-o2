@@ -19,7 +19,7 @@ const ROTAS_PUBLICAS = [
   // Formulário público de Capitalização — preenchido por imobiliárias,
   // corretores e proprietários que não têm (nem precisam ter) conta na
   // Plataforma O2.
-  "/formulario-capitalizacao",
+  "/capitalizacao",
 ];
 const ROTAS_SO_DESLOGADO = ["/login", "/signup"];
 

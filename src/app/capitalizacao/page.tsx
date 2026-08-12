@@ -1,5 +1,16 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import CapitalizacaoForm from "./CapitalizacaoForm";
+
+export const metadata: Metadata = {
+  title: "Capitalização O2 Seguros — Ficha Online",
+  description: "Ficha online para dar entrada no título de capitalização junto à O2 Seguros.",
+  openGraph: {
+    title: "Capitalização O2 Seguros — Ficha Online",
+    description: "Ficha online para dar entrada no título de capitalização junto à O2 Seguros.",
+    images: ["/o2-logo-color.png"],
+  },
+};
 
 export default function FormularioCapitalizacaoPage() {
   return (
