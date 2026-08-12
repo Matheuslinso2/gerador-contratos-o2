@@ -129,10 +129,18 @@ const CAMPO_MOTIVO_RECUSA = "ufCrm10_1776352403";
 const CAMPO_VIGENCIA_INICIAL = "ufCrm10_1779821934";
 const CAMPO_VIGENCIA_FINAL = "ufCrm10_1779821962";
 const CAMPO_DATA_EFETIVACAO = "ufCrm10_1776352369";
+// "Valor do Premio Liquido" é o campo realmente usado hoje (money) -- os
+// dois anteriores ("Prêmio Líquido" string e "Prémio Líquido" double) estão
+// vazios em todo card convertido conferido, provavelmente campos antigos
+// que pararam de ser preenchidos quando esse campo novo entrou.
+const CAMPO_PREMIO_LIQUIDO_NOVO = "ufCrm10_1781029986152";
 const CAMPO_PREMIO_LIQUIDO = "ufCrm10_1779820763";
 const CAMPO_PREMIO_LIQUIDO_LEGADO = "ufCrm10_1778258846";
-const CAMPO_COMISSAO_FINAL = "ufCrm10_1779820737";
-const CAMPO_COMISSAO_FINAL_LEGADO = "ufCrm10_1778258780";
+// "Comissão Trabalhada" é um PERCENTUAL (ex: 29 = 29%), não um valor em
+// reais -- confirmado nos dados reais dos 8 cards convertidos (valores como
+// 10, 16, 24, 40, incompatíveis com R$ mas plausíveis como %).
+const CAMPO_COMISSAO_FINAL_PCT = "ufCrm10_1779820737";
+const CAMPO_COMISSAO_FINAL_PCT_LEGADO = "ufCrm10_1778258780";
 const CAMPO_DESCONTO = "ufCrm10_1781029891735";
 const CAMPO_DESCONTO_LEGADO = "ufCrm10_1779820897";
 // Adicionados pela supervisora em 05/08/2026 pra medir quanto tempo o
@@ -206,7 +214,7 @@ export type LinhaContagem = {
   vigenciaFinal: string;
   dataEfetivacao: string;
   premioLiquido: number | "";
-  comissaoFinal: number | "";
+  comissaoFinalPct: number | ""; // percentual (ex: 29 = 29%), não valor em reais
   desconto: number | "";
   alertas: string[];
 };
@@ -404,8 +412,11 @@ export function montarContagemMensal(
       vigenciaInicial: apenasData(item[CAMPO_VIGENCIA_INICIAL]),
       vigenciaFinal: apenasData(item[CAMPO_VIGENCIA_FINAL]),
       dataEfetivacao: apenasData(item[CAMPO_DATA_EFETIVACAO]),
-      premioLiquido: valorMonetario(item[CAMPO_PREMIO_LIQUIDO]) || valorMonetario(item[CAMPO_PREMIO_LIQUIDO_LEGADO]),
-      comissaoFinal: valorMonetario(item[CAMPO_COMISSAO_FINAL]) || valorMonetario(item[CAMPO_COMISSAO_FINAL_LEGADO]),
+      premioLiquido:
+        valorMonetario(item[CAMPO_PREMIO_LIQUIDO_NOVO]) ||
+        valorMonetario(item[CAMPO_PREMIO_LIQUIDO]) ||
+        valorMonetario(item[CAMPO_PREMIO_LIQUIDO_LEGADO]),
+      comissaoFinalPct: valorMonetario(item[CAMPO_COMISSAO_FINAL_PCT]) || valorMonetario(item[CAMPO_COMISSAO_FINAL_PCT_LEGADO]),
       desconto: valorMonetario(item[CAMPO_DESCONTO]) || valorMonetario(item[CAMPO_DESCONTO_LEGADO]),
       alertas,
     };
@@ -545,9 +556,11 @@ export function montarAnaliseGerencial(
     if (l.resultado !== "Convertido") continue;
     const nome = l.seguradoraEscolhida || "Não identificado";
     const atual = convertidoPorSeguradora[nome] ?? { n: 0, premio: 0, comissao: 0 };
+    const premio = typeof l.premioLiquido === "number" ? l.premioLiquido : 0;
+    const pct = typeof l.comissaoFinalPct === "number" ? l.comissaoFinalPct : 0;
     atual.n += 1;
-    atual.premio += typeof l.premioLiquido === "number" ? l.premioLiquido : 0;
-    atual.comissao += typeof l.comissaoFinal === "number" ? l.comissaoFinal : 0;
+    atual.premio += premio;
+    atual.comissao += premio * (pct / 100); // Comissão Trabalhada é % do prêmio líquido, não R$
     convertidoPorSeguradora[nome] = atual;
   }
 
