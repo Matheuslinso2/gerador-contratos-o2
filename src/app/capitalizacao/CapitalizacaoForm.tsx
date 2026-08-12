@@ -15,21 +15,76 @@ import { PROFISSOES } from "@/lib/profissoes";
 import { ESTADOS_CIVIS } from "@/lib/estadosCivis";
 import { enviarFormularioCapitalizacao, type EstadoEnvioCapitalizacao } from "./actions";
 
+const O2_LARANJA = "#F8540D";
+const O2_NAVY = "#01192e";
+
 const inputClass =
-  "w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-o2-coral focus:outline-none";
+  "w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-[#F8540D] focus:outline-none";
 const inputErroClass =
   "w-full rounded-lg border border-red-400 px-3 py-2.5 text-sm focus:border-red-500 focus:outline-none";
 const labelClass = "text-xs text-gray-500";
 
-function Secao({ titulo, subtitulo, children }: { titulo: string; subtitulo?: string; children: React.ReactNode }) {
+function Secao({
+  numero,
+  titulo,
+  subtitulo,
+  children,
+}: {
+  numero: number;
+  titulo: string;
+  subtitulo?: string;
+  children: React.ReactNode;
+}) {
   return (
     <section className="space-y-3 rounded-xl border border-gray-200 p-4">
-      <div>
-        <h2 className="text-sm font-semibold text-o2-navy">{titulo}</h2>
-        {subtitulo && <p className="text-xs text-gray-500">{subtitulo}</p>}
+      <div className="flex items-center gap-2.5">
+        <span
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+          style={{ background: O2_LARANJA }}
+        >
+          {numero}
+        </span>
+        <div>
+          <h2 className="text-sm font-semibold" style={{ color: O2_NAVY }}>
+            {titulo}
+          </h2>
+          {subtitulo && <p className="text-xs text-gray-500">{subtitulo}</p>}
+        </div>
       </div>
       {children}
     </section>
+  );
+}
+
+function SeletorTipoPessoa({
+  name,
+  valor,
+  aoMudar,
+}: {
+  name: string;
+  valor: "PF" | "PJ";
+  aoMudar: (v: "PF" | "PJ") => void;
+}) {
+  return (
+    <div className="inline-flex rounded-full border border-gray-300 p-1 text-sm">
+      {(["PF", "PJ"] as const).map((opcao) => (
+        <label
+          key={opcao}
+          className="cursor-pointer rounded-full px-4 py-1.5 font-medium transition"
+          style={valor === opcao ? { background: O2_LARANJA, color: "#fff" } : { color: "#6b7280" }}
+        >
+          <input
+            type="radio"
+            name={name}
+            value={opcao}
+            checked={valor === opcao}
+            onChange={() => aoMudar(opcao)}
+            className="sr-only"
+          />
+          {opcao === "PF" ? "Pessoa física" : "Pessoa jurídica"}
+        </label>
+      ))}
+    </div>
   );
 }
 
@@ -298,7 +353,9 @@ export default function CapitalizacaoForm() {
   if (estado?.ok) {
     return (
       <div className="rounded-xl border border-green-300 bg-green-50 p-6 text-center">
-        <p className="text-lg font-semibold text-o2-navy">Ficha enviada com sucesso! ✅</p>
+        <p className="text-lg font-semibold" style={{ color: O2_NAVY }}>
+          Ficha enviada com sucesso! ✅
+        </p>
         <p className="mt-1 text-sm text-gray-600">
           Recebemos os dados do Título de Capitalização e já criamos o registro na O2. Em breve entraremos em
           contato.
@@ -313,7 +370,7 @@ export default function CapitalizacaoForm() {
         <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">⚠️ {estado.erro}</p>
       )}
 
-      <Secao titulo="1. Identificação" subtitulo="Quem está preenchendo esta ficha?">
+      <Secao numero={1} titulo="Identificação" subtitulo="Quem está preenchendo esta ficha?">
         <Campo name="email_contato" label="E-mail de contato" type="email" required />
         <div>
           <label className={labelClass}>Quem administra o imóvel? *</label>
@@ -335,7 +392,7 @@ export default function CapitalizacaoForm() {
       </Secao>
 
       {quemAdministra === "Imobiliária" && (
-        <Secao titulo="2. Dados da imobiliária">
+        <Secao numero={2} titulo="Dados da imobiliária">
           <div className="grid grid-cols-2 gap-2">
             <Campo name="imobiliaria_nome" label="Nome da imobiliária" required />
             <Campo name="imobiliaria_email" label="E-mail da imobiliária" type="email" required />
@@ -343,7 +400,7 @@ export default function CapitalizacaoForm() {
         </Secao>
       )}
       {quemAdministra === "Corretor individual" && (
-        <Secao titulo="2. Dados do corretor">
+        <Secao numero={2} titulo="Dados do corretor">
           <div className="grid grid-cols-2 gap-2">
             <Campo name="corretor_nome" label="Nome do corretor" required />
             <Campo name="corretor_email" label="E-mail do corretor" type="email" required />
@@ -351,7 +408,7 @@ export default function CapitalizacaoForm() {
         </Secao>
       )}
 
-      <Secao titulo="3. Informações do título de capitalização">
+      <Secao numero={3} titulo="Informações do título de capitalização">
         <div className="grid grid-cols-2 gap-2">
           <CampoMoeda name="valor_titulo" label="Valor do título" required />
           <div>
@@ -402,29 +459,8 @@ export default function CapitalizacaoForm() {
         )}
       </Secao>
 
-      <Secao titulo="4. Locatário" subtitulo="Quem vai morar no imóvel">
-        <div className="flex gap-4 text-sm">
-          <label className="flex items-center gap-1.5">
-            <input
-              type="radio"
-              name="tipo_locatario"
-              value="PF"
-              checked={tipoLocatario === "PF"}
-              onChange={() => setTipoLocatario("PF")}
-            />
-            Pessoa física
-          </label>
-          <label className="flex items-center gap-1.5">
-            <input
-              type="radio"
-              name="tipo_locatario"
-              value="PJ"
-              checked={tipoLocatario === "PJ"}
-              onChange={() => setTipoLocatario("PJ")}
-            />
-            Pessoa jurídica
-          </label>
-        </div>
+      <Secao numero={4} titulo="Locatário" subtitulo="Quem vai morar no imóvel">
+        <SeletorTipoPessoa name="tipo_locatario" valor={tipoLocatario} aoMudar={setTipoLocatario} />
         {tipoLocatario === "PF" ? (
           <CamposPessoaFisica prefixo="locat_pf" comQualificacao />
         ) : (
@@ -436,33 +472,12 @@ export default function CapitalizacaoForm() {
         </div>
       </Secao>
 
-      <Secao titulo="5. Dados do imóvel">
+      <Secao numero={5} titulo="Dados do imóvel">
         <CamposImovel />
       </Secao>
 
-      <Secao titulo="6. Locador" subtitulo="Dono(a) do imóvel">
-        <div className="flex gap-4 text-sm">
-          <label className="flex items-center gap-1.5">
-            <input
-              type="radio"
-              name="tipo_locador"
-              value="PF"
-              checked={tipoLocador === "PF"}
-              onChange={() => setTipoLocador("PF")}
-            />
-            Pessoa física
-          </label>
-          <label className="flex items-center gap-1.5">
-            <input
-              type="radio"
-              name="tipo_locador"
-              value="PJ"
-              checked={tipoLocador === "PJ"}
-              onChange={() => setTipoLocador("PJ")}
-            />
-            Pessoa jurídica
-          </label>
-        </div>
+      <Secao numero={6} titulo="Locador" subtitulo="Dono(a) do imóvel">
+        <SeletorTipoPessoa name="tipo_locador" valor={tipoLocador} aoMudar={setTipoLocador} />
         {tipoLocador === "PF" ? (
           <CamposPessoaFisica prefixo="locador_pf" />
         ) : (
@@ -475,7 +490,7 @@ export default function CapitalizacaoForm() {
         <span>
           Confirmo que tenho autorização das pessoas citadas nesta ficha para enviar seus dados à O2 Seguros, que os
           tratará conforme a{" "}
-          <a href="/termos" target="_blank" className="font-medium text-o2-navy underline">
+          <a href="/termos" target="_blank" className="font-medium underline" style={{ color: O2_NAVY }}>
             Política de Privacidade
           </a>
           , exclusivamente para a emissão do título de capitalização.
@@ -485,7 +500,8 @@ export default function CapitalizacaoForm() {
       <button
         type="submit"
         disabled={enviando}
-        className="w-full rounded-full bg-o2-coral px-4 py-2.5 font-medium text-white transition hover:opacity-90 disabled:opacity-60"
+        className="w-full rounded-full px-4 py-2.5 font-medium text-white transition hover:opacity-90 disabled:opacity-60"
+        style={{ background: O2_LARANJA }}
       >
         {enviando ? "Enviando..." : "Enviar ficha"}
       </button>
