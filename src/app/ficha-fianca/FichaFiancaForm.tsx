@@ -223,6 +223,34 @@ function CamposImovel() {
   );
 }
 
+function SeletorPfPj({ valor, aoMudar }: { valor: "" | "PF" | "PJ"; aoMudar: (v: "PF" | "PJ") => void }) {
+  return (
+    <div>
+      <label className={labelClass}>Tipo de pessoa do locatário *</label>
+      <div className="inline-flex rounded-full border border-gray-300 p-1 text-sm">
+        {(["PF", "PJ"] as const).map((opcao) => (
+          <label
+            key={opcao}
+            className="cursor-pointer rounded-full px-4 py-1.5 font-medium transition"
+            style={valor === opcao ? { background: O2_LARANJA, color: "#fff" } : { color: "#6b7280" }}
+          >
+            <input
+              type="radio"
+              name="_tipo_pessoa_locatario_ui"
+              value={opcao}
+              checked={valor === opcao}
+              onChange={() => aoMudar(opcao)}
+              required
+              className="sr-only"
+            />
+            {opcao === "PF" ? "Pessoa física" : "Pessoa jurídica"}
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function CamposLocatarioPf({ indice }: { indice: 1 | 2 | 3 }) {
   const p = `locat${indice}`;
   const [profissao, setProfissao] = useState("");
@@ -271,7 +299,13 @@ function FichaFiancaFormInterno({ aoConcluirNova }: { aoConcluirNova: () => void
   const [vocEIs, setVocEIs] = useState("");
   const [imovelAdministrado, setImovelAdministrado] = useState("");
   const [finalidadeImovel, setFinalidadeImovel] = useState("");
-  const [tipoPessoaLocatario, setTipoPessoaLocatario] = useState("");
+  // Duas perguntas separadas na tela (PF/PJ, depois quantidade só se PF) —
+  // combinadas num valor só na hora de enviar, porque o Bitrix guarda isso
+  // como um único campo de múltipla escolha ("1 locatário Pessoa Física",
+  // "2 locatários...", "Pessoa Jurídica"), sem campo de quantidade à parte.
+  const [tipoPessoaLocat, setTipoPessoaLocat] = useState<"" | "PF" | "PJ">("");
+  const [quantidadeLocatarios, setQuantidadeLocatarios] = useState("");
+  const tipoPessoaLocatario = tipoPessoaLocat === "PJ" ? "PJ" : tipoPessoaLocat === "PF" ? quantidadeLocatarios : "";
 
   const mostraPerguntaAdministrado = vocEIs === "Proprietário do Imóvel" || vocEIs === "Pretendente à locação";
   const qtdLocatarios = tipoPessoaLocatario === "1" || tipoPessoaLocatario === "2" || tipoPessoaLocatario === "3" ? Number(tipoPessoaLocatario) : 0;
@@ -303,6 +337,7 @@ function FichaFiancaFormInterno({ aoConcluirNova }: { aoConcluirNova: () => void
       {estado?.erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">⚠️ {estado.erro}</p>}
 
       <Secao numero={1} titulo="Identificação" subtitulo="Quem está preenchendo esta ficha?">
+        <Campo name="email_contato" label="Seu e-mail" type="email" required />
         <Selecao
           name="voce_e"
           label="Você é"
@@ -372,14 +407,17 @@ function FichaFiancaFormInterno({ aoConcluirNova }: { aoConcluirNova: () => void
       </Secao>
 
       <Secao numero={5} titulo="Locatário(s)" subtitulo="Quem vai morar no imóvel — responsáveis financeiros pela locação">
-        <Selecao
-          name="tipo_pessoa_locatario"
-          label="Tipo de pessoa do locatário"
-          required
-          valor={tipoPessoaLocatario}
-          aoMudar={setTipoPessoaLocatario}
-          opcoes={["1", "2", "3", "PJ"]}
+        <input type="hidden" name="tipo_pessoa_locatario" value={tipoPessoaLocatario} />
+        <SeletorPfPj
+          valor={tipoPessoaLocat}
+          aoMudar={(v) => {
+            setTipoPessoaLocat(v);
+            setQuantidadeLocatarios("");
+          }}
         />
+        {tipoPessoaLocat === "PF" && (
+          <Selecao name="_quantidade_locatarios_ui" label="Quantidade de locatários" required valor={quantidadeLocatarios} aoMudar={setQuantidadeLocatarios} opcoes={["1", "2", "3"]} />
+        )}
         {tipoPessoaLocatario === "PJ" && (
           <div className="grid grid-cols-2 gap-2 rounded-lg bg-gray-50 p-3">
             <Campo name="locat_pj_razao" label="Razão social" required className="col-span-2" />

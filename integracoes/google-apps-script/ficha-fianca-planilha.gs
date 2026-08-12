@@ -33,6 +33,7 @@ const CABECALHO = [
   "Link do Card",
   "Avisos de mapeamento",
 
+  "E-mail de contato (quem preencheu)",
   "Você é",
   "Imóvel será administrado?",
   "Nome administradora/corretor",

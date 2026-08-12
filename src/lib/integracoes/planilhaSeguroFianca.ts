@@ -38,6 +38,7 @@ function montarLinha(payload: FichaFiancaPayload, resultado: ResultadoCriacaoCar
     linkDoCard(resultado.item.id),
     resultado.avisos.join(" | "),
 
+    payload.emailContato,
     payload.vocEIs,
     payload.imovelAdministrado,
     payload.adminNome,

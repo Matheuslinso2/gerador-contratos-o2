@@ -73,6 +73,7 @@ export async function enviarFichaFianca(
     responseId,
     submittedAt: new Date().toISOString(),
 
+    emailContato: campo(formData, "email_contato"),
     vocEIs: campo(formData, "voce_e") as FichaFiancaPayload["vocEIs"],
     imovelAdministrado: (campo(formData, "imovel_administrado") || "") as FichaFiancaPayload["imovelAdministrado"],
     adminNome: campo(formData, "admin_nome"),

@@ -35,6 +35,11 @@ export type FichaFiancaPayload = {
   responseId: string;
   submittedAt: string;
 
+  // Pedido no Forms como primeira pergunta, antes de saber quem preenche —
+  // sem campo dedicado equivalente no card do Bitrix (os e-mails do card
+  // são sempre do locatário/administradora/proprietário). Guardado no
+  // Supabase e na planilha de conferência, não enviado ao Bitrix.
+  emailContato: string;
   vocEIs: "Pretendente à locação" | "Administrador/Corretor de Imóveis" | "Proprietário do Imóvel";
   imovelAdministrado: "Sim" | "Não" | "";
   adminNome: string;
