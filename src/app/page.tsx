@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "./actions";
 import AppHeader from "@/components/AppHeader";
+import PainelCategorias from "@/components/PainelCategorias";
 
 export default async function Home() {
   const supabase = await createClient();
@@ -52,7 +53,6 @@ export default async function Home() {
     href: string;
     titulo: string;
     descricao: string;
-    gradiente: string;
     icone: ReactNode;
     pendente?: boolean;
   }[] = [
@@ -60,7 +60,6 @@ export default async function Home() {
       href: "/gerar-contrato",
       titulo: "Gerar contrato",
       descricao: "Monta o contrato final e exporta em Word",
-      gradiente: "from-o2-coral to-orange-400",
       pendente: !cadastroCompleto,
       icone: (
         <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
@@ -79,7 +78,6 @@ export default async function Home() {
       href: "/auditar-contrato",
       titulo: "Auditar contrato",
       descricao: "Analisa um contrato pronto e aponta erros e inconsistências",
-      gradiente: "from-o2-indigo to-o2-navy",
       pendente: !cadastroCompleto,
       icone: (
         <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
@@ -93,7 +91,6 @@ export default async function Home() {
       href: "/contratos",
       titulo: "Contratos realizados",
       descricao: "Busca contratos gerados e auditorias por CPF, nome ou endereço",
-      gradiente: "from-o2-navy to-slate-700",
       icone: (
         <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
           <rect x="4" y="5" width="16" height="14" rx="2" stroke="currentColor" strokeWidth="1.6" />
@@ -105,7 +102,6 @@ export default async function Home() {
       href: "/multa-rescisoria",
       titulo: "Multa rescisória",
       descricao: "Calculadora rápida de consulta, sem cadastro necessário",
-      gradiente: "from-o2-coral to-o2-indigo",
       icone: (
         <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
           <rect x="5" y="3.5" width="14" height="17" rx="2" stroke="currentColor" strokeWidth="1.6" />
@@ -125,14 +121,12 @@ export default async function Home() {
     href: string;
     titulo: string;
     descricao: string;
-    gradiente: string;
     icone: ReactNode;
   }[] = [
     {
       href: "/capitalizacao",
       titulo: "Capitalização",
       descricao: "Ficha online para dar entrada no título de capitalização",
-      gradiente: "from-amber-500 to-o2-coral",
       icone: (
         <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
           <ellipse cx="12" cy="7" rx="7" ry="3" stroke="currentColor" strokeWidth="1.6" />
@@ -145,7 +139,6 @@ export default async function Home() {
       href: "/ficha-fianca",
       titulo: "Ficha Fiança",
       descricao: "Ficha online para dar entrada na análise e cotação de fiança",
-      gradiente: "from-violet-500 to-o2-navy",
       icone: (
         <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
           <rect x="6" y="3.5" width="12" height="17" rx="2" stroke="currentColor" strokeWidth="1.6" />
@@ -163,14 +156,12 @@ export default async function Home() {
     href: string;
     titulo: string;
     descricao: string;
-    gradiente: string;
     icone: ReactNode;
   }[] = [
     {
       href: "/producao",
       titulo: "Produção",
       descricao: "Dashboard de prêmio, comissão e volume da produção da corretora",
-      gradiente: "from-cyan-500 to-o2-navy",
       icone: (
         <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
           <path d="M4 20V4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
@@ -185,7 +176,6 @@ export default async function Home() {
       href: "/faturas",
       titulo: "Faturas",
       descricao: "Boletos de seguradora recebidos, prontos pra reenviar às imobiliárias",
-      gradiente: "from-o2-coral to-amber-500",
       icone: (
         <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
           <path
@@ -202,7 +192,6 @@ export default async function Home() {
       href: "/seguro-fianca",
       titulo: "Seguro Fiança",
       descricao: "Acompanhamento das propostas de fiança em andamento",
-      gradiente: "from-teal-500 to-o2-navy",
       icone: (
         <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
           <path
@@ -219,7 +208,6 @@ export default async function Home() {
       href: "/ramos-elementares",
       titulo: "Ramos Elementares",
       descricao: "Novos negócios, renovações, endossos e qualidade da produção",
-      gradiente: "from-emerald-500 to-o2-navy",
       icone: (
         <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
           <path d="M4 19.5h16" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
@@ -232,7 +220,6 @@ export default async function Home() {
       href: "/social-media",
       titulo: "Social Media",
       descricao: "Notícias de mercado imobiliário e seguros, coletadas automaticamente",
-      gradiente: "from-fuchsia-500 to-o2-navy",
       icone: (
         <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
           <rect x="4" y="4" width="16" height="16" rx="4" stroke="currentColor" strokeWidth="1.6" />
@@ -243,32 +230,119 @@ export default async function Home() {
     },
   ];
 
-  const configuracoes: { href: string; titulo: string; descricao: string }[] = [
+  const configuracoes: { href: string; titulo: string; descricao: string; icone: ReactNode }[] = [
+    {
+      href: "/imobiliaria",
+      titulo: "Configuração da imobiliária",
+      descricao: "Dados-base e variáveis de praxe",
+      icone: (
+        <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
+          <path d="M5 20.5V6.5a1 1 0 011-1h5v15" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M14 20.5V10a1 1 0 011-1h3a1 1 0 011 1v10.5" stroke="currentColor" strokeWidth="1.6" />
+          <path
+            d="M8 8.5h.01M8 11.5h.01M8 14.5h.01M8 17.5h.01M17.5 13.5h.01M17.5 16.5h.01"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+          />
+          <path d="M3.5 20.5h17" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+      ),
+    },
     ...(isAdmin(user.email)
       ? [
           {
             href: "/clausulas",
             titulo: "Biblioteca de cláusulas (admin)",
             descricao: "Seguradoras, produtos e coberturas adicionais",
+            icone: (
+              <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
+                <path
+                  d="M4 5.5c2-1 5-1 8 .5 3-1.5 6-1.5 8-.5v13c-2-1-5-1-8 .5-3-1.5-6-1.5-8-.5z"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinejoin="round"
+                />
+                <path d="M12 6v13" stroke="currentColor" strokeWidth="1.6" />
+              </svg>
+            ),
           },
           {
             href: "/admin/imobiliarias",
             titulo: "Imobiliárias cadastradas (admin)",
             descricao: "Visão de todas as contas de imobiliária parceiras",
+            icone: (
+              <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
+                <circle cx="9" cy="8.5" r="3" stroke="currentColor" strokeWidth="1.6" />
+                <path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                <circle cx="17" cy="9.5" r="2.3" stroke="currentColor" strokeWidth="1.6" />
+                <path d="M15 19c0-2.2 1-3.9 3-4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+            ),
+          },
+        ]
+      : []),
+  ];
+
+  const categorias = [
+    {
+      id: "ferramentas",
+      label: "Ferramentas úteis",
+      accent: "navy" as const,
+      itens: ferramentas,
+      icone: (
+        <svg viewBox="0 0 24 24" fill="none" className="h-full w-full" stroke="currentColor" strokeWidth="1.6">
+          <path d="M7 3.5h7l4 4V19a1.5 1.5 0 01-1.5 1.5h-9.5A1.5 1.5 0 015.5 19V5A1.5 1.5 0 017 3.5z" />
+        </svg>
+      ),
+    },
+    {
+      id: "cotacao",
+      label: "Solicitação de Cotação",
+      accent: "orange" as const,
+      itens: solicitacaoCotacao,
+      icone: (
+        <svg viewBox="0 0 24 24" fill="none" className="h-full w-full" stroke="currentColor" strokeWidth="1.6">
+          <ellipse cx="12" cy="7" rx="7" ry="3" />
+          <path d="M5 7v4c0 1.66 3.13 3 7 3s7-1.34 7-3V7" />
+          <path d="M5 11v4c0 1.66 3.13 3 7 3s7-1.34 7-3v-4" />
+        </svg>
+      ),
+    },
+    ...(usoInterno
+      ? [
+          {
+            id: "interno",
+            label: "Aplicações internas",
+            accent: "blue" as const,
+            itens: aplicacoesInternas,
+            restrita: true,
+            icone: (
+              <svg viewBox="0 0 24 24" fill="none" className="h-full w-full" stroke="currentColor" strokeWidth="1.6">
+                <path d="M12 3.5l7 2.5v5.2c0 4.6-3 7.9-7 9.3-4-1.4-7-4.7-7-9.3V6l7-2.5z" />
+              </svg>
+            ),
           },
         ]
       : []),
     {
-      href: "/imobiliaria",
-      titulo: "Configuração da imobiliária",
-      descricao: "Dados-base e variáveis de praxe",
+      id: "config",
+      label: "Configurações",
+      accent: "gray" as const,
+      itens: configuracoes,
+      icone: (
+        <svg viewBox="0 0 24 24" fill="none" className="h-full w-full" stroke="currentColor" strokeWidth="1.6">
+          <path d="M5 20.5V6.5a1 1 0 011-1h5v15" />
+          <path d="M14 20.5V10a1 1 0 011-1h3a1 1 0 011 1v10.5" />
+        </svg>
+      ),
     },
   ];
 
   return (
     <>
       <AppHeader userEmail={user.email} logoutAction={signOut} />
-      <main className="mx-auto max-w-2xl flex-1 space-y-8 p-8">
+      <main className="mx-auto max-w-4xl flex-1 space-y-6 p-8">
         <h1 className="text-xl font-semibold text-o2-navy">Painel</h1>
 
         {!cadastroCompleto && (
@@ -281,123 +355,7 @@ export default async function Home() {
           </Link>
         )}
 
-        <section className="space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-400">Ferramentas úteis</h2>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {ferramentas.map((f) => (
-              <Link
-                key={f.href}
-                href={f.href}
-                className={`group relative overflow-hidden rounded-2xl bg-gradient-to-br p-5 text-white shadow-md transition duration-200 hover:-translate-y-0.5 hover:shadow-xl ${f.gradiente}`}
-              >
-                <div className="mb-3 flex items-center justify-between">
-                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-white/15">
-                    {f.icone}
-                  </span>
-                  {f.pendente && (
-                    <span className="rounded-full bg-white/90 px-2 py-0.5 text-xs font-medium text-yellow-800">
-                      cadastro pendente
-                    </span>
-                  )}
-                </div>
-                <p className="font-semibold">{f.titulo}</p>
-                <p className="mt-1 text-sm text-white/80">{f.descricao}</p>
-                <svg
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                  className="absolute bottom-4 right-4 h-5 w-5 text-white/40 transition group-hover:translate-x-1 group-hover:text-white/80"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-              </Link>
-            ))}
-          </div>
-        </section>
-
-        <section className="space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-400">Solicitação de Cotação</h2>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {solicitacaoCotacao.map((s) => (
-              <Link
-                key={s.href}
-                href={s.href}
-                className={`group relative overflow-hidden rounded-2xl bg-gradient-to-br p-5 text-white shadow-md transition duration-200 hover:-translate-y-0.5 hover:shadow-xl ${s.gradiente}`}
-              >
-                <span className="mb-3 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-white/15">
-                  {s.icone}
-                </span>
-                <p className="font-semibold">{s.titulo}</p>
-                <p className="mt-1 text-sm text-white/80">{s.descricao}</p>
-                <svg
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                  className="absolute bottom-4 right-4 h-5 w-5 text-white/40 transition group-hover:translate-x-1 group-hover:text-white/80"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-              </Link>
-            ))}
-          </div>
-        </section>
-
-        {usoInterno && (
-          <section className="space-y-3">
-            <div>
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-400">Aplicações internas</h2>
-              <p className="text-xs text-gray-400">Só aparece pra administradores e colaboradores O2.</p>
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {aplicacoesInternas.map((a) => (
-                <Link
-                  key={a.href}
-                  href={a.href}
-                  className={`group relative overflow-hidden rounded-2xl bg-gradient-to-br p-5 text-white shadow-md transition duration-200 hover:-translate-y-0.5 hover:shadow-xl ${a.gradiente}`}
-                >
-                  <span className="mb-3 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-white/15">
-                    {a.icone}
-                  </span>
-                  <p className="font-semibold">{a.titulo}</p>
-                  <p className="mt-1 text-sm text-white/80">{a.descricao}</p>
-                  <svg
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                    className="absolute bottom-4 right-4 h-5 w-5 text-white/40 transition group-hover:translate-x-1 group-hover:text-white/80"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                </Link>
-              ))}
-            </div>
-          </section>
-        )}
-
-        <section className="space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-400">Configurações</h2>
-          <div className="flex flex-col gap-3">
-            {configuracoes.map((c) => (
-              <Link
-                key={c.href}
-                href={c.href}
-                className="rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm transition hover:shadow-md"
-              >
-                <p className="font-medium text-o2-navy">{c.titulo}</p>
-                <p className="text-sm text-gray-500">{c.descricao}</p>
-              </Link>
-            ))}
-          </div>
-        </section>
+        <PainelCategorias categorias={categorias} />
       </main>
     </>
   );
