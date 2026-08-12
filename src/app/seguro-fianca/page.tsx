@@ -451,15 +451,51 @@ export default async function SeguroFiancaPage({
                         <tr>
                           <td style={{ color: "var(--negative)" }}>Total convertido (fechado)</td>
                           <td className={`${styles.numCol} ${styles.num}`}>{gerencial.kpis.convertidos}</td>
-                          <td className={`${styles.numCol} ${styles.num}`}>{fmtBRL(0)}</td>
-                          <td className={`${styles.numCol} ${styles.num}`}>{fmtBRL(0)}</td>
+                          <td className={`${styles.numCol} ${styles.num}`}>
+                            {fmtBRL(Object.values(gerencial.convertidoPorSeguradora).reduce((a, c) => a + c.premio, 0))}
+                          </td>
+                          <td className={`${styles.numCol} ${styles.num}`}>
+                            {fmtBRL(Object.values(gerencial.convertidoPorSeguradora).reduce((a, c) => a + c.comissao, 0))}
+                          </td>
                         </tr>
                       </tbody>
                     </table>
                   </div>
                   <div className={styles.panelSub} style={{ marginTop: 12 }}>
-                    &quot;Comissão cotada&quot; é estimada (valor × % de comissão de cada seguradora) — potencial, ainda não é dinheiro confirmado.
+                    &quot;Comissão cotada&quot; é estimada (valor × % de comissão de cada seguradora) — potencial, ainda não é dinheiro confirmado. O prêmio/comissão convertido usa o valor líquido e a comissão final registrados no fechamento do contrato.
                   </div>
+                  {Object.keys(gerencial.convertidoPorSeguradora).length > 0 && (
+                    <div style={{ marginTop: 16 }}>
+                      <h3>Convertidos por seguradora</h3>
+                      <div className={styles.panelSub}>
+                        seguradora escolhida no fechamento — pode não bater com a lista de cotação acima se o campo não foi preenchido
+                      </div>
+                      <div className={styles.tableWrap}>
+                        <table className={styles.data}>
+                          <thead>
+                            <tr>
+                              <th>Seguradora</th>
+                              <th className={styles.numCol}>Convertidos</th>
+                              <th className={styles.numCol}>Prêmio Líquido</th>
+                              <th className={styles.numCol}>Comissão Final</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {Object.entries(gerencial.convertidoPorSeguradora)
+                              .sort((a, b) => b[1].n - a[1].n)
+                              .map(([nome, c]) => (
+                                <tr key={nome}>
+                                  <td style={nome === "Não identificado" ? { color: "var(--negative)" } : undefined}>{nome}</td>
+                                  <td className={`${styles.numCol} ${styles.num}`}>{c.n}</td>
+                                  <td className={`${styles.numCol} ${styles.num}`}>{fmtBRL(c.premio)}</td>
+                                  <td className={`${styles.numCol} ${styles.num}`}>{fmtBRL(c.comissao)}</td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </section>
 

@@ -436,6 +436,7 @@ export type AnaliseGerencial = {
   porResponsavelFunil2: Record<string, { cards: number; andamento: number; negativos: number; positivos: number }>;
   statusPorSeguradora: Record<string, Record<string, number>>;
   cotadoPorSeguradora: Record<string, { n: number; premio: number; comissao: number }>;
+  convertidoPorSeguradora: Record<string, { n: number; premio: number; comissao: number }>;
   taxaPorSeguradora: Record<string, { n: number; pctLocacao: number; pctAluguel: number }>;
   motivosRecusaFunil1: { total: number; semMotivo: number }; // decisão de compliance, sem motivo interno — só o total importa
   motivosPerdaFunil2: { porMotivo: Record<string, number>; semMotivo: number; total: number };
@@ -533,6 +534,21 @@ export function montarAnaliseGerencial(
       pctLocacao: media(comTaxa.map((l) => l.seguradoras[seg.nome].pctLocacao as number)),
       pctAluguel: media(comTaxa.map((l) => l.seguradoras[seg.nome].pctAluguel as number)),
     };
+  }
+
+  // Convertido de verdade (contrato fechado) -- usa a seguradora ESCOLHIDA
+  // no card (campo preenchido só na conversão), não a lista de seguradoras
+  // cotadas, e o prêmio líquido/comissão final registrados no fechamento
+  // (não o valor cotado inicialmente, que pode ter mudado na negociação).
+  const convertidoPorSeguradora: Record<string, { n: number; premio: number; comissao: number }> = {};
+  for (const l of linhas) {
+    if (l.resultado !== "Convertido") continue;
+    const nome = l.seguradoraEscolhida || "Não identificado";
+    const atual = convertidoPorSeguradora[nome] ?? { n: 0, premio: 0, comissao: 0 };
+    atual.n += 1;
+    atual.premio += typeof l.premioLiquido === "number" ? l.premioLiquido : 0;
+    atual.comissao += typeof l.comissaoFinal === "number" ? l.comissaoFinal : 0;
+    convertidoPorSeguradora[nome] = atual;
   }
 
   const recusasFunil1 = linhas.filter((l) => l.resultado === "Recusado");
@@ -678,10 +694,21 @@ export function montarAnaliseGerencial(
   // Calendário diário de "Contrato Recebido" (etapa do funil 2) — direto do
   // histórico nativo de mudança de etapa, não depende de campo nenhum novo,
   // então tem histórico completo desde que o Bitrix começou a ser usado.
-  const contagemRecebimentos: Record<string, number> = {};
-  for (const h of historico) {
+  // Conta só a PRIMEIRA entrada de cada card nessa etapa -- um card que
+  // volta pra "Contrato com Pendências" pra correção e reentra em "Contrato
+  // Recebido" não pode contar 2x, senão o total passa do número real de
+  // contratos recebidos.
+  const primeiraEntradaContratoRecebido = new Map<number, string>(); // ownerId -> dia (YYYY-MM-DD)
+  const historicoOrdenado = [...historico].sort(
+    (a, b) => new Date(a.CREATED_TIME).getTime() - new Date(b.CREATED_TIME).getTime()
+  );
+  for (const h of historicoOrdenado) {
     if (h.STAGE_ID !== ETAPA_CONTRATO_RECEBIDO) continue;
-    const dia = h.CREATED_TIME.slice(0, 10);
+    if (primeiraEntradaContratoRecebido.has(h.OWNER_ID)) continue;
+    primeiraEntradaContratoRecebido.set(h.OWNER_ID, h.CREATED_TIME.slice(0, 10));
+  }
+  const contagemRecebimentos: Record<string, number> = {};
+  for (const dia of primeiraEntradaContratoRecebido.values()) {
     if (!dia.startsWith(competencia)) continue;
     contagemRecebimentos[dia] = (contagemRecebimentos[dia] ?? 0) + 1;
   }
@@ -719,6 +746,7 @@ export function montarAnaliseGerencial(
     porResponsavelFunil2,
     statusPorSeguradora,
     cotadoPorSeguradora,
+    convertidoPorSeguradora,
     taxaPorSeguradora,
     motivosRecusaFunil1: { total: recusasFunil1.length, semMotivo: recusasFunil1.length },
     motivosPerdaFunil2: { porMotivo: motivosPerdaFunil2, semMotivo: perdasSemMotivo, total: perdasFunil2.length },
