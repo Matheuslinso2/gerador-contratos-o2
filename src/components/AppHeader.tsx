@@ -41,9 +41,16 @@ export default function AppHeader({
                 { href: "/gerar-contrato", label: "Gerar contrato" },
                 { href: "/auditar-contrato", label: "Auditar contrato" },
                 { href: "/multa-rescisoria", label: "Cálculo de multa rescisória" },
+                { href: "/contratos", label: "Contratos realizados" },
               ]}
             />
-            <NavLink href="/contratos" label="Contratos realizados" />
+            <NavDropdown
+              label="Solicitação de Cotação"
+              items={[
+                { href: "/capitalizacao", label: "Capitalização" },
+                { href: "/ficha-fianca", label: "Seguro Fiança" },
+              ]}
+            />
             {(isAdmin(userEmail) || isColaboradorO2(userEmail)) && (
               <NavDropdown
                 label="Uso interno"
