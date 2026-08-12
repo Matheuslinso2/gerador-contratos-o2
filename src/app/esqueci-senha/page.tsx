@@ -12,7 +12,7 @@ export default async function EsqueciSenhaPage({
   return (
     <main className="mx-auto flex max-w-sm flex-1 flex-col justify-center gap-5 p-8">
       <div className="flex justify-center">
-        <Image src="/o2-logo-color.png" alt="O2 Seguros" width={140} height={83} priority />
+        <Image src="/marca-o2/o2-logo-oficial.png" alt="O2 Seguros" width={140} height={77} priority />
       </div>
       <div className="text-center">
         <h1 className="text-xl font-semibold text-o2-navy">Esqueci minha senha</h1>

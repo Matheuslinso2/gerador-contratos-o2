@@ -65,24 +65,24 @@ export function montarEmailFatura({
   const senha = faturas.map((f) => f.senha_pdf).find((s): s is string => !!s) ?? null;
   const blocoSenha = senha
     ? `
-        <div style="background: #fff3f0; border: 1px solid #ff5a3b; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px;">
+        <div style="background: #fff3f0; border: 1px solid #F8540D; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px;">
           <p style="margin: 0; font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 0.5px;">Senha para abrir o PDF</p>
-          <p style="margin: 4px 0 0; font-size: 18px; font-weight: bold; color: #ff5a3b; letter-spacing: 1px;">${senha}</p>
+          <p style="margin: 4px 0 0; font-size: 18px; font-weight: bold; color: #F8540D; letter-spacing: 1px;">${senha}</p>
         </div>`
     : "";
 
   const html = `
     <div style="max-width: 560px; margin: 0 auto; font-family: Arial, sans-serif;">
-      <div style="background: #00213a; padding: 20px 24px; border-radius: 10px 10px 0 0;">
+      <div style="background: #01192e; padding: 20px 24px; border-radius: 10px 10px 0 0;">
         <img src="cid:o2-logo" alt="O2 Seguros" height="28" style="display: block;" />
       </div>
       <div style="border: 1px solid #eee; border-top: none; border-radius: 0 0 10px 10px; padding: 24px;">
-        <p style="margin: 0 0 16px; font-size: 15px; color: #00213a;">Olá, ${nomeImobiliaria}!</p>
+        <p style="margin: 0 0 16px; font-size: 15px; color: #01192e;">Olá, ${nomeImobiliaria}!</p>
         <p style="margin: 0 0 20px; font-size: 14px; color: #333; line-height: 1.5;">
           Segue em anexo a fatura da <strong>${seguradora}</strong> referente a <strong>${competenciaTexto}</strong>.
         </p>
         <div style="background: #f7f9fb; border: 1px solid #e5e9ee; border-radius: 8px; padding: 16px 20px; margin-bottom: 20px;">
-          <table style="width: 100%; border-collapse: collapse; font-size: 14px; color: #00213a;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 14px; color: #01192e;">
             <tr>
               <td style="padding: 4px 0; color: #888;">Seguradora</td>
               <td style="padding: 4px 0; text-align: right; font-weight: bold;">${seguradora}</td>
@@ -97,7 +97,7 @@ export function montarEmailFatura({
             </tr>
             <tr>
               <td style="padding: 4px 0; color: #888;">Valor</td>
-              <td style="padding: 4px 0; text-align: right; font-weight: bold; color: #ff5a3b;">${formatarValor(referencia?.valor ?? null)}</td>
+              <td style="padding: 4px 0; text-align: right; font-weight: bold; color: #F8540D;">${formatarValor(referencia?.valor ?? null)}</td>
             </tr>
           </table>
         </div>

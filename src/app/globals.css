@@ -8,8 +8,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --color-o2-navy: #00213a;
-  --color-o2-coral: #ff5a3b;
+  --color-o2-navy: #01192e;
+  --color-o2-coral: #F8540D;
   --color-o2-indigo: #1c165c;
   --color-o2-gray: #e4eaee;
   --font-sans: var(--font-poppins);

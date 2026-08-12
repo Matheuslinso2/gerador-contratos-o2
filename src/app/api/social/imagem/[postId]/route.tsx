@@ -36,8 +36,8 @@ const FONTE_INTER_600 = fs.readFileSync(
   path.join(process.cwd(), "src", "lib", "social", "fonts", "Inter-SemiBold.woff")
 );
 
-const NAVY = "#00213a";
-const CORAL = "#ff5a3b";
+const NAVY = "#01192e";
+const CORAL = "#F8540D";
 
 function fmtData(iso: string): string {
   return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }).replace(".", "");

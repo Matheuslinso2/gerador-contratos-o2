@@ -17,7 +17,7 @@ export default async function Home() {
       <>
         <AppHeader />
         <main className="mx-auto flex max-w-xl flex-1 flex-col items-center justify-center gap-6 p-8 text-center">
-          <Image src="/o2-logo-color.png" alt="O2 Seguros" width={168} height={100} priority />
+          <Image src="/marca-o2/o2-logo-oficial.png" alt="O2 Seguros" width={168} height={93} priority />
           <div>
             <h1 className="text-2xl font-bold text-o2-navy">Workspace O2</h1>
             <p className="mt-1 text-sm text-gray-600">Painel para imobiliárias parceiras da O2 Seguros</p>
