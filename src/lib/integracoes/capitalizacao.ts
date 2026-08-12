@@ -29,7 +29,7 @@ type BitrixAddResponse = {
   result: { item: { id: number; title: string } };
 };
 
-const ITEM = {
+export const ITEM = {
   origem: "1762240566",
   imobiliaria: "479542475",
   emailImobiliaria: "1475427667",

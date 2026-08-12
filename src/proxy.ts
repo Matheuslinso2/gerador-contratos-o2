@@ -16,6 +16,10 @@ const ROTAS_PUBLICAS = [
   // Recebe eventos do Google Forms sem cookie de usuário. A rota valida um
   // token secreto próprio antes de ler o conteúdo ou criar qualquer card.
   "/api/integracoes/google-forms",
+  // Formulário público de Capitalização — preenchido por imobiliárias,
+  // corretores e proprietários que não têm (nem precisam ter) conta na
+  // Plataforma O2.
+  "/formulario-capitalizacao",
 ];
 const ROTAS_SO_DESLOGADO = ["/login", "/signup"];
 
