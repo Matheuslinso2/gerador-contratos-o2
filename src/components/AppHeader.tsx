@@ -48,7 +48,7 @@ export default function AppHeader({
               label="Solicitação de Cotação"
               items={[
                 { href: "/capitalizacao", label: "Capitalização" },
-                { href: "/ficha-fianca", label: "Seguro Fiança" },
+                { href: "/ficha-fianca", label: "Ficha Fiança" },
               ]}
             />
             {(isAdmin(userEmail) || isColaboradorO2(userEmail)) && (

@@ -121,6 +121,42 @@ export default async function Home() {
     },
   ];
 
+  const solicitacaoCotacao: {
+    href: string;
+    titulo: string;
+    descricao: string;
+    gradiente: string;
+    icone: ReactNode;
+  }[] = [
+    {
+      href: "/capitalizacao",
+      titulo: "Capitalização",
+      descricao: "Ficha online para dar entrada no título de capitalização",
+      gradiente: "from-amber-500 to-o2-coral",
+      icone: (
+        <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
+          <ellipse cx="12" cy="7" rx="7" ry="3" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M5 7v4c0 1.66 3.13 3 7 3s7-1.34 7-3V7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          <path d="M5 11v4c0 1.66 3.13 3 7 3s7-1.34 7-3v-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+      ),
+    },
+    {
+      href: "/ficha-fianca",
+      titulo: "Ficha Fiança",
+      descricao: "Ficha online para dar entrada na análise e cotação de fiança",
+      gradiente: "from-violet-500 to-o2-navy",
+      icone: (
+        <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
+          <rect x="6" y="3.5" width="12" height="17" rx="2" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M9 3.5V3a1 1 0 011-1h4a1 1 0 011 1v.5" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M9 11.7l1.8 1.8L15.5 9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M9 15.7h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+      ),
+    },
+  ];
+
   const usoInterno = isAdmin(user.email) || isColaboradorO2(user.email);
 
   const aplicacoesInternas: {
@@ -266,6 +302,36 @@ export default async function Home() {
                 </div>
                 <p className="font-semibold">{f.titulo}</p>
                 <p className="mt-1 text-sm text-white/80">{f.descricao}</p>
+                <svg
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                  className="absolute bottom-4 right-4 h-5 w-5 text-white/40 transition group-hover:translate-x-1 group-hover:text-white/80"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </Link>
+            ))}
+          </div>
+        </section>
+
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-400">Solicitação de Cotação</h2>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {solicitacaoCotacao.map((s) => (
+              <Link
+                key={s.href}
+                href={s.href}
+                className={`group relative overflow-hidden rounded-2xl bg-gradient-to-br p-5 text-white shadow-md transition duration-200 hover:-translate-y-0.5 hover:shadow-xl ${s.gradiente}`}
+              >
+                <span className="mb-3 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-white/15">
+                  {s.icone}
+                </span>
+                <p className="font-semibold">{s.titulo}</p>
+                <p className="mt-1 text-sm text-white/80">{s.descricao}</p>
                 <svg
                   viewBox="0 0 20 20"
                   fill="currentColor"
