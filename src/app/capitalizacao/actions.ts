@@ -7,6 +7,7 @@ import {
   criarCardCapitalizacao,
   type CapitalizacaoFormPayload,
 } from "@/lib/integracoes/capitalizacao";
+import { registrarNaPlanilhaCapitalizacao, type DadosCapitalizacaoPlanilha } from "@/lib/integracoes/planilhaCapitalizacao";
 
 export type EstadoEnvioCapitalizacao = { ok: boolean; erro?: string } | null;
 
@@ -117,19 +118,91 @@ export async function enviarFormularioCapitalizacao(
     [ITEM.locadorPjTelefone]: campo(formData, "locador_pj_telefone"),
   };
 
+  const responseId = randomUUID();
+  const submittedAt = new Date().toISOString();
+
   const payload: CapitalizacaoFormPayload = {
     formId: "landing-page-o2-capitalizacao",
-    responseId: randomUUID(),
-    submittedAt: new Date().toISOString(),
+    responseId,
+    submittedAt,
     respondentEmail: emailContato || null,
     editResponseUrl: null,
     answers,
+  };
+
+  const dadosPlanilha: DadosCapitalizacaoPlanilha = {
+    responseId,
+    submittedAt,
+    emailContato,
+    quemAdministra,
+    imobiliariaNome: campo(formData, "imobiliaria_nome"),
+    imobiliariaEmail: campo(formData, "imobiliaria_email"),
+    corretorNome: campo(formData, "corretor_nome"),
+    corretorEmail: campo(formData, "corretor_email"),
+
+    valorTitulo: campo(formData, "valor_titulo"),
+    encargosConsiderados: campo(formData, "encargos_considerados"),
+    prazo: campo(formData, "prazo"),
+    formaPagamento,
+    titularCartao: campo(formData, "titular_cartao"),
+    cpfCartao: campo(formData, "cpf_cartao"),
+
+    tipoLocatario: tipoLocatario === "PJ" ? "PJ" : "PF",
+    locatEmail,
+    locatTelefone,
+    locatPfNome: campo(formData, "locat_pf_nome"),
+    locatPfCpf: campo(formData, "locat_pf_cpf"),
+    locatPfNascimento: campo(formData, "locat_pf_nascimento"),
+    locatPfRg: campo(formData, "locat_pf_rg"),
+    locatPfRgOrgao: campo(formData, "locat_pf_rg_orgao"),
+    locatPfRgUf: campo(formData, "locat_pf_rg_uf"),
+    locatPfRgEmissao: campo(formData, "locat_pf_rg_emissao"),
+    locatPfEstadoCivil: campo(formData, "locat_pf_estado_civil"),
+    locatPfProfissao: campo(formData, "locat_pf_profissao"),
+    locatPfRenda: campo(formData, "locat_pf_renda"),
+    locatPjRazao: campo(formData, "locat_pj_razao"),
+    locatPjCnpj: campo(formData, "locat_pj_cnpj"),
+    locatPjFundacao: campo(formData, "locat_pj_fundacao"),
+    locatPjInscricao: campo(formData, "locat_pj_inscricao"),
+    locatPjSocio: campo(formData, "locat_pj_socio"),
+    locatPjSocioCpf: campo(formData, "locat_pj_socio_cpf"),
+    locatPjRenda: campo(formData, "locat_pj_renda"),
+
+    imovelCep: campo(formData, "imovel_cep"),
+    imovelLogradouro: logradouro,
+    imovelNumero: numero,
+    imovelComplemento: complemento,
+    imovelBairro: bairro,
+    imovelCidade: cidade,
+    imovelUf: uf,
+
+    tipoLocador: tipoLocador === "PJ" ? "PJ" : "PF",
+    locadorPfNome: campo(formData, "locador_pf_nome"),
+    locadorPfCpf: campo(formData, "locador_pf_cpf"),
+    locadorPfNascimento: campo(formData, "locador_pf_nascimento"),
+    locadorPfRg: campo(formData, "locador_pf_rg"),
+    locadorPfRgOrgao: campo(formData, "locador_pf_rg_orgao"),
+    locadorPfRgUf: campo(formData, "locador_pf_rg_uf"),
+    locadorPjRazao: campo(formData, "locador_pj_razao"),
+    locadorPjCnpj: campo(formData, "locador_pj_cnpj"),
+    locadorPjFundacao: campo(formData, "locador_pj_fundacao"),
+    locadorPjInscricao: campo(formData, "locador_pj_inscricao"),
+    locadorPjSocio: campo(formData, "locador_pj_socio"),
+    locadorPjSocioCpf: campo(formData, "locador_pj_socio_cpf"),
+    locadorPjTelefone: campo(formData, "locador_pj_telefone"),
   };
 
   try {
     await auditar(payload, "processando");
     const resultado = await criarCardCapitalizacao(payload);
     await auditar(payload, resultado.created ? "criado" : "duplicado", resultado.item.id);
+    try {
+      await registrarNaPlanilhaCapitalizacao(dadosPlanilha, resultado);
+    } catch (erroPlanilha) {
+      // Não falha o envio por isso — o card já foi criado, o que importa.
+      // A planilha é só o registro de conferência.
+      console.warn("Falha ao registrar na planilha de conferência da Capitalização:", erroPlanilha);
+    }
     return { ok: true };
   } catch (error) {
     const mensagem = error instanceof Error ? error.message : String(error);

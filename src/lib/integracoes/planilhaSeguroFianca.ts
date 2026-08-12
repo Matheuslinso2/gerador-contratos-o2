@@ -120,7 +120,7 @@ export async function registrarNaPlanilhaFianca(payload: FichaFiancaPayload, res
   const resposta = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ token, linha: montarLinha(payload, resultado) }),
+    body: JSON.stringify({ token, formulario: "ficha_fianca", linha: montarLinha(payload, resultado) }),
     signal: AbortSignal.timeout(15_000),
   });
   const dados = await resposta.json();
