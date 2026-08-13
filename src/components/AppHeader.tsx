@@ -58,6 +58,7 @@ export default function AppHeader({
                   { href: "/producao", label: "Produção" },
                   { href: "/faturas", label: "Faturas" },
                   { href: "/seguro-fianca", label: "Seguro Fiança" },
+                  { href: "/painel-capitalizacao", label: "Capitalização" },
                   { href: "/ramos-elementares", label: "Ramos Elementares" },
                   { href: "/social-media", label: "Social Media" },
                 ]}

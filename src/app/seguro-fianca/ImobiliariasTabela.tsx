@@ -14,10 +14,16 @@ type LinhaImobiliaria = {
   comissaoCotada: number;
   premioEfetivado: number;
   comissaoEfetivada: number;
+  ticketMedio: number;
+  mediaPercentualPacote: number;
 };
 
 function fmtBRL(v: number): string {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function fmtPct(v: number): string {
+  return v ? `${v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%` : "—";
 }
 
 function normalizar(s: string): string {
@@ -70,6 +76,12 @@ export default function ImobiliariasTabela({ imobiliarias }: { imobiliarias: Lin
             <th className={styles.numCol}>Convertidos</th>
             <th className={styles.numCol}>Prêmio Cotado</th>
             <th className={styles.numCol}>Comissão Cotada</th>
+            <th className={styles.numCol} title="Média das cotações de cada card, depois média entre os cards da imobiliária">
+              Ticket Médio
+            </th>
+            <th className={styles.numCol} title="Percentual médio do pacote de locação que vira parcela do seguro, mesma lógica do Ticket Médio">
+              % Pacote Médio
+            </th>
             <th className={styles.numCol}>Prêmio Efetivado</th>
             <th className={styles.numCol}>Comissão Efetivada</th>
           </tr>
@@ -87,6 +99,8 @@ export default function ImobiliariasTabela({ imobiliarias }: { imobiliarias: Lin
               <td className={`${styles.numCol} ${styles.num}`}>{i.convertidos}</td>
               <td className={`${styles.numCol} ${styles.num}`}>{fmtBRL(i.premioCotado)}</td>
               <td className={`${styles.numCol} ${styles.num}`}>{fmtBRL(i.comissaoCotada)}</td>
+              <td className={`${styles.numCol} ${styles.num}`}>{fmtBRL(i.ticketMedio)}</td>
+              <td className={`${styles.numCol} ${styles.num}`}>{fmtPct(i.mediaPercentualPacote)}</td>
               <td className={`${styles.numCol} ${styles.num}`} style={{ color: "var(--negative)" }}>
                 {fmtBRL(i.premioEfetivado)}
               </td>
@@ -97,7 +111,7 @@ export default function ImobiliariasTabela({ imobiliarias }: { imobiliarias: Lin
           ))}
           {filtradas.length === 0 && (
             <tr>
-              <td colSpan={10} style={{ color: "var(--ink-faint)" }}>
+              <td colSpan={12} style={{ color: "var(--ink-faint)" }}>
                 {busca ? "Nenhuma imobiliária encontrada com esse nome." : "Nenhuma imobiliária com cotação registrada neste período."}
               </td>
             </tr>

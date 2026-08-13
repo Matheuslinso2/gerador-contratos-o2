@@ -55,7 +55,8 @@ const ORDEM_CHAVES_ETAPA = ETAPAS.map((e) => {
 type ConfigSeguradora = {
   nome: string;
   status: [string, string][]; // [rótulo do plano, código do campo] — mais de um item quando a seguradora tem planos com status separado (ex: Porto)
-  valor: string;
+  valor: string; // valor da PARCELA cotada (mensal), não o prêmio total -- confirmado com o usuário
+  parcelas: string | null; // nº de parcelas cotado -- valor × parcelas = prêmio total cotado, comparável com o prêmio líquido efetivado
   comissao: string | null;
   pAluguel: string;
   pLocacao: string;
@@ -70,6 +71,7 @@ export const SEGURADORAS: ConfigSeguradora[] = [
     nome: "Too",
     status: [["Status", "ufCrm10_1776867659537"]],
     valor: "ufCrm10_1776867692274",
+    parcelas: "ufCrm10_1776867679954",
     comissao: "ufCrm10_1776867669061",
     pAluguel: "ufCrm10_1776867701485",
     pLocacao: "ufCrm10_1776867711264",
@@ -82,6 +84,7 @@ export const SEGURADORAS: ConfigSeguradora[] = [
       ["Essencial 30", "ufCrm10_1776867909680"],
     ],
     valor: "ufCrm10_1776867925596",
+    parcelas: "ufCrm10_1776867921034",
     comissao: "ufCrm10_1776867916361",
     pAluguel: "ufCrm10_1776867930894",
     pLocacao: "ufCrm10_1776867936621",
@@ -90,6 +93,9 @@ export const SEGURADORAS: ConfigSeguradora[] = [
     nome: "Pottencial (Taxa Fixa)",
     status: [["Status", "ufCrm10_1776867969326"]],
     valor: "ufCrm10_1776867980768",
+    // "Parcelas - Pottencial" é compartilhado entre os 2 planos no Bitrix,
+    // mesma limitação já documentada pra taxa/aluguel/locação da Pottencial.
+    parcelas: "ufCrm10_1776867953606",
     comissao: "ufCrm10_1776867975334",
     pAluguel: "ufCrm10_1778265458",
     pLocacao: "ufCrm10_1778265502",
@@ -98,6 +104,7 @@ export const SEGURADORAS: ConfigSeguradora[] = [
     nome: "Pottencial (Tradicional)",
     status: [["Status", "ufCrm10_1776867994910"]],
     valor: "ufCrm10_1776868008634",
+    parcelas: "ufCrm10_1776867953606",
     comissao: "ufCrm10_1776867999897",
     pAluguel: "ufCrm10_1778265458",
     pLocacao: "ufCrm10_1778265502",
@@ -106,6 +113,7 @@ export const SEGURADORAS: ConfigSeguradora[] = [
     nome: "Tokio",
     status: [["Status", "ufCrm10_1776868050602"]],
     valor: "ufCrm10_1776868065822",
+    parcelas: "ufCrm10_1776868060146",
     comissao: "ufCrm10_1776868055318",
     pAluguel: "ufCrm10_1776868072231",
     pLocacao: "ufCrm10_1776868076763",
@@ -114,6 +122,7 @@ export const SEGURADORAS: ConfigSeguradora[] = [
     nome: "Junto",
     status: [["Status", "ufCrm10_1776868102153"]],
     valor: "ufCrm10_1778263318",
+    parcelas: "ufCrm10_1776868106892",
     comissao: null,
     pAluguel: "ufCrm10_1778265853",
     pLocacao: "ufCrm10_1778265830",
@@ -206,7 +215,14 @@ export type LinhaContagem = {
   pacoteLocacao: number | "";
   seguradoras: Record<
     string,
-    { status: Record<string, string>; valor: number | ""; comissaoPct: number | ""; pctAluguel: number | ""; pctLocacao: number | "" }
+    {
+      status: Record<string, string>;
+      valor: number | ""; // valor da PARCELA cotada
+      parcelas: number | "";
+      comissaoPct: number | "";
+      pctAluguel: number | "";
+      pctLocacao: number | "";
+    }
   >;
   seguradoraEscolhida: string;
   motivoRecusaPerda: string;
@@ -372,9 +388,12 @@ export function montarContagemMensal(
         pctLocacao = typeof pLocacao === "number" ? pLocacao : "";
       }
 
+      const parcelasRaw = seg.parcelas ? item[seg.parcelas] : undefined;
+
       seguradoras[seg.nome] = {
         status,
         valor: valorPlano,
+        parcelas: typeof parcelasRaw === "number" ? parcelasRaw : "",
         comissaoPct: seg.comissao ? valorMonetario(item[seg.comissao]) : "",
         pctAluguel,
         pctLocacao,
@@ -462,6 +481,8 @@ export type AnaliseGerencial = {
     comissaoCotada: number;
     premioEfetivado: number;
     comissaoEfetivada: number;
+    ticketMedio: number;
+    mediaPercentualPacote: number;
   }[];
   valoresTrabalhados: { aluguel: number; pacoteLocacao: number };
   faixasPacoteLocacao: { faixa: string; cards: number; pacoteMedio: number; seguroMedio: number }[];
@@ -540,13 +561,26 @@ export function montarAnaliseGerencial(
     }
 
     const cotadas = linhas.filter((l) => typeof l.seguradoras[seg.nome]?.valor === "number");
+    // "Valor" é a PARCELA cotada (mensal), não o prêmio total -- confirmado
+    // com o usuário. Prêmio cotado = parcela × nº de parcelas, senão fica
+    // numa escala 8-29x menor que o prêmio líquido efetivado (que já é
+    // total), inviabilizando a comparação "Cotado vs Convertido". Cards sem
+    // o campo "Parcelas" preenchido ficam de fora da soma de premio/comissao
+    // (não dá pra estimar o total sem saber quantas parcelas) -- "n" (qtd
+    // cotada) continua contando todos, só o valor em R$ fica subestimado
+    // proporcionalmente a esses casos.
     cotadoPorSeguradora[seg.nome] = {
       n: cotadas.length,
-      premio: cotadas.reduce((a, l) => a + (l.seguradoras[seg.nome].valor as number), 0),
+      premio: cotadas.reduce((a, l) => {
+        const s = l.seguradoras[seg.nome];
+        if (typeof s.valor !== "number" || typeof s.parcelas !== "number") return a;
+        return a + s.valor * s.parcelas;
+      }, 0),
       comissao: cotadas.reduce((a, l) => {
         const s = l.seguradoras[seg.nome];
+        if (typeof s.valor !== "number" || typeof s.parcelas !== "number") return a;
         const pct = typeof s.comissaoPct === "number" ? s.comissaoPct : 0;
-        return a + (s.valor as number) * (pct / 100);
+        return a + s.valor * s.parcelas * (pct / 100);
       }, 0),
     };
 
@@ -599,6 +633,8 @@ export function montarAnaliseGerencial(
       comissaoCotada: number;
       premioEfetivado: number;
       comissaoEfetivada: number;
+      ticketMedioValores: number[];
+      percentualPacoteValores: number[];
     }
   > = {};
   let semImobiliaria = 0;
@@ -617,6 +653,8 @@ export function montarAnaliseGerencial(
       comissaoCotada: 0,
       premioEfetivado: 0,
       comissaoEfetivada: 0,
+      ticketMedioValores: [],
+      percentualPacoteValores: [],
     };
     const d = porImobiliaria[l.imobiliaria];
     d.total++;
@@ -628,14 +666,28 @@ export function montarAnaliseGerencial(
     // Prêmio/comissão cotado -- soma de TODAS as seguradoras cotadas nesse
     // card (mesmo critério já usado no "Total cotado" de Cotado x
     // Convertido: um card cotado com 3 seguradoras conta as 3, não é
-    // deduplicado por card).
+    // deduplicado por card). "Valor" é a PARCELA, então o prêmio total é
+    // valor × parcelas (mesma correção aplicada em cotadoPorSeguradora) --
+    // sem o nº de parcelas não dá pra estimar o total, esses casos ficam de
+    // fora da soma em R$.
     for (const seg of SEGURADORAS) {
       const s = l.seguradoras[seg.nome];
-      if (typeof s?.valor !== "number") continue;
-      d.premioCotado += s.valor;
+      if (typeof s?.valor !== "number" || typeof s.parcelas !== "number") continue;
+      const premioTotal = s.valor * s.parcelas;
+      d.premioCotado += premioTotal;
       const pct = typeof s.comissaoPct === "number" ? s.comissaoPct : 0;
-      d.comissaoCotada += s.valor * (pct / 100);
+      d.comissaoCotada += premioTotal * (pct / 100);
     }
+
+    // Ticket médio e % do pacote -- ao nível de CARD primeiro (média das
+    // cotações do próprio card, ex: 5 seguradoras cotadas nesse card viram
+    // 1 valor), e só depois média entre os cards da imobiliária. Evita o
+    // mesmo problema do Prêmio Cotado (soma que cresce com o nº de
+    // seguradoras cotadas, sem relação direta com o nº de cards).
+    const ticketCard = cotacaoMediaDoCard(l);
+    if (ticketCard !== null) d.ticketMedioValores.push(ticketCard);
+    const pctCard = percentualPacoteMedioDoCard(l);
+    if (pctCard !== null) d.percentualPacoteValores.push(pctCard);
 
     // Prêmio/comissão efetivado -- só cards convertidos, com o prêmio
     // líquido e o percentual de comissão registrados no fechamento (mesmo
@@ -650,7 +702,15 @@ export function montarAnaliseGerencial(
   // Todas as imobiliárias com pelo menos 1 card, ordenadas por volume — a
   // UI decide quantas mostrar por padrão (ver ImobiliariasTabela.tsx).
   const topImobiliarias = Object.entries(porImobiliaria)
-    .map(([nome, d]) => ({ nome, ...d }))
+    .map(([nome, d]) => {
+      const { ticketMedioValores, percentualPacoteValores, ...resto } = d;
+      return {
+        nome,
+        ...resto,
+        ticketMedio: media(ticketMedioValores),
+        mediaPercentualPacote: media(percentualPacoteValores),
+      };
+    })
     .sort((a, b) => b.total - a.total);
 
   const valoresTrabalhados = {
@@ -663,6 +723,15 @@ export function montarAnaliseGerencial(
   // de cada card, depois média entre os cards da faixa).
   function cotacaoMediaDoCard(l: LinhaContagem): number | null {
     const valores = SEGURADORAS.map((seg) => l.seguradoras[seg.nome]?.valor).filter((v): v is number => typeof v === "number" && v > 0);
+    return valores.length ? media(valores) : null;
+  }
+  // Mesma lógica do ticket médio, mas pra taxa (% do pacote de locação que
+  // vira parcela do seguro) -- usada no ticket médio e no % médio por
+  // imobiliária (ver porImobiliaria acima).
+  function percentualPacoteMedioDoCard(l: LinhaContagem): number | null {
+    const valores = SEGURADORAS.map((seg) => l.seguradoras[seg.nome]?.pctLocacao).filter(
+      (v): v is number => typeof v === "number" && v > 0
+    );
     return valores.length ? media(valores) : null;
   }
   const FAIXAS_PACOTE = [
