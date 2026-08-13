@@ -218,7 +218,7 @@ function setEnumComAviso(
 }
 
 function numeroPtBr(v: Resposta): number | undefined {
-  const raw = texto(v).replace(/R\$/gi, "").replace(/\s/g, "").replace(",", ".");
+  const raw = texto(v).replace(/R\$/gi, "").replace(/\s/g, "").replace(/\./g, "").replace(",", ".");
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? parsed : undefined;
 }
