@@ -27,6 +27,7 @@ type Post = {
   status: string;
   criado_em: string;
   erro: string | null;
+  instagram_post_id: string | null;
 };
 
 const ROTULO_STATUS: Record<string, string> = {
@@ -79,7 +80,7 @@ export default async function SocialMediaPage({
 
   const { data: posts } = await supabase
     .from("social_media_posts")
-    .select("id, categoria, titulo_card, legenda, status, criado_em, erro")
+    .select("id, categoria, titulo_card, legenda, status, criado_em, erro, instagram_post_id")
     .order("criado_em", { ascending: false })
     .limit(30)
     .returns<Post[]>();
@@ -153,6 +154,16 @@ export default async function SocialMediaPage({
                     </span>
                   </div>
                   <p className="whitespace-pre-wrap text-sm text-slate-700">{p.legenda}</p>
+                  {p.status === "publicado" && p.instagram_post_id?.startsWith("http") && (
+                    <a
+                      href={p.instagram_post_id}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-1 inline-block text-xs text-emerald-600 hover:underline"
+                    >
+                      Ver no Instagram →
+                    </a>
+                  )}
                   {p.status === "erro" && p.erro && (
                     <p className="mt-1 text-xs text-red-600">Erro: {p.erro}</p>
                   )}
