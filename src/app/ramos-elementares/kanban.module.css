@@ -57,17 +57,46 @@
   font-size: 0.82rem;
 }
 
+.cardTopo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
 .cardNome {
   font-weight: 600;
   color: var(--re-text);
   display: block;
-  margin-bottom: 2px;
+}
+
+.cardStatus {
+  flex: 0 0 auto;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--re-muted);
+  background: var(--re-surface-2);
+  border: 1px solid var(--re-line);
+  border-radius: 4px;
+  padding: 1px 5px;
+  white-space: nowrap;
 }
 
 .cardMeta {
   color: var(--re-muted);
   font-size: 0.75rem;
   display: block;
+}
+
+.cardObservacao {
+  color: var(--re-muted);
+  font-size: 0.72rem;
+  font-style: italic;
+  display: block;
+  margin-top: 4px;
 }
 
 .cardBadges {
@@ -98,6 +127,35 @@
 .badgeUrgente {
   background: var(--re-red);
   color: #fff;
+}
+
+.chip {
+  font-size: 0.68rem;
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.chipOk {
+  background: color-mix(in srgb, var(--re-green) 18%, transparent);
+  color: var(--re-green);
+}
+
+.chipAtencao {
+  background: color-mix(in srgb, var(--re-amber) 20%, transparent);
+  color: var(--re-amber);
+}
+
+.chipCritico {
+  background: color-mix(in srgb, var(--re-red) 18%, transparent);
+  color: var(--re-red);
+}
+
+.chipNeutro {
+  background: var(--re-surface-2);
+  color: var(--re-muted);
+  border: 1px solid var(--re-line);
 }
 
 .mostrarMais {

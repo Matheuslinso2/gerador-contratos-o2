@@ -111,6 +111,9 @@ type RegistroNovo = RegistroBase & {
   diasCotacao: number | null;
   orcamento: string;
   dataEfetivacao: number | null;
+  negociador: string;
+  ultimoContato: number | null;
+  observacoes: string;
 };
 
 type RegistroRenovacao = RegistroBase & {
@@ -120,6 +123,7 @@ type RegistroRenovacao = RegistroBase & {
   dataEnvio: number | null;
   dataEfetivacao: number | null;
   comissaoAnterior: number;
+  ultimoContato: number | null;
 };
 
 type RegistroEndosso = {
@@ -141,12 +145,26 @@ type RegistroEndosso = {
 // o Kanban de "Verificação por E-mail" -- nomePrincipal segue a regra do
 // usuário: imobiliária/administradora quando houver, senão o segurado, e
 // só em último caso o cotador/responsável identificado na planilha.
+// Agrupamento de status em 4 estágios amplos, pra visão geral do Kanban não
+// fragmentar em 8-10 colunas finas (a planilha usa muitos valores de status
+// diferentes) -- o status detalhado da planilha continua exposto no card,
+// só a coluna do quadro que passa a ser o estágio.
+export type GrupoStatus = "andamento" | "fechado" | "nao_fechou" | "cancelado";
+
+function grupoStatus(status: string): GrupoStatus {
+  if (status === "EFETIVADO") return "fechado";
+  if (status === "CANCELADO") return "cancelado";
+  if (status === "NÃO EFETIVADO" || status === "SEM PARCERIA") return "nao_fechou";
+  return "andamento";
+}
+
 export type RegistroNegociacao = {
   id: string; // `${aba}|${linha}`, mesma chave usada pra casar com incendio_emails_confirmacao
   aba: string;
   linha: number;
   tipo: "novo" | "renovacao" | "endosso";
   status: string;
+  grupoStatus: GrupoStatus;
   nomePrincipal: string;
   imobiliaria: string;
   segurado: string;
@@ -155,6 +173,11 @@ export type RegistroNegociacao = {
   apolice: string | null;
   premioTotal: number;
   comissao: number;
+  negociador: string | null;
+  observacoes: string | null;
+  // Dias desde o registro de ÚLTIMO CONTATO na planilha -- null quando a
+  // aba não tem essa coluna (ENDOSSOS) ou o campo está vazio na linha.
+  diasSemContato: number | null;
 };
 
 function nomePrincipal(imobiliaria: string, segurado: string, cotador: string): string {
@@ -386,6 +409,9 @@ function mapearNovos(linhas: CelulaGoogle[][], aba: string, competencia?: string
         repasse: numero(linha[34]),
         dataEfetivacao: numeroOpcional(linha[39]),
         efetivado: status === "EFETIVADO",
+        negociador: texto(linha[35]),
+        ultimoContato: numeroOpcional(linha[36]),
+        observacoes: texto(linha[37]),
       };
     })
     .filter((registro): registro is RegistroNovo => registro !== null);
@@ -417,6 +443,7 @@ function mapearRenovacoes(linhas: CelulaGoogle[][], aba: string): RegistroRenova
         dataEnvio: numeroOpcional(linha[21]),
         dataEfetivacao: numeroOpcional(linha[25]),
         efetivado: status === "EFETIVADO",
+        ultimoContato: numeroOpcional(linha[23]),
       };
     })
     .filter((registro): registro is RegistroRenovacao => registro !== null);
@@ -639,6 +666,7 @@ export function montarAnaliseRamosElementares(fonte: FonteRamosBruta, agora = ne
         linha: registro.linha,
         tipo: "novo",
         status: registro.status,
+        grupoStatus: grupoStatus(registro.status),
         nomePrincipal: nomePrincipal(registro.imobiliaria, registro.segurado, registro.cotador),
         imobiliaria: registro.imobiliaria,
         segurado: registro.segurado,
@@ -647,6 +675,9 @@ export function montarAnaliseRamosElementares(fonte: FonteRamosBruta, agora = ne
         apolice: null,
         premioTotal: registro.premioTotal,
         comissao: registro.comissao,
+        negociador: registro.negociador || null,
+        observacoes: registro.observacoes || null,
+        diasSemContato: diasDesdeSerial(registro.ultimoContato, agora),
       })
     ),
     ...[...rnAtual, ...rnFutura].map(
@@ -656,6 +687,7 @@ export function montarAnaliseRamosElementares(fonte: FonteRamosBruta, agora = ne
         linha: registro.linha,
         tipo: "renovacao",
         status: registro.status,
+        grupoStatus: grupoStatus(registro.status),
         nomePrincipal: nomePrincipal(registro.imobiliaria, registro.segurado, registro.cotador),
         imobiliaria: registro.imobiliaria,
         segurado: registro.segurado,
@@ -664,6 +696,9 @@ export function montarAnaliseRamosElementares(fonte: FonteRamosBruta, agora = ne
         apolice: registro.apolice || null,
         premioTotal: registro.premioTotal,
         comissao: registro.comissao,
+        negociador: null,
+        observacoes: null,
+        diasSemContato: diasDesdeSerial(registro.ultimoContato, agora),
       })
     ),
     ...endossos.map(
@@ -673,6 +708,7 @@ export function montarAnaliseRamosElementares(fonte: FonteRamosBruta, agora = ne
         linha: registro.linha,
         tipo: "endosso",
         status: registro.status,
+        grupoStatus: grupoStatus(registro.status),
         nomePrincipal: nomePrincipal(registro.imobiliaria, registro.segurado, registro.cotador),
         imobiliaria: registro.imobiliaria,
         segurado: registro.segurado,
@@ -681,6 +717,9 @@ export function montarAnaliseRamosElementares(fonte: FonteRamosBruta, agora = ne
         apolice: registro.apolice || null,
         premioTotal: 0,
         comissao: 0,
+        negociador: null,
+        observacoes: null,
+        diasSemContato: null,
       })
     ),
   ];

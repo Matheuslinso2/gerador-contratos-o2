@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { AnaliseRamosElementares, ItemAgrupado, RegistroNegociacao, ResumoPopulacao } from "@/lib/ramos-elementares/analise";
+import type { AnaliseRamosElementares, GrupoStatus, ItemAgrupado, RegistroNegociacao, ResumoPopulacao } from "@/lib/ramos-elementares/analise";
 import styles from "./ramos-elementares.module.css";
 import kanbanStyles from "./kanban.module.css";
 
@@ -330,12 +330,46 @@ function PainelAlertas({ analise }: { analise: AnaliseRamosElementares }) {
 
 const LIMITE_CARD_COLUNA = 12;
 
+// Estágios amplos pra visão geral do Kanban não fragmentar em 8-10 colunas
+// finas (a planilha usa muitos valores de status diferentes) -- o status
+// detalhado da planilha continua exposto em cada card.
+const ORDEM_GRUPOS: GrupoStatus[] = ["andamento", "fechado", "nao_fechou", "cancelado"];
+const ROTULOS_GRUPO: Record<GrupoStatus, string> = {
+  andamento: "Em andamento",
+  fechado: "Fechado",
+  nao_fechou: "Não fechou",
+  cancelado: "Cancelado",
+};
+
+// Limiares de "dias sem contato" -- mesmo corte de 6 dias já usado em outros
+// alertas operacionais deste painel (ex: "cotações paradas").
+function chipContato(dias: number | null): { texto: string; tone: "ok" | "atencao" | "critico" | "neutro" } {
+  if (dias === null) return { texto: "Sem registro de contato", tone: "neutro" };
+  if (dias < 0) return { texto: "Contato futuro registrado", tone: "neutro" };
+  if (dias <= 3) return { texto: `${dias}d sem contato`, tone: "ok" };
+  if (dias <= 6) return { texto: `${dias}d sem contato`, tone: "atencao" };
+  return { texto: `${dias}d sem contato`, tone: "critico" };
+}
+
+function ChipDiasContato({ dias }: { dias: number | null }) {
+  const info = chipContato(dias);
+  const classeTone =
+    info.tone === "ok"
+      ? kanbanStyles.chipOk
+      : info.tone === "atencao"
+        ? kanbanStyles.chipAtencao
+        : info.tone === "critico"
+          ? kanbanStyles.chipCritico
+          : kanbanStyles.chipNeutro;
+  return <span className={`${kanbanStyles.chip} ${classeTone}`}>{info.texto}</span>;
+}
+
 function ColunaKanban({
-  status,
+  grupo,
   itens,
   emailPorId,
 }: {
-  status: string;
+  grupo: GrupoStatus;
   itens: RegistroNegociacao[];
   emailPorId: Map<string, EmailConfirmacao[]>;
 }) {
@@ -344,7 +378,7 @@ function ColunaKanban({
   return (
     <div className={kanbanStyles.coluna}>
       <div className={kanbanStyles.colunaHead}>
-        <span className={kanbanStyles.colunaTitulo}>{status}</span>
+        <span className={kanbanStyles.colunaTitulo}>{ROTULOS_GRUPO[grupo]}</span>
         <span className={kanbanStyles.colunaContagem}>{itens.length}</span>
       </div>
       <div className={kanbanStyles.colunaLista}>
@@ -362,12 +396,22 @@ function ColunaKanban({
           );
           return (
             <div key={item.id} className={kanbanStyles.card}>
-              <span className={kanbanStyles.cardNome}>{item.nomePrincipal}</span>
+              <div className={kanbanStyles.cardTopo}>
+                <span className={kanbanStyles.cardNome}>{item.nomePrincipal}</span>
+                <span className={kanbanStyles.cardStatus}>{item.status}</span>
+              </div>
               <span className={kanbanStyles.cardMeta}>
                 {item.ramo}
                 {item.seguradora && item.seguradora !== "NÃO INFORMADA" ? ` · ${item.seguradora}` : ""}
                 {item.apolice ? ` · Apólice ${item.apolice}` : ""}
+                {item.negociador ? ` · ${item.negociador}` : ""}
               </span>
+              {grupo === "andamento" && (
+                <div className={kanbanStyles.cardBadges}>
+                  <ChipDiasContato dias={item.diasSemContato} />
+                </div>
+              )}
+              {item.observacoes && <span className={kanbanStyles.cardObservacao}>{item.observacoes}</span>}
               {(temDivergencia || temConfirmacao) && (
                 <div className={kanbanStyles.cardBadges}>
                   {divergenciaUrgente && (
@@ -397,6 +441,45 @@ function ColunaKanban({
   );
 }
 
+const LIMITE_ATENCAO = 10;
+
+function SecaoAtencao({ negociacoes }: { negociacoes: RegistroNegociacao[] }) {
+  const [expandida, setExpandida] = useState(false);
+  const parados = useMemo(
+    () =>
+      negociacoes
+        .filter((item) => item.grupoStatus === "andamento" && item.diasSemContato !== null && item.diasSemContato >= 4)
+        .sort((a, b) => (b.diasSemContato ?? 0) - (a.diasSemContato ?? 0)),
+    [negociacoes]
+  );
+  if (parados.length === 0) return null;
+  const visiveis = expandida ? parados : parados.slice(0, LIMITE_ATENCAO);
+  return (
+    <section className={styles.panel} style={{ marginBottom: 16 }}>
+      <h2>⚠ Atenção — negócios em andamento sem contato recente</h2>
+      <p>Ordenado do mais parado pro mais recente. Considera só negócios que ainda não fecharam nem cancelaram.</p>
+      <div className={styles.listaCabecalho} aria-hidden="true">
+        <span>Nome</span><span>Status</span><span>Negociador</span><span>Sem contato</span>
+      </div>
+      <div className={styles.listaDados}>
+        {visiveis.map((item) => (
+          <div className={styles.listaLinha} key={item.id}>
+            <strong>{item.nomePrincipal}</strong>
+            <span><small>Status</small>{item.status}</span>
+            <span><small>Negociador</small>{item.negociador ?? "Não informado"}</span>
+            <span><small>Sem contato</small><ChipDiasContato dias={item.diasSemContato} /></span>
+          </div>
+        ))}
+      </div>
+      {parados.length > LIMITE_ATENCAO && (
+        <button type="button" className={styles.expandir} onClick={() => setExpandida((valor) => !valor)}>
+          {expandida ? "Mostrar apenas os 10 mais parados" : `Mostrar todos (mais ${parados.length - LIMITE_ATENCAO})`}
+        </button>
+      )}
+    </section>
+  );
+}
+
 function PainelEmails({ analise, emailsConfirmacao }: { analise: AnaliseRamosElementares; emailsConfirmacao: EmailConfirmacao[] }) {
   const emailPorId = useMemo(() => {
     const mapa = new Map<string, EmailConfirmacao[]>();
@@ -411,28 +494,31 @@ function PainelEmails({ analise, emailsConfirmacao }: { analise: AnaliseRamosEle
   }, [emailsConfirmacao]);
 
   const colunas = useMemo(() => {
-    const grupos = new Map<string, RegistroNegociacao[]>();
+    const grupos = new Map<GrupoStatus, RegistroNegociacao[]>();
     for (const item of analise.negociacoes) {
-      const lista = grupos.get(item.status) ?? [];
+      const lista = grupos.get(item.grupoStatus) ?? [];
       lista.push(item);
-      grupos.set(item.status, lista);
+      grupos.set(item.grupoStatus, lista);
     }
-    return [...grupos.entries()].sort((a, b) => b[1].length - a[1].length);
+    return ORDEM_GRUPOS.map((grupo): [GrupoStatus, RegistroNegociacao[]] => [grupo, grupos.get(grupo) ?? []]);
   }, [analise.negociacoes]);
 
   const divergenciasReais = emailsConfirmacao.filter((email) => email.divergencia && email.divergencia_tipo === "status_desatualizado");
   const cancelamentosNaoRefletidos = divergenciasReais.filter((email) => email.tipo_confirmacao === "cancelamento_confirmado");
   const emailsLote = emailsConfirmacao.filter((email) => email.e_lote);
+  const paradosCriticos = analise.negociacoes.filter(
+    (item) => item.grupoStatus === "andamento" && item.diasSemContato !== null && item.diasSemContato >= 7
+  ).length;
 
   return (
     <>
       <div className={styles.kpis}>
         <Kpi label="Negociações na planilha" value={String(analise.negociacoes.length)} note="Novos + renovações + endossos do mês" tone="ok" />
         <Kpi
-          label="Confirmações por e-mail"
-          value={String(emailsConfirmacao.length)}
-          note="Recebidas em incendio@o2seguros.com.br"
-          tone="ok"
+          label="Sem contato há 7d+"
+          value={String(paradosCriticos)}
+          note="Em andamento, sem registro de contato recente"
+          tone={paradosCriticos ? "danger" : "ok"}
         />
         <Kpi
           label="Status desatualizado na planilha"
@@ -448,17 +534,18 @@ function PainelEmails({ analise, emailsConfirmacao }: { analise: AnaliseRamosEle
         />
       </div>
       <p className={styles.avisoNeutro} style={{ marginBottom: 12 }}>
-        A planilha é a fonte oficial dos negócios (agrupados por status abaixo). O e-mail só confirma/atualiza o que já está
-        aqui — cards com ⚠ ou 🔴 têm um e-mail cujo status não bate com o que está na planilha. E-mails "não encontrados" na
-        planilha (geralmente e-mails de lote, cobrindo várias apólices de uma vez) não aparecem como divergência — ficam
-        listados à parte, abaixo do quadro, pra conferência manual.
+        A planilha é a fonte oficial dos negócios, agrupados abaixo em 4 estágios (o status detalhado aparece em cada
+        card). Cards com ⚠ ou 🔴 têm um e-mail cujo status não bate com o que está na planilha; o chip de dias mostra
+        há quanto tempo não há registro de "ÚLTIMO CONTATO" na planilha (só disponível pra novos e renovações —
+        endossos não têm essa coluna). E-mails "não encontrados" (geralmente lote) ficam à parte, abaixo do quadro.
       </p>
-      {colunas.length === 0 ? (
+      <SecaoAtencao negociacoes={analise.negociacoes} />
+      {colunas.every(([, itens]) => itens.length === 0) ? (
         <div className={styles.zeroState}>Nenhuma negociação encontrada nesta competência.</div>
       ) : (
         <div className={kanbanStyles.board}>
-          {colunas.map(([status, itens]) => (
-            <ColunaKanban key={status} status={status} itens={itens} emailPorId={emailPorId} />
+          {colunas.map(([grupo, itens]) => (
+            <ColunaKanban key={grupo} grupo={grupo} itens={itens} emailPorId={emailPorId} />
           ))}
         </div>
       )}
