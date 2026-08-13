@@ -16,6 +16,9 @@ const ROTAS_PUBLICAS = [
   // Recebe eventos do Google Forms sem cookie de usuário. A rota valida um
   // token secreto próprio antes de ler o conteúdo ou criar qualquer card.
   "/api/integracoes/google-forms",
+  // Recebe e-mails da caixa incendio@ via gatilho do Google Apps Script,
+  // sem cookie de usuário. Valida um token secreto próprio (mesmo padrão).
+  "/api/integracoes/incendio-email",
   // Formulário público de Capitalização — preenchido por imobiliárias,
   // corretores e proprietários que não têm (nem precisam ter) conta na
   // Plataforma O2.
