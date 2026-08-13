@@ -13,7 +13,10 @@ type EmailConfirmacao = {
   tipo_confirmacao: "contratacao_confirmada" | "apolice_emitida" | "cancelamento_confirmado" | "outro" | "nao_identificado";
   recebido_em: string;
   divergencia: boolean;
+  divergencia_tipo: "nao_encontrado" | "status_desatualizado" | null;
   divergencia_motivo: string | null;
+  cliente_nome: string | null;
+  e_lote: boolean;
 };
 type RecorteNovos = "consolidado" | "mes" | "pendentes";
 type RecorteRenovacao = "atual" | "futura";
@@ -347,7 +350,13 @@ function ColunaKanban({
       <div className={kanbanStyles.colunaLista}>
         {visiveis.map((item) => {
           const emails = emailPorId.get(item.id) ?? [];
-          const temDivergencia = emails.some((email) => email.divergencia);
+          // "Não encontrado" nunca chega aqui (não tem aba/linha pra virar
+          // card), então toda divergência neste mapa é status desatualizado
+          // de verdade -- mas filtramos por divergencia_tipo mesmo assim
+          // por clareza/robustez.
+          const divergenciasReais = emails.filter((email) => email.divergencia && email.divergencia_tipo === "status_desatualizado");
+          const divergenciaUrgente = divergenciasReais.some((email) => email.tipo_confirmacao === "cancelamento_confirmado");
+          const temDivergencia = divergenciasReais.length > 0;
           const temConfirmacao = emails.some(
             (email) => !email.divergencia && email.tipo_confirmacao !== "nao_identificado" && email.tipo_confirmacao !== "outro"
           );
@@ -361,7 +370,14 @@ function ColunaKanban({
               </span>
               {(temDivergencia || temConfirmacao) && (
                 <div className={kanbanStyles.cardBadges}>
-                  {temDivergencia && <span className={`${kanbanStyles.badge} ${kanbanStyles.badgeAlerta}`}>⚠ e-mail diverge</span>}
+                  {divergenciaUrgente && (
+                    <span className={`${kanbanStyles.badge} ${kanbanStyles.badgeUrgente}`}>
+                      🔴 cancelado por e-mail, planilha não reflete
+                    </span>
+                  )}
+                  {temDivergencia && !divergenciaUrgente && (
+                    <span className={`${kanbanStyles.badge} ${kanbanStyles.badgeAlerta}`}>⚠ status desatualizado na planilha</span>
+                  )}
                   {temConfirmacao && !temDivergencia && (
                     <span className={`${kanbanStyles.badge} ${kanbanStyles.badgeOk}`}>✓ confirmado por e-mail</span>
                   )}
@@ -404,7 +420,9 @@ function PainelEmails({ analise, emailsConfirmacao }: { analise: AnaliseRamosEle
     return [...grupos.entries()].sort((a, b) => b[1].length - a[1].length);
   }, [analise.negociacoes]);
 
-  const totalDivergencias = emailsConfirmacao.filter((email) => email.divergencia).length;
+  const divergenciasReais = emailsConfirmacao.filter((email) => email.divergencia && email.divergencia_tipo === "status_desatualizado");
+  const cancelamentosNaoRefletidos = divergenciasReais.filter((email) => email.tipo_confirmacao === "cancelamento_confirmado");
+  const emailsLote = emailsConfirmacao.filter((email) => email.e_lote);
 
   return (
     <>
@@ -417,15 +435,23 @@ function PainelEmails({ analise, emailsConfirmacao }: { analise: AnaliseRamosEle
           tone="ok"
         />
         <Kpi
-          label="Divergências em aberto"
-          value={String(totalDivergencias)}
-          note="E-mail não bate com o status da planilha"
-          tone={totalDivergencias ? "warning" : "ok"}
+          label="Status desatualizado na planilha"
+          value={String(divergenciasReais.length)}
+          note="E-mail confirma algo que a planilha ainda não reflete"
+          tone={divergenciasReais.length ? "warning" : "ok"}
+        />
+        <Kpi
+          label="Cancelamentos não refletidos"
+          value={String(cancelamentosNaoRefletidos.length)}
+          note="Cancelado por e-mail, planilha ainda mostra ativo"
+          tone={cancelamentosNaoRefletidos.length ? "danger" : "ok"}
         />
       </div>
       <p className={styles.avisoNeutro} style={{ marginBottom: 12 }}>
         A planilha é a fonte oficial dos negócios (agrupados por status abaixo). O e-mail só confirma/atualiza o que já está
-        aqui — cards com ⚠ têm um e-mail cujo status não bate com o que está na planilha.
+        aqui — cards com ⚠ ou 🔴 têm um e-mail cujo status não bate com o que está na planilha. E-mails "não encontrados" na
+        planilha (geralmente e-mails de lote, cobrindo várias apólices de uma vez) não aparecem como divergência — ficam
+        listados à parte, abaixo do quadro, pra conferência manual.
       </p>
       {colunas.length === 0 ? (
         <div className={styles.zeroState}>Nenhuma negociação encontrada nesta competência.</div>
@@ -435,6 +461,25 @@ function PainelEmails({ analise, emailsConfirmacao }: { analise: AnaliseRamosEle
             <ColunaKanban key={status} status={status} itens={itens} emailPorId={emailPorId} />
           ))}
         </div>
+      )}
+      {emailsLote.length > 0 && (
+        <section className={styles.panel} style={{ marginTop: 16 }}>
+          <h2>E-mails de lote — conferir manualmente</h2>
+          <p>
+            Cobrem várias apólices/clientes de uma vez (renovação em bloco de uma imobiliária inteira). Não são casados
+            automaticamente linha a linha — confira o e-mail original pra ver quais itens já fecharam.
+          </p>
+          <div className={styles.listaDados}>
+            {emailsLote.map((email, indice) => (
+              <div className={styles.listaLinha} key={`${email.recebido_em}-${indice}`}>
+                <strong>{email.cliente_nome ?? "Sem descrição"}</strong>
+                <span><small>Tipo</small>{email.tipo_confirmacao.replace(/_/g, " ")}</span>
+                <span><small>Recebido</small>{new Date(email.recebido_em).toLocaleDateString("pt-BR")}</span>
+                <span><small>Na planilha</small>{email.aba ? `${email.aba} L${email.linha}` : "Não localizado"}</span>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
     </>
   );

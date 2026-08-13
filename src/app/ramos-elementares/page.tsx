@@ -48,9 +48,10 @@ export default async function RamosElementaresPage({
 
   const { data: emailsConfirmacaoRaw } = await supabase
     .from("incendio_emails_confirmacao")
-    .select("aba:planilha_aba, linha:planilha_linha, tipo_confirmacao, recebido_em, divergencia, divergencia_motivo")
-    .not("planilha_aba", "is", null)
-    .not("planilha_linha", "is", null)
+    .select(
+      "aba:planilha_aba, linha:planilha_linha, tipo_confirmacao, recebido_em, divergencia, divergencia_tipo, divergencia_motivo, cliente_nome, e_lote"
+    )
+    .in("tipo_confirmacao", ["contratacao_confirmada", "apolice_emitida", "cancelamento_confirmado"])
     .order("recebido_em", { ascending: false });
   const emailsConfirmacao = emailsConfirmacaoRaw ?? [];
 

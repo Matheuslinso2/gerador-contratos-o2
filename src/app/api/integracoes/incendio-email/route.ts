@@ -25,7 +25,12 @@ function statusCompativel(tipo: string, statusPlanilha: string | null): boolean 
   const aceitos = STATUS_COMPATIVEIS[tipo];
   if (!aceitos) return true; // "outro" não tem status esperado -- não gera divergência de status
   if (!statusPlanilha) return false;
-  return aceitos.some((s) => statusPlanilha.toUpperCase().includes(s));
+  const normalizado = statusPlanilha.toUpperCase();
+  // "NÃO EFETIVADO" contém a palavra "EFETIVADO" como substring -- sem essa
+  // exclusão, o sistema tratava os dois como se fossem a mesma coisa (bug
+  // real encontrado na base: apólice emitida batendo como "compatível" com
+  // status "NÃO EFETIVADO", quando é exatamente o oposto).
+  return aceitos.some((s) => normalizado.includes(s) && !normalizado.includes(`NÃO ${s}`));
 }
 
 export async function POST(request: NextRequest) {
@@ -81,6 +86,8 @@ export async function POST(request: NextRequest) {
         seguradora: extraido.seguradora,
         numeroApolice: extraido.numero_apolice,
         dataReferencia: dataEmail,
+        assuntoEmail: assunto,
+        apenasSinaisFortes: extraido.e_lote,
       });
     } catch (error) {
       console.warn("Falha ao cruzar e-mail de incêndio com a planilha:", error);
@@ -88,10 +95,20 @@ export async function POST(request: NextRequest) {
   }
 
   const relevante = extraido.tipo_confirmacao !== "nao_identificado" && extraido.tipo_confirmacao !== "outro";
-  const divergencia = relevante && (!correspondencia.encontrado || !statusCompativel(extraido.tipo_confirmacao, correspondencia.status));
-  const divergenciaMotivo = !divergencia
+  // E-mail de lote sem correspondência não é uma divergência real -- não dá
+  // pra casar um lote inteiro com uma única linha, então "não encontrado"
+  // nesse caso é esperado, não um alerta. Só vira divergência se um sinal
+  // forte (apólice/assunto) realmente achou uma linha e o status bate ou não.
+  const tentativaValida = relevante && (!extraido.e_lote || correspondencia.encontrado);
+  const divergencia = tentativaValida && (!correspondencia.encontrado || !statusCompativel(extraido.tipo_confirmacao, correspondencia.status));
+  const divergenciaTipo: "nao_encontrado" | "status_desatualizado" | null = !divergencia
     ? null
     : !correspondencia.encontrado
+      ? "nao_encontrado"
+      : "status_desatualizado";
+  const divergenciaMotivo = !divergencia
+    ? null
+    : divergenciaTipo === "nao_encontrado"
       ? "Nenhuma linha correspondente encontrada na planilha do mês (por segurado/seguradora ou apólice)."
       : `Status na planilha ("${correspondencia.status}") não bate com o que o e-mail confirma.`;
 
@@ -113,7 +130,9 @@ export async function POST(request: NextRequest) {
     planilha_linha: correspondencia.linha,
     planilha_status: correspondencia.status,
     divergencia,
+    divergencia_tipo: divergenciaTipo,
     divergencia_motivo: divergenciaMotivo,
+    e_lote: extraido.e_lote,
   });
 
   if (erroInsert) return NextResponse.json({ ok: false, erro: erroInsert.message }, { status: 500 });

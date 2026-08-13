@@ -95,6 +95,11 @@
   color: var(--re-red);
 }
 
+.badgeUrgente {
+  background: var(--re-red);
+  color: #fff;
+}
+
 .mostrarMais {
   align-self: center;
   margin-top: 4px;

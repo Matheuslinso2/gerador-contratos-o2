@@ -118,6 +118,17 @@ export async function encontrarCorrespondenciaPlanilha(params: {
   seguradora: string | null;
   numeroApolice: string | null;
   dataReferencia: Date;
+  // Assunto do e-mail recebido -- a coluna "ASSUNTO DO EMAIL" (NOVOS
+  // PENDENTES/NOVOS MÊS) é preenchida pelo negociador com o assunto do
+  // e-mail daquela negociação, e como o assunto costuma se repetir
+  // (Re:/RES: mantém o texto original) essa é uma correspondência bem mais
+  // confiável do que casar só pelo nome do segurado.
+  assuntoEmail?: string | null;
+  // true para e-mails de LOTE (várias apólices numa mensagem só) -- nesses
+  // casos cliente_nome não é um nome de verdade, então pulamos a
+  // correspondência por nome e só aceitamos sinais fortes e inequívocos
+  // (número de apólice exato ou assunto do e-mail batendo).
+  apenasSinaisFortes?: boolean;
 }): Promise<ResultadoCorrespondencia> {
   const spreadsheetId = await resolverPlanilhaDoMes(params.dataReferencia);
   if (!spreadsheetId) return { encontrado: false, aba: null, linha: null, status: null };
@@ -128,16 +139,32 @@ export async function encontrarCorrespondenciaPlanilha(params: {
   const clienteBusca = normalizar(params.clienteNome);
   const seguradoraBusca = params.seguradora ? normalizar(params.seguradora) : null;
   const apoliceBusca = params.numeroApolice ? apenasDigitos(params.numeroApolice) : null;
+  const assuntoBusca = params.assuntoEmail?.trim() || null;
 
-  // NOVOS PENDENTES / NOVOS MÊS: col 0 status, col 14 segurado, col 26 seguradora.
+  // NOVOS PENDENTES / NOVOS MÊS: col 0 status, col 14 segurado, col 26
+  // seguradora, col 38 "ASSUNTO DO EMAIL".
+  const abasNovos: { nomeAba: string; linhas: (string | number | boolean | null)[][] }[] = [];
   for (const nomeAba of ["NOVOS PENDENTES", "NOVOS MÊS"]) {
-    const linhas = await lerAba(api, spreadsheetId, nomeAba, "AR");
-    for (let i = 0; i < linhas.length; i++) {
-      const segurado = String(linhas[i][14] ?? "");
-      if (!segurado || !textoCorresponde(segurado, clienteBusca)) continue;
-      const seguradoraLinha = String(linhas[i][26] ?? "");
-      if (seguradoraBusca && seguradoraLinha && !textoCorresponde(seguradoraLinha, seguradoraBusca)) continue;
-      return { encontrado: true, aba: nomeAba, linha: i + 2, status: String(linhas[i][0] ?? "") || null };
+    abasNovos.push({ nomeAba, linhas: await lerAba(api, spreadsheetId, nomeAba, "AR") });
+  }
+  if (assuntoBusca) {
+    for (const { nomeAba, linhas } of abasNovos) {
+      for (let i = 0; i < linhas.length; i++) {
+        const assuntoLinha = String(linhas[i][38] ?? "").trim();
+        if (!assuntoLinha || !textoCorresponde(assuntoLinha, assuntoBusca)) continue;
+        return { encontrado: true, aba: nomeAba, linha: i + 2, status: String(linhas[i][0] ?? "") || null };
+      }
+    }
+  }
+  if (!params.apenasSinaisFortes) {
+    for (const { nomeAba, linhas } of abasNovos) {
+      for (let i = 0; i < linhas.length; i++) {
+        const segurado = String(linhas[i][14] ?? "");
+        if (!segurado || !textoCorresponde(segurado, clienteBusca)) continue;
+        const seguradoraLinha = String(linhas[i][26] ?? "");
+        if (seguradoraBusca && seguradoraLinha && !textoCorresponde(seguradoraLinha, seguradoraBusca)) continue;
+        return { encontrado: true, aba: nomeAba, linha: i + 2, status: String(linhas[i][0] ?? "") || null };
+      }
     }
   }
 
@@ -151,6 +178,7 @@ export async function encontrarCorrespondenciaPlanilha(params: {
       if (apoliceBusca && apoliceLinha && apoliceLinha === apoliceBusca) {
         return { encontrado: true, aba: nomeAba, linha: i + 2, status: String(linhas[i][0] ?? "") || null };
       }
+      if (params.apenasSinaisFortes) continue;
       const segurado = String(linhas[i][5] ?? "");
       if (!segurado || !textoCorresponde(segurado, clienteBusca)) continue;
       const seguradoraLinha = String(linhas[i][8] ?? "");
@@ -166,6 +194,7 @@ export async function encontrarCorrespondenciaPlanilha(params: {
     if (apoliceBusca && apoliceLinha && apoliceLinha === apoliceBusca) {
       return { encontrado: true, aba: "ENDOSSOS", linha: i + 2, status: String(linhasEndosso[i][0] ?? "") || null };
     }
+    if (params.apenasSinaisFortes) continue;
     const segurado = String(linhasEndosso[i][6] ?? "");
     if (!segurado || !textoCorresponde(segurado, clienteBusca)) continue;
     const seguradoraLinha = String(linhasEndosso[i][9] ?? "");

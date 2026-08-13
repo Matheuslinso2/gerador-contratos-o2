@@ -9,6 +9,7 @@ export type DadosEmailIncendioExtraidos = {
   ramo: string | null;
   numero_apolice: string | null;
   valor: number | null;
+  e_lote: boolean;
 };
 
 const SYSTEM_PROMPT = `Você analisa e-mails recebidos na caixa incendio@o2seguros.com.br da O2 Seguros (corretora), pra identificar e extrair confirmações de status de negociações de RAMOS ELEMENTARES, EXCLUSIVAMENTE os produtos: Incêndio Individual Residencial, Incêndio Individual Empresarial, Incêndio Imobiliário, Equipamentos Portáteis e Seguro Condominial.
@@ -31,6 +32,7 @@ Para os outros tipos, extraia (só o que estiver realmente presente no texto -- 
 - ramo: tipo de seguro (ex: "Incêndio Residencial", "Incêndio Empresarial", "Condomínio", "Moto", "Auto") se identificável.
 - numero_apolice: número da apólice, se mencionado.
 - valor: valor do prêmio/parcela mencionado, como número, se houver.
+- e_lote: true quando o e-mail trata de VÁRIAS apólices/clientes de uma vez (ex: renovação em lote de uma imobiliária inteira, com uma planilha anexa listando vários itens, tipo "15 itens, 12 contratados"). Nesses casos ainda descreva o lote em cliente_nome (ex: "Renovação Canale Imóveis — 15 itens"), mas marque e_lote como true -- um lote inteiro não pode ser cruzado com uma única linha da planilha, então não adianta tentar. Se o e-mail trata de um único cliente/apólice, e_lote é false.
 
 Responda SEMPRE chamando a ferramenta "extrair_confirmacao_incendio". Nunca responda em texto livre.`;
 
@@ -50,8 +52,12 @@ const FERRAMENTA_EXTRACAO: Anthropic.Tool = {
       ramo: { type: ["string", "null"], description: "Tipo de seguro/ramo." },
       numero_apolice: { type: ["string", "null"], description: "Número da apólice, se mencionado." },
       valor: { type: ["number", "null"], description: "Valor do prêmio/parcela mencionado." },
+      e_lote: {
+        type: "boolean",
+        description: "true quando o e-mail trata de várias apólices/clientes de uma vez (lote), false quando é um único cliente/apólice.",
+      },
     },
-    required: ["tipo_confirmacao", "seguradora", "cliente_nome", "ramo", "numero_apolice", "valor"],
+    required: ["tipo_confirmacao", "seguradora", "cliente_nome", "ramo", "numero_apolice", "valor", "e_lote"],
   },
 };
 
