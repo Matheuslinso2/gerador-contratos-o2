@@ -1,0 +1,115 @@
+.board {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.coluna {
+  flex: 0 0 280px;
+  display: flex;
+  flex-direction: column;
+  background: var(--re-surface-2);
+  border: 1px solid var(--re-line);
+  border-radius: 10px;
+  max-height: 74vh;
+}
+
+.colunaHead {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--re-line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.colunaTitulo {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--re-text);
+}
+
+.colunaContagem {
+  font-size: 0.75rem;
+  color: var(--re-muted);
+  background: var(--re-surface);
+  border: 1px solid var(--re-line);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
+.colunaLista {
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card {
+  background: var(--re-surface);
+  border: 1px solid var(--re-line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 0.82rem;
+}
+
+.cardNome {
+  font-weight: 600;
+  color: var(--re-text);
+  display: block;
+  margin-bottom: 2px;
+}
+
+.cardMeta {
+  color: var(--re-muted);
+  font-size: 0.75rem;
+  display: block;
+}
+
+.cardBadges {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.badge {
+  font-size: 0.68rem;
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badgeOk {
+  background: color-mix(in srgb, var(--re-green) 18%, transparent);
+  color: var(--re-green);
+}
+
+.badgeAlerta {
+  background: color-mix(in srgb, var(--re-red) 18%, transparent);
+  color: var(--re-red);
+}
+
+.mostrarMais {
+  align-self: center;
+  margin-top: 4px;
+  background: none;
+  border: 1px dashed var(--re-line);
+  color: var(--re-muted);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.vazio {
+  padding: 20px 12px;
+  color: var(--re-muted);
+  font-size: 0.8rem;
+  text-align: center;
+}

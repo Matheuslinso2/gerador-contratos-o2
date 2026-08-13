@@ -60,7 +60,6 @@ export default function AppHeader({
                   { href: "/seguro-fianca", label: "Seguro Fiança" },
                   { href: "/painel-capitalizacao", label: "Capitalização" },
                   { href: "/ramos-elementares", label: "Ramos Elementares" },
-                  { href: "/ramos-elementares/emails", label: "Verificação por E-mail" },
                   { href: "/social-media", label: "Social Media" },
                 ]}
               />

@@ -11,9 +11,11 @@ export type DadosEmailIncendioExtraidos = {
   valor: number | null;
 };
 
-const SYSTEM_PROMPT = `Você analisa e-mails recebidos na caixa incendio@o2seguros.com.br da O2 Seguros (corretora), pra identificar e extrair confirmações de status de negociações de Incêndio/Ramos Elementares (contratação de seguro incêndio, apólice emitida pela seguradora, cancelamento de apólice).
+const SYSTEM_PROMPT = `Você analisa e-mails recebidos na caixa incendio@o2seguros.com.br da O2 Seguros (corretora), pra identificar e extrair confirmações de status de negociações de RAMOS ELEMENTARES, EXCLUSIVAMENTE os produtos: Incêndio Individual Residencial, Incêndio Individual Empresarial, Incêndio Imobiliário, Equipamentos Portáteis e Seguro Condominial.
 
-Essa caixa recebe MUITOS tipos de e-mail diferentes (cobrança, renovação, sinistro, spam, etc.) -- sua primeira tarefa é classificar corretamente tipo_confirmacao:
+IMPORTANTE: essa mesma caixa de e-mail também recebe mensagens sobre OUTROS produtos que a O2 vende (Seguro Fiança Locatícia, Título de Capitalização, Auto, Moto, Vida, etc.) -- esses NÃO são Ramos Elementares e devem ser classificados como "nao_identificado", mesmo que o e-mail seja claramente uma confirmação de contratação/apólice/cancelamento de um desses outros produtos. Só classifique como contratacao_confirmada/apolice_emitida/cancelamento_confirmado/outro quando o produto do e-mail for claramente um dos 5 ramos elementares listados acima.
+
+Essa caixa recebe MUITOS tipos de e-mail diferentes (cobrança, renovação, sinistro, spam, produtos de outras áreas, etc.) -- sua primeira tarefa é classificar corretamente tipo_confirmacao:
 
 - "contratacao_confirmada": um e-mail INTERNO da O2 (geralmente de alguém @o2seguros.com.br) confirmando que a contratação de um seguro foi realizada. Costuma ter frases como "CONTRATAÇÃO CONFIRMADA" ou "CONFIRMAÇÃO DE CONTRATAÇÃO" no assunto/corpo, e cita seguro, cliente, seguradora.
 - "apolice_emitida": confirma que a apólice foi EMITIDA/gerada (seja um e-mail interno da O2 dizendo "APÓLICE EMITIDA", seja um e-mail AUTOMÁTICO da própria seguradora tipo "Apólice Digital", "Cartão e Documentos Digitais", parabenizando o cliente pela contratação).

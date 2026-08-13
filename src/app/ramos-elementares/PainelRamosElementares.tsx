@@ -2,10 +2,19 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { AnaliseRamosElementares, ItemAgrupado, ResumoPopulacao } from "@/lib/ramos-elementares/analise";
+import type { AnaliseRamosElementares, ItemAgrupado, RegistroNegociacao, ResumoPopulacao } from "@/lib/ramos-elementares/analise";
 import styles from "./ramos-elementares.module.css";
+import kanbanStyles from "./kanban.module.css";
 
-type AbaPainel = "visao" | "novos" | "renovacoes" | "financeiro" | "endossos" | "alertas";
+type AbaPainel = "visao" | "novos" | "renovacoes" | "financeiro" | "endossos" | "alertas" | "emails";
+type EmailConfirmacao = {
+  aba: string | null;
+  linha: number | null;
+  tipo_confirmacao: "contratacao_confirmada" | "apolice_emitida" | "cancelamento_confirmado" | "outro" | "nao_identificado";
+  recebido_em: string;
+  divergencia: boolean;
+  divergencia_motivo: string | null;
+};
 type RecorteNovos = "consolidado" | "mes" | "pendentes";
 type RecorteRenovacao = "atual" | "futura";
 
@@ -316,16 +325,133 @@ function PainelAlertas({ analise }: { analise: AnaliseRamosElementares }) {
   );
 }
 
+const LIMITE_CARD_COLUNA = 12;
+
+function ColunaKanban({
+  status,
+  itens,
+  emailPorId,
+}: {
+  status: string;
+  itens: RegistroNegociacao[];
+  emailPorId: Map<string, EmailConfirmacao[]>;
+}) {
+  const [expandida, setExpandida] = useState(false);
+  const visiveis = expandida ? itens : itens.slice(0, LIMITE_CARD_COLUNA);
+  return (
+    <div className={kanbanStyles.coluna}>
+      <div className={kanbanStyles.colunaHead}>
+        <span className={kanbanStyles.colunaTitulo}>{status}</span>
+        <span className={kanbanStyles.colunaContagem}>{itens.length}</span>
+      </div>
+      <div className={kanbanStyles.colunaLista}>
+        {visiveis.map((item) => {
+          const emails = emailPorId.get(item.id) ?? [];
+          const temDivergencia = emails.some((email) => email.divergencia);
+          const temConfirmacao = emails.some(
+            (email) => !email.divergencia && email.tipo_confirmacao !== "nao_identificado" && email.tipo_confirmacao !== "outro"
+          );
+          return (
+            <div key={item.id} className={kanbanStyles.card}>
+              <span className={kanbanStyles.cardNome}>{item.nomePrincipal}</span>
+              <span className={kanbanStyles.cardMeta}>
+                {item.ramo}
+                {item.seguradora && item.seguradora !== "NÃO INFORMADA" ? ` · ${item.seguradora}` : ""}
+                {item.apolice ? ` · Apólice ${item.apolice}` : ""}
+              </span>
+              {(temDivergencia || temConfirmacao) && (
+                <div className={kanbanStyles.cardBadges}>
+                  {temDivergencia && <span className={`${kanbanStyles.badge} ${kanbanStyles.badgeAlerta}`}>⚠ e-mail diverge</span>}
+                  {temConfirmacao && !temDivergencia && (
+                    <span className={`${kanbanStyles.badge} ${kanbanStyles.badgeOk}`}>✓ confirmado por e-mail</span>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {itens.length === 0 && <div className={kanbanStyles.vazio}>Nenhum registro</div>}
+      </div>
+      {itens.length > LIMITE_CARD_COLUNA && (
+        <button type="button" className={kanbanStyles.mostrarMais} onClick={() => setExpandida((valor) => !valor)}>
+          {expandida ? "Mostrar menos" : `+${itens.length - LIMITE_CARD_COLUNA}`}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function PainelEmails({ analise, emailsConfirmacao }: { analise: AnaliseRamosElementares; emailsConfirmacao: EmailConfirmacao[] }) {
+  const emailPorId = useMemo(() => {
+    const mapa = new Map<string, EmailConfirmacao[]>();
+    for (const email of emailsConfirmacao) {
+      if (!email.aba || !email.linha) continue;
+      const id = `${email.aba}|${email.linha}`;
+      const lista = mapa.get(id) ?? [];
+      lista.push(email);
+      mapa.set(id, lista);
+    }
+    return mapa;
+  }, [emailsConfirmacao]);
+
+  const colunas = useMemo(() => {
+    const grupos = new Map<string, RegistroNegociacao[]>();
+    for (const item of analise.negociacoes) {
+      const lista = grupos.get(item.status) ?? [];
+      lista.push(item);
+      grupos.set(item.status, lista);
+    }
+    return [...grupos.entries()].sort((a, b) => b[1].length - a[1].length);
+  }, [analise.negociacoes]);
+
+  const totalDivergencias = emailsConfirmacao.filter((email) => email.divergencia).length;
+
+  return (
+    <>
+      <div className={styles.kpis}>
+        <Kpi label="Negociações na planilha" value={String(analise.negociacoes.length)} note="Novos + renovações + endossos do mês" tone="ok" />
+        <Kpi
+          label="Confirmações por e-mail"
+          value={String(emailsConfirmacao.length)}
+          note="Recebidas em incendio@o2seguros.com.br"
+          tone="ok"
+        />
+        <Kpi
+          label="Divergências em aberto"
+          value={String(totalDivergencias)}
+          note="E-mail não bate com o status da planilha"
+          tone={totalDivergencias ? "warning" : "ok"}
+        />
+      </div>
+      <p className={styles.avisoNeutro} style={{ marginBottom: 12 }}>
+        A planilha é a fonte oficial dos negócios (agrupados por status abaixo). O e-mail só confirma/atualiza o que já está
+        aqui — cards com ⚠ têm um e-mail cujo status não bate com o que está na planilha.
+      </p>
+      {colunas.length === 0 ? (
+        <div className={styles.zeroState}>Nenhuma negociação encontrada nesta competência.</div>
+      ) : (
+        <div className={kanbanStyles.board}>
+          {colunas.map(([status, itens]) => (
+            <ColunaKanban key={status} status={status} itens={itens} emailPorId={emailPorId} />
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function PainelRamosElementares({
   analise,
   competencia,
   origem,
   erroFonte,
+  emailsConfirmacao,
 }: {
   analise: AnaliseRamosElementares;
   competencia: string;
   origem: "planilha" | "bitrix" | "snapshot" | "indisponivel";
   erroFonte: string | null;
+  emailsConfirmacao: EmailConfirmacao[];
 }) {
   const router = useRouter();
   const [aba, setAba] = useState<AbaPainel>("visao");
@@ -349,6 +475,7 @@ export default function PainelRamosElementares({
     financeiro: <PainelFinanceiro analise={analise} />,
     endossos: <PainelEndossos analise={analise} />,
     alertas: <PainelAlertas analise={analise} />,
+    emails: <PainelEmails analise={analise} emailsConfirmacao={emailsConfirmacao} />,
   }[aba];
 
   function atualizarAgora() {
@@ -406,6 +533,7 @@ export default function PainelRamosElementares({
           ["financeiro", "Financeiro estimado"],
           ["endossos", "Endossos"],
           ["alertas", "Alertas e qualidade"],
+          ["emails", "Verificação por E-mail"],
         ] as [AbaPainel, string][]).map(([valor, rotulo]) => (
           <button key={valor} type="button" aria-current={aba === valor ? "page" : undefined} onClick={() => setAba(valor)}>{rotulo}</button>
         ))}

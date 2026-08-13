@@ -46,6 +46,14 @@ export default async function RamosElementaresPage({
 
   if (!isAdmin(user?.email) && !isColaboradorO2(user?.email)) redirect("/");
 
+  const { data: emailsConfirmacaoRaw } = await supabase
+    .from("incendio_emails_confirmacao")
+    .select("aba:planilha_aba, linha:planilha_linha, tipo_confirmacao, recebido_em, divergencia, divergencia_motivo")
+    .not("planilha_aba", "is", null)
+    .not("planilha_linha", "is", null)
+    .order("recebido_em", { ascending: false });
+  const emailsConfirmacao = emailsConfirmacaoRaw ?? [];
+
   let analise: AnaliseRamosElementares;
   const usarBitrix = competencia >= COMPETENCIA_INICIO_BITRIX;
   let origem: "planilha" | "bitrix" | "snapshot" | "indisponivel" = usarBitrix ? "bitrix" : "planilha";
@@ -102,6 +110,7 @@ export default async function RamosElementaresPage({
         competencia={competencia}
         origem={origem}
         erroFonte={erroFonte}
+        emailsConfirmacao={emailsConfirmacao}
       />
     </>
   );

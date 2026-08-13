@@ -82,6 +82,7 @@ export type AnaliseRamosElementares = {
   };
   alertasOperacionais: AlertaRamos[];
   qualidade: AlertaRamos[];
+  negociacoes: RegistroNegociacao[];
 };
 
 type RegistroBase = {
@@ -91,6 +92,7 @@ type RegistroBase = {
   ramo: string;
   seguradora: string;
   imobiliaria: string;
+  segurado: string;
   cotador: string;
   premioTotal: number;
   comissao: number;
@@ -126,6 +128,7 @@ type RegistroEndosso = {
   status: string;
   dataRecebida: number | null;
   imobiliaria: string;
+  segurado: string;
   ramo: string;
   seguradora: string;
   cotador: string;
@@ -133,6 +136,33 @@ type RegistroEndosso = {
   tempoGasto: number | null;
   restituicao: number;
 };
+
+// Registro achatado (novo/renovação/endosso, num só formato) pra alimentar
+// o Kanban de "Verificação por E-mail" -- nomePrincipal segue a regra do
+// usuário: imobiliária/administradora quando houver, senão o segurado, e
+// só em último caso o cotador/responsável identificado na planilha.
+export type RegistroNegociacao = {
+  id: string; // `${aba}|${linha}`, mesma chave usada pra casar com incendio_emails_confirmacao
+  aba: string;
+  linha: number;
+  tipo: "novo" | "renovacao" | "endosso";
+  status: string;
+  nomePrincipal: string;
+  imobiliaria: string;
+  segurado: string;
+  seguradora: string;
+  ramo: string;
+  apolice: string | null;
+  premioTotal: number;
+  comissao: number;
+};
+
+function nomePrincipal(imobiliaria: string, segurado: string, cotador: string): string {
+  if (imobiliaria && imobiliaria !== "NÃO INFORMADA") return imobiliaria;
+  if (segurado) return segurado;
+  if (cotador && cotador !== "NÃO INFORMADO") return `Responsável: ${cotador}`;
+  return "Não identificado";
+}
 
 const STATUS_AVANCADOS = new Set([
   "EM NEGOCIAÇÃO",
@@ -346,6 +376,7 @@ function mapearNovos(linhas: CelulaGoogle[][], aba: string, competencia?: string
         tempoGasto: numeroOpcional(linha[11]),
         diasCotacao: numeroOpcional(linha[12]),
         imobiliaria: imobiliariaCanonica(texto(linha[13])),
+        segurado: texto(linha[14]),
         ramo: ramoCanonico(texto(linha[25])),
         seguradora: seguradoraPorOrigem(texto(linha[26]), origem),
         orcamento: texto(linha[27]),
@@ -375,6 +406,7 @@ function mapearRenovacoes(linhas: CelulaGoogle[][], aba: string): RegistroRenova
         apolice: texto(linha[2]),
         fimVigencia: numeroOpcional(linha[3]),
         imobiliaria: imobiliariaCanonica(texto(linha[4])),
+        segurado: texto(linha[5]),
         ramo: ramoCanonico(texto(linha[7])),
         seguradora: seguradoraPorOrigem(texto(linha[8]), operacao),
         premioTotal: numero(linha[15]),
@@ -401,6 +433,7 @@ function mapearEndossos(linhas: CelulaGoogle[][], aba: string): RegistroEndosso[
         status: statusCanonico(statusRaw),
         dataRecebida: numeroOpcional(linha[3]),
         imobiliaria: imobiliariaCanonica(texto(linha[5])),
+        segurado: texto(linha[6]),
         ramo: ramoCanonico(texto(linha[7])),
         apolice: texto(linha[8]),
         seguradora: seguradoraCanonica(texto(linha[9])),
@@ -598,6 +631,60 @@ export function montarAnaliseRamosElementares(fonte: FonteRamosBruta, agora = ne
     .map((registro) => registro.tempoGasto)
     .filter((valor): valor is number => typeof valor === "number" && valor >= 0);
 
+  const negociacoes: RegistroNegociacao[] = [
+    ...novosConsolidados.map(
+      (registro): RegistroNegociacao => ({
+        id: `${registro.aba}|${registro.linha}`,
+        aba: registro.aba,
+        linha: registro.linha,
+        tipo: "novo",
+        status: registro.status,
+        nomePrincipal: nomePrincipal(registro.imobiliaria, registro.segurado, registro.cotador),
+        imobiliaria: registro.imobiliaria,
+        segurado: registro.segurado,
+        seguradora: registro.seguradora,
+        ramo: registro.ramo,
+        apolice: null,
+        premioTotal: registro.premioTotal,
+        comissao: registro.comissao,
+      })
+    ),
+    ...[...rnAtual, ...rnFutura].map(
+      (registro): RegistroNegociacao => ({
+        id: `${registro.aba}|${registro.linha}`,
+        aba: registro.aba,
+        linha: registro.linha,
+        tipo: "renovacao",
+        status: registro.status,
+        nomePrincipal: nomePrincipal(registro.imobiliaria, registro.segurado, registro.cotador),
+        imobiliaria: registro.imobiliaria,
+        segurado: registro.segurado,
+        seguradora: registro.seguradora,
+        ramo: registro.ramo,
+        apolice: registro.apolice || null,
+        premioTotal: registro.premioTotal,
+        comissao: registro.comissao,
+      })
+    ),
+    ...endossos.map(
+      (registro): RegistroNegociacao => ({
+        id: `${registro.aba}|${registro.linha}`,
+        aba: registro.aba,
+        linha: registro.linha,
+        tipo: "endosso",
+        status: registro.status,
+        nomePrincipal: nomePrincipal(registro.imobiliaria, registro.segurado, registro.cotador),
+        imobiliaria: registro.imobiliaria,
+        segurado: registro.segurado,
+        seguradora: registro.seguradora,
+        ramo: registro.ramo,
+        apolice: registro.apolice || null,
+        premioTotal: 0,
+        comissao: 0,
+      })
+    ),
+  ];
+
   return {
     competencia: fonte.competencia,
     atualizadoEm: agora.toISOString(),
@@ -645,6 +732,7 @@ export function montarAnaliseRamosElementares(fonte: FonteRamosBruta, agora = ne
     },
     alertasOperacionais,
     qualidade,
+    negociacoes,
   };
 }
 

@@ -28,9 +28,13 @@ const LABEL_PROCESSADO = "IA-Processado-Incendio";
 // Só busca e-mails que pareçam ser confirmação de status -- evita mandar
 // TODO e-mail da caixa (cobrança, renovação futura, spam) pra IA sem
 // necessidade. O filtro fino de verdade (é ou não é uma confirmação
-// relevante) é feito pela IA do lado da Plataforma O2.
+// relevante, e se é do produto certo) é feito pela IA do lado da
+// Plataforma O2. IMPORTANTE: exige incendio@ nos destinatários (to/cc) --
+// essa caixa de e-mail também recebe Seguro Fiança e outros produtos que
+// não são Ramos Elementares, então sem essa exigência o robô ia processar
+// confirmação de coisa que não é da conta dele.
 const QUERY =
-  '("CONFIRMAÇÃO DE CONTRATAÇÃO" OR "CONTRATAÇÃO CONFIRMADA" OR "APÓLICE EMITIDA" OR "CANCELAMENTO CONFIRMADO" OR "Apólice Digital" OR "Apolice Digital") in:inbox -label:' +
+  '(to:incendio@o2seguros.com.br OR cc:incendio@o2seguros.com.br) ("CONFIRMAÇÃO DE CONTRATAÇÃO" OR "CONTRATAÇÃO CONFIRMADA" OR "APÓLICE EMITIDA" OR "CANCELAMENTO CONFIRMADO" OR "Apólice Digital" OR "Apolice Digital") in:inbox -label:' +
   LABEL_PROCESSADO +
   " newer_than:60d";
 
