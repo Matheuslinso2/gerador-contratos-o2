@@ -39,6 +39,8 @@ function processarEmailsIncendio() {
   const threads = GmailApp.search(QUERY, 0, 50);
 
   threads.forEach(function (thread) {
+    let todasEnviadasComSucesso = true;
+
     thread.getMessages().forEach(function (message) {
       try {
         const payload = {
@@ -59,15 +61,18 @@ function processarEmailsIncendio() {
         });
         if (resposta.getResponseCode() >= 300) {
           Logger.log("Falha ao processar mensagem " + message.getId() + ": " + resposta.getContentText());
+          todasEnviadasComSucesso = false;
         }
       } catch (erro) {
         Logger.log("Erro ao enviar mensagem " + message.getId() + ": " + erro);
+        todasEnviadasComSucesso = false;
       }
     });
-    // Marca a thread inteira como processada só depois de tentar mandar
-    // todas as mensagens -- evita reprocessar a thread inteira de novo no
-    // próximo disparo (a Plataforma O2 também ignora mensagem repetida,
-    // esse label é só uma otimização pra não reler a mesma thread sempre).
-    thread.addLabel(label);
+
+    // Só marca a thread como processada se TODAS as mensagens foram
+    // aceitas (2xx) -- se alguma falhou (ex: token errado, API fora do
+    // ar), a thread continua sem a etiqueta e entra de novo na busca do
+    // próximo disparo, em vez de ficar perdida pra sempre.
+    if (todasEnviadasComSucesso) thread.addLabel(label);
   });
 }
