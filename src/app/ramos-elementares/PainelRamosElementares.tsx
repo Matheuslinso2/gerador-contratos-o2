@@ -390,39 +390,57 @@ function PainelEmails({ analise, emailsConfirmacao }: { analise: AnaliseRamosEle
       {pendencias.length === 0 ? (
         <div className={styles.zeroState}>Nenhuma pendência encontrada — 0</div>
       ) : (
-        <>
-          <div className={styles.listaCabecalho} aria-hidden="true">
-            <span>Negócio</span><span>Status na planilha</span><span>E-mail confirma</span><span>Recebido</span>
-          </div>
-          <div className={styles.listaDados}>
-            {pendencias.map(({ negociacao, email }) => (
-              <div className={styles.listaLinha} key={negociacao.id}>
-                <strong>
-                  {negociacao.nomePrincipal}
-                  <br />
-                  <small style={{ fontWeight: 400 }}>
-                    {negociacao.ramo}
-                    {negociacao.negociador ? ` · ${negociacao.negociador}` : ""}
-                    {negociacao.diasSemContato !== null && negociacao.diasSemContato >= 0
-                      ? ` · ${negociacao.diasSemContato}d sem contato`
-                      : ""}
-                  </small>
-                </strong>
-                <span><small>Status na planilha</small>{negociacao.status}</span>
-                <span>
-                  <small>E-mail confirma</small>
-                  {ROTULOS_TIPO_EMAIL[email.tipo_confirmacao] ?? email.tipo_confirmacao}
-                  {email.tipo_confirmacao === "cancelamento_confirmado" && (
-                    <span className={`${styles.badge} ${styles.badgeUrgente}`} style={{ marginLeft: 6 }}>
-                      urgente
-                    </span>
-                  )}
-                </span>
-                <span><small>Recebido</small>{new Date(email.recebido_em).toLocaleDateString("pt-BR")}</span>
-              </div>
-            ))}
-          </div>
-        </>
+        <div className={styles.tabelaWrap}>
+          <table className={styles.tabela}>
+            <thead>
+              <tr>
+                <th>Imobiliária</th>
+                <th>Cliente na apólice</th>
+                <th>Seguradora</th>
+                <th>Produto</th>
+                <th>Status na planilha</th>
+                <th>E-mail confirma</th>
+                <th>Lote</th>
+                <th>Recebido</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pendencias.map(({ negociacao, email }) => (
+                <tr key={negociacao.id}>
+                  <td>
+                    {negociacao.imobiliaria && negociacao.imobiliaria !== "NÃO INFORMADA" ? negociacao.imobiliaria : "—"}
+                    {(negociacao.negociador || (negociacao.diasSemContato !== null && negociacao.diasSemContato >= 0)) && (
+                      <>
+                        <br />
+                        <small className={styles.tabelaSub}>
+                          {negociacao.negociador ?? ""}
+                          {negociacao.negociador && negociacao.diasSemContato !== null && negociacao.diasSemContato >= 0 ? " · " : ""}
+                          {negociacao.diasSemContato !== null && negociacao.diasSemContato >= 0
+                            ? `${negociacao.diasSemContato}d sem contato`
+                            : ""}
+                        </small>
+                      </>
+                    )}
+                  </td>
+                  <td>{negociacao.segurado || "—"}</td>
+                  <td>{negociacao.seguradora}</td>
+                  <td>{negociacao.ramo}</td>
+                  <td>{negociacao.status}</td>
+                  <td>
+                    {ROTULOS_TIPO_EMAIL[email.tipo_confirmacao] ?? email.tipo_confirmacao}
+                    {email.tipo_confirmacao === "cancelamento_confirmado" && (
+                      <span className={`${styles.badge} ${styles.badgeUrgente}`} style={{ marginLeft: 6 }}>
+                        urgente
+                      </span>
+                    )}
+                  </td>
+                  <td>{email.e_lote ? email.cliente_nome || "Lote (sem descrição)" : "—"}</td>
+                  <td>{new Date(email.recebido_em).toLocaleDateString("pt-BR")}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </>
   );
