@@ -99,5 +99,46 @@ export async function extrairDadosEmailIncendio(
     throw new Error("A IA não retornou uma classificação estruturada do e-mail.");
   }
 
-  return chamada.input as DadosEmailIncendioExtraidos;
+  return normalizarExtracao(chamada.input as Record<string, unknown>);
+}
+
+const TIPOS_CONFIRMACAO_VALIDOS = new Set<DadosEmailIncendioExtraidos["tipo_confirmacao"]>([
+  "contratacao_confirmada",
+  "apolice_emitida",
+  "cancelamento_confirmado",
+  "autorizacao_cliente",
+  "outro",
+  "nao_identificado",
+]);
+
+// A IA, forçada a sempre preencher um campo obrigatório mesmo sem ter a
+// informação, às vezes devolve um texto-placeholder (ex: "<UNKNOWN>") em vez
+// de null -- isso nunca deveria ir direto pro banco sem tratar: em campo de
+// texto vira lixo silencioso, e em "valor" (coluna numérica) quebra a
+// gravação com erro do Postgres. Normaliza qualquer coisa que não seja um
+// valor de verdade pra null antes de devolver.
+function normalizarCampoTexto(valor: unknown): string | null {
+  if (typeof valor !== "string") return null;
+  const limpo = valor.trim();
+  if (!limpo || /^<?unknown>?$/i.test(limpo) || /^(n\/?a|none|null)$/i.test(limpo)) return null;
+  return limpo;
+}
+
+function normalizarValorNumerico(valor: unknown): number | null {
+  return typeof valor === "number" && Number.isFinite(valor) ? valor : null;
+}
+
+function normalizarExtracao(bruto: Record<string, unknown>): DadosEmailIncendioExtraidos {
+  const tipoConfirmacao = TIPOS_CONFIRMACAO_VALIDOS.has(bruto.tipo_confirmacao as DadosEmailIncendioExtraidos["tipo_confirmacao"])
+    ? (bruto.tipo_confirmacao as DadosEmailIncendioExtraidos["tipo_confirmacao"])
+    : "nao_identificado";
+  return {
+    tipo_confirmacao: tipoConfirmacao,
+    seguradora: normalizarCampoTexto(bruto.seguradora),
+    cliente_nome: normalizarCampoTexto(bruto.cliente_nome),
+    ramo: normalizarCampoTexto(bruto.ramo),
+    numero_apolice: normalizarCampoTexto(bruto.numero_apolice),
+    valor: normalizarValorNumerico(bruto.valor),
+    e_lote: bruto.e_lote === true,
+  };
 }
