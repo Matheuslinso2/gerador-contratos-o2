@@ -142,29 +142,15 @@ type RegistroEndosso = {
 };
 
 // Registro achatado (novo/renovação/endosso, num só formato) pra alimentar
-// o Kanban de "Verificação por E-mail" -- nomePrincipal segue a regra do
+// a tela de "Verificação por E-mail" -- nomePrincipal segue a regra do
 // usuário: imobiliária/administradora quando houver, senão o segurado, e
 // só em último caso o cotador/responsável identificado na planilha.
-// Agrupamento de status em 4 estágios amplos, pra visão geral do Kanban não
-// fragmentar em 8-10 colunas finas (a planilha usa muitos valores de status
-// diferentes) -- o status detalhado da planilha continua exposto no card,
-// só a coluna do quadro que passa a ser o estágio.
-export type GrupoStatus = "andamento" | "fechado" | "nao_fechou" | "cancelado";
-
-function grupoStatus(status: string): GrupoStatus {
-  if (status === "EFETIVADO") return "fechado";
-  if (status === "CANCELADO") return "cancelado";
-  if (status === "NÃO EFETIVADO" || status === "SEM PARCERIA") return "nao_fechou";
-  return "andamento";
-}
-
 export type RegistroNegociacao = {
   id: string; // `${aba}|${linha}`, mesma chave usada pra casar com incendio_emails_confirmacao
   aba: string;
   linha: number;
   tipo: "novo" | "renovacao" | "endosso";
   status: string;
-  grupoStatus: GrupoStatus;
   nomePrincipal: string;
   imobiliaria: string;
   segurado: string;
@@ -666,7 +652,6 @@ export function montarAnaliseRamosElementares(fonte: FonteRamosBruta, agora = ne
         linha: registro.linha,
         tipo: "novo",
         status: registro.status,
-        grupoStatus: grupoStatus(registro.status),
         nomePrincipal: nomePrincipal(registro.imobiliaria, registro.segurado, registro.cotador),
         imobiliaria: registro.imobiliaria,
         segurado: registro.segurado,
@@ -687,7 +672,6 @@ export function montarAnaliseRamosElementares(fonte: FonteRamosBruta, agora = ne
         linha: registro.linha,
         tipo: "renovacao",
         status: registro.status,
-        grupoStatus: grupoStatus(registro.status),
         nomePrincipal: nomePrincipal(registro.imobiliaria, registro.segurado, registro.cotador),
         imobiliaria: registro.imobiliaria,
         segurado: registro.segurado,
@@ -708,7 +692,6 @@ export function montarAnaliseRamosElementares(fonte: FonteRamosBruta, agora = ne
         linha: registro.linha,
         tipo: "endosso",
         status: registro.status,
-        grupoStatus: grupoStatus(registro.status),
         nomePrincipal: nomePrincipal(registro.imobiliaria, registro.segurado, registro.cotador),
         imobiliaria: registro.imobiliaria,
         segurado: registro.segurado,
