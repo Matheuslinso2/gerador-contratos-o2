@@ -217,6 +217,18 @@ export default async function Home() {
       ),
     },
     {
+      href: "/painel-capitalizacao",
+      titulo: "Painel Capitalização",
+      descricao: "Funil, comissão e alertas dos títulos de capitalização",
+      icone: (
+        <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
+          <ellipse cx="12" cy="7" rx="7" ry="3" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M5 7v4c0 1.66 3.13 3 7 3s7-1.34 7-3V7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          <path d="M5 11v4c0 1.66 3.13 3 7 3s7-1.34 7-3v-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+      ),
+    },
+    {
       href: "/social-media",
       titulo: "Social Media",
       descricao: "Notícias de mercado imobiliário e seguros, coletadas automaticamente",
