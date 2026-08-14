@@ -164,6 +164,10 @@ export type RegistroNegociacao = {
   // Dias desde o registro de ÚLTIMO CONTATO na planilha -- null quando a
   // aba não tem essa coluna (ENDOSSOS) ou o campo está vazio na linha.
   diasSemContato: number | null;
+  // Melhor data conhecida do último toque nesse negócio (ÚLTIMO CONTATO, ou
+  // na falta dele a data de recebimento/envio) -- usada como âncora pra
+  // buscar por nome no Gmail quando não há e-mail correspondente ainda.
+  dataReferencia: string | null;
 };
 
 function nomePrincipal(imobiliaria: string, segurado: string, cotador: string): string {
@@ -182,7 +186,7 @@ const STATUS_AVANCADOS = new Set([
   "CANCELADO",
 ]);
 
-const STATUS_TERMINAIS = new Set(["EFETIVADO", "NÃO EFETIVADO", "CANCELADO", "SEM PARCERIA"]);
+export const STATUS_TERMINAIS = new Set(["EFETIVADO", "NÃO EFETIVADO", "CANCELADO", "SEM PARCERIA"]);
 const COTADORES_CONHECIDOS = new Set([
   "AMANDA",
   "ANA INGRID",
@@ -337,6 +341,12 @@ function diasAteSerial(serial: number | null, agora: Date): number | null {
   if (serial === null) return null;
   const data = new Date(Date.UTC(1899, 11, 30) + Math.floor(serial) * 86_400_000);
   return Math.ceil((data.getTime() - agora.getTime()) / 86_400_000);
+}
+
+function isoDeSerial(serial: number | null): string | null {
+  if (serial === null) return null;
+  const data = new Date(Date.UTC(1899, 11, 30) + Math.floor(serial) * 86_400_000);
+  return data.toISOString().slice(0, 10);
 }
 
 function linhaNovaTemDados(linha: CelulaGoogle[]): boolean {
@@ -663,6 +673,7 @@ export function montarAnaliseRamosElementares(fonte: FonteRamosBruta, agora = ne
         negociador: registro.negociador || null,
         observacoes: registro.observacoes || null,
         diasSemContato: diasDesdeSerial(registro.ultimoContato, agora),
+        dataReferencia: isoDeSerial(registro.ultimoContato ?? registro.dataRecebida),
       })
     ),
     ...[...rnAtual, ...rnFutura].map(
@@ -683,6 +694,7 @@ export function montarAnaliseRamosElementares(fonte: FonteRamosBruta, agora = ne
         negociador: null,
         observacoes: null,
         diasSemContato: diasDesdeSerial(registro.ultimoContato, agora),
+        dataReferencia: isoDeSerial(registro.ultimoContato ?? registro.dataEnvio),
       })
     ),
     ...endossos.map(
@@ -703,6 +715,7 @@ export function montarAnaliseRamosElementares(fonte: FonteRamosBruta, agora = ne
         negociador: null,
         observacoes: null,
         diasSemContato: null,
+        dataReferencia: null,
       })
     ),
   ];
