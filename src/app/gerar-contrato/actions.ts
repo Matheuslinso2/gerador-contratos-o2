@@ -78,7 +78,7 @@ export async function gerarContrato(formData: FormData) {
   }
   const imobiliaria_id = minhaImobiliaria.id;
 
-  const tipo_garantia_id = String(formData.get("tipo_garantia_id") ?? "");
+  const tipo_garantia_id = String(formData.get("tipo_garantia_id") ?? "") || null;
   const produto_id = String(formData.get("produto_id") ?? "") || null;
   const seguro_incendio_produto_id = String(formData.get("seguro_incendio_produto_id") ?? "") || null;
   const locador = qualificarPessoas(formData, "locador");
@@ -101,7 +101,6 @@ export async function gerarContrato(formData: FormData) {
   const valor_caucao = valor_caucao_raw ? Number(valor_caucao_raw) : null;
 
   if (
-    !tipo_garantia_id ||
     !locador ||
     !locatario ||
     !endereco_imovel ||
@@ -141,7 +140,9 @@ export async function gerarContrato(formData: FormData) {
   const [{ data: imobiliaria }, { data: tipoGarantia }, { data: produto }, { data: produtoIncendio }] =
     await Promise.all([
       supabase.from("imobiliarias").select("*").eq("id", imobiliaria_id).single(),
-      supabase.from("tipos_garantia").select("nome").eq("id", tipo_garantia_id).single(),
+      tipo_garantia_id
+        ? supabase.from("tipos_garantia").select("nome").eq("id", tipo_garantia_id).single()
+        : Promise.resolve({ data: null }),
       produto_id
         ? supabase
             .from("produtos")
@@ -158,12 +159,15 @@ export async function gerarContrato(formData: FormData) {
         : Promise.resolve({ data: null }),
     ]);
 
-  if (!imobiliaria || !tipoGarantia) {
-    redirect(`/gerar-contrato?erro=${encodeURIComponent("Imobiliária ou tipo de garantia não encontrado.")}`);
+  if (!imobiliaria) {
+    redirect(`/gerar-contrato?erro=${encodeURIComponent("Imobiliária não encontrada.")}`);
+  }
+  if (tipo_garantia_id && !tipoGarantia) {
+    redirect(`/gerar-contrato?erro=${encodeURIComponent("Tipo de garantia não encontrado.")}`);
   }
 
-  const ehFiador = tipoGarantia.nome === "Fiador";
-  const ehCaucao = tipoGarantia.nome === "Caução";
+  const ehFiador = tipoGarantia?.nome === "Fiador";
+  const ehCaucao = tipoGarantia?.nome === "Caução";
 
   let produtoNome: string | null = null;
   let seguradoraNome: string | null = null;
@@ -174,11 +178,11 @@ export async function gerarContrato(formData: FormData) {
     if (!clausulaGarantiaBase) {
       redirect(
         `/gerar-contrato?erro=${encodeURIComponent(
-          `Cadastre a cláusula de ${tipoGarantia.nome} no cadastro da imobiliária antes de gerar este contrato.`
+          `Cadastre a cláusula de ${tipoGarantia!.nome} no cadastro da imobiliária antes de gerar este contrato.`
         )}`
       );
     }
-  } else {
+  } else if (tipoGarantia) {
     if (!produto) {
       redirect(`/gerar-contrato?erro=${encodeURIComponent("Produto não encontrado.")}`);
     }
@@ -191,7 +195,7 @@ export async function gerarContrato(formData: FormData) {
   let valorTitulo: number | null = null;
   let numeroPropostaTitulo: string | null = null;
 
-  if (tipoGarantia.nome === NOME_TIPO_TITULO) {
+  if (tipoGarantia?.nome === NOME_TIPO_TITULO) {
     const arquivoTitulo = formData.get("titulo_capitalizacao_arquivo") as File | null;
     if (!arquivoTitulo || arquivoTitulo.size === 0) {
       redirect(
@@ -281,30 +285,34 @@ export async function gerarContrato(formData: FormData) {
     prazoMeses: prazo_meses,
   });
 
-  const rotuloGarantia = produtoNome
-    ? `${tipoGarantia.nome} (${seguradoraNome ? `${seguradoraNome} — ` : ""}${produtoNome})`
-    : tipoGarantia.nome;
+  const rotuloGarantia = tipoGarantia
+    ? produtoNome
+      ? `${tipoGarantia.nome} (${seguradoraNome ? `${seguradoraNome} — ` : ""}${produtoNome})`
+      : tipoGarantia.nome
+    : null;
 
   // Insere a cláusula de garantia na mesma posição relativa em que ela
   // estava no contrato original da imobiliária (gravada quando o texto-base
   // foi limpo no cadastro), renumerando o restante coerentemente — em vez de
   // só colar no final. Se a inserção automática falhar, cai de volta pro
-  // formato antigo (cabeçalho genérico ao final).
-  let textoBaseComGarantia = [
-    textoBaseContrato,
-    `CLÁUSULA DE GARANTIA — ${rotuloGarantia}\n\n${clausulaGarantiaBase}`,
-  ].join("\n\n");
-  try {
-    const resultado = await inserirClausulaGarantiaNaPosicaoCorreta(
-      textoBaseContrato,
-      imobiliaria.garantia_posicao_apos_clausula ?? null,
-      rotuloGarantia,
-      clausulaGarantiaBase
-    );
-    textoBaseComGarantia = resultado.texto_final;
-  } catch {
-    // Mantém o texto com o cabeçalho genérico se a inserção automática
-    // falhar — não vale travar a geração do contrato por causa disso.
+  // formato antigo (cabeçalho genérico ao final). Sem garantia selecionada
+  // (fluxo de teste), o texto-base fica sem nenhuma cláusula de garantia.
+  let textoBaseComGarantia = rotuloGarantia
+    ? [textoBaseContrato, `CLÁUSULA DE GARANTIA — ${rotuloGarantia}\n\n${clausulaGarantiaBase}`].join("\n\n")
+    : textoBaseContrato;
+  if (rotuloGarantia) {
+    try {
+      const resultado = await inserirClausulaGarantiaNaPosicaoCorreta(
+        textoBaseContrato,
+        imobiliaria.garantia_posicao_apos_clausula ?? null,
+        rotuloGarantia,
+        clausulaGarantiaBase
+      );
+      textoBaseComGarantia = resultado.texto_final;
+    } catch {
+      // Mantém o texto com o cabeçalho genérico se a inserção automática
+      // falhar — não vale travar a geração do contrato por causa disso.
+    }
   }
 
   const clausulaIncendio = produtoIncendio

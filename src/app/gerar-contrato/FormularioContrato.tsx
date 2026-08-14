@@ -226,10 +226,9 @@ export default function FormularioContrato({
               setTipoGarantiaId(e.target.value);
               setProdutoId("");
             }}
-            required
             className="rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
           >
-            <option value="">Tipo de garantia...</option>
+            <option value="">Sem garantia (só para teste — não usar em contrato real)</option>
             {tiposGarantiaDaLocacao.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.nome}
@@ -237,7 +236,7 @@ export default function FormularioContrato({
             ))}
           </select>
 
-          {tipoGarantiaSelecionado !== NOME_TIPO_FIADOR && tipoGarantiaSelecionado !== NOME_TIPO_CAUCAO && (
+          {tipoGarantiaId && tipoGarantiaSelecionado !== NOME_TIPO_FIADOR && tipoGarantiaSelecionado !== NOME_TIPO_CAUCAO && (
             <select
               name="produto_id"
               value={produtoId}
@@ -258,6 +257,13 @@ export default function FormularioContrato({
             </select>
           )}
         </div>
+
+        {!tipoGarantiaId && (
+          <p className="text-xs text-amber-600">
+            Sem garantia selecionada — o contrato vai ser gerado sem cláusula de garantia. Use
+            só para teste; o Auditor de Contrato vai apontar essa ausência.
+          </p>
+        )}
 
         {tipoGarantiaSelecionado === NOME_TIPO_FIADOR && (
           <div>
