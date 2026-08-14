@@ -151,6 +151,12 @@
   color: #fff;
 }
 
+.badgeNeutro {
+  background: var(--re-surface-2);
+  color: var(--re-muted);
+  border: 1px solid var(--re-line);
+}
+
 .tabelaWrap {
   overflow-x: auto;
 }

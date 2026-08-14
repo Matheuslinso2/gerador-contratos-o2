@@ -3,7 +3,13 @@ import Anthropic from "@anthropic-ai/sdk";
 // Schema achatado -- mesmo cuidado já documentado em auditorContrato.ts e
 // faturasIA.ts nesse projeto (schema aninhado confunde o modelo).
 export type DadosEmailIncendioExtraidos = {
-  tipo_confirmacao: "contratacao_confirmada" | "apolice_emitida" | "cancelamento_confirmado" | "outro" | "nao_identificado";
+  tipo_confirmacao:
+    | "contratacao_confirmada"
+    | "apolice_emitida"
+    | "cancelamento_confirmado"
+    | "autorizacao_cliente"
+    | "outro"
+    | "nao_identificado";
   seguradora: string | null;
   cliente_nome: string | null;
   ramo: string | null;
@@ -16,12 +22,13 @@ const SYSTEM_PROMPT = `Você analisa e-mails recebidos na caixa incendio@o2segur
 
 IMPORTANTE: essa mesma caixa de e-mail também recebe mensagens sobre OUTROS produtos que a O2 vende (Seguro Fiança Locatícia, Título de Capitalização, Auto, Moto, Vida, etc.) -- esses NÃO são Ramos Elementares e devem ser classificados como "nao_identificado", mesmo que o e-mail seja claramente uma confirmação de contratação/apólice/cancelamento de um desses outros produtos. Só classifique como contratacao_confirmada/apolice_emitida/cancelamento_confirmado/outro quando o produto do e-mail for claramente um dos 5 ramos elementares listados acima.
 
-Essa caixa recebe MUITOS tipos de e-mail diferentes (cobrança, renovação, sinistro, spam, produtos de outras áreas, etc.) -- sua primeira tarefa é classificar corretamente tipo_confirmacao:
+Essa caixa recebe MUITOS tipos de e-mail diferentes (cobrança, renovação, sinistro, spam, produtos de outras áreas, etc.) -- sua primeira tarefa é classificar corretamente tipo_confirmacao. Preste atenção em QUEM manda cada tipo: os 3 primeiros tipos abaixo são sempre um e-mail da PRÓPRIA O2 (ou automático da seguradora) dizendo que algo foi feito; "autorizacao_cliente" é o INVERSO -- é a imobiliária/cliente dando o aval pra O2 seguir, ANTES da O2 confirmar:
 
 - "contratacao_confirmada": um e-mail INTERNO da O2 (geralmente de alguém @o2seguros.com.br) confirmando que a contratação de um seguro foi realizada. Costuma ter frases como "CONTRATAÇÃO CONFIRMADA" ou "CONFIRMAÇÃO DE CONTRATAÇÃO" no assunto/corpo, e cita seguro, cliente, seguradora.
 - "apolice_emitida": confirma que a apólice foi EMITIDA/gerada (seja um e-mail interno da O2 dizendo "APÓLICE EMITIDA", seja um e-mail AUTOMÁTICO da própria seguradora tipo "Apólice Digital", "Cartão e Documentos Digitais", parabenizando o cliente pela contratação).
 - "cancelamento_confirmado": confirma que uma apólice/seguro foi CANCELADO. Costuma ter "CANCELAMENTO CONFIRMADO" no corpo.
-- "outro": é claramente sobre uma negociação/apólice de incêndio ou ramos elementares, mas não se encaixa nos 3 tipos acima (ex: pedido de cancelamento ainda não confirmado, dúvida, solicitação de documentos de sinistro).
+- "autorizacao_cliente": um e-mail EXTERNO (da imobiliária/administradora/cliente, NÃO de @o2seguros.com.br) autorizando a O2 a seguir com a contratação, renovação ou cancelamento -- é o aval do cliente, mas ainda NÃO é a confirmação de que a O2 já fez. Exemplos reais: "Pode seguir com a contratação", "Podem renovar", "De acordo, pode prosseguir", "Todos os seguros serão renovados, exceto o de Fulano de Tal". NÃO classifique como isso uma simples dúvida ou pedido inicial de cotação -- é especificamente um "sim, pode ir em frente" depois de já terem recebido uma proposta/cotação.
+- "outro": é claramente sobre uma negociação/apólice de incêndio ou ramos elementares, mas não se encaixa nos tipos acima (ex: pedido de cancelamento ainda não confirmado, dúvida, solicitação de documentos de sinistro, e-mail de acompanhamento tipo "recebemos sua solicitação, entraremos em contato").
 - "nao_identificado": não é sobre confirmação de status de negociação/contratação (ex: cobrança/ficha de compensação, lembrete de renovação futura, spam, assunto totalmente não relacionado). Use esse valor pra qualquer e-mail que não seja claramente uma dessas confirmações -- é preferível classificar como "nao_identificado" a forçar um encaixe errado.
 
 Se tipo_confirmacao for "nao_identificado", deixe os demais campos como null.
@@ -44,7 +51,7 @@ const FERRAMENTA_EXTRACAO: Anthropic.Tool = {
     properties: {
       tipo_confirmacao: {
         type: "string",
-        enum: ["contratacao_confirmada", "apolice_emitida", "cancelamento_confirmado", "outro", "nao_identificado"],
+        enum: ["contratacao_confirmada", "apolice_emitida", "cancelamento_confirmado", "autorizacao_cliente", "outro", "nao_identificado"],
         description: "Classificação do e-mail.",
       },
       seguradora: { type: ["string", "null"], description: "Nome da seguradora." },

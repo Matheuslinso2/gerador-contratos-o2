@@ -9,13 +9,20 @@ type AbaPainel = "visao" | "novos" | "renovacoes" | "financeiro" | "endossos" | 
 type EmailConfirmacao = {
   aba: string | null;
   linha: number | null;
-  tipo_confirmacao: "contratacao_confirmada" | "apolice_emitida" | "cancelamento_confirmado" | "outro" | "nao_identificado";
+  tipo_confirmacao:
+    | "contratacao_confirmada"
+    | "apolice_emitida"
+    | "cancelamento_confirmado"
+    | "autorizacao_cliente"
+    | "outro"
+    | "nao_identificado";
   recebido_em: string;
   divergencia: boolean;
   divergencia_tipo: "nao_encontrado" | "status_desatualizado" | null;
   divergencia_motivo: string | null;
   cliente_nome: string | null;
   e_lote: boolean;
+  gmail_thread_id: string | null;
 };
 type RecorteNovos = "consolidado" | "mes" | "pendentes";
 type RecorteRenovacao = "atual" | "futura";
@@ -333,16 +340,49 @@ const ROTULOS_TIPO_EMAIL: Record<string, string> = {
   cancelamento_confirmado: "Cancelamento confirmado",
 };
 
+// A partir de quantos dias sem a O2 confirmar depois que o cliente já
+// autorizou é que vira um aviso -- os exemplos reais mostram a O2
+// respondendo no mesmo dia ou no dia seguinte, então 2 dias já é sinal de
+// atraso, não só normal demora operacional.
+const LIMIAR_DIAS_AUTORIZACAO_PENDENTE = 2;
+
 // Só o que precisa de ação: um e-mail confirmou algo (apólice emitida,
 // contratação efetivada, cancelamento) que o status atual do negócio na
-// planilha ainda não reflete. Exclui endossos por pedido explícito -- aqui
-// é só pra negócios (novo/renovação).
+// planilha ainda não reflete, OU o cliente já autorizou e a O2 ainda não
+// fechou o loop. Exclui endossos por pedido explícito -- aqui é só pra
+// negócios (novo/renovação).
 function PainelEmails({ analise, emailsConfirmacao }: { analise: AnaliseRamosElementares; emailsConfirmacao: EmailConfirmacao[] }) {
   const negociacaoPorId = useMemo(() => {
     const mapa = new Map<string, RegistroNegociacao>();
     for (const item of analise.negociacoes) mapa.set(item.id, item);
     return mapa;
   }, [analise.negociacoes]);
+
+  const emailsPorNegociacao = useMemo(() => {
+    const mapa = new Map<string, EmailConfirmacao[]>();
+    for (const email of emailsConfirmacao) {
+      if (!email.aba || !email.linha) continue;
+      const id = `${email.aba}|${email.linha}`;
+      const lista = mapa.get(id) ?? [];
+      lista.push(email);
+      mapa.set(id, lista);
+    }
+    return mapa;
+  }, [emailsConfirmacao]);
+
+  // Cancelamento cujo mesmo e-mail/thread também tem uma contratação ou
+  // apólice emitida (achado real nos exemplos: pedem cancelar uma apólice
+  // com endereço errado e reemitir a certa, no mesmo atendimento) -- isso é
+  // uma correção administrativa, não um negócio perdido de verdade, então
+  // não deve entrar como alerta "urgente".
+  function ehReemissao(email: EmailConfirmacao): boolean {
+    if (email.tipo_confirmacao !== "cancelamento_confirmado" || !email.gmail_thread_id) return false;
+    return emailsConfirmacao.some(
+      (outro) =>
+        outro.gmail_thread_id === email.gmail_thread_id &&
+        (outro.tipo_confirmacao === "contratacao_confirmada" || outro.tipo_confirmacao === "apolice_emitida")
+    );
+  }
 
   const pendencias = useMemo(() => {
     const porNegociacao = new Map<string, { negociacao: RegistroNegociacao; email: EmailConfirmacao }>();
@@ -356,15 +396,48 @@ function PainelEmails({ analise, emailsConfirmacao }: { analise: AnaliseRamosEle
         porNegociacao.set(negociacao.id, { negociacao, email });
       }
     }
-    return [...porNegociacao.values()].sort((a, b) => {
-      const urgenteA = a.email.tipo_confirmacao === "cancelamento_confirmado" ? 0 : 1;
-      const urgenteB = b.email.tipo_confirmacao === "cancelamento_confirmado" ? 0 : 1;
-      if (urgenteA !== urgenteB) return urgenteA - urgenteB;
-      return new Date(b.email.recebido_em).getTime() - new Date(a.email.recebido_em).getTime();
-    });
+    return [...porNegociacao.values()]
+      .map((item) => ({ ...item, reemissao: ehReemissao(item.email) }))
+      .sort((a, b) => {
+        const urgenteA = a.email.tipo_confirmacao === "cancelamento_confirmado" && !a.reemissao ? 0 : 1;
+        const urgenteB = b.email.tipo_confirmacao === "cancelamento_confirmado" && !b.reemissao ? 0 : 1;
+        if (urgenteA !== urgenteB) return urgenteA - urgenteB;
+        return new Date(b.email.recebido_em).getTime() - new Date(a.email.recebido_em).getTime();
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [emailsConfirmacao, negociacaoPorId]);
 
-  const cancelamentosNaoRefletidos = pendencias.filter((item) => item.email.tipo_confirmacao === "cancelamento_confirmado");
+  const cancelamentosNaoRefletidos = pendencias.filter(
+    (item) => item.email.tipo_confirmacao === "cancelamento_confirmado" && !item.reemissao
+  );
+
+  // Cliente já deu o aval ("pode seguir com a contratação") mas nenhum
+  // e-mail de confirmação da O2 (contratação/apólice/cancelamento) chegou
+  // depois disso pra mesma linha -- o loop ficou aberto.
+  const autorizacoesPendentes = useMemo(() => {
+    const resultado: { negociacao: RegistroNegociacao; autorizacao: EmailConfirmacao; dias: number }[] = [];
+    for (const [id, emails] of emailsPorNegociacao) {
+      const negociacao = negociacaoPorId.get(id);
+      if (!negociacao || negociacao.tipo === "endosso") continue;
+      const autorizacoes = emails
+        .filter((email) => email.tipo_confirmacao === "autorizacao_cliente")
+        .sort((a, b) => new Date(b.recebido_em).getTime() - new Date(a.recebido_em).getTime());
+      if (autorizacoes.length === 0) continue;
+      const ultimaAutorizacao = autorizacoes[0];
+      const jaConfirmouDepois = emails.some(
+        (email) =>
+          (email.tipo_confirmacao === "contratacao_confirmada" ||
+            email.tipo_confirmacao === "apolice_emitida" ||
+            email.tipo_confirmacao === "cancelamento_confirmado") &&
+          new Date(email.recebido_em) > new Date(ultimaAutorizacao.recebido_em)
+      );
+      if (jaConfirmouDepois) continue;
+      const dias = Math.floor((Date.now() - new Date(ultimaAutorizacao.recebido_em).getTime()) / 86_400_000);
+      if (dias < LIMIAR_DIAS_AUTORIZACAO_PENDENTE) continue;
+      resultado.push({ negociacao, autorizacao: ultimaAutorizacao, dias });
+    }
+    return resultado.sort((a, b) => b.dias - a.dias);
+  }, [emailsPorNegociacao, negociacaoPorId]);
 
   return (
     <>
@@ -381,11 +454,55 @@ function PainelEmails({ analise, emailsConfirmacao }: { analise: AnaliseRamosEle
           note="Cancelado por e-mail, planilha ainda mostra ativo"
           tone={cancelamentosNaoRefletidos.length ? "danger" : "ok"}
         />
+        <Kpi
+          label="Cliente autorizou, sem confirmação"
+          value={String(autorizacoesPendentes.length)}
+          note={`Aval do cliente há ${LIMIAR_DIAS_AUTORIZACAO_PENDENTE}d+ sem a O2 fechar o loop`}
+          tone={autorizacoesPendentes.length ? "danger" : "ok"}
+        />
       </div>
+
+      {autorizacoesPendentes.length > 0 && (
+        <section className={styles.panel} style={{ marginBottom: 16 }}>
+          <h2>⏳ Cliente autorizou — aguardando confirmação da O2</h2>
+          <p>
+            A imobiliária/cliente já deu o aval (ex: "pode seguir com a contratação") e nenhum e-mail de contratação,
+            apólice emitida ou cancelamento chegou depois disso pra esse negócio.
+          </p>
+          <div className={styles.tabelaWrap}>
+            <table className={styles.tabela}>
+              <thead>
+                <tr>
+                  <th>Imobiliária</th>
+                  <th>Cliente na apólice</th>
+                  <th>Status na planilha</th>
+                  <th>Autorizado em</th>
+                  <th>Dias sem confirmação</th>
+                </tr>
+              </thead>
+              <tbody>
+                {autorizacoesPendentes.map(({ negociacao, autorizacao, dias }) => (
+                  <tr key={negociacao.id}>
+                    <td>{negociacao.imobiliaria && negociacao.imobiliaria !== "NÃO INFORMADA" ? negociacao.imobiliaria : "—"}</td>
+                    <td>{negociacao.segurado || "—"}</td>
+                    <td>{negociacao.status}</td>
+                    <td>{new Date(autorizacao.recebido_em).toLocaleDateString("pt-BR")}</td>
+                    <td>
+                      <span className={`${styles.badge} ${styles.badgeUrgente}`}>{dias}d</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
       <p className={styles.avisoNeutro} style={{ marginBottom: 12 }}>
-        Só aparece aqui negócio (novo ou renovação — endossos ficam de fora) onde um e-mail recebido em
+        Abaixo, só negócio (novo ou renovação — endossos ficam de fora) onde um e-mail recebido em
         incendio@o2seguros.com.br confirmou apólice emitida, contratação efetivada ou cancelamento, e o status na
-        planilha ainda não foi atualizado pra refletir isso.
+        planilha ainda não foi atualizado pra refletir isso. Cancelamento que é reemissão (mesmo atendimento cancelou
+        uma apólice errada e emitiu a correta) aparece marcado como "reemissão", não como urgente.
       </p>
       {pendencias.length === 0 ? (
         <div className={styles.zeroState}>Nenhuma pendência encontrada — 0</div>
@@ -405,7 +522,7 @@ function PainelEmails({ analise, emailsConfirmacao }: { analise: AnaliseRamosEle
               </tr>
             </thead>
             <tbody>
-              {pendencias.map(({ negociacao, email }) => (
+              {pendencias.map(({ negociacao, email, reemissao }) => (
                 <tr key={negociacao.id}>
                   <td>
                     {negociacao.imobiliaria && negociacao.imobiliaria !== "NÃO INFORMADA" ? negociacao.imobiliaria : "—"}
@@ -429,8 +546,11 @@ function PainelEmails({ analise, emailsConfirmacao }: { analise: AnaliseRamosEle
                   <td>
                     {ROTULOS_TIPO_EMAIL[email.tipo_confirmacao] ?? email.tipo_confirmacao}
                     {email.tipo_confirmacao === "cancelamento_confirmado" && (
-                      <span className={`${styles.badge} ${styles.badgeUrgente}`} style={{ marginLeft: 6 }}>
-                        urgente
+                      <span
+                        className={`${styles.badge} ${reemissao ? styles.badgeNeutro : styles.badgeUrgente}`}
+                        style={{ marginLeft: 6 }}
+                      >
+                        {reemissao ? "reemissão" : "urgente"}
                       </span>
                     )}
                   </td>
