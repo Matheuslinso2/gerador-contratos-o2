@@ -102,6 +102,9 @@ export type PainelCapitalizacao = {
     comissaoEfetivada: number;
     comissaoPotencial: number;
     cardsComAlerta: number;
+    premioPotencial: number;
+    numeroImobiliarias: number;
+    ticketMedioPremio: number;
   };
   funil: FunilEtapa[];
   cardsAlerta: { id: number; titulo: string; etapaNome: string; diasParado: number }[];
@@ -212,6 +215,10 @@ export async function montarPainelCapitalizacao(competencia: string, agora = new
   const valorTotalEmitido = emitidos.reduce((soma, c) => soma + c.valorTitulo, 0);
   const comissaoEfetivada = emitidos.reduce((soma, c) => soma + c.comissao, 0);
   const comissaoPotencial = cardsCompetencia.reduce((soma, c) => soma + c.comissao, 0);
+  const premioPotencial = cardsCompetencia.reduce((soma, c) => soma + c.valorTitulo, 0);
+  const numeroImobiliarias = new Set(cardsCompetencia.filter((c) => c.imobiliaria !== "—").map((c) => c.imobiliaria))
+    .size;
+  const ticketMedioPremio = cardsCompetencia.length > 0 ? premioPotencial / cardsCompetencia.length : 0;
 
   // Alerta de card parado é operacional (agora), não fica preso à
   // competência selecionada — um card antigo esquecido continua alertando.
@@ -259,6 +266,9 @@ export async function montarPainelCapitalizacao(competencia: string, agora = new
       comissaoEfetivada,
       comissaoPotencial,
       cardsComAlerta: cardsAlertaLista.length,
+      premioPotencial,
+      numeroImobiliarias,
+      ticketMedioPremio,
     },
     funil,
     cardsAlerta: cardsAlertaLista,

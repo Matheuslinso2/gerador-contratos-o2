@@ -66,6 +66,9 @@ export default function PainelCapitalizacao({ dados }: { dados: PainelCapitaliza
           sub="parados 3+ dias sem mudar de etapa"
           tone={kpis.cardsComAlerta > 0 ? "warning" : "positive"}
         />
+        <Kpi label="Prêmio potencial" value={fmtBRL(kpis.premioPotencial)} sub="soma do prêmio de todos os cards do mês" tone="info" />
+        <Kpi label="Imobiliárias" value={String(kpis.numeroImobiliarias)} sub="imobiliárias distintas com cards no mês" />
+        <Kpi label="Ticket médio" value={fmtBRL(kpis.ticketMedioPremio)} sub="prêmio médio por card no mês" />
       </div>
 
       <section className={styles.section}>
