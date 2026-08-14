@@ -41,7 +41,7 @@ const CLASSE_FILL: Record<string, string> = {
 };
 
 export default function PainelCapitalizacao({ dados }: { dados: PainelCapitalizacaoData }) {
-  const { kpis, funil, cardsAlerta } = dados;
+  const { kpis, funil, cardsAlerta, titulos } = dados;
   const maiorQuantidade = Math.max(1, ...funil.map((e) => e.quantidadeAtual));
 
   return (
@@ -131,6 +131,43 @@ export default function PainelCapitalizacao({ dados }: { dados: PainelCapitaliza
                       <td>{card.titulo || `Card #${card.id}`}</td>
                       <td>{card.etapaNome}</td>
                       <td className={`${styles.numCol} ${styles.num}`}>{card.diasParado}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className={styles.section}>
+        <div className={styles.sectionHead}>
+          <h2>Títulos solicitados</h2>
+          <div className={styles.note}>todos os títulos ativos, sem filtro de mês</div>
+        </div>
+        <div className={styles.panel}>
+          {titulos.length === 0 ? (
+            <div className={styles.panelSub}>Nenhum título encontrado.</div>
+          ) : (
+            <div className={styles.tableWrap}>
+              <table className={styles.data}>
+                <thead>
+                  <tr>
+                    <th>Titular</th>
+                    <th>Imobiliária</th>
+                    <th>Status</th>
+                    <th className={styles.numCol}>Prêmio</th>
+                    <th className={styles.numCol}>Comissão</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {titulos.map((t) => (
+                    <tr key={t.id}>
+                      <td>{t.titular}</td>
+                      <td>{t.imobiliaria}</td>
+                      <td>{t.etapaNome}</td>
+                      <td className={`${styles.numCol} ${styles.num}`}>{fmtBRL(t.valorTitulo)}</td>
+                      <td className={`${styles.numCol} ${styles.num}`}>{fmtBRL(t.comissao)}</td>
                     </tr>
                   ))}
                 </tbody>

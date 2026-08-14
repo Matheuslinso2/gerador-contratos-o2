@@ -34,6 +34,10 @@ const etapaPorStatusId = new Map(ETAPAS.map((e) => [e.statusId, e]));
 const CAMPOS = {
   valorTitulo: "ufCrm14CapValorTit",
   comissao: "ufCrm14CapComissao",
+  locatPfNome: "ufCrm14CapLocatPfNome",
+  locatPjRazao: "ufCrm14CapLocatPjRazao",
+  imobiliaria: "ufCrm14CapImobAdmin",
+  corretor: "ufCrm14CapCorretor",
 } as const;
 
 const LIMITE_ALERTA_DIAS = 3;
@@ -74,6 +78,8 @@ export type CardCapitalizacao = {
   valorTitulo: number;
   comissao: number;
   diasParadoEtapaAtual: number | null;
+  titular: string;
+  imobiliaria: string;
 };
 
 export type FunilEtapa = {
@@ -99,6 +105,14 @@ export type PainelCapitalizacao = {
   };
   funil: FunilEtapa[];
   cardsAlerta: { id: number; titulo: string; etapaNome: string; diasParado: number }[];
+  titulos: {
+    id: number;
+    titular: string;
+    imobiliaria: string;
+    etapaNome: string;
+    valorTitulo: number;
+    comissao: number;
+  }[];
   atualizadoEm: string;
 };
 
@@ -119,6 +133,8 @@ function mapearCard(item: BitrixItemRaw, agora: Date): CardCapitalizacao | null 
     valorTitulo: dinheiro(item[CAMPOS.valorTitulo]),
     comissao: dinheiro(item[CAMPOS.comissao]),
     diasParadoEtapaAtual,
+    titular: texto(item[CAMPOS.locatPfNome]) || texto(item[CAMPOS.locatPjRazao]) || texto(item.title) || "—",
+    imobiliaria: texto(item[CAMPOS.imobiliaria]) || texto(item[CAMPOS.corretor]) || "—",
   };
 }
 
@@ -218,6 +234,19 @@ export async function montarPainelCapitalizacao(competencia: string, agora = new
     tempoMedioDiasFechado: mediasPorEtapa.get(etapa.statusId) ?? null,
   }));
 
+  // Carteira completa — sem filtro de competência, é consulta de todos os
+  // títulos ativos, não um relatório do mês.
+  const titulos = [...cards]
+    .sort((a, b) => b.criadoEm.getTime() - a.criadoEm.getTime())
+    .map((c) => ({
+      id: c.id,
+      titular: c.titular,
+      imobiliaria: c.imobiliaria,
+      etapaNome: c.etapaNome,
+      valorTitulo: c.valorTitulo,
+      comissao: c.comissao,
+    }));
+
   return {
     competencia,
     kpis: {
@@ -233,6 +262,7 @@ export async function montarPainelCapitalizacao(competencia: string, agora = new
     },
     funil,
     cardsAlerta: cardsAlertaLista,
+    titulos,
     atualizadoEm: agora.toISOString(),
   };
 }
