@@ -357,8 +357,9 @@ export default function CapitalizacaoForm() {
           Ficha enviada com sucesso! ✅
         </p>
         <p className="mt-1 text-sm text-gray-600">
-          Recebemos os dados do Título de Capitalização e já criamos o registro na O2. Em breve entraremos em
-          contato.
+          {estado.pendente
+            ? "Recebemos os dados do Título de Capitalização e nossa equipe já está com eles. Em breve entraremos em contato."
+            : "Recebemos os dados do Título de Capitalização e já criamos o registro na O2. Em breve entraremos em contato."}
         </p>
       </div>
     );

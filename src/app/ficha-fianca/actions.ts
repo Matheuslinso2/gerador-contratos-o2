@@ -9,7 +9,7 @@ import {
 } from "@/lib/integracoes/seguroFianca";
 import { registrarNaPlanilhaFianca } from "@/lib/integracoes/planilhaSeguroFianca";
 
-export type EstadoEnvioFichaFianca = { ok: boolean; erro?: string } | null;
+export type EstadoEnvioFichaFianca = { ok: boolean; erro?: string; pendente?: boolean } | null;
 
 function campo(formData: FormData, name: string): string {
   return String(formData.get(name) ?? "").trim();
@@ -123,8 +123,14 @@ export async function enviarFichaFianca(
     }
     return { ok: true };
   } catch (error) {
+    // O card no Bitrix não foi criado, mas o payload já está salvo em
+    // integracao_formularios_log (status "processando" logo acima) — o
+    // envio não se perde. Devolve sucesso pro visitante em vez do erro cru
+    // do Bitrix; quem faz o backfill do card busca por status "erro" nessa
+    // tabela quando o Bitrix voltar ao normal.
     const mensagem = error instanceof Error ? error.message : String(error);
     await auditar(payload, "erro", undefined, mensagem);
-    return { ok: false, erro: mensagem };
+    console.error("Ficha Fiança: card no Bitrix não criado, dado preservado no Supabase para backfill:", mensagem);
+    return { ok: true, pendente: true };
   }
 }

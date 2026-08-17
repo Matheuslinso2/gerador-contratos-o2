@@ -317,7 +317,9 @@ function FichaFiancaFormInterno({ aoConcluirNova }: { aoConcluirNova: () => void
           Ficha enviada com sucesso! ✅
         </p>
         <p className="mt-1 text-sm text-gray-600">
-          Recebemos os dados e já criamos a solicitação de Seguro Fiança na O2. Em breve retornaremos por e-mail com o parecer da análise.
+          {estado.pendente
+            ? "Recebemos sua ficha e nossa equipe já está com os dados. Em breve entraremos em contato por e-mail sobre o andamento da análise."
+            : "Recebemos os dados e já criamos a solicitação de Seguro Fiança na O2. Em breve retornaremos por e-mail com o parecer da análise."}
         </p>
         <button
           type="button"

@@ -9,7 +9,7 @@ import {
 } from "@/lib/integracoes/capitalizacao";
 import { registrarNaPlanilhaCapitalizacao, type DadosCapitalizacaoPlanilha } from "@/lib/integracoes/planilhaCapitalizacao";
 
-export type EstadoEnvioCapitalizacao = { ok: boolean; erro?: string } | null;
+export type EstadoEnvioCapitalizacao = { ok: boolean; erro?: string; pendente?: boolean } | null;
 
 function campo(formData: FormData, name: string): string {
   return String(formData.get(name) ?? "").trim();
@@ -205,8 +205,13 @@ export async function enviarFormularioCapitalizacao(
     }
     return { ok: true };
   } catch (error) {
+    // Mesmo espírito do ficha-fianca/actions.ts: o card no Bitrix falhou,
+    // mas o payload já está salvo em integracao_formularios_log (status
+    // "processando" logo acima) — devolve sucesso pro visitante e deixa o
+    // backfill manual pra quando o Bitrix voltar (buscar status "erro").
     const mensagem = error instanceof Error ? error.message : String(error);
     await auditar(payload, "erro", undefined, mensagem);
-    return { ok: false, erro: mensagem };
+    console.error("Capitalização: card no Bitrix não criado, dado preservado no Supabase para backfill:", mensagem);
+    return { ok: true, pendente: true };
   }
 }
