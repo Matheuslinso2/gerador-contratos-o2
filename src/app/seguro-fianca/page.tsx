@@ -428,7 +428,10 @@ export default async function SeguroFiancaPage({
               <section className={styles.section}>
                 <div className={styles.sectionHead}>
                   <h2>Produtividade por responsável, por funil</h2>
-                  <div className={styles.note}>responsável atual de cada card, dentro de cada funil</div>
+                  <div className={styles.note}>
+                    Análise e Cotação: Responsável(is) pela Cotação, ou pelo Cadastro se a cotação ainda não foi atribuída. Negociação e
+                    Contrato: Responsável(is) pela Negociação. Nunca o dono atual do card.
+                  </div>
                 </div>
                 <div className={styles.grid2}>
                   <div className={styles.panel}>

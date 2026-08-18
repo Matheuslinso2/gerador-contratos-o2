@@ -163,9 +163,8 @@ const CAMPO_FIM_COTACAO = "ufCrm10_1785946326148";
 // quando o card muda de dono ao longo do processo (assignedById só guarda o
 // dono ATUAL) -- um campo por etapa, confirmados via crm.item.fields.
 // Cotação e Negociação aceitam mais de uma pessoa por card (isMultiple),
-// Cadastro e Efetivação são de pessoa única. "Responsável pelo Cadastro"
-// (etapa "Iniciante") não tem painel que o use ainda, por isso não tem
-// constante aqui -- adicionar quando/se um painel precisar dele.
+// Cadastro (etapa "Iniciante") e Efetivação são de pessoa única.
+const CAMPO_RESPONSAVEL_CADASTRO = "ufCrm10_1786644365";
 const CAMPO_RESPONSAVEIS_COTACAO = "ufCrm10_1786644429";
 const CAMPO_RESPONSAVEIS_NEGOCIACAO = "ufCrm10_1786644450";
 const CAMPO_RESPONSAVEL_EFETIVACAO = "ufCrm10_1786644465";
@@ -200,6 +199,7 @@ function nomesResponsaveis(usuarios: Record<number, string>, v: unknown): string
 // linhas (ver buscarDadosAoVivo em page.tsx).
 export function idsResponsaveisEtapas(item: BitrixItemRaw): number[] {
   return [
+    ...idsResponsavel(item[CAMPO_RESPONSAVEL_CADASTRO]),
     ...idsResponsavel(item[CAMPO_RESPONSAVEIS_COTACAO]),
     ...idsResponsavel(item[CAMPO_RESPONSAVEIS_NEGOCIACAO]),
     ...idsResponsavel(item[CAMPO_RESPONSAVEL_EFETIVACAO]),
@@ -243,7 +243,8 @@ export type LinhaContagem = {
   dataCotacao: string; // data (YYYY-MM-DD) da HORA FIM — dia em que a cotação foi concluída; "" se não preenchida
   cotacaoCamposTrocados: boolean; // HORA INICIO/HORA FIM aparentam estar invertidos (duração já vem em valor absoluto)
   qtdMovimentacoes: number;
-  responsavelAtual: string;
+  responsavelAtual: string; // campo nativo (assignedById, dono ATUAL) -- guardado só como dado bruto, nenhuma métrica usa mais
+  responsavelCadastro: string; // campo dedicado (17/08/2026), etapa "Iniciante", nome único, "" se vazio
   responsaveisCotacao: string[]; // campo dedicado (17/08/2026), pode ter mais de um nome
   responsaveisNegociacao: string[]; // idem
   responsavelEfetivacao: string; // nome único, "" se vazio
@@ -459,6 +460,7 @@ export function montarContagemMensal(
       cotacaoCamposTrocados,
       qtdMovimentacoes: eventos.length,
       responsavelAtual: nomeUsuario(usuarios, item.assignedById),
+      responsavelCadastro: nomesResponsaveis(usuarios, item[CAMPO_RESPONSAVEL_CADASTRO])[0] ?? "",
       responsaveisCotacao: nomesResponsaveis(usuarios, item[CAMPO_RESPONSAVEIS_COTACAO]),
       responsaveisNegociacao: nomesResponsaveis(usuarios, item[CAMPO_RESPONSAVEIS_NEGOCIACAO]),
       responsavelEfetivacao: nomesResponsaveis(usuarios, item[CAMPO_RESPONSAVEL_EFETIVACAO])[0] ?? "",
@@ -630,26 +632,39 @@ export function montarAnaliseGerencial(
     porFunilEtapa[chave] = (porFunilEtapa[chave] ?? 0) + 1;
   }
 
-  function porResponsavel(linhasFunil: LinhaContagem[], creditoPositivo: (l: LinhaContagem) => boolean) {
+  function porResponsavel(
+    linhasFunil: LinhaContagem[],
+    creditoPositivo: (l: LinhaContagem) => boolean,
+    obterNomes: (l: LinhaContagem) => string[]
+  ) {
     const mapa: Record<string, { cards: number; andamento: number; negativos: number; positivos: number }> = {};
     for (const l of linhasFunil) {
-      const nome = l.responsavelAtual || "(sem responsável)";
-      mapa[nome] ??= { cards: 0, andamento: 0, negativos: 0, positivos: 0 };
-      mapa[nome].cards++;
-      if (creditoPositivo(l)) mapa[nome].positivos++;
-      else if (l.resultado === "Recusado" || l.resultado === "Perdido") mapa[nome].negativos++;
-      else mapa[nome].andamento++;
+      const nomes = obterNomes(l);
+      for (const nome of nomes.length ? nomes : ["(sem responsável)"]) {
+        mapa[nome] ??= { cards: 0, andamento: 0, negativos: 0, positivos: 0 };
+        mapa[nome].cards++;
+        if (creditoPositivo(l)) mapa[nome].positivos++;
+        else if (l.resultado === "Recusado" || l.resultado === "Perdido") mapa[nome].negativos++;
+        else mapa[nome].andamento++;
+      }
     }
     return mapa;
   }
+  // Responsável(is) do funil 1 (Análise e Cotação) pra um card: prioriza
+  // Responsáveis pela Cotação (etapa em que o card de fato está sendo
+  // trabalhado); cai pro Responsável pelo Cadastro só se a cotação ainda nem
+  // começou. Nunca usa o campo nativo (assignedById) -- esse perde o
+  // histórico assim que o card muda de dono.
+  const nomesFunil1 = (l: LinhaContagem): string[] =>
+    l.responsaveisCotacao.length ? l.responsaveisCotacao : l.responsavelCadastro ? [l.responsavelCadastro] : [];
   // Funil 1: cards ainda ativos ali contam por Andamento/Negativos; os que já
-  // avançaram pro funil 2 entram como "Positivos" pelo responsável ATUAL
-  // (não dá pra saber quem especificamente fechou a análise — a API não
-  // guarda histórico de troca de responsável, só de etapa).
-  const porResponsavelFunil1 = porResponsavel(linhas, (l) => l.funil === "Negociação e Contrato");
+  // avançaram pro funil 2 entram como "Positivos" (créditos de quem cotou,
+  // ou de quem cadastrou se a cotação nunca chegou a ser atribuída).
+  const porResponsavelFunil1 = porResponsavel(linhas, (l) => l.funil === "Negociação e Contrato", nomesFunil1);
   const porResponsavelFunil2 = porResponsavel(
     linhas.filter((l) => l.funil === "Negociação e Contrato"),
-    (l) => l.resultado === "Convertido"
+    (l) => l.resultado === "Convertido",
+    (l) => l.responsaveisNegociacao
   );
 
   const statusPorSeguradora: Record<string, Record<string, number>> = {};
@@ -975,7 +990,11 @@ export function montarAnaliseGerencial(
     .map((l) => {
       const stats = tempoPorEtapa[`${l.funil} | ${l.etapaAtual}`];
       const razao = stats && stats.media > 0 ? l.minutosEtapaAtual / stats.media : 0;
-      return { id: l.id, nome: l.nome, etapa: l.etapaAtual, minutos: l.minutosEtapaAtual, mediaEtapa: stats?.media ?? 0, responsavel: l.responsavelAtual, razao };
+      // Mesma prioridade de campo por etapa usada em porResponsavelFunil1/2 --
+      // nunca o campo nativo (assignedById).
+      const nomes = l.funil === "Negociação e Contrato" ? l.responsaveisNegociacao : nomesFunil1(l);
+      const responsavel = nomes.join(", ") || "(sem responsável)";
+      return { id: l.id, nome: l.nome, etapa: l.etapaAtual, minutos: l.minutosEtapaAtual, mediaEtapa: stats?.media ?? 0, responsavel, razao };
     })
     .filter((c) => c.razao > 1.3 && c.minutos >= 2880) // pelo menos 2 dias corridos, pra não gerar ruído com card recém-criado
     .sort((a, b) => b.minutos - a.minutos || b.razao - a.razao)
