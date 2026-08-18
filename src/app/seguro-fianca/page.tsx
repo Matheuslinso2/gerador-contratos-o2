@@ -20,9 +20,12 @@ import {
   ENTITY_TYPE_ID,
   ETAPAS,
   SEGURADORAS,
+  idsResponsaveisEtapas,
   montarAnaliseGerencial,
   montarContagemMensal,
+  normalizarQuadroDiario,
   type AnaliseGerencial,
+  type QuadroDiario,
 } from "@/lib/bitrix/seguroFianca";
 
 export const dynamic = "force-dynamic";
@@ -55,7 +58,9 @@ async function buscarDadosAoVivo(competencia: string): Promise<AnaliseGerencial 
   ]);
 
   const idsEmpresa = items.map((it) => it.companyId).filter((id): id is number => !!id);
-  const idsUsuario = items.flatMap((it) => [it.assignedById, it.createdBy, it.movedBy]).filter((id): id is number => !!id);
+  const idsUsuario = items
+    .flatMap((it) => [it.assignedById, it.createdBy, it.movedBy, ...idsResponsaveisEtapas(it)])
+    .filter((id): id is number => !!id);
   const [empresas, usuarios] = await Promise.all([buscarEmpresas(idsEmpresa), buscarUsuarios(idsUsuario)]);
 
   const contagem = montarContagemMensal(items, historico, usuarios, empresas, defs);
@@ -169,6 +174,64 @@ function ProdutividadeTabela({ dados }: { dados: AnaliseGerencial["porResponsave
   );
 }
 
+// Tabela "Data × Responsável" compartilhada pelos 3 quadros diários
+// (cotações concluídas, contratos recebidos, efetivações) -- mesma forma
+// desde que passaram a usar os campos de responsável por etapa.
+function QuadroDiarioTabela({ quadro }: { quadro: QuadroDiario }) {
+  return (
+    <>
+      <div className={styles.tableWrap}>
+        <table className={styles.data}>
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th className={styles.numCol}>Quant.</th>
+              {quadro.responsaveis.map((nome) => (
+                <th key={nome} className={styles.numCol}>
+                  {nome}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {quadro.dias.map((d) => (
+              <tr key={d.data}>
+                <td>{d.data.split("-").reverse().join("/")}</td>
+                <td className={`${styles.numCol} ${styles.num}`} style={{ fontWeight: 700 }}>
+                  {d.total}
+                </td>
+                {quadro.responsaveis.map((nome) => (
+                  <td key={nome} className={`${styles.numCol} ${styles.num}`}>
+                    {d.porResponsavel[nome] ?? 0}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td style={{ fontWeight: 700 }}>Total</td>
+              <td className={`${styles.numCol} ${styles.num}`} style={{ fontWeight: 700 }}>
+                {quadro.dias.reduce((a, d) => a + d.total, 0)}
+              </td>
+              {quadro.responsaveis.map((nome) => (
+                <td key={nome} className={`${styles.numCol} ${styles.num}`} style={{ fontWeight: 700 }}>
+                  {quadro.dias.reduce((a, d) => a + (d.porResponsavel[nome] ?? 0), 0)}
+                </td>
+              ))}
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      {quadro.responsaveis.length === 0 && (
+        <div className={styles.panelSub} style={{ marginTop: 12 }}>
+          Nenhum registro neste período.
+        </div>
+      )}
+    </>
+  );
+}
+
 export default async function SeguroFiancaPage({
   searchParams,
 }: {
@@ -206,7 +269,16 @@ export default async function SeguroFiancaPage({
   } else {
     const { data } = await supabase.from("seguro_fianca_snapshots").select("payload, atualizado_em").eq("competencia", competencia).maybeSingle();
     if (data) {
-      gerencial = data.payload as AnaliseGerencial & { totalMovimentacoes: number };
+      // Snapshots salvos antes de 17/08/2026 têm a forma antiga desses 3
+      // quadros (ou nem têm efetivacoesPorDia) -- normaliza pra não quebrar
+      // a página ao reabrir uma competência passada.
+      const payload = data.payload as AnaliseGerencial & { totalMovimentacoes: number };
+      gerencial = {
+        ...payload,
+        analisesDiariasPorResponsavel: normalizarQuadroDiario(payload.analisesDiariasPorResponsavel, competencia),
+        contratosRecebidosPorDia: normalizarQuadroDiario(payload.contratosRecebidosPorDia, competencia),
+        efetivacoesPorDia: normalizarQuadroDiario(payload.efetivacoesPorDia, competencia),
+      };
       atualizadoEm = data.atualizado_em;
     } else {
       // Nenhum snapshot foi salvo pra esse mês (a página nunca foi aberta
@@ -635,90 +707,29 @@ export default async function SeguroFiancaPage({
               </section>
 
               <section className={styles.section}>
-                <div className={styles.grid2}>
+                <div className={styles.sectionHead}>
+                  <h2>Quadros diários por responsável de etapa</h2>
+                  <div className={styles.note}>campos de responsável por etapa, adicionados em 17/08/2026 — meses anteriores a essa data ficam vazios aqui</div>
+                </div>
+                <div className={styles.grid3}>
                   <div className={styles.panel}>
                     <h3>Quantitativo de análises diárias</h3>
                     <div className={styles.panelSub}>
-                      todas as análises que entraram por dia (inclusive recusadas), pelo responsável atual do card
+                      cotações concluídas por dia (dia da HORA FIM), por Responsável(is) pela Cotação — card com mais de uma pessoa credita as duas, então a soma das colunas pode passar do Total; cards sem HORA FIM/responsável preenchidos ficam de fora
                     </div>
-                    <div className={styles.tableWrap}>
-                      <table className={styles.data}>
-                        <thead>
-                          <tr>
-                            <th>Data</th>
-                            <th className={styles.numCol}>Quant.</th>
-                            {gerencial.analisesDiariasPorResponsavel.responsaveis.map((nome) => (
-                              <th key={nome} className={styles.numCol}>
-                                {nome}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {gerencial.analisesDiariasPorResponsavel.dias.map((d) => (
-                            <tr key={d.data}>
-                              <td>{d.data.split("-").reverse().join("/")}</td>
-                              <td className={`${styles.numCol} ${styles.num}`} style={{ fontWeight: 700 }}>
-                                {d.total}
-                              </td>
-                              {gerencial.analisesDiariasPorResponsavel.responsaveis.map((nome) => (
-                                <td key={nome} className={`${styles.numCol} ${styles.num}`}>
-                                  {d.porResponsavel[nome] ?? 0}
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                        <tfoot>
-                          <tr>
-                            <td style={{ fontWeight: 700 }}>Total</td>
-                            <td className={`${styles.numCol} ${styles.num}`} style={{ fontWeight: 700 }}>
-                              {gerencial.analisesDiariasPorResponsavel.dias.reduce((a, d) => a + d.total, 0)}
-                            </td>
-                            {gerencial.analisesDiariasPorResponsavel.responsaveis.map((nome) => (
-                              <td key={nome} className={`${styles.numCol} ${styles.num}`} style={{ fontWeight: 700 }}>
-                                {gerencial.analisesDiariasPorResponsavel.dias.reduce((a, d) => a + (d.porResponsavel[nome] ?? 0), 0)}
-                              </td>
-                            ))}
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
-                    {gerencial.analisesDiariasPorResponsavel.responsaveis.length === 0 && (
-                      <div className={styles.panelSub} style={{ marginTop: 12 }}>
-                        Nenhuma análise registrada neste período.
-                      </div>
-                    )}
+                    <QuadroDiarioTabela quadro={gerencial.analisesDiariasPorResponsavel} />
                   </div>
                   <div className={styles.panel}>
                     <h3>Contratos recebidos por dia</h3>
-                    <div className={styles.panelSub}>cards que entraram na etapa "Contrato Recebido" (Negociação e Contrato) em cada dia do mês</div>
-                    <div className={styles.tableWrap}>
-                      <table className={styles.data}>
-                        <thead>
-                          <tr>
-                            <th>Data</th>
-                            <th className={styles.numCol}>Quant.</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {gerencial.contratosRecebidosPorDia.map((d) => (
-                            <tr key={d.data}>
-                              <td>{d.data.split("-").reverse().join("/")}</td>
-                              <td className={`${styles.numCol} ${styles.num}`}>{d.quantidade}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                        <tfoot>
-                          <tr>
-                            <td style={{ fontWeight: 700 }}>Total</td>
-                            <td className={`${styles.numCol} ${styles.num}`} style={{ fontWeight: 700 }}>
-                              {gerencial.contratosRecebidosPorDia.reduce((a, d) => a + d.quantidade, 0)}
-                            </td>
-                          </tr>
-                        </tfoot>
-                      </table>
+                    <div className={styles.panelSub}>
+                      cards que entraram na etapa &quot;Contrato Recebido&quot; (Negociação e Contrato), por Responsável(is) pela Negociação
                     </div>
+                    <QuadroDiarioTabela quadro={gerencial.contratosRecebidosPorDia} />
+                  </div>
+                  <div className={styles.panel}>
+                    <h3>Efetivações por dia</h3>
+                    <div className={styles.panelSub}>dia da Data de Efetivação, por Responsável pela Efetivação</div>
+                    <QuadroDiarioTabela quadro={gerencial.efetivacoesPorDia} />
                   </div>
                 </div>
               </section>

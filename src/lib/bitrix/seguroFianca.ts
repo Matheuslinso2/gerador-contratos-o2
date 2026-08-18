@@ -159,6 +159,16 @@ const CAMPO_DESCONTO_LEGADO = "ufCrm10_1779820897";
 // outros ficaram vazios, foram tentativas abandonadas).
 const CAMPO_INICIO_COTACAO = "ufCrm10_1785946291045";
 const CAMPO_FIM_COTACAO = "ufCrm10_1785946326148";
+// Adicionados em 17/08/2026 pra resolver a perda de registro do responsável
+// quando o card muda de dono ao longo do processo (assignedById só guarda o
+// dono ATUAL) -- um campo por etapa, confirmados via crm.item.fields.
+// Cotação e Negociação aceitam mais de uma pessoa por card (isMultiple),
+// Cadastro e Efetivação são de pessoa única. "Responsável pelo Cadastro"
+// (etapa "Iniciante") não tem painel que o use ainda, por isso não tem
+// constante aqui -- adicionar quando/se um painel precisar dele.
+const CAMPO_RESPONSAVEIS_COTACAO = "ufCrm10_1786644429";
+const CAMPO_RESPONSAVEIS_NEGOCIACAO = "ufCrm10_1786644450";
+const CAMPO_RESPONSAVEL_EFETIVACAO = "ufCrm10_1786644465";
 
 function enumLabel(defs: Record<string, BitrixDefinicaoCampo>, campo: string, valor: unknown): string {
   if (valor === null || valor === undefined || valor === "") return "";
@@ -169,6 +179,31 @@ function enumLabel(defs: Record<string, BitrixDefinicaoCampo>, campo: string, va
 function nomeUsuario(usuarios: Record<number, string>, id: number | undefined): string {
   if (!id) return "";
   return usuarios[id] || `ID ${id}`;
+}
+
+// Campos "employee" do Bitrix vêm como array (múltiplo) ou valor solto
+// (único) -- normaliza os dois formatos pra uma lista de IDs.
+function idsResponsavel(v: unknown): number[] {
+  if (v === null || v === undefined || v === "") return [];
+  const bruto = Array.isArray(v) ? v : [v];
+  return bruto.map((x) => Number(x)).filter((n) => Number.isFinite(n) && n > 0);
+}
+
+function nomesResponsaveis(usuarios: Record<number, string>, v: unknown): string[] {
+  return idsResponsavel(v)
+    .map((id) => nomeUsuario(usuarios, id))
+    .filter(Boolean);
+}
+
+// IDs de usuário referenciados nos campos de responsável por etapa de um
+// card -- usado só pra saber quem resolver via user.get antes de montar as
+// linhas (ver buscarDadosAoVivo em page.tsx).
+export function idsResponsaveisEtapas(item: BitrixItemRaw): number[] {
+  return [
+    ...idsResponsavel(item[CAMPO_RESPONSAVEIS_COTACAO]),
+    ...idsResponsavel(item[CAMPO_RESPONSAVEIS_NEGOCIACAO]),
+    ...idsResponsavel(item[CAMPO_RESPONSAVEL_EFETIVACAO]),
+  ];
 }
 
 function nomeEmpresa(empresas: Record<number, string>, id: number | undefined): string {
@@ -209,6 +244,9 @@ export type LinhaContagem = {
   cotacaoCamposTrocados: boolean; // HORA INICIO/HORA FIM aparentam estar invertidos (duração já vem em valor absoluto)
   qtdMovimentacoes: number;
   responsavelAtual: string;
+  responsaveisCotacao: string[]; // campo dedicado (17/08/2026), pode ter mais de um nome
+  responsaveisNegociacao: string[]; // idem
+  responsavelEfetivacao: string; // nome único, "" se vazio
   criadoPor: string;
   ultimaMovimentacaoPor: string;
   aluguel: number | "";
@@ -421,6 +459,9 @@ export function montarContagemMensal(
       cotacaoCamposTrocados,
       qtdMovimentacoes: eventos.length,
       responsavelAtual: nomeUsuario(usuarios, item.assignedById),
+      responsaveisCotacao: nomesResponsaveis(usuarios, item[CAMPO_RESPONSAVEIS_COTACAO]),
+      responsaveisNegociacao: nomesResponsaveis(usuarios, item[CAMPO_RESPONSAVEIS_NEGOCIACAO]),
+      responsavelEfetivacao: nomesResponsaveis(usuarios, item[CAMPO_RESPONSAVEL_EFETIVACAO])[0] ?? "",
       criadoPor: nomeUsuario(usuarios, item.createdBy),
       ultimaMovimentacaoPor: nomeUsuario(usuarios, item.movedBy),
       aluguel: alugCard,
@@ -490,15 +531,58 @@ export type AnaliseGerencial = {
   tempoPorFunil: { analiseECotacao: EstatisticaTempo; negociacaoEContrato: EstatisticaTempo };
   cardsQuePedemAtencao: { id: number; nome: string; etapa: string; minutos: number; mediaEtapa: number; responsavel: string }[];
   tempoCotacaoPorResponsavel: Record<string, { recusado: EstatisticaTempo; aprovado: EstatisticaTempo }>;
-  analisesDiariasPorResponsavel: { responsaveis: string[]; dias: { data: string; porResponsavel: Record<string, number>; total: number }[] };
-  contratosRecebidosPorDia: { data: string; quantidade: number }[];
+  analisesDiariasPorResponsavel: QuadroDiario;
+  contratosRecebidosPorDia: QuadroDiario;
+  efetivacoesPorDia: QuadroDiario;
   qualidade: { semImobiliaria: number; perdidosFunil2SemMotivo: number; totalPerdidosFunil2: number; cotacaoTempoInconsistente: number };
 };
+
+// Forma comum dos 3 quadros "por dia × responsável" do painel (cotações
+// concluídas, contratos recebidos, efetivações) -- ver montarQuadroDiario.
+export type QuadroDiario = { responsaveis: string[]; dias: { data: string; porResponsavel: Record<string, number>; total: number }[] };
 
 function diasDoMes(competencia: string): string[] {
   const [ano, mes] = competencia.split("-").map(Number);
   const ultimoDia = new Date(ano, mes, 0).getDate();
   return Array.from({ length: ultimoDia }, (_, i) => `${competencia}-${String(i + 1).padStart(2, "0")}`);
+}
+
+// Agrega uma lista de eventos (um card = um evento, com o dia em que ele
+// aconteceu e os nomes dos responsáveis daquele card por aquela etapa) num
+// quadro diário: total = nº de cards no dia (métrica real de volume), e o
+// crédito por responsável é somado à parte -- quando um card tem mais de um
+// responsável (Cotação/Negociação aceitam vários), cada um recebe crédito
+// no seu nome, então a soma das colunas pode passar do Total. Cards sem
+// nenhum responsável preenchido caem no bucket "(sem responsável)" em vez
+// de sumir da contagem.
+function montarQuadroDiario(eventos: { dia: string; nomes: string[] }[], competencia: string): QuadroDiario {
+  const porDia: Record<string, Record<string, number>> = {};
+  const totalPorDia: Record<string, number> = {};
+  const nomesSet = new Set<string>();
+  for (const { dia, nomes } of eventos) {
+    if (!dia || !dia.startsWith(competencia)) continue;
+    totalPorDia[dia] = (totalPorDia[dia] ?? 0) + 1;
+    const lista = nomes.length ? nomes : ["(sem responsável)"];
+    porDia[dia] ??= {};
+    for (const nome of lista) {
+      porDia[dia][nome] = (porDia[dia][nome] ?? 0) + 1;
+      nomesSet.add(nome);
+    }
+  }
+  return {
+    responsaveis: [...nomesSet].sort(),
+    dias: diasDoMes(competencia).map((data) => ({ data, porResponsavel: porDia[data] ?? {}, total: totalPorDia[data] ?? 0 })),
+  };
+}
+
+// Snapshots salvos no Supabase antes de 17/08/2026 têm a forma antiga
+// (contratosRecebidosPorDia era {data,quantidade}[], efetivacoesPorDia nem
+// existia) -- ao reabrir uma competência passada, essa função evita quebrar
+// a página, devolvendo um quadro vazio em vez do formato incompatível.
+export function normalizarQuadroDiario(valor: unknown, competencia: string): QuadroDiario {
+  const v = valor as Partial<QuadroDiario> | undefined | null;
+  if (v && Array.isArray(v.responsaveis) && Array.isArray(v.dias)) return v as QuadroDiario;
+  return { responsaveis: [], dias: diasDoMes(competencia).map((data) => ({ data, porResponsavel: {}, total: 0 })) };
 }
 
 const ETAPA_CONTRATO_RECEBIDO = "DT1042_20:UC_RD3MTL";
@@ -800,39 +884,26 @@ export function montarAnaliseGerencial(
     tempoCotacaoPorResponsavel[nome] = { recusado: estatisticasTempo(d.recusado), aprovado: estatisticasTempo(d.aprovado) };
   }
 
-  // Calendário diário — todas as análises que ENTRARAM por dia (inclusive
-  // recusadas), atribuídas ao responsável ATUAL do card — não depende de
-  // HORA INICIO/FIM (que nem todo mundo preenche), cobre 100% dos cards.
-  // Mesma lógica/limitação de porResponsavelFunil1: é o responsável atual,
-  // não necessariamente quem especificamente cotou (API não guarda
-  // histórico de troca de responsável). Se aparecer alguém além da Kelly e
-  // Cassia, normalmente é reforço em dia de demanda alta.
-  const porDiaResponsavel: Record<string, Record<string, number>> = {};
-  const responsaveisCotacao = new Set<string>();
-  for (const l of linhas) {
-    if (!l.dataCriacao || !l.dataCriacao.startsWith(competencia)) continue;
-    const nome = l.responsavelAtual || "(sem responsável)";
-    porDiaResponsavel[l.dataCriacao] ??= {};
-    porDiaResponsavel[l.dataCriacao][nome] = (porDiaResponsavel[l.dataCriacao][nome] ?? 0) + 1;
-    responsaveisCotacao.add(nome);
-  }
-  const responsaveisOrdenados = [...responsaveisCotacao].sort();
-  const analisesDiariasPorResponsavel: AnaliseGerencial["analisesDiariasPorResponsavel"] = {
-    responsaveis: responsaveisOrdenados,
-    dias: diasDoMes(competencia).map((data) => {
-      const porResponsavel = porDiaResponsavel[data] ?? {};
-      const total = Object.values(porResponsavel).reduce((a, b) => a + b, 0);
-      return { data, porResponsavel, total };
-    }),
-  };
+  // Calendário diário de cotações CONCLUÍDAS — dia da HORA FIM da cotação
+  // (quando o trabalho foi de fato terminado, não quando o card entrou), por
+  // Responsáveis pela Cotação (campo dedicado, 17/08/2026). Antes usava o
+  // responsável ATUAL do card e o dia de entrada -- a supervisora reportou
+  // que o responsável ia mudando de mão em mão e se perdia o registro de
+  // quem cotou de verdade; o campo novo resolve isso na origem. Cards sem
+  // HORA FIM ou sem o campo de responsável preenchidos ficam de fora (mesma
+  // limitação já documentada em "Tempo de cotação por responsável").
+  const analisesDiariasPorResponsavel = montarQuadroDiario(
+    linhas.map((l) => ({ dia: l.dataCotacao, nomes: l.responsaveisCotacao })),
+    competencia
+  );
 
-  // Calendário diário de "Contrato Recebido" (etapa do funil 2) — direto do
-  // histórico nativo de mudança de etapa, não depende de campo nenhum novo,
-  // então tem histórico completo desde que o Bitrix começou a ser usado.
-  // Conta só a PRIMEIRA entrada de cada card nessa etapa -- um card que
-  // volta pra "Contrato com Pendências" pra correção e reentra em "Contrato
-  // Recebido" não pode contar 2x, senão o total passa do número real de
-  // contratos recebidos.
+  // Calendário diário de "Contrato Recebido" (etapa do funil 2) — dia direto
+  // do histórico nativo de mudança de etapa (não depende de campo novo, tem
+  // histórico completo), quebrado por Responsáveis pela Negociação (campo
+  // dedicado, 17/08/2026). Conta só a PRIMEIRA entrada de cada card nessa
+  // etapa -- um card que volta pra "Contrato com Pendências" pra correção e
+  // reentra em "Contrato Recebido" não pode contar 2x.
+  const linhaPorId = new Map(linhas.map((l) => [l.id, l]));
   const primeiraEntradaContratoRecebido = new Map<number, string>(); // ownerId -> dia (YYYY-MM-DD)
   const historicoOrdenado = [...historico].sort(
     (a, b) => new Date(a.CREATED_TIME).getTime() - new Date(b.CREATED_TIME).getTime()
@@ -842,15 +913,20 @@ export function montarAnaliseGerencial(
     if (primeiraEntradaContratoRecebido.has(h.OWNER_ID)) continue;
     primeiraEntradaContratoRecebido.set(h.OWNER_ID, h.CREATED_TIME.slice(0, 10));
   }
-  const contagemRecebimentos: Record<string, number> = {};
-  for (const dia of primeiraEntradaContratoRecebido.values()) {
-    if (!dia.startsWith(competencia)) continue;
-    contagemRecebimentos[dia] = (contagemRecebimentos[dia] ?? 0) + 1;
-  }
-  const contratosRecebidosPorDia: AnaliseGerencial["contratosRecebidosPorDia"] = diasDoMes(competencia).map((data) => ({
-    data,
-    quantidade: contagemRecebimentos[data] ?? 0,
-  }));
+  const contratosRecebidosPorDia = montarQuadroDiario(
+    [...primeiraEntradaContratoRecebido.entries()].map(([ownerId, dia]) => ({
+      dia,
+      nomes: linhaPorId.get(ownerId)?.responsaveisNegociacao ?? [],
+    })),
+    competencia
+  );
+
+  // Calendário diário de Efetivação — dia da Data de Efetivação (campo já
+  // existente), por Responsável pela Efetivação (novo, único por card).
+  const efetivacoesPorDia = montarQuadroDiario(
+    linhas.map((l) => ({ dia: l.dataEfetivacao, nomes: l.responsavelEfetivacao ? [l.responsavelEfetivacao] : [] })),
+    competencia
+  );
 
   // Cards em andamento parados bem acima da média da própria etapa (não é
   // "tempo corrido" isolado — é relativo ao ritmo normal daquela etapa, e
@@ -894,6 +970,7 @@ export function montarAnaliseGerencial(
     tempoCotacaoPorResponsavel,
     analisesDiariasPorResponsavel,
     contratosRecebidosPorDia,
+    efetivacoesPorDia,
     qualidade: {
       semImobiliaria,
       perdidosFunil2SemMotivo: perdasSemMotivo,
