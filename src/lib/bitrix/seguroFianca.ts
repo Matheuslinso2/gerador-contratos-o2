@@ -884,16 +884,17 @@ export function montarAnaliseGerencial(
     tempoCotacaoPorResponsavel[nome] = { recusado: estatisticasTempo(d.recusado), aprovado: estatisticasTempo(d.aprovado) };
   }
 
-  // Calendário diário de cotações CONCLUÍDAS — dia da HORA FIM da cotação
-  // (quando o trabalho foi de fato terminado, não quando o card entrou), por
-  // Responsáveis pela Cotação (campo dedicado, 17/08/2026). Antes usava o
-  // responsável ATUAL do card e o dia de entrada -- a supervisora reportou
-  // que o responsável ia mudando de mão em mão e se perdia o registro de
-  // quem cotou de verdade; o campo novo resolve isso na origem. Cards sem
-  // HORA FIM ou sem o campo de responsável preenchidos ficam de fora (mesma
-  // limitação já documentada em "Tempo de cotação por responsável").
+  // Calendário diário de cotações REALIZADAS — dia de ENTRADA do card
+  // (não a HORA FIM/finalização: nesse quadro importa que a cotação foi
+  // feita, não quando ela terminou -- por isso o total bate com o total de
+  // cards, com ou sem HORA FIM preenchida). Responsável vem do campo
+  // dedicado Responsáveis pela Cotação (17/08/2026), não mais do
+  // responsável ATUAL do card -- a supervisora reportou que o responsável
+  // ia mudando de mão em mão e se perdia o registro de quem cotou de
+  // verdade. Negociação e Efetivação (painéis ao lado) usam parâmetro
+  // diferente de propósito: só existem quando a etapa de fato aconteceu.
   const analisesDiariasPorResponsavel = montarQuadroDiario(
-    linhas.map((l) => ({ dia: l.dataCotacao, nomes: l.responsaveisCotacao })),
+    linhas.map((l) => ({ dia: l.dataCriacao, nomes: l.responsaveisCotacao })),
     competencia
   );
 

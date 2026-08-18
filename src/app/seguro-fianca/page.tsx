@@ -715,7 +715,7 @@ export default async function SeguroFiancaPage({
                   <div className={styles.panel}>
                     <h3>Quantitativo de análises diárias</h3>
                     <div className={styles.panelSub}>
-                      cotações concluídas por dia (dia da HORA FIM), por Responsável(is) pela Cotação — card com mais de uma pessoa credita as duas, então a soma das colunas pode passar do Total; cards sem HORA FIM/responsável preenchidos ficam de fora
+                      todas as análises que entraram por dia (independe de HORA FIM registrada), por Responsável(is) pela Cotação — card com mais de uma pessoa credita as duas, então a soma das colunas pode passar do Total; cards sem o campo de responsável preenchido caem em &quot;(sem responsável)&quot;
                     </div>
                     <QuadroDiarioTabela quadro={gerencial.analisesDiariasPorResponsavel} />
                   </div>
