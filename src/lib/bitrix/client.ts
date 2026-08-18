@@ -95,11 +95,31 @@ export async function buscarEmpresas(ids: number[]): Promise<Record<number, stri
   const nomeporId: Record<number, string> = {};
   const idsUnicos = [...new Set(ids)].filter((id) => id > 0);
   if (!idsUnicos.length) return nomeporId;
-  const resposta = await chamarBitrix<{ result: { ID: string; TITLE: string }[] }>("crm.company.list", {
-    select: ["ID", "TITLE"],
-    "filter[ID]": idsUnicos,
-  });
-  for (const empresa of resposta.result) nomeporId[Number(empresa.ID)] = empresa.TITLE;
+
+  // O crm.company.list devolve no máximo 50 registros por página. Enviar todos
+  // os IDs de uma vez e ler apenas o primeiro resultado fazia as empresas que
+  // ficavam nas páginas seguintes aparecerem no painel como "ID 12345".
+  const tamanhoLote = 50;
+  for (let indice = 0; indice < idsUnicos.length; indice += tamanhoLote) {
+    const lote = idsUnicos.slice(indice, indice + tamanhoLote);
+    let start = 0;
+
+    for (;;) {
+      const resposta = await chamarBitrix<{
+        result: { ID: string; TITLE: string }[];
+        next?: number;
+      }>("crm.company.list", {
+        select: ["ID", "TITLE"],
+        "filter[ID]": lote,
+        start,
+      });
+
+      for (const empresa of resposta.result) nomeporId[Number(empresa.ID)] = empresa.TITLE;
+      if (resposta.next === undefined) break;
+      start = resposta.next;
+    }
+  }
+
   return nomeporId;
 }
 
