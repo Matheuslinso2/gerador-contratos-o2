@@ -28,6 +28,10 @@ const ROTAS_PUBLICAS = [
   // nenhuma alteração; esta é só uma via alternativa de entrada que já
   // cria o card diretamente no Bitrix.
   "/ficha-fianca",
+  // Formulário público de Seguro Auto — mesma lógica. Ainda não cria card
+  // no Bitrix (SPA não existe ainda), só registra em
+  // integracao_formularios_log até a integração ser ligada.
+  "/seguro-auto",
 ];
 const ROTAS_SO_DESLOGADO = ["/login", "/signup"];
 
