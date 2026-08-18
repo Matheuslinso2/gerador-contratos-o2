@@ -148,6 +148,25 @@ export default async function Home() {
         </svg>
       ),
     },
+    {
+      href: "/seguro-auto",
+      titulo: "Seguro Auto",
+      descricao: "Ficha online para dar entrada na cotação de seguro automóvel",
+      icone: (
+        <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
+          <path
+            d="M4.5 15.5l1.4-4.6a2 2 0 011.9-1.4h8.4a2 2 0 011.9 1.4l1.4 4.6"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <rect x="3.5" y="15.5" width="17" height="4" rx="1.4" stroke="currentColor" strokeWidth="1.6" />
+          <circle cx="7" cy="19.5" r="1.3" stroke="currentColor" strokeWidth="1.4" />
+          <circle cx="17" cy="19.5" r="1.3" stroke="currentColor" strokeWidth="1.4" />
+        </svg>
+      ),
+    },
   ];
 
   const usoInterno = isAdmin(user.email) || isColaboradorO2(user.email);

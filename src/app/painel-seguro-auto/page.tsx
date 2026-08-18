@@ -6,6 +6,7 @@ import { signOut } from "../actions";
 import { competenciaAtual, competenciaValida, montarPainelSeguroAuto } from "@/lib/seguroAuto/painel";
 import PainelSeguroAuto from "./PainelSeguroAuto";
 import SeletorCompetencia from "./SeletorCompetencia";
+import AtualizarAgora from "./AtualizarAgora";
 import styles from "./painel-seguro-auto.module.css";
 
 export const dynamic = "force-dynamic";
@@ -51,7 +52,10 @@ export default async function PainelSeguroAutoPage({
               <h1 className={styles.title}>Painel Seguro Auto — {rotuloCompetencia(competencia)}</h1>
             </div>
             <div className={styles.meta}>
-              <SeletorCompetencia competencia={competencia} />
+              <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "flex-end" }}>
+                <SeletorCompetencia competencia={competencia} />
+                <AtualizarAgora />
+              </div>
               <br />
               {dados && <>Atualizado em {new Date(dados.atualizadoEm).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</>}
             </div>

@@ -49,6 +49,7 @@ export default function AppHeader({
               items={[
                 { href: "/capitalizacao", label: "Capitalização" },
                 { href: "/ficha-fianca", label: "Ficha Fiança" },
+                { href: "/seguro-auto", label: "Seguro Auto" },
               ]}
             />
             {(isAdmin(userEmail) || isColaboradorO2(userEmail)) && (
@@ -59,6 +60,7 @@ export default function AppHeader({
                   { href: "/faturas", label: "Faturas" },
                   { href: "/seguro-fianca", label: "Seguro Fiança" },
                   { href: "/painel-capitalizacao", label: "Capitalização" },
+                  { href: "/painel-seguro-auto", label: "Automóvel" },
                   { href: "/ramos-elementares", label: "Ramos Elementares" },
                   { href: "/social-media", label: "Social Media" },
                 ]}
