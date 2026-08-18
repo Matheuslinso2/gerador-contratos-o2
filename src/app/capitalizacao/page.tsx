@@ -3,6 +3,7 @@ import Image from "next/image";
 import CapitalizacaoForm from "./CapitalizacaoForm";
 import { createClient } from "@/lib/supabase/server";
 import AppHeader from "@/components/AppHeader";
+import LinkPublicoCompartilhavel from "@/components/LinkPublicoCompartilhavel";
 import { signOut } from "@/app/actions";
 
 export const metadata: Metadata = {
@@ -25,6 +26,7 @@ export default async function FormularioCapitalizacaoPage() {
     <>
       {user && <AppHeader userEmail={user.email} logoutAction={signOut} />}
       <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 p-6 sm:p-8">
+        {user && <LinkPublicoCompartilhavel path="/capitalizacao" />}
         <div className="flex flex-col items-center gap-4 text-center">
           <div className="relative flex items-center justify-center">
             <div
