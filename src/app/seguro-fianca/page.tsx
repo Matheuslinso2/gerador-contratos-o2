@@ -657,7 +657,7 @@ export default async function SeguroFiancaPage({
                 <div className={styles.sectionHead}>
                   <h2>Tempo de cotação por responsável</h2>
                   <div className={styles.note}>
-                    HORA INICIO → HORA FIM da fase de cotação (campo adicionado em 05/08/2026) — separado por resultado porque recusar é mais rápido que cotar de verdade
+                    HORA INICIO → HORA FIM da fase de cotação, por Responsável(is) pela Cotação — separado por resultado porque recusar é mais rápido que cotar de verdade
                   </div>
                 </div>
                 <div className={styles.panel}>
@@ -715,20 +715,22 @@ export default async function SeguroFiancaPage({
                   <div className={styles.panel}>
                     <h3>Quantitativo de análises diárias</h3>
                     <div className={styles.panelSub}>
-                      todas as análises que entraram por dia (independe de HORA FIM registrada), por Responsável(is) pela Cotação — card com mais de uma pessoa credita as duas, então a soma das colunas pode passar do Total; cards sem o campo de responsável preenchido caem em &quot;(sem responsável)&quot;
+                      todas as análises que entraram por dia (independe de HORA FIM registrada), por Responsável(is) pela Cotação — card com mais de uma pessoa credita as duas, então a soma das colunas pode passar do Total; cards sem o campo preenchido não entram na quebra por pessoa, mas viram alerta em &quot;Qualidade dos dados&quot;
                     </div>
                     <QuadroDiarioTabela quadro={gerencial.analisesDiariasPorResponsavel} />
                   </div>
                   <div className={styles.panel}>
                     <h3>Contratos recebidos por dia</h3>
                     <div className={styles.panelSub}>
-                      cards que entraram na etapa &quot;Contrato Recebido&quot; (Negociação e Contrato), por Responsável(is) pela Negociação
+                      cards que entraram na etapa &quot;Contrato Recebido&quot; (Negociação e Contrato), por Responsável(is) pela Negociação — sem o campo preenchido vira alerta em &quot;Qualidade dos dados&quot;, não entra na quebra por pessoa
                     </div>
                     <QuadroDiarioTabela quadro={gerencial.contratosRecebidosPorDia} />
                   </div>
                   <div className={styles.panel}>
                     <h3>Efetivações por dia</h3>
-                    <div className={styles.panelSub}>dia da Data de Efetivação, por Responsável pela Efetivação</div>
+                    <div className={styles.panelSub}>
+                      dia da Data de Efetivação, por Responsável pela Efetivação — sem o campo preenchido vira alerta em &quot;Qualidade dos dados&quot;, não entra na quebra por pessoa
+                    </div>
                     <QuadroDiarioTabela quadro={gerencial.efetivacoesPorDia} />
                   </div>
                 </div>
@@ -854,35 +856,66 @@ export default async function SeguroFiancaPage({
                 <div className={styles.sectionHead}>
                   <h2>Qualidade dos dados</h2>
                 </div>
-                <div className={`${styles.stampPanel} ${gerencial.qualidade.semImobiliaria + gerencial.qualidade.perdidosFunil2SemMotivo > 0 ? styles.stampPanelWarning : ""}`}>
-                  <div className={`${styles.stampBadge} ${gerencial.qualidade.semImobiliaria + gerencial.qualidade.perdidosFunil2SemMotivo > 0 ? styles.stampBadgeWarning : ""}`}>
-                    {gerencial.qualidade.semImobiliaria + gerencial.qualidade.perdidosFunil2SemMotivo > 0 ? (
-                      <>
-                        ATENÇÃO
-                        <br />
-                        PREENCHIMENTO
-                      </>
-                    ) : (
-                      <>
-                        DADOS
-                        <br />
-                        COMPLETOS
-                      </>
-                    )}
-                  </div>
-                  <div className={styles.stampList}>
-                    <div>
-                      {Math.round(((gerencial.kpis.total - gerencial.qualidade.semImobiliaria) / Math.max(gerencial.kpis.total, 1)) * 100)}% dos cards (
-                      {gerencial.kpis.total - gerencial.qualidade.semImobiliaria} de {gerencial.kpis.total}) têm imobiliária/empresa vinculada no CRM.
+                {(() => {
+                  // Cada métrica é uma dimensão de preenchimento independente (um
+                  // card pode faltar em mais de uma ao mesmo tempo) -- não soma
+                  // valores entre si, só usa "algum alerta existe" pra decidir o
+                  // selo. Os números de funil (recusados/aprovados/convertidos/
+                  // etc., no topo da página) vêm do status real do card e não são
+                  // afetados por nenhum desses alertas de preenchimento.
+                  const algumAlerta =
+                    gerencial.qualidade.semImobiliaria > 0 ||
+                    gerencial.qualidade.perdidosFunil2SemMotivo > 0 ||
+                    gerencial.qualidade.saiuFunil1SemHoraFim > 0 ||
+                    gerencial.qualidade.semResponsavelCotacao > 0 ||
+                    gerencial.qualidade.semResponsavelNegociacao > 0 ||
+                    gerencial.qualidade.semResponsavelEfetivacao > 0;
+                  return (
+                    <div className={`${styles.stampPanel} ${algumAlerta ? styles.stampPanelWarning : ""}`}>
+                      <div className={`${styles.stampBadge} ${algumAlerta ? styles.stampBadgeWarning : ""}`}>
+                        {algumAlerta ? (
+                          <>
+                            ATENÇÃO
+                            <br />
+                            PREENCHIMENTO
+                          </>
+                        ) : (
+                          <>
+                            DADOS
+                            <br />
+                            COMPLETOS
+                          </>
+                        )}
+                      </div>
+                      <div className={styles.stampList}>
+                        <div>
+                          {Math.round(((gerencial.kpis.total - gerencial.qualidade.semImobiliaria) / Math.max(gerencial.kpis.total, 1)) * 100)}% dos cards (
+                          {gerencial.kpis.total - gerencial.qualidade.semImobiliaria} de {gerencial.kpis.total}) têm imobiliária/empresa vinculada no CRM.
+                        </div>
+                        <div>
+                          {gerencial.motivosPerdaFunil2.total > 0
+                            ? `${Math.round(((gerencial.motivosPerdaFunil2.total - gerencial.qualidade.perdidosFunil2SemMotivo) / gerencial.motivosPerdaFunil2.total) * 100)}% das perdas em Negociação e Contrato (${gerencial.motivosPerdaFunil2.total - gerencial.qualidade.perdidosFunil2SemMotivo} de ${gerencial.motivosPerdaFunil2.total}) têm motivo registrado. `
+                            : "Nenhuma perda em Negociação e Contrato ainda este mês. "}
+                          Recusas em Análise e Cotação não exigem motivo — são decisão de compliance da própria seguradora, não do time.
+                        </div>
+                        {gerencial.qualidade.saiuFunil1SemHoraFim > 0 && (
+                          <div>{gerencial.qualidade.saiuFunil1SemHoraFim} card(s) já recusado(s)/aprovado(s) em Análise e Cotação sem HORA FIM da cotação registrada.</div>
+                        )}
+                        {gerencial.qualidade.semResponsavelCotacao > 0 && (
+                          <div>{gerencial.qualidade.semResponsavelCotacao} card(s) sem Responsável(is) pela Cotação preenchido.</div>
+                        )}
+                        {gerencial.qualidade.semResponsavelNegociacao > 0 && (
+                          <div>
+                            {gerencial.qualidade.semResponsavelNegociacao} card(s) que já entraram em &quot;Contrato Recebido&quot; sem Responsável(is) pela Negociação preenchido.
+                          </div>
+                        )}
+                        {gerencial.qualidade.semResponsavelEfetivacao > 0 && (
+                          <div>{gerencial.qualidade.semResponsavelEfetivacao} card(s) com Data de Efetivação preenchida sem Responsável pela Efetivação.</div>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      {gerencial.motivosPerdaFunil2.total > 0
-                        ? `${Math.round(((gerencial.motivosPerdaFunil2.total - gerencial.qualidade.perdidosFunil2SemMotivo) / gerencial.motivosPerdaFunil2.total) * 100)}% das perdas em Negociação e Contrato (${gerencial.motivosPerdaFunil2.total - gerencial.qualidade.perdidosFunil2SemMotivo} de ${gerencial.motivosPerdaFunil2.total}) têm motivo registrado. `
-                        : "Nenhuma perda em Negociação e Contrato ainda este mês. "}
-                      Recusas em Análise e Cotação não exigem motivo — são decisão de compliance da própria seguradora, não do time.
-                    </div>
-                  </div>
-                </div>
+                  );
+                })()}
               </section>
 
               <footer className={styles.footer}>

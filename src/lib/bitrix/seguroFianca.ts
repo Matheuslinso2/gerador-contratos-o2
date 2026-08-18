@@ -534,12 +534,28 @@ export type AnaliseGerencial = {
   analisesDiariasPorResponsavel: QuadroDiario;
   contratosRecebidosPorDia: QuadroDiario;
   efetivacoesPorDia: QuadroDiario;
-  qualidade: { semImobiliaria: number; perdidosFunil2SemMotivo: number; totalPerdidosFunil2: number; cotacaoTempoInconsistente: number };
+  qualidade: {
+    semImobiliaria: number;
+    perdidosFunil2SemMotivo: number;
+    totalPerdidosFunil2: number;
+    cotacaoTempoInconsistente: number;
+    saiuFunil1SemHoraFim: number;
+    semResponsavelCotacao: number;
+    semResponsavelNegociacao: number;
+    semResponsavelEfetivacao: number;
+  };
 };
 
-// Forma comum dos 3 quadros "por dia × responsável" do painel (cotações
-// concluídas, contratos recebidos, efetivações) -- ver montarQuadroDiario.
-export type QuadroDiario = { responsaveis: string[]; dias: { data: string; porResponsavel: Record<string, number>; total: number }[] };
+// Forma comum dos 3 quadros "por dia × responsável" do painel (cotações,
+// contratos recebidos, efetivações) -- ver montarQuadroDiario. semResponsavel
+// é a contagem de cards que entraram na conta (têm o "dia" válido) mas não
+// têm o campo de responsável daquela etapa preenchido -- não vira bucket na
+// tabela, vira alerta em "Qualidade dos dados".
+export type QuadroDiario = {
+  responsaveis: string[];
+  dias: { data: string; porResponsavel: Record<string, number>; total: number }[];
+  semResponsavel: number;
+};
 
 function diasDoMes(competencia: string): string[] {
   const [ano, mes] = competencia.split("-").map(Number);
@@ -553,18 +569,23 @@ function diasDoMes(competencia: string): string[] {
 // crédito por responsável é somado à parte -- quando um card tem mais de um
 // responsável (Cotação/Negociação aceitam vários), cada um recebe crédito
 // no seu nome, então a soma das colunas pode passar do Total. Cards sem
-// nenhum responsável preenchido caem no bucket "(sem responsável)" em vez
-// de sumir da contagem.
+// nenhum responsável preenchido NÃO viram bucket na tabela (poluía a
+// leitura) -- só contam pra `total` do dia e pra `semResponsavel`, que o
+// painel de "Qualidade dos dados" usa pra alertar preenchimento incompleto.
 function montarQuadroDiario(eventos: { dia: string; nomes: string[] }[], competencia: string): QuadroDiario {
   const porDia: Record<string, Record<string, number>> = {};
   const totalPorDia: Record<string, number> = {};
   const nomesSet = new Set<string>();
+  let semResponsavel = 0;
   for (const { dia, nomes } of eventos) {
     if (!dia || !dia.startsWith(competencia)) continue;
     totalPorDia[dia] = (totalPorDia[dia] ?? 0) + 1;
-    const lista = nomes.length ? nomes : ["(sem responsável)"];
+    if (!nomes.length) {
+      semResponsavel++;
+      continue;
+    }
     porDia[dia] ??= {};
-    for (const nome of lista) {
+    for (const nome of nomes) {
       porDia[dia][nome] = (porDia[dia][nome] ?? 0) + 1;
       nomesSet.add(nome);
     }
@@ -572,6 +593,7 @@ function montarQuadroDiario(eventos: { dia: string; nomes: string[] }[], compete
   return {
     responsaveis: [...nomesSet].sort(),
     dias: diasDoMes(competencia).map((data) => ({ data, porResponsavel: porDia[data] ?? {}, total: totalPorDia[data] ?? 0 })),
+    semResponsavel,
   };
 }
 
@@ -581,8 +603,10 @@ function montarQuadroDiario(eventos: { dia: string; nomes: string[] }[], compete
 // a página, devolvendo um quadro vazio em vez do formato incompatível.
 export function normalizarQuadroDiario(valor: unknown, competencia: string): QuadroDiario {
   const v = valor as Partial<QuadroDiario> | undefined | null;
-  if (v && Array.isArray(v.responsaveis) && Array.isArray(v.dias)) return v as QuadroDiario;
-  return { responsaveis: [], dias: diasDoMes(competencia).map((data) => ({ data, porResponsavel: {}, total: 0 })) };
+  if (v && Array.isArray(v.responsaveis) && Array.isArray(v.dias)) {
+    return { responsaveis: v.responsaveis, dias: v.dias, semResponsavel: typeof v.semResponsavel === "number" ? v.semResponsavel : 0 };
+  }
+  return { responsaveis: [], dias: diasDoMes(competencia).map((data) => ({ data, porResponsavel: {}, total: 0 })), semResponsavel: 0 };
 }
 
 const ETAPA_CONTRATO_RECEBIDO = "DT1042_20:UC_RD3MTL";
@@ -861,23 +885,37 @@ export function montarAnaliseGerencial(
   };
 
   // Tempo de execução da fase de cotação (HORA INICIO -> HORA FIM, campos
-  // adicionados pela supervisora em 05/08/2026), por responsável ATUAL do
-  // card — separado em recusado/aprovado porque são naturalmente muito
+  // adicionados pela supervisora em 05/08/2026), por Responsáveis pela
+  // Cotação (campo dedicado, 17/08/2026 -- não mais o responsável ATUAL do
+  // card) — separado em recusado/aprovado porque são naturalmente muito
   // diferentes (recusar é rápido, cotar de verdade com várias seguradoras
   // demora mais). Cards com HORA INICIO/FIM aparentemente trocados (o campo
   // "Tempo Gasto", calculado pelo próprio Bitrix, confirma que a duração
   // real bate com o valor absoluto) entram normalmente na média — só ficam
-  // marcados como alerta de qualidade, não são mais excluídos.
+  // marcados como alerta de qualidade, não são mais excluídos. Cards sem
+  // Responsável(is) pela Cotação preenchido não entram aqui (não tem quem
+  // creditar) mas já caem no alerta semResponsavelCotacao, mais amplo.
+  //
+  // Alerta separado: card que já SAIU do funil 1 (foi recusado ou aprovado
+  // pra Negociação) sem nunca ter registrado a HORA FIM da cotação -- sinal
+  // de etapa pulada, independente de ter HORA INICIO ou responsável.
   const porCotador: Record<string, { recusado: number[]; aprovado: number[] }> = {};
   let cotacaoTempoInconsistente = 0;
+  let saiuFunil1SemHoraFim = 0;
   for (const l of linhas) {
+    const jaPassouPelaCotacao = l.funil === "Negociação e Contrato" || l.resultado === "Aprovado";
+    const saiuFunil1 = jaPassouPelaCotacao || l.resultado === "Recusado";
+    if (saiuFunil1 && !l.dataCotacao) saiuFunil1SemHoraFim++;
+
     if (l.minutosCotacao === null) continue;
     if (l.cotacaoCamposTrocados) cotacaoTempoInconsistente++;
-    const jaPassouPelaCotacao = l.funil === "Negociação e Contrato" || l.resultado === "Aprovado";
     const resultadoCotacao = l.resultado === "Recusado" ? "recusado" : jaPassouPelaCotacao ? "aprovado" : null;
     if (!resultadoCotacao) continue; // ainda em andamento na cotação — não deveria ter os 2 campos preenchidos ainda
-    porCotador[l.responsavelAtual] ??= { recusado: [], aprovado: [] };
-    porCotador[l.responsavelAtual][resultadoCotacao].push(l.minutosCotacao);
+    if (!l.responsaveisCotacao.length) continue;
+    for (const nome of l.responsaveisCotacao) {
+      porCotador[nome] ??= { recusado: [], aprovado: [] };
+      porCotador[nome][resultadoCotacao].push(l.minutosCotacao);
+    }
   }
   const tempoCotacaoPorResponsavel: AnaliseGerencial["tempoCotacaoPorResponsavel"] = {};
   for (const [nome, d] of Object.entries(porCotador)) {
@@ -977,6 +1015,10 @@ export function montarAnaliseGerencial(
       perdidosFunil2SemMotivo: perdasSemMotivo,
       totalPerdidosFunil2: perdasFunil2.length,
       cotacaoTempoInconsistente,
+      saiuFunil1SemHoraFim,
+      semResponsavelCotacao: analisesDiariasPorResponsavel.semResponsavel,
+      semResponsavelNegociacao: contratosRecebidosPorDia.semResponsavel,
+      semResponsavelEfetivacao: efetivacoesPorDia.semResponsavel,
     },
   };
 }
