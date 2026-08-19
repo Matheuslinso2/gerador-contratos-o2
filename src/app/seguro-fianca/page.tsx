@@ -8,21 +8,13 @@ import AtualizarAgora from "./AtualizarAgora";
 import ImobiliariasTabela from "./ImobiliariasTabela";
 import styles from "./seguro-fianca.module.css";
 import {
-  buscarDefinicaoCampos,
-  buscarEmpresas,
-  buscarUsuarios,
-  listarHistoricoEtapas,
-  listarItensSpa,
-} from "@/lib/bitrix/client";
-import {
   CATEGORIA_ANALISE,
   CATEGORIA_NEGOCIACAO,
   ENTITY_TYPE_ID,
   ETAPAS,
   SEGURADORAS,
-  idsResponsaveisEtapas,
+  buscarAnaliseGerencialAoVivo,
   montarAnaliseGerencial,
-  montarContagemMensal,
   normalizarQuadroDiario,
   type AnaliseGerencial,
   type QuadroDiario,
@@ -89,30 +81,19 @@ function normalizarSnapshot(
   payload: AnaliseGerencial & { totalMovimentacoes: number },
   competencia: string
 ): AnaliseGerencial & { totalMovimentacoes: number } {
+  // Snapshots salvos antes do congelamento/herança (20/08/2026) têm
+  // contratosRecebidosPorDia no formato antigo (QuadroDiario direto, sem
+  // mesAtual/herdado) -- trata como objeto solto pra não quebrar o cast.
+  const contratosRecebidosPorDia = payload.contratosRecebidosPorDia as unknown as { mesAtual?: unknown; herdado?: unknown } | undefined;
   return {
     ...payload,
     analisesDiariasPorResponsavel: normalizarQuadroDiario(payload.analisesDiariasPorResponsavel, competencia),
-    contratosRecebidosPorDia: normalizarQuadroDiario(payload.contratosRecebidosPorDia, competencia),
+    contratosRecebidosPorDia: {
+      mesAtual: normalizarQuadroDiario(contratosRecebidosPorDia?.mesAtual, competencia),
+      herdado: normalizarQuadroDiario(contratosRecebidosPorDia?.herdado, competencia),
+    },
     efetivacoesPorDia: normalizarQuadroDiario(payload.efetivacoesPorDia, competencia),
   };
-}
-
-async function buscarDadosAoVivo(competencia: string): Promise<AnaliseGerencial & { totalMovimentacoes: number }> {
-  const [items, historico, defs] = await Promise.all([
-    listarItensSpa(ENTITY_TYPE_ID),
-    listarHistoricoEtapas(ENTITY_TYPE_ID),
-    buscarDefinicaoCampos(ENTITY_TYPE_ID),
-  ]);
-
-  const idsEmpresa = items.map((it) => it.companyId).filter((id): id is number => !!id);
-  const idsUsuario = items
-    .flatMap((it) => [it.assignedById, it.createdBy, it.movedBy, ...idsResponsaveisEtapas(it)])
-    .filter((id): id is number => !!id);
-  const [empresas, usuarios] = await Promise.all([buscarEmpresas(idsEmpresa), buscarUsuarios(idsUsuario)]);
-
-  const contagem = montarContagemMensal(items, historico, usuarios, empresas, defs);
-  const gerencial = montarAnaliseGerencial(contagem, historico, competencia);
-  return { ...gerencial, totalMovimentacoes: historico.length };
 }
 
 function construirSegmentosFunil(
@@ -127,19 +108,23 @@ function construirSegmentosFunil(
     if (valor > 0) segmentos.push({ label: etapa.nome, value: valor, classe: styles.segNew });
   }
 
+  // Terminais (Recusado/Aprovado/Perdido/Convertido) somam mês atual +
+  // herdado num número só, e representam só o que aconteceu NESTE mês --
+  // por isso usam .total (não dividem por origem aqui, ver KPIs do topo
+  // pra essa divisão).
   if (categoria === CATEGORIA_ANALISE) {
-    if (gerencial.kpis.aprovados > 0) {
-      segmentos.push({ label: "Aprovado p/ Negociação e Contrato", value: gerencial.kpis.aprovados, classe: styles.segInfo });
+    if (gerencial.kpis.aprovados.total > 0) {
+      segmentos.push({ label: "Aprovado p/ Negociação e Contrato", value: gerencial.kpis.aprovados.total, classe: styles.segInfo });
     }
-    if (gerencial.kpis.recusados > 0) {
-      segmentos.push({ label: "Recusado", value: gerencial.kpis.recusados, classe: styles.segNeg });
+    if (gerencial.kpis.recusados.total > 0) {
+      segmentos.push({ label: "Recusado", value: gerencial.kpis.recusados.total, classe: styles.segNeg });
     }
   } else {
-    if (gerencial.kpis.convertidos > 0) {
-      segmentos.push({ label: "Convertido", value: gerencial.kpis.convertidos, classe: styles.segInfo });
+    if (gerencial.kpis.convertidos.total > 0) {
+      segmentos.push({ label: "Convertido", value: gerencial.kpis.convertidos.total, classe: styles.segInfo });
     }
-    if (gerencial.kpis.perdidos > 0) {
-      segmentos.push({ label: "Perdido", value: gerencial.kpis.perdidos, classe: styles.segNeg });
+    if (gerencial.kpis.perdidos.total > 0) {
+      segmentos.push({ label: "Perdido", value: gerencial.kpis.perdidos.total, classe: styles.segNeg });
     }
   }
   return segmentos;
@@ -178,15 +163,21 @@ function StackBar({ segments, total }: { segments: { label: string; value: numbe
   );
 }
 
+// "Novos" = criados nesta competência (zera na virada). "Andamento" = tudo
+// que essa pessoa tem aberto agora, novidades + herdados (não zera).
+// "Negativos"/"Positivos" = evento terminal neste mês, novidade+herdado
+// somados (zera na virada).
 function ProdutividadeTabela({ dados }: { dados: AnaliseGerencial["porResponsavelFunil1"] }) {
-  const linhas = Object.entries(dados).sort((a, b) => b[1].cards - a[1].cards);
+  const linhas = Object.entries(dados).sort(
+    (a, b) => b[1].novos + b[1].andamento + b[1].negativos + b[1].positivos - (a[1].novos + a[1].andamento + a[1].negativos + a[1].positivos)
+  );
   return (
     <div className={styles.tableWrap}>
       <table className={styles.data}>
         <thead>
           <tr>
             <th>Responsável</th>
-            <th className={styles.numCol}>Cards</th>
+            <th className={styles.numCol}>Novos</th>
             <th className={styles.numCol}>Andamento</th>
             <th className={styles.numCol}>Negativos</th>
             <th className={styles.numCol}>Positivos</th>
@@ -196,7 +187,7 @@ function ProdutividadeTabela({ dados }: { dados: AnaliseGerencial["porResponsave
           {linhas.map(([nome, d]) => (
             <tr key={nome}>
               <td>{nome}</td>
-              <td className={`${styles.numCol} ${styles.num}`}>{d.cards}</td>
+              <td className={`${styles.numCol} ${styles.num}`}>{d.novos}</td>
               <td className={styles.numCol}>
                 <span className={`${styles.pill} ${styles.pillPositive}`}>{d.andamento}</span>
               </td>
@@ -310,7 +301,7 @@ export default async function SeguroFiancaPage({
 
   if (ehCompetenciaAtual) {
     try {
-      gerencial = await comLimiteDeTempo(buscarDadosAoVivo(competencia), LIMITE_TEMPO_AO_VIVO_MS);
+      gerencial = await comLimiteDeTempo(buscarAnaliseGerencialAoVivo(competencia), LIMITE_TEMPO_AO_VIVO_MS);
       atualizadoEm = new Date().toISOString();
       const { error: erroUpsert } = await supabase
         .from("seguro_fianca_snapshots")
@@ -402,55 +393,77 @@ export default async function SeguroFiancaPage({
 
           {gerencial && (
             <>
+              <h2 style={{ fontSize: 14, fontWeight: 700, margin: "0 0 8px", color: "var(--ink)" }}>Novidades do mês</h2>
               <div className={styles.kpis}>
-                <Kpi label="Total de Cards" value={String(gerencial.kpis.total)} sub="entradas no mês" />
-                <Kpi label="Em Andamento" value={String(gerencial.kpis.emAndamento)} sub="ainda sendo trabalhados, nos dois funis" tone="positive" />
-                <Kpi label="Recusados" value={String(gerencial.kpis.recusados)} sub="não avançaram em Análise e Cotação" tone="negative" />
-                <Kpi label="Aprovados" value={String(gerencial.kpis.aprovados)} sub="saíram de Análise e Cotação p/ Negociação" tone="info" />
-                <Kpi label="Perdidos" value={String(gerencial.kpis.perdidos)} sub="não fecharam em Negociação e Contrato" tone="negative" />
-                <Kpi label="Convertidos" value={String(gerencial.kpis.convertidos)} sub="contrato fechado" />
+                <Kpi label="Total de Cards" value={String(gerencial.kpis.total)} sub="criados nesta competência" />
+                <Kpi label="Imobiliárias" value={String(gerencial.kpis.imobiliarias)} sub="enviaram cotação no período" />
+                <Kpi label="Em Andamento" value={String(gerencial.kpis.emAndamento.mesAtual)} sub="deste mês, ainda sendo trabalhados" tone="positive" />
+                <Kpi label="Recusados" value={String(gerencial.kpis.recusados.mesAtual)} sub="deste mês, não avançaram em Análise e Cotação" tone="negative" />
+                <Kpi label="Aprovados" value={String(gerencial.kpis.aprovados.mesAtual)} sub="deste mês, saíram p/ Negociação" tone="info" />
+                <Kpi label="Perdidos" value={String(gerencial.kpis.perdidos.mesAtual)} sub="deste mês, não fecharam em Negociação e Contrato" tone="negative" />
+                <Kpi label="Convertidos" value={String(gerencial.kpis.convertidos.mesAtual)} sub="deste mês, contrato fechado" />
                 <Kpi
                   label="Cards com Alerta"
                   value={String(gerencial.kpis.comAlerta)}
-                  sub={`${Math.round((gerencial.kpis.comAlerta / Math.max(gerencial.kpis.total, 1)) * 100)}% — ver qualidade dos dados`}
-                  tone={gerencial.kpis.comAlerta / Math.max(gerencial.kpis.total, 1) > 0.2 ? "warning" : "positive"}
+                  sub={`${Math.round((gerencial.kpis.comAlerta / Math.max(gerencial.kpis.totalRelevantes, 1)) * 100)}% de novidades + herdados — ver qualidade dos dados`}
+                  tone={gerencial.kpis.comAlerta / Math.max(gerencial.kpis.totalRelevantes, 1) > 0.2 ? "warning" : "positive"}
                 />
-                <Kpi label="Imobiliárias" value={String(gerencial.kpis.imobiliarias)} sub="enviaram cotação no período" />
               </div>
 
-              <section className={styles.section}>
-                <div className={styles.sectionHead}>
-                  <h2>Distribuição por funil e etapa</h2>
-                  <div className={styles.note}>{gerencial.kpis.total} cards</div>
-                </div>
-                <div className={styles.panel}>
-                  <div className={styles.stackGroup}>
-                    <div className={styles.glabel}>
-                      <span>Análise e Cotação — resultado de todos que passaram por aqui</span>
-                      <span className={styles.num}>{gerencial.kpis.total} cards</span>
+              <h2 style={{ fontSize: 14, fontWeight: 700, margin: "20px 0 8px", color: "var(--ink)" }}>Herdado de meses anteriores</h2>
+              <div className={styles.kpis}>
+                <Kpi label="Em Andamento" value={String(gerencial.kpis.emAndamento.herdado)} sub="ainda em aberto, de outros meses" tone="positive" />
+                <Kpi label="Recusados" value={String(gerencial.kpis.recusados.herdado)} sub="recusados este mês, criados antes" tone="negative" />
+                <Kpi label="Aprovados" value={String(gerencial.kpis.aprovados.herdado)} sub="aprovados este mês, criados antes" tone="info" />
+                <Kpi label="Perdidos" value={String(gerencial.kpis.perdidos.herdado)} sub="perdidos este mês, criados antes" tone="negative" />
+                <Kpi label="Convertidos" value={String(gerencial.kpis.convertidos.herdado)} sub="convertidos este mês, criados antes" />
+              </div>
+
+              {(() => {
+                // "Em andamento" mostra tudo (novidades + herdados); os
+                // terminais (Recusado/Aprovado/Perdido/Convertido) só o que
+                // aconteceu neste mês -- por isso o total de cada barra é a
+                // soma dos próprios segmentos, não um KPI pronto.
+                const segmentosFunil1 = construirSegmentosFunil(gerencial, CATEGORIA_ANALISE);
+                const segmentosFunil2 = construirSegmentosFunil(gerencial, CATEGORIA_NEGOCIACAO);
+                const totalFunil1 = segmentosFunil1.reduce((a, s) => a + s.value, 0);
+                const totalFunil2 = segmentosFunil2.reduce((a, s) => a + s.value, 0);
+                return (
+                  <section className={styles.section}>
+                    <div className={styles.sectionHead}>
+                      <h2>Distribuição por funil e etapa</h2>
+                      <div className={styles.note}>em andamento (todos) + terminais deste mês</div>
                     </div>
-                    <StackBar segments={construirSegmentosFunil(gerencial, CATEGORIA_ANALISE)} total={gerencial.kpis.total} />
-                  </div>
-                  <div className={styles.stackGroup}>
-                    <div className={styles.glabel}>
-                      <span>Negociação e Contrato — situação atual dos encaminhados</span>
-                      <span className={styles.num}>{gerencial.kpis.aprovados} cards</span>
+                    <div className={styles.panel}>
+                      <div className={styles.stackGroup}>
+                        <div className={styles.glabel}>
+                          <span>Análise e Cotação — em andamento (todos) + recusado/aprovado deste mês</span>
+                          <span className={styles.num}>{totalFunil1} cards</span>
+                        </div>
+                        <StackBar segments={segmentosFunil1} total={totalFunil1} />
+                      </div>
+                      <div className={styles.stackGroup}>
+                        <div className={styles.glabel}>
+                          <span>Negociação e Contrato — em andamento (todos) + convertido/perdido deste mês</span>
+                          <span className={styles.num}>{totalFunil2} cards</span>
+                        </div>
+                        <StackBar segments={segmentosFunil2} total={totalFunil2} />
+                      </div>
+                      <div className={styles.legendRow}>
+                        <div className={styles.legendItem}>
+                          <span className={styles.swatch} style={{ background: "var(--accent)" }} /> Em andamento
+                        </div>
+                        <div className={styles.legendItem}>
+                          <span className={styles.swatch} style={{ background: "var(--info)" }} /> Aprovado/Convertido (este mês)
+                        </div>
+                        <div className={styles.legendItem}>
+                          <span className={styles.swatch} style={{ background: "var(--negative)" }} /> Recusado/Perdido (este mês)
+                        </div>
+                      </div>
                     </div>
-                    <StackBar segments={construirSegmentosFunil(gerencial, CATEGORIA_NEGOCIACAO)} total={gerencial.kpis.aprovados} />
-                  </div>
-                  <div className={styles.legendRow}>
-                    <div className={styles.legendItem}>
-                      <span className={styles.swatch} style={{ background: "var(--accent)" }} /> Em andamento
-                    </div>
-                    <div className={styles.legendItem}>
-                      <span className={styles.swatch} style={{ background: "var(--info)" }} /> Aprovado/Convertido
-                    </div>
-                    <div className={styles.legendItem}>
-                      <span className={styles.swatch} style={{ background: "var(--negative)" }} /> Recusado/Perdido
-                    </div>
-                  </div>
-                </div>
-              </section>
+                  </section>
+                );
+              })()}
 
               <section className={styles.section}>
                 <div className={styles.sectionHead}>
@@ -521,7 +534,7 @@ export default async function SeguroFiancaPage({
                   </div>
                   <div className={styles.panel}>
                     <h3>Negociação e Contrato</h3>
-                    <div className={styles.panelSub}>{gerencial.kpis.aprovados} cards encaminhados</div>
+                    <div className={styles.panelSub}>{gerencial.kpis.aprovados.total} cards encaminhados este mês</div>
                     <ProdutividadeTabela dados={gerencial.porResponsavelFunil2} />
                   </div>
                 </div>
@@ -605,7 +618,7 @@ export default async function SeguroFiancaPage({
                         </tr>
                         <tr>
                           <td style={{ color: "var(--negative)" }}>Total convertido (fechado)</td>
-                          <td className={`${styles.numCol} ${styles.num}`}>{gerencial.kpis.convertidos}</td>
+                          <td className={`${styles.numCol} ${styles.num}`}>{gerencial.kpis.convertidos.total}</td>
                           <td className={`${styles.numCol} ${styles.num}`}>
                             {fmtBRL(Object.values(gerencial.convertidoPorSeguradora).reduce((a, c) => a + c.premio, 0))}
                           </td>
@@ -805,9 +818,12 @@ export default async function SeguroFiancaPage({
                   <div className={styles.panel}>
                     <h3>Contratos recebidos por dia</h3>
                     <div className={styles.panelSub}>
-                      cards que entraram na etapa &quot;Contrato Recebido&quot; (Negociação e Contrato) — sem quebra por responsável, ver &quot;Qualidade dos dados&quot; pra preenchimento pendente
+                      cards que entraram na etapa &quot;Contrato Recebido&quot; — dividido pela origem do card (criado este mês ou herdado), sem quebra por responsável
                     </div>
-                    <QuadroDiarioTabela quadro={gerencial.contratosRecebidosPorDia} mostrarResponsaveis={false} />
+                    <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>Origem: mês atual</div>
+                    <QuadroDiarioTabela quadro={gerencial.contratosRecebidosPorDia.mesAtual} mostrarResponsaveis={false} />
+                    <div style={{ fontSize: 12.5, fontWeight: 700, marginTop: 16, marginBottom: 6 }}>Origem: herdado de meses anteriores</div>
+                    <QuadroDiarioTabela quadro={gerencial.contratosRecebidosPorDia.herdado} mostrarResponsaveis={false} />
                   </div>
                   <div className={styles.panel}>
                     <h3>Efetivações por dia</h3>

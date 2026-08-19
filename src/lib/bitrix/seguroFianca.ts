@@ -12,8 +12,39 @@
 // - Taxa real de uma seguradora = valor da cotação ÷ pacote de locação
 //   (não confundir com o campo "Taxa Média (13%)" do CRM, que é uma meta
 //   fixa, não um resultado real).
+//
+// Congelamento mensal / herança (desenhado com o Matheus e a Patricia em
+// 19-20/08/2026) — regra geral: um card só entra em "Novidades do mês" se
+// nasceu (dataCriacao) nesta competência. Tudo que acontece depois com um
+// card de mês anterior ("herdado") conta pelo MÊS DO EVENTO (recusou/
+// aprovou/perdeu/converteu), não pela origem. Cada quadro do painel usa um
+// dos 3 conjuntos abaixo (ver montarAnaliseGerencial):
+// - `novidades` — só cards criados nesta competência (Grupo A: Total,
+//   cotações, valores trabalhados, etc.).
+// - `relevantes` — novidades + cards de outras competências que ainda estão
+//   "Em andamento" OU tiveram algum evento nesta competência (usado pra
+//   "em andamento" e qualidade de dados — nunca zera, é o estado atual).
+// - Conjuntos "este mês" por evento (recusadosEsteMs, aprovadosEsteMes,
+//   perdidosEsteMes, convertidosEsteMes) — cards cujo evento terminal
+//   aconteceu nesta competência, seja qual for a origem. Usado nos KPIs
+//   "terminais", que zeram na virada do mês.
+// Importante: essa lógica só é válida calculada AO VIVO pra competência
+// ATUAL. Mês passado precisa ser lido do snapshot congelado (ver page.tsx),
+// nunca recalculado — "Em Andamento" de um mês fechado é um fato histórico
+// (estava aberto naquele momento), não algo rededuzível do estado atual do
+// Bitrix.
 
-import type { BitrixDefinicaoCampo, BitrixItemRaw, BitrixStageHistoryEvent } from "./client";
+import "server-only";
+import {
+  buscarDefinicaoCampos,
+  buscarEmpresas,
+  buscarUsuarios,
+  listarHistoricoEtapas,
+  listarItensSpa,
+  type BitrixDefinicaoCampo,
+  type BitrixItemRaw,
+  type BitrixStageHistoryEvent,
+} from "./client";
 
 export const ENTITY_TYPE_ID = 1042;
 export const CATEGORIA_ANALISE = 18;
@@ -230,7 +261,7 @@ export type LinhaContagem = {
   imobiliaria: string;
   tipoLocacao: string;
   finalidadeImovel: string;
-  competencia: string;
+  competencia: string; // mês de CRIAÇÃO (origem) — base de "novidades" vs "herdado"
   funil: "Análise e Cotação" | "Negociação e Contrato";
   etapaAtual: string;
   resultado: "Recusado" | "Aprovado" | "Perdido" | "Convertido" | "Em andamento";
@@ -244,6 +275,15 @@ export type LinhaContagem = {
   dataCotacao: string; // data (YYYY-MM-DD) da HORA FIM — dia em que a cotação foi concluída; "" se não preenchida
   cotacaoCamposTrocados: boolean; // HORA INICIO/HORA FIM aparentam estar invertidos (duração já vem em valor absoluto)
   qtdMovimentacoes: number;
+  // Datas de EVENTO (mês em que o card recusou/aprovou/perdeu/converteu),
+  // derivadas do histórico de etapas -- "" se o evento nunca aconteceu.
+  // Base de todo KPI "terminal" (zera na virada do mês, conta pelo mês do
+  // evento, não pela origem do card). Ver comentário no topo do arquivo.
+  dataRecusa: string;
+  dataAprovacao: string;
+  dataPerda: string;
+  dataConversao: string; // Data de Efetivação quando preenchida, senão a entrada em SUCESSO do funil 2
+  entrouContratoRecebido: boolean; // já passou pela etapa "Contrato Recebido" alguma vez
   responsavelAtual: string; // campo nativo (assignedById, dono ATUAL) -- guardado só como dado bruto, nenhuma métrica usa mais
   responsavelCadastro: string; // campo dedicado (17/08/2026), etapa "Iniciante", nome único, "" se vazio
   responsaveisCotacao: string[]; // campo dedicado (17/08/2026), pode ter mais de um nome
@@ -291,6 +331,14 @@ function resultadoNoFunil(categoryId: number, semantica: Etapa["semantica"]): Li
 
 function nomeFunil(categoryId: number): LinhaContagem["funil"] {
   return categoryId === CATEGORIA_ANALISE ? "Análise e Cotação" : "Negociação e Contrato";
+}
+
+// Primeiro evento do histórico do card que bate no predicado, já ordenado
+// por data -- base de dataRecusa/dataAprovacao/dataPerda/dataConversao.
+function primeiraDataEtapa(eventos: BitrixStageHistoryEvent[], predicate: (e: BitrixStageHistoryEvent) => boolean): string {
+  const ordenados = [...eventos].sort((a, b) => new Date(a.CREATED_TIME).getTime() - new Date(b.CREATED_TIME).getTime());
+  const achado = ordenados.find(predicate);
+  return achado ? apenasData(achado.CREATED_TIME) : "";
 }
 
 // Reconstrói, a partir do histórico real de mudança de etapa (crm.stagehistory.list),
@@ -390,14 +438,41 @@ export function montarContagemMensal(
     const cotacaoCamposTrocados = minutosCotacaoBruto !== null && minutosCotacaoBruto < 0;
     const dataCotacao = fimCotacaoRaw ? apenasData(String(fimCotacaoRaw)) : "";
 
+    // Datas de evento -- ver comentário no topo do arquivo. Fallback pra
+    // movedTime/updatedTime só quando sabemos que o evento aconteceu (pelo
+    // resultado/categoria atual do card) mas o histórico não tem o registro
+    // (card antigo, ou movido por importação sem gerar evento).
+    const fallbackData = apenasData(item.movedTime || item.updatedTime);
+    const dataRecusa =
+      resultado === "Recusado"
+        ? primeiraDataEtapa(eventos, (e) => e.CATEGORY_ID === CATEGORIA_ANALISE && etapaPorStatusId.get(e.STAGE_ID)?.semantica === "F") ||
+          fallbackData
+        : "";
+    const dataAprovacao =
+      item.categoryId === CATEGORIA_NEGOCIACAO
+        ? primeiraDataEtapa(eventos, (e) => e.CATEGORY_ID === CATEGORIA_NEGOCIACAO) || fallbackData
+        : "";
+    const dataPerda =
+      resultado === "Perdido"
+        ? primeiraDataEtapa(eventos, (e) => e.CATEGORY_ID === CATEGORIA_NEGOCIACAO && etapaPorStatusId.get(e.STAGE_ID)?.semantica === "F") ||
+          fallbackData
+        : "";
+
     const motivoRecusaPerda = enumLabel(defs, CAMPO_MOTIVO_RECUSA, item[CAMPO_MOTIVO_RECUSA]);
-    const responsaveisCotacaoAlerta = nomesResponsaveis(usuarios, item[CAMPO_RESPONSAVEIS_COTACAO]);
-    const responsaveisNegociacaoAlerta = nomesResponsaveis(usuarios, item[CAMPO_RESPONSAVEIS_NEGOCIACAO]);
-    const responsavelEfetivacaoAlerta = nomesResponsaveis(usuarios, item[CAMPO_RESPONSAVEL_EFETIVACAO])[0] ?? "";
-    const dataEfetivacaoAlerta = apenasData(item[CAMPO_DATA_EFETIVACAO]);
+    const responsaveisCotacao = nomesResponsaveis(usuarios, item[CAMPO_RESPONSAVEIS_COTACAO]);
+    const responsaveisNegociacao = nomesResponsaveis(usuarios, item[CAMPO_RESPONSAVEIS_NEGOCIACAO]);
+    const responsavelEfetivacao = nomesResponsaveis(usuarios, item[CAMPO_RESPONSAVEL_EFETIVACAO])[0] ?? "";
+    const dataEfetivacao = apenasData(item[CAMPO_DATA_EFETIVACAO]);
     const jaPassouPelaCotacao = item.categoryId === CATEGORIA_NEGOCIACAO || resultado === "Aprovado";
     const saiuFunil1 = jaPassouPelaCotacao || resultado === "Recusado";
     const entrouContratoRecebido = item.stageId === ETAPA_CONTRATO_RECEBIDO || eventos.some((e) => e.STAGE_ID === ETAPA_CONTRATO_RECEBIDO);
+
+    const dataConversao =
+      resultado === "Convertido"
+        ? dataEfetivacao ||
+          primeiraDataEtapa(eventos, (e) => e.CATEGORY_ID === CATEGORIA_NEGOCIACAO && etapaPorStatusId.get(e.STAGE_ID)?.semantica === "S") ||
+          fallbackData
+        : "";
 
     // Mesmas 6 dimensões do quadro "Qualidade dos dados" (ver qualidade{} em
     // montarAnaliseGerencial) -- computadas aqui por card pra "Cards com
@@ -411,9 +486,9 @@ export function montarContagemMensal(
       alertas.push("Convertido sem seguradora escolhida");
     }
     if (saiuFunil1 && !dataCotacao) alertas.push("Saiu de Análise e Cotação sem HORA FIM da cotação registrada");
-    if (!responsaveisCotacaoAlerta.length) alertas.push("Sem Responsável(is) pela Cotação preenchido");
-    if (entrouContratoRecebido && !responsaveisNegociacaoAlerta.length) alertas.push("Sem Responsável(is) pela Negociação preenchido");
-    if (dataEfetivacaoAlerta && !responsavelEfetivacaoAlerta) alertas.push("Data de Efetivação preenchida sem Responsável pela Efetivação");
+    if (!responsaveisCotacao.length) alertas.push("Sem Responsável(is) pela Cotação preenchido");
+    if (entrouContratoRecebido && !responsaveisNegociacao.length) alertas.push("Sem Responsável(is) pela Negociação preenchido");
+    if (dataEfetivacao && !responsavelEfetivacao) alertas.push("Data de Efetivação preenchida sem Responsável pela Efetivação");
 
     const alugCard = valorMonetario(item[CAMPO_ALUGUEL]);
     const pacoteCard = valorMonetario(item[CAMPO_PACOTE_LOCACAO]);
@@ -476,11 +551,16 @@ export function montarContagemMensal(
       dataCotacao,
       cotacaoCamposTrocados,
       qtdMovimentacoes: eventos.length,
+      dataRecusa,
+      dataAprovacao,
+      dataPerda,
+      dataConversao,
+      entrouContratoRecebido,
       responsavelAtual: nomeUsuario(usuarios, item.assignedById),
       responsavelCadastro: nomesResponsaveis(usuarios, item[CAMPO_RESPONSAVEL_CADASTRO])[0] ?? "",
-      responsaveisCotacao: nomesResponsaveis(usuarios, item[CAMPO_RESPONSAVEIS_COTACAO]),
-      responsaveisNegociacao: nomesResponsaveis(usuarios, item[CAMPO_RESPONSAVEIS_NEGOCIACAO]),
-      responsavelEfetivacao: nomesResponsaveis(usuarios, item[CAMPO_RESPONSAVEL_EFETIVACAO])[0] ?? "",
+      responsaveisCotacao,
+      responsaveisNegociacao,
+      responsavelEfetivacao,
       criadoPor: nomeUsuario(usuarios, item.createdBy),
       ultimaMovimentacaoPor: nomeUsuario(usuarios, item.movedBy),
       aluguel: alugCard,
@@ -490,7 +570,7 @@ export function montarContagemMensal(
       motivoRecusaPerda,
       vigenciaInicial: apenasData(item[CAMPO_VIGENCIA_INICIAL]),
       vigenciaFinal: apenasData(item[CAMPO_VIGENCIA_FINAL]),
-      dataEfetivacao: apenasData(item[CAMPO_DATA_EFETIVACAO]),
+      dataEfetivacao,
       premioLiquido:
         valorMonetario(item[CAMPO_PREMIO_LIQUIDO_NOVO]) ||
         valorMonetario(item[CAMPO_PREMIO_LIQUIDO]) ||
@@ -519,40 +599,65 @@ function estatisticasTempo(minutos: number[]): EstatisticaTempo {
   return { media: media(minutos), mediana: mediana(minutos), min: ordenado[0] ?? 0, max: ordenado[ordenado.length - 1] ?? 0, n: minutos.length };
 }
 
+// mesAtual = origem (dataCriacao) nesta competência; herdado = origem em
+// competência anterior; total = soma dos dois (não separa por origem — é
+// o número "único" usado nos quadros que não dividem, ex: a barra
+// empilhada e a tabela de imobiliárias).
+export type ContagemPorOrigem = { mesAtual: number; herdado: number; total: number };
+function contagemPorOrigem(itens: LinhaContagem[], competencia: string): ContagemPorOrigem {
+  let mesAtual = 0;
+  let herdado = 0;
+  for (const l of itens) {
+    if (l.competencia === competencia) mesAtual++;
+    else herdado++;
+  }
+  return { mesAtual, herdado, total: mesAtual + herdado };
+}
+
 export type AnaliseGerencial = {
-  kpis: { total: number; emAndamento: number; recusados: number; aprovados: number; perdidos: number; convertidos: number; comAlerta: number; imobiliarias: number };
-  porFunilEtapa: Record<string, number>;
-  porResponsavelFunil1: Record<string, { cards: number; andamento: number; negativos: number; positivos: number }>;
-  porResponsavelFunil2: Record<string, { cards: number; andamento: number; negativos: number; positivos: number }>;
-  statusPorSeguradora: Record<string, Record<string, number>>;
-  cotadoPorSeguradora: Record<string, { n: number; premio: number; comissao: number }>;
-  convertidoPorSeguradora: Record<string, { n: number; premio: number; comissao: number }>;
-  taxaPorSeguradora: Record<string, { n: number; pctLocacao: number; pctAluguel: number }>;
-  motivosRecusaFunil1: { total: number; semMotivo: number }; // decisão de compliance, sem motivo interno — só o total importa
-  motivosPerdaFunil2: { porMotivo: Record<string, number>; semMotivo: number; total: number };
+  kpis: {
+    total: number; // "novidades" -- só cards criados nesta competência
+    totalRelevantes: number; // novidades + herdados considerados neste mês -- base do % de "Cards com Alerta"
+    imobiliarias: number; // idem, imobiliárias distintas entre as novidades
+    emAndamento: ContagemPorOrigem;
+    recusados: ContagemPorOrigem; // mês do evento (dataRecusa)
+    aprovados: ContagemPorOrigem; // mês do evento (dataAprovacao)
+    perdidos: ContagemPorOrigem; // mês do evento (dataPerda)
+    convertidos: ContagemPorOrigem; // mês do evento (dataConversao)
+    comAlerta: number; // "relevantes" -- não zera, é sobre preenchimento atual
+  };
+  porFunilEtapa: Record<string, number>; // "relevantes"
+  porResponsavelFunil1: Record<string, { novos: number; andamento: number; negativos: number; positivos: number }>;
+  porResponsavelFunil2: Record<string, { novos: number; andamento: number; negativos: number; positivos: number }>;
+  statusPorSeguradora: Record<string, Record<string, number>>; // "novidades"
+  cotadoPorSeguradora: Record<string, { n: number; premio: number; comissao: number }>; // "novidades"
+  convertidoPorSeguradora: Record<string, { n: number; premio: number; comissao: number }>; // mês do evento
+  taxaPorSeguradora: Record<string, { n: number; pctLocacao: number; pctAluguel: number }>; // "novidades"
+  motivosRecusaFunil1: { total: number; semMotivo: number }; // mês do evento
+  motivosPerdaFunil2: { porMotivo: Record<string, number>; semMotivo: number; total: number }; // mês do evento
   topImobiliarias: {
     nome: string;
-    total: number;
-    recusados: number;
-    emAndamento: number;
-    perdidos: number;
-    convertidos: number;
-    premioCotado: number;
-    comissaoCotada: number;
-    premioEfetivado: number;
-    comissaoEfetivada: number;
-    ticketMedio: number;
-    mediaPercentualPacote: number;
+    total: number; // "novidades"
+    recusados: number; // mês do evento
+    emAndamento: number; // novos + herdados, 1 número
+    perdidos: number; // mês do evento
+    convertidos: number; // mês do evento
+    premioCotado: number; // "novidades"
+    comissaoCotada: number; // "novidades"
+    premioEfetivado: number; // mês do evento
+    comissaoEfetivada: number; // mês do evento
+    ticketMedio: number; // "novidades"
+    mediaPercentualPacote: number; // "novidades"
   }[];
-  valoresTrabalhados: { aluguel: number; pacoteLocacao: number };
-  faixasPacoteLocacao: { faixa: string; cards: number; pacoteMedio: number; seguroMedio: number }[];
-  tempoPorEtapa: Record<string, EstatisticaTempo>;
-  tempoPorFunil: { analiseECotacao: EstatisticaTempo; negociacaoEContrato: EstatisticaTempo };
+  valoresTrabalhados: { aluguel: number; pacoteLocacao: number }; // "novidades"
+  faixasPacoteLocacao: { faixa: string; cards: number; pacoteMedio: number; seguroMedio: number }[]; // "novidades"
+  tempoPorEtapa: Record<string, EstatisticaTempo>; // "relevantes"
+  tempoPorFunil: { analiseECotacao: EstatisticaTempo; negociacaoEContrato: EstatisticaTempo }; // mês do evento (saída do funil)
   cardsQuePedemAtencao: { id: number; nome: string; etapa: string; minutos: number; mediaEtapa: number; responsavel: string }[];
-  tempoCotacaoPorResponsavel: Record<string, { recusado: EstatisticaTempo; aprovado: EstatisticaTempo }>;
-  analisesDiariasPorResponsavel: QuadroDiario;
-  contratosRecebidosPorDia: QuadroDiario;
-  efetivacoesPorDia: QuadroDiario;
+  tempoCotacaoPorResponsavel: Record<string, { recusado: EstatisticaTempo; aprovado: EstatisticaTempo }>; // mês do evento (HORA FIM)
+  analisesDiariasPorResponsavel: QuadroDiario; // já era só "novidades" (dataCriacao) — sem mudança
+  contratosRecebidosPorDia: { mesAtual: QuadroDiario; herdado: QuadroDiario };
+  efetivacoesPorDia: QuadroDiario; // por evento, sem separar origem — sem mudança
   qualidade: {
     semImobiliaria: number;
     perdidosFunil2SemMotivo: number;
@@ -562,7 +667,7 @@ export type AnaliseGerencial = {
     semResponsavelCotacao: number;
     semResponsavelNegociacao: number;
     semResponsavelEfetivacao: number;
-  };
+  }; // tudo "relevantes"
 };
 
 // Forma comum dos 3 quadros "por dia × responsável" do painel (cotações,
@@ -633,38 +738,41 @@ export function montarAnaliseGerencial(
   historico: BitrixStageHistoryEvent[],
   competencia: string
 ): AnaliseGerencial {
-  const total = linhas.length;
-  const recusados = linhas.filter((l) => l.resultado === "Recusado").length;
-  const aprovados = linhas.filter((l) => l.funil === "Negociação e Contrato").length; // todo card no funil 2 já foi aprovado no funil 1
-  const perdidos = linhas.filter((l) => l.resultado === "Perdido").length;
-  const convertidos = linhas.filter((l) => l.resultado === "Convertido").length;
-  const emAndamento = linhas.filter((l) => l.resultado === "Em andamento").length;
-  const comAlerta = linhas.filter((l) => l.alertas.length > 0).length;
+  // Os 3 conjuntos que todo quadro do painel usa -- ver comentário no topo
+  // do arquivo pra regra completa de cada um.
+  const novidades = linhas.filter((l) => l.competencia === competencia);
+  function algumEventoNaCompetencia(l: LinhaContagem): boolean {
+    return (
+      (!!l.dataRecusa && l.dataRecusa.startsWith(competencia)) ||
+      (!!l.dataAprovacao && l.dataAprovacao.startsWith(competencia)) ||
+      (!!l.dataPerda && l.dataPerda.startsWith(competencia)) ||
+      (!!l.dataConversao && l.dataConversao.startsWith(competencia))
+    );
+  }
+  const relevantes = linhas.filter((l) => l.competencia === competencia || l.resultado === "Em andamento" || algumEventoNaCompetencia(l));
+
+  const recusadosEsteMs = linhas.filter((l) => l.dataRecusa && l.dataRecusa.startsWith(competencia));
+  const aprovadosEsteMes = linhas.filter((l) => l.dataAprovacao && l.dataAprovacao.startsWith(competencia));
+  const perdidosEsteMes = linhas.filter((l) => l.dataPerda && l.dataPerda.startsWith(competencia));
+  const convertidosEsteMes = linhas.filter((l) => l.dataConversao && l.dataConversao.startsWith(competencia));
+
+  const total = novidades.length;
+  const emAndamento = contagemPorOrigem(
+    relevantes.filter((l) => l.resultado === "Em andamento"),
+    competencia
+  );
+  const recusados = contagemPorOrigem(recusadosEsteMs, competencia);
+  const aprovados = contagemPorOrigem(aprovadosEsteMes, competencia);
+  const perdidos = contagemPorOrigem(perdidosEsteMes, competencia);
+  const convertidos = contagemPorOrigem(convertidosEsteMes, competencia);
+  const comAlerta = relevantes.filter((l) => l.alertas.length > 0).length;
 
   const porFunilEtapa: Record<string, number> = {};
-  for (const l of linhas) {
+  for (const l of relevantes) {
     const chave = `${l.funil} | ${l.etapaAtual}`;
     porFunilEtapa[chave] = (porFunilEtapa[chave] ?? 0) + 1;
   }
 
-  function porResponsavel(
-    linhasFunil: LinhaContagem[],
-    creditoPositivo: (l: LinhaContagem) => boolean,
-    obterNomes: (l: LinhaContagem) => string[]
-  ) {
-    const mapa: Record<string, { cards: number; andamento: number; negativos: number; positivos: number }> = {};
-    for (const l of linhasFunil) {
-      const nomes = obterNomes(l);
-      for (const nome of nomes.length ? nomes : ["(sem responsável)"]) {
-        mapa[nome] ??= { cards: 0, andamento: 0, negativos: 0, positivos: 0 };
-        mapa[nome].cards++;
-        if (creditoPositivo(l)) mapa[nome].positivos++;
-        else if (l.resultado === "Recusado" || l.resultado === "Perdido") mapa[nome].negativos++;
-        else mapa[nome].andamento++;
-      }
-    }
-    return mapa;
-  }
   // Responsável(is) do funil 1 (Análise e Cotação) pra um card: prioriza
   // Responsáveis pela Cotação (etapa em que o card de fato está sendo
   // trabalhado); cai pro Responsável pelo Cadastro só se a cotação ainda nem
@@ -672,15 +780,40 @@ export function montarAnaliseGerencial(
   // histórico assim que o card muda de dono.
   const nomesFunil1 = (l: LinhaContagem): string[] =>
     l.responsaveisCotacao.length ? l.responsaveisCotacao : l.responsavelCadastro ? [l.responsavelCadastro] : [];
-  // Funil 1: cards ainda ativos ali contam por Andamento/Negativos; os que já
-  // avançaram pro funil 2 entram como "Positivos" (créditos de quem cotou,
-  // ou de quem cadastrou se a cotação nunca chegou a ser atribuída).
-  const porResponsavelFunil1 = porResponsavel(linhas, (l) => l.funil === "Negociação e Contrato", nomesFunil1);
-  const porResponsavelFunil2 = porResponsavel(
-    linhas.filter((l) => l.funil === "Negociação e Contrato"),
-    (l) => l.resultado === "Convertido",
-    (l) => l.responsaveisNegociacao
-  );
+
+  // Produtividade por responsável, por funil (quadro 4): "novos" = cards
+  // criados nesta competência atribuídos à pessoa; "andamento" = ainda em
+  // aberto agora, novidades + herdados; "negativos"/"positivos" = evento
+  // terminal nesta competência (recusou/aprovou ou perdeu/converteu),
+  // somando novidade+herdado num número só, zera na virada do mês.
+  function creditar(
+    mapa: Record<string, { novos: number; andamento: number; negativos: number; positivos: number }>,
+    nomes: string[],
+    campo: "novos" | "andamento" | "negativos" | "positivos"
+  ) {
+    for (const nome of nomes.length ? nomes : ["(sem responsável)"]) {
+      mapa[nome] ??= { novos: 0, andamento: 0, negativos: 0, positivos: 0 };
+      mapa[nome][campo]++;
+    }
+  }
+  const porResponsavelFunil1: AnaliseGerencial["porResponsavelFunil1"] = {};
+  for (const l of novidades) creditar(porResponsavelFunil1, nomesFunil1(l), "novos");
+  for (const l of relevantes) {
+    if (l.funil === "Análise e Cotação" && l.resultado === "Em andamento") creditar(porResponsavelFunil1, nomesFunil1(l), "andamento");
+  }
+  for (const l of recusadosEsteMs) creditar(porResponsavelFunil1, nomesFunil1(l), "negativos");
+  for (const l of aprovadosEsteMes) creditar(porResponsavelFunil1, nomesFunil1(l), "positivos");
+
+  // Funil 2: "novos" = cards que entraram em Negociação e Contrato nesta
+  // competência (aprovados este mês), já que ninguém "nasce" direto no
+  // funil 2.
+  const porResponsavelFunil2: AnaliseGerencial["porResponsavelFunil2"] = {};
+  for (const l of aprovadosEsteMes) creditar(porResponsavelFunil2, l.responsaveisNegociacao, "novos");
+  for (const l of relevantes) {
+    if (l.funil === "Negociação e Contrato" && l.resultado === "Em andamento") creditar(porResponsavelFunil2, l.responsaveisNegociacao, "andamento");
+  }
+  for (const l of perdidosEsteMes) creditar(porResponsavelFunil2, l.responsaveisNegociacao, "negativos");
+  for (const l of convertidosEsteMes) creditar(porResponsavelFunil2, l.responsaveisNegociacao, "positivos");
 
   const statusPorSeguradora: Record<string, Record<string, number>> = {};
   const cotadoPorSeguradora: Record<string, { n: number; premio: number; comissao: number }> = {};
@@ -690,7 +823,7 @@ export function montarAnaliseGerencial(
     for (const rotulo of rotulos) {
       const chave = rotulos.length > 1 ? `${seg.nome} (${rotulo})` : seg.nome;
       const contagem: Record<string, number> = {};
-      for (const l of linhas) {
+      for (const l of novidades) {
         const valor = l.seguradoras[seg.nome]?.status[rotulo];
         if (!valor) continue;
         contagem[valor] = (contagem[valor] ?? 0) + 1;
@@ -698,7 +831,7 @@ export function montarAnaliseGerencial(
       statusPorSeguradora[chave] = contagem;
     }
 
-    const cotadas = linhas.filter((l) => typeof l.seguradoras[seg.nome]?.valor === "number");
+    const cotadas = novidades.filter((l) => typeof l.seguradoras[seg.nome]?.valor === "number");
     // "Valor" é a PARCELA cotada (mensal), não o prêmio total -- confirmado
     // com o usuário. Prêmio cotado = parcela × nº de parcelas, senão fica
     // numa escala 8-29x menor que o prêmio líquido efetivado (que já é
@@ -722,7 +855,7 @@ export function montarAnaliseGerencial(
       }, 0),
     };
 
-    const comTaxa = linhas.filter((l) => typeof l.seguradoras[seg.nome]?.pctLocacao === "number");
+    const comTaxa = novidades.filter((l) => typeof l.seguradoras[seg.nome]?.pctLocacao === "number");
     taxaPorSeguradora[seg.nome] = {
       n: comTaxa.length,
       pctLocacao: media(comTaxa.map((l) => l.seguradoras[seg.nome].pctLocacao as number)),
@@ -734,9 +867,9 @@ export function montarAnaliseGerencial(
   // no card (campo preenchido só na conversão), não a lista de seguradoras
   // cotadas, e o prêmio líquido/comissão final registrados no fechamento
   // (não o valor cotado inicialmente, que pode ter mudado na negociação).
+  // Mês do evento (dataConversao), não a origem do card.
   const convertidoPorSeguradora: Record<string, { n: number; premio: number; comissao: number }> = {};
-  for (const l of linhas) {
-    if (l.resultado !== "Convertido") continue;
+  for (const l of convertidosEsteMes) {
     const nome = l.seguradoraEscolhida || "Não identificado";
     const atual = convertidoPorSeguradora[nome] ?? { n: 0, premio: 0, comissao: 0 };
     const premio = typeof l.premioLiquido === "number" ? l.premioLiquido : 0;
@@ -747,11 +880,9 @@ export function montarAnaliseGerencial(
     convertidoPorSeguradora[nome] = atual;
   }
 
-  const recusasFunil1 = linhas.filter((l) => l.resultado === "Recusado");
-  const perdasFunil2 = linhas.filter((l) => l.resultado === "Perdido");
   const motivosPerdaFunil2: Record<string, number> = {};
   let perdasSemMotivo = 0;
-  for (const l of perdasFunil2) {
+  for (const l of perdidosEsteMes) {
     if (!l.motivoRecusaPerda) {
       perdasSemMotivo++;
       continue;
@@ -759,112 +890,6 @@ export function montarAnaliseGerencial(
     motivosPerdaFunil2[l.motivoRecusaPerda] = (motivosPerdaFunil2[l.motivoRecusaPerda] ?? 0) + 1;
   }
 
-  const porImobiliaria: Record<
-    string,
-    {
-      total: number;
-      recusados: number;
-      emAndamento: number;
-      perdidos: number;
-      convertidos: number;
-      premioCotado: number;
-      comissaoCotada: number;
-      premioEfetivado: number;
-      comissaoEfetivada: number;
-      ticketMedioValores: number[];
-      percentualPacoteValores: number[];
-    }
-  > = {};
-  let semImobiliaria = 0;
-  for (const l of linhas) {
-    if (!l.imobiliaria) {
-      semImobiliaria++;
-      continue;
-    }
-    porImobiliaria[l.imobiliaria] ??= {
-      total: 0,
-      recusados: 0,
-      emAndamento: 0,
-      perdidos: 0,
-      convertidos: 0,
-      premioCotado: 0,
-      comissaoCotada: 0,
-      premioEfetivado: 0,
-      comissaoEfetivada: 0,
-      ticketMedioValores: [],
-      percentualPacoteValores: [],
-    };
-    const d = porImobiliaria[l.imobiliaria];
-    d.total++;
-    if (l.resultado === "Recusado") d.recusados++;
-    else if (l.resultado === "Perdido") d.perdidos++;
-    else if (l.resultado === "Convertido") d.convertidos++;
-    else d.emAndamento++; // "Aprovado" é transitório (card já está no funil 2, contado lá pelo resultado real dele)
-
-    // Prêmio/comissão cotado (coluna da tabela de imobiliárias) -- média das
-    // seguradoras cotadas DENTRO do card primeiro (ex: 5 seguradoras deram
-    // preço nesse card → 1 ticket médio), e só depois SOMA desses tickets
-    // médios entre os cards da imobiliária. Corrige a distorção de antes
-    // (somar todas as seguradoras cotadas de todos os cards), que inflava o
-    // número conforme mais seguradoras cotavam o mesmo card, sem relação com
-    // o volume real de cards da imobiliária.
-    const premioMedioCard = premioTotalMedioDoCard(l);
-    if (premioMedioCard !== null) d.premioCotado += premioMedioCard;
-    const comissaoMediaCard = comissaoTotalMediaDoCard(l);
-    if (comissaoMediaCard !== null) d.comissaoCotada += comissaoMediaCard;
-
-    // Ticket médio e % do pacote -- ao nível de CARD primeiro (média das
-    // cotações do próprio card, ex: 5 seguradoras cotadas nesse card viram
-    // 1 valor), e só depois média entre os cards da imobiliária. Evita o
-    // mesmo problema do Prêmio Cotado (soma que cresce com o nº de
-    // seguradoras cotadas, sem relação direta com o nº de cards).
-    const ticketCard = cotacaoMediaDoCard(l);
-    if (ticketCard !== null) d.ticketMedioValores.push(ticketCard);
-    const pctCard = percentualPacoteMedioDoCard(l);
-    if (pctCard !== null) d.percentualPacoteValores.push(pctCard);
-
-    // Prêmio/comissão efetivado -- só cards convertidos, com o prêmio
-    // líquido e o percentual de comissão registrados no fechamento (mesmo
-    // cálculo de convertidoPorSeguradora).
-    if (l.resultado === "Convertido") {
-      const premio = typeof l.premioLiquido === "number" ? l.premioLiquido : 0;
-      const pct = typeof l.comissaoFinalPct === "number" ? l.comissaoFinalPct : 0;
-      d.premioEfetivado += premio;
-      d.comissaoEfetivada += premio * (pct / 100);
-    }
-  }
-  // Todas as imobiliárias com pelo menos 1 card, ordenadas por volume — a
-  // UI decide quantas mostrar por padrão (ver ImobiliariasTabela.tsx).
-  const topImobiliarias = Object.entries(porImobiliaria)
-    .map(([nome, d]) => {
-      const { ticketMedioValores, percentualPacoteValores, ...resto } = d;
-      return {
-        nome,
-        ...resto,
-        ticketMedio: media(ticketMedioValores),
-        mediaPercentualPacote: media(percentualPacoteValores),
-      };
-    })
-    .sort((a, b) => b.total - a.total);
-
-  const valoresTrabalhados = {
-    aluguel: linhas.reduce((a, l) => a + (typeof l.aluguel === "number" ? l.aluguel : 0), 0),
-    pacoteLocacao: linhas.reduce((a, l) => a + (typeof l.pacoteLocacao === "number" ? l.pacoteLocacao : 0), 0),
-  };
-
-  // Ticket médio por faixa de pacote de locação: quanto maior o pacote,
-  // maior a parcela média do seguro cotado (média das cotações não-vazias
-  // de cada card, depois média entre os cards da faixa).
-  function cotacaoMediaDoCard(l: LinhaContagem): number | null {
-    const valores = SEGURADORAS.map((seg) => l.seguradoras[seg.nome]?.valor).filter((v): v is number => typeof v === "number" && v > 0);
-    return valores.length ? media(valores) : null;
-  }
-  // Prêmio total médio do card -- média de (valor da parcela × parcelas) das
-  // seguradoras cotadas nesse card (ex: 5 seguradoras aprovaram, tira a
-  // média dos 5 prêmios totais). Usado no Prêmio/Comissão Cotado da tabela
-  // de imobiliárias (ver porImobiliaria acima) -- diferente do ticket médio
-  // (cotacaoMediaDoCard), que usa só o valor da parcela, sem multiplicar
-  // pelas parcelas.
   function premioTotalMedioDoCard(l: LinhaContagem): number | null {
     const valores = SEGURADORAS.map((seg) => {
       const s = l.seguradoras[seg.nome];
@@ -882,15 +907,106 @@ export function montarAnaliseGerencial(
     }).filter((v): v is number => v !== null);
     return valores.length ? media(valores) : null;
   }
-  // Mesma lógica do ticket médio, mas pra taxa (% do pacote de locação que
-  // vira parcela do seguro) -- usada no ticket médio e no % médio por
-  // imobiliária (ver porImobiliaria acima).
+  // Ticket médio por faixa de pacote de locação: quanto maior o pacote,
+  // maior a parcela média do seguro cotado (média das cotações não-vazias
+  // de cada card, depois média entre os cards da faixa).
+  function cotacaoMediaDoCard(l: LinhaContagem): number | null {
+    const valores = SEGURADORAS.map((seg) => l.seguradoras[seg.nome]?.valor).filter((v): v is number => typeof v === "number" && v > 0);
+    return valores.length ? media(valores) : null;
+  }
   function percentualPacoteMedioDoCard(l: LinhaContagem): number | null {
     const valores = SEGURADORAS.map((seg) => l.seguradoras[seg.nome]?.pctLocacao).filter(
       (v): v is number => typeof v === "number" && v > 0
     );
     return valores.length ? media(valores) : null;
   }
+
+  // Tabela de imobiliárias -- cada coluna vem de um conjunto diferente (ver
+  // tipo AnaliseGerencial acima), por isso itera separado em vez de um loop
+  // único como antes.
+  const porImobiliaria: Record<
+    string,
+    {
+      total: number;
+      recusados: number;
+      emAndamento: number;
+      perdidos: number;
+      convertidos: number;
+      premioCotado: number;
+      comissaoCotada: number;
+      premioEfetivado: number;
+      comissaoEfetivada: number;
+      ticketMedioValores: number[];
+      percentualPacoteValores: number[];
+    }
+  > = {};
+  function obterOuCriarImob(nome: string) {
+    porImobiliaria[nome] ??= {
+      total: 0,
+      recusados: 0,
+      emAndamento: 0,
+      perdidos: 0,
+      convertidos: 0,
+      premioCotado: 0,
+      comissaoCotada: 0,
+      premioEfetivado: 0,
+      comissaoEfetivada: 0,
+      ticketMedioValores: [],
+      percentualPacoteValores: [],
+    };
+    return porImobiliaria[nome];
+  }
+  for (const l of novidades) {
+    if (!l.imobiliaria) continue;
+    const d = obterOuCriarImob(l.imobiliaria);
+    d.total++;
+    const premioMedioCard = premioTotalMedioDoCard(l);
+    if (premioMedioCard !== null) d.premioCotado += premioMedioCard;
+    const comissaoMediaCard = comissaoTotalMediaDoCard(l);
+    if (comissaoMediaCard !== null) d.comissaoCotada += comissaoMediaCard;
+    const ticketCard = cotacaoMediaDoCard(l);
+    if (ticketCard !== null) d.ticketMedioValores.push(ticketCard);
+    const pctCard = percentualPacoteMedioDoCard(l);
+    if (pctCard !== null) d.percentualPacoteValores.push(pctCard);
+  }
+  for (const l of relevantes) {
+    if (l.imobiliaria && l.resultado === "Em andamento") obterOuCriarImob(l.imobiliaria).emAndamento++;
+  }
+  for (const l of recusadosEsteMs) {
+    if (l.imobiliaria) obterOuCriarImob(l.imobiliaria).recusados++;
+  }
+  for (const l of perdidosEsteMes) {
+    if (l.imobiliaria) obterOuCriarImob(l.imobiliaria).perdidos++;
+  }
+  for (const l of convertidosEsteMes) {
+    if (!l.imobiliaria) continue;
+    const d = obterOuCriarImob(l.imobiliaria);
+    d.convertidos++;
+    const premio = typeof l.premioLiquido === "number" ? l.premioLiquido : 0;
+    const pct = typeof l.comissaoFinalPct === "number" ? l.comissaoFinalPct : 0;
+    d.premioEfetivado += premio;
+    d.comissaoEfetivada += premio * (pct / 100);
+  }
+  // Todas as imobiliárias com pelo menos 1 card em algum dos conjuntos
+  // acima, ordenadas por volume de novidades — a UI decide quantas mostrar
+  // por padrão (ver ImobiliariasTabela.tsx).
+  const topImobiliarias = Object.entries(porImobiliaria)
+    .map(([nome, d]) => {
+      const { ticketMedioValores, percentualPacoteValores, ...resto } = d;
+      return {
+        nome,
+        ...resto,
+        ticketMedio: media(ticketMedioValores),
+        mediaPercentualPacote: media(percentualPacoteValores),
+      };
+    })
+    .sort((a, b) => b.total - a.total);
+
+  const valoresTrabalhados = {
+    aluguel: novidades.reduce((a, l) => a + (typeof l.aluguel === "number" ? l.aluguel : 0), 0),
+    pacoteLocacao: novidades.reduce((a, l) => a + (typeof l.pacoteLocacao === "number" ? l.pacoteLocacao : 0), 0),
+  };
+
   const FAIXAS_PACOTE = [
     { faixa: "Até R$ 1.800", min: 0, max: 1800 },
     { faixa: "R$ 1.800 – R$ 2.600", min: 1800, max: 2600 },
@@ -898,7 +1014,7 @@ export function montarAnaliseGerencial(
     { faixa: "Acima de R$ 5.200", min: 5200, max: Infinity },
   ];
   const faixasPacoteLocacao = FAIXAS_PACOTE.map(({ faixa, min: minFaixa, max: maxFaixa }) => {
-    const doFaixa = linhas.filter((l) => typeof l.pacoteLocacao === "number" && l.pacoteLocacao >= minFaixa && l.pacoteLocacao < maxFaixa);
+    const doFaixa = novidades.filter((l) => typeof l.pacoteLocacao === "number" && l.pacoteLocacao >= minFaixa && l.pacoteLocacao < maxFaixa);
     const cotacoes = doFaixa.map(cotacaoMediaDoCard).filter((v): v is number => v !== null);
     return {
       faixa,
@@ -908,12 +1024,12 @@ export function montarAnaliseGerencial(
     };
   });
 
-  // Tempo por etapa = só o card que está NA etapa AGORA, contando uma vez
-  // (o tempo da passagem atual, minutosEtapaAtual) -- não soma passagens
-  // antigas nem conta de novo um card que já voltou pra uma etapa visitada
-  // antes. Cada card pertence a exatamente uma etapa aqui.
+  // Tempo por etapa (quadro "Tempo em aberto por etapa") = só o card que
+  // está NA etapa AGORA, contando uma vez, dentro do conjunto "relevantes"
+  // (novidades + herdados que ainda pertencem a este mês) -- não mais
+  // all-time.
   const minutosPorEtapa: Record<string, number[]> = {};
-  for (const l of linhas) {
+  for (const l of relevantes) {
     const chave = `${l.funil} | ${l.etapaAtual}`;
     (minutosPorEtapa[chave] ??= []).push(l.minutosEtapaAtual);
   }
@@ -926,39 +1042,46 @@ export function montarAnaliseGerencial(
     tempoPorEtapa[chave] = estatisticasTempo(minutosPorEtapa[chave]);
   }
 
+  // Tempo de ciclo por funil -- mês em que o card SAIU do funil (evento),
+  // independente de origem, zera na virada.
   const tempoPorFunil: AnaliseGerencial["tempoPorFunil"] = {
-    analiseECotacao: estatisticasTempo(linhas.map((l) => l.minutosFunil1)),
-    negociacaoEContrato: estatisticasTempo(linhas.map((l) => l.minutosFunil2).filter((v): v is number => v !== null)),
+    analiseECotacao: estatisticasTempo([...recusadosEsteMs, ...aprovadosEsteMes].map((l) => l.minutosFunil1)),
+    negociacaoEContrato: estatisticasTempo(
+      [...perdidosEsteMes, ...convertidosEsteMes].map((l) => l.minutosFunil2).filter((v): v is number => v !== null)
+    ),
   };
 
-  // Tempo de execução da fase de cotação (HORA INICIO -> HORA FIM, campos
-  // adicionados pela supervisora em 05/08/2026), por Responsáveis pela
-  // Cotação (campo dedicado, 17/08/2026 -- não mais o responsável ATUAL do
-  // card) — separado em recusado/aprovado porque são naturalmente muito
-  // diferentes (recusar é rápido, cotar de verdade com várias seguradoras
-  // demora mais). Cards com HORA INICIO/FIM aparentemente trocados (o campo
-  // "Tempo Gasto", calculado pelo próprio Bitrix, confirma que a duração
-  // real bate com o valor absoluto) entram normalmente na média — só ficam
-  // marcados como alerta de qualidade, não são mais excluídos. Cards sem
-  // Responsável(is) pela Cotação preenchido não entram aqui (não tem quem
-  // creditar) mas já caem no alerta semResponsavelCotacao, mais amplo.
-  //
-  // Alerta separado: card que já SAIU do funil 1 (foi recusado ou aprovado
-  // pra Negociação) sem nunca ter registrado a HORA FIM da cotação -- sinal
-  // de etapa pulada, independente de ter HORA INICIO ou responsável.
-  const porCotador: Record<string, { recusado: number[]; aprovado: number[] }> = {};
+  // Qualidade dos dados (conjunto "relevantes" -- tudo que pertence à
+  // competência, sem zerar, sem dividir por origem).
+  let semImobiliaria = 0;
   let cotacaoTempoInconsistente = 0;
   let saiuFunil1SemHoraFim = 0;
-  for (const l of linhas) {
+  let semResponsavelCotacao = 0;
+  let semResponsavelNegociacao = 0;
+  let semResponsavelEfetivacao = 0;
+  for (const l of relevantes) {
+    if (!l.imobiliaria) semImobiliaria++;
     const jaPassouPelaCotacao = l.funil === "Negociação e Contrato" || l.resultado === "Aprovado";
     const saiuFunil1 = jaPassouPelaCotacao || l.resultado === "Recusado";
     if (saiuFunil1 && !l.dataCotacao) saiuFunil1SemHoraFim++;
+    if (l.minutosCotacao !== null && l.cotacaoCamposTrocados) cotacaoTempoInconsistente++;
+    if (!l.responsaveisCotacao.length) semResponsavelCotacao++;
+    if (l.entrouContratoRecebido && !l.responsaveisNegociacao.length) semResponsavelNegociacao++;
+    if (l.dataEfetivacao && !l.responsavelEfetivacao) semResponsavelEfetivacao++;
+  }
 
-    if (l.minutosCotacao === null) continue;
-    if (l.cotacaoCamposTrocados) cotacaoTempoInconsistente++;
+  // Tempo de execução da fase de cotação (HORA INICIO -> HORA FIM), por
+  // Responsáveis pela Cotação -- mês em que a cotação foi CONCLUÍDA (HORA
+  // FIM), independente de origem do card, zera na virada. Separado em
+  // recusado/aprovado porque são naturalmente muito diferentes (recusar é
+  // rápido, cotar de verdade com várias seguradoras demora mais).
+  const cotacoesConcluidasEsteMes = linhas.filter((l) => l.dataCotacao && l.dataCotacao.startsWith(competencia));
+  const porCotador: Record<string, { recusado: number[]; aprovado: number[] }> = {};
+  for (const l of cotacoesConcluidasEsteMes) {
+    if (l.minutosCotacao === null || !l.responsaveisCotacao.length) continue;
+    const jaPassouPelaCotacao = l.funil === "Negociação e Contrato" || l.resultado === "Aprovado";
     const resultadoCotacao = l.resultado === "Recusado" ? "recusado" : jaPassouPelaCotacao ? "aprovado" : null;
     if (!resultadoCotacao) continue; // ainda em andamento na cotação — não deveria ter os 2 campos preenchidos ainda
-    if (!l.responsaveisCotacao.length) continue;
     for (const nome of l.responsaveisCotacao) {
       porCotador[nome] ??= { recusado: [], aprovado: [] };
       porCotador[nome][resultadoCotacao].push(l.minutosCotacao);
@@ -969,26 +1092,18 @@ export function montarAnaliseGerencial(
     tempoCotacaoPorResponsavel[nome] = { recusado: estatisticasTempo(d.recusado), aprovado: estatisticasTempo(d.aprovado) };
   }
 
-  // Calendário diário de cotações REALIZADAS — dia de ENTRADA do card
-  // (não a HORA FIM/finalização: nesse quadro importa que a cotação foi
-  // feita, não quando ela terminou -- por isso o total bate com o total de
-  // cards, com ou sem HORA FIM preenchida). Responsável vem do campo
-  // dedicado Responsáveis pela Cotação (17/08/2026), não mais do
-  // responsável ATUAL do card -- a supervisora reportou que o responsável
-  // ia mudando de mão em mão e se perdia o registro de quem cotou de
-  // verdade. Negociação e Efetivação (painéis ao lado) usam parâmetro
-  // diferente de propósito: só existem quando a etapa de fato aconteceu.
+  // Calendário diário de cotações REALIZADAS — dia de ENTRADA do card. Como
+  // usa dataCriacao, já é implicitamente só "novidades" (um card herdado tem
+  // dataCriacao de outro mês, nunca bate com `competencia` aqui) -- sem
+  // mudança de comportamento.
   const analisesDiariasPorResponsavel = montarQuadroDiario(
     linhas.map((l) => ({ dia: l.dataCriacao, nomes: l.responsaveisCotacao })),
     competencia
   );
 
-  // Calendário diário de "Contrato Recebido" (etapa do funil 2) — dia direto
-  // do histórico nativo de mudança de etapa (não depende de campo novo, tem
-  // histórico completo), quebrado por Responsáveis pela Negociação (campo
-  // dedicado, 17/08/2026). Conta só a PRIMEIRA entrada de cada card nessa
-  // etapa -- um card que volta pra "Contrato com Pendências" pra correção e
-  // reentra em "Contrato Recebido" não pode contar 2x.
+  // Calendário diário de "Contrato Recebido" — dividido em mês atual ×
+  // herdado (pedido da Patricia), pela origem do card (l.competencia), não
+  // pelo dia do evento (que já é filtrado dentro de montarQuadroDiario).
   const linhaPorId = new Map(linhas.map((l) => [l.id, l]));
   const primeiraEntradaContratoRecebido = new Map<number, string>(); // ownerId -> dia (YYYY-MM-DD)
   const historicoOrdenado = [...historico].sort(
@@ -999,16 +1114,18 @@ export function montarAnaliseGerencial(
     if (primeiraEntradaContratoRecebido.has(h.OWNER_ID)) continue;
     primeiraEntradaContratoRecebido.set(h.OWNER_ID, h.CREATED_TIME.slice(0, 10));
   }
-  const contratosRecebidosPorDia = montarQuadroDiario(
-    [...primeiraEntradaContratoRecebido.entries()].map(([ownerId, dia]) => ({
-      dia,
-      nomes: linhaPorId.get(ownerId)?.responsaveisNegociacao ?? [],
-    })),
-    competencia
-  );
+  const entradasContratoRecebido = [...primeiraEntradaContratoRecebido.entries()].map(([ownerId, dia]) => ({
+    dia,
+    nomes: linhaPorId.get(ownerId)?.responsaveisNegociacao ?? [],
+    origemMesAtual: linhaPorId.get(ownerId)?.competencia === competencia,
+  }));
+  const contratosRecebidosPorDia = {
+    mesAtual: montarQuadroDiario(entradasContratoRecebido.filter((e) => e.origemMesAtual), competencia),
+    herdado: montarQuadroDiario(entradasContratoRecebido.filter((e) => !e.origemMesAtual), competencia),
+  };
 
-  // Calendário diário de Efetivação — dia da Data de Efetivação (campo já
-  // existente), por Responsável pela Efetivação (novo, único por card).
+  // Calendário diário de Efetivação — dia da Data de Efetivação, por evento,
+  // sem separar origem (confirmado com o Matheus). Sem mudança.
   const efetivacoesPorDia = montarQuadroDiario(
     linhas.map((l) => ({ dia: l.dataEfetivacao, nomes: l.responsavelEfetivacao ? [l.responsavelEfetivacao] : [] })),
     competencia
@@ -1017,7 +1134,7 @@ export function montarAnaliseGerencial(
   // Cards em andamento parados bem acima da média da própria etapa (não é
   // "tempo corrido" isolado — é relativo ao ritmo normal daquela etapa, e
   // conta só o tempo na passagem ATUAL, não a idade total do card).
-  const candidatosAtencao = linhas
+  const candidatosAtencao = relevantes
     .filter((l) => l.resultado === "Em andamento")
     .map((l) => {
       const stats = tempoPorEtapa[`${l.funil} | ${l.etapaAtual}`];
@@ -1041,7 +1158,17 @@ export function montarAnaliseGerencial(
   }));
 
   return {
-    kpis: { total, emAndamento, recusados, aprovados, perdidos, convertidos, comAlerta, imobiliarias: Object.keys(porImobiliaria).length },
+    kpis: {
+      total,
+      totalRelevantes: relevantes.length,
+      emAndamento,
+      recusados,
+      aprovados,
+      perdidos,
+      convertidos,
+      comAlerta,
+      imobiliarias: new Set(novidades.map((l) => l.imobiliaria).filter(Boolean)).size,
+    },
     porFunilEtapa,
     porResponsavelFunil1,
     porResponsavelFunil2,
@@ -1049,8 +1176,8 @@ export function montarAnaliseGerencial(
     cotadoPorSeguradora,
     convertidoPorSeguradora,
     taxaPorSeguradora,
-    motivosRecusaFunil1: { total: recusasFunil1.length, semMotivo: recusasFunil1.length },
-    motivosPerdaFunil2: { porMotivo: motivosPerdaFunil2, semMotivo: perdasSemMotivo, total: perdasFunil2.length },
+    motivosRecusaFunil1: { total: recusadosEsteMs.length, semMotivo: recusadosEsteMs.length },
+    motivosPerdaFunil2: { porMotivo: motivosPerdaFunil2, semMotivo: perdasSemMotivo, total: perdidosEsteMes.length },
     topImobiliarias,
     valoresTrabalhados,
     faixasPacoteLocacao,
@@ -1064,12 +1191,34 @@ export function montarAnaliseGerencial(
     qualidade: {
       semImobiliaria,
       perdidosFunil2SemMotivo: perdasSemMotivo,
-      totalPerdidosFunil2: perdasFunil2.length,
+      totalPerdidosFunil2: perdidosEsteMes.length,
       cotacaoTempoInconsistente,
       saiuFunil1SemHoraFim,
-      semResponsavelCotacao: analisesDiariasPorResponsavel.semResponsavel,
-      semResponsavelNegociacao: contratosRecebidosPorDia.semResponsavel,
-      semResponsavelEfetivacao: efetivacoesPorDia.semResponsavel,
+      semResponsavelCotacao,
+      semResponsavelNegociacao,
+      semResponsavelEfetivacao,
     },
   };
+}
+
+// Busca ao vivo no Bitrix + monta a análise gerencial pra uma competência --
+// compartilhada entre a página (SeguroFiancaPage) e o cron de congelamento
+// mensal (ver /api/cron/congelar-paineis), pra não duplicar a lógica de
+// resolver empresas/usuários referenciados.
+export async function buscarAnaliseGerencialAoVivo(competencia: string): Promise<AnaliseGerencial & { totalMovimentacoes: number }> {
+  const [items, historico, defs] = await Promise.all([
+    listarItensSpa(ENTITY_TYPE_ID),
+    listarHistoricoEtapas(ENTITY_TYPE_ID),
+    buscarDefinicaoCampos(ENTITY_TYPE_ID),
+  ]);
+
+  const idsEmpresa = items.map((it) => it.companyId).filter((id): id is number => !!id);
+  const idsUsuario = items
+    .flatMap((it) => [it.assignedById, it.createdBy, it.movedBy, ...idsResponsaveisEtapas(it)])
+    .filter((id): id is number => !!id);
+  const [empresas, usuarios] = await Promise.all([buscarEmpresas(idsEmpresa), buscarUsuarios(idsUsuario)]);
+
+  const contagem = montarContagemMensal(items, historico, usuarios, empresas, defs);
+  const gerencial = montarAnaliseGerencial(contagem, historico, competencia);
+  return { ...gerencial, totalMovimentacoes: historico.length };
 }

@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/coletar-noticias",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/congelar-paineis",
+      "schedule": "0 3 1 * *"
     }
   ]
 }
