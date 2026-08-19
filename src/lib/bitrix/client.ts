@@ -59,36 +59,55 @@ export type BitrixStageHistoryEvent = {
   STAGE_ID: string;
 };
 
-// crm.item.list pagina de 50 em 50 — busca todas as páginas até acabar.
-export async function listarItensSpa(entityTypeId: number): Promise<BitrixItemRaw[]> {
-  const itens: BitrixItemRaw[] = [];
-  let start = 0;
-  for (;;) {
-    const pagina = await chamarBitrix<{ result: { items: BitrixItemRaw[] }; next?: number }>("crm.item.list", {
-      entityTypeId,
-      select: ["*", "UF_*"],
-      start,
-    });
-    itens.push(...pagina.result.items);
-    if (pagina.next === undefined) break;
-    start = pagina.next;
+const TAMANHO_PAGINA_BITRIX = 50;
+// Nº de páginas buscadas ao mesmo tempo depois da primeira -- rápido o
+// bastante pra não somar o tempo de cada página sequencialmente (era isso
+// que estourava os 60s do Vercel com listas grandes, ex: 1.340 eventos de
+// histórico em 27 páginas), mas sem disparar tudo de uma vez e arriscar
+// limite de taxa do Bitrix.
+const CONCORRENCIA_PAGINACAO = 6;
+
+async function comConcorrenciaLimitada<X, Y>(itens: X[], limite: number, tarefa: (item: X) => Promise<Y>): Promise<Y[]> {
+  const resultados: Y[] = new Array(itens.length);
+  let proximo = 0;
+  async function trabalhador() {
+    for (;;) {
+      const indice = proximo++;
+      if (indice >= itens.length) return;
+      resultados[indice] = await tarefa(itens[indice]);
+    }
   }
+  await Promise.all(Array.from({ length: Math.min(limite, itens.length) }, trabalhador));
+  return resultados;
+}
+
+// Busca a 1ª página pra saber o total, depois busca o resto em paralelo (com
+// limite de concorrência) em vez de uma página esperando a outra terminar.
+async function buscarTodasPaginas<X>(metodo: string, paramsBase: Record<string, BitrixParamValue>): Promise<X[]> {
+  const primeira = await chamarBitrix<{ result: { items: X[] }; next?: number; total?: number }>(metodo, {
+    ...paramsBase,
+    start: 0,
+  });
+  const itens = [...primeira.result.items];
+  const total = primeira.total ?? itens.length;
+  if (primeira.next === undefined || total <= itens.length) return itens;
+
+  const starts: number[] = [];
+  for (let start = TAMANHO_PAGINA_BITRIX; start < total; start += TAMANHO_PAGINA_BITRIX) starts.push(start);
+
+  const paginas = await comConcorrenciaLimitada(starts, CONCORRENCIA_PAGINACAO, (start) =>
+    chamarBitrix<{ result: { items: X[] } }>(metodo, { ...paramsBase, start })
+  );
+  for (const pagina of paginas) itens.push(...pagina.result.items);
   return itens;
 }
 
+export async function listarItensSpa(entityTypeId: number): Promise<BitrixItemRaw[]> {
+  return buscarTodasPaginas<BitrixItemRaw>("crm.item.list", { entityTypeId, select: ["*", "UF_*"] });
+}
+
 export async function listarHistoricoEtapas(entityTypeId: number): Promise<BitrixStageHistoryEvent[]> {
-  const eventos: BitrixStageHistoryEvent[] = [];
-  let start = 0;
-  for (;;) {
-    const pagina = await chamarBitrix<{ result: { items: BitrixStageHistoryEvent[] }; next?: number }>(
-      "crm.stagehistory.list",
-      { entityTypeId, "order[id]": "asc", start }
-    );
-    eventos.push(...pagina.result.items);
-    if (pagina.next === undefined) break;
-    start = pagina.next;
-  }
-  return eventos;
+  return buscarTodasPaginas<BitrixStageHistoryEvent>("crm.stagehistory.list", { entityTypeId, "order[id]": "asc" });
 }
 
 export async function buscarEmpresas(ids: number[]): Promise<Record<number, string>> {
