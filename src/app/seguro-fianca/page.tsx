@@ -784,13 +784,13 @@ export default async function SeguroFiancaPage({
                 <div className={styles.grid2}>
                   <div className={styles.panel}>
                     <h3>Tempo em aberto por etapa</h3>
-                    <div className={styles.panelSub}>tempo de cada passagem pela etapa (se o card voltou, conta mais de uma vez)</div>
+                    <div className={styles.panelSub}>só os cards que estão na etapa agora, cada card contando uma vez, pelo tempo da passagem atual</div>
                     <div className={styles.tableWrap}>
                       <table className={styles.data}>
                         <thead>
                           <tr>
                             <th>Etapa</th>
-                            <th className={styles.numCol}>Passagens</th>
+                            <th className={styles.numCol}>Cards</th>
                             <th className={styles.numCol}>Média</th>
                             <th className={styles.numCol}>Máx.</th>
                           </tr>

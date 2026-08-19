@@ -874,16 +874,14 @@ export function montarAnaliseGerencial(
     };
   });
 
-  // Tempo por etapa = soma de todas as PASSAGENS por ela (não de cards
-  // únicos) — reconstruído do histórico real de mudança de etapa, ver
-  // construirSegmentosEtapa. Um card que voltou pra uma etapa já visitada
-  // entra mais de uma vez aqui.
+  // Tempo por etapa = só o card que está NA etapa AGORA, contando uma vez
+  // (o tempo da passagem atual, minutosEtapaAtual) -- não soma passagens
+  // antigas nem conta de novo um card que já voltou pra uma etapa visitada
+  // antes. Cada card pertence a exatamente uma etapa aqui.
   const minutosPorEtapa: Record<string, number[]> = {};
   for (const l of linhas) {
-    for (const seg of l.segmentosEtapa) {
-      const chave = `${seg.funil} | ${seg.etapa}`;
-      (minutosPorEtapa[chave] ??= []).push(seg.minutos);
-    }
+    const chave = `${l.funil} | ${l.etapaAtual}`;
+    (minutosPorEtapa[chave] ??= []).push(l.minutosEtapaAtual);
   }
   const tempoPorEtapa: AnaliseGerencial["tempoPorEtapa"] = {};
   const chavesOrdenadas = [
