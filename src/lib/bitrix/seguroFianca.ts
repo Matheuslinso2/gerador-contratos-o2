@@ -618,7 +618,8 @@ export type AnaliseGerencial = {
   kpis: {
     total: number; // "novidades" -- só cards criados nesta competência
     totalRelevantes: number; // novidades + herdados considerados neste mês -- base do % de "Cards com Alerta"
-    imobiliarias: number; // idem, imobiliárias distintas entre as novidades
+    imobiliarias: number; // imobiliárias distintas entre as novidades
+    imobiliariasHerdado: number; // imobiliárias distintas entre os herdados (relevantes que não são novidade)
     emAndamento: ContagemPorOrigem;
     recusados: ContagemPorOrigem; // mês do evento (dataRecusa)
     aprovados: ContagemPorOrigem; // mês do evento (dataAprovacao)
@@ -1168,6 +1169,9 @@ export function montarAnaliseGerencial(
       convertidos,
       comAlerta,
       imobiliarias: new Set(novidades.map((l) => l.imobiliaria).filter(Boolean)).size,
+      imobiliariasHerdado: new Set(
+        relevantes.filter((l) => l.competencia !== competencia).map((l) => l.imobiliaria).filter(Boolean)
+      ).size,
     },
     porFunilEtapa,
     porResponsavelFunil1,

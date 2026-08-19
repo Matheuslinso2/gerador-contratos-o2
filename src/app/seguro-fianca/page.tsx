@@ -455,6 +455,7 @@ export default async function SeguroFiancaPage({
 
               <h2 style={{ fontSize: 14, fontWeight: 700, margin: "20px 0 8px", color: "var(--ink)" }}>Herdado de meses anteriores</h2>
               <div className={styles.kpis}>
+                <Kpi label="Imobiliárias" value={String(gerencial.kpis.imobiliariasHerdado)} sub="com card herdado ainda relevante este mês" />
                 <Kpi label="Em Andamento" value={String(gerencial.kpis.emAndamento.herdado)} sub="ainda em aberto, de outros meses" tone="positive" />
                 <Kpi label="Recusados" value={String(gerencial.kpis.recusados.herdado)} sub="recusados este mês, criados antes" tone="negative" />
                 <Kpi label="Aprovados" value={String(gerencial.kpis.aprovados.herdado)} sub="aprovados este mês, criados antes" tone="info" />
