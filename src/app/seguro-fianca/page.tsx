@@ -212,6 +212,49 @@ function ProdutividadeTabela({ dados }: { dados: AnaliseGerencial["porResponsave
   );
 }
 
+// "Contratos recebidos por dia" -- 3 colunas (Data, Mês Atual, Mês
+// Anterior), já que mesAtual/herdado têm exatamente os mesmos dias na mesma
+// ordem (vêm da mesma competência, ver montarQuadroDiario).
+function ContratosRecebidosTabela({ mesAtual, herdado }: { mesAtual: QuadroDiario; herdado: QuadroDiario }) {
+  const totalMesAtual = mesAtual.dias.reduce((a, d) => a + d.total, 0);
+  const totalHerdado = herdado.dias.reduce((a, d) => a + d.total, 0);
+  return (
+    <div className={styles.tableWrap}>
+      <table className={styles.data}>
+        <thead>
+          <tr>
+            <th>Data</th>
+            <th className={styles.numCol}>Mês Atual</th>
+            <th className={styles.numCol}>Mês Anterior</th>
+          </tr>
+        </thead>
+        <tbody>
+          {mesAtual.dias.map((d, i) => (
+            <tr key={d.data}>
+              <td>{d.data.split("-").reverse().join("/")}</td>
+              <td className={`${styles.numCol} ${styles.num}`} style={{ fontWeight: 700 }}>
+                {d.total}
+              </td>
+              <td className={`${styles.numCol} ${styles.num}`}>{herdado.dias[i]?.total ?? 0}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td style={{ fontWeight: 700 }}>Total</td>
+            <td className={`${styles.numCol} ${styles.num}`} style={{ fontWeight: 700 }}>
+              {totalMesAtual}
+            </td>
+            <td className={`${styles.numCol} ${styles.num}`} style={{ fontWeight: 700 }}>
+              {totalHerdado}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
 // Tabela "Data × Responsável" compartilhada pelos 3 quadros diários
 // (cotações concluídas, contratos recebidos, efetivações) -- mesma forma
 // desde que passaram a usar os campos de responsável por etapa.
@@ -818,12 +861,9 @@ export default async function SeguroFiancaPage({
                   <div className={styles.panel}>
                     <h3>Contratos recebidos por dia</h3>
                     <div className={styles.panelSub}>
-                      cards que entraram na etapa &quot;Contrato Recebido&quot; — dividido pela origem do card (criado este mês ou herdado), sem quebra por responsável
+                      cards que entraram na etapa &quot;Contrato Recebido&quot; — Mês Atual conta os cards criados nesta competência, Mês Anterior conta os herdados de qualquer competência anterior
                     </div>
-                    <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>Origem: mês atual</div>
-                    <QuadroDiarioTabela quadro={gerencial.contratosRecebidosPorDia.mesAtual} mostrarResponsaveis={false} />
-                    <div style={{ fontSize: 12.5, fontWeight: 700, marginTop: 16, marginBottom: 6 }}>Origem: herdado de meses anteriores</div>
-                    <QuadroDiarioTabela quadro={gerencial.contratosRecebidosPorDia.herdado} mostrarResponsaveis={false} />
+                    <ContratosRecebidosTabela mesAtual={gerencial.contratosRecebidosPorDia.mesAtual} herdado={gerencial.contratosRecebidosPorDia.herdado} />
                   </div>
                   <div className={styles.panel}>
                     <h3>Efetivações por dia</h3>
