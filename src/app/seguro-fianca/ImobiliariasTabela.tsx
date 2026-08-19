@@ -34,7 +34,36 @@ function normalizar(s: string): string {
     .replace(/[̀-ͯ]/g, "");
 }
 
-export default function ImobiliariasTabela({ imobiliarias }: { imobiliarias: LinhaImobiliaria[] }) {
+// Tendência vs. mês anterior (pedido da Patricia): sem histórico do mês
+// anterior ainda, entra como "alta" (mesma leitura de quem tinha 0 e passou
+// a ter cotação) -- é o comportamento esperado enquanto o painel não tem
+// mais de um mês de histórico salvo.
+function tendencia(atual: number, anterior: number): { pct: number; direcao: "up" | "down" | "flat" } {
+  if (atual === anterior) return { pct: 0, direcao: "flat" };
+  if (anterior === 0) return { pct: 100, direcao: "up" };
+  const variacao = ((atual - anterior) / anterior) * 100;
+  return { pct: Math.abs(variacao), direcao: variacao >= 0 ? "up" : "down" };
+}
+
+function Tendencia({ atual, anterior }: { atual: number; anterior: number }) {
+  const t = tendencia(atual, anterior);
+  if (t.direcao === "flat") return <span style={{ color: "var(--ink-faint)" }}>—</span>;
+  const seta = t.direcao === "up" ? "▲" : "▼";
+  const cor = t.direcao === "up" ? "var(--info)" : "var(--negative)";
+  return (
+    <span style={{ color: cor, fontWeight: 700 }}>
+      {seta} {t.pct.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}%
+    </span>
+  );
+}
+
+export default function ImobiliariasTabela({
+  imobiliarias,
+  totalMesAnteriorPorImobiliaria = {},
+}: {
+  imobiliarias: LinhaImobiliaria[];
+  totalMesAnteriorPorImobiliaria?: Record<string, number>;
+}) {
   const [expandido, setExpandido] = useState(false);
   const [busca, setBusca] = useState("");
   const LIMITE = 10;
@@ -70,12 +99,19 @@ export default function ImobiliariasTabela({ imobiliarias }: { imobiliarias: Lin
           <tr>
             <th>Imobiliária</th>
             <th className={styles.numCol}>Cotações</th>
+            <th className={styles.numCol} title="Comparado ao total de cotações do mês anterior">
+              Tendência
+            </th>
             <th className={styles.numCol}>Em Andamento</th>
             <th className={styles.numCol}>Recusados</th>
             <th className={styles.numCol}>Perdidos</th>
             <th className={styles.numCol}>Convertidos</th>
-            <th className={styles.numCol}>Prêmio Cotado</th>
-            <th className={styles.numCol}>Comissão Cotada</th>
+            <th className={styles.numCol} title="Média dos prêmios cotados dentro de cada card, somada entre os cards da imobiliária">
+              Prêmio Cotado
+            </th>
+            <th className={styles.numCol} title="Média das comissões cotadas dentro de cada card, somada entre os cards da imobiliária">
+              Comissão Cotada
+            </th>
             <th className={styles.numCol} title="Média das cotações de cada card, depois média entre os cards da imobiliária">
               Ticket Médio
             </th>
@@ -92,6 +128,9 @@ export default function ImobiliariasTabela({ imobiliarias }: { imobiliarias: Lin
               <td>{i.nome}</td>
               <td className={`${styles.numCol} ${styles.num}`} style={{ fontWeight: 700 }}>
                 {i.total}
+              </td>
+              <td className={`${styles.numCol} ${styles.num}`}>
+                <Tendencia atual={i.total} anterior={totalMesAnteriorPorImobiliaria[i.nome] ?? 0} />
               </td>
               <td className={`${styles.numCol} ${styles.num}`}>{i.emAndamento}</td>
               <td className={`${styles.numCol} ${styles.num}`}>{i.recusados}</td>
@@ -111,7 +150,7 @@ export default function ImobiliariasTabela({ imobiliarias }: { imobiliarias: Lin
           ))}
           {filtradas.length === 0 && (
             <tr>
-              <td colSpan={12} style={{ color: "var(--ink-faint)" }}>
+              <td colSpan={13} style={{ color: "var(--ink-faint)" }}>
                 {busca ? "Nenhuma imobiliária encontrada com esse nome." : "Nenhuma imobiliária com cotação registrada neste período."}
               </td>
             </tr>

@@ -1,5 +1,6 @@
 import styles from "./painel-capitalizacao.module.css";
 import type { PainelCapitalizacao as PainelCapitalizacaoData } from "@/lib/capitalizacao/painel";
+import TitulosTabela from "./TitulosTabela";
 
 function fmtBRL(v: number): string {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -149,34 +150,7 @@ export default function PainelCapitalizacao({ dados }: { dados: PainelCapitaliza
           <div className={styles.note}>todos os títulos ativos, sem filtro de mês</div>
         </div>
         <div className={styles.panel}>
-          {titulos.length === 0 ? (
-            <div className={styles.panelSub}>Nenhum título encontrado.</div>
-          ) : (
-            <div className={styles.tableWrap}>
-              <table className={styles.data}>
-                <thead>
-                  <tr>
-                    <th>Titular</th>
-                    <th>Imobiliária</th>
-                    <th>Status</th>
-                    <th className={styles.numCol}>Prêmio</th>
-                    <th className={styles.numCol}>Comissão</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {titulos.map((t) => (
-                    <tr key={t.id}>
-                      <td>{t.titular}</td>
-                      <td>{t.imobiliaria}</td>
-                      <td>{t.etapaNome}</td>
-                      <td className={`${styles.numCol} ${styles.num}`}>{fmtBRL(t.valorTitulo)}</td>
-                      <td className={`${styles.numCol} ${styles.num}`}>{fmtBRL(t.comissao)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          {titulos.length === 0 ? <div className={styles.panelSub}>Nenhum título encontrado.</div> : <TitulosTabela titulos={titulos} />}
         </div>
       </section>
     </>

@@ -36,12 +36,29 @@ function mesAtualDefault(): string {
   return `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}`;
 }
 
+// Usado na coluna "Tendência" da tabela de imobiliárias (comparação com o
+// mês anterior, pedido da Patricia) -- competência é sempre "YYYY-MM".
+function competenciaAnterior(competencia: string): string {
+  const [ano, mes] = competencia.split("-").map(Number);
+  const data = new Date(ano, mes - 2, 1);
+  return `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, "0")}`;
+}
+
 function fmtBRL(v: number): string {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 function fmtPct(v: number): string {
   return v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "%";
 }
+// A etapa de encerramento de "Análise e Cotação" se chama "PERDIDO" no
+// Bitrix (mesmo rótulo genérico usado nos dois funis) -- só no quadro
+// "Tempo em aberto por etapa" isso precisa aparecer como "Recusado", pra
+// bater com o termo usado no resto do painel pra esse funil. Não mexe em
+// "Negociação e Contrato | PERDIDO", que usa "Perdido" mesmo de propósito.
+function rotuloEtapaTempoAberto(chave: string): string {
+  return chave === "Análise e Cotação | PERDIDO" ? "Análise e Cotação | Recusado" : chave;
+}
+
 function fmtDuracao(minutosTotais: number): string {
   const min = Math.round(minutosTotais);
   const horas = Math.floor(min / 60);
@@ -207,7 +224,11 @@ function ProdutividadeTabela({ dados }: { dados: AnaliseGerencial["porResponsave
 // Tabela "Data × Responsável" compartilhada pelos 3 quadros diários
 // (cotações concluídas, contratos recebidos, efetivações) -- mesma forma
 // desde que passaram a usar os campos de responsável por etapa.
-function QuadroDiarioTabela({ quadro }: { quadro: QuadroDiario }) {
+// "Contratos recebidos por dia" usa mostrarResponsaveis={false} (pedido da
+// Patricia): só Data × Quant., sem a quebra por pessoa que os outros dois
+// quadros mantêm.
+function QuadroDiarioTabela({ quadro, mostrarResponsaveis = true }: { quadro: QuadroDiario; mostrarResponsaveis?: boolean }) {
+  const semNenhumRegistro = mostrarResponsaveis ? quadro.responsaveis.length === 0 : quadro.dias.every((d) => d.total === 0);
   return (
     <>
       <div className={styles.tableWrap}>
@@ -216,11 +237,12 @@ function QuadroDiarioTabela({ quadro }: { quadro: QuadroDiario }) {
             <tr>
               <th>Data</th>
               <th className={styles.numCol}>Quant.</th>
-              {quadro.responsaveis.map((nome) => (
-                <th key={nome} className={styles.numCol}>
-                  {nome}
-                </th>
-              ))}
+              {mostrarResponsaveis &&
+                quadro.responsaveis.map((nome) => (
+                  <th key={nome} className={styles.numCol}>
+                    {nome}
+                  </th>
+                ))}
             </tr>
           </thead>
           <tbody>
@@ -230,11 +252,12 @@ function QuadroDiarioTabela({ quadro }: { quadro: QuadroDiario }) {
                 <td className={`${styles.numCol} ${styles.num}`} style={{ fontWeight: 700 }}>
                   {d.total}
                 </td>
-                {quadro.responsaveis.map((nome) => (
-                  <td key={nome} className={`${styles.numCol} ${styles.num}`}>
-                    {d.porResponsavel[nome] ?? 0}
-                  </td>
-                ))}
+                {mostrarResponsaveis &&
+                  quadro.responsaveis.map((nome) => (
+                    <td key={nome} className={`${styles.numCol} ${styles.num}`}>
+                      {d.porResponsavel[nome] ?? 0}
+                    </td>
+                  ))}
               </tr>
             ))}
           </tbody>
@@ -244,16 +267,17 @@ function QuadroDiarioTabela({ quadro }: { quadro: QuadroDiario }) {
               <td className={`${styles.numCol} ${styles.num}`} style={{ fontWeight: 700 }}>
                 {quadro.dias.reduce((a, d) => a + d.total, 0)}
               </td>
-              {quadro.responsaveis.map((nome) => (
-                <td key={nome} className={`${styles.numCol} ${styles.num}`} style={{ fontWeight: 700 }}>
-                  {quadro.dias.reduce((a, d) => a + (d.porResponsavel[nome] ?? 0), 0)}
-                </td>
-              ))}
+              {mostrarResponsaveis &&
+                quadro.responsaveis.map((nome) => (
+                  <td key={nome} className={`${styles.numCol} ${styles.num}`} style={{ fontWeight: 700 }}>
+                    {quadro.dias.reduce((a, d) => a + (d.porResponsavel[nome] ?? 0), 0)}
+                  </td>
+                ))}
             </tr>
           </tfoot>
         </table>
       </div>
-      {quadro.responsaveis.length === 0 && (
+      {semNenhumRegistro && (
         <div className={styles.panelSub} style={{ marginTop: 12 }}>
           Nenhum registro neste período.
         </div>
@@ -324,6 +348,21 @@ export default async function SeguroFiancaPage({
       gerencial = { ...montarAnaliseGerencial([], [], competencia), totalMovimentacoes: 0 };
       semRegistroNoPeriodo = true;
     }
+  }
+
+  // Coluna "Tendência" da tabela de imobiliárias -- compara o total de
+  // cotações desta competência com a anterior. Sem mês anterior salvo ainda
+  // (ex: primeiro mês rodando o painel), cada imobiliária cai no ramo
+  // "anterior = 0" e aparece como alta -- comportamento esperado, avisado
+  // pela própria Patricia ao pedir essa coluna.
+  const { data: snapshotAnterior } = await supabase
+    .from("seguro_fianca_snapshots")
+    .select("payload")
+    .eq("competencia", competenciaAnterior(competencia))
+    .maybeSingle();
+  const totalMesAnteriorPorImobiliaria: Record<string, number> = {};
+  for (const im of (snapshotAnterior?.payload as AnaliseGerencial | undefined)?.topImobiliarias ?? []) {
+    totalMesAnteriorPorImobiliaria[im.nome] = im.total;
   }
 
   return (
@@ -766,9 +805,9 @@ export default async function SeguroFiancaPage({
                   <div className={styles.panel}>
                     <h3>Contratos recebidos por dia</h3>
                     <div className={styles.panelSub}>
-                      cards que entraram na etapa &quot;Contrato Recebido&quot; (Negociação e Contrato), por Responsável(is) pela Negociação — sem o campo preenchido vira alerta em &quot;Qualidade dos dados&quot;, não entra na quebra por pessoa
+                      cards que entraram na etapa &quot;Contrato Recebido&quot; (Negociação e Contrato) — sem quebra por responsável, ver &quot;Qualidade dos dados&quot; pra preenchimento pendente
                     </div>
-                    <QuadroDiarioTabela quadro={gerencial.contratosRecebidosPorDia} />
+                    <QuadroDiarioTabela quadro={gerencial.contratosRecebidosPorDia} mostrarResponsaveis={false} />
                   </div>
                   <div className={styles.panel}>
                     <h3>Efetivações por dia</h3>
@@ -798,7 +837,7 @@ export default async function SeguroFiancaPage({
                         <tbody>
                           {Object.entries(gerencial.tempoPorEtapa).map(([etapa, t]) => (
                             <tr key={etapa}>
-                              <td>{etapa}</td>
+                              <td>{rotuloEtapaTempoAberto(etapa)}</td>
                               <td className={`${styles.numCol} ${styles.num}`}>{t.n}</td>
                               <td className={`${styles.numCol} ${styles.num}`}>{fmtDuracao(t.media)}</td>
                               <td className={`${styles.numCol} ${styles.num}`}>{fmtDuracao(t.max)}</td>
@@ -892,7 +931,10 @@ export default async function SeguroFiancaPage({
                   <div className={styles.note}>{gerencial.kpis.imobiliarias} imobiliárias com pelo menos 1 cotação no período</div>
                 </div>
                 <div className={styles.panel}>
-                  <ImobiliariasTabela imobiliarias={gerencial.topImobiliarias} />
+                  <ImobiliariasTabela
+                    imobiliarias={gerencial.topImobiliarias}
+                    totalMesAnteriorPorImobiliaria={totalMesAnteriorPorImobiliaria}
+                  />
                 </div>
               </section>
 

@@ -43,6 +43,7 @@ export const ETAPAS: Etapa[] = [
   { statusId: "DT1042_20:FAIL", nome: "PERDIDO", semantica: "F" },
 ];
 const etapaPorStatusId = new Map(ETAPAS.map((e) => [e.statusId, e]));
+const ETAPA_CONTRATO_RECEBIDO = "DT1042_20:UC_RD3MTL";
 
 // Ordem de progressão dos funis (funil 1 do primeiro ao último status, depois
 // funil 2 do primeiro ao último) — usada pra ordenar o painel "Tempo em
@@ -390,13 +391,29 @@ export function montarContagemMensal(
     const dataCotacao = fimCotacaoRaw ? apenasData(String(fimCotacaoRaw)) : "";
 
     const motivoRecusaPerda = enumLabel(defs, CAMPO_MOTIVO_RECUSA, item[CAMPO_MOTIVO_RECUSA]);
+    const responsaveisCotacaoAlerta = nomesResponsaveis(usuarios, item[CAMPO_RESPONSAVEIS_COTACAO]);
+    const responsaveisNegociacaoAlerta = nomesResponsaveis(usuarios, item[CAMPO_RESPONSAVEIS_NEGOCIACAO]);
+    const responsavelEfetivacaoAlerta = nomesResponsaveis(usuarios, item[CAMPO_RESPONSAVEL_EFETIVACAO])[0] ?? "";
+    const dataEfetivacaoAlerta = apenasData(item[CAMPO_DATA_EFETIVACAO]);
+    const jaPassouPelaCotacao = item.categoryId === CATEGORIA_NEGOCIACAO || resultado === "Aprovado";
+    const saiuFunil1 = jaPassouPelaCotacao || resultado === "Recusado";
+    const entrouContratoRecebido = item.stageId === ETAPA_CONTRATO_RECEBIDO || eventos.some((e) => e.STAGE_ID === ETAPA_CONTRATO_RECEBIDO);
+
+    // Mesmas 6 dimensões do quadro "Qualidade dos dados" (ver qualidade{} em
+    // montarAnaliseGerencial) -- computadas aqui por card pra "Cards com
+    // Alerta" (primeiro painel, KPI) espelhar exatamente o mesmo critério, em
+    // vez de cobrir só um subconjunto delas.
     const alertas: string[] = [];
+    if (!item.companyId) alertas.push("Sem imobiliária/empresa vinculada");
     // Recusa em Análise e Cotação (categoryId 18) não exige motivo — só perdas em Negociação e Contrato (categoryId 20).
     if (resultado === "Perdido" && !motivoRecusaPerda) alertas.push("Perdido sem motivo registrado");
-    if (!item.companyId) alertas.push("Sem imobiliária/empresa vinculada");
     if (resultado === "Convertido" && !enumLabel(defs, CAMPO_SEGURADORA_ESCOLHIDA, item[CAMPO_SEGURADORA_ESCOLHIDA])) {
       alertas.push("Convertido sem seguradora escolhida");
     }
+    if (saiuFunil1 && !dataCotacao) alertas.push("Saiu de Análise e Cotação sem HORA FIM da cotação registrada");
+    if (!responsaveisCotacaoAlerta.length) alertas.push("Sem Responsável(is) pela Cotação preenchido");
+    if (entrouContratoRecebido && !responsaveisNegociacaoAlerta.length) alertas.push("Sem Responsável(is) pela Negociação preenchido");
+    if (dataEfetivacaoAlerta && !responsavelEfetivacaoAlerta) alertas.push("Data de Efetivação preenchida sem Responsável pela Efetivação");
 
     const alugCard = valorMonetario(item[CAMPO_ALUGUEL]);
     const pacoteCard = valorMonetario(item[CAMPO_PACOTE_LOCACAO]);
@@ -611,8 +628,6 @@ export function normalizarQuadroDiario(valor: unknown, competencia: string): Qua
   return { responsaveis: [], dias: diasDoMes(competencia).map((data) => ({ data, porResponsavel: {}, total: 0 })), semResponsavel: 0 };
 }
 
-const ETAPA_CONTRATO_RECEBIDO = "DT1042_20:UC_RD3MTL";
-
 export function montarAnaliseGerencial(
   linhas: LinhaContagem[],
   historico: BitrixStageHistoryEvent[],
@@ -786,21 +801,17 @@ export function montarAnaliseGerencial(
     else if (l.resultado === "Convertido") d.convertidos++;
     else d.emAndamento++; // "Aprovado" é transitório (card já está no funil 2, contado lá pelo resultado real dele)
 
-    // Prêmio/comissão cotado -- soma de TODAS as seguradoras cotadas nesse
-    // card (mesmo critério já usado no "Total cotado" de Cotado x
-    // Convertido: um card cotado com 3 seguradoras conta as 3, não é
-    // deduplicado por card). "Valor" é a PARCELA, então o prêmio total é
-    // valor × parcelas (mesma correção aplicada em cotadoPorSeguradora) --
-    // sem o nº de parcelas não dá pra estimar o total, esses casos ficam de
-    // fora da soma em R$.
-    for (const seg of SEGURADORAS) {
-      const s = l.seguradoras[seg.nome];
-      if (typeof s?.valor !== "number" || typeof s.parcelas !== "number") continue;
-      const premioTotal = s.valor * s.parcelas;
-      d.premioCotado += premioTotal;
-      const pct = typeof s.comissaoPct === "number" ? s.comissaoPct : 0;
-      d.comissaoCotada += premioTotal * (pct / 100);
-    }
+    // Prêmio/comissão cotado (coluna da tabela de imobiliárias) -- média das
+    // seguradoras cotadas DENTRO do card primeiro (ex: 5 seguradoras deram
+    // preço nesse card → 1 ticket médio), e só depois SOMA desses tickets
+    // médios entre os cards da imobiliária. Corrige a distorção de antes
+    // (somar todas as seguradoras cotadas de todos os cards), que inflava o
+    // número conforme mais seguradoras cotavam o mesmo card, sem relação com
+    // o volume real de cards da imobiliária.
+    const premioMedioCard = premioTotalMedioDoCard(l);
+    if (premioMedioCard !== null) d.premioCotado += premioMedioCard;
+    const comissaoMediaCard = comissaoTotalMediaDoCard(l);
+    if (comissaoMediaCard !== null) d.comissaoCotada += comissaoMediaCard;
 
     // Ticket médio e % do pacote -- ao nível de CARD primeiro (média das
     // cotações do próprio card, ex: 5 seguradoras cotadas nesse card viram
@@ -846,6 +857,29 @@ export function montarAnaliseGerencial(
   // de cada card, depois média entre os cards da faixa).
   function cotacaoMediaDoCard(l: LinhaContagem): number | null {
     const valores = SEGURADORAS.map((seg) => l.seguradoras[seg.nome]?.valor).filter((v): v is number => typeof v === "number" && v > 0);
+    return valores.length ? media(valores) : null;
+  }
+  // Prêmio total médio do card -- média de (valor da parcela × parcelas) das
+  // seguradoras cotadas nesse card (ex: 5 seguradoras aprovaram, tira a
+  // média dos 5 prêmios totais). Usado no Prêmio/Comissão Cotado da tabela
+  // de imobiliárias (ver porImobiliaria acima) -- diferente do ticket médio
+  // (cotacaoMediaDoCard), que usa só o valor da parcela, sem multiplicar
+  // pelas parcelas.
+  function premioTotalMedioDoCard(l: LinhaContagem): number | null {
+    const valores = SEGURADORAS.map((seg) => {
+      const s = l.seguradoras[seg.nome];
+      if (typeof s?.valor !== "number" || typeof s.parcelas !== "number") return null;
+      return s.valor * s.parcelas;
+    }).filter((v): v is number => v !== null);
+    return valores.length ? media(valores) : null;
+  }
+  function comissaoTotalMediaDoCard(l: LinhaContagem): number | null {
+    const valores = SEGURADORAS.map((seg) => {
+      const s = l.seguradoras[seg.nome];
+      if (typeof s?.valor !== "number" || typeof s.parcelas !== "number") return null;
+      const pct = typeof s.comissaoPct === "number" ? s.comissaoPct : 0;
+      return s.valor * s.parcelas * (pct / 100);
+    }).filter((v): v is number => v !== null);
     return valores.length ? media(valores) : null;
   }
   // Mesma lógica do ticket médio, mas pra taxa (% do pacote de locação que
