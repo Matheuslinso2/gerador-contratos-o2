@@ -32,6 +32,20 @@ function competenciaValida(valor: string | undefined): valor is string {
   return !!valor && /^\d{4}-(0[1-9]|1[0-2])$/.test(valor);
 }
 
+// Timeout do Vercel é 60s e MATA a função sem rodar catch nenhum -- o
+// fallback pro retrato salvo (abaixo) só funciona se a gente mesmo cortar a
+// busca ao vivo ANTES disso, com folga pra ainda dar tempo de consultar o
+// snapshot e responder.
+const LIMITE_TEMPO_AO_VIVO_MS = 40_000;
+
+function comLimiteDeTempo<T>(promessa: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const limite = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Tempo esgotado após ${Math.round(ms / 1000)}s buscando a fonte`)), ms);
+  });
+  return Promise.race([promessa, limite]).finally(() => clearTimeout(timer)) as Promise<T>;
+}
+
 export default async function RamosElementaresPage({
   searchParams,
 }: {
@@ -61,9 +75,10 @@ export default async function RamosElementaresPage({
   let erroFonte: string | null = null;
 
   try {
-    const fonte = usarBitrix
-      ? await lerFonteRamosElementaresBitrix(competencia)
-      : await lerFonteRamosElementares(competencia);
+    const fonte = await comLimiteDeTempo(
+      usarBitrix ? lerFonteRamosElementaresBitrix(competencia) : lerFonteRamosElementares(competencia),
+      LIMITE_TEMPO_AO_VIVO_MS
+    );
     analise = montarAnaliseRamosElementares(fonte);
 
     const { error: erroSnapshot } = await supabase.from("ramos_elementares_snapshots").upsert(

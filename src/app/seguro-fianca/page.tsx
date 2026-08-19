@@ -50,6 +50,36 @@ function fmtDuracao(minutosTotais: number): string {
   return `${horas}h${String(minutos).padStart(2, "0")}min`;
 }
 
+// Timeout do Vercel é 60s e MATA a função sem rodar catch nenhum -- não dá
+// pra reagir a isso depois que acontece. Por isso corta a busca ao vivo
+// antes disso (com folga pra ainda dar tempo de consultar o retrato salvo e
+// responder) em vez de deixar o Bitrix decidir quando a página quebra.
+const LIMITE_TEMPO_AO_VIVO_MS = 40_000;
+
+function comLimiteDeTempo<T>(promessa: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const limite = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Tempo esgotado após ${Math.round(ms / 1000)}s buscando no Bitrix`)), ms);
+  });
+  return Promise.race([promessa, limite]).finally(() => clearTimeout(timer)) as Promise<T>;
+}
+
+// Snapshots salvos antes de 17/08/2026 têm a forma antiga desses 3 quadros
+// (ou nem têm efetivacoesPorDia) -- normaliza pra não quebrar a página com
+// um retrato salvo antigo, seja reabrindo um mês passado ou caindo aqui de
+// fallback por erro no mês atual.
+function normalizarSnapshot(
+  payload: AnaliseGerencial & { totalMovimentacoes: number },
+  competencia: string
+): AnaliseGerencial & { totalMovimentacoes: number } {
+  return {
+    ...payload,
+    analisesDiariasPorResponsavel: normalizarQuadroDiario(payload.analisesDiariasPorResponsavel, competencia),
+    contratosRecebidosPorDia: normalizarQuadroDiario(payload.contratosRecebidosPorDia, competencia),
+    efetivacoesPorDia: normalizarQuadroDiario(payload.efetivacoesPorDia, competencia),
+  };
+}
+
 async function buscarDadosAoVivo(competencia: string): Promise<AnaliseGerencial & { totalMovimentacoes: number }> {
   const [items, historico, defs] = await Promise.all([
     listarItensSpa(ENTITY_TYPE_ID),
@@ -252,10 +282,11 @@ export default async function SeguroFiancaPage({
   let atualizadoEm: string | null = null;
   let erro: string | null = null;
   let semRegistroNoPeriodo = false;
+  let usandoRetratoSalvo = false;
 
   if (ehCompetenciaAtual) {
     try {
-      gerencial = await buscarDadosAoVivo(competencia);
+      gerencial = await comLimiteDeTempo(buscarDadosAoVivo(competencia), LIMITE_TEMPO_AO_VIVO_MS);
       atualizadoEm = new Date().toISOString();
       const { error: erroUpsert } = await supabase
         .from("seguro_fianca_snapshots")
@@ -265,20 +296,25 @@ export default async function SeguroFiancaPage({
       }
     } catch (e) {
       erro = e instanceof Error ? e.message : "Falha ao buscar dados do Bitrix.";
+      // Busca ao vivo falhou (ou estourou o limite) -- em vez de deixar a
+      // tela em branco, cai pro último retrato salvo (se existir um) igual
+      // já fazemos pra competência passada. O aviso de erro continua
+      // aparecendo, só que agora com o painel funcionando por baixo.
+      const { data } = await supabase
+        .from("seguro_fianca_snapshots")
+        .select("payload, atualizado_em")
+        .eq("competencia", competencia)
+        .maybeSingle();
+      if (data) {
+        gerencial = normalizarSnapshot(data.payload as AnaliseGerencial & { totalMovimentacoes: number }, competencia);
+        atualizadoEm = data.atualizado_em;
+        usandoRetratoSalvo = true;
+      }
     }
   } else {
     const { data } = await supabase.from("seguro_fianca_snapshots").select("payload, atualizado_em").eq("competencia", competencia).maybeSingle();
     if (data) {
-      // Snapshots salvos antes de 17/08/2026 têm a forma antiga desses 3
-      // quadros (ou nem têm efetivacoesPorDia) -- normaliza pra não quebrar
-      // a página ao reabrir uma competência passada.
-      const payload = data.payload as AnaliseGerencial & { totalMovimentacoes: number };
-      gerencial = {
-        ...payload,
-        analisesDiariasPorResponsavel: normalizarQuadroDiario(payload.analisesDiariasPorResponsavel, competencia),
-        contratosRecebidosPorDia: normalizarQuadroDiario(payload.contratosRecebidosPorDia, competencia),
-        efetivacoesPorDia: normalizarQuadroDiario(payload.efetivacoesPorDia, competencia),
-      };
+      gerencial = normalizarSnapshot(data.payload as AnaliseGerencial & { totalMovimentacoes: number }, competencia);
       atualizadoEm = data.atualizado_em;
     } else {
       // Nenhum snapshot foi salvo pra esse mês (a página nunca foi aberta
@@ -315,7 +351,12 @@ export default async function SeguroFiancaPage({
             <div className={styles.stampPanel + " " + styles.stampPanelWarning} style={{ marginBottom: 24 }}>
               <div className={styles.stampBadge + " " + styles.stampBadgeWarning}>ERRO</div>
               <div className={styles.stampList}>
-                <div>Não consegui buscar os dados do Bitrix agora: {erro}</div>
+                <div>
+                  Não consegui buscar os dados do Bitrix agora: {erro}
+                  {usandoRetratoSalvo
+                    ? " — mostrando o último retrato salvo, pode estar um pouco desatualizado."
+                    : " — e ainda não existe nenhum retrato salvo desta competência pra mostrar no lugar."}
+                </div>
               </div>
             </div>
           )}
