@@ -820,74 +820,37 @@ export default async function SeguroFiancaPage({
               </section>
 
               <section className={styles.section}>
-                <div className={styles.grid2}>
-                  <div className={styles.panel}>
-                    <h3>Tempo em aberto por etapa</h3>
-                    <div className={styles.panelSub}>só os cards que estão na etapa agora, cada card contando uma vez, pelo tempo da passagem atual</div>
-                    <div className={styles.tableWrap}>
-                      <table className={styles.data}>
-                        <thead>
-                          <tr>
-                            <th>Etapa</th>
-                            <th className={styles.numCol}>Cards</th>
-                            <th className={styles.numCol}>Média</th>
-                            <th className={styles.numCol}>Máx.</th>
+                <div className={styles.panel}>
+                  <h3>Tempo em aberto por etapa</h3>
+                  <div className={styles.panelSub}>só os cards que estão na etapa agora, cada card contando uma vez, pelo tempo da passagem atual</div>
+                  <div className={styles.tableWrap}>
+                    <table className={styles.data}>
+                      <thead>
+                        <tr>
+                          <th>Etapa</th>
+                          <th className={styles.numCol}>Cards</th>
+                          <th className={styles.numCol}>Média</th>
+                          <th className={styles.numCol}>Máx.</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Object.entries(gerencial.tempoPorEtapa).map(([etapa, t]) => (
+                          <tr key={etapa}>
+                            <td>{rotuloEtapaTempoAberto(etapa)}</td>
+                            <td className={`${styles.numCol} ${styles.num}`}>{t.n}</td>
+                            <td className={`${styles.numCol} ${styles.num}`}>{fmtDuracao(t.media)}</td>
+                            <td className={`${styles.numCol} ${styles.num}`}>{fmtDuracao(t.max)}</td>
                           </tr>
-                        </thead>
-                        <tbody>
-                          {Object.entries(gerencial.tempoPorEtapa).map(([etapa, t]) => (
-                            <tr key={etapa}>
-                              <td>{rotuloEtapaTempoAberto(etapa)}</td>
-                              <td className={`${styles.numCol} ${styles.num}`}>{t.n}</td>
-                              <td className={`${styles.numCol} ${styles.num}`}>{fmtDuracao(t.media)}</td>
-                              <td className={`${styles.numCol} ${styles.num}`}>{fmtDuracao(t.max)}</td>
-                            </tr>
-                          ))}
-                          {Object.keys(gerencial.tempoPorEtapa).length === 0 && (
-                            <tr>
-                              <td colSpan={4} style={{ color: "var(--ink-faint)" }}>
-                                Nenhum card em aberto neste período.
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                  <div className={styles.panel}>
-                    <h3>Cards que pedem atenção</h3>
-                    <div className={styles.panelSub}>parado pelo menos 30% mais que a média da própria etapa</div>
-                    <div className={styles.tableWrap}>
-                      <table className={styles.data}>
-                        <thead>
+                        ))}
+                        {Object.keys(gerencial.tempoPorEtapa).length === 0 && (
                           <tr>
-                            <th>Card</th>
-                            <th>Etapa</th>
-                            <th className={styles.numCol}>Tempo</th>
-                            <th>Responsável</th>
+                            <td colSpan={4} style={{ color: "var(--ink-faint)" }}>
+                              Nenhum card em aberto neste período.
+                            </td>
                           </tr>
-                        </thead>
-                        <tbody>
-                          {gerencial.cardsQuePedemAtencao.map((c) => (
-                            <tr key={c.id}>
-                              <td>
-                                #{c.id} {c.nome}
-                              </td>
-                              <td>{c.etapa}</td>
-                              <td className={`${styles.numCol} ${styles.num}`}>{fmtDuracao(c.minutos)}</td>
-                              <td>{c.responsavel}</td>
-                            </tr>
-                          ))}
-                          {gerencial.cardsQuePedemAtencao.length === 0 && (
-                            <tr>
-                              <td colSpan={4} style={{ color: "var(--ink-faint)" }}>
-                                Nenhum card fora do padrão da própria etapa.
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
+                        )}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               </section>
