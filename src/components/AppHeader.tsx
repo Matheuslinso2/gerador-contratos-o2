@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { isAdmin, isColaboradorO2 } from "@/lib/admin";
+import { isAdmin, isColaboradorO2, isMatheus } from "@/lib/admin";
 import NavLink from "./NavLink";
 import NavDropdown from "./NavDropdown";
 
@@ -74,6 +74,7 @@ export default function AppHeader({
                 ...(isAdmin(userEmail)
                   ? [{ href: "/admin/imobiliarias", label: "Imobiliárias cadastradas (admin)" }]
                   : []),
+                ...(isMatheus(userEmail) ? [{ href: "/admin/acessos", label: "Uso diário do Workspace" }] : []),
               ]}
             />
           </div>
