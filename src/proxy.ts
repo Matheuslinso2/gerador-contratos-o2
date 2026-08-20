@@ -92,6 +92,8 @@ export async function proxy(request: NextRequest) {
       const { error } = await supabase.rpc("registrar_acesso_diario", { p_email: user.email });
       if (!error) {
         response.cookies.set(cookieAcesso, "1", { maxAge: 60 * 60 * 26, httpOnly: true });
+      } else {
+        console.error("[registro-acesso-diario] falhou para", user.email, error.message);
       }
     }
   }

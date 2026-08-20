@@ -29,6 +29,19 @@ create policy "usuario atualiza o proprio acesso do dia" on workspace_acessos_di
   using (email = auth.jwt() ->> 'email')
   with check (email = auth.jwt() ->> 'email');
 
+-- Corrige bug descoberto em 20/08/2026: "insert ... on conflict do update"
+-- exige que o role autenticado tenha SELECT liberado (via RLS) sobre a
+-- tabela-alvo pra checar o conflito, mesmo quando o caminho executado em
+-- runtime e so o insert -- sem isso, o upsert falha com "new row violates
+-- row-level security policy" mesmo a linha sendo do proprio usuario. So o
+-- Matheus tinha policy de SELECT, entao o registro de uso diario falhava
+-- silenciosamente pra todo mundo, menos ele, desde que a funcionalidade
+-- foi ao ar (o proxy.ts engolia o erro). A leitura de TODAS as linhas
+-- continua restrita ao Matheus (policy acima nao muda).
+create policy "usuario le o proprio acesso do dia" on workspace_acessos_diarios
+  for select
+  using (email = auth.jwt() ->> 'email');
+
 -- Chamada pelo middleware (proxy.ts) uma vez por dia por usuário (throttled
 -- por cookie, não em toda requisição) -- usa o dia calculado em horário de
 -- Brasília, não UTC, pra bater com o que a equipe entende como "hoje".
