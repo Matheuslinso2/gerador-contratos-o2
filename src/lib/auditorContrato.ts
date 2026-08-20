@@ -27,11 +27,6 @@ export type ClausulaReferencia = {
   clausulaBase: string;
 };
 
-export type ClausulaGarantiaImobiliaria = {
-  fiador: string | null;
-  caucao: string | null;
-};
-
 export type FonteDocumento =
   | { tipo: "texto"; texto: string }
   | { tipo: "pdf"; base64: string }
@@ -71,7 +66,9 @@ Você precisa preencher TODOS OS 10 CAMPOS de status/resumo abaixo, um de cada v
 
    — Se a garantia for Seguro Fiança ou Título de Capitalização e uma BIBLIOTECA DE CLÁUSULAS DE REFERÊNCIA for fornecida, verifique se a cláusula do contrato tem o mesmo conteúdo essencial do texto oficial daquele produto/seguradora (sem trechos essenciais alterados, removidos ou incompatíveis). Se a seguradora/produto citado não constar na biblioteca fornecida, use "nao_avaliado" com resumo explicando que não há como validar.
 
-   — Se a garantia for Fiador ou Caução: se um texto de CLÁUSULA-PADRÃO DA IMOBILIÁRIA para esse tipo de garantia for fornecido abaixo, compare o conteúdo essencial da cláusula do contrato contra esse texto de referência (mesma lógica da biblioteca de seguros — sem trechos essenciais alterados, removidos ou incompatíveis) e cite no resumo o que bateu ou não. Se a imobiliária não tiver cadastrado esse texto de referência, use "nao_avaliado" com resumo "Imobiliária não tem cláusula-padrão de [Fiador/Caução] cadastrada para conferência — cadastre em Configurações da imobiliária.". Além da comparação de texto, para Fiador confira se o(s) fiador(es) está(ão) devidamente qualificado(s) (nome completo, CPF/RG, endereço) e se há cláusula de responsabilidade solidária; para Caução confira se o valor caucionado está expresso e se NÃO ultrapassa o equivalente a 3 (três) meses de aluguel — se ultrapassar, isso viola o art. 38 da Lei 8.245/91 e é "problema" (cite no pontos_criticos com os dois valores).
+   — Se a garantia for Fiador ou Caução: não há biblioteca de referência pra esses dois (cada imobiliária redige a própria cláusula) — a checagem aqui é de COESÃO do próprio contrato, não de comparação com um texto externo. Confirme que a cláusula de fato existe no contrato (não só que o tipo de garantia foi citado em algum lugar) e que está completa:
+      · Fiador — fiador(es) devidamente qualificado(s) (nome completo, CPF/RG, endereço, estado civil) e presença de cláusula de responsabilidade solidária. "problema" se a garantia foi identificada como Fiador mas não há cláusula de fiador no corpo do contrato, ou se a qualificação do fiador estiver incompleta.
+      · Caução — valor caucionado expresso e forma da garantia (dinheiro, título, bens) definida, e o valor NÃO pode ultrapassar o equivalente a 3 (três) meses de aluguel (art. 38 da Lei 8.245/91) — se ultrapassar, "problema" com os dois valores citados em pontos_criticos. "problema" também se a garantia foi identificada como Caução mas o valor ou a forma da garantia não estiverem expressos no contrato.
 
    ATENÇÃO A CLÁUSULAS CONDICIONAIS (vale para QUALQUER seguradora, não só Tokio Marine): a biblioteca pode trazer, além da(s) cláusula(s) sempre obrigatória(s), cláusulas ou parágrafos rotulados como condicionais/opcionais — reconheça pelo próprio texto da biblioteca (marcações como "quando contratada a cobertura de X", "cláusula especial", "opcional", "aplicável quando houver mais de um locatário", "parágrafo aplicável a...", etc.), não só pelo formato específico da Tokio (Cláusula Especial nº 2/3/4). Para cada cláusula/parágrafo condicional identificado na biblioteca daquele produto/seguradora:
       a) verifique se a cotação/proposta ou o próprio contrato indicam que a condição se aplica (ex: cobertura extra contratada, mais de um locatário no contrato, procuração outorgada a terceiro);
@@ -143,7 +140,7 @@ const FERRAMENTA_RELATORIO: Anthropic.Tool = {
         type: "string",
         minLength: 1,
         description:
-          "Resumo curto do pilar 4 (cláusula da garantia). Quando houver cláusulas condicionais na biblioteca (seguro/capitalização), nomeie explicitamente quais se aplicam e se cada uma foi encontrada. Para Fiador/Caução, diga se bateu contra a cláusula-padrão da imobiliária (ou se ela não está cadastrada). Pode passar de uma frase se precisar citar mais de um ponto, mas continue direto e sem rodeios.",
+          "Resumo curto do pilar 4 (cláusula da garantia). Quando houver cláusulas condicionais na biblioteca (seguro/capitalização), nomeie explicitamente quais se aplicam e se cada uma foi encontrada. Para Fiador/Caução, diga se a cláusula existe e está completa no próprio contrato (qualificação do fiador, ou valor/forma da caução). Pode passar de uma frase se precisar citar mais de um ponto, mas continue direto e sem rodeios.",
       },
       assinaturas_status: { type: "string", enum: STATUS_ENUM, description: "Status do pilar 5 (assinaturas)." },
       assinaturas_resumo: { type: "string", minLength: 1, description: "Resumo de uma frase do pilar 5 (assinaturas)." },
@@ -196,7 +193,6 @@ export async function auditarContrato(
   contrato: FonteDocumento,
   bibliotecaClausulas: ClausulaReferencia[] = [],
   cotacao: FonteDocumento | null = null,
-  clausulaGarantiaImobiliaria: ClausulaGarantiaImobiliaria = { fiador: null, caucao: null },
   certificado: FonteDocumento | null = null
 ): Promise<RelatorioAuditoria> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -214,17 +210,8 @@ export async function auditarContrato(
         .join("\n\n")}\n\n---\n\n`
     : "";
 
-  const blocoClausulaGarantia = clausulaGarantiaImobiliaria.fiador || clausulaGarantiaImobiliaria.caucao
-    ? `CLÁUSULA-PADRÃO DA IMOBILIÁRIA (texto de referência cadastrado pela própria imobiliária — use para conferir o enquadramento da cláusula de garantia do contrato quando ela for Fiador ou Caução):\n\n${[
-        clausulaGarantiaImobiliaria.fiador ? `— Fiador —\n${clausulaGarantiaImobiliaria.fiador}` : null,
-        clausulaGarantiaImobiliaria.caucao ? `— Caução —\n${clausulaGarantiaImobiliaria.caucao}` : null,
-      ]
-        .filter(Boolean)
-        .join("\n\n")}\n\n---\n\n`
-    : "";
-
   const conteudo: Anthropic.ContentBlockParam[] = [
-    { type: "text", text: `${blocoBiblioteca}${blocoClausulaGarantia}Analise o contrato de locação a seguir e reporte o checklist.` },
+    { type: "text", text: `${blocoBiblioteca}Analise o contrato de locação a seguir e reporte o checklist.` },
     ...blocosDoDocumento("CONTRATO DE LOCAÇÃO A SER AUDITADO", contrato),
   ];
 

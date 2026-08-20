@@ -132,7 +132,7 @@ export async function auditar(formData: FormData) {
 
   const { data: imobiliaria } = await supabase
     .from("imobiliarias")
-    .select("id, clausula_fiador, clausula_caucao")
+    .select("id")
     .eq("user_id", user.id)
     .maybeSingle();
   if (!imobiliaria) {
@@ -209,13 +209,7 @@ export async function auditar(formData: FormData) {
 
   let relatorio;
   try {
-    relatorio = await auditarContrato(
-      fonteContrato,
-      bibliotecaClausulas,
-      fonteCotacao,
-      { fiador: imobiliaria.clausula_fiador, caucao: imobiliaria.clausula_caucao },
-      fonteCertificado
-    );
+    relatorio = await auditarContrato(fonteContrato, bibliotecaClausulas, fonteCotacao, fonteCertificado);
   } catch (e) {
     const mensagem = e instanceof Error ? e.message : "Falha ao analisar o contrato.";
     redirect(`/auditar-contrato?erro=${encodeURIComponent(mensagem)}`);
