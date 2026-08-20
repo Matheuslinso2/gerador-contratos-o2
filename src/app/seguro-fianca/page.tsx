@@ -87,6 +87,14 @@ function normalizarSnapshot(
   const contratosRecebidosPorDia = payload.contratosRecebidosPorDia as unknown as { mesAtual?: unknown; herdado?: unknown } | undefined;
   return {
     ...payload,
+    kpis: {
+      ...payload.kpis,
+      // Retratos congelados antes de 20/08/2026 não têm esse campo -- deriva
+      // da própria tabela de imobiliárias já salva no snapshot.
+      imobiliariasAtivas:
+        payload.kpis.imobiliariasAtivas ??
+        payload.topImobiliarias.filter((im) => im.total > 0 || im.emAndamento > 0).length,
+    },
     analisesDiariasPorResponsavel: normalizarQuadroDiario(payload.analisesDiariasPorResponsavel, competencia),
     contratosRecebidosPorDia: {
       mesAtual: normalizarQuadroDiario(contratosRecebidosPorDia?.mesAtual, competencia),
@@ -948,7 +956,7 @@ export default async function SeguroFiancaPage({
               <section className={styles.section}>
                 <div className={styles.sectionHead}>
                   <h2>Imobiliárias — status de todos os cards</h2>
-                  <div className={styles.note}>{gerencial.kpis.imobiliarias} imobiliárias com pelo menos 1 cotação no período</div>
+                  <div className={styles.note}>{gerencial.kpis.imobiliariasAtivas} imobiliárias com novidade ou card herdado em andamento</div>
                 </div>
                 <div className={styles.panel}>
                   <ImobiliariasTabela
