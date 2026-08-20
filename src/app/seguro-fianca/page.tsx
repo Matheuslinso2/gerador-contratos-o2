@@ -89,11 +89,11 @@ function normalizarSnapshot(
     ...payload,
     kpis: {
       ...payload.kpis,
-      // Retratos congelados antes de 20/08/2026 não têm esse campo -- deriva
-      // da própria tabela de imobiliárias já salva no snapshot.
-      imobiliariasAtivas:
-        payload.kpis.imobiliariasAtivas ??
-        payload.topImobiliarias.filter((im) => im.total > 0 || im.emAndamento > 0).length,
+      // Retratos congelados antes de 20/08/2026 não têm esse campo -- toda
+      // linha de topImobiliarias já nasce de novidade, "em andamento" ou
+      // evento (recusa/perda/conversão) DESTE mês, então o total de linhas
+      // já é exatamente "novos + herdados relevantes este mês".
+      imobiliariasAtivas: payload.kpis.imobiliariasAtivas ?? payload.topImobiliarias.length,
     },
     analisesDiariasPorResponsavel: normalizarQuadroDiario(payload.analisesDiariasPorResponsavel, competencia),
     contratosRecebidosPorDia: {

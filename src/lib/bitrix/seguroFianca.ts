@@ -620,7 +620,7 @@ export type AnaliseGerencial = {
     totalRelevantes: number; // novidades + herdados considerados neste mês -- base do % de "Cards com Alerta"
     imobiliarias: number; // imobiliárias distintas entre as novidades
     imobiliariasHerdado: number; // imobiliárias distintas entre os herdados (relevantes que não são novidade)
-    imobiliariasAtivas: number; // novos + herdados EM ANDAMENTO (não conta herdado só porque teve evento este mês) -- usado na legenda do quadro "Imobiliárias — status de todos os cards"
+    imobiliariasAtivas: number; // novos + herdados relevantes este mês (mesmo escopo de "relevantes"/imobiliariasHerdado) -- usado na legenda do quadro "Imobiliárias — status de todos os cards"
     emAndamento: ContagemPorOrigem;
     recusados: ContagemPorOrigem; // mês do evento (dataRecusa)
     aprovados: ContagemPorOrigem; // mês do evento (dataAprovacao)
@@ -1173,10 +1173,12 @@ export function montarAnaliseGerencial(
       imobiliariasHerdado: new Set(
         relevantes.filter((l) => l.competencia !== competencia).map((l) => l.imobiliaria).filter(Boolean)
       ).size,
-      // total>0 = teve novidade; emAndamento>0 = tem card (novo ou herdado)
-      // ainda em aberto -- não conta imobiliária cujo único vínculo do mês é
-      // um herdado já fechado (recusado/perdido/convertido).
-      imobiliariasAtivas: topImobiliarias.filter((im) => im.total > 0 || im.emAndamento > 0).length,
+      // Novos + herdados RELEVANTES este mês (mesmo escopo de "relevantes"
+      // usado em imobiliariasHerdado acima) -- um herdado que se resolveu
+      // (recusado/perdido/convertido) DURANTE este mês continua contando até
+      // o fim do mês, só muda de categoria. Só sai da conta um herdado que já
+      // tinha se resolvido num mês anterior a este.
+      imobiliariasAtivas: new Set(relevantes.map((l) => l.imobiliaria).filter(Boolean)).size,
     },
     porFunilEtapa,
     porResponsavelFunil1,
