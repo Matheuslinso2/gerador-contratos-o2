@@ -34,8 +34,10 @@ export default function AuditorForm({ userId }: { userId: string }) {
     const dados = new FormData(form);
     const arquivo = dados.get("arquivo") as File | null;
     const arquivoCotacao = dados.get("arquivo_cotacao") as File | null;
+    const arquivoCertificado = dados.get("arquivo_certificado") as File | null;
     dados.delete("arquivo");
     dados.delete("arquivo_cotacao");
+    dados.delete("arquivo_certificado");
 
     try {
       setEtapa("enviando");
@@ -50,6 +52,11 @@ export default function AuditorForm({ userId }: { userId: string }) {
         const path = await enviarArquivo(supabase, userId, arquivoCotacao);
         dados.set("arquivo_cotacao_path", path);
         dados.set("arquivo_cotacao_nome", arquivoCotacao.name);
+      }
+      if (arquivoCertificado && arquivoCertificado.size > 0) {
+        const path = await enviarArquivo(supabase, userId, arquivoCertificado);
+        dados.set("arquivo_certificado_path", path);
+        dados.set("arquivo_certificado_nome", arquivoCertificado.name);
       }
 
       setEtapa("analisando");
@@ -117,6 +124,31 @@ export default function AuditorForm({ userId }: { userId: string }) {
         <p className="my-2 text-center text-xs text-gray-400">— ou —</p>
         <input
           name="arquivo_cotacao"
+          type="file"
+          accept=".docx,.pdf,.png,.jpg,.jpeg,.webp"
+          className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+        />
+        <p className="mt-1 text-xs text-gray-500">Se enviar um arquivo, ele substitui o texto colado acima.</p>
+      </div>
+
+      <div className="rounded-lg border border-gray-200 p-3">
+        <p className="mb-2 text-sm font-medium text-o2-navy">
+          Certificado de assinatura eletrônica (opcional)
+        </p>
+        <p className="mb-2 text-xs text-gray-500">
+          Se enviar, o Auditor usa o comprovante de assinatura (Clicksign, ZapSign, D4Sign,
+          DocuSign ou similar) como fonte principal do pilar de assinaturas — conferindo o código
+          de verificação e cruzando os nomes dos signatários com o contrato e a cotação.
+        </p>
+        <textarea
+          name="texto_certificado"
+          rows={4}
+          placeholder="Cole aqui o texto do certificado de assinatura eletrônica..."
+          className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+        />
+        <p className="my-2 text-center text-xs text-gray-400">— ou —</p>
+        <input
+          name="arquivo_certificado"
           type="file"
           accept=".docx,.pdf,.png,.jpg,.jpeg,.webp"
           className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"

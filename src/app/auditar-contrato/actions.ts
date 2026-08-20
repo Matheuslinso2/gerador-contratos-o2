@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { extrairTextoDocx } from "@/lib/extrairTextoDocx";
-import { extrairTextoPdf } from "@/lib/extrairTextoPdf";
+import { extrairTextoPdfComPaginas } from "@/lib/extrairTextoPdf";
 import { auditarContrato, type FonteDocumento } from "@/lib/auditorContrato";
 
 const BUCKET_TEMP = "auditoria-temp";
@@ -86,8 +86,13 @@ async function extrairDeCampo(
   }
 
   let texto = "";
+  let numPaginasPdf = 0;
   try {
-    texto = ehPdf ? await extrairTextoPdf(buffer) : await extrairTextoDocx(buffer);
+    if (ehPdf) {
+      ({ texto, numPaginas: numPaginasPdf } = await extrairTextoPdfComPaginas(buffer));
+    } else {
+      texto = await extrairTextoDocx(buffer);
+    }
   } catch {
     redirect(
       `/auditar-contrato?erro=${encodeURIComponent(
@@ -96,10 +101,24 @@ async function extrairDeCampo(
     );
   }
 
-  // PDF escaneado (sem texto real) OU formulário preenchível cujos valores
-  // não vieram na extração (ver comentário do parâmetro acima): nos dois
-  // casos, guarda os bytes originais pra IA ler direto das páginas.
-  const pdfBase64 = ehPdf && (!texto.trim() || sempreLerPdfVisualmente) ? buffer.toString("base64") : null;
+  // Apps de scanner (CamScanner e similares) gravam um "carimbo" de
+  // cabeçalho/rodapé (data, nome do app, link de compartilhamento) como
+  // texto real em cada página, mesmo quando o conteúdo do contrato em si é
+  // só a imagem escaneada, sem nenhum texto real por trás -- isso engana um
+  // simples "texto vazio?" (o PDF não fica vazio, só sobra o carimbo) e faz
+  // a IA analisar apenas esses links, achando que "o arquivo não tem
+  // conteúdo". Um contrato de verdade tem centenas de caracteres por
+  // página; um carimbo sozinho fica bem abaixo disso.
+  const textoInsuficiente = ehPdf && numPaginasPdf > 0 && texto.length / numPaginasPdf < 200;
+
+  // PDF escaneado (sem texto real ou com só o carimbo do scanner) OU
+  // formulário preenchível cujos valores não vieram na extração (ver
+  // comentário do parâmetro acima): nos três casos, guarda os bytes
+  // originais pra IA ler direto das páginas.
+  const pdfBase64 =
+    ehPdf && (!texto.trim() || textoInsuficiente || sempreLerPdfVisualmente)
+      ? buffer.toString("base64")
+      : null;
 
   return { texto: pdfBase64 ? "" : texto, nomeArquivo, pdfBase64, imagemBase64: null, imagemMediaType: null };
 }
@@ -113,7 +132,7 @@ export async function auditar(formData: FormData) {
 
   const { data: imobiliaria } = await supabase
     .from("imobiliarias")
-    .select("id")
+    .select("id, clausula_fiador, clausula_caucao")
     .eq("user_id", user.id)
     .maybeSingle();
   if (!imobiliaria) {
@@ -157,6 +176,27 @@ export async function auditar(formData: FormData) {
         ? { tipo: "imagem", base64: imagemBase64Cotacao, mediaType: imagemMediaTypeCotacao }
         : null;
 
+  const {
+    texto: textoCertificado,
+    pdfBase64: pdfBase64Certificado,
+    imagemBase64: imagemBase64Certificado,
+    imagemMediaType: imagemMediaTypeCertificado,
+  } = await extrairDeCampo(
+    supabase,
+    formData,
+    "texto_certificado",
+    "arquivo_certificado_path",
+    "arquivo_certificado_nome",
+    true
+  );
+  const fonteCertificado: FonteDocumento | null = textoCertificado
+    ? { tipo: "texto", texto: textoCertificado }
+    : pdfBase64Certificado
+      ? { tipo: "pdf", base64: pdfBase64Certificado }
+      : imagemBase64Certificado && imagemMediaTypeCertificado
+        ? { tipo: "imagem", base64: imagemBase64Certificado, mediaType: imagemMediaTypeCertificado }
+        : null;
+
   const { data: produtosSeguro } = await supabase
     .from("produtos")
     .select("nome, clausula_base, seguradoras(nome)")
@@ -169,7 +209,13 @@ export async function auditar(formData: FormData) {
 
   let relatorio;
   try {
-    relatorio = await auditarContrato(fonteContrato, bibliotecaClausulas, fonteCotacao);
+    relatorio = await auditarContrato(
+      fonteContrato,
+      bibliotecaClausulas,
+      fonteCotacao,
+      { fiador: imobiliaria.clausula_fiador, caucao: imobiliaria.clausula_caucao },
+      fonteCertificado
+    );
   } catch (e) {
     const mensagem = e instanceof Error ? e.message : "Falha ao analisar o contrato.";
     redirect(`/auditar-contrato?erro=${encodeURIComponent(mensagem)}`);

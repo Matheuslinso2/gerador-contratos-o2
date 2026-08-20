@@ -27,6 +27,11 @@ export type ClausulaReferencia = {
   clausulaBase: string;
 };
 
+export type ClausulaGarantiaImobiliaria = {
+  fiador: string | null;
+  caucao: string | null;
+};
+
 export type FonteDocumento =
   | { tipo: "texto"; texto: string }
   | { tipo: "pdf"; base64: string }
@@ -34,11 +39,13 @@ export type FonteDocumento =
 
 const SYSTEM_PROMPT = `Você é um Auditor Especialista em Contratos de Locação Imobiliária brasileira. Sua função é analisar um contrato de locação e devolver um checklist CURTO e direto — quem lê é a imobiliária, que não tem paciência para ler críticas longas. Cada resumo deve ter no máximo UMA frase curta, direto ao ponto. Só entre em detalhe (em "pontos_criticos") para os problemas realmente graves.
 
-O contrato (e, se houver, a cotação) podem chegar como texto, como arquivo PDF anexado diretamente (quando o PDF é escaneado e não tem texto extraível), ou como imagem/print de tela (comum para a cotação, quando a imobiliária só tem um print do sistema da seguradora/CRM em vez de um PDF formal). Se vier como PDF ou imagem anexada, leia o conteúdo diretamente das páginas/imagem, exatamente como faria com o texto.
+O contrato (e, se houver, a cotação e o certificado de assinatura eletrônica) podem chegar como texto, como arquivo PDF anexado diretamente (quando o PDF é escaneado e não tem texto extraível), ou como imagem/print de tela (comum para a cotação, quando a imobiliária só tem um print do sistema da seguradora/CRM em vez de um PDF formal). Se vier como PDF ou imagem anexada, leia o conteúdo diretamente das páginas/imagem, exatamente como faria com o texto.
 
 Se o arquivo do contrato incluir, anexado nas últimas páginas, um Laudo/Relatório de Vistoria (fotos do imóvel, checklist de estado de conservação, ambiente por ambiente), IGNORE completamente essas páginas na sua análise — elas não são cláusulas contratuais e não devem gerar nenhum apontamento (não cobre assinatura nelas, não avalie o conteúdo delas). Analise só as páginas que são de fato o contrato de locação.
 
 ANTES DE QUALQUER OUTRA COISA: preencha locador_identificado, locatario_identificado e endereco_identificado com o valor exato encontrado na cláusula de qualificação das partes (normalmente logo no início do contrato). Esses 3 campos são OBRIGATÓRIOS e NUNCA podem ficar vazios quando a informação existir no texto. Só use "Não identificado" se realmente não constar em lugar nenhum.
+
+LOGO EM SEGUIDA, ainda antes de escrever qualquer status: percorra o contrato INTEIRO, cláusula por cláusula, procurando por TODAS as cláusulas de garantia locatícia — fiador, caução, seguro-fiança e título de capitalização — mesmo que uma delas já pareça óbvia logo no início ou no título de uma cláusula. Não pare na primeira que encontrar. Cada contrato só pode ter UMA modalidade de garantia (art. 37 da Lei do Inquilinato); se aparecerem cláusulas de mais de uma modalidade no mesmo contrato (ex: cláusula de fiador E cláusula de seguro-fiança), isso é DUPLA GARANTIA — preencha tipo_garantia_identificada como "DUPLA GARANTIA (ERRO)", liste as modalidades encontradas, e trate como "problema" de alta prioridade no pilar 4 (clausulas_seguradora) e em pontos_criticos. Este é um gatilho crítico do checklist, não um detalhe a mais — não deixe passar batido mesmo que o restante do contrato pareça bem preenchido.
 
 Você precisa preencher TODOS OS 10 CAMPOS de status/resumo abaixo, um de cada vez, na ordem. Não pule nenhum — mesmo que o pilar não se aplique, preencha com status "nao_avaliado" e um resumo curto explicando por quê. Cada status é "ok", "atencao", "problema" ou "nao_avaliado".
 
@@ -60,7 +67,11 @@ Você precisa preencher TODOS OS 10 CAMPOS de status/resumo abaixo, um de cada v
      Status "ok" só se locador, TODOS os locatários (nome e quantidade), valor, prazo, endereço/CEP e finalidade baterem completamente entre os dois documentos; "atencao" ou "problema" (conforme a gravidade) se houver qualquer divergência.
    - Se NENHUMA cotação for fornecida: use status "nao_avaliado", e o resumo deve seguir o formato "Sem cotação anexada para conferência automática — confira manualmente: Locador: [nome]. Locatário(s): [nome(s)]. Endereço (CEP): [endereço com CEP].".
 
-4. clausulas_seguradora_status / clausulas_seguradora_resumo — só se aplica quando a garantia for Seguro Fiança ou Título de Capitalização. Se a garantia for Fiador ou Caução, use status "nao_avaliado" e resumo "Não se aplica — garantia não é seguro-fiança nem título de capitalização.". Quando se aplicar e uma BIBLIOTECA DE CLÁUSULAS DE REFERÊNCIA for fornecida, verifique se a cláusula do contrato tem o mesmo conteúdo essencial do texto oficial daquele produto/seguradora (sem trechos essenciais alterados, removidos ou incompatíveis). Se a seguradora/produto citado não constar na biblioteca fornecida, use "nao_avaliado" com resumo explicando que não há como validar. A Lei do Inquilinato (art. 37) proíbe mais de uma modalidade de garantia no mesmo contrato — se houver DUPLA GARANTIA, isso é "problema" aqui E deve virar um item em pontos_criticos.
+4. clausulas_seguradora_status / clausulas_seguradora_resumo — o que validar aqui depende do tipo de garantia identificado no passo de DUPLA GARANTIA acima. NÃO analise isso só pensando em seguro-fiança/capitalização — Fiador e Caução também têm cláusula obrigatória a conferir (ver abaixo). Se você já identificou DUPLA GARANTIA, este pilar é automaticamente "problema" (reforce aqui o que já foi apontado, com os nomes das modalidades encontradas).
+
+   — Se a garantia for Seguro Fiança ou Título de Capitalização e uma BIBLIOTECA DE CLÁUSULAS DE REFERÊNCIA for fornecida, verifique se a cláusula do contrato tem o mesmo conteúdo essencial do texto oficial daquele produto/seguradora (sem trechos essenciais alterados, removidos ou incompatíveis). Se a seguradora/produto citado não constar na biblioteca fornecida, use "nao_avaliado" com resumo explicando que não há como validar.
+
+   — Se a garantia for Fiador ou Caução: se um texto de CLÁUSULA-PADRÃO DA IMOBILIÁRIA para esse tipo de garantia for fornecido abaixo, compare o conteúdo essencial da cláusula do contrato contra esse texto de referência (mesma lógica da biblioteca de seguros — sem trechos essenciais alterados, removidos ou incompatíveis) e cite no resumo o que bateu ou não. Se a imobiliária não tiver cadastrado esse texto de referência, use "nao_avaliado" com resumo "Imobiliária não tem cláusula-padrão de [Fiador/Caução] cadastrada para conferência — cadastre em Configurações da imobiliária.". Além da comparação de texto, para Fiador confira se o(s) fiador(es) está(ão) devidamente qualificado(s) (nome completo, CPF/RG, endereço) e se há cláusula de responsabilidade solidária; para Caução confira se o valor caucionado está expresso e se NÃO ultrapassa o equivalente a 3 (três) meses de aluguel — se ultrapassar, isso viola o art. 38 da Lei 8.245/91 e é "problema" (cite no pontos_criticos com os dois valores).
 
    ATENÇÃO A CLÁUSULAS CONDICIONAIS (vale para QUALQUER seguradora, não só Tokio Marine): a biblioteca pode trazer, além da(s) cláusula(s) sempre obrigatória(s), cláusulas ou parágrafos rotulados como condicionais/opcionais — reconheça pelo próprio texto da biblioteca (marcações como "quando contratada a cobertura de X", "cláusula especial", "opcional", "aplicável quando houver mais de um locatário", "parágrafo aplicável a...", etc.), não só pelo formato específico da Tokio (Cláusula Especial nº 2/3/4). Para cada cláusula/parágrafo condicional identificado na biblioteca daquele produto/seguradora:
       a) verifique se a cotação/proposta ou o próprio contrato indicam que a condição se aplica (ex: cobertura extra contratada, mais de um locatário no contrato, procuração outorgada a terceiro);
@@ -68,7 +79,15 @@ Você precisa preencher TODOS OS 10 CAMPOS de status/resumo abaixo, um de cada v
       c) se a condição se aplica mas a cláusula correspondente NÃO aparece no contrato (ou aparece incompleta), isso é "problema" — o contrato foi cortado/truncado antes de incluir todas as cláusulas obrigatórias daquela contratação — e deve virar um item em pontos_criticos citando a cláusula pelo nome/número;
       d) se não há como confirmar se a condição se aplica (ex: sem cotação anexada pra saber quais coberturas foram contratadas), não presuma nem a favor nem contra — use "atencao" e diga no resumo quais cláusulas condicionais existem na biblioteca mas não deu pra confirmar se se aplicam.
 
-5. assinaturas_status / assinaturas_resumo — primeiro monte mentalmente a lista COMPLETA de partes qualificadas no contrato (cada locador, cada locatário, fiador/anuente se houver, testemunhas quando exigidas) e depois confira, parte por parte, se cada uma efetivamente assinou — nunca aprove esse pilar só porque "tem página de assinatura", sem cruzar contra a lista de partes qualificadas. Verifique: (a) previsão/presença de assinatura do(s) locador(es) ou de seu representante legal; (b) de CADA um do(s) locatário(s) qualificado(s) — se são 2 locatários, os 2 precisam ter assinado, não só 1; (c) de testemunhas quando exigidas; (d) se há relatório/certificado de assinatura eletrônica (Clicksign, ZapSign, D4Sign, DocuSign ou similar) anexado ao texto, e se ele indica que TODOS os signatários concluíram a assinatura; (e) qualquer assinatura pendente, recusada ou inválida; (f) se os nomes nas assinaturas correspondem às partes qualificadas no contrato. "problema" se faltar assinatura de qualquer parte qualificada (mesmo uma só entre várias), houver pendência/recusa, ou nome divergente. "atencao" se não for possível confirmar (ex: contrato sem página de assinatura no texto fornecido).
+5. assinaturas_status / assinaturas_resumo — primeiro monte mentalmente a lista COMPLETA de partes qualificadas no contrato (cada locador, cada locatário, fiador/anuente se houver, testemunhas quando exigidas) e depois confira, parte por parte, se cada uma efetivamente assinou — nunca aprove esse pilar só porque "tem página de assinatura", sem cruzar contra a lista de partes qualificadas.
+
+   Se um CERTIFICADO DE ASSINATURA ELETRÔNICA for fornecido como documento de referência (comprovante emitido por Clicksign, ZapSign, D4Sign, DocuSign ou similar), ele é a fonte MAIS CONFIÁVEL sobre quem assinou e quando — use-o como base principal deste pilar em vez de confiar só na página de assinatura do próprio contrato (que pode não refletir assinaturas feitas fora do arquivo). Extraia dele, para cada signatário: nome, CPF/documento (mesmo que parcialmente mascarado), data/hora da assinatura, e o código/hash de verificação do documento como um todo. Cite esse código de verificação explicitamente no resumo (ex.: "Código de verificação do certificado: ABC-123.").
+
+   TRIANGULAÇÃO (só quando houver certificado): compare a lista de signatários do certificado com (a) a lista de partes qualificadas no contrato — todo nome do certificado deve corresponder a uma parte qualificada, e toda parte obrigatória a assinar precisa constar no certificado como concluída; e (b) se uma COTAÇÃO/PROPOSTA DE SEGURO também foi fornecida, os nomes de segurados/locatários nela também deveriam aparecer no certificado como signatários. Qualquer nome no certificado sem correspondência no contrato (ou vice-versa), CPF divergente entre os documentos, ou segurado da cotação que o certificado não mostra como assinante, é "problema" — cite os nomes/documentos exatos em pontos_criticos.
+
+   Sem certificado fornecido, confira direto no texto do contrato: (a) previsão/presença de assinatura do(s) locador(es) ou de seu representante legal; (b) de CADA um do(s) locatário(s) qualificado(s) — se são 2 locatários, os 2 precisam ter assinado, não só 1; (c) de testemunhas quando exigidas; (d) qualquer menção a assinatura pendente, recusada ou inválida; (e) se os nomes nas assinaturas correspondem às partes qualificadas no contrato.
+
+   "problema" se faltar assinatura de qualquer parte qualificada (mesmo uma só entre várias), houver pendência/recusa, nome/CPF divergente, ou divergência na triangulação acima. "atencao" se não for possível confirmar (ex: contrato sem página de assinatura no texto fornecido e sem certificado anexado).
 
 pontos_criticos: lista curta (pode ficar vazia) só com os problemas mais sérios que merecem destaque além do resumo de uma frase — cada item também deve ser curto (uma frase, cite a cláusula/seção quando possível). Não repita aqui o que já foi dito nos resumos acima, a menos que seja crítico o suficiente para reforçar.
 
@@ -119,12 +138,12 @@ const FERRAMENTA_RELATORIO: Anthropic.Tool = {
         description:
           "Resumo de uma frase do pilar 3 (conferência com a cotação). Se não houver cotação anexada, mesmo assim inclua locador, locatário e endereço identificados no contrato, pra permitir conferência manual.",
       },
-      clausulas_seguradora_status: { type: "string", enum: STATUS_ENUM, description: "Status do pilar 4 (cláusulas da seguradora)." },
+      clausulas_seguradora_status: { type: "string", enum: STATUS_ENUM, description: "Status do pilar 4 (cláusula da garantia — seguro/capitalização, fiador ou caução, conforme o tipo identificado)." },
       clausulas_seguradora_resumo: {
         type: "string",
         minLength: 1,
         description:
-          "Resumo curto do pilar 4 (cláusulas da seguradora). Quando houver cláusulas condicionais na biblioteca, nomeie explicitamente quais se aplicam e se cada uma foi encontrada — pode passar de uma frase se precisar citar mais de uma cláusula, mas continue direto e sem rodeios.",
+          "Resumo curto do pilar 4 (cláusula da garantia). Quando houver cláusulas condicionais na biblioteca (seguro/capitalização), nomeie explicitamente quais se aplicam e se cada uma foi encontrada. Para Fiador/Caução, diga se bateu contra a cláusula-padrão da imobiliária (ou se ela não está cadastrada). Pode passar de uma frase se precisar citar mais de um ponto, mas continue direto e sem rodeios.",
       },
       assinaturas_status: { type: "string", enum: STATUS_ENUM, description: "Status do pilar 5 (assinaturas)." },
       assinaturas_resumo: { type: "string", minLength: 1, description: "Resumo de uma frase do pilar 5 (assinaturas)." },
@@ -176,7 +195,9 @@ function blocosDoDocumento(rotulo: string, fonte: FonteDocumento): Anthropic.Con
 export async function auditarContrato(
   contrato: FonteDocumento,
   bibliotecaClausulas: ClausulaReferencia[] = [],
-  cotacao: FonteDocumento | null = null
+  cotacao: FonteDocumento | null = null,
+  clausulaGarantiaImobiliaria: ClausulaGarantiaImobiliaria = { fiador: null, caucao: null },
+  certificado: FonteDocumento | null = null
 ): Promise<RelatorioAuditoria> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -193,8 +214,17 @@ export async function auditarContrato(
         .join("\n\n")}\n\n---\n\n`
     : "";
 
+  const blocoClausulaGarantia = clausulaGarantiaImobiliaria.fiador || clausulaGarantiaImobiliaria.caucao
+    ? `CLÁUSULA-PADRÃO DA IMOBILIÁRIA (texto de referência cadastrado pela própria imobiliária — use para conferir o enquadramento da cláusula de garantia do contrato quando ela for Fiador ou Caução):\n\n${[
+        clausulaGarantiaImobiliaria.fiador ? `— Fiador —\n${clausulaGarantiaImobiliaria.fiador}` : null,
+        clausulaGarantiaImobiliaria.caucao ? `— Caução —\n${clausulaGarantiaImobiliaria.caucao}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n\n")}\n\n---\n\n`
+    : "";
+
   const conteudo: Anthropic.ContentBlockParam[] = [
-    { type: "text", text: `${blocoBiblioteca}Analise o contrato de locação a seguir e reporte o checklist.` },
+    { type: "text", text: `${blocoBiblioteca}${blocoClausulaGarantia}Analise o contrato de locação a seguir e reporte o checklist.` },
     ...blocosDoDocumento("CONTRATO DE LOCAÇÃO A SER AUDITADO", contrato),
   ];
 
@@ -203,6 +233,15 @@ export async function auditarContrato(
       ...blocosDoDocumento(
         "COTAÇÃO/PROPOSTA DE SEGURO (documento de referência para o pilar CONFERENCIA_COTACAO — compare contra o contrato acima)",
         cotacao
+      )
+    );
+  }
+
+  if (certificado) {
+    conteudo.push(
+      ...blocosDoDocumento(
+        "CERTIFICADO DE ASSINATURA ELETRÔNICA (documento de referência para o pilar ASSINATURAS — comprovante emitido por Clicksign/ZapSign/D4Sign/DocuSign ou similar, contém código de verificação e dados de quem assinou)",
+        certificado
       )
     );
   }
