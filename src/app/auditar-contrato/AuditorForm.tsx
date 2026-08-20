@@ -21,9 +21,82 @@ async function enviarArquivo(
   return path;
 }
 
+function IconeUpload() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 16V4" />
+      <path d="M7 9l5-5 5 5" />
+      <path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+    </svg>
+  );
+}
+
+// Upload é o jeito rotineiro de mandar cada documento -- por isso vira um
+// botão de verdade em destaque, e colar texto manualmente fica escondido
+// atrás de um <details>, só pra não desaparecer de vez (útil pra um trecho
+// avulso), sem tomar o espaço da tela por padrão.
+function CampoUpload({
+  label,
+  ajuda,
+  nomeCampoArquivo,
+  nomeCampoTexto,
+  accept,
+  placeholderTexto,
+  nomeArquivo,
+  onArquivoChange,
+}: {
+  label: string;
+  ajuda: string;
+  nomeCampoArquivo: string;
+  nomeCampoTexto: string;
+  accept: string;
+  placeholderTexto: string;
+  nomeArquivo: string | null;
+  onArquivoChange: (nome: string | null) => void;
+}) {
+  return (
+    <div className="rounded-lg border border-gray-200 p-3">
+      <p className="mb-1 text-sm font-medium text-o2-navy">{label}</p>
+      <p className="mb-2 text-xs text-gray-500">{ajuda}</p>
+
+      <div className="flex flex-wrap items-center gap-2.5">
+        <label className="inline-flex cursor-pointer items-center gap-2 rounded-full bg-o2-navy px-4 py-2 text-sm font-medium text-white transition hover:opacity-90">
+          <IconeUpload />
+          Selecionar arquivo
+          <input
+            name={nomeCampoArquivo}
+            type="file"
+            accept={accept}
+            className="sr-only"
+            onChange={(e) => onArquivoChange(e.target.files?.[0]?.name ?? null)}
+          />
+        </label>
+        <span className="text-sm text-gray-600">
+          {nomeArquivo ?? "Nenhum arquivo selecionado"}
+        </span>
+      </div>
+
+      <details className="mt-2">
+        <summary className="cursor-pointer text-xs text-gray-500 hover:text-o2-coral">
+          ou cole o texto manualmente
+        </summary>
+        <textarea
+          name={nomeCampoTexto}
+          rows={4}
+          placeholder={placeholderTexto}
+          className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-o2-coral focus:outline-none"
+        />
+      </details>
+    </div>
+  );
+}
+
 export default function AuditorForm({ userId }: { userId: string }) {
   const [etapa, setEtapa] = useState<"parado" | "enviando" | "analisando">("parado");
   const [erro, setErro] = useState<string | null>(null);
+  const [nomeArquivoContrato, setNomeArquivoContrato] = useState<string | null>(null);
+  const [nomeArquivoCotacao, setNomeArquivoCotacao] = useState<string | null>(null);
+  const [nomeArquivoCertificado, setNomeArquivoCertificado] = useState<string | null>(null);
   const enviando = etapa !== "parado";
 
   async function aoEnviar(e: React.FormEvent<HTMLFormElement>) {
@@ -80,81 +153,38 @@ export default function AuditorForm({ userId }: { userId: string }) {
         <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>
       )}
 
-      <div>
-        <label className="text-sm text-gray-600">Cole o texto do contrato</label>
-        <textarea
-          name="texto"
-          rows={8}
-          placeholder="Cole aqui o texto completo do contrato de locação..."
-          className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
-        />
-      </div>
+      <CampoUpload
+        label="Contrato de locação"
+        ajuda="Envie o arquivo (.docx ou .pdf) -- inclusive escaneado ou fotografado, a IA lê direto das páginas."
+        nomeCampoArquivo="arquivo"
+        nomeCampoTexto="texto"
+        accept=".docx,.pdf"
+        placeholderTexto="Cole aqui o texto completo do contrato de locação..."
+        nomeArquivo={nomeArquivoContrato}
+        onArquivoChange={setNomeArquivoContrato}
+      />
 
-      <p className="text-center text-sm text-gray-400">— ou —</p>
+      <CampoUpload
+        label="Cotação/proposta de seguro (opcional)"
+        ajuda="Se enviar, o Auditor confere se segurado, valor do aluguel, prazo e endereço batem entre o contrato e a cotação. Pode ser PDF/Word, ficha cadastral ou print de tela."
+        nomeCampoArquivo="arquivo_cotacao"
+        nomeCampoTexto="texto_cotacao"
+        accept=".docx,.pdf,.png,.jpg,.jpeg,.webp"
+        placeholderTexto="Cole aqui o texto da cotação (nomes, endereço, valor, prazo)..."
+        nomeArquivo={nomeArquivoCotacao}
+        onArquivoChange={setNomeArquivoCotacao}
+      />
 
-      <div>
-        <label className="text-sm text-gray-600">Envie o arquivo do contrato (.docx ou .pdf)</label>
-        <input
-          name="arquivo"
-          type="file"
-          accept=".docx,.pdf"
-          className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
-        />
-        <p className="mt-1 text-xs text-gray-500">
-          Se enviar um arquivo, ele substitui o texto colado acima. PDFs escaneados (sem texto
-          real) também funcionam — a IA lê direto das páginas do documento.
-        </p>
-      </div>
-
-      <div className="rounded-lg border border-gray-200 p-3">
-        <p className="mb-2 text-sm font-medium text-o2-navy">
-          Cotação/proposta de seguro (opcional)
-        </p>
-        <p className="mb-2 text-xs text-gray-500">
-          Se enviar, o Auditor confere se segurado, valor do aluguel, prazo e endereço batem
-          entre o contrato e a cotação. Pode ser um PDF/Word da cotação, uma ficha cadastral, um
-          print de tela do sistema, ou o texto colado abaixo — a IA lê o que estiver disponível.
-        </p>
-        <textarea
-          name="texto_cotacao"
-          rows={5}
-          placeholder="Cole aqui o texto da cotação (nomes, endereço, valor, prazo)..."
-          className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
-        />
-        <p className="my-2 text-center text-xs text-gray-400">— ou —</p>
-        <input
-          name="arquivo_cotacao"
-          type="file"
-          accept=".docx,.pdf,.png,.jpg,.jpeg,.webp"
-          className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
-        />
-        <p className="mt-1 text-xs text-gray-500">Se enviar um arquivo, ele substitui o texto colado acima.</p>
-      </div>
-
-      <div className="rounded-lg border border-gray-200 p-3">
-        <p className="mb-2 text-sm font-medium text-o2-navy">
-          Certificado de assinatura eletrônica (opcional)
-        </p>
-        <p className="mb-2 text-xs text-gray-500">
-          Se enviar, o Auditor usa o comprovante de assinatura (Clicksign, ZapSign, D4Sign,
-          DocuSign ou similar) como fonte principal do pilar de assinaturas — conferindo o código
-          de verificação e cruzando os nomes dos signatários com o contrato e a cotação.
-        </p>
-        <textarea
-          name="texto_certificado"
-          rows={4}
-          placeholder="Cole aqui o texto do certificado de assinatura eletrônica..."
-          className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
-        />
-        <p className="my-2 text-center text-xs text-gray-400">— ou —</p>
-        <input
-          name="arquivo_certificado"
-          type="file"
-          accept=".docx,.pdf,.png,.jpg,.jpeg,.webp"
-          className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
-        />
-        <p className="mt-1 text-xs text-gray-500">Se enviar um arquivo, ele substitui o texto colado acima.</p>
-      </div>
+      <CampoUpload
+        label="Certificado de assinatura eletrônica (opcional)"
+        ajuda="Se enviar, o Auditor usa o comprovante (Clicksign, ZapSign, D4Sign, DocuSign ou similar) como fonte principal do pilar de assinaturas -- conferindo o código de verificação e cruzando os signatários com o contrato e a cotação. Pode ser PDF, Word, ou uma imagem escaneada/print."
+        nomeCampoArquivo="arquivo_certificado"
+        nomeCampoTexto="texto_certificado"
+        accept=".docx,.pdf,.png,.jpg,.jpeg,.webp"
+        placeholderTexto="Cole aqui o texto do certificado de assinatura eletrônica..."
+        nomeArquivo={nomeArquivoCertificado}
+        onArquivoChange={setNomeArquivoCertificado}
+      />
 
       <button
         type="submit"
