@@ -42,9 +42,12 @@ create policy "usuario le o proprio acesso do dia" on workspace_acessos_diarios
   for select
   using (email = auth.jwt() ->> 'email');
 
--- Chamada pelo middleware (proxy.ts) uma vez por dia por usuário (throttled
--- por cookie, não em toda requisição) -- usa o dia calculado em horário de
--- Brasília, não UTC, pra bater com o que a equipe entende como "hoje".
+-- Chamada pelo middleware (proxy.ts) em TODA requisição autenticada (sem
+-- throttle por cookie, desde 20/08/2026) -- assim ultimo_acesso reflete a
+-- atividade real da pessoa ao longo do dia, não só a primeira requisição.
+-- primeiro_acesso só é preenchido uma vez (default do INSERT); as chamadas
+-- seguintes caem no ON CONFLICT DO UPDATE. Usa o dia calculado em horário
+-- de Brasília, não UTC, pra bater com o que a equipe entende como "hoje".
 -- SECURITY INVOKER (padrão) de propósito: roda com o JWT de quem chamou,
 -- então as políticas de RLS acima continuam valendo -- ninguém registra
 -- acesso em nome de outro e-mail.

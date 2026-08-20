@@ -35,14 +35,6 @@ const ROTAS_PUBLICAS = [
 ];
 const ROTAS_SO_DESLOGADO = ["/login", "/signup"];
 
-// "Dia" em horário de Brasília (não UTC) -- usado só pro nome do cookie de
-// throttle abaixo; o registro em si usa o relógio do próprio Postgres (ver
-// registrar_acesso_diario em supabase/schema_acessos_diarios.sql).
-function diaBrasilia(): string {
-  const brasilia = new Date(Date.now() - 3 * 60 * 60 * 1000);
-  return brasilia.toISOString().slice(0, 10);
-}
-
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
@@ -84,17 +76,16 @@ export async function proxy(request: NextRequest) {
   }
 
   // Registro de uso diário (não é log de login -- ver
-  // supabase/schema_acessos_diarios.sql) -- throttled por cookie pra não
-  // bater no banco em toda requisição, só na primeira do dia.
+  // supabase/schema_acessos_diarios.sql). Chama em toda requisição
+  // autenticada -- sem throttle por cookie -- pra ultimo_acesso refletir a
+  // atividade real da pessoa ao longo do dia, não só a primeira requisição.
+  // registrar_acesso_diario já faz upsert (ON CONFLICT DO UPDATE), então
+  // primeiro_acesso é preenchido só uma vez (default now() do INSERT) e as
+  // chamadas seguintes só atualizam ultimo_acesso/qtd_requisicoes.
   if (user?.email) {
-    const cookieAcesso = `wsacesso_${diaBrasilia()}`;
-    if (!request.cookies.get(cookieAcesso)) {
-      const { error } = await supabase.rpc("registrar_acesso_diario", { p_email: user.email });
-      if (!error) {
-        response.cookies.set(cookieAcesso, "1", { maxAge: 60 * 60 * 26, httpOnly: true });
-      } else {
-        console.error("[registro-acesso-diario] falhou para", user.email, error.message);
-      }
+    const { error } = await supabase.rpc("registrar_acesso_diario", { p_email: user.email });
+    if (error) {
+      console.error("[registro-acesso-diario] falhou para", user.email, error.message);
     }
   }
 
