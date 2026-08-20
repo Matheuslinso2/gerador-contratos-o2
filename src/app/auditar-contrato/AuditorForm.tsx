@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { unstable_rethrow } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
 import { auditar } from "./actions";
@@ -91,17 +91,38 @@ function CampoUpload({
   );
 }
 
-export default function AuditorForm({ userId }: { userId: string }) {
+// auditar() redireciona pra esta mesma rota (?ultimo=<id>) em vez de
+// desmontar o componente, então nada reseta sozinho depois de uma
+// auditoria concluída -- nem os arquivos escolhidos (inputs não
+// controlados, o React nem sabe que têm valor), nem o botão preso em
+// "Analisando...". Em vez de tentar limpar tudo manualmente, o
+// AuditorForm troca a key do formulário a cada novo ultimoId -- isso
+// desmonta e remonta a árvore inteira, que é o jeito recomendado pelo
+// React de "resetar tudo quando algo muda": todo useState volta ao
+// valor inicial e os inputs de arquivo voltam a ficar vazios de graça.
+export default function AuditorForm({ userId, ultimoId }: { userId: string; ultimoId?: string }) {
+  return <Formulario key={ultimoId ?? "inicial"} userId={userId} sucessoInicial={Boolean(ultimoId)} />;
+}
+
+function Formulario({ userId, sucessoInicial }: { userId: string; sucessoInicial: boolean }) {
   const [etapa, setEtapa] = useState<"parado" | "enviando" | "analisando">("parado");
   const [erro, setErro] = useState<string | null>(null);
+  const [sucesso, setSucesso] = useState(sucessoInicial);
   const [nomeArquivoContrato, setNomeArquivoContrato] = useState<string | null>(null);
   const [nomeArquivoCotacao, setNomeArquivoCotacao] = useState<string | null>(null);
   const [nomeArquivoCertificado, setNomeArquivoCertificado] = useState<string | null>(null);
   const enviando = etapa !== "parado";
 
+  useEffect(() => {
+    if (!sucessoInicial) return;
+    const timer = setTimeout(() => setSucesso(false), 6000);
+    return () => clearTimeout(timer);
+  }, [sucessoInicial]);
+
   async function aoEnviar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setErro(null);
+    setSucesso(false);
 
     const form = e.currentTarget;
     const dados = new FormData(form);
@@ -149,6 +170,11 @@ export default function AuditorForm({ userId }: { userId: string }) {
 
   return (
     <form onSubmit={aoEnviar} className="space-y-3">
+      {sucesso && (
+        <p className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-700">
+          ✅ Contrato analisado — veja o resultado na lista abaixo. Ambiente pronto para uma nova auditoria.
+        </p>
+      )}
       {erro && (
         <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>
       )}

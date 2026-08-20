@@ -83,7 +83,7 @@ export default async function AuditarContratoPage({
         )}
 
         <div className="rounded-xl border border-o2-navy/10 bg-white p-5 shadow-sm">
-          <AuditorForm userId={user!.id} />
+          <AuditorForm userId={user!.id} ultimoId={ultimo} />
         </div>
 
         <section className="space-y-3">
