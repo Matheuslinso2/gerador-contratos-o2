@@ -183,6 +183,19 @@ export default async function Home() {
         </svg>
       ),
     },
+    {
+      href: "/rc-obras",
+      titulo: "RC Obras",
+      descricao: "Ficha online para cotação de Responsabilidade Civil de Obras",
+      icone: (
+        <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
+          <path d="M4 20.5h16" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          <path d="M6 20.5V10l6-4.5 6 4.5v10.5" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+          <path d="M9.5 20.5v-5h5v5" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+          <path d="M3 10l9-6.5L21 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      ),
+    },
   ];
 
   const usoInterno = isAdmin(user.email) || isColaboradorO2(user.email);

@@ -51,6 +51,7 @@ export default function AppHeader({
                 { href: "/ficha-fianca", label: "Ficha Fiança" },
                 { href: "/seguro-auto", label: "Seguro Auto" },
                 { href: "/seguro-incendio", label: "Seguro Incêndio" },
+                { href: "/rc-obras", label: "RC Obras" },
               ]}
             />
             {(isAdmin(userEmail) || isColaboradorO2(userEmail)) && (
