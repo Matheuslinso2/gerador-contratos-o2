@@ -36,6 +36,11 @@ const ROTAS_PUBLICAS = [
   // imobiliário) — mesma lógica. O Google Forms "Ficha online - Seguro
   // Incêndio" continua ativo em paralelo, sem nenhuma alteração.
   "/seguro-incendio",
+  // Formulário público de RC Obras (Seguro de Responsabilidade Civil de
+  // Obras) — ainda sem SPA no Bitrix, então não cria card: só envia e-mail
+  // pra incendio@o2seguros.com.br e registra na planilha compartilhada de
+  // conferência (ver src/app/rc-obras/actions.ts).
+  "/rc-obras",
 ];
 const ROTAS_SO_DESLOGADO = ["/login", "/signup"];
 

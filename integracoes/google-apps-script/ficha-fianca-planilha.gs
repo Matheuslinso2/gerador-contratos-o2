@@ -177,6 +177,44 @@ const CONFIG = {
       "Locador PJ - Telefone",
     ],
   },
+
+  rc_obras: {
+    aba: "RC Obras",
+    cabecalho: [
+      "Data/Hora",
+      "Protocolo",
+      "Status",
+
+      "E-mail de contato",
+      "Telefone de contato",
+      "Nome completo",
+      "CPF/CNPJ",
+
+      "CEP da obra",
+      "Logradouro",
+      "Número",
+      "Complemento",
+      "Bairro",
+      "Cidade",
+      "UF",
+
+      "Reforma ou construção do zero",
+      "Reforço estrutural",
+      "Data de início da obra",
+      "Data de fim da obra",
+      "% de evolução da obra",
+
+      "Cobertura Básica - Obras Civis em Construção",
+      "Despesas de Desentulho",
+      "Danos em Consequência de Erro de Projeto/Risco do Fabricante",
+      "Equipamentos Móveis e Estacionários",
+      "Equipamentos de Pequeno e Médio Porte",
+      "Responsabilidade Civil Geral e Cruzada Riscos de Engenharia",
+      "Responsabilidade Civil Geral Por Danos Morais Riscos de Engenharia",
+      "Responsabilidade Civil por Danos Morais Empregador",
+      "Responsabilidade Civil Do Empregador",
+    ],
+  },
 };
 
 function respostaJson(objeto) {
