@@ -2,9 +2,12 @@
 
 import { randomUUID } from "crypto";
 import { createServiceClient } from "@/lib/supabase/service";
-import { criarCardSeguroAuto, type SeguroAutoPayload } from "@/lib/integracoes/seguroAuto";
+import { criarCardSeguroAuto, montarEmailSeguroAuto, type SeguroAutoPayload } from "@/lib/integracoes/seguroAuto";
+import { enviarEmail } from "@/lib/email";
 
 export type EstadoEnvioSeguroAuto = { ok: boolean; erro?: string; pendente?: boolean } | null;
+
+const EMAIL_DESTINO_SEGURO_AUTO = "auto@o2seguros.com.br";
 
 function campo(formData: FormData, name: string): string {
   return String(formData.get(name) ?? "").trim();
@@ -62,6 +65,16 @@ export async function enviarFichaSeguroAuto(
     const supabase = createServiceClient();
     const resultado = await criarCardSeguroAuto(payload, supabase);
     await auditar(payload, resultado.created ? "criado" : "duplicado", resultado.item.id);
+
+    // Best-effort: o card já foi criado, uma falha aqui não deve derrubar o
+    // envio nem confundir quem preencheu a ficha.
+    try {
+      const { assunto, html } = montarEmailSeguroAuto(payload, resultado);
+      await enviarEmail({ para: EMAIL_DESTINO_SEGURO_AUTO, assunto, html, remetente: "Plataforma O2 — Seguro Auto" });
+    } catch (erroEmail) {
+      console.warn("Seguro Auto: falha ao enviar e-mail pra auto@o2seguros.com.br:", erroEmail);
+    }
+
     return { ok: true };
   } catch (error) {
     // Mesmo espírito de ficha-fianca/actions.ts e capitalizacao/actions.ts:

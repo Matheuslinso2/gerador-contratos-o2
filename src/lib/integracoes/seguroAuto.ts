@@ -12,6 +12,7 @@
 // arquivo ÚNICO (isMultiple: false) -- por isso a landing page também só
 // aceita 1 arquivo por campo agora.
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { envolverEmailO2, linhaCampo, blocoSecao, botaoPill } from "./emailO2";
 
 const ENTITY_TYPE_ID = 1050;
 const CATEGORY_ID = 30;
@@ -153,4 +154,52 @@ export async function criarCardSeguroAuto(payload: SeguroAutoPayload, supabase: 
 
   const added = await bitrix<BitrixAddResponse>("crm.item.add", { entityTypeId: ENTITY_TYPE_ID, fields });
   return { created: true, item: added.result.item };
+}
+
+const BITRIX_BASE_URL = "https://o2seguros.bitrix24.com.br";
+
+// Notifica auto@o2seguros.com.br a cada envio de /seguro-auto -- o card já
+// é criado na SPA (acima), mas a caixa de e-mail é o jeito de alguém saber
+// na hora que chegou uma ficha nova, sem precisar ficar checando o Bitrix.
+export function montarEmailSeguroAuto(payload: SeguroAutoPayload, resultado: { created: boolean; item: { id: number } }): { assunto: string; html: string } {
+  const linkCard = `${BITRIX_BASE_URL}/crm/type/${ENTITY_TYPE_ID}/details/${resultado.item.id}/`;
+
+  const corpoHtml = [
+    blocoSecao(
+      "Contato",
+      [linhaCampo("Nome completo", payload.nomeCompleto), linhaCampo("E-mail", payload.email), linhaCampo("Telefone", payload.telefone), linhaCampo("Estado civil", payload.estadoCivil)].join("")
+    ),
+    blocoSecao(
+      "Veículo e uso",
+      [
+        linhaCampo("Endereço residencial", payload.enderecoResidencial),
+        linhaCampo("Possui garagem", payload.possuiGaragem),
+        linhaCampo("Portão", payload.portao),
+        linhaCampo("Utilização do veículo", payload.utilizacaoVeiculo),
+        linhaCampo("Uso detalhado do carro", payload.usoCarroDetalhado),
+      ].join("")
+    ),
+    blocoSecao(
+      "Anexos enviados",
+      [
+        linhaCampo("CNH", payload.anexoCnh ? "✅ Enviada" : "— Não enviada"),
+        linhaCampo("CRLV", payload.anexoCrlv ? "✅ Enviado" : "— Não enviado"),
+        linhaCampo("Apólice anterior", payload.anexoApolice ? "✅ Enviada" : "— Não enviada"),
+      ].join("")
+    ),
+    botaoPill(linkCard, resultado.created ? "Ver card no Bitrix →" : "Ver card existente no Bitrix →"),
+  ].join("");
+
+  const html = envolverEmailO2({
+    badge: "Seguro Auto",
+    titulo: "Nova ficha preenchida! 🚗",
+    introducao: resultado.created
+      ? `${payload.nomeCompleto} acabou de preencher a ficha de Seguro Auto pela Plataforma O2. Confira tudo o que foi informado abaixo:`
+      : `${payload.nomeCompleto} preencheu a ficha de novo — o protocolo já existia, então o card no Bitrix não foi duplicado.`,
+    corpoHtml,
+    protocolo: payload.responseId,
+    origem: "/seguro-auto",
+  });
+
+  return { assunto: `Nova cotação Seguro Auto — ${payload.nomeCompleto}`, html };
 }
