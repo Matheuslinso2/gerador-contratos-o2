@@ -47,7 +47,10 @@ export default function AppHeader({
             />
             <NavDropdown
               label="Solicitação de Cotação"
-              items={PRODUTOS_LANDING_PAGE.map((p) => ({ href: p.href, label: p.titulo }))}
+              items={[
+                { href: "/cotacao", label: "Solicitação geral" },
+                ...PRODUTOS_LANDING_PAGE.map((p) => ({ href: p.href, label: p.titulo })),
+              ]}
             />
             {(isAdmin(userEmail) || isColaboradorO2(userEmail)) && (
               <NavDropdown
