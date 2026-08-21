@@ -4,12 +4,16 @@ import { randomUUID } from "crypto";
 import { createServiceClient } from "@/lib/supabase/service";
 import {
   criarCardSeguroFianca,
+  montarEmailFichaFianca,
   type FichaFiancaPayload,
   type LocatarioPfPayload,
 } from "@/lib/integracoes/seguroFianca";
 import { registrarNaPlanilhaFianca } from "@/lib/integracoes/planilhaSeguroFianca";
+import { enviarEmail } from "@/lib/email";
 
 export type EstadoEnvioFichaFianca = { ok: boolean; erro?: string; pendente?: boolean } | null;
+
+const EMAIL_DESTINO_FICHA_FIANCA = "fianca@o2seguros.com.br";
 
 function campo(formData: FormData, name: string): string {
   return String(formData.get(name) ?? "").trim();
@@ -120,6 +124,12 @@ export async function enviarFichaFianca(
       // Não falha o envio por isso — o card já foi criado, o que importa.
       // A planilha é só o registro de conferência.
       console.warn("Falha ao registrar na planilha de conferência da Ficha Fiança:", erroPlanilha);
+    }
+    try {
+      const { assunto, html } = montarEmailFichaFianca(payload, resultado);
+      await enviarEmail({ para: EMAIL_DESTINO_FICHA_FIANCA, assunto, html, remetente: "Plataforma O2 — Seguro Fiança" });
+    } catch (erroEmail) {
+      console.warn("Ficha Fiança: falha ao enviar e-mail pra fianca@o2seguros.com.br:", erroEmail);
     }
     return { ok: true };
   } catch (error) {

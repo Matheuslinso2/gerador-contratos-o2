@@ -40,14 +40,7 @@ export type RcObrasPayload = {
   coberturas: Record<CoberturaRcObrasChave, string>;
 };
 
-import { envolverEmailO2, linhaCampo, blocoSecao } from "./emailO2";
-
-function formatarData(iso: string): string {
-  if (!iso) return "";
-  const [ano, mes, dia] = iso.split("-");
-  if (!ano || !mes || !dia) return iso;
-  return `${dia}/${mes}/${ano}`;
-}
+import { envolverEmailO2, linhaCampo, blocoSecao, formatarData } from "./emailO2";
 
 export function montarEmailRcObras(p: RcObrasPayload): { assunto: string; html: string } {
   const enderecoObra = [

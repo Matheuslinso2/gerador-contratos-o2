@@ -1,3 +1,6 @@
+import { envolverEmailO2, linhaCampo, blocoSecao, botaoPill, formatarData } from "./emailO2";
+import type { DadosCapitalizacaoPlanilha } from "./planilhaCapitalizacao";
+
 const ENTITY_TYPE_ID = 1048;
 const CATEGORY_ID = 28;
 const STAGE_ID = "DT1048_28:NEW";
@@ -327,4 +330,130 @@ export async function criarCardCapitalizacao(payload: CapitalizacaoFormPayload) 
 
   const added = await bitrix<BitrixAddResponse>("crm.item.add", { entityTypeId: ENTITY_TYPE_ID, fields });
   return { created: true, item: added.result.item };
+}
+
+const BITRIX_BASE_URL = "https://o2seguros.bitrix24.com.br";
+
+// Notifica cap@o2seguros.com.br a cada envio de /capitalizacao -- o card já
+// é criado na SPA "Título de Capitalização" (acima), mas essa caixa de
+// e-mail é o jeito de alguém saber na hora que chegou uma ficha nova.
+// Reaproveita o mesmo objeto DadosCapitalizacaoPlanilha já montado em
+// capitalizacao/actions.ts pra planilha de conferência -- campos já vêm
+// nomeados de forma limpa, sem precisar ler de novo o Record<string,string>
+// "answers" indexado por ITEM.*.
+export function montarEmailCapitalizacao(d: DadosCapitalizacaoPlanilha, resultado: { created: boolean; item: { id: number } }): { assunto: string; html: string } {
+  const linkCard = `${BITRIX_BASE_URL}/crm/type/${ENTITY_TYPE_ID}/details/${resultado.item.id}/`;
+  const ehLocatarioPf = d.tipoLocatario === "PF";
+  const ehLocadorPf = d.tipoLocador === "PF";
+
+  const enderecoImovel = [
+    [d.imovelLogradouro, d.imovelNumero].filter(Boolean).join(", "),
+    d.imovelComplemento,
+    d.imovelBairro,
+    [d.imovelCidade, d.imovelUf].filter(Boolean).join("/"),
+    d.imovelCep,
+  ]
+    .filter(Boolean)
+    .join(" — ");
+
+  const nomePrincipal = (ehLocatarioPf ? d.locatPfNome : d.locatPjRazao) || d.imobiliariaNome || d.corretorNome;
+
+  const corpoHtml = [
+    blocoSecao(
+      "Contato / origem",
+      [
+        linhaCampo("Seu e-mail", d.emailContato),
+        linhaCampo("Quem administra", d.quemAdministra),
+        linhaCampo("Imobiliária — Nome", d.imobiliariaNome),
+        linhaCampo("Imobiliária — E-mail", d.imobiliariaEmail),
+        linhaCampo("Corretor — Nome", d.corretorNome),
+        linhaCampo("Corretor — E-mail", d.corretorEmail),
+      ].join("")
+    ),
+    blocoSecao(
+      "Título de Capitalização",
+      [
+        linhaCampo("Valor do título", d.valorTitulo ? `R$ ${d.valorTitulo}` : ""),
+        linhaCampo("Encargos considerados", d.encargosConsiderados),
+        linhaCampo("Prazo", d.prazo),
+        linhaCampo("Forma de pagamento", d.formaPagamento),
+        linhaCampo("Titular do cartão", d.titularCartao),
+        linhaCampo("CPF do titular do cartão", d.cpfCartao),
+      ].join("")
+    ),
+    blocoSecao(
+      "Imóvel",
+      [linhaCampo("Endereço", enderecoImovel)].join("")
+    ),
+    ehLocatarioPf
+      ? blocoSecao(
+          "Locatário (Pessoa Física)",
+          [
+            linhaCampo("Nome", d.locatPfNome),
+            linhaCampo("CPF", d.locatPfCpf),
+            linhaCampo("Nascimento", formatarData(d.locatPfNascimento)),
+            linhaCampo("RG", d.locatPfRg),
+            linhaCampo("Órgão expedidor", d.locatPfRgOrgao),
+            linhaCampo("UF do RG", d.locatPfRgUf),
+            linhaCampo("Data de emissão", formatarData(d.locatPfRgEmissao)),
+            linhaCampo("Estado civil", d.locatPfEstadoCivil),
+            linhaCampo("Profissão", d.locatPfProfissao),
+            linhaCampo("Renda mensal", d.locatPfRenda ? `R$ ${d.locatPfRenda}` : ""),
+            linhaCampo("E-mail", d.locatEmail),
+            linhaCampo("Telefone", d.locatTelefone),
+          ].join("")
+        )
+      : blocoSecao(
+          "Locatário (Pessoa Jurídica)",
+          [
+            linhaCampo("Razão social", d.locatPjRazao),
+            linhaCampo("CNPJ", d.locatPjCnpj),
+            linhaCampo("Fundação", formatarData(d.locatPjFundacao)),
+            linhaCampo("Inscrição estadual", d.locatPjInscricao),
+            linhaCampo("Sócio responsável", d.locatPjSocio),
+            linhaCampo("CPF do sócio", d.locatPjSocioCpf),
+            linhaCampo("Faturamento mensal", d.locatPjRenda ? `R$ ${d.locatPjRenda}` : ""),
+            linhaCampo("E-mail", d.locatEmail),
+            linhaCampo("Telefone", d.locatTelefone),
+          ].join("")
+        ),
+    ehLocadorPf
+      ? blocoSecao(
+          "Locador (Pessoa Física)",
+          [
+            linhaCampo("Nome", d.locadorPfNome),
+            linhaCampo("CPF", d.locadorPfCpf),
+            linhaCampo("Nascimento", formatarData(d.locadorPfNascimento)),
+            linhaCampo("RG", d.locadorPfRg),
+            linhaCampo("Órgão expedidor", d.locadorPfRgOrgao),
+            linhaCampo("UF do RG", d.locadorPfRgUf),
+          ].join("")
+        )
+      : blocoSecao(
+          "Locador (Pessoa Jurídica)",
+          [
+            linhaCampo("Razão social", d.locadorPjRazao),
+            linhaCampo("CNPJ", d.locadorPjCnpj),
+            linhaCampo("Fundação", formatarData(d.locadorPjFundacao)),
+            linhaCampo("Inscrição estadual", d.locadorPjInscricao),
+            linhaCampo("Sócio responsável", d.locadorPjSocio),
+            linhaCampo("CPF do sócio", d.locadorPjSocioCpf),
+            linhaCampo("Telefone", d.locadorPjTelefone),
+          ].join("")
+        ),
+    botaoPill(linkCard, resultado.created ? "Ver card no Bitrix →" : "Ver card existente no Bitrix →"),
+  ].join("");
+
+  const html = envolverEmailO2({
+    badge: "Capitalização",
+    titulo: "Nova ficha preenchida! 💰",
+    introducao: resultado.created
+      ? `${nomePrincipal} acabou de preencher a ficha de Capitalização pela Plataforma O2. Confira tudo o que foi informado abaixo:`
+      : `${nomePrincipal} preencheu a ficha de novo — o protocolo já existia, então o card no Bitrix não foi duplicado.`,
+    corpoHtml,
+    protocolo: d.responseId,
+    origem: "/capitalizacao",
+  });
+
+  return { assunto: `Nova cotação Capitalização — ${nomePrincipal}`, html };
 }

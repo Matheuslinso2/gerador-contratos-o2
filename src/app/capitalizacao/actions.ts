@@ -5,11 +5,15 @@ import { createServiceClient } from "@/lib/supabase/service";
 import {
   ITEM,
   criarCardCapitalizacao,
+  montarEmailCapitalizacao,
   type CapitalizacaoFormPayload,
 } from "@/lib/integracoes/capitalizacao";
 import { registrarNaPlanilhaCapitalizacao, type DadosCapitalizacaoPlanilha } from "@/lib/integracoes/planilhaCapitalizacao";
+import { enviarEmail } from "@/lib/email";
 
 export type EstadoEnvioCapitalizacao = { ok: boolean; erro?: string; pendente?: boolean } | null;
+
+const EMAIL_DESTINO_CAPITALIZACAO = "cap@o2seguros.com.br";
 
 function campo(formData: FormData, name: string): string {
   return String(formData.get(name) ?? "").trim();
@@ -202,6 +206,12 @@ export async function enviarFormularioCapitalizacao(
       // Não falha o envio por isso — o card já foi criado, o que importa.
       // A planilha é só o registro de conferência.
       console.warn("Falha ao registrar na planilha de conferência da Capitalização:", erroPlanilha);
+    }
+    try {
+      const { assunto, html } = montarEmailCapitalizacao(dadosPlanilha, resultado);
+      await enviarEmail({ para: EMAIL_DESTINO_CAPITALIZACAO, assunto, html, remetente: "Plataforma O2 — Capitalização" });
+    } catch (erroEmail) {
+      console.warn("Capitalização: falha ao enviar e-mail pra cap@o2seguros.com.br:", erroEmail);
     }
     return { ok: true };
   } catch (error) {

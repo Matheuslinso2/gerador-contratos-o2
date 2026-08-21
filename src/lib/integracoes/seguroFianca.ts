@@ -12,6 +12,8 @@
 // nasce na etapa "Nova Solicitação" (fila de entrada), não pulando direto
 // pra "Aguardando Cotação" como os cards digitados manualmente hoje.
 
+import { envolverEmailO2, linhaCampo, blocoSecao, botaoPill } from "./emailO2";
+
 const ENTITY_TYPE_ID = 1042;
 const CATEGORY_ID = 18; // Análise e Cotação
 const STAGE_ID = "DT1042_18:NEW"; // Nova Solicitação
@@ -401,4 +403,98 @@ export async function criarCardSeguroFianca(payload: FichaFiancaPayload) {
 
   const added = await bitrix<BitrixAddResponse>("crm.item.add", { entityTypeId: ENTITY_TYPE_ID, fields });
   return { created: true, item: added.result.item, avisos };
+}
+
+const BITRIX_BASE_URL = "https://o2seguros.bitrix24.com.br";
+
+function linhasLocatarioPf(l: LocatarioPfPayload, numero: number): string {
+  return [
+    linhaCampo(`Locatário ${numero} — Nome`, l.nome),
+    linhaCampo(`Locatário ${numero} — CPF`, l.cpf),
+    linhaCampo(`Locatário ${numero} — E-mail`, l.email),
+    linhaCampo(`Locatário ${numero} — Telefone`, l.telefone),
+    linhaCampo(`Locatário ${numero} — Profissão`, l.profissao),
+    linhaCampo(`Locatário ${numero} — Renda mensal`, l.rendaMensal ? `R$ ${l.rendaMensal}` : ""),
+    linhaCampo(`Locatário ${numero} — Empresa`, l.empresaNome ?? ""),
+    linhaCampo(`Locatário ${numero} — Salário bruto (empresa)`, l.empresaSalarioBruto ? `R$ ${l.empresaSalarioBruto}` : ""),
+    linhaCampo(`Locatário ${numero} — Telefone da empresa`, l.empresaTelefone ?? ""),
+  ].join("");
+}
+
+// Notifica fianca@o2seguros.com.br a cada envio de /ficha-fianca -- o card
+// já é criado na SPA "Seguro Fiança" (acima), mas essa caixa de e-mail é o
+// jeito de alguém saber na hora que chegou uma ficha nova.
+export function montarEmailFichaFianca(p: FichaFiancaPayload, resultado: { created: boolean; item: { id: number } }): { assunto: string; html: string } {
+  const linkCard = `${BITRIX_BASE_URL}/crm/type/${ENTITY_TYPE_ID}/details/${resultado.item.id}/`;
+  const ehPj = p.tipoPessoaLocatario === "PJ";
+
+  const enderecoImovel = [
+    [p.imovelLogradouro, p.imovelNumero].filter(Boolean).join(", "),
+    p.imovelComplemento,
+    p.imovelBairro,
+    [p.imovelCidade, p.imovelUf].filter(Boolean).join("/"),
+    p.imovelCep,
+  ]
+    .filter(Boolean)
+    .join(" — ");
+
+  const nomePrincipal = ehPj ? p.locatPjRazao : p.locatarios[0]?.nome || p.adminNome || p.proprietarioNome;
+
+  const corpoHtml = [
+    blocoSecao(
+      "Contato",
+      [
+        linhaCampo("Seu e-mail (quem preencheu)", p.emailContato),
+        linhaCampo("Você é", p.vocEIs),
+        linhaCampo("Imóvel administrado?", p.imovelAdministrado),
+        linhaCampo("Administradora/corretor — Nome", p.adminNome),
+        linhaCampo("Administradora/corretor — E-mail", p.adminEmail),
+        linhaCampo("Administradora/corretor — Telefone", p.adminTelefone),
+        linhaCampo("Proprietário — Nome", p.proprietarioNome),
+        linhaCampo("Proprietário — E-mail", p.proprietarioEmail),
+        linhaCampo("Proprietário — Telefone", p.proprietarioTelefone),
+      ].join("")
+    ),
+    blocoSecao(
+      "Imóvel e valores",
+      [
+        linhaCampo("Finalidade", p.finalidadeImovel),
+        linhaCampo("Endereço", enderecoImovel),
+        linhaCampo("Aluguel", p.aluguel ? `R$ ${p.aluguel}` : ""),
+        linhaCampo("Condomínio", p.condominio ? `R$ ${p.condominio}` : ""),
+        linhaCampo("IPTU", p.iptu ? `R$ ${p.iptu}` : ""),
+        linhaCampo("Água", p.agua ? `R$ ${p.agua}` : ""),
+        linhaCampo("Luz", p.luz ? `R$ ${p.luz}` : ""),
+        linhaCampo("Gás", p.gas ? `R$ ${p.gas}` : ""),
+        linhaCampo("Prazo de vigência", p.prazoVigenciaTexto),
+        linhaCampo("Seguro incêndio", p.seguroIncendio),
+      ].join("")
+    ),
+    ehPj
+      ? blocoSecao(
+          "Locatário (Pessoa Jurídica)",
+          [
+            linhaCampo("Razão social", p.locatPjRazao),
+            linhaCampo("CNPJ", p.locatPjCnpj),
+            linhaCampo("E-mail", p.locatPjEmail),
+            linhaCampo("Telefone", p.locatPjTelefone),
+            linhaCampo("Comentários", p.locatPjComentarios),
+          ].join("")
+        )
+      : blocoSecao("Locatário(s) — Pessoa Física", p.locatarios.map((l, i) => linhasLocatarioPf(l, i + 1)).join("")),
+    botaoPill(linkCard, resultado.created ? "Ver card no Bitrix →" : "Ver card existente no Bitrix →"),
+  ].join("");
+
+  const html = envolverEmailO2({
+    badge: "Seguro Fiança",
+    titulo: "Nova ficha preenchida! 🔑",
+    introducao: resultado.created
+      ? `${nomePrincipal} acabou de preencher a Ficha Fiança pela Plataforma O2. Confira tudo o que foi informado abaixo:`
+      : `${nomePrincipal} preencheu a ficha de novo — o protocolo já existia, então o card no Bitrix não foi duplicado.`,
+    corpoHtml,
+    protocolo: p.responseId,
+    origem: "/ficha-fianca",
+  });
+
+  return { assunto: `Nova cotação Seguro Fiança — ${nomePrincipal}`, html };
 }

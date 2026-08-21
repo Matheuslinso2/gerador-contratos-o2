@@ -39,6 +39,16 @@ export function blocoSecao(titulo: string, linhasHtml: string): string {
     </tr>`;
 }
 
+// Converte "yyyy-mm-dd" (formato de <input type="date"> e de datas ISO já
+// normalizadas) pra "dd/mm/yyyy". Qualquer outro formato passa direto, sem
+// tentar adivinhar (evita bagunçar texto livre digitado pela pessoa).
+export function formatarData(valor: string): string {
+  if (!valor) return "";
+  const [ano, mes, dia] = valor.split("-");
+  if (!ano || !mes || !dia || ano.length !== 4) return valor;
+  return `${dia}/${mes}/${ano}`;
+}
+
 // Botão pílula (CTA), no estilo dos banners em pílula do manual de marca.
 export function botaoPill(href: string, texto: string): string {
   return `

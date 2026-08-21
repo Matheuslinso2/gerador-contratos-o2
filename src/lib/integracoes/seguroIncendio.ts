@@ -17,6 +17,7 @@
 // (isMultiple: true) -- diferente dos campos de arquivo único do Seguro
 // Auto, aqui o valor precisa ser uma lista de tuplas [nome, base64].
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { envolverEmailO2, linhaCampo, blocoSecao, botaoPill } from "./emailO2";
 
 const ENTITY_TYPE_ID = 1046;
 const CATEGORY_ID = 22;
@@ -202,4 +203,79 @@ export async function criarCardSeguroIncendio(payload: SeguroIncendioPayload, su
 
   const added = await bitrix<BitrixAddResponse>("crm.item.add", { entityTypeId: ENTITY_TYPE_ID, fields });
   return { created: true, item: added.result.item };
+}
+
+const BITRIX_BASE_URL = "https://o2seguros.bitrix24.com.br";
+
+// Notifica incendio@o2seguros.com.br a cada envio de /seguro-incendio -- o
+// card já é criado na SPA "Ramos Elementares" (acima), mas essa caixa de
+// e-mail é o jeito de alguém saber na hora que chegou uma ficha nova.
+export function montarEmailSeguroIncendio(p: SeguroIncendioPayload, resultado: { created: boolean; item: { id: number } }): { assunto: string; html: string } {
+  const linkCard = `${BITRIX_BASE_URL}/crm/type/${ENTITY_TYPE_ID}/details/${resultado.item.id}/`;
+  const nomePrincipal = p.modalidade === "Imobiliario" ? p.nomeImobiliaria : p.nomeProprietario;
+
+  const secoesHtml =
+    p.modalidade === "Imobiliario"
+      ? [
+          blocoSecao(
+            "Imobiliária",
+            [
+              linhaCampo("Nome da imobiliária", p.nomeImobiliaria),
+              linhaCampo("E-mail", p.email),
+              linhaCampo("Telefone", p.telefone),
+            ].join("")
+          ),
+          blocoSecao(
+            "Planilha de itens",
+            [
+              linhaCampo("Quantidade de endereços", p.qtdEnderecos),
+              linhaCampo("Arquivo enviado", p.anexoPlanilhaNome ? `📎 ${p.anexoPlanilhaNome}` : "— Não enviado"),
+            ].join("")
+          ),
+        ].join("")
+      : [
+          blocoSecao(
+            "Proprietário",
+            [
+              linhaCampo("Nome completo", p.nomeProprietario),
+              linhaCampo("CPF", p.cpfProprietario),
+              linhaCampo("E-mail", p.email),
+              linhaCampo("Telefone", p.telefone),
+            ].join("")
+          ),
+          blocoSecao(
+            "Imóvel",
+            [
+              linhaCampo("Finalidade", p.modalidade === "Empresarial" ? "Comercial" : "Residencial"),
+              linhaCampo("Atividade comercial", p.atividadeComercial),
+              linhaCampo("CEP", p.imovelCep),
+              linhaCampo("Endereço", p.imovelEndereco),
+              linhaCampo("Metragem", p.metragem),
+              linhaCampo("Valor do aluguel", p.valorAluguel ? `R$ ${p.valorAluguel}` : ""),
+            ].join("")
+          ),
+          blocoSecao(
+            "Administração",
+            [
+              linhaCampo("Administrado por imobiliária", p.administradoPorImobiliaria),
+              linhaCampo("Nome da imobiliária", p.nomeImobiliaria),
+              linhaCampo("Preferências", p.preferencias),
+            ].join("")
+          ),
+        ].join("");
+
+  const corpoHtml = secoesHtml + botaoPill(linkCard, resultado.created ? "Ver card no Bitrix →" : "Ver card existente no Bitrix →");
+
+  const html = envolverEmailO2({
+    badge: `Seguro Incêndio — ${p.modalidade}`,
+    titulo: "Nova ficha preenchida! 🔥",
+    introducao: resultado.created
+      ? `${nomePrincipal} acabou de preencher a ficha de Seguro Incêndio pela Plataforma O2. Confira tudo o que foi informado abaixo:`
+      : `${nomePrincipal} preencheu a ficha de novo — o protocolo já existia, então o card no Bitrix não foi duplicado.`,
+    corpoHtml,
+    protocolo: p.responseId,
+    origem: "/seguro-incendio",
+  });
+
+  return { assunto: `Nova cotação Seguro Incêndio (${p.modalidade}) — ${nomePrincipal}`, html };
 }
