@@ -41,6 +41,10 @@ const ROTAS_PUBLICAS = [
   // pra incendio@o2seguros.com.br e registra na planilha compartilhada de
   // conferência (ver src/app/rc-obras/actions.ts).
   "/rc-obras",
+  // Vitrine pública que reúne as 5 fichas acima num link só — a pessoa
+  // escolhe o produto e é levada pra rota individual de sempre (nenhuma
+  // delas muda). Ver src/lib/produtosLandingPage.tsx (fonte única).
+  "/cotacao",
 ];
 const ROTAS_SO_DESLOGADO = ["/login", "/signup"];
 

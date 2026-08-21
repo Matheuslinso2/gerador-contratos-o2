@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { isAdmin, isColaboradorO2, isMatheus } from "@/lib/admin";
+import { PRODUTOS_LANDING_PAGE } from "@/lib/produtosLandingPage";
 import NavLink from "./NavLink";
 import NavDropdown from "./NavDropdown";
 
@@ -46,13 +47,7 @@ export default function AppHeader({
             />
             <NavDropdown
               label="Solicitação de Cotação"
-              items={[
-                { href: "/capitalizacao", label: "Capitalização" },
-                { href: "/ficha-fianca", label: "Ficha Fiança" },
-                { href: "/seguro-auto", label: "Seguro Auto" },
-                { href: "/seguro-incendio", label: "Seguro Incêndio" },
-                { href: "/rc-obras", label: "RC Obras" },
-              ]}
+              items={PRODUTOS_LANDING_PAGE.map((p) => ({ href: p.href, label: p.titulo }))}
             />
             {(isAdmin(userEmail) || isColaboradorO2(userEmail)) && (
               <NavDropdown
