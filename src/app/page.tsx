@@ -167,6 +167,22 @@ export default async function Home() {
         </svg>
       ),
     },
+    {
+      href: "/seguro-incendio",
+      titulo: "Seguro Incêndio",
+      descricao: "Ficha online para cotação de incêndio residencial, empresarial ou imobiliário",
+      icone: (
+        <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
+          <path
+            d="M12 3.5c1 2 .3 3.2-.6 4.4-1 1.3-1.8 2.3-1.8 3.9a3 3 0 003 3c1.9 0 3-1.3 3-3.1 1.2 1 1.9 2.3 1.9 3.9a5.5 5.5 0 11-11 0c0-3 1.6-4.7 3-6.3 1.3-1.5 2.2-2.7 2.5-5.8z"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      ),
+    },
   ];
 
   const usoInterno = isAdmin(user.email) || isColaboradorO2(user.email);

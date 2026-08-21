@@ -50,6 +50,7 @@ export default function AppHeader({
                 { href: "/capitalizacao", label: "Capitalização" },
                 { href: "/ficha-fianca", label: "Ficha Fiança" },
                 { href: "/seguro-auto", label: "Seguro Auto" },
+                { href: "/seguro-incendio", label: "Seguro Incêndio" },
               ]}
             />
             {(isAdmin(userEmail) || isColaboradorO2(userEmail)) && (

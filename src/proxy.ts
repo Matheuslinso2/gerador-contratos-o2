@@ -32,6 +32,10 @@ const ROTAS_PUBLICAS = [
   // no Bitrix (SPA não existe ainda), só registra em
   // integracao_formularios_log até a integração ser ligada.
   "/seguro-auto",
+  // Formulário público de Seguro Incêndio (residencial, empresarial e
+  // imobiliário) — mesma lógica. O Google Forms "Ficha online - Seguro
+  // Incêndio" continua ativo em paralelo, sem nenhuma alteração.
+  "/seguro-incendio",
 ];
 const ROTAS_SO_DESLOGADO = ["/login", "/signup"];
 
