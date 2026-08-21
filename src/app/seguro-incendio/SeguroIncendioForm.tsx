@@ -229,6 +229,16 @@ function CamposImovel() {
 
 type ArquivoStatus = { nome: string; estado: "enviando" | "ok" | "erro"; mensagem?: string };
 
+function IconeUpload() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 16V4" />
+      <path d="M7 9l5-5 5 5" />
+      <path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+    </svg>
+  );
+}
+
 function CampoUploadPlanilha({ responseId, path, setPath, nome, setNome }: { responseId: string; path: string; setPath: (v: string) => void; nome: string; setNome: (v: string) => void }) {
   const [arquivo, setArquivo] = useState<ArquivoStatus | null>(null);
 
@@ -262,7 +272,14 @@ function CampoUploadPlanilha({ responseId, path, setPath, nome, setNome }: { res
       <p className="mt-0.5 text-xs text-gray-500">1 arquivo, Excel/CSV/PDF, até 20MB.</p>
       <input type="hidden" name="anexo_planilha" value={path} />
       <input type="hidden" name="anexo_planilha_nome" value={nome} />
-      <input type="file" accept=".xlsx,.xls,.csv,.ods,.pdf" onChange={aoSelecionar} className="mt-1.5 w-full text-sm" />
+      <label
+        className="mt-1.5 inline-flex cursor-pointer items-center gap-2 rounded-full px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
+        style={{ background: O2_LARANJA }}
+      >
+        <IconeUpload />
+        {nome ? "Trocar planilha" : "Selecionar planilha"}
+        <input type="file" accept=".xlsx,.xls,.csv,.ods,.pdf" onChange={aoSelecionar} className="sr-only" />
+      </label>
       {arquivo && (
         <p className={`mt-1.5 text-xs ${arquivo.estado === "erro" ? "text-red-600" : arquivo.estado === "ok" ? "text-green-700" : "text-gray-500"}`}>
           {arquivo.nome} — {arquivo.estado === "enviando" ? "enviando..." : arquivo.estado === "ok" ? "enviado ✅" : arquivo.mensagem}
