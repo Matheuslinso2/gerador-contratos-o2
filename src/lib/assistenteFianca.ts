@@ -21,8 +21,6 @@ export type OpcaoComparada = {
 };
 
 export type AnaliseFianca = {
-  pacote_locacao: string;
-  resumo_executivo: string;
   pendencias: string[];
   opcoes: OpcaoComparada[];
   comparativo_planos: string;
@@ -32,7 +30,6 @@ export type AnaliseFianca = {
   leitura_consultiva: string;
   proximo_passo: string;
   mensagem_whatsapp: string;
-  mensagem_email: string;
 };
 
 const SYSTEM_PROMPT = `Você é a Consultora de Vendas Sênior de Seguro Fiança da O2 Seguros, apoiando em tempo real o negociador (vendedor) da O2 durante o atendimento de um caso. O negociador vai te passar o panorama de um caso real (dados da locação e cotações recebidas de uma ou mais seguradoras, como texto colado ou como print/imagem do sistema) e você devolve a leitura consultiva completa, pronta para ele usar na ligação, no WhatsApp ou no e-mail, seguindo exatamente o manual interno de vendas da O2.
@@ -49,7 +46,7 @@ REGRAS DE SEGURANÇA DA ANÁLISE (nunca infrinja):
 7. Nunca prometa resgate integral, correção garantida ou aprovação instantânea de título de capitalização sem que as regras estejam confirmadas no panorama recebido.
 8. Nunca use travessão (—) em nenhum texto gerado, nem no relatório nem nas mensagens prontas. Use vírgula, dois-pontos ou parênteses.
 
-CÁLCULOS OBRIGATÓRIOS:
+CÁLCULOS OBRIGATÓRIOS (usados internamente para chegar no percentual de cada opção — não precisam virar um campo próprio na resposta):
 - Pacote de locação = aluguel + condomínio + IPTU + outros encargos recorrentes informados. Se o panorama já trouxer o pacote pronto, use-o, mas confira contra a soma dos itens informados e avise em pendências se houver divergência.
 - Percentual do pacote de cada opção = parcela do seguro ÷ pacote de locação × 100.
 - Custo total de cada opção = valor da parcela × quantidade de parcelas, salvo se o prêmio total informado for diferente, caso em que você destaca a divergência em pontos_atencao dessa opção.
@@ -76,8 +73,6 @@ MENSAGEM PRONTA PARA WHATSAPP ("mensagem_whatsapp"):
 - Use linguagem condicional ("depois de confirmado o credenciamento", "conforme as regras do título") para qualquer coisa ainda não confirmada documentalmente no panorama.
 - Pode usar até um emoji quando fizer sentido pro tom, sem exagerar.
 
-MENSAGEM PARA E-MAIL ("mensagem_email"): versão mais completa, no padrão consultivo — parabenização pela aprovação, comparação organizada por grupo/estrutura (LMI/LMG), benchmark de mercado quando fizer sentido, leitura consultiva final, e pergunta de fechamento. Pode ser mais longa que a de WhatsApp, mas continua objetiva.
-
 LEITURA CONSULTIVA FINAL ("leitura_consultiva"): siga este modelo, adaptado aos dados reais do caso — "Minha leitura: [opção] entrega o melhor equilíbrio porque [dados objetivos]. Para quem prioriza menor parcela, [opção] reduz o custo, mas trabalha com [limite/cobertura menor]. Para quem busca proteção mais ampla, [opção] acrescenta [coberturas] por R$ [diferença] ao mês." Nunca invente um dado que não veio no panorama.
 
 Se o panorama vier como imagem (print de tela do sistema/CRM/seguradora), leia os dados diretamente da imagem, exatamente como faria com texto — não presuma nada que não esteja visível.
@@ -92,16 +87,6 @@ const FERRAMENTA_ANALISE: Anthropic.Tool = {
   input_schema: {
     type: "object",
     properties: {
-      pacote_locacao: {
-        type: "string",
-        minLength: 1,
-        description: "Valor do pacote de locação calculado, com a composição entre parênteses, ex: 'R$ 6.845,59 (aluguel R$ 5.500,00 + condomínio R$ 900,00 + IPTU R$ 445,59)'.",
-      },
-      resumo_executivo: {
-        type: "string",
-        minLength: 1,
-        description: "1 a 2 frases: situação de aprovação, pacote, quantidade de opções e qual é a principal decisão em aberto.",
-      },
       pendencias: {
         type: "array",
         description: "Dados essenciais que faltaram no panorama e precisam ser confirmados antes de recomendar ou emitir. Pode ficar vazio se não houver nenhuma.",
@@ -171,15 +156,8 @@ const FERRAMENTA_ANALISE: Anthropic.Tool = {
         minLength: 1,
         description: "Mensagem curta pronta para enviar por WhatsApp, seguindo as regras de formato do manual.",
       },
-      mensagem_email: {
-        type: "string",
-        minLength: 1,
-        description: "Versão mais completa, pronta para enviar por e-mail, seguindo o padrão consultivo do manual.",
-      },
     },
     required: [
-      "pacote_locacao",
-      "resumo_executivo",
       "pendencias",
       "opcoes",
       "comparativo_planos",
@@ -189,7 +167,6 @@ const FERRAMENTA_ANALISE: Anthropic.Tool = {
       "leitura_consultiva",
       "proximo_passo",
       "mensagem_whatsapp",
-      "mensagem_email",
     ],
   },
 };

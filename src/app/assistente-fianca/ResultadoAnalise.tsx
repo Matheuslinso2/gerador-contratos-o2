@@ -60,12 +60,6 @@ export default function ResultadoAnalise({ resultado }: { resultado: AnaliseFian
         <TituloEtapa numero="1" titulo="Parecer analítico" subtitulo="Uso interno — leitura do caso conforme o manual de vendas" />
 
         <div className="space-y-4 rounded-xl border border-o2-navy/10 bg-white p-5 shadow-sm">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Pacote de locação</p>
-            <p className="mb-2 text-lg font-semibold text-o2-navy">{resultado.pacote_locacao}</p>
-            <p className="text-sm text-gray-700">{resultado.resumo_executivo}</p>
-          </div>
-
           {resultado.pendencias.length > 0 && (
             <div className="rounded-lg border border-yellow-300 bg-yellow-50 p-3">
               <p className="mb-1 text-sm font-semibold text-yellow-800">Confirmar antes de recomendar ou emitir</p>
@@ -95,9 +89,6 @@ export default function ResultadoAnalise({ resultado }: { resultado: AnaliseFian
                       <td className="px-3 py-2">
                         <p className="font-medium text-gray-800">
                           {o.seguradora} · {o.plano}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {o.valor_parcela} ({o.parcelas}) · total {o.valor_total}
                         </p>
                       </td>
                       <td className="px-3 py-2 text-gray-700">
@@ -136,24 +127,14 @@ export default function ResultadoAnalise({ resultado }: { resultado: AnaliseFian
       </section>
 
       <section className="space-y-3">
-        <TituloEtapa numero="2" titulo="Visão comercial" subtitulo="Pronta para copiar e enviar ao cliente/imobiliária" />
+        <TituloEtapa numero="2" titulo="Visão comercial" subtitulo="Mensagem pronta para copiar e enviar ao cliente/imobiliária" />
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm">
-            <div className="mb-1.5 flex items-center justify-between">
-              <p className="text-sm font-semibold text-o2-navy">WhatsApp</p>
-              <BotaoCopiar texto={resultado.mensagem_whatsapp} />
-            </div>
-            <p className="whitespace-pre-wrap text-sm text-gray-800">{resultado.mensagem_whatsapp}</p>
+        <div className="rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm">
+          <div className="mb-1.5 flex items-center justify-between">
+            <p className="text-sm font-semibold text-o2-navy">WhatsApp</p>
+            <BotaoCopiar texto={resultado.mensagem_whatsapp} />
           </div>
-
-          <div className="rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm">
-            <div className="mb-1.5 flex items-center justify-between">
-              <p className="text-sm font-semibold text-o2-navy">E-mail</p>
-              <BotaoCopiar texto={resultado.mensagem_email} />
-            </div>
-            <p className="whitespace-pre-wrap text-sm text-gray-800">{resultado.mensagem_email}</p>
-          </div>
+          <p className="whitespace-pre-wrap text-sm text-gray-800">{resultado.mensagem_whatsapp}</p>
         </div>
       </section>
     </div>
