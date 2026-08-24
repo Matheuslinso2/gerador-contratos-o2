@@ -175,6 +175,22 @@ export default async function Home() {
       ),
     },
     {
+      href: "/assistente-fianca",
+      titulo: "Assistente de Vendas — Fiança",
+      descricao: "Cole o panorama de cotações e receba a leitura consultiva pronta para WhatsApp e e-mail",
+      icone: (
+        <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
+          <path
+            d="M12 3.5c-4.7 0-8 3.1-8 6.8 0 2 .9 3.7 2.4 4.9-.2 1-.7 1.9-1.4 2.6 1.4.2 2.8-.1 3.9-.8.9.3 2 .5 3.1.5 4.7 0 8-3.1 8-6.8s-3.3-7.2-8-7.2z"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinejoin="round"
+          />
+          <path d="M8.5 10.2h7M8.5 13h4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+      ),
+    },
+    {
       href: "/ramos-elementares",
       titulo: "Ramos Elementares",
       descricao: "Novos negócios, renovações, endossos e qualidade da produção",
