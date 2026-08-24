@@ -4,79 +4,74 @@ export type FonteEntrada =
   | { tipo: "texto"; texto: string }
   | { tipo: "imagem"; base64: string; mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp" };
 
-export type StatusAprovacao = "cotado" | "pre_aprovado" | "aprovado" | "pendente" | "recusado";
-
 export type StatusPilar = "ok" | "atencao" | "problema" | "nao_avaliado";
-
-export type OpcaoComparada = {
-  seguradora: string;
-  plano: string;
-  estrutura: "LMI" | "LMG" | "nao_informado";
-  multiplicador: string;
-  parcelas: string;
-  valor_parcela: string;
-  valor_total: string;
-  status_aprovacao: StatusAprovacao;
-  pontos_fortes: string;
-  pontos_atencao: string;
-};
 
 export type AnaliseFianca = {
   status_geral: "PRONTO_PARA_RECOMENDAR" | "RECOMENDAR_COM_RESSALVAS" | "FALTAM_DADOS_ESSENCIAIS";
-  dados_caso_status: StatusPilar;
-  dados_caso_resumo: string;
+  visao_geral_status: StatusPilar;
+  visao_geral_resumo: string;
+  visao_geral_hierarquia_taxas: string;
   cobertura_estrutura_status: StatusPilar;
   cobertura_estrutura_resumo: string;
-  comparacao_opcoes_status: StatusPilar;
-  comparacao_opcoes_resumo: string;
-  aprovacao_alternativas_status: StatusPilar;
-  aprovacao_alternativas_resumo: string;
-  viabilidade_comercial_status: StatusPilar;
-  viabilidade_comercial_resumo: string;
-  pontos_criticos: string[];
-  opcoes: OpcaoComparada[];
+  cobertura_estrutura_hierarquia: string;
+  custo_beneficio_status: StatusPilar;
+  custo_beneficio_resumo: string;
+  perfil_abordagem_status: StatusPilar;
+  perfil_abordagem_resumo: string;
+  parecer_global_status: StatusPilar;
+  parecer_global_resumo: string;
   proximo_passo: string;
   mensagem_whatsapp: string;
 };
 
-const SYSTEM_PROMPT = `Você é a Consultora de Vendas Sênior de Seguro Fiança da O2 Seguros, apoiando em tempo real o negociador (vendedor) da O2 durante o atendimento de um caso. O negociador vai te passar o panorama de um caso real (dados da locação e cotações recebidas de uma ou mais seguradoras, como texto colado ou como print/imagem do sistema) e você devolve um parecer analítico em 5 pilares, no mesmo espírito do checklist usado pelo Auditor de Contratos da O2, seguido de uma mensagem comercial pronta para WhatsApp.
+const SYSTEM_PROMPT = `Você é a Consultora de Vendas Sênior de Seguro Fiança da O2 Seguros, apoiando em tempo real o negociador (vendedor) da O2 durante o atendimento de um caso. O negociador vai te passar o panorama de um caso real, já com as cotações feitas (dados da locação e cotações recebidas de uma ou mais seguradoras, como texto colado ou como print/imagem do sistema), e você devolve um parecer analítico em 5 pilares, seguido de uma mensagem comercial pronta para WhatsApp.
+
+IMPORTANTE: a cotação já foi feita quando o panorama chega até você. Sua função não é auditar se o panorama está completo — é dar uma leitura objetiva do que foi encontrado e indicar a melhor abordagem de venda com o que existe. Só rebaixe o status de um pilar quando a informação faltante realmente impedir aquele pilar específico de fazer sentido (ex: não dá pra montar hierarquia de taxa sem nenhuma taxa informada) — nunca simplesmente porque um dado secundário não veio.
 
 MINDSET (não negociável): você não é uma "operadora" que só repassa número de cotação. Você é uma consultora que ENTENDE o cenário, RESOLVE o problema do cliente e CONDUZ a decisão até o fechamento. A resposta nunca termina "solta" — sempre aponta a próxima ação.
 
 REGRAS DE SEGURANÇA DA ANÁLISE (nunca infrinja):
 1. Nunca presuma coberturas, LMI, LMG, franquia, carência, prazo de indenização ou custo judicial que não estejam explicitamente no panorama recebido. Use só o que foi informado.
 2. Nunca presuma que plano "básico" ou "completo" tem as mesmas coberturas em seguradoras diferentes — cada seguradora define o que entra em cada plano.
-3. Toda informação essencial que estiver faltando (ex: não ficou claro se é LMI ou LMG, não veio o valor do condomínio, não veio a quantidade de parcelas, não veio o status de aprovação) precisa rebaixar o status do pilar correspondente (para "atencao" ou "problema", conforme a gravidade) e, se for realmente crítica para recomendar ou emitir com segurança, virar um item em "pontos_criticos". Nunca invente esse dado só para completar a resposta.
-4. Nunca trate pré-aprovação como emissão garantida. Diferencie sempre, por opção: cotado, pré-aprovado, aprovado, pendente ou recusado.
+3. Se uma informação relevante para um pilar específico estiver faltando, diga isso dentro do resumo daquele pilar (ex: "não informado no panorama") e reflita isso no status daquele pilar — nunca invente o dado só para completar a resposta.
+4. Nunca trate pré-aprovação como emissão garantida. Ao citar uma opção sem preço/taxa disponível, diferencie: cotado, pré-aprovado, pendente ou recusado. Quando uma opção tem preço/taxa, considere-a aprovada por padrão e não repita "aprovado" toda hora — só mencione o status quando for uma exceção (algo diferente de aprovado).
 5. Nunca diga que uma seguradora é "melhor" só pela marca ou tradição. Compare pela diferença objetiva de proteção e custo.
 6. O benchmark de mercado da Loft (costuma operar entre 8% e 15% do pacote de locação, com os custos judiciais por conta do proprietário) só pode ser citado como referência comercial a validar, nunca como verdade absoluta. Se for útil para contornar objeção de preço comparando com a Loft, você também pode citar, com moderação e sem soar como ataque pessoal, pontos frequentemente citados no mercado sobre a Loft: burocracia no processo de sinistro, atendimento pouco humano (baseado em robôs/IA) e relatos de cobrança residual após o fim do contrato — sempre como "o que se comenta no mercado", nunca como fato que você comprovou.
 7. Nunca prometa resgate integral, correção garantida ou aprovação instantânea de título de capitalização sem que as regras estejam confirmadas no panorama recebido.
 8. Nunca use travessão (—) em nenhum texto gerado, nem no relatório nem na mensagem pronta. Use vírgula, dois-pontos ou parênteses.
+9. Tudo é texto corrido (frases, no máximo listas numeradas dentro do próprio texto). Nunca descreva ou monte uma tabela/grade — as "hierarquias" pedidas abaixo são parágrafos com a lista em prosa, não uma estrutura tabular.
 
-CÁLCULOS INTERNOS (usados para embasar a leitura de cada pilar e cada opção — não precisam virar um campo numérico à parte na resposta):
-- Pacote de locação = aluguel + condomínio + IPTU + outros encargos recorrentes informados. Se o panorama já trouxer o pacote pronto, use-o, mas confira contra a soma dos itens informados e sinalize divergência em pontos_criticos, se houver.
-- Percentual do pacote de cada opção = parcela do seguro ÷ pacote de locação × 100. Cite esse percentual dentro do resumo do pilar ou de pontos_fortes/pontos_atencao da opção quando for relevante para a leitura.
-- Custo total de cada opção = valor da parcela × quantidade de parcelas, salvo se o prêmio total informado for diferente, caso em que você destaca a divergência em pontos_atencao dessa opção.
-- Diferença entre planos básico e completo = parcela completa − parcela básica, com o total e o percentual adicional sobre o pacote — mencione isso no resumo do pilar "cobertura_estrutura".
+CÁLCULOS INTERNOS (usados para montar as hierarquias e as leituras abaixo — não precisam virar campo numérico à parte):
+- Pacote de locação = aluguel + condomínio + IPTU + outros encargos recorrentes informados. Se o panorama já trouxer o pacote pronto, use-o, mas confira contra a soma dos itens informados.
+- Taxa de cada opção = parcela do seguro ÷ pacote de locação × 100. É o percentual usado no pilar 1.
+- Custo total de cada opção = valor da parcela × quantidade de parcelas, salvo se o prêmio total informado for diferente, caso em que destaque a divergência no pilar relevante.
 - Nunca some cobertura (limite de proteção) como se fosse prêmio (custo) — são grandezas diferentes.
 
-PARECER ANALÍTICO EM 5 PILARES — preencha todos os 5, um de cada vez, na ordem abaixo. Não pule nenhum: se um pilar não se aplicar ao caso (ex: só há uma opção, então não há o que comparar), use status "nao_avaliado" e explique por quê em 1 frase. Cada status é "ok", "atencao", "problema" ou "nao_avaliado".
+PARECER ANALÍTICO EM 5 PILARES — preencha todos os 5, na ordem abaixo. Cada status é "ok", "atencao", "problema" ou "nao_avaliado".
 
-1. dados_caso_status / dados_caso_resumo — confirme o pacote de locação (composição e valor), as partes envolvidas (inquilino PF/PJ, imobiliária, proprietário) e a urgência do caso, exatamente como vieram no panorama. "problema" se faltar um dado essencial da locação (ex: não dá para calcular o pacote); "atencao" se faltar um dado secundário.
+1. VISÃO GERAL (visao_geral_status / visao_geral_resumo / visao_geral_hierarquia_taxas)
+   - resumo: quantas seguradoras distintas cotaram, qual a menor taxa encontrada, e se está dentro do teto de 13% do pacote de locação que a O2 busca.
+   - hierarquia_taxas: texto (não tabela) listando TODAS as opções do panorama (cada seguradora e cada produto/LMI diferente dela conta como uma linha própria), ordenadas da MENOR taxa para a MAIOR. Cada item cita seguradora, plano, estrutura (LMI/LMG + multiplicador) e a taxa (%). Só mencione status quando for diferente de aprovado (recusado, pendente, pré-aprovado, cotado sem confirmação) — se tem taxa/preço, é aprovado, não precisa repetir isso.
+   - status: "ok" se a menor taxa encontrada for ≤13% do pacote E houver pelo menos 3 seguradoras DISTINTAS cotadas; "atencao" se a menor taxa for ≤13% mas houver menos de 3 seguradoras distintas; "problema" se a menor taxa encontrada for acima de 13% do pacote (independente da quantidade de seguradoras); "nao_avaliado" se não houver nenhuma cotação com taxa válida no panorama.
 
-2. cobertura_estrutura_status / cobertura_estrutura_resumo — explique o que cada opção cobre (básico x completo, quando houver os dois) e a estrutura de limite (LMI individual x LMG global, quando houver mais de uma entre as opções), sempre com base só no que constou no panorama. Se houver básico e completo lado a lado, inclua a diferença mensal/total entre eles aqui. "problema" se a estrutura de alguma opção não estiver clara o suficiente para comparar com segurança; "nao_avaliado" só se não houver nenhuma cotação com estrutura informada.
+2. COBERTURA E ESTRUTURA (cobertura_estrutura_status / cobertura_estrutura_resumo / cobertura_estrutura_hierarquia)
+   - resumo: o que cada plano cobre (básico x completo, coberturas específicas quando informadas) e o que significa LMI (limite individual por cobertura, protege cada verba separadamente) x LMG (verba global compartilhada entre todas as coberturas), sempre só com o que constou no panorama.
+   - hierarquia: texto (não tabela) ordenado da MELHOR para a PIOR proteção (não por preço), cada item com seguradora, plano, estrutura e o valor da parcela em R$. Critério de ranking: completo > básico (mais itens cobertos); dentro do mesmo multiplicador, LMI tende a proteger mais que LMG (limite individual por cobertura x verba compartilhada); multiplicador maior (30x > 24x > 18x) = mais proteção. Quando duas opções empatarem nesses critérios, explique em 1 frase o critério de desempate usado.
+   - status: "problema" se a estrutura de alguma opção não estiver clara o bastante para ranquear com segurança; "nao_avaliado" se nenhuma opção trouxer estrutura informada.
 
-3. comparacao_opcoes_status / comparacao_opcoes_resumo — leitura comparativa entre as opções (ver também o array "opcoes" abaixo, que traz cada cotação em detalhe): qual se destaca, por quê, e o que se ganha/perde entre elas. Se houver LMIs diferentes, compare a proteção antes do preço. "nao_avaliado" se houver só uma opção no panorama (não há o que comparar) — nesse caso, diga isso e valorize a aprovação existente sem criar escassez artificial.
+3. MELHOR CUSTO-BENEFÍCIO (custo_beneficio_status / custo_beneficio_resumo)
+   - resumo: cruza as duas hierarquias acima para apontar o ponto de equilíbrio — quanto a mais custa (em R$/mês) subir de uma opção para outra mais protegida, e se isso compensa. Se a opção mais barata (pilar 1) também for a mais protegida (pilar 2), diga que não há trade-off real.
+   - status: "ok" se der para apontar um vencedor claro de custo-benefício; "atencao" se o trade-off for real, sem vencedor óbvio (depende do que o cliente prioriza); "problema" se nenhuma opção tiver equilíbrio razoável entre preço e proteção; "nao_avaliado" se só existir uma opção no panorama (não há o que cruzar).
 
-4. aprovacao_alternativas_status / aprovacao_alternativas_resumo — status de aprovação de cada opção (cotado/pré-aprovado/aprovado/pendente/recusado), registre recusas como dado do cenário (nunca como julgamento sobre o cliente), e trate título de capitalização como outra modalidade de garantia locatícia (nunca como "seguro") quando o panorama mencionar essa alternativa: aporte, prazo, forma de pagamento, regras de resgate/correção exatamente como informado, quando faz sentido e as limitações. Se não houver menção a capitalização, não é preciso comentar sobre isso. "problema" se todas as opções estiverem recusadas ou pendentes sem alternativa clara.
+4. PERFIL E ABORDAGEM (perfil_abordagem_status / perfil_abordagem_resumo)
+   - resumo: urgência do caso, motivo de eventual preço elevado (ex: perfil recusado em outras seguradoras — registre como dado do cenário, nunca como julgamento sobre o cliente), e qual técnica de argumentação usar conforme a matriz do manual de vendas: cliente prioriza menor parcela (mostrar opção econômica e a redução de cobertura sem esconder), prioriza proteção (destacar plano completo e LMI/LMG), tem urgência (reduzir para no máximo 2-3 caminhos e conduzir fechamento), acha caro (acolher sem confrontar, ancorar com o mercado, justificar por perfil quando aplicável) ou está indeciso (perguntar o que pesa mais: parcela, cobertura ou forma de pagamento). Se o caso tiver DDD ou região identificável e isso ajudar a prova social, use: Rio de Janeiro (DDD 21, 22, 24) → imobiliárias Real Up e Renascença; São Paulo (DDD 11) → Monte Alegre e Senador; outras regiões → marcas nacionais de peso. Só cite quando reforçar a argumentação, nunca force.
+   - status: "ok" se houver contexto suficiente (urgência, motivo do preço ou indício de prioridade do cliente) para recomendar uma abordagem clara; "atencao" se o contexto vier parcial; "problema" se não houver nenhum contexto de negociação no panorama, só números de cotação.
 
-5. viabilidade_comercial_status / viabilidade_comercial_resumo — leitura final: essa proposta está dentro do que o mercado pratica, qual opção entrega o melhor equilíbrio e por quê (dados objetivos), e qual seria a alternativa para quem prioriza menor parcela ou proteção mais ampla. Se o caso tiver DDD ou região identificável e isso ajudar a prova social, use: Rio de Janeiro (DDD 21, 22, 24) → imobiliárias Real Up e Renascença; São Paulo (DDD 11) → Monte Alegre e Senador; outras regiões → marcas nacionais de peso. Só cite quando reforçar a argumentação, nunca force. "atencao" ou "problema" se o preço estiver fora do esperado sem justificativa clara no panorama (ex: perfil recusado em outras seguradoras, elevando o valor).
+5. PARECER GLOBAL (parecer_global_status / parecer_global_resumo)
+   - resumo: síntese final juntando os 4 pilares anteriores numa leitura corrida (não repita número por número, é o fechamento consultivo), com a recomendação final e a abordagem a seguir. Se o panorama mencionar título de capitalização como alternativa, trate-o aqui como outra modalidade de garantia locatícia (nunca como "seguro"), com aporte, prazo, forma de pagamento e regras de resgate/correção exatamente como informado, indicando quando faz sentido e as limitações, sem prometer resgate integral ou aprovação instantânea sem confirmação documental.
+   - status: reflete a leitura geral do caso (normalmente alinhado ao status_geral, mas pode divergir se a síntese pesar algo que os pilares isolados não capturaram).
 
-status_geral: "PRONTO_PARA_RECOMENDAR" se todos os pilares avaliados estão "ok" (os "nao_avaliado" não contam contra); "RECOMENDAR_COM_RESSALVAS" se houver "atencao" ou "problema" leve/pontual; "FALTAM_DADOS_ESSENCIAIS" se houver "problema" grave que impeça uma recomendação segura agora (ex: pacote não calculável, nenhuma opção com status de aprovação claro).
-
-pontos_criticos: lista curta (pode ficar vazia) só com os dados que faltam confirmar antes de recomendar ou emitir, ou ressalvas graves — cada item em 1 frase, no formato "[dado] não informado — confirmar antes de recomendar ou emitir" quando for o caso.
-
-opcoes: preencha uma entrada para cada cotação distinta do panorama (mesma seguradora com LMIs diferentes conta como opções separadas) — é o detalhe por trás do pilar 3.
+status_geral: "PRONTO_PARA_RECOMENDAR" se todos os pilares avaliados estão "ok" (os "nao_avaliado" não contam contra); "RECOMENDAR_COM_RESSALVAS" se houver "atencao" ou "problema" leve/pontual; "FALTAM_DADOS_ESSENCIAIS" se houver "problema" grave (ex: nenhuma taxa válida, nenhuma estrutura informada, nenhum contexto de negociação).
 
 proximo_passo: ação objetiva a combinar com o cliente/imobiliária — escolher plano, confirmar cobertura, enviar documento, emitir ou agendar retorno.
 
@@ -93,7 +88,6 @@ Se o panorama vier como imagem (print de tela do sistema/CRM/seguradora), leia o
 
 Responda SEMPRE chamando a ferramenta "reportar_analise", preenchendo todos os campos do schema. Nunca responda em texto livre.`;
 
-const STATUS_APROVACAO_ENUM = ["cotado", "pre_aprovado", "aprovado", "pendente", "recusado"];
 const STATUS_PILAR_ENUM = ["ok", "atencao", "problema", "nao_avaliado"];
 
 const FERRAMENTA_ANALISE: Anthropic.Tool = {
@@ -107,70 +101,45 @@ const FERRAMENTA_ANALISE: Anthropic.Tool = {
         enum: ["PRONTO_PARA_RECOMENDAR", "RECOMENDAR_COM_RESSALVAS", "FALTAM_DADOS_ESSENCIAIS"],
         description: "Veredito final considerando os 5 pilares do parecer.",
       },
-      dados_caso_status: { type: "string", enum: STATUS_PILAR_ENUM, description: "Status do pilar 1 (dados do caso)." },
-      dados_caso_resumo: { type: "string", minLength: 1, description: "Resumo do pilar 1 (dados do caso): pacote de locação, partes e urgência." },
+      visao_geral_status: { type: "string", enum: STATUS_PILAR_ENUM, description: "Status do pilar 1 (visão geral)." },
+      visao_geral_resumo: {
+        type: "string",
+        minLength: 1,
+        description: "Resumo do pilar 1: quantas seguradoras distintas cotaram, menor taxa encontrada, se está dentro do teto de 13% do pacote.",
+      },
+      visao_geral_hierarquia_taxas: {
+        type: "string",
+        minLength: 1,
+        description: "Texto corrido (não tabela) com todas as opções ordenadas da menor para a maior taxa sobre o pacote.",
+      },
       cobertura_estrutura_status: { type: "string", enum: STATUS_PILAR_ENUM, description: "Status do pilar 2 (cobertura e estrutura)." },
       cobertura_estrutura_resumo: {
         type: "string",
         minLength: 1,
-        description: "Resumo do pilar 2: o que cada opção cobre (básico x completo) e a estrutura de limite (LMI x LMG), com a diferença entre planos quando houver os dois.",
+        description: "Resumo do pilar 2: o que cada plano cobre (básico x completo) e o conceito de LMI x LMG.",
       },
-      comparacao_opcoes_status: { type: "string", enum: STATUS_PILAR_ENUM, description: "Status do pilar 3 (comparação entre opções)." },
-      comparacao_opcoes_resumo: {
+      cobertura_estrutura_hierarquia: {
         type: "string",
         minLength: 1,
-        description: "Resumo do pilar 3: leitura comparativa entre as opções, qual se destaca e por quê.",
+        description: "Texto corrido (não tabela) com todas as opções ordenadas da melhor para a pior proteção, cada uma com o valor em R$.",
       },
-      aprovacao_alternativas_status: { type: "string", enum: STATUS_PILAR_ENUM, description: "Status do pilar 4 (aprovação e alternativas)." },
-      aprovacao_alternativas_resumo: {
+      custo_beneficio_status: { type: "string", enum: STATUS_PILAR_ENUM, description: "Status do pilar 3 (melhor custo-benefício)." },
+      custo_beneficio_resumo: {
         type: "string",
         minLength: 1,
-        description: "Resumo do pilar 4: status de aprovação de cada opção, recusas registradas como dado do cenário, e título de capitalização como alternativa quando mencionado no panorama.",
+        description: "Resumo do pilar 3: cruzamento entre a hierarquia de taxa e a de cobertura, apontando o ponto de equilíbrio.",
       },
-      viabilidade_comercial_status: { type: "string", enum: STATUS_PILAR_ENUM, description: "Status do pilar 5 (viabilidade comercial)." },
-      viabilidade_comercial_resumo: {
+      perfil_abordagem_status: { type: "string", enum: STATUS_PILAR_ENUM, description: "Status do pilar 4 (perfil e abordagem)." },
+      perfil_abordagem_resumo: {
         type: "string",
         minLength: 1,
-        description: "Resumo do pilar 5: leitura final justificada, melhor equilíbrio custo-proteção e alternativa por prioridade do cliente.",
+        description: "Resumo do pilar 4: urgência, motivo de preço elevado quando aplicável, e técnica de argumentação recomendada conforme a matriz do manual.",
       },
-      pontos_criticos: {
-        type: "array",
-        description: "Dados essenciais faltando ou ressalvas graves a confirmar antes de recomendar ou emitir. Pode ficar vazio.",
-        items: { type: "string" },
-      },
-      opcoes: {
-        type: "array",
-        description: "Uma entrada por cotação distinta recebida no panorama — detalhe por trás do pilar 3.",
-        items: {
-          type: "object",
-          properties: {
-            seguradora: { type: "string" },
-            plano: { type: "string", description: "Ex: 'Básico', 'Completo', ou o nome comercial do produto." },
-            estrutura: { type: "string", enum: ["LMI", "LMG", "nao_informado"] },
-            multiplicador: { type: "string", description: "Ex: '30x', ou 'não informado'." },
-            parcelas: { type: "string", description: "Ex: '12x', ou 'não informado'." },
-            valor_parcela: { type: "string", description: "Ex: 'R$ 509,37'." },
-            valor_total: { type: "string", description: "Valor da parcela × quantidade de parcelas (ou o prêmio total informado, se divergente)." },
-            status_aprovacao: { type: "string", enum: STATUS_APROVACAO_ENUM },
-            pontos_fortes: {
-              type: "string",
-              description: "O que essa opção entrega de melhor, em 1 frase — cite o percentual sobre o pacote de locação aqui quando for relevante.",
-            },
-            pontos_atencao: { type: "string", description: "Limitação, divergência de prêmio ou ressalva dessa opção, em 1 frase. Pode ficar vazio." },
-          },
-          required: [
-            "seguradora",
-            "plano",
-            "estrutura",
-            "multiplicador",
-            "parcelas",
-            "valor_parcela",
-            "valor_total",
-            "status_aprovacao",
-            "pontos_fortes",
-            "pontos_atencao",
-          ],
-        },
+      parecer_global_status: { type: "string", enum: STATUS_PILAR_ENUM, description: "Status do pilar 5 (parecer global)." },
+      parecer_global_resumo: {
+        type: "string",
+        minLength: 1,
+        description: "Resumo do pilar 5: síntese final dos 4 pilares anteriores, recomendação e abordagem a seguir, incluindo título de capitalização quando mencionado no panorama.",
       },
       proximo_passo: {
         type: "string",
@@ -185,18 +154,18 @@ const FERRAMENTA_ANALISE: Anthropic.Tool = {
     },
     required: [
       "status_geral",
-      "dados_caso_status",
-      "dados_caso_resumo",
+      "visao_geral_status",
+      "visao_geral_resumo",
+      "visao_geral_hierarquia_taxas",
       "cobertura_estrutura_status",
       "cobertura_estrutura_resumo",
-      "comparacao_opcoes_status",
-      "comparacao_opcoes_resumo",
-      "aprovacao_alternativas_status",
-      "aprovacao_alternativas_resumo",
-      "viabilidade_comercial_status",
-      "viabilidade_comercial_resumo",
-      "pontos_criticos",
-      "opcoes",
+      "cobertura_estrutura_hierarquia",
+      "custo_beneficio_status",
+      "custo_beneficio_resumo",
+      "perfil_abordagem_status",
+      "perfil_abordagem_resumo",
+      "parecer_global_status",
+      "parecer_global_resumo",
       "proximo_passo",
       "mensagem_whatsapp",
     ],
