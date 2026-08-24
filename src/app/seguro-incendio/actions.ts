@@ -19,6 +19,16 @@ function campo(formData: FormData, name: string): string {
 }
 
 const MODALIDADES_VALIDAS: ModalidadeIncendio[] = ["Residencial", "Empresarial", "Imobiliario"];
+const SOLICITANTES_VALIDOS = ["Proprietário", "Inquilino", "Imobiliária/Administradora"];
+
+// Mesma lógica do formatarMoedaDigitada (validacoesBr.ts), mas server-side:
+// o valor já chega mascarado ("2.000,00") pelo CampoMoeda, então basta
+// desfazer a máscara pt-BR pra validar o número de verdade.
+function paraNumero(valor: string): number {
+  const limpo = valor.replace(/\./g, "").replace(",", ".").replace(/[^0-9.-]/g, "");
+  const numero = Number(limpo);
+  return Number.isFinite(numero) ? numero : 0;
+}
 
 async function auditar(payload: SeguroIncendioPayload, status: string, itemId?: number, erro?: string) {
   try {
@@ -55,6 +65,8 @@ export async function enviarFichaSeguroIncendio(
     responseId,
     modalidade,
     email: campo(formData, "email"),
+    solicitante: campo(formData, "solicitante"),
+    finsLocacao: campo(formData, "fins_locacao"),
     nomeProprietario: campo(formData, "nome_proprietario"),
     cpfProprietario: campo(formData, "cpf_proprietario"),
     atividadeComercial: campo(formData, "atividade_comercial"),
@@ -84,6 +96,27 @@ export async function enviarFichaSeguroIncendio(
     }
     if (modalidade === "Empresarial" && !payload.atividadeComercial) {
       return { ok: false, erro: "Descreva a atividade comercial do imóvel." };
+    }
+    if (!SOLICITANTES_VALIDOS.includes(payload.solicitante)) {
+      return { ok: false, erro: "Informe quem está solicitando a ficha." };
+    }
+    if (payload.solicitante === "Proprietário" && payload.finsLocacao !== "Sim" && payload.finsLocacao !== "Não") {
+      return { ok: false, erro: "Informe se a cotação é para fins de locação a terceiros." };
+    }
+    // Inquilino e Imobiliária/Administradora sempre pedem cotação de imóvel
+    // alugado; Proprietário só pede metragem/aluguel quando confirma que é
+    // para locação a terceiros -- mesma regra calculada no formulário.
+    const precisaDadosAluguel =
+      payload.solicitante === "Inquilino" ||
+      payload.solicitante === "Imobiliária/Administradora" ||
+      (payload.solicitante === "Proprietário" && payload.finsLocacao === "Sim");
+    if (precisaDadosAluguel) {
+      if (!payload.metragem || paraNumero(payload.metragem) <= 0) {
+        return { ok: false, erro: "Informe a metragem do imóvel (maior que zero)." };
+      }
+      if (!payload.valorAluguel || paraNumero(payload.valorAluguel) <= 0) {
+        return { ok: false, erro: "Informe o valor do aluguel (maior que zero)." };
+      }
     }
   }
 

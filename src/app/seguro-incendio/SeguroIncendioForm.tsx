@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 import {
   formatarCPF,
@@ -46,12 +46,16 @@ function Campo({
   type = "text",
   required,
   className,
+  min,
+  step,
 }: {
   name: string;
   label: string;
   type?: string;
   required?: boolean;
   className?: string;
+  min?: string | number;
+  step?: string | number;
 }) {
   return (
     <div className={className}>
@@ -59,13 +63,38 @@ function Campo({
         {label}
         {required && " *"}
       </label>
-      <input name={name} type={type} required={required} className={inputClass} />
+      <input name={name} type={type} required={required} min={min} step={step} className={inputClass} />
     </div>
   );
 }
 
-function CampoMoeda({ name, label, required }: { name: string; label: string; required?: boolean }) {
+// Quando exigirMaiorQueZero, bloqueia o envio de verdade (não só um aviso)
+// via setCustomValidity nativo do navegador -- "0,00" preenchido conta como
+// valor ausente pro negócio (ex: aluguel de imóvel alugado não existe a R$
+// 0), então não basta exigir presença do campo.
+function CampoMoeda({
+  name,
+  label,
+  required,
+  exigirMaiorQueZero,
+}: {
+  name: string;
+  label: string;
+  required?: boolean;
+  exigirMaiorQueZero?: boolean;
+}) {
   const [exibicao, setExibicao] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function aoMudar(valorDigitado: string) {
+    const { exibicao: novaExibicao, numero } = formatarMoedaDigitada(valorDigitado);
+    setExibicao(novaExibicao);
+    if (inputRef.current) {
+      const invalido = exigirMaiorQueZero && novaExibicao !== "" && numero <= 0;
+      inputRef.current.setCustomValidity(invalido ? "Informe um valor maior que R$ 0,00." : "");
+    }
+  }
+
   return (
     <div>
       <label className={labelClass}>
@@ -73,9 +102,10 @@ function CampoMoeda({ name, label, required }: { name: string; label: string; re
         {required && " *"}
       </label>
       <input
+        ref={inputRef}
         name={name}
         value={exibicao}
-        onChange={(e) => setExibicao(formatarMoedaDigitada(e.target.value).exibicao)}
+        onChange={(e) => aoMudar(e.target.value)}
         placeholder="R$ 0,00"
         inputMode="numeric"
         required={required}
@@ -293,9 +323,18 @@ function SeguroIncendioFormInterno({ aoConcluirNova }: { aoConcluirNova: () => v
   const [estado, formAction, enviando] = useActionState<EstadoEnvioSeguroIncendio, FormData>(enviarFichaSeguroIncendio, null);
   const [responseId] = useState(() => crypto.randomUUID());
   const [modalidade, setModalidade] = useState<ModalidadeIncendio>("Residencial");
+  const [solicitante, setSolicitante] = useState("");
+  const [finsLocacao, setFinsLocacao] = useState("");
   const [administradoPorImobiliaria, setAdministradoPorImobiliaria] = useState("");
   const [anexoPlanilha, setAnexoPlanilha] = useState("");
   const [anexoPlanilhaNome, setAnexoPlanilhaNome] = useState("");
+
+  // Inquilino e Imobiliária/Administradora só solicitam cotação de imóvel
+  // alugado, por definição. Só o Proprietário pode estar segurando o
+  // próprio imóvel (sem aluguel envolvido) -- por isso só nesse caso a
+  // pergunta extra decide se pede metragem/valor do aluguel.
+  const precisaDadosAluguel =
+    solicitante === "Inquilino" || solicitante === "Imobiliária/Administradora" || (solicitante === "Proprietário" && finsLocacao === "Sim");
 
   if (estado?.ok) {
     return (
@@ -346,7 +385,31 @@ function SeguroIncendioFormInterno({ aoConcluirNova }: { aoConcluirNova: () => v
         </Secao>
       ) : (
         <>
-          <Secao numero={2} titulo="Dados do proprietário">
+          <Secao numero={2} titulo="Quem está solicitando?">
+            <SeletorUnico
+              name="solicitante"
+              label="Você é"
+              required
+              opcoes={["Proprietário", "Inquilino", "Imobiliária/Administradora"]}
+              valor={solicitante}
+              aoMudar={(v) => {
+                setSolicitante(v);
+                if (v !== "Proprietário") setFinsLocacao("");
+              }}
+            />
+            {solicitante === "Proprietário" && (
+              <SeletorUnico
+                name="fins_locacao"
+                label="A cotação é para fins de locação a terceiros?"
+                required
+                opcoes={["Sim", "Não"]}
+                valor={finsLocacao}
+                aoMudar={setFinsLocacao}
+              />
+            )}
+          </Secao>
+
+          <Secao numero={3} titulo="Dados do proprietário">
             <div className="grid grid-cols-2 gap-2">
               <Campo name="nome_proprietario" label="Nome completo do proprietário" required className="col-span-2" />
               <CampoCpf name="cpf_proprietario" label="CPF do proprietário" required />
@@ -363,15 +426,17 @@ function SeguroIncendioFormInterno({ aoConcluirNova }: { aoConcluirNova: () => v
             </div>
           </Secao>
 
-          <Secao numero={3} titulo="Imóvel">
+          <Secao numero={4} titulo="Imóvel">
             <CamposImovel />
-            <div className="grid grid-cols-2 gap-2">
-              <Campo name="metragem" label="Metragem do imóvel (opcional)" />
-              <CampoMoeda name="valor_aluguel" label="Valor do aluguel" required />
-            </div>
+            {precisaDadosAluguel && (
+              <div className="grid grid-cols-2 gap-2">
+                <Campo name="metragem" label="Metragem do imóvel (m²)" type="number" min="1" step="1" required />
+                <CampoMoeda name="valor_aluguel" label="Valor do aluguel" required exigirMaiorQueZero />
+              </div>
+            )}
           </Secao>
 
-          <Secao numero={4} titulo="Administração">
+          <Secao numero={5} titulo="Administração">
             <SeletorUnico
               name="administrado_por_imobiliaria"
               label="Será administrado por imobiliária?"

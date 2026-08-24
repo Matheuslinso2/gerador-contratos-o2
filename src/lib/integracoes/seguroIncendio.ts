@@ -47,6 +47,8 @@ export type SeguroIncendioPayload = {
   modalidade: ModalidadeIncendio;
   // Individual (Residencial ou Empresarial)
   email: string;
+  solicitante: string; // "Proprietário" | "Inquilino" | "Imobiliária/Administradora"
+  finsLocacao: string; // "Sim" | "Não" -- só perguntado quando solicitante é Proprietário
   nomeProprietario: string;
   cpfProprietario: string;
   atividadeComercial: string; // só Empresarial
@@ -144,14 +146,16 @@ function montarObservacoes(p: SeguroIncendioPayload): string {
   }
   return [
     `E-mail: ${p.email}`,
+    `Quem solicitou: ${p.solicitante}`,
+    p.solicitante === "Proprietário" ? `Cotação para fins de locação a terceiros: ${p.finsLocacao}` : "",
     `Nome do proprietário: ${p.nomeProprietario}`,
     `CPF do proprietário: ${p.cpfProprietario}`,
     `Finalidade do imóvel: ${p.modalidade === "Empresarial" ? "Comercial" : "Residencial"}`,
     p.atividadeComercial ? `Atividade comercial: ${p.atividadeComercial}` : "",
     `CEP do imóvel: ${p.imovelCep}`,
     `Endereço do imóvel: ${p.imovelEndereco}`,
-    p.metragem ? `Metragem: ${p.metragem}` : "",
-    `Valor do aluguel: R$ ${p.valorAluguel}`,
+    p.metragem ? `Metragem: ${p.metragem} m²` : "",
+    p.valorAluguel ? `Valor do aluguel: R$ ${p.valorAluguel}` : "",
     `Administrado por imobiliária: ${p.administradoPorImobiliaria}${
       p.administradoPorImobiliaria === "Sim" && p.nomeImobiliaria ? ` (${p.nomeImobiliaria})` : ""
     }`,
@@ -235,6 +239,13 @@ export function montarEmailSeguroIncendio(p: SeguroIncendioPayload, resultado: {
         ].join("")
       : [
           blocoSecao(
+            "Solicitante",
+            [
+              linhaCampo("Quem solicitou", p.solicitante),
+              p.solicitante === "Proprietário" ? linhaCampo("Cotação para fins de locação a terceiros", p.finsLocacao) : "",
+            ].join("")
+          ),
+          blocoSecao(
             "Proprietário",
             [
               linhaCampo("Nome completo", p.nomeProprietario),
@@ -250,7 +261,7 @@ export function montarEmailSeguroIncendio(p: SeguroIncendioPayload, resultado: {
               linhaCampo("Atividade comercial", p.atividadeComercial),
               linhaCampo("CEP", p.imovelCep),
               linhaCampo("Endereço", p.imovelEndereco),
-              linhaCampo("Metragem", p.metragem),
+              linhaCampo("Metragem", p.metragem ? `${p.metragem} m²` : ""),
               linhaCampo("Valor do aluguel", p.valorAluguel ? `R$ ${p.valorAluguel}` : ""),
             ].join("")
           ),
