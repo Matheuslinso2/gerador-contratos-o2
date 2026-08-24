@@ -5,6 +5,16 @@ import { analisar } from "./actions";
 import ResultadoAnalise from "./ResultadoAnalise";
 import type { AnaliseFianca } from "@/lib/assistenteFianca";
 
+function IconeUpload() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 16V4" />
+      <path d="M7 9l5-5 5 5" />
+      <path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+    </svg>
+  );
+}
+
 export default function PanoramaForm() {
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -45,12 +55,14 @@ export default function PanoramaForm() {
           />
         </div>
 
-        <details>
-          <summary className="cursor-pointer text-xs text-gray-500 hover:text-o2-coral">
-            ou anexar um print do sistema/seguradora em vez de colar texto
-          </summary>
-          <div className="mt-2 flex flex-wrap items-center gap-2.5">
+        <div className="rounded-lg border border-gray-200 p-3">
+          <p className="mb-1 text-sm font-medium text-o2-navy">Ou anexe um print (opcional)</p>
+          <p className="mb-2 text-xs text-gray-500">
+            Print do sistema/seguradora com as cotações — a IA lê os dados direto da imagem, sem precisar digitar nada.
+          </p>
+          <div className="flex flex-wrap items-center gap-2.5">
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-full bg-o2-navy px-4 py-2 text-sm font-medium text-white transition hover:opacity-90">
+              <IconeUpload />
               Selecionar imagem
               <input
                 name="imagem"
@@ -62,7 +74,7 @@ export default function PanoramaForm() {
             </label>
             <span className="text-sm text-gray-600">{nomeImagem ?? "Nenhuma imagem selecionada"}</span>
           </div>
-        </details>
+        </div>
 
         {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
 
