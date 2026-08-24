@@ -3,18 +3,6 @@
 import { useState } from "react";
 import type { AnaliseFianca, StatusPilar } from "@/lib/assistenteFianca";
 
-const STATUS_GERAL_ESTILO: Record<AnaliseFianca["status_geral"], string> = {
-  PRONTO_PARA_RECOMENDAR: "border-green-300 bg-green-50 text-green-700",
-  RECOMENDAR_COM_RESSALVAS: "border-yellow-300 bg-yellow-50 text-yellow-800",
-  FALTAM_DADOS_ESSENCIAIS: "border-red-300 bg-red-50 text-red-700",
-};
-
-const STATUS_GERAL_ROTULO: Record<AnaliseFianca["status_geral"], string> = {
-  PRONTO_PARA_RECOMENDAR: "✅ Pronto para recomendar",
-  RECOMENDAR_COM_RESSALVAS: "⚠️ Recomendar com ressalvas",
-  FALTAM_DADOS_ESSENCIAIS: "❌ Faltam dados essenciais",
-};
-
 const ICONE_PILAR: Record<StatusPilar, string> = {
   ok: "✅",
   atencao: "⚠️",
@@ -94,10 +82,6 @@ export default function ResultadoAnalise({ resultado }: { resultado: AnaliseFian
         <TituloEtapa numero="1" titulo="Parecer analítico" subtitulo="Uso interno — 5 pilares de leitura do caso" />
 
         <div className="space-y-4 rounded-xl border border-o2-navy/10 bg-white p-5 shadow-sm">
-          <span className={`inline-flex rounded-full border px-3 py-1 text-sm font-semibold ${STATUS_GERAL_ESTILO[resultado.status_geral]}`}>
-            {STATUS_GERAL_ROTULO[resultado.status_geral]}
-          </span>
-
           <BlocoPilar
             numero="1"
             titulo="Visão geral"
@@ -130,10 +114,6 @@ export default function ResultadoAnalise({ resultado }: { resultado: AnaliseFian
             status={resultado.parecer_global_status}
             resumo={resultado.parecer_global_resumo}
           />
-
-          <div className="rounded-lg border border-o2-coral/30 bg-o2-coral/5 p-3">
-            <p className="text-sm font-medium text-o2-navy">Próximo passo: {resultado.proximo_passo}</p>
-          </div>
         </div>
       </section>
 

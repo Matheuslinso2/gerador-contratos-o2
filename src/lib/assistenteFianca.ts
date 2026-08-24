@@ -7,7 +7,6 @@ export type FonteEntrada =
 export type StatusPilar = "ok" | "atencao" | "problema" | "nao_avaliado";
 
 export type AnaliseFianca = {
-  status_geral: "PRONTO_PARA_RECOMENDAR" | "RECOMENDAR_COM_RESSALVAS" | "FALTAM_DADOS_ESSENCIAIS";
   visao_geral_status: StatusPilar;
   visao_geral_resumo: string;
   visao_geral_hierarquia_taxas: string;
@@ -20,7 +19,6 @@ export type AnaliseFianca = {
   perfil_abordagem_resumo: string;
   parecer_global_status: StatusPilar;
   parecer_global_resumo: string;
-  proximo_passo: string;
   mensagem_whatsapp: string;
 };
 
@@ -68,12 +66,8 @@ PARECER ANALÍTICO EM 5 PILARES — preencha todos os 5, na ordem abaixo. Cada s
    - status: "ok" se houver contexto suficiente (urgência, motivo do preço ou indício de prioridade do cliente) para recomendar uma abordagem clara; "atencao" se o contexto vier parcial; "problema" se não houver nenhum contexto de negociação no panorama, só números de cotação.
 
 5. PARECER GLOBAL (parecer_global_status / parecer_global_resumo)
-   - resumo: síntese final juntando os 4 pilares anteriores numa leitura corrida (não repita número por número, é o fechamento consultivo), com a recomendação final e a abordagem a seguir. Se o panorama mencionar título de capitalização como alternativa, trate-o aqui como outra modalidade de garantia locatícia (nunca como "seguro"), com aporte, prazo, forma de pagamento e regras de resgate/correção exatamente como informado, indicando quando faz sentido e as limitações, sem prometer resgate integral ou aprovação instantânea sem confirmação documental.
-   - status: reflete a leitura geral do caso (normalmente alinhado ao status_geral, mas pode divergir se a síntese pesar algo que os pilares isolados não capturaram).
-
-status_geral: "PRONTO_PARA_RECOMENDAR" se todos os pilares avaliados estão "ok" (os "nao_avaliado" não contam contra); "RECOMENDAR_COM_RESSALVAS" se houver "atencao" ou "problema" leve/pontual; "FALTAM_DADOS_ESSENCIAIS" se houver "problema" grave (ex: nenhuma taxa válida, nenhuma estrutura informada, nenhum contexto de negociação).
-
-proximo_passo: ação objetiva a combinar com o cliente/imobiliária — escolher plano, confirmar cobertura, enviar documento, emitir ou agendar retorno.
+   - resumo: síntese final juntando os 4 pilares anteriores numa leitura corrida (não repita número por número, é o fechamento consultivo), com a recomendação final, a abordagem a seguir, e terminando com a ação objetiva a combinar com o cliente/imobiliária (escolher plano, confirmar cobertura, enviar documento, emitir ou agendar retorno). Se o panorama mencionar título de capitalização como alternativa, trate-o aqui como outra modalidade de garantia locatícia (nunca como "seguro"), com aporte, prazo, forma de pagamento e regras de resgate/correção exatamente como informado, indicando quando faz sentido e as limitações, sem prometer resgate integral ou aprovação instantânea sem confirmação documental.
+   - status: "ok" se todos os pilares anteriores estiverem "ok" (os "nao_avaliado" não contam contra); "atencao" se houver "atencao" ou "problema" leve/pontual em algum pilar anterior; "problema" se houver "problema" grave em algum pilar anterior (ex: nenhuma taxa válida, nenhuma estrutura informada, nenhum contexto de negociação) que impeça uma recomendação segura agora.
 
 MENSAGEM PRONTA PARA WHATSAPP ("mensagem_whatsapp"):
 - No máximo 4 blocos curtos, até ~600 caracteres no total.
@@ -96,11 +90,6 @@ const FERRAMENTA_ANALISE: Anthropic.Tool = {
   input_schema: {
     type: "object",
     properties: {
-      status_geral: {
-        type: "string",
-        enum: ["PRONTO_PARA_RECOMENDAR", "RECOMENDAR_COM_RESSALVAS", "FALTAM_DADOS_ESSENCIAIS"],
-        description: "Veredito final considerando os 5 pilares do parecer.",
-      },
       visao_geral_status: { type: "string", enum: STATUS_PILAR_ENUM, description: "Status do pilar 1 (visão geral)." },
       visao_geral_resumo: {
         type: "string",
@@ -139,12 +128,7 @@ const FERRAMENTA_ANALISE: Anthropic.Tool = {
       parecer_global_resumo: {
         type: "string",
         minLength: 1,
-        description: "Resumo do pilar 5: síntese final dos 4 pilares anteriores, recomendação e abordagem a seguir, incluindo título de capitalização quando mencionado no panorama.",
-      },
-      proximo_passo: {
-        type: "string",
-        minLength: 1,
-        description: "Ação objetiva a combinar com o cliente/imobiliária: escolher plano, confirmar cobertura, enviar documento, emitir ou agendar retorno.",
+        description: "Resumo do pilar 5: síntese final dos 4 pilares anteriores, recomendação, abordagem a seguir e a ação objetiva a combinar com o cliente/imobiliária, incluindo título de capitalização quando mencionado no panorama.",
       },
       mensagem_whatsapp: {
         type: "string",
@@ -153,7 +137,6 @@ const FERRAMENTA_ANALISE: Anthropic.Tool = {
       },
     },
     required: [
-      "status_geral",
       "visao_geral_status",
       "visao_geral_resumo",
       "visao_geral_hierarquia_taxas",
@@ -166,7 +149,6 @@ const FERRAMENTA_ANALISE: Anthropic.Tool = {
       "perfil_abordagem_resumo",
       "parecer_global_status",
       "parecer_global_resumo",
-      "proximo_passo",
       "mensagem_whatsapp",
     ],
   },
