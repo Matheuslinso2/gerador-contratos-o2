@@ -14,7 +14,6 @@ export type OpcaoComparada = {
   parcelas: string;
   valor_parcela: string;
   valor_total: string;
-  percentual_pacote: string;
   status_aprovacao: StatusAprovacao;
   pontos_fortes: string;
   pontos_atencao: string;
@@ -48,7 +47,7 @@ REGRAS DE SEGURANÇA DA ANÁLISE (nunca infrinja):
 
 CÁLCULOS OBRIGATÓRIOS (usados internamente para chegar no percentual de cada opção — não precisam virar um campo próprio na resposta):
 - Pacote de locação = aluguel + condomínio + IPTU + outros encargos recorrentes informados. Se o panorama já trouxer o pacote pronto, use-o, mas confira contra a soma dos itens informados e avise em pendências se houver divergência.
-- Percentual do pacote de cada opção = parcela do seguro ÷ pacote de locação × 100.
+- Percentual do pacote de cada opção = parcela do seguro ÷ pacote de locação × 100. Use esse percentual na leitura de cada opção (pontos_fortes/pontos_atencao) e na leitura consultiva final — não devolva como campo numérico à parte.
 - Custo total de cada opção = valor da parcela × quantidade de parcelas, salvo se o prêmio total informado for diferente, caso em que você destaca a divergência em pontos_atencao dessa opção.
 - Diferença entre planos básico e completo = parcela completa − parcela básica, com o total e o percentual adicional sobre o pacote.
 - Nunca some cobertura (limite de proteção) como se fosse prêmio (custo) — são grandezas diferentes.
@@ -105,9 +104,11 @@ const FERRAMENTA_ANALISE: Anthropic.Tool = {
             parcelas: { type: "string", description: "Ex: '12x', ou 'não informado'." },
             valor_parcela: { type: "string", description: "Ex: 'R$ 509,37'." },
             valor_total: { type: "string", description: "Valor da parcela × quantidade de parcelas (ou o prêmio total informado, se divergente)." },
-            percentual_pacote: { type: "string", description: "Ex: '7,4%'." },
             status_aprovacao: { type: "string", enum: STATUS_APROVACAO_ENUM },
-            pontos_fortes: { type: "string", description: "O que essa opção entrega de melhor, em 1 frase." },
+            pontos_fortes: {
+              type: "string",
+              description: "O que essa opção entrega de melhor, em 1 frase — cite o percentual sobre o pacote de locação aqui quando for relevante.",
+            },
             pontos_atencao: { type: "string", description: "Limitação, divergência de prêmio ou ressalva dessa opção, em 1 frase. Pode ficar vazio." },
           },
           required: [
@@ -118,7 +119,6 @@ const FERRAMENTA_ANALISE: Anthropic.Tool = {
             "parcelas",
             "valor_parcela",
             "valor_total",
-            "percentual_pacote",
             "status_aprovacao",
             "pontos_fortes",
             "pontos_atencao",

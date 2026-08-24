@@ -78,7 +78,6 @@ export default function ResultadoAnalise({ resultado }: { resultado: AnaliseFian
                   <tr className="border-b border-gray-100 bg-o2-gray/30 text-xs text-gray-500">
                     <th className="px-3 py-2 font-medium">Seguradora / Plano</th>
                     <th className="px-3 py-2 font-medium">Estrutura</th>
-                    <th className="px-3 py-2 font-medium">% pacote</th>
                     <th className="px-3 py-2 font-medium">Status</th>
                     <th className="px-3 py-2 font-medium">Leitura</th>
                   </tr>
@@ -94,7 +93,6 @@ export default function ResultadoAnalise({ resultado }: { resultado: AnaliseFian
                       <td className="px-3 py-2 text-gray-700">
                         {o.estrutura === "nao_informado" ? "—" : `${o.estrutura} ${o.multiplicador}`}
                       </td>
-                      <td className="px-3 py-2 font-medium text-gray-800">{o.percentual_pacote}</td>
                       <td className="px-3 py-2">
                         <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${COR_STATUS[o.status_aprovacao]}`}>
                           {ROTULO_STATUS[o.status_aprovacao]}
