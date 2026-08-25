@@ -8,6 +8,23 @@ import { auditarContrato, type FonteDocumento } from "@/lib/auditorContrato";
 
 const BUCKET_TEMP = "auditoria-temp";
 
+// maxDuration da página é 180s (ver page.tsx) -- corta a chamada à IA um
+// pouco antes disso, com folga pra esse catch e o redirect ainda rodarem.
+// Sem isso, um timeout de PLATAFORMA (Vercel matando a função) não passa
+// por try/catch nenhum e o usuário só vê uma tela de erro genérica.
+const LIMITE_TEMPO_ANALISE_MS = 165_000;
+
+function comLimiteDeTempo<T>(promessa: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const limite = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`A análise demorou mais que ${Math.round(ms / 1000)}s — provavelmente por causa do volume de documentos anexados. Tente reenviar com menos anexos, ou um de cada vez.`)),
+      ms
+    );
+  });
+  return Promise.race([promessa, limite]).finally(() => clearTimeout(timer)) as Promise<T>;
+}
+
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
 // O arquivo já chega no servidor só como um caminho no Storage — o upload
@@ -209,7 +226,10 @@ export async function auditar(formData: FormData) {
 
   let relatorio;
   try {
-    relatorio = await auditarContrato(fonteContrato, bibliotecaClausulas, fonteCotacao, fonteCertificado);
+    relatorio = await comLimiteDeTempo(
+      auditarContrato(fonteContrato, bibliotecaClausulas, fonteCotacao, fonteCertificado),
+      LIMITE_TEMPO_ANALISE_MS
+    );
   } catch (e) {
     const mensagem = e instanceof Error ? e.message : "Falha ao analisar o contrato.";
     redirect(`/auditar-contrato?erro=${encodeURIComponent(mensagem)}`);

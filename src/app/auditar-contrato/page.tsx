@@ -9,10 +9,13 @@ import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { garantirImobiliariaColaborador } from "@/lib/imobiliariaColaborador";
 
 export const dynamic = "force-dynamic";
-// Analisar um PDF escaneado de várias páginas (a IA lendo direto das
-// imagens) demora bem mais que um contrato em texto — o padrão da Vercel
-// (10s) corta a operação no meio do caminho. Dá mais fôlego.
-export const maxDuration = 60;
+// Analisar PDF escaneado/imagem (a IA lendo direto das páginas) já demora
+// mais que texto puro -- com MAIS de um documento anexado (contrato +
+// cotação + certificado, cada um podendo ser escaneado) o tempo soma e
+// passava de 60s, estourando o limite e a Vercel matava a função no meio
+// (sem nem deixar a mensagem de erro do try/catch em actions.ts aparecer --
+// timeout de plataforma não passa por catch nenhum). Dá mais fôlego.
+export const maxDuration = 180;
 
 export default async function AuditarContratoPage({
   searchParams,

@@ -218,7 +218,7 @@ function Formulario({ userId, sucessoInicial }: { userId: string; sucessoInicial
         className="rounded-full bg-o2-coral px-6 py-2.5 font-medium text-white transition hover:opacity-90 disabled:opacity-60"
       >
         {etapa === "enviando" && "Enviando arquivos..."}
-        {etapa === "analisando" && "Analisando... (pode levar até 1 minuto)"}
+        {etapa === "analisando" && "Analisando... (pode levar alguns minutos com vários documentos anexados)"}
         {etapa === "parado" && "Analisar contrato"}
       </button>
     </form>
