@@ -80,8 +80,11 @@ export async function enviarFichaRcObras(_estadoAnterior: EstadoEnvioRcObras, fo
   if (!categoriaImovelBruta) {
     return { ok: false, erro: "Selecione se o imóvel é residencial ou comercial." };
   }
-  if (!payload.tipoObraDetalhado) {
+  if (payload.tipoObra === "Reforma" && !payload.tipoObraDetalhado) {
     return { ok: false, erro: "Selecione o tipo de obra." };
+  }
+  if (payload.tipoObra !== "Reforma") {
+    payload.tipoObraDetalhado = "";
   }
   if (!payload.obraCep || !payload.obraLogradouro || !payload.obraNumero) {
     return { ok: false, erro: "Preencha o endereço completo da obra." };

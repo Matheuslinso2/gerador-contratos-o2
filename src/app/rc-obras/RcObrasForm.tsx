@@ -315,15 +315,27 @@ function RcObrasFormInterno({ aoConcluirNova }: { aoConcluirNova: () => void }) 
           valor={categoriaImovel}
           aoMudar={setCategoriaImovel}
         />
-        <CampoSelect
-          name="tipo_obra_detalhado"
-          label="Qual desses descreve melhor o tipo de obra?"
+        <SeletorUnico
+          name="tipo_obra"
+          label="Reforma ou construção do zero?"
           required
-          opcoes={TIPOS_OBRA_DETALHADO}
-          valor={tipoObraDetalhado}
-          aoMudar={setTipoObraDetalhado}
+          opcoes={["Reforma", "Construção do zero"]}
+          valor={tipoObra}
+          aoMudar={(v) => {
+            setTipoObra(v);
+            if (v !== "Reforma") setTipoObraDetalhado("");
+          }}
         />
-        <SeletorUnico name="tipo_obra" label="Reforma ou construção do zero?" required opcoes={["Reforma", "Construção do zero"]} valor={tipoObra} aoMudar={setTipoObra} />
+        {tipoObra === "Reforma" && (
+          <CampoSelect
+            name="tipo_obra_detalhado"
+            label="Qual desses descreve melhor o tipo de obra?"
+            required
+            opcoes={TIPOS_OBRA_DETALHADO}
+            valor={tipoObraDetalhado}
+            aoMudar={setTipoObraDetalhado}
+          />
+        )}
         <SeletorUnico name="reforco_estrutural" label="A obra tem reforço estrutural?" required opcoes={["Sim", "Não"]} valor={reforcoEstrutural} aoMudar={setReforcoEstrutural} />
         <div className="grid grid-cols-2 gap-2">
           <Campo name="data_inicio" label="Data de início da obra" type="date" required />
