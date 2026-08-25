@@ -4,7 +4,7 @@ import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
 import { coletarAgora, gerarRascunho, gerarRascunhoInstitucional, descartarRascunho, aprovarEPublicar } from "./actions";
-import SubmitButton from "./SubmitButton";
+import SubmitButton from "@/components/SubmitButton";
 
 export const dynamic = "force-dynamic";
 

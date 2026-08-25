@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { signUp } from "./actions";
 import CampoSenha from "@/components/CampoSenha";
+import SubmitButton from "@/components/SubmitButton";
 
 export default async function SignupPage({
   searchParams,
@@ -54,12 +55,12 @@ export default async function SignupPage({
           </span>
         </label>
 
-        <button
+        <SubmitButton
+          textoCarregando="Criando conta…"
           className="w-full rounded-full bg-o2-coral px-4 py-2.5 font-medium text-white transition hover:opacity-90"
-          type="submit"
         >
           Criar conta
-        </button>
+        </SubmitButton>
       </form>
 
       <p className="text-center text-sm text-gray-600">

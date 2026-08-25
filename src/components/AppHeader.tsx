@@ -76,6 +76,7 @@ export default function AppHeader({
                   ? [{ href: "/admin/imobiliarias", label: "Imobiliárias cadastradas (admin)" }]
                   : []),
                 ...(isMatheus(userEmail) ? [{ href: "/admin/acessos", label: "Uso diário do Workspace" }] : []),
+                ...(isMatheus(userEmail) ? [{ href: "/admin/usuarios", label: "Logins do Workspace (admin)" }] : []),
               ]}
             />
           </div>
