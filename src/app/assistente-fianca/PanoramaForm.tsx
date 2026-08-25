@@ -6,6 +6,13 @@ import ResultadoAnalise from "./ResultadoAnalise";
 import FeedbackAnalise from "./FeedbackAnalise";
 import type { AnaliseFianca } from "@/lib/assistenteFianca";
 
+const EXTENSOES_ACEITAS = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf"];
+
+function extensaoValida(nome: string): boolean {
+  const nomeLower = nome.toLowerCase();
+  return EXTENSOES_ACEITAS.some((ext) => nomeLower.endsWith(ext));
+}
+
 function IconeUpload() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -20,7 +27,17 @@ export default function PanoramaForm() {
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [resposta, setResposta] = useState<{ id: string; analise: AnaliseFianca } | null>(null);
-  const [nomeImagem, setNomeImagem] = useState<string | null>(null);
+  const [arquivo, setArquivo] = useState<File | null>(null);
+  const [arrastando, setArrastando] = useState(false);
+
+  function selecionarArquivo(f: File | null) {
+    if (f && !extensaoValida(f.name)) {
+      setErro("Envie uma imagem (.png, .jpg, .jpeg, .gif, .webp) ou um PDF.");
+      return;
+    }
+    setErro(null);
+    setArquivo(f);
+  }
 
   async function aoEnviar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -29,6 +46,8 @@ export default function PanoramaForm() {
     setResposta(null);
 
     const dados = new FormData(e.currentTarget);
+    if (arquivo) dados.set("arquivo", arquivo);
+
     try {
       const resultado = await analisar(dados);
       setResposta(resultado);
@@ -56,26 +75,40 @@ export default function PanoramaForm() {
           />
         </div>
 
-        <div className="rounded-lg border border-gray-200 p-3">
-          <p className="mb-1 text-sm font-medium text-o2-navy">Ou anexe um print (opcional)</p>
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setArrastando(true);
+          }}
+          onDragLeave={() => setArrastando(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setArrastando(false);
+            selecionarArquivo(e.dataTransfer.files?.[0] ?? null);
+          }}
+          className={`rounded-lg border p-3 transition ${
+            arrastando ? "border-o2-coral bg-o2-coral/5" : "border-gray-200"
+          }`}
+        >
+          <p className="mb-1 text-sm font-medium text-o2-navy">Ou anexe um print ou PDF (opcional)</p>
           <p className="mb-2 text-xs text-gray-500">
-            Print do sistema/seguradora com as cotações — a IA lê os dados direto da imagem, sem precisar digitar nada.
-            Em grades com várias colunas de multiplicador (18x/24x/30x lado a lado), a leitura fica mais confiável
-            se você recortar/ampliar só a linha aprovada antes de anexar, ou colar os dados em texto acima.
+            Print do sistema/seguradora ou PDF da cotação — a IA lê os dados direto do arquivo, sem precisar digitar
+            nada. Em grades com várias colunas de multiplicador (18x/24x/30x lado a lado), um PDF costuma ler melhor
+            que um print comprimido; se ainda assim usar print, vale recortar/ampliar só a linha aprovada, ou colar
+            os dados em texto acima. Também dá pra arrastar o arquivo direto pra esta área.
           </p>
           <div className="flex flex-wrap items-center gap-2.5">
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-full bg-o2-navy px-4 py-2 text-sm font-medium text-white transition hover:opacity-90">
               <IconeUpload />
-              Selecionar imagem
+              Selecionar arquivo
               <input
-                name="imagem"
                 type="file"
-                accept=".png,.jpg,.jpeg,.gif,.webp"
+                accept=".png,.jpg,.jpeg,.gif,.webp,.pdf"
                 className="sr-only"
-                onChange={(e) => setNomeImagem(e.target.files?.[0]?.name ?? null)}
+                onChange={(e) => selecionarArquivo(e.target.files?.[0] ?? null)}
               />
             </label>
-            <span className="text-sm text-gray-600">{nomeImagem ?? "Nenhuma imagem selecionada"}</span>
+            <span className="text-sm text-gray-600">{arquivo?.name ?? "Nenhum arquivo selecionado (ou arraste aqui)"}</span>
           </div>
         </div>
 

@@ -2,7 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 
 export type FonteEntrada =
   | { tipo: "texto"; texto: string }
-  | { tipo: "imagem"; base64: string; mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp" };
+  | { tipo: "imagem"; base64: string; mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp" }
+  | { tipo: "pdf"; base64: string };
 
 export type OpcaoTabela = {
   seguradora: string;
@@ -39,10 +40,10 @@ REGRAS DE SEGURANÇA DA ANÁLISE (nunca infrinja):
 
 CÁLCULOS INTERNOS: pacote de locação = aluguel + condomínio + IPTU + outros encargos recorrentes informados. Taxa de cada opção = parcela do seguro ÷ pacote de locação × 100. Nunca some cobertura (limite de proteção) como se fosse prêmio (custo).
 
-0. LEITURA BRUTA ("leitura_bruta") — SEMPRE preencha primeiro, antes de qualquer outro campo. Se o panorama vier como TEXTO, escreva 1 frase curta confirmando os dados recebidos. Se vier como IMAGEM, faça uma transcrição cuidadosa, seguradora por seguradora, ANTES de decidir qualquer taxa ou multiplicador:
-   a) para cada linha/seguradora da imagem, diga o status (aprovado, pré-aprovado, recusado, indisponível, limite excedido);
-   b) se houver uma grade com uma coluna por multiplicador lado a lado (ex: 18x, 20x, 24x, 30x), liste os cabeçalhos de coluna na ordem exata em que aparecem na imagem, da esquerda para a direita, e diga célula por célula se está vazia/cinza ou tem valor — cite o valor exato quando houver, associado ao cabeçalho da coluna correspondente contado a partir da esquerda;
-   c) se a correspondência entre um valor e sua coluna não estiver 100% legível (colunas estreitas, imagem comprimida), diga isso explicitamente aqui ("valor de R$X visível, mas a coluna exata entre 18x/24x/30x não está nítida") em vez de adivinhar.
+0. LEITURA BRUTA ("leitura_bruta") — SEMPRE preencha primeiro, antes de qualquer outro campo. Se o panorama vier como TEXTO, escreva 1 frase curta confirmando os dados recebidos. Se vier como IMAGEM OU PDF, faça uma transcrição cuidadosa, seguradora por seguradora, ANTES de decidir qualquer taxa ou multiplicador (um PDF pode ter várias páginas — transcreva página por página se precisar):
+   a) para cada linha/seguradora, diga o status (aprovado, pré-aprovado, recusado, indisponível, limite excedido);
+   b) se houver uma grade com uma coluna por multiplicador lado a lado (ex: 18x, 20x, 24x, 30x), liste os cabeçalhos de coluna na ordem exata em que aparecem, da esquerda para a direita, e diga célula por célula se está vazia/cinza ou tem valor — cite o valor exato quando houver, associado ao cabeçalho da coluna correspondente contado a partir da esquerda;
+   c) se a correspondência entre um valor e sua coluna não estiver 100% legível (colunas estreitas, imagem comprimida ou baixa qualidade), diga isso explicitamente aqui ("valor de R$X visível, mas a coluna exata entre 18x/24x/30x não está nítida") em vez de adivinhar.
    Só depois de terminar essa transcrição use-a como base para preencher "opcoes" — a tabela final nunca pode contradizer o que foi transcrito aqui, e nunca pule direto para a tabela sem transcrever antes.
 
 1. TABELA COMPARATIVA ("opcoes") — uma linha por cotação distinta do panorama (mesma seguradora com LMIs ou planos diferentes conta como linhas separadas), ORDENADA da MELHOR condição de preço (menor taxa) para a PIOR (maior taxa). Campos por linha:
@@ -75,7 +76,7 @@ Se quiser ampliar a proteção, o plano Completo sai por R$ 114,41/mês (6,4% do
 Vale lembrar que o Básico não cobre esses itens, então qualquer dano ao imóvel ou multa por saída antecipada ficaria por conta do inquilino.
 Qual das duas opções você prefere que eu já encaminhe?"
 
-Se o panorama vier como imagem (print de tela do sistema/CRM/seguradora), leia os dados diretamente da imagem, exatamente como faria com texto — não presuma nada que não esteja visível.
+Se o panorama vier como imagem (print de tela do sistema/CRM/seguradora) ou como PDF, leia os dados diretamente do arquivo, exatamente como faria com texto — não presuma nada que não esteja visível.
 
 Responda SEMPRE chamando a ferramenta "reportar_analise", preenchendo todos os campos do schema. Nunca responda em texto livre.`;
 
@@ -132,6 +133,12 @@ const FERRAMENTA_ANALISE: Anthropic.Tool = {
 function blocoDaEntrada(entrada: FonteEntrada): Anthropic.ContentBlockParam[] {
   if (entrada.tipo === "texto") {
     return [{ type: "text", text: `PANORAMA DO CASO:\n\n${entrada.texto}` }];
+  }
+  if (entrada.tipo === "pdf") {
+    return [
+      { type: "text", text: "PANORAMA DO CASO (arquivo PDF anexado abaixo — leia direto das páginas, inclusive tabelas e grades de valores):" },
+      { type: "document", source: { type: "base64", media_type: "application/pdf", data: entrada.base64 } },
+    ];
   }
   return [
     { type: "text", text: "PANORAMA DO CASO (imagem/print de tela anexado abaixo — leia o conteúdo visível na imagem):" },

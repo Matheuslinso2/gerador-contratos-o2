@@ -3,13 +3,16 @@
 -- utilidade, pra permitir revisar e melhorar o prompt com o tempo.
 -- Aplicado direto no projeto em 25/08/2026 via MCP do Supabase -- este
 -- arquivo é só o registro/documentação, igual aos demais schema_*.sql.
+-- Ajustado no mesmo dia pra aceitar PDF como entrada: coluna
+-- entrada_imagem_nome virou entrada_arquivo_nome e o check de
+-- entrada_tipo passou a aceitar 'pdf'.
 
 create table if not exists assistente_fianca_analises (
   id uuid primary key default gen_random_uuid(),
   criado_por text not null,
-  entrada_tipo text not null check (entrada_tipo in ('texto', 'imagem')),
+  entrada_tipo text not null check (entrada_tipo in ('texto', 'imagem', 'pdf')),
   entrada_texto text,
-  entrada_imagem_nome text,
+  entrada_arquivo_nome text,
   resultado jsonb not null,
   feedback_precisao smallint check (feedback_precisao between 1 and 5),
   feedback_utilidade smallint check (feedback_utilidade between 1 and 5),

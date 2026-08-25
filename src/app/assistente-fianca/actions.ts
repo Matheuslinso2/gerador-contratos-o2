@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
+import { extrairTextoPdfComPaginas } from "@/lib/extrairTextoPdf";
 import { analisarPanoramaFianca, type AnaliseFianca, type FonteEntrada } from "@/lib/assistenteFianca";
 
 const EXTENSOES_IMAGEM: Record<string, "image/jpeg" | "image/png" | "image/gif" | "image/webp"> = {
@@ -11,6 +12,29 @@ const EXTENSOES_IMAGEM: Record<string, "image/jpeg" | "image/png" | "image/gif" 
   ".gif": "image/gif",
   ".webp": "image/webp",
 };
+
+async function entradaDoArquivo(arquivo: File): Promise<FonteEntrada> {
+  const nomeLower = arquivo.name.toLowerCase();
+  const buffer = Buffer.from(await arquivo.arrayBuffer());
+
+  if (nomeLower.endsWith(".pdf")) {
+    // PDF com texto real extraível é lido como texto (mais barato e mais
+    // confiável). PDF escaneado (sem texto, ou só um carimbo de scanner)
+    // vai direto pra IA como documento, pra ela ler das páginas.
+    const { texto, numPaginas } = await extrairTextoPdfComPaginas(buffer);
+    const textoInsuficiente = numPaginas > 0 && texto.length / numPaginas < 200;
+    if (texto.trim() && !textoInsuficiente) {
+      return { tipo: "texto", texto };
+    }
+    return { tipo: "pdf", base64: buffer.toString("base64") };
+  }
+
+  const extensao = Object.keys(EXTENSOES_IMAGEM).find((ext) => nomeLower.endsWith(ext));
+  if (!extensao) {
+    throw new Error("Envie uma imagem (.png, .jpg, .jpeg, .gif, .webp) ou um PDF.");
+  }
+  return { tipo: "imagem", base64: buffer.toString("base64"), mediaType: EXTENSOES_IMAGEM[extensao] };
+}
 
 export async function analisar(formData: FormData): Promise<{ id: string; analise: AnaliseFianca }> {
   const supabase = await createClient();
@@ -22,23 +46,17 @@ export async function analisar(formData: FormData): Promise<{ id: string; analis
   }
 
   const texto = String(formData.get("panorama") ?? "").trim();
-  const arquivo = formData.get("imagem") as File | null;
+  const arquivo = formData.get("arquivo") as File | null;
 
   let entrada: FonteEntrada;
-  let entradaImagemNome: string | null = null;
+  let entradaArquivoNome: string | null = null;
   if (arquivo && arquivo.size > 0) {
-    const nomeLower = arquivo.name.toLowerCase();
-    const extensao = Object.keys(EXTENSOES_IMAGEM).find((ext) => nomeLower.endsWith(ext));
-    if (!extensao) {
-      throw new Error("A imagem precisa ser .png, .jpg, .jpeg, .gif ou .webp.");
-    }
-    const buffer = Buffer.from(await arquivo.arrayBuffer());
-    entrada = { tipo: "imagem", base64: buffer.toString("base64"), mediaType: EXTENSOES_IMAGEM[extensao] };
-    entradaImagemNome = arquivo.name;
+    entrada = await entradaDoArquivo(arquivo);
+    entradaArquivoNome = arquivo.name;
   } else if (texto) {
     entrada = { tipo: "texto", texto };
   } else {
-    throw new Error("Cole o panorama do caso ou anexe um print das cotações.");
+    throw new Error("Cole o panorama do caso ou anexe um print/PDF das cotações.");
   }
 
   const analise = await analisarPanoramaFianca(entrada);
@@ -49,7 +67,7 @@ export async function analisar(formData: FormData): Promise<{ id: string; analis
       criado_por: user.email,
       entrada_tipo: entrada.tipo,
       entrada_texto: entrada.tipo === "texto" ? entrada.texto : null,
-      entrada_imagem_nome: entradaImagemNome,
+      entrada_arquivo_nome: entradaArquivoNome,
       resultado: analise,
     })
     .select("id")
