@@ -32,11 +32,25 @@ export type FonteDocumento =
   | { tipo: "pdf"; base64: string }
   | { tipo: "imagem"; base64: string; mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp" };
 
+// Um único upload pode virar vários documentos, todos numa lista só (ver
+// AuditorForm.tsx) -- cada um marcado com o papel que ele tem na auditoria.
+// "contrato" aceita MAIS DE UM (ex: contrato original + aditivo(s)); os
+// outros normalmente vêm 0 ou 1 vez, mas nada impede mais de um também.
+export type TipoDocumentoAuditoria = "contrato" | "cotacao" | "certificado" | "outro";
+
+export type DocumentoAuditoria = {
+  tipo: TipoDocumentoAuditoria;
+  fonte: FonteDocumento;
+  nomeArquivo?: string | null;
+};
+
 const SYSTEM_PROMPT = `Você é um Auditor Especialista em Contratos de Locação Imobiliária brasileira. Sua função é analisar um contrato de locação e devolver um checklist CURTO e direto — quem lê é a imobiliária, que não tem paciência para ler críticas longas. Cada resumo deve ter no máximo UMA frase curta, direto ao ponto. Só entre em detalhe (em "pontos_criticos") para os problemas realmente graves.
 
 O contrato (e, se houver, a cotação e o certificado de assinatura eletrônica) podem chegar como texto, como arquivo PDF anexado diretamente (quando o PDF é escaneado e não tem texto extraível), ou como imagem/print de tela (comum para a cotação, quando a imobiliária só tem um print do sistema da seguradora/CRM em vez de um PDF formal). Se vier como PDF ou imagem anexada, leia o conteúdo diretamente das páginas/imagem, exatamente como faria com o texto.
 
-Se o arquivo do contrato incluir, anexado nas últimas páginas, um Laudo/Relatório de Vistoria (fotos do imóvel, checklist de estado de conservação, ambiente por ambiente), IGNORE completamente essas páginas na sua análise — elas não são cláusulas contratuais e não devem gerar nenhum apontamento (não cobre assinatura nelas, não avalie o conteúdo delas). Analise só as páginas que são de fato o contrato de locação.
+O CONTRATO pode chegar em MAIS DE UMA PARTE — o caso mais comum é contrato original + um ou mais ADITIVOS que alteram cláusulas específicas dele. Quando isso acontece, cada parte vem rotulada "Parte X de Y" abaixo. Trate todas as partes como um único contrato lógico (some as partes pra montar o quadro completo de partes qualificadas, garantia, etc.). Se um ADITIVO (normalmente reconhecível pelo nome do arquivo ou porque o próprio texto diz explicitamente qual cláusula do contrato original está sendo alterada) entrar em conflito com o contrato original numa mesma cláusula, a versão do ADITIVO prevalece na sua análise, por ser mais recente — mas o que o aditivo NÃO alterar continua valendo do contrato original.
+
+Se o arquivo do contrato incluir, anexado nas últimas páginas, um Laudo/Relatório de Vistoria (fotos do imóvel, checklist de estado de conservação, ambiente por ambiente), IGNORE completamente essas páginas na sua análise — elas não são cláusulas contratuais e não devem gerar nenhum apontamento (não cobre assinatura nelas, não avalie o conteúdo delas). Analise só as páginas que são de fato o contrato de locação. O mesmo vale se um documento desse tipo chegar rotulado "DOCUMENTO ADICIONAL DE CONTEXTO" — se for claramente um laudo/vistoria, ignore; se for outra coisa relevante, use como contexto extra sem forçar em nenhum pilar específico.
 
 ANTES DE QUALQUER OUTRA COISA: preencha locador_identificado, locatario_identificado e endereco_identificado com o valor exato encontrado na cláusula de qualificação das partes (normalmente logo no início do contrato). Esses 3 campos são OBRIGATÓRIOS e NUNCA podem ficar vazios quando a informação existir no texto. Só use "Não identificado" se realmente não constar em lugar nenhum.
 
@@ -190,17 +204,37 @@ function blocosDoDocumento(rotulo: string, fonte: FonteDocumento): Anthropic.Con
   ];
 }
 
+// Monta os blocos de um grupo de documentos do mesmo papel (ex: todos os
+// "contrato") -- rotula "Parte X de Y" só quando há mais de um, pra não
+// poluir o caso comum (1 arquivo só).
+function blocosDoGrupo(rotuloBase: string, docs: DocumentoAuditoria[]): Anthropic.ContentBlockParam[] {
+  const blocos: Anthropic.ContentBlockParam[] = [];
+  docs.forEach((doc, i) => {
+    const sufixoArquivo = doc.nomeArquivo ? ` (arquivo: ${doc.nomeArquivo})` : "";
+    const rotulo = docs.length > 1 ? `${rotuloBase} — Parte ${i + 1} de ${docs.length}${sufixoArquivo}` : `${rotuloBase}${sufixoArquivo}`;
+    blocos.push(...blocosDoDocumento(rotulo, doc.fonte));
+  });
+  return blocos;
+}
+
 export async function auditarContrato(
-  contrato: FonteDocumento,
-  bibliotecaClausulas: ClausulaReferencia[] = [],
-  cotacao: FonteDocumento | null = null,
-  certificado: FonteDocumento | null = null
+  documentos: DocumentoAuditoria[],
+  bibliotecaClausulas: ClausulaReferencia[] = []
 ): Promise<RelatorioAuditoria> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new Error(
       "Auditor de contrato não configurado: falta a variável de ambiente ANTHROPIC_API_KEY."
     );
+  }
+
+  const contratos = documentos.filter((d) => d.tipo === "contrato");
+  const cotacoes = documentos.filter((d) => d.tipo === "cotacao");
+  const certificados = documentos.filter((d) => d.tipo === "certificado");
+  const outros = documentos.filter((d) => d.tipo === "outro");
+
+  if (contratos.length === 0) {
+    throw new Error("Nenhum documento de contrato foi identificado — marque ao menos um dos arquivos enviados como \"Contrato/Aditivo\", ou cole o texto do contrato.");
   }
 
   const anthropic = new Anthropic({ apiKey });
@@ -213,25 +247,29 @@ export async function auditarContrato(
 
   const conteudo: Anthropic.ContentBlockParam[] = [
     { type: "text", text: `${blocoBiblioteca}Analise o contrato de locação a seguir e reporte o checklist.` },
-    ...blocosDoDocumento("CONTRATO DE LOCAÇÃO A SER AUDITADO", contrato),
+    ...blocosDoGrupo("CONTRATO DE LOCAÇÃO A SER AUDITADO", contratos),
   ];
 
-  if (cotacao) {
+  if (cotacoes.length > 0) {
     conteudo.push(
-      ...blocosDoDocumento(
+      ...blocosDoGrupo(
         "COTAÇÃO/PROPOSTA DE SEGURO (documento de referência para o pilar CONFERENCIA_COTACAO — compare contra o contrato acima)",
-        cotacao
+        cotacoes
       )
     );
   }
 
-  if (certificado) {
+  if (certificados.length > 0) {
     conteudo.push(
-      ...blocosDoDocumento(
+      ...blocosDoGrupo(
         "CERTIFICADO DE ASSINATURA ELETRÔNICA (documento de referência para o pilar ASSINATURAS — comprovante emitido por Clicksign/ZapSign/D4Sign/DocuSign ou similar, contém código de verificação e dados de quem assinou)",
-        certificado
+        certificados
       )
     );
+  }
+
+  if (outros.length > 0) {
+    conteudo.push(...blocosDoGrupo("DOCUMENTO ADICIONAL DE CONTEXTO", outros));
   }
 
   const mensagem = await anthropic.messages.create({

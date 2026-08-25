@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { extrairTextoDocx } from "@/lib/extrairTextoDocx";
 import { extrairTextoPdfComPaginas } from "@/lib/extrairTextoPdf";
-import { auditarContrato, type FonteDocumento } from "@/lib/auditorContrato";
+import { auditarContrato, type DocumentoAuditoria, type FonteDocumento, type TipoDocumentoAuditoria } from "@/lib/auditorContrato";
 
 const BUCKET_TEMP = "auditoria-temp";
 
@@ -39,12 +39,9 @@ const EXTENSOES_IMAGEM: Record<string, "image/jpeg" | "image/png" | "image/gif" 
   ".webp": "image/webp",
 };
 
-async function extrairDeCampo(
+async function extrairDocumento(
   supabase: SupabaseServerClient,
-  formData: FormData,
-  campoTexto: string,
-  campoPath: string,
-  campoNome: string,
+  { texto0, path, nomeArquivo }: { texto0: string; path: string; nomeArquivo: string | null },
   // Fichas/formulários PDF preenchíveis (comum em documentos que passaram
   // por assinatura eletrônica) costumam ter os RÓTULOS como texto normal da
   // página, mas os VALORES digitados nos campos ficam como dado de
@@ -60,10 +57,6 @@ async function extrairDeCampo(
   imagemBase64: string | null;
   imagemMediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp" | null;
 }> {
-  const texto0 = String(formData.get(campoTexto) ?? "").trim();
-  const path = String(formData.get(campoPath) ?? "").trim();
-  const nomeArquivo = String(formData.get(campoNome) ?? "").trim() || null;
-
   if (!path) {
     return { texto: texto0, nomeArquivo: null, pdfBase64: null, imagemBase64: null, imagemMediaType: null };
   }
@@ -156,63 +149,57 @@ export async function auditar(formData: FormData) {
     redirect(`/auditar-contrato?erro=${encodeURIComponent("Cadastre sua imobiliária primeiro.")}`);
   }
 
-  const { texto, nomeArquivo, pdfBase64, imagemBase64, imagemMediaType } = await extrairDeCampo(
-    supabase,
-    formData,
-    "texto",
-    "arquivo_path",
-    "arquivo_nome"
-  );
+  // Lista dinâmica de documentos (ver AuditorForm.tsx) -- cada item i manda
+  // doc_{i}_tipo (obrigatório) e, ou doc_{i}_path + doc_{i}_nome (upload),
+  // ou doc_{i}_texto (colado à mão). Ordem não importa, cada item carrega o
+  // próprio papel na auditoria.
+  const totalDocs = Number(formData.get("doc_count") ?? 0);
+  const documentos: DocumentoAuditoria[] = [];
+  const nomesPorTipo: Record<TipoDocumentoAuditoria, string[]> = { contrato: [], cotacao: [], certificado: [], outro: [] };
+  const textosContrato: string[] = [];
 
-  let fonteContrato: FonteDocumento;
-  if (texto) {
-    fonteContrato = { tipo: "texto", texto };
-  } else if (pdfBase64) {
-    fonteContrato = { tipo: "pdf", base64: pdfBase64 };
-  } else if (imagemBase64 && imagemMediaType) {
-    fonteContrato = { tipo: "imagem", base64: imagemBase64, mediaType: imagemMediaType };
-  } else {
+  for (let i = 0; i < totalDocs; i++) {
+    const tipoBruto = String(formData.get(`doc_${i}_tipo`) ?? "contrato");
+    const tipo: TipoDocumentoAuditoria =
+      tipoBruto === "cotacao" || tipoBruto === "certificado" || tipoBruto === "outro" ? tipoBruto : "contrato";
+    const texto0 = String(formData.get(`doc_${i}_texto`) ?? "").trim();
+    const path = String(formData.get(`doc_${i}_path`) ?? "").trim();
+    const nomeArquivo = String(formData.get(`doc_${i}_nome`) ?? "").trim() || null;
+
+    // Documento/fichas preenchíveis (comum em cotação e certificado) usam
+    // leitura visual sempre, pra pegar valor de campo de formulário que a
+    // extração de texto simples não vê -- ver comentário em extrairDocumento.
+    const sempreLerPdfVisualmente = tipo === "cotacao" || tipo === "certificado";
+    const { texto, pdfBase64, imagemBase64, imagemMediaType } = await extrairDocumento(
+      supabase,
+      { texto0, path, nomeArquivo },
+      sempreLerPdfVisualmente
+    );
+
+    const fonte: FonteDocumento | null = texto
+      ? { tipo: "texto", texto }
+      : pdfBase64
+        ? { tipo: "pdf", base64: pdfBase64 }
+        : imagemBase64 && imagemMediaType
+          ? { tipo: "imagem", base64: imagemBase64, mediaType: imagemMediaType }
+          : null;
+
+    if (!fonte) continue; // linha vazia (não deveria acontecer, mas não trava a auditoria por isso)
+
+    documentos.push({ tipo, fonte, nomeArquivo });
+    nomesPorTipo[tipo].push(nomeArquivo ?? "texto colado");
+    if (tipo === "contrato" && texto) textosContrato.push(texto);
+  }
+
+  if (!documentos.some((d) => d.tipo === "contrato")) {
     redirect(
       `/auditar-contrato?erro=${encodeURIComponent(
-        "Cole o texto do contrato ou envie um arquivo .docx/.pdf."
+        "Adicione ao menos um documento marcado como \"Contrato/Aditivo\" (arquivo ou texto colado)."
       )}`
     );
   }
 
-  const {
-    texto: textoCotacao,
-    pdfBase64: pdfBase64Cotacao,
-    imagemBase64: imagemBase64Cotacao,
-    imagemMediaType: imagemMediaTypeCotacao,
-  } = await extrairDeCampo(supabase, formData, "texto_cotacao", "arquivo_cotacao_path", "arquivo_cotacao_nome", true);
-  const fonteCotacao: FonteDocumento | null = textoCotacao
-    ? { tipo: "texto", texto: textoCotacao }
-    : pdfBase64Cotacao
-      ? { tipo: "pdf", base64: pdfBase64Cotacao }
-      : imagemBase64Cotacao && imagemMediaTypeCotacao
-        ? { tipo: "imagem", base64: imagemBase64Cotacao, mediaType: imagemMediaTypeCotacao }
-        : null;
-
-  const {
-    texto: textoCertificado,
-    pdfBase64: pdfBase64Certificado,
-    imagemBase64: imagemBase64Certificado,
-    imagemMediaType: imagemMediaTypeCertificado,
-  } = await extrairDeCampo(
-    supabase,
-    formData,
-    "texto_certificado",
-    "arquivo_certificado_path",
-    "arquivo_certificado_nome",
-    true
-  );
-  const fonteCertificado: FonteDocumento | null = textoCertificado
-    ? { tipo: "texto", texto: textoCertificado }
-    : pdfBase64Certificado
-      ? { tipo: "pdf", base64: pdfBase64Certificado }
-      : imagemBase64Certificado && imagemMediaTypeCertificado
-        ? { tipo: "imagem", base64: imagemBase64Certificado, mediaType: imagemMediaTypeCertificado }
-        : null;
+  const nomeArquivo = nomesPorTipo.contrato.join(" + ") || null;
 
   const { data: produtosSeguro } = await supabase
     .from("produtos")
@@ -226,10 +213,7 @@ export async function auditar(formData: FormData) {
 
   let relatorio;
   try {
-    relatorio = await comLimiteDeTempo(
-      auditarContrato(fonteContrato, bibliotecaClausulas, fonteCotacao, fonteCertificado),
-      LIMITE_TEMPO_ANALISE_MS
-    );
+    relatorio = await comLimiteDeTempo(auditarContrato(documentos, bibliotecaClausulas), LIMITE_TEMPO_ANALISE_MS);
   } catch (e) {
     const mensagem = e instanceof Error ? e.message : "Falha ao analisar o contrato.";
     redirect(`/auditar-contrato?erro=${encodeURIComponent(mensagem)}`);
@@ -267,7 +251,9 @@ export async function auditar(formData: FormData) {
       locatario_identificado: relatorio.locatario_identificado,
       endereco_identificado: relatorio.endereco_identificado,
       relatorio,
-      texto_contrato: texto || "[Lido diretamente das páginas do PDF escaneado — sem texto extraído]",
+      texto_contrato:
+        textosContrato.join("\n\n--- ADITIVO/PARTE SEGUINTE ---\n\n") ||
+        "[Lido diretamente das páginas do PDF escaneado — sem texto extraído]",
     })
     .select("id")
     .single();
