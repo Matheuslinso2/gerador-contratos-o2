@@ -49,6 +49,7 @@ export async function enviarFichaRcObras(_estadoAnterior: EstadoEnvioRcObras, fo
 
   const tipoObraBruto = campo(formData, "tipo_obra");
   const reforcoBruto = campo(formData, "reforco_estrutural");
+  const categoriaImovelBruta = campo(formData, "categoria_imovel");
 
   const payload: RcObrasPayload = {
     responseId,
@@ -63,6 +64,8 @@ export async function enviarFichaRcObras(_estadoAnterior: EstadoEnvioRcObras, fo
     obraBairro: campo(formData, "obra_bairro"),
     obraCidade: campo(formData, "obra_cidade"),
     obraUf: campo(formData, "obra_uf"),
+    categoriaImovel: categoriaImovelBruta === "Comercial" ? "Comercial" : "Residencial",
+    tipoObraDetalhado: campo(formData, "tipo_obra_detalhado"),
     tipoObra: tipoObraBruto === "Construção do zero" ? "Construção do zero" : "Reforma",
     reforcoEstrutural: reforcoBruto === "Sim" ? "Sim" : "Não",
     dataInicio: campo(formData, "data_inicio"),
@@ -73,6 +76,12 @@ export async function enviarFichaRcObras(_estadoAnterior: EstadoEnvioRcObras, fo
 
   if (!payload.email || !payload.telefone || !payload.nomeCompleto || !payload.cpfCnpj) {
     return { ok: false, erro: "Preencha e-mail, telefone, nome completo e CPF/CNPJ." };
+  }
+  if (!categoriaImovelBruta) {
+    return { ok: false, erro: "Selecione se o imóvel é residencial ou comercial." };
+  }
+  if (!payload.tipoObraDetalhado) {
+    return { ok: false, erro: "Selecione o tipo de obra." };
   }
   if (!payload.obraCep || !payload.obraLogradouro || !payload.obraNumero) {
     return { ok: false, erro: "Preencha o endereço completo da obra." };

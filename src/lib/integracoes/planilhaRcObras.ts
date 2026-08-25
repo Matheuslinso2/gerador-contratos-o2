@@ -40,6 +40,12 @@ function montarLinha(dados: DadosRcObrasPlanilha): unknown[] {
     dados.evolucaoObra,
 
     ...COBERTURAS_RC_OBRAS.map((c) => dados.coberturas[c.chave] || ""),
+
+    // Adicionados depois -- ficam no fim da linha de propósito, pra não
+    // desalinhar as colunas já existentes na planilha ao vivo (ver aviso
+    // no cabeçalho deste arquivo).
+    dados.categoriaImovel,
+    dados.tipoObraDetalhado,
   ];
 }
 

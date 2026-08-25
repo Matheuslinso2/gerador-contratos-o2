@@ -19,6 +19,15 @@ export const COBERTURAS_RC_OBRAS = [
 
 export type CoberturaRcObrasChave = (typeof COBERTURAS_RC_OBRAS)[number]["chave"];
 
+export const TIPOS_OBRA_DETALHADO = [
+  "Reforma não estrutural de Imóvel Residencial",
+  "Reforma não estrutural de Imóvel Comercial",
+  "Reforma não estrutural de Loja de Rua",
+  "Reforma não estrutural de Loja em Shopping",
+  "Reforma não estrutural de Escritório",
+  "Reforma não estrutural de Apartamento Habitual",
+] as const;
+
 export type RcObrasPayload = {
   responseId: string;
   email: string;
@@ -32,6 +41,8 @@ export type RcObrasPayload = {
   obraBairro: string;
   obraCidade: string;
   obraUf: string;
+  categoriaImovel: "Residencial" | "Comercial";
+  tipoObraDetalhado: string;
   tipoObra: "Reforma" | "Construção do zero";
   reforcoEstrutural: "Sim" | "Não";
   dataInicio: string;
@@ -88,6 +99,8 @@ export function montarEmailRcObras(p: RcObrasPayload): { assunto: string; html: 
       "Dados da obra",
       [
         linhaCampo("Endereço", enderecoObra),
+        linhaCampo("Categoria do imóvel", p.categoriaImovel),
+        linhaCampo("Tipo de obra", p.tipoObraDetalhado),
         linhaCampo("Reforma ou construção do zero", p.tipoObra),
         linhaCampo("Reforço estrutural", p.reforcoEstrutural),
         linhaCampo("Início da obra", formatarData(p.dataInicio)),

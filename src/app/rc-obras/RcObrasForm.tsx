@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 import { formatarCPF, formatarCNPJ, validarCPF, validarCNPJ, formatarCEP, validarCEP, buscarEnderecoPorCep, apenasDigitos, formatarMoedaDigitada } from "@/lib/validacoesBr";
 import { enviarFichaRcObras, type EstadoEnvioRcObras } from "./actions";
-import { COBERTURAS_RC_OBRAS, type CoberturaRcObrasChave } from "@/lib/integracoes/rcObras";
+import { COBERTURAS_RC_OBRAS, TIPOS_OBRA_DETALHADO, type CoberturaRcObrasChave } from "@/lib/integracoes/rcObras";
 
 const O2_LARANJA = "#F8540D";
 const O2_NAVY = "#01192e";
@@ -104,6 +104,41 @@ function SeletorUnico({
           </label>
         ))}
       </div>
+    </div>
+  );
+}
+
+function CampoSelect({
+  name,
+  label,
+  opcoes,
+  required,
+  valor,
+  aoMudar,
+}: {
+  name: string;
+  label: string;
+  opcoes: readonly string[];
+  required?: boolean;
+  valor: string;
+  aoMudar: (v: string) => void;
+}) {
+  return (
+    <div>
+      <label className={labelClass}>
+        {label}
+        {required && " *"}
+      </label>
+      <select name={name} value={valor} onChange={(e) => aoMudar(e.target.value)} required={required} className={inputClass}>
+        <option value="" disabled>
+          Selecione
+        </option>
+        {opcoes.map((op) => (
+          <option key={op} value={op}>
+            {op}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }
@@ -217,6 +252,8 @@ function CampoCobertura({ chave, label }: { chave: CoberturaRcObrasChave; label:
 function RcObrasFormInterno({ aoConcluirNova }: { aoConcluirNova: () => void }) {
   const [estado, formAction, enviando] = useActionState<EstadoEnvioRcObras, FormData>(enviarFichaRcObras, null);
   const [responseId] = useState(() => crypto.randomUUID());
+  const [categoriaImovel, setCategoriaImovel] = useState("");
+  const [tipoObraDetalhado, setTipoObraDetalhado] = useState("");
   const [tipoObra, setTipoObra] = useState("");
   const [reforcoEstrutural, setReforcoEstrutural] = useState("");
   const [evolucaoObra, setEvolucaoObra] = useState("");
@@ -270,6 +307,22 @@ function RcObrasFormInterno({ aoConcluirNova }: { aoConcluirNova: () => void }) 
       </Secao>
 
       <Secao numero={4} titulo="Dados da obra">
+        <SeletorUnico
+          name="categoria_imovel"
+          label="O imóvel é residencial ou comercial?"
+          required
+          opcoes={["Residencial", "Comercial"]}
+          valor={categoriaImovel}
+          aoMudar={setCategoriaImovel}
+        />
+        <CampoSelect
+          name="tipo_obra_detalhado"
+          label="Qual desses descreve melhor o tipo de obra?"
+          required
+          opcoes={TIPOS_OBRA_DETALHADO}
+          valor={tipoObraDetalhado}
+          aoMudar={setTipoObraDetalhado}
+        />
         <SeletorUnico name="tipo_obra" label="Reforma ou construção do zero?" required opcoes={["Reforma", "Construção do zero"]} valor={tipoObra} aoMudar={setTipoObra} />
         <SeletorUnico name="reforco_estrutural" label="A obra tem reforço estrutural?" required opcoes={["Sim", "Não"]} valor={reforcoEstrutural} aoMudar={setReforcoEstrutural} />
         <div className="grid grid-cols-2 gap-2">

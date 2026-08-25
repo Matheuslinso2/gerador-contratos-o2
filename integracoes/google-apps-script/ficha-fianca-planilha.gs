@@ -213,6 +213,9 @@ const CONFIG = {
       "Responsabilidade Civil Geral Por Danos Morais Riscos de Engenharia",
       "Responsabilidade Civil por Danos Morais Empregador",
       "Responsabilidade Civil Do Empregador",
+
+      "Categoria do imóvel",
+      "Tipo de obra (detalhado)",
     ],
   },
 };
