@@ -13,6 +13,7 @@ export type OpcaoTabela = {
 };
 
 export type AnaliseFianca = {
+  pacote_locacao: string;
   opcoes: OpcaoTabela[];
   parecer_abordagem_comercial: string;
   mensagem_whatsapp: string;
@@ -36,6 +37,8 @@ REGRAS DE SEGURANÇA DA ANÁLISE (nunca infrinja):
 7. Nunca use travessão (—) em nenhum texto gerado, nem no parecer nem na mensagem pronta. Use vírgula, dois-pontos ou parênteses.
 
 CÁLCULOS INTERNOS: pacote de locação = aluguel + condomínio + IPTU + outros encargos recorrentes informados. Taxa de cada opção = parcela do seguro ÷ pacote de locação × 100. Nunca some cobertura (limite de proteção) como se fosse prêmio (custo).
+
+0. PACOTE DE LOCAÇÃO ("pacote_locacao") — só para identificar o caso no histórico de análises, não é exibido no resultado principal. 1 linha curta: "R$ [pacote total] (aluguel R$ [x] + condomínio R$ [y] + IPTU R$ [z])" com os itens que o panorama realmente informou.
 
 1. TABELA COMPARATIVA ("opcoes") — uma linha por cotação distinta do panorama (mesma seguradora com LMIs ou planos diferentes conta como linhas separadas), ORDENADA da MELHOR condição de preço (menor taxa) para a PIOR (maior taxa). Campos por linha:
    - seguradora: nome da seguradora.
@@ -77,6 +80,11 @@ const FERRAMENTA_ANALISE: Anthropic.Tool = {
   input_schema: {
     type: "object",
     properties: {
+      pacote_locacao: {
+        type: "string",
+        minLength: 1,
+        description: "1 linha curta: valor do pacote de locação e composição (aluguel + condomínio + IPTU), para identificar o caso no histórico. Não aparece no resultado exibido ao negociador.",
+      },
       opcoes: {
         type: "array",
         description: "Uma linha por cotação distinta, ordenada da melhor condição de preço (menor taxa) para a pior (maior taxa).",
@@ -106,7 +114,7 @@ const FERRAMENTA_ANALISE: Anthropic.Tool = {
         description: "Mensagem curta pronta para enviar por WhatsApp, seguindo as regras de formato do manual.",
       },
     },
-    required: ["opcoes", "parecer_abordagem_comercial", "mensagem_whatsapp"],
+    required: ["pacote_locacao", "opcoes", "parecer_abordagem_comercial", "mensagem_whatsapp"],
   },
 };
 

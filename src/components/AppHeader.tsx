@@ -71,6 +71,9 @@ export default function AppHeader({
               label="Configurações"
               items={[
                 { href: "/imobiliaria", label: "Imobiliária" },
+                ...(isAdmin(userEmail) || isColaboradorO2(userEmail)
+                  ? [{ href: "/historico-analises-fianca", label: "Histórico de análises (Fiança)" }]
+                  : []),
                 ...(isAdmin(userEmail) ? [{ href: "/clausulas", label: "Cláusulas (admin)" }] : []),
                 ...(isAdmin(userEmail)
                   ? [{ href: "/admin/imobiliarias", label: "Imobiliárias cadastradas (admin)" }]
