@@ -60,6 +60,8 @@ export default function PanoramaForm() {
           <p className="mb-1 text-sm font-medium text-o2-navy">Ou anexe um print (opcional)</p>
           <p className="mb-2 text-xs text-gray-500">
             Print do sistema/seguradora com as cotações — a IA lê os dados direto da imagem, sem precisar digitar nada.
+            Em grades com várias colunas de multiplicador (18x/24x/30x lado a lado), a leitura fica mais confiável
+            se você recortar/ampliar só a linha aprovada antes de anexar, ou colar os dados em texto acima.
           </p>
           <div className="flex flex-wrap items-center gap-2.5">
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-full bg-o2-navy px-4 py-2 text-sm font-medium text-white transition hover:opacity-90">

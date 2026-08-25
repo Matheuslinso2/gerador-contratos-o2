@@ -13,6 +13,7 @@ export type OpcaoTabela = {
 };
 
 export type AnaliseFianca = {
+  leitura_bruta: string;
   pacote_locacao: string;
   opcoes: OpcaoTabela[];
   parecer_abordagem_comercial: string;
@@ -38,7 +39,11 @@ REGRAS DE SEGURANÇA DA ANÁLISE (nunca infrinja):
 
 CÁLCULOS INTERNOS: pacote de locação = aluguel + condomínio + IPTU + outros encargos recorrentes informados. Taxa de cada opção = parcela do seguro ÷ pacote de locação × 100. Nunca some cobertura (limite de proteção) como se fosse prêmio (custo).
 
-0. PACOTE DE LOCAÇÃO ("pacote_locacao") — só para identificar o caso no histórico de análises, não é exibido no resultado principal. 1 linha curta: "R$ [pacote total] (aluguel R$ [x] + condomínio R$ [y] + IPTU R$ [z])" com os itens que o panorama realmente informou.
+0. LEITURA BRUTA ("leitura_bruta") — SEMPRE preencha primeiro, antes de qualquer outro campo. Se o panorama vier como TEXTO, escreva 1 frase curta confirmando os dados recebidos. Se vier como IMAGEM, faça uma transcrição cuidadosa, seguradora por seguradora, ANTES de decidir qualquer taxa ou multiplicador:
+   a) para cada linha/seguradora da imagem, diga o status (aprovado, pré-aprovado, recusado, indisponível, limite excedido);
+   b) se houver uma grade com uma coluna por multiplicador lado a lado (ex: 18x, 20x, 24x, 30x), liste os cabeçalhos de coluna na ordem exata em que aparecem na imagem, da esquerda para a direita, e diga célula por célula se está vazia/cinza ou tem valor — cite o valor exato quando houver, associado ao cabeçalho da coluna correspondente contado a partir da esquerda;
+   c) se a correspondência entre um valor e sua coluna não estiver 100% legível (colunas estreitas, imagem comprimida), diga isso explicitamente aqui ("valor de R$X visível, mas a coluna exata entre 18x/24x/30x não está nítida") em vez de adivinhar.
+   Só depois de terminar essa transcrição use-a como base para preencher "opcoes" — a tabela final nunca pode contradizer o que foi transcrito aqui, e nunca pule direto para a tabela sem transcrever antes.
 
 1. TABELA COMPARATIVA ("opcoes") — uma linha por cotação distinta do panorama (mesma seguradora com LMIs ou planos diferentes conta como linhas separadas), ORDENADA da MELHOR condição de preço (menor taxa) para a PIOR (maior taxa). Campos por linha:
    - seguradora: nome da seguradora.
@@ -72,8 +77,6 @@ Qual das duas opções você prefere que eu já encaminhe?"
 
 Se o panorama vier como imagem (print de tela do sistema/CRM/seguradora), leia os dados diretamente da imagem, exatamente como faria com texto — não presuma nada que não esteja visível.
 
-GRADE DE MULTIPLICADORES EM IMAGEM (atenção redobrada): quando a imagem trouxer uma grade com uma coluna por multiplicador lado a lado (ex: 18x, 24x, 30x, e às vezes 20x também), confira com cuidado em QUAL coluna o valor está preenchido antes de reportar o multiplicador — não presuma 30x só por ser o mais comum nos exemplos deste prompt. Célula vazia, cinza ou sem número não tem cotação naquele multiplicador. Se a seguradora estiver marcada como recusada, indisponível ou com limite excedido e nenhuma célula da grade tiver valor, essa linha não tem taxa: estrutura e taxa ficam "não informado", e a observação registra o status.
-
 Responda SEMPRE chamando a ferramenta "reportar_analise", preenchendo todos os campos do schema. Nunca responda em texto livre.`;
 
 const FERRAMENTA_ANALISE: Anthropic.Tool = {
@@ -82,6 +85,12 @@ const FERRAMENTA_ANALISE: Anthropic.Tool = {
   input_schema: {
     type: "object",
     properties: {
+      leitura_bruta: {
+        type: "string",
+        minLength: 1,
+        description:
+          "OBRIGATÓRIO preencher primeiro. Se texto: 1 frase confirmando os dados recebidos. Se imagem: transcrição célula por célula da grade de multiplicadores (cabeçalhos na ordem da esquerda pra direita, e o que está preenchido ou vazio em cada uma) antes de decidir a tabela final. Nunca pule esta etapa.",
+      },
       pacote_locacao: {
         type: "string",
         minLength: 1,
@@ -116,7 +125,7 @@ const FERRAMENTA_ANALISE: Anthropic.Tool = {
         description: "Mensagem curta pronta para enviar por WhatsApp, seguindo as regras de formato do manual.",
       },
     },
-    required: ["pacote_locacao", "opcoes", "parecer_abordagem_comercial", "mensagem_whatsapp"],
+    required: ["leitura_bruta", "pacote_locacao", "opcoes", "parecer_abordagem_comercial", "mensagem_whatsapp"],
   },
 };
 
