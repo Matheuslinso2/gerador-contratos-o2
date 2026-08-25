@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { analisar } from "./actions";
 import ResultadoAnalise from "./ResultadoAnalise";
+import FeedbackAnalise from "./FeedbackAnalise";
 import type { AnaliseFianca } from "@/lib/assistenteFianca";
 
 function IconeUpload() {
@@ -18,19 +19,19 @@ function IconeUpload() {
 export default function PanoramaForm() {
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [resultado, setResultado] = useState<AnaliseFianca | null>(null);
+  const [resposta, setResposta] = useState<{ id: string; analise: AnaliseFianca } | null>(null);
   const [nomeImagem, setNomeImagem] = useState<string | null>(null);
 
   async function aoEnviar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setErro(null);
     setEnviando(true);
-    setResultado(null);
+    setResposta(null);
 
     const dados = new FormData(e.currentTarget);
     try {
-      const analise = await analisar(dados);
-      setResultado(analise);
+      const resultado = await analisar(dados);
+      setResposta(resultado);
     } catch (err) {
       setErro(err instanceof Error ? err.message : "Falha ao analisar o panorama.");
     } finally {
@@ -87,7 +88,12 @@ export default function PanoramaForm() {
         </button>
       </form>
 
-      {resultado && <ResultadoAnalise resultado={resultado} />}
+      {resposta && (
+        <>
+          <ResultadoAnalise resultado={resposta.analise} />
+          <FeedbackAnalise analiseId={resposta.id} />
+        </>
+      )}
     </div>
   );
 }
