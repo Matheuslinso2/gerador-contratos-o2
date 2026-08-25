@@ -72,6 +72,8 @@ Qual das duas opções você prefere que eu já encaminhe?"
 
 Se o panorama vier como imagem (print de tela do sistema/CRM/seguradora), leia os dados diretamente da imagem, exatamente como faria com texto — não presuma nada que não esteja visível.
 
+GRADE DE MULTIPLICADORES EM IMAGEM (atenção redobrada): quando a imagem trouxer uma grade com uma coluna por multiplicador lado a lado (ex: 18x, 24x, 30x, e às vezes 20x também), confira com cuidado em QUAL coluna o valor está preenchido antes de reportar o multiplicador — não presuma 30x só por ser o mais comum nos exemplos deste prompt. Célula vazia, cinza ou sem número não tem cotação naquele multiplicador. Se a seguradora estiver marcada como recusada, indisponível ou com limite excedido e nenhuma célula da grade tiver valor, essa linha não tem taxa: estrutura e taxa ficam "não informado", e a observação registra o status.
+
 Responda SEMPRE chamando a ferramenta "reportar_analise", preenchendo todos os campos do schema. Nunca responda em texto livre.`;
 
 const FERRAMENTA_ANALISE: Anthropic.Tool = {
