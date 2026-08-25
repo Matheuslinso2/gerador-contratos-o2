@@ -52,9 +52,9 @@ CÁLCULOS INTERNOS: pacote de locação = aluguel + condomínio + IPTU + outros 
    - Recomendação final + próxima ação objetiva (escolher plano, confirmar cobertura, enviar documento, emitir ou agendar retorno).
 
 MENSAGEM PRONTA PARA WHATSAPP ("mensagem_whatsapp"):
-- Até ~600 caracteres, em frases curtas e diretas, cada uma numa linha própria.
+- Entre 500 e 750 caracteres — não escreva telegráfico demais. Frases completas e naturais, como uma pessoa escrevendo, não fragmentos picados. Cada frase numa linha própria.
 - Comece confirmando o ponto principal (boa notícia) ou acolhendo a objeção, sem introdução longa.
-- Cite os números que mudam a decisão: valor da opção principal, percentual do pacote, comparação com o mercado (Loft, 8% a 15%) quando fizer sentido.
+- Cite os números que mudam a decisão (valor da opção principal, percentual do pacote, comparação com o mercado quando fizer sentido) dentro de uma frase corrida, não como lista seca.
 - Diga em 1 frase o que a opção principal já cobre/atende (ex: atende a imobiliária).
 - Se houver upsell (ex: plano completo), apresente valor, percentual e o que ele acrescenta, com um empurrão sutil e verdadeiro (ex: "a diferença é pequena, por isso muitos clientes escolhem o completo") — nunca invente esse padrão de comportamento se não fizer sentido no caso.
 - No máximo 3 caminhos reais (não liste todas as opções técnicas).
