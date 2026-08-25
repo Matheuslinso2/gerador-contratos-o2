@@ -2,7 +2,6 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
-import { extrairTextoPdfComPaginas } from "@/lib/extrairTextoPdf";
 import { analisarPanoramaFianca, type AnaliseFianca, type FonteEntrada } from "@/lib/assistenteFianca";
 
 const EXTENSOES_IMAGEM: Record<string, "image/jpeg" | "image/png" | "image/gif" | "image/webp"> = {
@@ -18,14 +17,12 @@ async function entradaDoArquivo(arquivo: File): Promise<FonteEntrada> {
   const buffer = Buffer.from(await arquivo.arrayBuffer());
 
   if (nomeLower.endsWith(".pdf")) {
-    // PDF com texto real extraível é lido como texto (mais barato e mais
-    // confiável). PDF escaneado (sem texto, ou só um carimbo de scanner)
-    // vai direto pra IA como documento, pra ela ler das páginas.
-    const { texto, numPaginas } = await extrairTextoPdfComPaginas(buffer);
-    const textoInsuficiente = numPaginas > 0 && texto.length / numPaginas < 200;
-    if (texto.trim() && !textoInsuficiente) {
-      return { tipo: "texto", texto };
-    }
+    // Sempre manda o PDF pra IA como documento (ela processa texto e o
+    // visual de cada página nativamente) -- não confia em extração de
+    // texto própria aqui: painéis com fonte customizada (comum em prints
+    // exportados de ferramentas de design) já vieram com dígitos trocados
+    // na camada de texto (ex: "18X/24X/30X" virando "30X" repetido), o
+    // que geraria erro mesmo sem nenhum problema de leitura visual.
     return { tipo: "pdf", base64: buffer.toString("base64") };
   }
 
