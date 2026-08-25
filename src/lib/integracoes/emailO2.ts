@@ -13,6 +13,10 @@ const O2_CINZA_ESCURO = "#444440";
 const FONTE = "'Poppins', Arial, sans-serif";
 const LOGO_URL = "https://gerador-contratos-o2.vercel.app/marca-o2/o2-logo-horizontal.png";
 
+// Toda notificação de landing page vai em cópia pro comercial, além do
+// e-mail específico do produto (incendio@, fianca@, cap@, auto@...).
+export const EMAIL_COMERCIAL_O2 = "comercial@o2seguros.com.br";
+
 // Uma linha "rótulo: valor" dentro de uma seção. Ignorada se vazia -- assim
 // só aparece no e-mail o que a pessoa realmente preencheu.
 export function linhaCampo(label: string, valor: string): string {

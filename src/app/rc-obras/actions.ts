@@ -5,6 +5,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { enviarEmail } from "@/lib/email";
 import { montarEmailRcObras, COBERTURAS_RC_OBRAS, type RcObrasPayload, type CoberturaRcObrasChave } from "@/lib/integracoes/rcObras";
 import { registrarNaPlanilhaRcObras } from "@/lib/integracoes/planilhaRcObras";
+import { EMAIL_COMERCIAL_O2 } from "@/lib/integracoes/emailO2";
 
 export type EstadoEnvioRcObras = { ok: boolean; erro?: string } | null;
 
@@ -90,6 +91,7 @@ export async function enviarFichaRcObras(_estadoAnterior: EstadoEnvioRcObras, fo
     const { assunto, html } = montarEmailRcObras(payload);
     await enviarEmail({
       para: EMAIL_DESTINO_RC_OBRAS,
+      cc: [EMAIL_COMERCIAL_O2],
       assunto,
       html,
       remetente: "Plataforma O2 — RC Obras",

@@ -8,6 +8,7 @@ import {
   type SeguroIncendioPayload,
   type ModalidadeIncendio,
 } from "@/lib/integracoes/seguroIncendio";
+import { EMAIL_COMERCIAL_O2 } from "@/lib/integracoes/emailO2";
 import { enviarEmail } from "@/lib/email";
 
 export type EstadoEnvioSeguroIncendio = { ok: boolean; erro?: string; pendente?: boolean } | null;
@@ -130,7 +131,13 @@ export async function enviarFichaSeguroIncendio(
     // envio nem confundir quem preencheu a ficha.
     try {
       const { assunto, html } = montarEmailSeguroIncendio(payload, resultado);
-      await enviarEmail({ para: EMAIL_DESTINO_SEGURO_INCENDIO, assunto, html, remetente: "Plataforma O2 — Seguro Incêndio" });
+      await enviarEmail({
+        para: EMAIL_DESTINO_SEGURO_INCENDIO,
+        cc: [EMAIL_COMERCIAL_O2],
+        assunto,
+        html,
+        remetente: "Plataforma O2 — Seguro Incêndio",
+      });
     } catch (erroEmail) {
       console.warn("Seguro Incêndio: falha ao enviar e-mail pra incendio@o2seguros.com.br:", erroEmail);
     }

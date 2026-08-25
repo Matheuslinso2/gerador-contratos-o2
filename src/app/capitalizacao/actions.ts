@@ -9,6 +9,7 @@ import {
   type CapitalizacaoFormPayload,
 } from "@/lib/integracoes/capitalizacao";
 import { registrarNaPlanilhaCapitalizacao, type DadosCapitalizacaoPlanilha } from "@/lib/integracoes/planilhaCapitalizacao";
+import { EMAIL_COMERCIAL_O2 } from "@/lib/integracoes/emailO2";
 import { enviarEmail } from "@/lib/email";
 
 export type EstadoEnvioCapitalizacao = { ok: boolean; erro?: string; pendente?: boolean } | null;
@@ -209,7 +210,13 @@ export async function enviarFormularioCapitalizacao(
     }
     try {
       const { assunto, html } = montarEmailCapitalizacao(dadosPlanilha, resultado);
-      await enviarEmail({ para: EMAIL_DESTINO_CAPITALIZACAO, assunto, html, remetente: "Plataforma O2 — Capitalização" });
+      await enviarEmail({
+        para: EMAIL_DESTINO_CAPITALIZACAO,
+        cc: [EMAIL_COMERCIAL_O2],
+        assunto,
+        html,
+        remetente: "Plataforma O2 — Capitalização",
+      });
     } catch (erroEmail) {
       console.warn("Capitalização: falha ao enviar e-mail pra cap@o2seguros.com.br:", erroEmail);
     }

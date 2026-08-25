@@ -3,6 +3,7 @@
 import { randomUUID } from "crypto";
 import { createServiceClient } from "@/lib/supabase/service";
 import { criarCardSeguroAuto, montarEmailSeguroAuto, type SeguroAutoPayload } from "@/lib/integracoes/seguroAuto";
+import { EMAIL_COMERCIAL_O2 } from "@/lib/integracoes/emailO2";
 import { enviarEmail } from "@/lib/email";
 
 export type EstadoEnvioSeguroAuto = { ok: boolean; erro?: string; pendente?: boolean } | null;
@@ -70,7 +71,13 @@ export async function enviarFichaSeguroAuto(
     // envio nem confundir quem preencheu a ficha.
     try {
       const { assunto, html } = montarEmailSeguroAuto(payload, resultado);
-      await enviarEmail({ para: EMAIL_DESTINO_SEGURO_AUTO, assunto, html, remetente: "Plataforma O2 — Seguro Auto" });
+      await enviarEmail({
+        para: EMAIL_DESTINO_SEGURO_AUTO,
+        cc: [EMAIL_COMERCIAL_O2],
+        assunto,
+        html,
+        remetente: "Plataforma O2 — Seguro Auto",
+      });
     } catch (erroEmail) {
       console.warn("Seguro Auto: falha ao enviar e-mail pra auto@o2seguros.com.br:", erroEmail);
     }

@@ -9,6 +9,7 @@ import {
   type LocatarioPfPayload,
 } from "@/lib/integracoes/seguroFianca";
 import { registrarNaPlanilhaFianca } from "@/lib/integracoes/planilhaSeguroFianca";
+import { EMAIL_COMERCIAL_O2 } from "@/lib/integracoes/emailO2";
 import { enviarEmail } from "@/lib/email";
 
 export type EstadoEnvioFichaFianca = { ok: boolean; erro?: string; pendente?: boolean } | null;
@@ -127,7 +128,13 @@ export async function enviarFichaFianca(
     }
     try {
       const { assunto, html } = montarEmailFichaFianca(payload, resultado);
-      await enviarEmail({ para: EMAIL_DESTINO_FICHA_FIANCA, assunto, html, remetente: "Plataforma O2 — Seguro Fiança" });
+      await enviarEmail({
+        para: EMAIL_DESTINO_FICHA_FIANCA,
+        cc: [EMAIL_COMERCIAL_O2],
+        assunto,
+        html,
+        remetente: "Plataforma O2 — Seguro Fiança",
+      });
     } catch (erroEmail) {
       console.warn("Ficha Fiança: falha ao enviar e-mail pra fianca@o2seguros.com.br:", erroEmail);
     }
