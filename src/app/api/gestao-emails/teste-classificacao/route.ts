@@ -21,7 +21,17 @@ export async function GET() {
   }
 
   try {
-    const mensagens = await listarMensagens({ query: "in:inbox newer_than:7d", maxResultados: 30 });
+    // "to:" (não "in:inbox" sozinho) já implementa na busca a regra "ignorar
+    // e-mail em que sou só copiado, sem tarefa atribuída" -- o operador to:
+    // do Gmail só bate com o campo Para, nunca com Cc. Sem isso, o volume de
+    // notificação automática de equipe (Segimob, Fiança, Incêndio) lota os
+    // resultados mais recentes e engole os poucos e-mails que são de fato
+    // do Matheus (confirmado no teste real: 0/30 relevantes usando só
+    // in:inbox, porque a amostra virou 100% ruído operacional).
+    const mensagens = await listarMensagens({
+      query: "to:matheus@o2seguros.com.br in:inbox newer_than:7d",
+      maxResultados: 40,
+    });
     const classificacoes = await classificarEmailsExecutivos(mensagens);
 
     const porId = new Map(mensagens.map((m) => [m.id, m]));
