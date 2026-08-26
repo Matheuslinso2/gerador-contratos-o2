@@ -42,9 +42,18 @@ function obterClienteGmail(): gmail_v1.Gmail {
   return gmail({ version: "v1", auth: cliente });
 }
 
+// "to:" (não "in:inbox" sozinho) já implementa a regra "ignorar e-mail em
+// que sou só copiado, sem tarefa atribuída" na própria busca -- o operador
+// to: do Gmail só bate com o campo Para, nunca Cc. Confirmado num teste
+// real: com in:inbox puro, o volume de notificação automática de equipe
+// (Segimob, Fiança, Incêndio) lotava a amostra recente e engolia por
+// completo os poucos e-mails que são de fato do Matheus.
+export const QUERY_PADRAO_CAIXA_EXECUTIVA = "to:matheus@o2seguros.com.br in:inbox newer_than:7d";
+
 export type MensagemGmail = {
   id: string;
   threadId: string;
+  messageIdHeader: string;
   remetente: string;
   destinatarios: string;
   assunto: string;
@@ -114,22 +123,36 @@ export async function listarMensagens({
       lote.map((id) => api.users.messages.get({ userId: "me", id, format: "full" }))
     );
     for (const resposta of resultados) {
-      const msg = resposta.data;
-      if (!msg.id || !msg.threadId) continue;
-      mensagens.push({
-        id: msg.id,
-        threadId: msg.threadId,
-        remetente: obterHeader(msg.payload?.headers, "From"),
-        destinatarios: obterHeader(msg.payload?.headers, "To"),
-        assunto: obterHeader(msg.payload?.headers, "Subject"),
-        data: obterHeader(msg.payload?.headers, "Date"),
-        snippet: msg.snippet || "",
-        corpoTexto: extrairTextoPlano(msg.payload).slice(0, LIMITE_CORPO),
-        labelIds: msg.labelIds || [],
-      });
+      const mensagem = paraMensagemGmail(resposta.data);
+      if (mensagem) mensagens.push(mensagem);
     }
   }
   return mensagens;
+}
+
+function paraMensagemGmail(msg: gmail_v1.Schema$Message): MensagemGmail | null {
+  if (!msg.id || !msg.threadId) return null;
+  return {
+    id: msg.id,
+    threadId: msg.threadId,
+    messageIdHeader: obterHeader(msg.payload?.headers, "Message-ID"),
+    remetente: obterHeader(msg.payload?.headers, "From"),
+    destinatarios: obterHeader(msg.payload?.headers, "To"),
+    assunto: obterHeader(msg.payload?.headers, "Subject"),
+    data: obterHeader(msg.payload?.headers, "Date"),
+    snippet: msg.snippet || "",
+    corpoTexto: extrairTextoPlano(msg.payload).slice(0, LIMITE_CORPO),
+    labelIds: msg.labelIds || [],
+  };
+}
+
+// Busca uma mensagem específica pelo id interno do Gmail -- usado pelas
+// ações (arquivar, gerar rascunho) pra reobter o dado real da mensagem em
+// vez de confiar em algo que o cliente guardou na tela.
+export async function obterMensagemPorId(messageId: string): Promise<MensagemGmail | null> {
+  const api = obterClienteGmail();
+  const resposta = await api.users.messages.get({ userId: "me", id: messageId, format: "full" });
+  return paraMensagemGmail(resposta.data);
 }
 
 // Arquivar = tirar a label INBOX (igual ao botão "Arquivar" do Gmail de
@@ -140,5 +163,54 @@ export async function arquivarMensagem(messageId: string): Promise<void> {
     userId: "me",
     id: messageId,
     requestBody: { removeLabelIds: ["INBOX"] },
+  });
+}
+
+function codificarAssuntoUtf8(assunto: string): string {
+  // Cabeçalho de e-mail é ASCII -- assunto com acento precisa ir como
+  // "encoded word" (RFC 2047), senão vira lixo no cliente de e-mail.
+  return `=?UTF-8?B?${Buffer.from(assunto, "utf-8").toString("base64")}?=`;
+}
+
+function assuntoComRe(assuntoOriginal: string): string {
+  return /^re:/i.test(assuntoOriginal.trim()) ? assuntoOriginal : `Re: ${assuntoOriginal}`;
+}
+
+// Cria um rascunho de resposta DE VERDADE no Gmail (não simulado) dentro da
+// mesma thread do e-mail original -- o Matheus revisa e envia direto pelo
+// Gmail. In-Reply-To/References é o que faz o Gmail (e o cliente de quem
+// recebe) reconhecerem isso como resposta em vez de e-mail solto, mesmo já
+// enviando `threadId` também.
+export async function criarRascunhoResposta({
+  mensagemOriginal,
+  corpoTexto,
+}: {
+  mensagemOriginal: MensagemGmail;
+  corpoTexto: string;
+}): Promise<void> {
+  const api = obterClienteGmail();
+
+  const linhas = [
+    `To: ${mensagemOriginal.remetente}`,
+    `Subject: ${codificarAssuntoUtf8(assuntoComRe(mensagemOriginal.assunto))}`,
+    mensagemOriginal.messageIdHeader ? `In-Reply-To: ${mensagemOriginal.messageIdHeader}` : null,
+    mensagemOriginal.messageIdHeader ? `References: ${mensagemOriginal.messageIdHeader}` : null,
+    "MIME-Version: 1.0",
+    "Content-Type: text/plain; charset=UTF-8",
+    "",
+    corpoTexto,
+  ].filter((linha): linha is string => linha !== null);
+
+  const raw = Buffer.from(linhas.join("\r\n"), "utf-8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+
+  await api.users.drafts.create({
+    userId: "me",
+    requestBody: {
+      message: { raw, threadId: mensagemOriginal.threadId },
+    },
   });
 }
