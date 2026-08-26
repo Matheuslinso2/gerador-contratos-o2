@@ -206,27 +206,27 @@ export default function ImobiliariasTabela({
               ordenacao={ordenacao}
               onClick={alternarOrdenacao}
               numerica
-              title="Prêmio Cotado — média dos prêmios cotados dentro de cada card, somada entre os cards da imobiliária"
+              title="Ticket Médio do Prêmio — prêmio total de cada card (parcela × nº de parcelas, média entre seguradoras quando mais de uma cotou), depois média entre os cards da imobiliária. É o tamanho médio de negócio, não a soma do mês."
             >
-              Prêmio Cot.
+              Tkt. Méd. Prêmio
             </Th>
             <Th
               coluna="comissaoCotada"
               ordenacao={ordenacao}
               onClick={alternarOrdenacao}
               numerica
-              title="Comissão Cotada — média das comissões cotadas dentro de cada card, somada entre os cards da imobiliária"
+              title="Comissão Média Cotada — comissão total de cada card (prêmio total × % de comissão, média entre seguradoras quando mais de uma cotou), depois média entre os cards da imobiliária. É a comissão média por negócio, não a soma do mês."
             >
-              Com. Cot.
+              Com. Méd. Cot.
             </Th>
             <Th
               coluna="ticketMedio"
               ordenacao={ordenacao}
               onClick={alternarOrdenacao}
               numerica
-              title="Ticket Médio — média das cotações de cada card, depois média entre os cards da imobiliária"
+              title="Parcela Média — valor da parcela/mensalidade do seguro cotado (sem multiplicar pelo nº de parcelas), média entre os cards da imobiliária. Base do % Pacote Médio ao lado."
             >
-              Ticket Méd.
+              Parcela Méd.
             </Th>
             <Th
               coluna="mediaPercentualPacote"

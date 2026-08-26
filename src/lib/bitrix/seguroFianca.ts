@@ -586,6 +586,16 @@ function media(valores: number[]): number {
   if (!valores.length) return 0;
   return Math.round((valores.reduce((a, b) => a + b, 0) / valores.length) * 10) / 10;
 }
+// Mesma coisa que media(), mas arredonda pra centavo (2 casas) em vez de 1
+// casa -- usada nos valores em R$ (Prêmio Cotado, Comissão Cotada, Ticket
+// Médio etc.). media() arredonda pra 1 casa porque foi pensada pra
+// percentual/minutos, onde isso é o esperado; aplicada a dinheiro, descartava
+// até R$0,09 por card (achado real: card 474 tinha comissão de R$8.517,03 e a
+// tela mostrava R$8.517,00).
+function mediaMoeda(valores: number[]): number {
+  if (!valores.length) return 0;
+  return Math.round((valores.reduce((a, b) => a + b, 0) / valores.length) * 100) / 100;
+}
 function mediana(valores: number[]): number {
   if (!valores.length) return 0;
   const ordenado = [...valores].sort((a, b) => a - b);
@@ -644,11 +654,11 @@ export type AnaliseGerencial = {
     emAndamento: number; // novos + herdados, 1 número
     perdidos: number; // mês do evento
     convertidos: number; // mês do evento
-    premioCotado: number; // "novidades"
-    comissaoCotada: number; // "novidades"
-    premioEfetivado: number; // mês do evento
-    comissaoEfetivada: number; // mês do evento
-    ticketMedio: number; // "novidades"
+    premioCotado: number; // "Ticket Médio do Prêmio" -- média (não soma) entre os cards da imobiliária, de premioTotalMedioDoCard (parcela x parcelas) de cada card
+    comissaoCotada: number; // "Comissão Média Cotada" -- média (não soma) entre os cards, de comissaoTotalMediaDoCard de cada card
+    premioEfetivado: number; // mês do evento -- continua SOMA (é receita realizada, não ticket médio)
+    comissaoEfetivada: number; // mês do evento -- continua SOMA
+    ticketMedio: number; // "Parcela Média" -- média só da parcela/mensalidade cotada (sem multiplicar por nº de parcelas), não confundir com premioCotado acima
     mediaPercentualPacote: number; // "novidades"
   }[];
   valoresTrabalhados: { aluguel: number; pacoteLocacao: number }; // "novidades"
@@ -898,7 +908,7 @@ export function montarAnaliseGerencial(
       if (typeof s?.valor !== "number" || typeof s.parcelas !== "number") return null;
       return s.valor * s.parcelas;
     }).filter((v): v is number => v !== null);
-    return valores.length ? media(valores) : null;
+    return valores.length ? mediaMoeda(valores) : null;
   }
   function comissaoTotalMediaDoCard(l: LinhaContagem): number | null {
     const valores = SEGURADORAS.map((seg) => {
@@ -907,14 +917,14 @@ export function montarAnaliseGerencial(
       const pct = typeof s.comissaoPct === "number" ? s.comissaoPct : 0;
       return s.valor * s.parcelas * (pct / 100);
     }).filter((v): v is number => v !== null);
-    return valores.length ? media(valores) : null;
+    return valores.length ? mediaMoeda(valores) : null;
   }
   // Ticket médio por faixa de pacote de locação: quanto maior o pacote,
   // maior a parcela média do seguro cotado (média das cotações não-vazias
   // de cada card, depois média entre os cards da faixa).
   function cotacaoMediaDoCard(l: LinhaContagem): number | null {
     const valores = SEGURADORAS.map((seg) => l.seguradoras[seg.nome]?.valor).filter((v): v is number => typeof v === "number" && v > 0);
-    return valores.length ? media(valores) : null;
+    return valores.length ? mediaMoeda(valores) : null;
   }
   function percentualPacoteMedioDoCard(l: LinhaContagem): number | null {
     const valores = SEGURADORAS.map((seg) => l.seguradoras[seg.nome]?.pctLocacao).filter(
@@ -934,10 +944,15 @@ export function montarAnaliseGerencial(
       emAndamento: number;
       perdidos: number;
       convertidos: number;
-      premioCotado: number;
-      comissaoCotada: number;
       premioEfetivado: number;
       comissaoEfetivada: number;
+      // Listas de valor POR CARD -- premioCotado/comissaoCotada/ticketMedio
+      // viram a MÉDIA dessas listas na hora de montar topImobiliarias (ver
+      // abaixo), não a soma. "Ticket Médio do Prêmio" e "Comissão Média
+      // Cotada" (pedido do Matheus): representam o card médio da
+      // imobiliária, não o volume total cotado no mês.
+      premioCotadoValores: number[];
+      comissaoCotadoValores: number[];
       ticketMedioValores: number[];
       percentualPacoteValores: number[];
     }
@@ -949,10 +964,10 @@ export function montarAnaliseGerencial(
       emAndamento: 0,
       perdidos: 0,
       convertidos: 0,
-      premioCotado: 0,
-      comissaoCotada: 0,
       premioEfetivado: 0,
       comissaoEfetivada: 0,
+      premioCotadoValores: [],
+      comissaoCotadoValores: [],
       ticketMedioValores: [],
       percentualPacoteValores: [],
     };
@@ -963,9 +978,9 @@ export function montarAnaliseGerencial(
     const d = obterOuCriarImob(l.imobiliaria);
     d.total++;
     const premioMedioCard = premioTotalMedioDoCard(l);
-    if (premioMedioCard !== null) d.premioCotado += premioMedioCard;
+    if (premioMedioCard !== null) d.premioCotadoValores.push(premioMedioCard);
     const comissaoMediaCard = comissaoTotalMediaDoCard(l);
-    if (comissaoMediaCard !== null) d.comissaoCotada += comissaoMediaCard;
+    if (comissaoMediaCard !== null) d.comissaoCotadoValores.push(comissaoMediaCard);
     const ticketCard = cotacaoMediaDoCard(l);
     if (ticketCard !== null) d.ticketMedioValores.push(ticketCard);
     const pctCard = percentualPacoteMedioDoCard(l);
@@ -994,11 +1009,13 @@ export function montarAnaliseGerencial(
   // por padrão (ver ImobiliariasTabela.tsx).
   const topImobiliarias = Object.entries(porImobiliaria)
     .map(([nome, d]) => {
-      const { ticketMedioValores, percentualPacoteValores, ...resto } = d;
+      const { premioCotadoValores, comissaoCotadoValores, ticketMedioValores, percentualPacoteValores, ...resto } = d;
       return {
         nome,
         ...resto,
-        ticketMedio: media(ticketMedioValores),
+        premioCotado: mediaMoeda(premioCotadoValores),
+        comissaoCotada: mediaMoeda(comissaoCotadoValores),
+        ticketMedio: mediaMoeda(ticketMedioValores),
         mediaPercentualPacote: media(percentualPacoteValores),
       };
     })
@@ -1021,8 +1038,8 @@ export function montarAnaliseGerencial(
     return {
       faixa,
       cards: doFaixa.length,
-      pacoteMedio: media(doFaixa.map((l) => l.pacoteLocacao as number)),
-      seguroMedio: media(cotacoes),
+      pacoteMedio: mediaMoeda(doFaixa.map((l) => l.pacoteLocacao as number)),
+      seguroMedio: mediaMoeda(cotacoes),
     };
   });
 
