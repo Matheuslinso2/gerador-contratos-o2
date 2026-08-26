@@ -54,10 +54,6 @@
 // LOSE, APOLOGY) sem precisar enumerar cada um.
 //
 // Limitações conhecidas e documentadas neste arquivo (não são bugs):
-// - CAMPO_MOTIVO_ENTRADA (UF_CRM_1784138667): identificado por inferência
-//   semântica das opções do enum, não confirmado 100% pelo rótulo real do
-//   campo no Bitrix (a API não expõe EDIT_FORM_LABEL pra nenhum dos ~157
-//   campos UF_CRM_* deste portal). Ver TODO ao lado da constante.
 // - Ligação vs e-mail (KPI R8 e afins): os valores de TYPE_ID de
 //   crm.activity.list para "ligação"/"e-mail" não foram confirmados contra
 //   dados reais nesta sessão. R7 (atividades, sem distinção de tipo) é
@@ -102,11 +98,10 @@ export const ENTITY_TYPE_ID_DEAL = 2;
 
 export const CAMPO_VALOR = "OPPORTUNITY";
 export const CAMPO_DATA_TERMINO = "CLOSEDATE";
-// TODO: confirmar com o usuário que UF_CRM_1784138667 é de fato "Motivo da
-// entrada" -- inferido pelos valores das opções do enum (7 opções, todas
-// relacionadas a aumento/recuperação de produção, batendo com a descrição do
-// usuário de que o motivo de entrada em Sucesso é sempre isso), mas o
-// rótulo real do campo não é exposto pela API do Bitrix neste portal.
+// Confirmado direto no Bitrix pelo usuário (2026-08-26): nome completo
+// "Motivo da entrada em Ativ. e Sucesso" (nome abreviado do campo, tipo
+// Lista, entidade Negócio) -- era só inferência por semântica das opções do
+// enum até então, agora confirmado.
 export const CAMPO_MOTIVO_ENTRADA = "UF_CRM_1784138667";
 
 // Etapas confirmadas via crm.dealcategory.list / crm.status.list ao vivo
