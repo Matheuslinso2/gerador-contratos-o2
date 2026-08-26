@@ -58,6 +58,7 @@ export default function AppHeader({
                 items={[
                   { href: "/producao", label: "Produção" },
                   { href: "/faturas", label: "Faturas" },
+                  { href: "/painel-comercial", label: "Comercial" },
                   { href: "/seguro-fianca", label: "Seguro Fiança" },
                   { href: "/assistente-fianca", label: "Assistente de Vendas — Fiança" },
                   { href: "/painel-capitalizacao", label: "Capitalização" },

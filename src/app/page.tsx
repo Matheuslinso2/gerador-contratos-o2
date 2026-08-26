@@ -159,6 +159,18 @@ export default async function Home() {
       ),
     },
     {
+      href: "/painel-comercial",
+      titulo: "Comercial",
+      descricao: "Ativação de novos clientes e Sucesso do Cliente — KPIs dos dois funis comerciais",
+      icone: (
+        <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
+          <circle cx="9" cy="8.5" r="3" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          <path d="M15 6.5l2 2 3.5-3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      ),
+    },
+    {
       href: "/seguro-fianca",
       titulo: "Seguro Fiança",
       descricao: "Acompanhamento das propostas de fiança em andamento",
