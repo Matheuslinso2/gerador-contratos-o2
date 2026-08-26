@@ -14,6 +14,18 @@ import PainelGestaoEmails, { type ItemPainelEmail } from "./PainelGestaoEmails";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
+// O header "From" cru vem como `"Nome" <email>` ou `Nome <email>` -- exibir
+// isso de uma vez só faz o nome e o e-mail competirem pela mesma ênfase
+// visual no card. Separa os dois pra a tela decidir o peso de cada um.
+function separarRemetente(remetente: string): { nome: string; email: string } {
+  const match = /^"?([^"<]*)"?\s*<([^>]+)>\s*$/.exec(remetente.trim());
+  if (match) {
+    const nome = match[1].trim();
+    return { nome: nome || match[2], email: match[2] };
+  }
+  return { nome: remetente, email: remetente };
+}
+
 function formatarData(dataHeader: string): string {
   const data = new Date(dataHeader);
   if (Number.isNaN(data.getTime())) return dataHeader;
@@ -49,11 +61,13 @@ export default async function GestaoEmailsPage() {
       if (c.categoria === "ruido") return [];
       const mensagem = porId.get(c.messageId);
       if (!mensagem) return [];
+      const { nome: remetenteNome, email: remetenteEmail } = separarRemetente(mensagem.remetente);
       return [
         {
           id: mensagem.id,
           threadId: mensagem.threadId,
-          remetente: mensagem.remetente,
+          remetenteNome,
+          remetenteEmail,
           assunto: mensagem.assunto,
           dataFormatada: formatarData(mensagem.data),
           categoria: c.categoria,
