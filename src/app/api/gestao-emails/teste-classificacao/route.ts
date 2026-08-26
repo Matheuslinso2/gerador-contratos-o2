@@ -40,12 +40,25 @@ export async function GET() {
         };
       });
 
+    // Diagnóstico: lista TODOS os e-mails com a categoria que a IA deu (ou
+    // "SEM_CLASSIFICACAO" se o messageId nem bateu com nenhum retornado) --
+    // ajuda a distinguir "IA decidiu que é ruído" de "bug de correspondência
+    // entre a mensagem e a classificação".
+    const classificacoesPorId = new Map(classificacoes.map((c) => [c.messageId, c]));
+    const diagnostico = mensagens.map((m) => ({
+      id: m.id,
+      remetente: m.remetente,
+      assunto: m.assunto,
+      categoria: classificacoesPorId.get(m.id)?.categoria ?? "SEM_CLASSIFICACAO",
+    }));
+
     return NextResponse.json({
       ok: true,
       totalLidos: mensagens.length,
       totalRelevantes: relevantes.length,
       totalFiltrados: mensagens.length - relevantes.length,
       relevantes,
+      diagnostico,
     });
   } catch (erro) {
     return NextResponse.json(
