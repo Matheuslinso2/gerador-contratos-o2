@@ -20,7 +20,7 @@ const SYSTEM_PROMPT = `Você filtra a caixa de entrada de matheus@o2seguros.com.
 
 - "gestao_macro": gestão macro da O2 Seguros -- financeiro/estratégico da empresa como um todo (ex: relatório de inadimplência consolidado endereçado a ele, decisão que afeta a corretora inteira), NÃO um caso operacional pontual de um cliente.
 - "api_seguradoras": integração de APIs com seguradoras.
-- "contabil_pf": questões contábeis, tributárias e fiscais -- da Pessoa Física dele, ou da empresa quando endereçadas diretamente a ele (contador, portal contábil, nota fiscal, cobrança de serviço usado pela empresa).
+- "contabil_pf": questões contábeis, tributárias e fiscais -- da Pessoa Física dele, ou da empresa quando endereçadas diretamente a ele (contador, portal contábil/Onvio, nota fiscal, imposto, declaração, cobrança de serviço usado pela empresa). NÃO inclui documentos trabalhistas/RH de colaboradores (rescisão de contrato de trabalho, seguro-desemprego, admissão, férias) -- isso é "gestao_macro", mesmo passando por assinatura eletrônica (Clicksign) ou tendo "requerimento"/"termo" no nome.
 - "demanda_direta": solicitação ou obrigação endereçada diretamente a ELE, que exige uma ação/resposta PESSOAL dele -- alguém perguntando algo só pra ele, pedindo uma decisão dele, ou cobrando algo dele especificamente.
 
 Use "ruido" pra tudo o resto, incluindo SEMPRE:
