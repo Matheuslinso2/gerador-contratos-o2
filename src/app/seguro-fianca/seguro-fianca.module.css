@@ -342,6 +342,26 @@ table.data,
   overflow-x: auto;
 }
 
+/* Só na tabela de Imobiliárias -- 13 colunas precisam caber sem rolagem
+   horizontal, então aperta o espaçamento e trava o cabeçalho numa linha só
+   (os nomes já vêm abreviados, ver ImobiliariasTabela.tsx). Não mexe em
+   .data th/td direto pra não afetar as outras tabelas da página. */
+.data.compacta th,
+.data.compacta td {
+  padding: 5px 6px;
+}
+.data.compacta th {
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+.data.compacta th:hover {
+  color: var(--ink);
+}
+.ordenacaoAtiva {
+  color: var(--accent-ink);
+}
+
 .pill {
   display: inline-block;
   font-size: 10.5px;

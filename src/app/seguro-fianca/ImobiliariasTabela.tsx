@@ -18,6 +18,11 @@ type LinhaImobiliaria = {
   mediaPercentualPacote: number;
 };
 
+// "tendencia" não é um campo salvo em LinhaImobiliaria (é calculado na hora
+// comparando com o mês anterior), por isso entra como uma coluna ordenável
+// à parte, não uma chave do tipo acima.
+type ColunaOrdenavel = keyof LinhaImobiliaria | "tendencia";
+
 function fmtBRL(v: number): string {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
@@ -45,6 +50,23 @@ function tendencia(atual: number, anterior: number): { pct: number; direcao: "up
   return { pct: Math.abs(variacao), direcao: variacao >= 0 ? "up" : "down" };
 }
 
+// Valor numérico/comparável de cada coluna, usado só pra ordenar -- nome
+// ordena por texto normalizado, tendência vira um número com sinal (alta
+// positiva, baixa negativa), o resto usa o próprio campo numérico.
+function valorOrdenacao(
+  i: LinhaImobiliaria,
+  coluna: ColunaOrdenavel,
+  totalMesAnteriorPorImobiliaria: Record<string, number>
+): number | string {
+  if (coluna === "nome") return normalizar(i.nome);
+  if (coluna === "tendencia") {
+    const t = tendencia(i.total, totalMesAnteriorPorImobiliaria[i.nome] ?? 0);
+    if (t.direcao === "flat") return 0;
+    return t.direcao === "up" ? t.pct : -t.pct;
+  }
+  return i[coluna];
+}
+
 function Tendencia({ atual, anterior }: { atual: number; anterior: number }) {
   const t = tendencia(atual, anterior);
   if (t.direcao === "flat") return <span style={{ color: "var(--ink-faint)" }}>—</span>;
@@ -57,6 +79,36 @@ function Tendencia({ atual, anterior }: { atual: number; anterior: number }) {
   );
 }
 
+function Th({
+  coluna,
+  ordenacao,
+  onClick,
+  numerica,
+  title,
+  children,
+}: {
+  coluna: ColunaOrdenavel;
+  ordenacao: { coluna: ColunaOrdenavel; direcao: "asc" | "desc" } | null;
+  onClick: (coluna: ColunaOrdenavel) => void;
+  numerica?: boolean;
+  title?: string;
+  children: React.ReactNode;
+}) {
+  const ativo = ordenacao?.coluna === coluna;
+  return (
+    <th
+      className={numerica ? styles.numCol : undefined}
+      title={title}
+      onClick={() => onClick(coluna)}
+    >
+      <span className={ativo ? styles.ordenacaoAtiva : undefined}>
+        {children}
+        {ativo && (ordenacao!.direcao === "desc" ? " ▼" : " ▲")}
+      </span>
+    </th>
+  );
+}
+
 export default function ImobiliariasTabela({
   imobiliarias,
   totalMesAnteriorPorImobiliaria = {},
@@ -66,7 +118,19 @@ export default function ImobiliariasTabela({
 }) {
   const [expandido, setExpandido] = useState(false);
   const [busca, setBusca] = useState("");
+  // null = ordem padrão (como veio do servidor, por volume de cotações).
+  // 1º clique num cabeçalho ordena decrescente, 2º clique inverte pra
+  // crescente, 3º clique volta pro padrão.
+  const [ordenacao, setOrdenacao] = useState<{ coluna: ColunaOrdenavel; direcao: "asc" | "desc" } | null>(null);
   const LIMITE = 10;
+
+  function alternarOrdenacao(coluna: ColunaOrdenavel) {
+    setOrdenacao((atual) => {
+      if (!atual || atual.coluna !== coluna) return { coluna, direcao: "desc" };
+      if (atual.direcao === "desc") return { coluna, direcao: "asc" };
+      return null;
+    });
+  }
 
   const filtradas = useMemo(() => {
     const termo = normalizar(busca);
@@ -74,7 +138,20 @@ export default function ImobiliariasTabela({
     return imobiliarias.filter((i) => normalizar(i.nome).includes(termo));
   }, [imobiliarias, busca]);
 
-  const visiveis = expandido || busca ? filtradas : filtradas.slice(0, LIMITE);
+  const ordenadas = useMemo(() => {
+    if (!ordenacao) return filtradas;
+    const { coluna, direcao } = ordenacao;
+    const copia = [...filtradas];
+    copia.sort((a, b) => {
+      const va = valorOrdenacao(a, coluna, totalMesAnteriorPorImobiliaria);
+      const vb = valorOrdenacao(b, coluna, totalMesAnteriorPorImobiliaria);
+      const cmp = typeof va === "string" ? va.localeCompare(vb as string) : (va as number) - (vb as number);
+      return direcao === "asc" ? cmp : -cmp;
+    });
+    return copia;
+  }, [filtradas, ordenacao, totalMesAnteriorPorImobiliaria]);
+
+  const visiveis = expandido || busca ? ordenadas : ordenadas.slice(0, LIMITE);
   const restantes = filtradas.length - LIMITE;
 
   return (
@@ -94,32 +171,78 @@ export default function ImobiliariasTabela({
           fontSize: 13,
         }}
       />
-      <table className={styles.data}>
+      <table className={`${styles.data} ${styles.compacta}`}>
         <thead>
           <tr>
-            <th>Imobiliária</th>
-            <th className={styles.numCol}>Cotações</th>
-            <th className={styles.numCol} title="Comparado ao total de cotações do mês anterior">
-              Tendência
-            </th>
-            <th className={styles.numCol}>Em Andamento</th>
-            <th className={styles.numCol}>Recusados</th>
-            <th className={styles.numCol}>Perdidos</th>
-            <th className={styles.numCol}>Convertidos</th>
-            <th className={styles.numCol} title="Média dos prêmios cotados dentro de cada card, somada entre os cards da imobiliária">
-              Prêmio Cotado
-            </th>
-            <th className={styles.numCol} title="Média das comissões cotadas dentro de cada card, somada entre os cards da imobiliária">
-              Comissão Cotada
-            </th>
-            <th className={styles.numCol} title="Média das cotações de cada card, depois média entre os cards da imobiliária">
-              Ticket Médio
-            </th>
-            <th className={styles.numCol} title="Percentual médio do pacote de locação que vira parcela do seguro, mesma lógica do Ticket Médio">
-              % Pacote Médio
-            </th>
-            <th className={styles.numCol}>Prêmio Efetivado</th>
-            <th className={styles.numCol}>Comissão Efetivada</th>
+            <Th coluna="nome" ordenacao={ordenacao} onClick={alternarOrdenacao}>
+              Imobiliária
+            </Th>
+            <Th coluna="total" ordenacao={ordenacao} onClick={alternarOrdenacao} numerica>
+              Cotações
+            </Th>
+            <Th
+              coluna="tendencia"
+              ordenacao={ordenacao}
+              onClick={alternarOrdenacao}
+              numerica
+              title="Tendência — comparado ao total de cotações do mês anterior"
+            >
+              Tend.
+            </Th>
+            <Th coluna="emAndamento" ordenacao={ordenacao} onClick={alternarOrdenacao} numerica title="Em Andamento">
+              Andamento
+            </Th>
+            <Th coluna="recusados" ordenacao={ordenacao} onClick={alternarOrdenacao} numerica title="Recusados">
+              Recus.
+            </Th>
+            <Th coluna="perdidos" ordenacao={ordenacao} onClick={alternarOrdenacao} numerica title="Perdidos">
+              Perd.
+            </Th>
+            <Th coluna="convertidos" ordenacao={ordenacao} onClick={alternarOrdenacao} numerica title="Convertidos">
+              Conv.
+            </Th>
+            <Th
+              coluna="premioCotado"
+              ordenacao={ordenacao}
+              onClick={alternarOrdenacao}
+              numerica
+              title="Prêmio Cotado — média dos prêmios cotados dentro de cada card, somada entre os cards da imobiliária"
+            >
+              Prêmio Cot.
+            </Th>
+            <Th
+              coluna="comissaoCotada"
+              ordenacao={ordenacao}
+              onClick={alternarOrdenacao}
+              numerica
+              title="Comissão Cotada — média das comissões cotadas dentro de cada card, somada entre os cards da imobiliária"
+            >
+              Com. Cot.
+            </Th>
+            <Th
+              coluna="ticketMedio"
+              ordenacao={ordenacao}
+              onClick={alternarOrdenacao}
+              numerica
+              title="Ticket Médio — média das cotações de cada card, depois média entre os cards da imobiliária"
+            >
+              Ticket Méd.
+            </Th>
+            <Th
+              coluna="mediaPercentualPacote"
+              ordenacao={ordenacao}
+              onClick={alternarOrdenacao}
+              numerica
+              title="% Pacote Médio — percentual médio do pacote de locação que vira parcela do seguro, mesma lógica do Ticket Médio"
+            >
+              % Pacote
+            </Th>
+            <Th coluna="premioEfetivado" ordenacao={ordenacao} onClick={alternarOrdenacao} numerica title="Prêmio Efetivado">
+              Prêmio Efet.
+            </Th>
+            <Th coluna="comissaoEfetivada" ordenacao={ordenacao} onClick={alternarOrdenacao} numerica title="Comissão Efetivada">
+              Com. Efet.
+            </Th>
           </tr>
         </thead>
         <tbody>
