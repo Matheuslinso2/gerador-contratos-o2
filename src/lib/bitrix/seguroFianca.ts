@@ -868,10 +868,17 @@ export function montarAnaliseGerencial(
     };
 
     const comTaxa = novidades.filter((l) => typeof l.seguradoras[seg.nome]?.pctLocacao === "number");
+    // pctLocacao e pctAluguel são preenchidos de forma independente no
+    // Bitrix (um card pode ter só um dos dois) -- cada média usa só os
+    // cards onde aquele campo específico é número, senão um "" entrando na
+    // soma de media() vira concatenação de string, o resultado vira NaN, e
+    // vira `null` quando vai pro JSON do retrato salvo (achado real: "Too"
+    // com pctAluguel null quebrando a página com retrato antigo).
+    const comTaxaAluguel = novidades.filter((l) => typeof l.seguradoras[seg.nome]?.pctAluguel === "number");
     taxaPorSeguradora[seg.nome] = {
       n: comTaxa.length,
       pctLocacao: media(comTaxa.map((l) => l.seguradoras[seg.nome].pctLocacao as number)),
-      pctAluguel: media(comTaxa.map((l) => l.seguradoras[seg.nome].pctAluguel as number)),
+      pctAluguel: media(comTaxaAluguel.map((l) => l.seguradoras[seg.nome].pctAluguel as number)),
     };
   }
 

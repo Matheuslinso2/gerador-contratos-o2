@@ -39,7 +39,12 @@ function competenciaAnterior(competencia: string): string {
 function fmtBRL(v: number): string {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
-function fmtPct(v: number): string {
+function fmtPct(v: number | null): string {
+  // Retratos salvos antes da correção de 31/08/2026 podem ter null aqui
+  // (era NaN em memória, virou null ao passar por JSON.stringify pro
+  // Supabase) -- sem essa proteção a página quebra inteira ao reabrir esse
+  // mês antigo.
+  if (v === null) return "—";
   return v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "%";
 }
 // A etapa de encerramento de "Análise e Cotação" se chama "PERDIDO" no
