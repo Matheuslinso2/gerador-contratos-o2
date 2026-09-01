@@ -65,8 +65,18 @@ export async function salvarImobiliaria(formData: FormData) {
     }
   }
 
-  if (!nome || !cnpj || !texto_base_contrato || !indice_reajuste) {
-    return;
+  // Antes, quando faltava algum obrigatório, a função só dava "return" --
+  // sem erro nenhum, a página recarregava em branco (formulário não
+  // controlado, os campos voltam ao valor salvo/vazio) e a pessoa ficava
+  // presa sem entender por quê (achado real: cliente relatou "preencho e
+  // não salva"). Agora sempre redireciona com o motivo exato.
+  const faltando: string[] = [];
+  if (!nome) faltando.push("Nome da imobiliária");
+  if (!cnpj) faltando.push("CNPJ");
+  if (!texto_base_contrato) faltando.push("Contrato-base (envie um arquivo ou cole o texto)");
+  if (!indice_reajuste) faltando.push("Índice de reajuste padrão");
+  if (faltando.length > 0) {
+    redirect(`/imobiliaria?erro=${encodeURIComponent(`Preencha os campos obrigatórios: ${faltando.join(", ")}.`)}`);
   }
 
   const { data: imobiliariaExistente } = await supabase
