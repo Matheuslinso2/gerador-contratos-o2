@@ -67,6 +67,19 @@ function competenciaData(data: Date): string {
   return `${data.getUTCFullYear()}-${String(data.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
+function apenasData(valor: unknown): string {
+  return texto(valor).slice(0, 10);
+}
+
+// Primeiro evento do histórico do card que bate no predicado, já ordenado
+// por data -- base de dataFinalizacao (congelamento/herança, mesmo padrão
+// de src/lib/bitrix/seguroFianca.ts).
+function primeiraDataEtapa(eventos: BitrixStageHistoryEvent[], predicate: (e: BitrixStageHistoryEvent) => boolean): string {
+  const ordenados = [...eventos].sort((a, b) => new Date(a.CREATED_TIME).getTime() - new Date(b.CREATED_TIME).getTime());
+  const achado = ordenados.find(predicate);
+  return achado ? apenasData(achado.CREATED_TIME) : "";
+}
+
 export type CardCapitalizacao = {
   id: number;
   titulo: string;
@@ -75,12 +88,21 @@ export type CardCapitalizacao = {
   semantica: Semantica;
   criadoEm: Date;
   movidoEm: Date | null;
+  // Data (YYYY-MM-DD) em que o card ENTROU pela primeira vez numa etapa
+  // terminal (Emitido/Perdido/Desistência) -- "" se ainda em andamento.
+  // Base do congelamento/herança: um card criado em agosto que só fecha em
+  // setembro conta como resultado de setembro, não de agosto.
+  dataFinalizacao: string;
   valorTitulo: number;
   comissao: number;
   diasParadoEtapaAtual: number | null;
   titular: string;
   imobiliaria: string;
 };
+
+// mesAtual = origem (criadoEm) nesta competência; herdado = origem em
+// competência anterior; total = soma dos dois.
+export type ContagemPorOrigem = { mesAtual: number; herdado: number; total: number };
 
 export type FunilEtapa = {
   statusId: string;
@@ -93,18 +115,19 @@ export type FunilEtapa = {
 export type PainelCapitalizacao = {
   competencia: string;
   kpis: {
-    total: number;
-    emitidos: number;
-    perdidos: number;
-    emAndamento: number;
+    total: number; // "novidades" -- só cards criados nesta competência
+    totalRelevantes: number; // novidades + herdados considerados neste mês
+    emitidos: ContagemPorOrigem; // mês do evento (dataFinalizacao)
+    perdidos: ContagemPorOrigem; // mês do evento (dataFinalizacao)
+    emAndamento: ContagemPorOrigem; // novos + herdados, ainda "P" agora
     taxaConversao: number | null;
-    valorTotalEmitido: number;
-    comissaoEfetivada: number;
-    comissaoPotencial: number;
+    valorTotalEmitido: number; // novidades + herdados emitidos ESTE mês
+    comissaoEfetivada: number; // novidades + herdados emitidos ESTE mês
+    comissaoPotencial: number; // "novidades"
     cardsComAlerta: number;
-    premioPotencial: number;
-    numeroImobiliarias: number;
-    ticketMedioPremio: number;
+    premioPotencial: number; // "novidades"
+    numeroImobiliarias: number; // "novidades"
+    ticketMedioPremio: number; // "novidades"
   };
   funil: FunilEtapa[];
   cardsAlerta: { id: number; titulo: string; etapaNome: string; diasParado: number }[];
@@ -119,12 +142,13 @@ export type PainelCapitalizacao = {
   atualizadoEm: string;
 };
 
-function mapearCard(item: BitrixItemRaw, agora: Date): CardCapitalizacao | null {
+function mapearCard(item: BitrixItemRaw, eventos: BitrixStageHistoryEvent[], agora: Date): CardCapitalizacao | null {
   const criadoEm = dataValida(item.createdTime);
   if (!criadoEm) return null;
   const etapa = etapaPorStatusId.get(texto(item.stageId));
   const movidoEm = dataValida(item.movedTime);
   const diasParadoEtapaAtual = movidoEm ? (agora.getTime() - movidoEm.getTime()) / 86_400_000 : null;
+  const dataFinalizacao = primeiraDataEtapa(eventos, (e) => etapaPorStatusId.get(texto(e.STAGE_ID))?.semantica !== "P");
   return {
     id: Number(item.id),
     titulo: texto(item.title),
@@ -133,6 +157,7 @@ function mapearCard(item: BitrixItemRaw, agora: Date): CardCapitalizacao | null 
     semantica: etapa?.semantica ?? "P",
     criadoEm,
     movidoEm,
+    dataFinalizacao,
     valorTitulo: dinheiro(item[CAMPOS.valorTitulo]),
     comissao: dinheiro(item[CAMPOS.comissao]),
     diasParadoEtapaAtual,
@@ -198,27 +223,64 @@ export function competenciaValida(valor: string | undefined): valor is string {
   return !!valor && /^\d{4}-(0[1-9]|1[0-2])$/.test(valor);
 }
 
+function contagemPorOrigem(itens: CardCapitalizacao[], competencia: string): ContagemPorOrigem {
+  let mesAtual = 0;
+  let herdado = 0;
+  for (const c of itens) {
+    if (competenciaData(c.criadoEm) === competencia) mesAtual++;
+    else herdado++;
+  }
+  return { mesAtual, herdado, total: mesAtual + herdado };
+}
+
 export async function montarPainelCapitalizacao(competencia: string, agora = new Date()): Promise<PainelCapitalizacao> {
   const [itens, historico] = await Promise.all([
     listarItensSpa(ENTITY_TYPE_ID),
     listarHistoricoEtapas(ENTITY_TYPE_ID),
   ]);
 
-  const cards = itens.map((item) => mapearCard(item, agora)).filter((c): c is CardCapitalizacao => c !== null);
-  const cardsCompetencia = cards.filter((c) => competenciaData(c.criadoEm) === competencia);
+  const historicoPorItem = new Map<number, BitrixStageHistoryEvent[]>();
+  for (const evento of historico) {
+    const lista = historicoPorItem.get(Number(evento.OWNER_ID)) || [];
+    lista.push(evento);
+    historicoPorItem.set(Number(evento.OWNER_ID), lista);
+  }
 
-  const emitidos = cardsCompetencia.filter((c) => c.etapaId === "DT1048_28:SUCCESS");
-  const perdidos = cardsCompetencia.filter((c) => c.semantica === "F");
-  const emAndamento = cardsCompetencia.filter((c) => c.semantica === "P");
-  const taxaConversao =
-    emitidos.length + perdidos.length > 0 ? emitidos.length / (emitidos.length + perdidos.length) : null;
-  const valorTotalEmitido = emitidos.reduce((soma, c) => soma + c.valorTitulo, 0);
-  const comissaoEfetivada = emitidos.reduce((soma, c) => soma + c.comissao, 0);
-  const comissaoPotencial = cardsCompetencia.reduce((soma, c) => soma + c.comissao, 0);
-  const premioPotencial = cardsCompetencia.reduce((soma, c) => soma + c.valorTitulo, 0);
-  const numeroImobiliarias = new Set(cardsCompetencia.filter((c) => c.imobiliaria !== "—").map((c) => c.imobiliaria))
-    .size;
-  const ticketMedioPremio = cardsCompetencia.length > 0 ? premioPotencial / cardsCompetencia.length : 0;
+  const cards = itens
+    .map((item) => mapearCard(item, historicoPorItem.get(Number(item.id)) || [], agora))
+    .filter((c): c is CardCapitalizacao => c !== null);
+  const novidades = cards.filter((c) => competenciaData(c.criadoEm) === competencia);
+
+  // Congelamento/herança (mesmo padrão de seguroFianca.ts): "relevantes"
+  // pra este mês = criado agora, OU ainda em andamento (de qualquer
+  // origem), OU fechou (emitido/perdido) DENTRO deste mês mesmo tendo sido
+  // criado antes -- assim um card de agosto que só fecha em setembro conta
+  // como resultado de setembro, e um card de agosto ainda aberto continua
+  // aparecendo em "Em andamento" até fechar.
+  function fechouNaCompetencia(c: CardCapitalizacao): boolean {
+    return !!c.dataFinalizacao && c.dataFinalizacao.startsWith(competencia);
+  }
+  const relevantes = cards.filter(
+    (c) => competenciaData(c.criadoEm) === competencia || c.semantica === "P" || fechouNaCompetencia(c)
+  );
+
+  const emitidosEsteMes = relevantes.filter((c) => c.etapaId === "DT1048_28:SUCCESS" && fechouNaCompetencia(c));
+  const perdidosEsteMes = relevantes.filter((c) => c.semantica === "F" && fechouNaCompetencia(c));
+  const emAndamentoRelevante = relevantes.filter((c) => c.semantica === "P");
+
+  const emitidos = contagemPorOrigem(emitidosEsteMes, competencia);
+  const perdidos = contagemPorOrigem(perdidosEsteMes, competencia);
+  const emAndamento = contagemPorOrigem(emAndamentoRelevante, competencia);
+  const taxaConversao = emitidos.total + perdidos.total > 0 ? emitidos.total / (emitidos.total + perdidos.total) : null;
+  const valorTotalEmitido = emitidosEsteMes.reduce((soma, c) => soma + c.valorTitulo, 0);
+  const comissaoEfetivada = emitidosEsteMes.reduce((soma, c) => soma + c.comissao, 0);
+  // Potencial/ticket médio continuam só "novidades" (mesmo espírito de
+  // premioPotencial/comissaoPotencial em seguroFianca.ts) -- são sobre o
+  // que entrou de novo, não sobre o total considerado no mês.
+  const comissaoPotencial = novidades.reduce((soma, c) => soma + c.comissao, 0);
+  const premioPotencial = novidades.reduce((soma, c) => soma + c.valorTitulo, 0);
+  const numeroImobiliarias = new Set(novidades.filter((c) => c.imobiliaria !== "—").map((c) => c.imobiliaria)).size;
+  const ticketMedioPremio = novidades.length > 0 ? premioPotencial / novidades.length : 0;
 
   // Alerta de card parado é operacional (agora), não fica preso à
   // competência selecionada — um card antigo esquecido continua alertando.
@@ -257,10 +319,11 @@ export async function montarPainelCapitalizacao(competencia: string, agora = new
   return {
     competencia,
     kpis: {
-      total: cardsCompetencia.length,
-      emitidos: emitidos.length,
-      perdidos: perdidos.length,
-      emAndamento: emAndamento.length,
+      total: novidades.length,
+      totalRelevantes: relevantes.length,
+      emitidos,
+      perdidos,
+      emAndamento,
       taxaConversao,
       valorTotalEmitido,
       comissaoEfetivada,

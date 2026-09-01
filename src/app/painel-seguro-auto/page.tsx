@@ -3,14 +3,26 @@ import AppHeader from "@/components/AppHeader";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "../actions";
-import { competenciaAtual, competenciaValida, montarPainelSeguroAuto } from "@/lib/seguroAuto/painel";
+import { competenciaAtual, competenciaValida, montarPainelSeguroAuto, type PainelSeguroAuto as PainelSeguroAutoData } from "@/lib/seguroAuto/painel";
 import PainelSeguroAuto from "./PainelSeguroAuto";
 import SeletorCompetencia from "./SeletorCompetencia";
 import AtualizarAgora from "./AtualizarAgora";
 import styles from "./painel-seguro-auto.module.css";
 
 export const dynamic = "force-dynamic";
+// Analisar todas as fichas ao vivo pode demorar -- corta antes do limite da
+// Vercel (60s) pra ainda dar tempo de cair no retrato salvo e responder, em
+// vez de deixar a Vercel matar a função sem nenhum catch rodar.
 export const maxDuration = 60;
+const LIMITE_TEMPO_AO_VIVO_MS = 40_000;
+
+function comLimiteDeTempo<T>(promessa: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const limite = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Tempo esgotado após ${Math.round(ms / 1000)}s buscando no Bitrix`)), ms);
+  });
+  return Promise.race([promessa, limite]).finally(() => clearTimeout(timer)) as Promise<T>;
+}
 
 function rotuloCompetencia(competencia: string): string {
   const [ano, mes] = competencia.split("-").map(Number);
@@ -25,7 +37,10 @@ export default async function PainelSeguroAutoPage({
   searchParams: Promise<{ competencia?: string }>;
 }) {
   const parametros = await searchParams;
-  const competencia = competenciaValida(parametros.competencia) ? parametros.competencia : competenciaAtual();
+  const competenciaHoje = competenciaAtual();
+  const competencia = competenciaValida(parametros.competencia) ? parametros.competencia : competenciaHoje;
+  const ehCompetenciaAtual = competencia === competenciaHoje;
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -33,12 +48,36 @@ export default async function PainelSeguroAutoPage({
 
   if (!isAdmin(user?.email) && !isColaboradorO2(user?.email)) redirect("/");
 
+  let dados: PainelSeguroAutoData | null = null;
   let erro: string | null = null;
-  let dados: Awaited<ReturnType<typeof montarPainelSeguroAuto>> | null = null;
-  try {
-    dados = await montarPainelSeguroAuto(competencia);
-  } catch (e) {
-    erro = e instanceof Error ? e.message : "Falha ao ler os dados de Seguro Auto no Bitrix.";
+  let usandoRetratoSalvo = false;
+
+  // Congelamento/herança (mesmo padrão do Seguro Fiança e Capitalização):
+  // competência ATUAL busca ao vivo e salva um retrato pra virar fallback;
+  // competência PASSADA só lê o retrato já congelado (por um cron, dia 1º
+  // de cada mês -- ver src/app/api/cron/congelar-paineis/route.ts).
+  if (ehCompetenciaAtual) {
+    try {
+      dados = await comLimiteDeTempo(montarPainelSeguroAuto(competencia), LIMITE_TEMPO_AO_VIVO_MS);
+      const { error: erroUpsert } = await supabase
+        .from("seguro_auto_snapshots")
+        .upsert({ competencia, atualizado_em: dados.atualizadoEm, payload: dados }, { onConflict: "competencia" });
+      if (erroUpsert) console.error("Falha ao salvar snapshot de Seguro Auto no Supabase:", erroUpsert);
+    } catch (e) {
+      erro = e instanceof Error ? e.message : "Falha ao ler os dados de Seguro Auto no Bitrix.";
+      const { data } = await supabase
+        .from("seguro_auto_snapshots")
+        .select("payload")
+        .eq("competencia", competencia)
+        .maybeSingle();
+      if (data) {
+        dados = data.payload as PainelSeguroAutoData;
+        usandoRetratoSalvo = true;
+      }
+    }
+  } else {
+    const { data } = await supabase.from("seguro_auto_snapshots").select("payload").eq("competencia", competencia).maybeSingle();
+    if (data) dados = data.payload as PainelSeguroAutoData;
   }
 
   return (
@@ -54,7 +93,7 @@ export default async function PainelSeguroAutoPage({
             <div className={styles.meta}>
               <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "flex-end" }}>
                 <SeletorCompetencia competencia={competencia} />
-                <AtualizarAgora />
+                {ehCompetenciaAtual && <AtualizarAgora />}
               </div>
               <br />
               {dados && <>Atualizado em {new Date(dados.atualizadoEm).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</>}
@@ -65,8 +104,17 @@ export default async function PainelSeguroAutoPage({
             <div className={`${styles.stampPanel} ${styles.stampPanelWarning}`} style={{ marginBottom: 24 }}>
               <div className={`${styles.stampBadge} ${styles.stampBadgeWarning}`}>ERRO</div>
               <div className={styles.stampList}>
-                <div>Não consegui buscar os dados do Bitrix agora: {erro}</div>
+                <div>
+                  Não consegui buscar os dados do Bitrix agora: {erro}
+                  {usandoRetratoSalvo && " — mostrando o último retrato salvo abaixo."}
+                </div>
               </div>
+            </div>
+          )}
+
+          {!dados && !erro && (
+            <div className={styles.panelSub}>
+              Nenhum retrato salvo pra esse mês ainda — a página nunca foi aberta durante essa competência.
             </div>
           )}
 

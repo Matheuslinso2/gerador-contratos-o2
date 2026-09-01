@@ -47,29 +47,44 @@ export default function PainelCapitalizacao({ dados }: { dados: PainelCapitaliza
 
   return (
     <>
+      <h2 style={{ fontSize: 14, fontWeight: 700, margin: "0 0 8px", color: "var(--ink)" }}>Novidades do mês</h2>
       <div className={styles.kpis}>
         <Kpi label="Solicitações no mês" value={String(kpis.total)} sub="cards criados na competência" />
-        <Kpi label="Em andamento" value={String(kpis.emAndamento)} sub="ainda sendo trabalhados" tone="info" />
-        <Kpi label="Emitidos" value={String(kpis.emitidos)} sub="título emitido com sucesso" tone="positive" />
-        <Kpi label="Perdidos" value={String(kpis.perdidos)} sub="pagamento não realizado ou desistência" tone="negative" />
+        <Kpi label="Em andamento" value={String(kpis.emAndamento.mesAtual)} sub="deste mês, ainda sendo trabalhados" tone="info" />
+        <Kpi label="Emitidos" value={String(kpis.emitidos.mesAtual)} sub="deste mês, título emitido com sucesso" tone="positive" />
+        <Kpi label="Perdidos" value={String(kpis.perdidos.mesAtual)} sub="deste mês, pagamento não realizado ou desistência" tone="negative" />
+        <Kpi label="Comissão potencial" value={fmtBRL(kpis.comissaoPotencial)} sub="todos os cards novos com comissão preenchida" tone="info" />
+        <Kpi label="Prêmio potencial" value={fmtBRL(kpis.premioPotencial)} sub="soma do prêmio de todos os cards novos" tone="info" />
+        <Kpi label="Imobiliárias" value={String(kpis.numeroImobiliarias)} sub="imobiliárias distintas com cards novos" />
+        <Kpi label="Ticket médio" value={fmtBRL(kpis.ticketMedioPremio)} sub="prêmio médio por card novo" />
+      </div>
+
+      <h2 style={{ fontSize: 14, fontWeight: 700, margin: "20px 0 8px", color: "var(--ink)" }}>Herdado de meses anteriores</h2>
+      <div className={styles.kpis}>
+        <Kpi label="Em andamento" value={String(kpis.emAndamento.herdado)} sub="ainda em aberto, de outros meses" tone="info" />
+        <Kpi label="Emitidos" value={String(kpis.emitidos.herdado)} sub="emitidos este mês, criados antes" tone="positive" />
+        <Kpi label="Perdidos" value={String(kpis.perdidos.herdado)} sub="perdidos este mês, criados antes" tone="negative" />
+      </div>
+
+      <h2 style={{ fontSize: 14, fontWeight: 700, margin: "20px 0 8px", color: "var(--ink)" }}>Total do mês (novidades + herdado)</h2>
+      <div className={styles.kpis}>
+        <Kpi label="Em andamento" value={String(kpis.emAndamento.total)} sub="soma, todos ainda em aberto" tone="info" />
+        <Kpi label="Emitidos" value={String(kpis.emitidos.total)} sub="soma, fecharam este mês" tone="positive" />
+        <Kpi label="Perdidos" value={String(kpis.perdidos.total)} sub="soma, fecharam este mês" tone="negative" />
         <Kpi
           label="Taxa de conversão"
           value={fmtPct(kpis.taxaConversao)}
-          sub="emitidos ÷ (emitidos + perdidos)"
+          sub="emitidos ÷ (emitidos + perdidos), soma do mês"
           tone={kpis.taxaConversao !== null && kpis.taxaConversao >= 0.5 ? "positive" : undefined}
         />
-        <Kpi label="Valor total emitido" value={fmtBRL(kpis.valorTotalEmitido)} sub="soma do prêmio dos emitidos" />
-        <Kpi label="Comissão efetivada" value={fmtBRL(kpis.comissaoEfetivada)} sub="comissão dos emitidos" tone="positive" />
-        <Kpi label="Comissão potencial" value={fmtBRL(kpis.comissaoPotencial)} sub="todos os cards com comissão preenchida" tone="info" />
+        <Kpi label="Valor total emitido" value={fmtBRL(kpis.valorTotalEmitido)} sub="soma do prêmio dos emitidos este mês" />
+        <Kpi label="Comissão efetivada" value={fmtBRL(kpis.comissaoEfetivada)} sub="comissão dos emitidos este mês" tone="positive" />
         <Kpi
           label="Cards com alerta"
           value={String(kpis.cardsComAlerta)}
           sub="parados 3+ dias sem mudar de etapa"
           tone={kpis.cardsComAlerta > 0 ? "warning" : "positive"}
         />
-        <Kpi label="Prêmio potencial" value={fmtBRL(kpis.premioPotencial)} sub="soma do prêmio de todos os cards do mês" tone="info" />
-        <Kpi label="Imobiliárias" value={String(kpis.numeroImobiliarias)} sub="imobiliárias distintas com cards no mês" />
-        <Kpi label="Ticket médio" value={fmtBRL(kpis.ticketMedioPremio)} sub="prêmio médio por card no mês" />
       </div>
 
       <section className={styles.section}>

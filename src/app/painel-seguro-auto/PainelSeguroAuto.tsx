@@ -63,39 +63,54 @@ export default function PainelSeguroAuto({ dados }: { dados: PainelSeguroAutoDat
 
   return (
     <>
+      <h2 style={{ fontSize: 14, fontWeight: 700, margin: "0 0 8px", color: "var(--ink)" }}>Novidades do mês</h2>
       <div className={styles.kpis}>
         <Kpi label="Fichas no mês" value={String(kpis.total)} sub="cards criados na competência" />
-        <Kpi label="Em andamento" value={String(kpis.emAndamento)} sub="ainda sendo trabalhadas" tone="info" />
-        <Kpi label="Convertidas" value={String(kpis.convertidos)} sub="cotação fechada com sucesso" tone="positive" />
-        <Kpi label="Perdidas" value={String(kpis.perdidos)} sub="não fechou" tone="negative" />
+        <Kpi label="Em andamento" value={String(kpis.emAndamento.mesAtual)} sub="deste mês, ainda sendo trabalhadas" tone="info" />
+        <Kpi label="Convertidas" value={String(kpis.convertidos.mesAtual)} sub="deste mês, cotação fechada com sucesso" tone="positive" />
+        <Kpi label="Perdidas" value={String(kpis.perdidos.mesAtual)} sub="deste mês, não fechou" tone="negative" />
+        <Kpi
+          label="Com CNH anexada"
+          value={fmtPct(kpis.percentualComCnh)}
+          sub="fichas novas com documento do condutor"
+          tone={kpis.percentualComCnh >= 0.8 ? "positive" : "warning"}
+        />
+        <Kpi
+          label="Com CRLV anexado"
+          value={fmtPct(kpis.percentualComCrlv)}
+          sub="fichas novas com documento do veículo"
+          tone={kpis.percentualComCrlv >= 0.8 ? "positive" : "warning"}
+        />
+        <Kpi label="Com apólice anterior" value={String(kpis.comApoliceAnterior)} sub="já tinham seguro vigente — possível troca de seguradora" tone="info" />
+      </div>
+
+      <h2 style={{ fontSize: 14, fontWeight: 700, margin: "20px 0 8px", color: "var(--ink)" }}>Herdado de meses anteriores</h2>
+      <div className={styles.kpis}>
+        <Kpi label="Em andamento" value={String(kpis.emAndamento.herdado)} sub="ainda em aberto, de outros meses" tone="info" />
+        <Kpi label="Convertidas" value={String(kpis.convertidos.herdado)} sub="convertidas este mês, criadas antes" tone="positive" />
+        <Kpi label="Perdidas" value={String(kpis.perdidos.herdado)} sub="perdidas este mês, criadas antes" tone="negative" />
+      </div>
+
+      <h2 style={{ fontSize: 14, fontWeight: 700, margin: "20px 0 8px", color: "var(--ink)" }}>Total do mês (novidades + herdado)</h2>
+      <div className={styles.kpis}>
+        <Kpi label="Em andamento" value={String(kpis.emAndamento.total)} sub="soma, todas ainda em aberto" tone="info" />
+        <Kpi label="Convertidas" value={String(kpis.convertidos.total)} sub="soma, fecharam este mês" tone="positive" />
+        <Kpi label="Perdidas" value={String(kpis.perdidos.total)} sub="soma, fecharam este mês" tone="negative" />
         <Kpi
           label="Taxa de conversão"
           value={fmtPct(kpis.taxaConversao)}
-          sub="convertidas ÷ (convertidas + perdidas)"
+          sub="convertidas ÷ (convertidas + perdidas), soma do mês"
           tone={kpis.taxaConversao !== null && kpis.taxaConversao >= 0.5 ? "positive" : undefined}
         />
+        <Kpi label="Prêmio efetivado" value={fmtBRL(kpis.premioEfetivado)} sub="soma do prêmio das convertidas este mês" tone="positive" />
+        <Kpi label="Comissão gerada" value={fmtBRL(kpis.comissaoGerada)} sub="soma da comissão das convertidas este mês" tone="positive" />
+        <Kpi label="% de comissão médio" value={fmtPctDireto(kpis.percentualComissaoMedio)} sub="média entre as convertidas este mês com % preenchido" />
         <Kpi
           label="Cards com alerta"
           value={String(kpis.cardsComAlerta)}
           sub="parados 3+ dias sem mudar de etapa"
           tone={kpis.cardsComAlerta > 0 ? "warning" : "positive"}
         />
-        <Kpi
-          label="Com CNH anexada"
-          value={fmtPct(kpis.percentualComCnh)}
-          sub="fichas do mês com documento do condutor"
-          tone={kpis.percentualComCnh >= 0.8 ? "positive" : "warning"}
-        />
-        <Kpi
-          label="Com CRLV anexado"
-          value={fmtPct(kpis.percentualComCrlv)}
-          sub="fichas do mês com documento do veículo"
-          tone={kpis.percentualComCrlv >= 0.8 ? "positive" : "warning"}
-        />
-        <Kpi label="Com apólice anterior" value={String(kpis.comApoliceAnterior)} sub="já tinham seguro vigente — possível troca de seguradora" tone="info" />
-        <Kpi label="Prêmio efetivado" value={fmtBRL(kpis.premioEfetivado)} sub="soma do prêmio das convertidas" tone="positive" />
-        <Kpi label="Comissão gerada" value={fmtBRL(kpis.comissaoGerada)} sub="soma da comissão das convertidas" tone="positive" />
-        <Kpi label="% de comissão médio" value={fmtPctDireto(kpis.percentualComissaoMedio)} sub="média entre as convertidas com % preenchido" />
       </div>
 
       <section className={styles.section}>
