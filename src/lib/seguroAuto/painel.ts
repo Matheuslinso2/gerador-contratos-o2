@@ -75,19 +75,6 @@ function competenciaData(data: Date): string {
   return `${data.getUTCFullYear()}-${String(data.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-function apenasData(valor: unknown): string {
-  return texto(valor).slice(0, 10);
-}
-
-// Primeiro evento do histórico do card que bate no predicado, já ordenado
-// por data -- base de dataFinalizacao (congelamento/herança, mesmo padrão
-// de src/lib/bitrix/seguroFianca.ts e src/lib/capitalizacao/painel.ts).
-function primeiraDataEtapa(eventos: BitrixStageHistoryEvent[], predicate: (e: BitrixStageHistoryEvent) => boolean): string {
-  const ordenados = [...eventos].sort((a, b) => new Date(a.CREATED_TIME).getTime() - new Date(b.CREATED_TIME).getTime());
-  const achado = ordenados.find(predicate);
-  return achado ? apenasData(achado.CREATED_TIME) : "";
-}
-
 function enumLabel(defs: Record<string, BitrixDefinicaoCampo>, campo: string, valor: unknown): string {
   if (valor === null || valor === undefined || valor === "") return "";
   const item = defs[campo]?.items?.find((i) => i.ID === String(valor));
@@ -102,11 +89,6 @@ export type CardSeguroAuto = {
   semantica: Semantica;
   criadoEm: Date;
   movidoEm: Date | null;
-  // Data (YYYY-MM-DD) em que o card ENTROU pela primeira vez numa etapa
-  // terminal (Sucesso/Perda) -- "" se ainda em andamento. Base do
-  // congelamento/herança: um card criado num mês que só fecha no seguinte
-  // conta como resultado do mês em que fechou, não do mês em que nasceu.
-  dataFinalizacao: string;
   diasParadoEtapaAtual: number | null;
   nome: string;
   email: string;
@@ -140,18 +122,17 @@ export type PainelSeguroAuto = {
   competencia: string;
   kpis: {
     total: number; // "novidades" -- só cards criados nesta competência
-    totalRelevantes: number; // novidades + herdados considerados neste mês
-    convertidos: ContagemPorOrigem; // mês do evento (dataFinalizacao)
-    perdidos: ContagemPorOrigem; // mês do evento (dataFinalizacao)
-    emAndamento: ContagemPorOrigem; // novos + herdados, ainda "P" agora
+    convertidos: number; // "novidades" -- só cards criados nesta competência
+    perdidos: number; // "novidades" -- só cards criados nesta competência
+    emAndamento: ContagemPorOrigem; // novos + herdados, ainda "P" agora -- ÚNICA coisa que herda de mês anterior (pedido do Matheus: uma vez concluído, não herda mais)
     taxaConversao: number | null;
     cardsComAlerta: number;
     percentualComCnh: number; // "novidades"
     percentualComCrlv: number; // "novidades"
     comApoliceAnterior: number; // "novidades"
-    premioEfetivado: number; // novidades + herdados convertidos ESTE mês
-    comissaoGerada: number; // novidades + herdados convertidos ESTE mês
-    percentualComissaoMedio: number | null; // novidades + herdados convertidos ESTE mês
+    premioEfetivado: number; // "novidades"
+    comissaoGerada: number; // "novidades"
+    percentualComissaoMedio: number | null; // "novidades"
   };
   funil: FunilEtapa[];
   distribuicaoUtilizacao: { rotulo: string; quantidade: number }[];
@@ -181,7 +162,6 @@ export type PainelSeguroAuto = {
 function mapearCard(
   item: BitrixItemRaw,
   defs: Record<string, BitrixDefinicaoCampo>,
-  eventos: BitrixStageHistoryEvent[],
   agora: Date
 ): CardSeguroAuto | null {
   const criadoEm = dataValida(item.createdTime);
@@ -189,7 +169,6 @@ function mapearCard(
   const etapa = etapaPorStatusId.get(texto(item.stageId));
   const movidoEm = dataValida(item.movedTime);
   const diasParadoEtapaAtual = movidoEm ? (agora.getTime() - movidoEm.getTime()) / 86_400_000 : null;
-  const dataFinalizacao = primeiraDataEtapa(eventos, (e) => etapaPorStatusId.get(texto(e.STAGE_ID))?.semantica !== "P");
   return {
     id: Number(item.id),
     titulo: texto(item.title),
@@ -198,7 +177,6 @@ function mapearCard(
     semantica: etapa?.semantica ?? "P",
     criadoEm,
     movidoEm,
-    dataFinalizacao,
     diasParadoEtapaAtual,
     nome: texto(item[CAMPOS.nome]) || texto(item.title),
     email: texto(item[CAMPOS.email]),
@@ -291,48 +269,31 @@ export async function montarPainelSeguroAuto(competencia: string, agora = new Da
     buscarDefinicaoCampos(ENTITY_TYPE_ID),
   ]);
 
-  const historicoPorItem = new Map<number, BitrixStageHistoryEvent[]>();
-  for (const evento of historico) {
-    const lista = historicoPorItem.get(Number(evento.OWNER_ID)) || [];
-    lista.push(evento);
-    historicoPorItem.set(Number(evento.OWNER_ID), lista);
-  }
-
-  const cards = itens
-    .map((item) => mapearCard(item, defs, historicoPorItem.get(Number(item.id)) || [], agora))
-    .filter((c): c is CardSeguroAuto => c !== null);
+  const cards = itens.map((item) => mapearCard(item, defs, agora)).filter((c): c is CardSeguroAuto => c !== null);
   const novidades = cards.filter((c) => competenciaData(c.criadoEm) === competencia);
 
-  // Congelamento/herança (mesmo padrão de seguroFianca.ts e
-  // capitalizacao/painel.ts): "relevantes" pra este mês = criado agora, OU
-  // ainda em andamento (de qualquer origem), OU fechou (convertido/perdido)
-  // DENTRO deste mês mesmo tendo sido criado antes.
-  function fechouNaCompetencia(c: CardSeguroAuto): boolean {
-    return !!c.dataFinalizacao && c.dataFinalizacao.startsWith(competencia);
-  }
-  const relevantes = cards.filter(
-    (c) => competenciaData(c.criadoEm) === competencia || c.semantica === "P" || fechouNaCompetencia(c)
-  );
+  // Redefinido com o Matheus em 01/09/2026 (mesma mudança em
+  // capitalizacao/painel.ts): a ÚNICA coisa que herda de mês anterior é
+  // "Em Andamento". Uma vez que o card CONCLUI (Sucesso/Perda), ele deixa
+  // de ser herdado -- Convertidos/Perdidos voltam a ser só sobre quem foi
+  // CRIADO neste mês, não sobre quando o Bitrix registrou a etapa final.
+  const emAndamentoTodos = cards.filter((c) => c.semantica === "P");
+  const emAndamento = contagemPorOrigem(emAndamentoTodos, competencia);
 
-  const convertidosEsteMes = relevantes.filter((c) => c.etapaId === "DT1050_30:SUCCESS" && fechouNaCompetencia(c));
-  const perdidosEsteMes = relevantes.filter((c) => c.semantica === "F" && fechouNaCompetencia(c));
-  const emAndamentoRelevante = relevantes.filter((c) => c.semantica === "P");
-
-  const convertidos = contagemPorOrigem(convertidosEsteMes, competencia);
-  const perdidos = contagemPorOrigem(perdidosEsteMes, competencia);
-  const emAndamento = contagemPorOrigem(emAndamentoRelevante, competencia);
-  const taxaConversao =
-    convertidos.total + perdidos.total > 0 ? convertidos.total / (convertidos.total + perdidos.total) : null;
+  const convertidosNovidades = novidades.filter((c) => c.etapaId === "DT1050_30:SUCCESS");
+  const perdidosNovidades = novidades.filter((c) => c.semantica === "F");
+  const convertidos = convertidosNovidades.length;
+  const perdidos = perdidosNovidades.length;
+  const taxaConversao = convertidos + perdidos > 0 ? convertidos / (convertidos + perdidos) : null;
   const comCnh = novidades.filter((c) => c.temCnh).length;
   const comCrlv = novidades.filter((c) => c.temCrlv).length;
   const comApolice = novidades.filter((c) => c.temApolice).length;
 
   // Prêmio/comissão só existem depois do fechamento -- soma sobre quem
-  // converteu ESTE mês (novidade ou herdado), mesmo espírito de
-  // valorTotalEmitido em capitalizacao/painel.ts.
-  const premioEfetivado = convertidosEsteMes.reduce((soma, c) => soma + c.premioEfetivado, 0);
-  const comissaoGerada = convertidosEsteMes.reduce((soma, c) => soma + c.comissaoGerada, 0);
-  const comPercentualComissao = convertidosEsteMes.filter((c) => c.percentualComissao > 0);
+  // converteu e foi criado ESTE mês.
+  const premioEfetivado = convertidosNovidades.reduce((soma, c) => soma + c.premioEfetivado, 0);
+  const comissaoGerada = convertidosNovidades.reduce((soma, c) => soma + c.comissaoGerada, 0);
+  const comPercentualComissao = convertidosNovidades.filter((c) => c.percentualComissao > 0);
   const percentualComissaoMedio =
     comPercentualComissao.length > 0
       ? comPercentualComissao.reduce((soma, c) => soma + c.percentualComissao, 0) / comPercentualComissao.length
@@ -370,7 +331,7 @@ export async function montarPainelSeguroAuto(competencia: string, agora = new Da
     semGaragem: novidades.filter((c) => !c.temGaragem).length,
   };
 
-  const convertidasFinanceiro = [...convertidosEsteMes]
+  const convertidasFinanceiro = [...convertidosNovidades]
     .sort((a, b) => b.premioEfetivado - a.premioEfetivado)
     .map((c) => ({
       id: c.id,
@@ -398,7 +359,6 @@ export async function montarPainelSeguroAuto(competencia: string, agora = new Da
     competencia,
     kpis: {
       total: novidades.length,
-      totalRelevantes: relevantes.length,
       convertidos,
       perdidos,
       emAndamento,
