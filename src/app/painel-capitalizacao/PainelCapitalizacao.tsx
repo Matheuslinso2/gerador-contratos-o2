@@ -163,7 +163,7 @@ export default function PainelCapitalizacao({ dados }: { dados: PainelCapitaliza
       <section className={styles.section}>
         <div className={styles.sectionHead}>
           <h2>Títulos solicitados</h2>
-          <div className={styles.note}>todos os títulos ativos, sem filtro de mês</div>
+          <div className={styles.note}>novidades do mês + em andamento herdados — mesma lógica dos KPIs acima</div>
         </div>
         <div className={styles.panel}>
           {titulos.length === 0 ? <div className={styles.panelSub}>Nenhum título encontrado.</div> : <TitulosTabela titulos={titulos} />}

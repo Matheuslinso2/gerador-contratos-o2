@@ -267,9 +267,15 @@ export async function montarPainelCapitalizacao(competencia: string, agora = new
     tempoMedioDiasFechado: mediasPorEtapa.get(etapa.statusId) ?? null,
   }));
 
-  // Carteira completa — sem filtro de competência, é consulta de todos os
-  // títulos ativos, não um relatório do mês.
-  const titulos = [...cards]
+  // Mesma lógica da herança dos KPIs: só entram na lista os títulos da
+  // competência (novidades, qualquer status) e os que ainda estão em
+  // andamento de meses anteriores (herdados) -- um título concluído em
+  // outro mês não aparece aqui, ele já foi contado no mês em que nasceu.
+  const idsNovidades = new Set(novidades.map((c) => c.id));
+  const herdadosEmAndamento = emAndamentoTodos.filter((c) => !idsNovidades.has(c.id));
+  const titulosRelevantes = [...novidades, ...herdadosEmAndamento];
+
+  const titulos = titulosRelevantes
     .sort((a, b) => b.criadoEm.getTime() - a.criadoEm.getTime())
     .map((c) => ({
       id: c.id,
