@@ -48,7 +48,54 @@ function obterClienteGmail(): gmail_v1.Gmail {
 // real: com in:inbox puro, o volume de notificação automática de equipe
 // (Segimob, Fiança, Incêndio) lotava a amostra recente e engolia por
 // completo os poucos e-mails que são de fato do Matheus.
-export const QUERY_PADRAO_CAIXA_EXECUTIVA = "to:matheus@o2seguros.com.br in:inbox newer_than:7d";
+//
+// Exclusões definidas com o Matheus em 2026-09-01, depois de um levantamento
+// de ~440 e-mails reais dos últimos 14 dias agrupados por remetente/assunto
+// -- tudo aqui é ruído estrutural que NUNCA é responsabilidade direta dele,
+// mesmo nos raros casos em que ele aparece em "Para" (não só em cópia).
+// Cortar na própria busca do Gmail evita gastar uma chamada de classificação
+// por IA com cada um desses e-mails.
+const REMETENTES_EXCLUIDOS = [
+  // Marketing pessoal / spam, sem nenhuma relação com a O2.
+  "casasbahia.com.br",
+  "comunicacao.inter.co",
+  "gruporecovery.com",
+  "amazon.com.br",
+  "pinterest.com",
+  "folhadespaulo.com.br",
+  "newsg.globo.com",
+  "eventim.com.br",
+  "brastemp.com.br",
+  "loft.com.br",
+  "qconcursos.com",
+  "cora.com.br",
+  "estacio.br",
+  // Newsletters de mercado/associações -- divulgação, nunca pede ação.
+  "sincorrj.com.br",
+  "fenacor.org.br",
+  "ens.edu.br",
+  "seguroinfo.com.br",
+  "sics.com.br",
+  "advys.com.br",
+  // Seguradoras -- bots de notificação de rotina (não confundir com um
+  // analista de verdade escrevendo de um desses domínios).
+  "segimob.com",
+  "apolice.digital.varejo@tokiomarine.com.br",
+  "endosso.digital.varejo@tokiomarine.com.br",
+  "noreply@tokiomarine.com.br",
+  "mail-tokiomarine.com.br",
+  "contasapagar@pottencial.com.br",
+];
+
+export const QUERY_PADRAO_CAIXA_EXECUTIVA = [
+  "to:matheus@o2seguros.com.br",
+  "in:inbox",
+  "newer_than:7d",
+  ...REMETENTES_EXCLUIDOS.map((remetente) => `-from:${remetente}`),
+  // A própria Plataforma O2 se auto-notifica de erro (matheus@ -> matheus@)
+  // -- é log técnico, não pedido de terceiro.
+  '-subject:"Erro no sistema"',
+].join(" ");
 
 export type MensagemGmail = {
   id: string;
