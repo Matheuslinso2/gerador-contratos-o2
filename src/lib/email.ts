@@ -1,8 +1,12 @@
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 
 export type AnexoEmail = { nome: string; conteudo: Buffer; tipo?: string; cid?: string };
 
-// Envia e-mail via Gmail/Google Workspace (SMTP com senha de app). Falha
+const ENDERECO_REMETENTE = "avisos@notificacoes.o2seguros.com.br";
+
+// Envia e-mail via Resend, usando o domínio dedicado
+// notificacoes.o2seguros.com.br (não mexe no e-mail principal
+// @o2seguros.com.br, que continua no Google Workspace). Falha
 // silenciosamente (só loga) se não estiver configurado — nunca deve travar
 // o cadastro da imobiliária por causa disso. Já quem chama com `throw:
 // true` (ex: envio de fatura, onde o usuário precisa saber na hora se
@@ -24,24 +28,19 @@ export async function enviarEmail({
   remetente?: string;
   throwSeFalhar?: boolean;
 }) {
-  const usuario = process.env.GMAIL_USER;
-  const senha = process.env.GMAIL_APP_PASSWORD;
+  const chave = process.env.RESEND_API_KEY;
 
-  if (!usuario || !senha) {
-    const msg = "Envio de e-mail não configurado: faltam GMAIL_USER/GMAIL_APP_PASSWORD.";
+  if (!chave) {
+    const msg = "Envio de e-mail não configurado: falta RESEND_API_KEY.";
     console.error(msg);
     if (throwSeFalhar) throw new Error(msg);
     return;
   }
 
   try {
-    const transportador = nodemailer.createTransport({
-      service: "gmail",
-      auth: { user: usuario, pass: senha },
-    });
-
-    await transportador.sendMail({
-      from: `${remetente} <${usuario}>`,
+    const resend = new Resend(chave);
+    const { error } = await resend.emails.send({
+      from: `${remetente} <${ENDERECO_REMETENTE}>`,
       to: para,
       cc: cc?.length ? cc : undefined,
       subject: assunto,
@@ -50,10 +49,10 @@ export async function enviarEmail({
         filename: a.nome,
         content: a.conteudo,
         contentType: a.tipo,
-        cid: a.cid,
-        contentDisposition: a.cid ? "inline" : "attachment",
+        contentId: a.cid,
       })),
     });
+    if (error) throw new Error(error.message);
   } catch (erro) {
     console.error("Falha ao enviar e-mail:", erro);
     if (throwSeFalhar) throw erro;
@@ -68,7 +67,7 @@ const EMAIL_ALERTA_ADMIN = "matheus@o2seguros.com.br";
 
 // Notifica a O2 quando algo dá erro de verdade no sistema, pra permitir
 // acompanhar sem precisar ficar checando os logs do Vercel. Reusa o mesmo
-// SMTP de enviarEmail — se não estiver configurado, só loga (não trava nada).
+// envio de enviarEmail — se não estiver configurado, só loga (não trava nada).
 export async function alertarAdmin({
   contexto,
   detalhe,

@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { alertarAdmin } from "@/lib/email";
 import { createClient } from "@/lib/supabase/server";
 
-// error.tsx roda no cliente e não pode chamar nodemailer diretamente (é
-// código de servidor), então ele reporta pra essa rota, que dispara o
+// error.tsx roda no cliente e não pode chamar o envio de e-mail diretamente
+// (é código de servidor), então ele reporta pra essa rota, que dispara o
 // alerta de verdade. A rota em si não exige login (erro pode acontecer até
 // na tela de login), mas aqui a gente tenta identificar quem estava
 // logado no momento, pra dizer no alerta qual imobiliária foi afetada.
