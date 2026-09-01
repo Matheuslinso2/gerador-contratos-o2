@@ -255,6 +255,37 @@ function apenasData(v: unknown): string {
   return String(v).slice(0, 10);
 }
 
+// O Bitrix devolve timestamps de EVENTO REAL (createdTime, movedTime,
+// updatedTime, CREATED_TIME do histórico de etapa) no fuso do servidor
+// (+03:00, Moscou) -- um card recebido às 21h-23h59 em Brasília já vira
+// "amanhã" nesse fuso. Fatiar a string bruta (apenasData) pegava o
+// dia/mês errado nessa janela -- achado real (relatado pelo Matheus,
+// 01/09/2026): card recebido às 18h de 31/08 (Brasília, confirmado no
+// campo "Data e hora de recebimento" do próprio card) tinha createdTime
+// "2026-09-01T00:00:38+03:00" e caía em setembro em vez de agosto,
+// inflando "Em Andamento" do mês errado.
+//
+// NÃO usar isso em campos do tipo "date" (sem hora real, tipo Data de
+// Efetivação/Vigência) -- esses o Bitrix sempre serializa com hora fixa
+// 03:00:00 (meia-noite do fuso do servidor, sem significado real), então
+// convertê-los de fuso SUBTRAI um dia por engano; pra esses, apenasData
+// (fatiamento direto) já está correto.
+function dataBrasiliaDeInstante(v: unknown): string {
+  if (!v) return "";
+  const data = new Date(String(v));
+  if (Number.isNaN(data.getTime())) return "";
+  const partes = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(data);
+  const ano = partes.find((p) => p.type === "year")?.value;
+  const mes = partes.find((p) => p.type === "month")?.value;
+  const dia = partes.find((p) => p.type === "day")?.value;
+  return `${ano}-${mes}-${dia}`;
+}
+
 export type LinhaContagem = {
   id: number;
   nome: string;
@@ -338,7 +369,7 @@ function nomeFunil(categoryId: number): LinhaContagem["funil"] {
 function primeiraDataEtapa(eventos: BitrixStageHistoryEvent[], predicate: (e: BitrixStageHistoryEvent) => boolean): string {
   const ordenados = [...eventos].sort((a, b) => new Date(a.CREATED_TIME).getTime() - new Date(b.CREATED_TIME).getTime());
   const achado = ordenados.find(predicate);
-  return achado ? apenasData(achado.CREATED_TIME) : "";
+  return achado ? dataBrasiliaDeInstante(achado.CREATED_TIME) : "";
 }
 
 // Reconstrói, a partir do histórico real de mudança de etapa (crm.stagehistory.list),
@@ -442,7 +473,7 @@ export function montarContagemMensal(
     // movedTime/updatedTime só quando sabemos que o evento aconteceu (pelo
     // resultado/categoria atual do card) mas o histórico não tem o registro
     // (card antigo, ou movido por importação sem gerar evento).
-    const fallbackData = apenasData(item.movedTime || item.updatedTime);
+    const fallbackData = dataBrasiliaDeInstante(item.movedTime || item.updatedTime);
     const dataRecusa =
       resultado === "Recusado"
         ? primeiraDataEtapa(eventos, (e) => e.CATEGORY_ID === CATEGORIA_ANALISE && etapaPorStatusId.get(e.STAGE_ID)?.semantica === "F") ||
@@ -537,12 +568,12 @@ export function montarContagemMensal(
       imobiliaria: nomeEmpresa(empresas, item.companyId),
       tipoLocacao: enumLabel(defs, CAMPO_TIPO_LOCACAO, item[CAMPO_TIPO_LOCACAO]),
       finalidadeImovel: enumLabel(defs, CAMPO_FINALIDADE_IMOVEL, item[CAMPO_FINALIDADE_IMOVEL]),
-      competencia: item.createdTime.slice(0, 7),
+      competencia: dataBrasiliaDeInstante(item.createdTime).slice(0, 7),
       funil: item.categoryId === CATEGORIA_ANALISE ? "Análise e Cotação" : "Negociação e Contrato",
       etapaAtual: etapa?.nome ?? item.stageId,
       resultado,
-      dataCriacao: apenasData(item.createdTime),
-      ultimaMovimentacao: apenasData(item.movedTime),
+      dataCriacao: dataBrasiliaDeInstante(item.createdTime),
+      ultimaMovimentacao: dataBrasiliaDeInstante(item.movedTime),
       segmentosEtapa,
       minutosEtapaAtual,
       minutosFunil1,
@@ -1138,7 +1169,7 @@ export function montarAnaliseGerencial(
   for (const h of historicoOrdenado) {
     if (h.STAGE_ID !== ETAPA_CONTRATO_RECEBIDO) continue;
     if (primeiraEntradaContratoRecebido.has(h.OWNER_ID)) continue;
-    primeiraEntradaContratoRecebido.set(h.OWNER_ID, h.CREATED_TIME.slice(0, 10));
+    primeiraEntradaContratoRecebido.set(h.OWNER_ID, dataBrasiliaDeInstante(h.CREATED_TIME));
   }
   const entradasContratoRecebido = [...primeiraEntradaContratoRecebido.entries()].map(([ownerId, dia]) => ({
     dia,
