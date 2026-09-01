@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { extrairTextoDocx } from "@/lib/extrairTextoDocx";
+import { extrairTextoPdf } from "@/lib/extrairTextoPdf";
 import { enviarEmail } from "@/lib/email";
 import { prepararTextoBase } from "@/lib/limparTextoBase";
 
@@ -35,18 +36,30 @@ export async function salvarImobiliaria(formData: FormData) {
 
   if (contratoArquivo && contratoArquivo.size > 0) {
     const nomeArquivo = contratoArquivo.name.toLowerCase();
-    if (!nomeArquivo.endsWith(".docx")) {
+    const ehDocx = nomeArquivo.endsWith(".docx");
+    const ehPdf = nomeArquivo.endsWith(".pdf");
+    if (!ehDocx && !ehPdf) {
       redirect(
-        `/imobiliaria?erro=${encodeURIComponent("O arquivo do contrato precisa estar em formato Word (.docx).")}`
+        `/imobiliaria?erro=${encodeURIComponent("O arquivo do contrato precisa estar em Word (.docx) ou PDF (.pdf).")}`
       );
     }
     const buffer = Buffer.from(await contratoArquivo.arrayBuffer());
     try {
-      texto_base_contrato = await extrairTextoDocx(buffer);
+      texto_base_contrato = ehPdf ? await extrairTextoPdf(buffer) : await extrairTextoDocx(buffer);
     } catch {
       redirect(
         `/imobiliaria?erro=${encodeURIComponent(
           `Não foi possível ler o arquivo "${contratoArquivo.name}" — ele pode estar corrompido ou num formato inesperado.`
+        )}`
+      );
+    }
+    // PDF escaneado (sem texto real, só imagem) extrai uma string vazia --
+    // ao contrário do Auditor, aqui não tem leitura visual pela IA como
+    // alternativa, então precisa avisar em vez de salvar um texto-base vazio.
+    if (ehPdf && !texto_base_contrato.trim()) {
+      redirect(
+        `/imobiliaria?erro=${encodeURIComponent(
+          `O PDF "${contratoArquivo.name}" parece ser escaneado (sem texto real, só imagem) — não consigo extrair o texto dele. Tente um PDF com texto selecionável, ou envie em Word (.docx).`
         )}`
       );
     }

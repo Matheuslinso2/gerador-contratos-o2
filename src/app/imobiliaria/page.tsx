@@ -104,16 +104,17 @@ export default async function ImobiliariaPage({
           <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">2. Contrato-base</h2>
           <div>
             <label className="text-sm text-gray-600">
-              Enviar o contrato-base em Word (opcional — extrai o texto automaticamente e preenche o campo abaixo)
+              Enviar o contrato-base em Word ou PDF (opcional — extrai o texto automaticamente e preenche o campo abaixo)
             </label>
             <input
               name="contrato_arquivo"
               type="file"
-              accept=".docx"
+              accept=".docx,.pdf"
               className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
             />
             <p className="mt-1 text-xs text-gray-500">
-              Aceita apenas .docx. Se enviar um arquivo, ele substitui o texto digitado abaixo.
+              Aceita .docx ou .pdf (com texto selecionável — PDF escaneado sem texto não funciona aqui). Se enviar um
+              arquivo, ele substitui o texto digitado abaixo.
             </p>
           </div>
 
