@@ -7,6 +7,7 @@ import { extrairTextoDocx } from "@/lib/extrairTextoDocx";
 import { extrairTextoPdf } from "@/lib/extrairTextoPdf";
 import { enviarEmail } from "@/lib/email";
 import { prepararTextoBase } from "@/lib/limparTextoBase";
+import { validarCNPJ } from "@/lib/validacoesBr";
 
 export async function salvarImobiliaria(formData: FormData) {
   const supabase = await createClient();
@@ -17,6 +18,12 @@ export async function salvarImobiliaria(formData: FormData) {
 
   const nome = String(formData.get("nome") ?? "").trim();
   const cnpj = String(formData.get("cnpj") ?? "").trim();
+  // O front-end já bloqueia isso com setCustomValidity, mas nunca dá pra
+  // confiar só no navegador (JS desabilitado, requisição direta etc.) --
+  // sem isso, um CNPJ com dígito verificador errado passava direto pro banco.
+  if (cnpj && !validarCNPJ(cnpj)) {
+    redirect(`/imobiliaria?erro=${encodeURIComponent("CNPJ inválido — confira os números digitados.")}`);
+  }
   const creci = String(formData.get("creci") ?? "").trim();
   const telefone = String(formData.get("telefone") ?? "").trim();
   const endereco = String(formData.get("endereco") ?? "").trim();

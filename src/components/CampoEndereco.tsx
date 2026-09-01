@@ -34,9 +34,16 @@ export default function CampoEndereco({
   const [bairro, setBairro] = useState("");
   const [cidade, setCidade] = useState("");
   const [uf, setUf] = useState("");
+  // Rótulo do campo final diz "pode ajustar manualmente", mas sem essa
+  // trava, editar esse campo à mão e depois tocar em qualquer campo de
+  // CEP/logradouro/número/etc. apagava a edição em silêncio (o final era
+  // sempre reconstruído do zero a partir dos campos separados). Uma vez que
+  // a pessoa mexe direto no campo final, ele para de ser recalculado.
+  const [editadoManualmente, setEditadoManualmente] = useState(false);
   const finalRef = useRef<HTMLInputElement>(null);
 
   function atualizarFinal(campos: Partial<{ logradouro: string; numero: string; complemento: string; bairro: string; cidade: string; uf: string; cep: string }>) {
+    if (editadoManualmente) return;
     const l = campos.logradouro ?? logradouro;
     const n = campos.numero ?? numero;
     const c = campos.complemento ?? complemento;
@@ -173,7 +180,18 @@ export default function CampoEndereco({
 
       <div>
         <label className="text-xs text-gray-500">Endereço final (pode ajustar manualmente)</label>
-        <input ref={finalRef} name={name} required={required} className={inputClass} />
+        <input
+          ref={finalRef}
+          name={name}
+          required={required}
+          onChange={() => setEditadoManualmente(true)}
+          className={inputClass}
+        />
+        {editadoManualmente && (
+          <p className="mt-0.5 text-xs text-gray-500">
+            Editado manualmente — os campos acima não vão mais atualizar este texto.
+          </p>
+        )}
       </div>
     </div>
   );
