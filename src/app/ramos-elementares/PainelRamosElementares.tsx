@@ -27,6 +27,12 @@ type EmailConfirmacao = {
 type RecorteNovos = "consolidado" | "mes" | "pendentes";
 type RecorteRenovacao = "atual" | "futura";
 
+function tipoFonteExibicao(fonte: AnaliseRamosElementares["fonte"]): "bitrix" | "hibrida" | "planilha" {
+  if (fonte.tipo === "hibrido") return "hibrida";
+  if (fonte.tipo === "bitrix24" || fonte.id.startsWith("bitrix-spa-")) return "bitrix";
+  return "planilha";
+}
+
 function brl(valor: number): string {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
@@ -272,7 +278,9 @@ function PainelFinanceiro({ analise }: { analise: AnaliseRamosElementares }) {
 
 function PainelEndossos({ analise }: { analise: AnaliseRamosElementares }) {
   const dados = analise.endossos;
-  const fonteBitrix = analise.fonte.tipo === "bitrix24" || analise.fonte.id.startsWith("bitrix-spa-");
+  // Endossos vêm da planilha tanto no modo "planilha" quanto no "hibrida"
+  // (só o modo 100% Bitrix, hoje sem uso, tem endossos estruturados no CRM).
+  const endossosDoBitrix = tipoFonteExibicao(analise.fonte) === "bitrix";
   return (
     <>
       <div className={styles.kpis}>
@@ -292,7 +300,7 @@ function PainelEndossos({ analise }: { analise: AnaliseRamosElementares }) {
         <section className={styles.panel}><h2>Seguradoras</h2><Barras dados={dados.porSeguradora} /></section>
       </div>
       <div className={styles.avisoNeutro}>
-        {fonteBitrix
+        {endossosDoBitrix
           ? "O tipo de movimentação é registrado em campo estruturado no CRM, sem classificação por texto livre."
           : "A aba não possui um campo estruturado para o tipo de movimentação. O painel não tenta adivinhar essa classificação pelas observações."}
       </div>
@@ -575,14 +583,14 @@ export default function PainelRamosElementares({
 }: {
   analise: AnaliseRamosElementares;
   competencia: string;
-  origem: "planilha" | "bitrix" | "snapshot" | "indisponivel";
+  origem: "planilha" | "hibrida" | "snapshot" | "indisponivel";
   erroFonte: string | null;
   emailsConfirmacao: EmailConfirmacao[];
 }) {
   const router = useRouter();
   const [aba, setAba] = useState<AbaPainel>("visao");
   const [atualizando, iniciarAtualizacao] = useTransition();
-  const fonteBitrix = analise.fonte.tipo === "bitrix24" || analise.fonte.id.startsWith("bitrix-spa-");
+  const tipoFonte = tipoFonteExibicao(analise.fonte);
 
   useEffect(() => {
     const intervalo = window.setInterval(() => router.refresh(), 120_000);
@@ -612,7 +620,10 @@ export default function PainelRamosElementares({
     <main className={styles.wrap}>
       <div className={styles.topo}>
         <div>
-          <div className={styles.eyebrow}>O2 Seguros · Uso interno · Fonte {fonteBitrix ? "CRM Bitrix24" : "Google Sheets"}</div>
+          <div className={styles.eyebrow}>
+            O2 Seguros · Uso interno · Fonte{" "}
+            {tipoFonte === "hibrida" ? "Bitrix24 (novos) + Planilha (renovações/endossos)" : tipoFonte === "bitrix" ? "CRM Bitrix24" : "Google Sheets"}
+          </div>
           <h1>Ramos Elementares</h1>
           <p>Painel de produção — {tituloCompetencia}</p>
         </div>
@@ -629,8 +640,8 @@ export default function PainelRamosElementares({
       <div className={`${styles.estadoFonte} ${origem === "snapshot" || origem === "indisponivel" ? styles.estadoFonteAlerta : ""}`}>
         <div>
           <strong>
-            {origem === "bitrix"
-              ? "Dados lidos diretamente do CRM Bitrix24"
+            {origem === "hibrida"
+              ? "Dados lidos diretamente do Bitrix24 (novos) e da planilha (renovações/endossos)"
               : origem === "planilha"
                 ? "Dados lidos diretamente da planilha"
                 : origem === "snapshot"
@@ -639,7 +650,14 @@ export default function PainelRamosElementares({
           </strong>
           <span>Última leitura: {new Date(analise.atualizadoEm).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</span>
         </div>
-        {analise.fonte.url ? <a href={analise.fonte.url} target="_blank" rel="noreferrer">{fonteBitrix ? "Abrir CRM" : "Abrir planilha fonte"}</a> : null}
+        <div className={styles.linksFonte}>
+          {analise.fonte.url ? (
+            <a href={analise.fonte.url} target="_blank" rel="noreferrer">{tipoFonte === "planilha" ? "Abrir planilha fonte" : "Abrir CRM"}</a>
+          ) : null}
+          {tipoFonte === "hibrida" && analise.fonte.urlSecundaria ? (
+            <a href={analise.fonte.urlSecundaria} target="_blank" rel="noreferrer">Abrir planilha fonte</a>
+          ) : null}
+        </div>
       </div>
 
       {erroFonte && <div className={styles.erroFonte}>{erroFonte}</div>}
@@ -668,12 +686,17 @@ export default function PainelRamosElementares({
       <div className={styles.conteudo}>{conteudo}</div>
       <footer className={styles.rodape}>
         <span>
-          Fonte primária: {fonteBitrix ? "SPA Produção Incêndio no Bitrix24." : "abas operacionais da planilha mensal."}
+          Fonte primária:{" "}
+          {tipoFonte === "hibrida"
+            ? "Novos negócios e pendências no SPA Produção Incêndio (Bitrix24); renovações e endossos nas abas operacionais da planilha mensal."
+            : tipoFonte === "bitrix"
+              ? "SPA Produção Incêndio no Bitrix24."
+              : "abas operacionais da planilha mensal."}
         </span>
         <span>
-          {fonteBitrix
+          {tipoFonte === "bitrix"
             ? "A planilha auxiliar permanece como detalhamento operacional; o painel usa os totais do CRM."
-            : "A CONTAGEM verif. é usada somente como referência de conferência."}
+            : "A CONTAGEM verif. da planilha é usada somente como referência de conferência para renovações e endossos."}
         </span>
       </footer>
     </main>

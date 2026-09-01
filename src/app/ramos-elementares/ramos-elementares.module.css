@@ -84,6 +84,7 @@
 .estadoFonte span { color: var(--re-muted); font-size: 10px; }
 .estadoFonte a { color: var(--re-blue); font-size: 11px; text-decoration: none; }
 .estadoFonte a:hover { text-decoration: underline; }
+.linksFonte { display: flex; gap: 12px; flex-shrink: 0; }
 
 .erroFonte, .avisoNeutro, .avisosFonte {
   border: 1px solid var(--re-line);

@@ -13,7 +13,11 @@ export type FonteRamosBruta = {
     titulo: string;
     url: string;
     modificadaEm: string | null;
-    tipo?: "google_sheets" | "bitrix24";
+    tipo?: "google_sheets" | "bitrix24" | "hibrido";
+    // Só usados quando tipo === "hibrido": novos vêm do Bitrix (url/titulo
+    // principais), renovações e endossos vêm da planilha (secundários).
+    urlSecundaria?: string | null;
+    tituloSecundario?: string | null;
   };
   abas: {
     novosPendentes: CelulaGoogle[][];
