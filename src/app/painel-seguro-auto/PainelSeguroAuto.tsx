@@ -1,5 +1,6 @@
 import styles from "./painel-seguro-auto.module.css";
 import type { PainelSeguroAuto as PainelSeguroAutoData } from "@/lib/seguroAuto/painel";
+import ExportarQuadro from "@/components/ExportarQuadro";
 
 function fmtPct(v: number | null): string {
   return `${((v ?? 0) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}%`;
@@ -60,15 +61,35 @@ export default function PainelSeguroAuto({ dados }: { dados: PainelSeguroAutoDat
   const maiorQuantidadeFunil = Math.max(1, ...funil.map((e) => e.quantidadeAtual));
   const maiorUtilizacao = Math.max(1, ...distribuicaoUtilizacao.map((d) => d.quantidade));
   const totalGaragem = Math.max(1, distribuicaoGaragem.comGaragem + distribuicaoGaragem.semGaragem);
+  const arquivo = (sufixo: string) => `seguro-auto-${sufixo}-${dados.competencia}`;
 
   return (
     <>
-      <h2 style={{ fontSize: 14, fontWeight: 700, margin: "0 0 8px", color: "var(--ink)" }}>Novidades do mês</h2>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+        <h2 style={{ fontSize: 14, fontWeight: 700, margin: "0 0 8px", color: "var(--ink)" }}>Novidades do mês</h2>
+        <ExportarQuadro
+          quadroId="quadro-auto-novidades"
+          nomeArquivo={arquivo("novidades")}
+          dadosExcel={[
+            { indicador: "Fichas no mês", valor: kpis.total },
+            { indicador: "Convertidas", valor: kpis.convertidos },
+            { indicador: "Perdidas", valor: kpis.perdidos },
+            { indicador: "Taxa de conversão", valor: fmtPct(kpis.taxaConversao) },
+            { indicador: "Prêmio efetivado", valor: kpis.premioEfetivado },
+            { indicador: "Comissão gerada", valor: kpis.comissaoGerada },
+            { indicador: "% de comissão médio", valor: fmtPctDireto(kpis.percentualComissaoMedio) },
+            { indicador: "Com CNH anexada", valor: fmtPct(kpis.percentualComCnh) },
+            { indicador: "Com CRLV anexado", valor: fmtPct(kpis.percentualComCrlv) },
+            { indicador: "Com apólice anterior", valor: kpis.comApoliceAnterior },
+          ]}
+          nomeAbaExcel="Novidades do mês"
+        />
+      </div>
       <p style={{ fontSize: 11.5, color: "var(--ink-muted, #93a2b5)", margin: "0 0 8px" }}>
         Convertidas/Perdidas contam pelo mês em que a ficha foi criada, não pelo mês em que o Bitrix registrou a
         conclusão.
       </p>
-      <div className={styles.kpis}>
+      <div id="quadro-auto-novidades" className={styles.kpis}>
         <Kpi label="Fichas no mês" value={String(kpis.total)} sub="cards criados na competência" />
         <Kpi label="Convertidas" value={String(kpis.convertidos)} sub="cotação fechada com sucesso" tone="positive" />
         <Kpi label="Perdidas" value={String(kpis.perdidos)} sub="não fechou" tone="negative" />
@@ -96,12 +117,25 @@ export default function PainelSeguroAuto({ dados }: { dados: PainelSeguroAutoDat
         <Kpi label="Com apólice anterior" value={String(kpis.comApoliceAnterior)} sub="já tinham seguro vigente — possível troca de seguradora" tone="info" />
       </div>
 
-      <h2 style={{ fontSize: 14, fontWeight: 700, margin: "20px 0 8px", color: "var(--ink)" }}>Em andamento (novos + herdados)</h2>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+        <h2 style={{ fontSize: 14, fontWeight: 700, margin: "20px 0 8px", color: "var(--ink)" }}>Em andamento (novos + herdados)</h2>
+        <ExportarQuadro
+          quadroId="quadro-auto-andamento"
+          nomeArquivo={arquivo("em-andamento")}
+          dadosExcel={[
+            { indicador: "Novas", valor: kpis.emAndamento.mesAtual },
+            { indicador: "Herdadas", valor: kpis.emAndamento.herdado },
+            { indicador: "Total", valor: kpis.emAndamento.total },
+            { indicador: "Cards com alerta", valor: kpis.cardsComAlerta },
+          ]}
+          nomeAbaExcel="Em andamento"
+        />
+      </div>
       <p style={{ fontSize: 11.5, color: "var(--ink-muted, #93a2b5)", margin: "0 0 8px" }}>
         Único quadro que herda de meses anteriores — assim que a ficha conclui (convertida/perdida), ela deixa de ser
         herdada e passa a contar no mês em que nasceu, acima.
       </p>
-      <div className={styles.kpis}>
+      <div id="quadro-auto-andamento" className={styles.kpis}>
         <Kpi label="Novas" value={String(kpis.emAndamento.mesAtual)} sub="criadas neste mês, ainda em aberto" tone="info" />
         <Kpi label="Herdadas" value={String(kpis.emAndamento.herdado)} sub="criadas antes, ainda em aberto" tone="info" />
         <Kpi label="Total" value={String(kpis.emAndamento.total)} sub="soma, todas ainda em aberto" tone="info" />
@@ -113,9 +147,19 @@ export default function PainelSeguroAuto({ dados }: { dados: PainelSeguroAutoDat
         />
       </div>
 
-      <section className={styles.section}>
+      <section id="quadro-auto-funil" className={styles.section}>
         <div className={styles.sectionHead}>
           <h2>Funil e tempo por etapa</h2>
+          <ExportarQuadro
+            quadroId="quadro-auto-funil"
+            nomeArquivo={arquivo("funil")}
+            dadosExcel={funil.map((e) => ({
+              etapa: e.nome,
+              cards: e.quantidadeAtual,
+              tempo_medio_dias: e.tempoMedioDiasFechado ?? "",
+            }))}
+            nomeAbaExcel="Funil"
+          />
         </div>
         <div className={styles.panel}>
           <div className={styles.barlist}>
@@ -148,10 +192,20 @@ export default function PainelSeguroAuto({ dados }: { dados: PainelSeguroAutoDat
         </div>
       </section>
 
-      <section className={styles.section}>
+      <section id="quadro-auto-perfil" className={styles.section}>
         <div className={styles.sectionHead}>
           <h2>Perfil das fichas do mês</h2>
           <div className={styles.note}>utilização declarada do veículo e presença de garagem</div>
+          <ExportarQuadro
+            quadroId="quadro-auto-perfil"
+            nomeArquivo={arquivo("perfil")}
+            dadosExcel={[
+              ...distribuicaoUtilizacao.map((d) => ({ utilizacao: d.rotulo, fichas: d.quantidade })),
+              { utilizacao: "Com garagem", fichas: distribuicaoGaragem.comGaragem },
+              { utilizacao: "Sem garagem", fichas: distribuicaoGaragem.semGaragem },
+            ]}
+            nomeAbaExcel="Perfil das fichas"
+          />
         </div>
         <div className={styles.panel}>
           {distribuicaoUtilizacao.length === 0 ? (
@@ -175,10 +229,20 @@ export default function PainelSeguroAuto({ dados }: { dados: PainelSeguroAutoDat
         </div>
       </section>
 
-      <section className={styles.section}>
+      <section id="quadro-auto-alerta" className={styles.section}>
         <div className={styles.sectionHead}>
           <h2>Cards que pedem atenção</h2>
           <div className={styles.note}>parados 3+ dias sem mudar de etapa — todas as fichas ativas, sem filtro de mês</div>
+          <ExportarQuadro
+            quadroId="quadro-auto-alerta"
+            nomeArquivo={arquivo("cards-alerta")}
+            dadosExcel={cardsAlerta.map((c) => ({
+              card: c.titulo || `Card #${c.id}`,
+              etapa: c.etapaNome,
+              dias_parado: c.diasParado,
+            }))}
+            nomeAbaExcel="Cards com alerta"
+          />
         </div>
         <div className={styles.panel}>
           {cardsAlerta.length === 0 ? (
@@ -208,10 +272,22 @@ export default function PainelSeguroAuto({ dados }: { dados: PainelSeguroAutoDat
         </div>
       </section>
 
-      <section className={styles.section}>
+      <section id="quadro-auto-convertidas" className={styles.section}>
         <div className={styles.sectionHead}>
           <h2>Convertidas — prêmio e comissão</h2>
           <div className={styles.note}>preenchido manualmente pelo time depois do fechamento, só nas fichas da competência selecionada</div>
+          <ExportarQuadro
+            quadroId="quadro-auto-convertidas"
+            nomeArquivo={arquivo("convertidas")}
+            dadosExcel={convertidasFinanceiro.map((c) => ({
+              cliente: c.nome || `Card #${c.id}`,
+              premio_efetivado: c.premioEfetivado,
+              comissao_gerada: c.comissaoGerada,
+              percentual_comissao: c.percentualComissao || "",
+              parcelas: c.numeroParcelas || "",
+            }))}
+            nomeAbaExcel="Convertidas"
+          />
         </div>
         <div className={styles.panel}>
           {convertidasFinanceiro.length === 0 ? (
@@ -245,10 +321,24 @@ export default function PainelSeguroAuto({ dados }: { dados: PainelSeguroAutoDat
         </div>
       </section>
 
-      <section className={styles.section}>
+      <section id="quadro-auto-fichas" className={styles.section}>
         <div className={styles.sectionHead}>
           <h2>Fichas recebidas</h2>
           <div className={styles.note}>{fichas.length} ficha(s) — novidades do mês + em andamento herdados, mesma lógica dos KPIs acima</div>
+          <ExportarQuadro
+            quadroId="quadro-auto-fichas"
+            nomeArquivo={arquivo("fichas")}
+            dadosExcel={fichas.map((f) => ({
+              nome: f.nome || "",
+              telefone: f.telefone || "",
+              email: f.email || "",
+              etapa: f.etapaNome,
+              cnh: f.temCnh ? "Sim" : "Não",
+              crlv: f.temCrlv ? "Sim" : "Não",
+              recebida_em: fmtData(f.criadoEm),
+            }))}
+            nomeAbaExcel="Fichas recebidas"
+          />
         </div>
         <div className={styles.panel}>
           {fichas.length === 0 ? (

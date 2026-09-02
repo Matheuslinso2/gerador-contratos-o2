@@ -8,6 +8,7 @@ import PainelSeguroAuto from "./PainelSeguroAuto";
 import SeletorCompetencia from "./SeletorCompetencia";
 import AtualizarAgora from "./AtualizarAgora";
 import styles from "./painel-seguro-auto.module.css";
+import { BotaoExportarPainelPdf } from "@/components/ExportarQuadro";
 
 export const dynamic = "force-dynamic";
 // Analisar todas as fichas ao vivo pode demorar -- corta antes do limite da
@@ -84,7 +85,7 @@ export default async function PainelSeguroAutoPage({
     <>
       <AppHeader userEmail={user?.email} logoutAction={signOut} />
       <div className={styles.wrap}>
-        <div className={styles.container}>
+        <div id="painel-seguro-auto-completo" className={styles.container}>
           <div className={styles.masthead}>
             <div>
               <div className={styles.eyebrow}>O2 Seguros · Central de Negócios · SPA Seguro Automóvel</div>
@@ -94,6 +95,9 @@ export default async function PainelSeguroAutoPage({
               <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "flex-end" }}>
                 <SeletorCompetencia competencia={competencia} />
                 {ehCompetenciaAtual && <AtualizarAgora />}
+                {dados && (
+                  <BotaoExportarPainelPdf painelId="painel-seguro-auto-completo" nomeArquivo={`seguro-auto-painel-${competencia}`} />
+                )}
               </div>
               <br />
               {dados && <>Atualizado em {new Date(dados.atualizadoEm).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</>}

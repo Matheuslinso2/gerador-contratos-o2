@@ -4,6 +4,18 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { AnaliseRamosElementares, ItemAgrupado, RegistroNegociacao, ResumoPopulacao } from "@/lib/ramos-elementares/analise";
 import styles from "./ramos-elementares.module.css";
+import ExportarQuadro, { BotaoExportarPainelPdf } from "@/components/ExportarQuadro";
+
+function linhasItemAgrupado(dados: ItemAgrupado[]): Record<string, unknown>[] {
+  return dados.map((item) => ({
+    nome: item.nome,
+    total: item.total,
+    efetivados: item.efetivados,
+    comissao: item.comissao,
+    comissao_efetivada: item.comissaoEfetivada,
+    conversao: item.conversao ?? "",
+  }));
+}
 
 type AbaPainel = "visao" | "novos" | "renovacoes" | "financeiro" | "endossos" | "alertas" | "emails";
 type EmailConfirmacao = {
@@ -111,8 +123,22 @@ function ResumoStatus({ resumo }: { resumo: ResumoPopulacao }) {
   return <Barras dados={resumo.porStatus} limite={12} />;
 }
 
-function PainelVisao({ analise }: { analise: AnaliseRamosElementares }) {
+function PainelVisao({ analise, competencia }: { analise: AnaliseRamosElementares; competencia: string }) {
   const atencao = [...analise.alertasOperacionais, ...analise.qualidade].filter((item) => item.quantidade > 0).slice(0, 5);
+  const ramosMaiorVolume = [...analise.novos.consolidado.porRamo, ...analise.renovacoes.atual.porRamo]
+    .reduce<ItemAgrupado[]>((acumulado, item) => {
+      const existente = acumulado.find((atual) => atual.nome === item.nome);
+      if (existente) {
+        existente.total += item.total;
+        existente.efetivados += item.efetivados;
+        existente.comissao += item.comissao;
+        existente.comissaoEfetivada += item.comissaoEfetivada;
+        existente.conversao = existente.total ? (existente.efetivados / existente.total) * 100 : null;
+      } else acumulado.push({ ...item });
+      return acumulado;
+    }, [])
+    .sort((a, b) => b.total - a.total);
+
   return (
     <>
       <div className={styles.kpis}>
@@ -124,40 +150,57 @@ function PainelVisao({ analise }: { analise: AnaliseRamosElementares }) {
         <Kpi label="Comissão dos efetivados" value={brl(analise.visaoGeral.comissaoEfetivada)} note="Valor estimado" tone="ok" />
       </div>
       <div className={styles.duasColunas}>
-        <section className={styles.panel}>
-          <h2>Novos negócios — situação atual</h2>
+        <section id="quadro-ramos-novos-situacao" className={styles.panel}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+            <h2>Novos negócios — situação atual</h2>
+            <ExportarQuadro
+              quadroId="quadro-ramos-novos-situacao"
+              nomeArquivo={`ramos-elementares-novos-situacao-${competencia}`}
+              dadosExcel={linhasItemAgrupado(analise.novos.consolidado.porStatus)}
+              nomeAbaExcel="Novos - situação"
+            />
+          </div>
           <p>{analise.novos.consolidado.total} registros entre novos do mês e pendências anteriores</p>
           <ResumoStatus resumo={analise.novos.consolidado} />
         </section>
-        <section className={styles.panel}>
-          <h2>Renovações — competência atual</h2>
+        <section id="quadro-ramos-renovacoes-situacao" className={styles.panel}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+            <h2>Renovações — competência atual</h2>
+            <ExportarQuadro
+              quadroId="quadro-ramos-renovacoes-situacao"
+              nomeArquivo={`ramos-elementares-renovacoes-situacao-${competencia}`}
+              dadosExcel={linhasItemAgrupado(analise.renovacoes.atual.porStatus)}
+              nomeAbaExcel="Renovações - situação"
+            />
+          </div>
           <p>A próxima competência não entra nesta conversão</p>
           <ResumoStatus resumo={analise.renovacoes.atual} />
         </section>
       </div>
       <div className={styles.duasColunas}>
-        <section className={styles.panel}>
-          <h2>Ramos com maior volume</h2>
+        <section id="quadro-ramos-maior-volume" className={styles.panel}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+            <h2>Ramos com maior volume</h2>
+            <ExportarQuadro
+              quadroId="quadro-ramos-maior-volume"
+              nomeArquivo={`ramos-elementares-maior-volume-${competencia}`}
+              dadosExcel={linhasItemAgrupado(ramosMaiorVolume)}
+              nomeAbaExcel="Ramos maior volume"
+            />
+          </div>
           <p>Produtos somados, mantendo a SUSEP como dimensão operacional</p>
-          <Barras
-            dados={[
-              ...analise.novos.consolidado.porRamo,
-              ...analise.renovacoes.atual.porRamo,
-            ].reduce<ItemAgrupado[]>((acumulado, item) => {
-              const existente = acumulado.find((atual) => atual.nome === item.nome);
-              if (existente) {
-                existente.total += item.total;
-                existente.efetivados += item.efetivados;
-                existente.comissao += item.comissao;
-                existente.comissaoEfetivada += item.comissaoEfetivada;
-                existente.conversao = existente.total ? (existente.efetivados / existente.total) * 100 : null;
-              } else acumulado.push({ ...item });
-              return acumulado;
-            }, []).sort((a, b) => b.total - a.total)}
-          />
+          <Barras dados={ramosMaiorVolume} />
         </section>
-        <section className={styles.panel}>
-          <h2>Pontos que exigem atenção</h2>
+        <section id="quadro-ramos-atencao" className={styles.panel}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+            <h2>Pontos que exigem atenção</h2>
+            <ExportarQuadro
+              quadroId="quadro-ramos-atencao"
+              nomeArquivo={`ramos-elementares-atencao-${competencia}`}
+              dadosExcel={atencao.map((item) => ({ titulo: item.titulo, descricao: item.descricao, quantidade: item.quantidade, gravidade: item.gravidade }))}
+              nomeAbaExcel="Pontos de atenção"
+            />
+          </div>
           <p>Somente ocorrências reais encontradas na leitura</p>
           <div className={styles.alertasCompactos}>
             {atencao.map((item) => (
@@ -174,9 +217,10 @@ function PainelVisao({ analise }: { analise: AnaliseRamosElementares }) {
   );
 }
 
-function PainelNovos({ analise }: { analise: AnaliseRamosElementares }) {
+function PainelNovos({ analise, competencia }: { analise: AnaliseRamosElementares; competencia: string }) {
   const [recorte, setRecorte] = useState<RecorteNovos>("consolidado");
   const resumo = analise.novos[recorte];
+  const arquivo = (sufixo: string) => `ramos-elementares-novos-${sufixo}-${recorte}-${competencia}`;
   return (
     <>
       <div className={styles.filtros}>
@@ -195,15 +239,51 @@ function PainelNovos({ analise }: { analise: AnaliseRamosElementares }) {
         <Kpi label="Tempo médio" value={duracao(resumo.tempoMedioMinutos)} note={`${resumo.temposValidos} tempos válidos`} />
       </div>
       <div className={styles.duasColunas}>
-        <section className={styles.panel}><h2>Status</h2><p>Distribuição atual dos registros</p><ResumoStatus resumo={resumo} /></section>
-        <section className={styles.panel}><h2>Produção por cotador ou origem</h2><p>Produção direta permanece separada das pessoas</p><Barras dados={resumo.porCotador} limite={12} /></section>
+        <section id="quadro-ramos-novos-status" className={styles.panel}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+            <h2>Status</h2>
+            <ExportarQuadro quadroId="quadro-ramos-novos-status" nomeArquivo={arquivo("status")} dadosExcel={linhasItemAgrupado(resumo.porStatus)} nomeAbaExcel="Status" />
+          </div>
+          <p>Distribuição atual dos registros</p>
+          <ResumoStatus resumo={resumo} />
+        </section>
+        <section id="quadro-ramos-novos-cotador" className={styles.panel}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+            <h2>Produção por cotador ou origem</h2>
+            <ExportarQuadro quadroId="quadro-ramos-novos-cotador" nomeArquivo={arquivo("cotador")} dadosExcel={linhasItemAgrupado(resumo.porCotador)} nomeAbaExcel="Cotador" />
+          </div>
+          <p>Produção direta permanece separada das pessoas</p>
+          <Barras dados={resumo.porCotador} limite={12} />
+        </section>
       </div>
       <div className={styles.duasColunas}>
-        <section className={styles.panel}><h2>Ramos</h2><p>Quantidade, efetivação e conversão</p><ListaAgrupada dados={resumo.porRamo} /></section>
-        <section className={styles.panel}><h2>Seguradoras</h2><p>Segimob é apresentado como origem sem seguradora informada</p><ListaAgrupada dados={resumo.porSeguradora} /></section>
+        <section id="quadro-ramos-novos-ramo" className={styles.panel}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+            <h2>Ramos</h2>
+            <ExportarQuadro quadroId="quadro-ramos-novos-ramo" nomeArquivo={arquivo("ramos")} dadosExcel={linhasItemAgrupado(resumo.porRamo)} nomeAbaExcel="Ramos" />
+          </div>
+          <p>Quantidade, efetivação e conversão</p>
+          <ListaAgrupada dados={resumo.porRamo} />
+        </section>
+        <section id="quadro-ramos-novos-seguradora" className={styles.panel}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+            <h2>Seguradoras</h2>
+            <ExportarQuadro quadroId="quadro-ramos-novos-seguradora" nomeArquivo={arquivo("seguradoras")} dadosExcel={linhasItemAgrupado(resumo.porSeguradora)} nomeAbaExcel="Seguradoras" />
+          </div>
+          <p>Segimob é apresentado como origem sem seguradora informada</p>
+          <ListaAgrupada dados={resumo.porSeguradora} />
+        </section>
       </div>
-      <section className={styles.panel}>
-        <h2>Imobiliárias — 100% da produção</h2>
+      <section id="quadro-ramos-novos-imobiliarias" className={styles.panel}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+          <h2>Imobiliárias — 100% da produção</h2>
+          <ExportarQuadro
+            quadroId="quadro-ramos-novos-imobiliarias"
+            nomeArquivo={arquivo("imobiliarias")}
+            dadosExcel={linhasItemAgrupado(resumo.porImobiliaria)}
+            nomeAbaExcel="Imobiliárias"
+          />
+        </div>
         <p>As 10 maiores aparecem primeiro; o botão revela todas com pelo menos um registro</p>
         <ListaAgrupada dados={resumo.porImobiliaria} tituloVazio="Nenhuma imobiliária" />
       </section>
@@ -211,9 +291,10 @@ function PainelNovos({ analise }: { analise: AnaliseRamosElementares }) {
   );
 }
 
-function PainelRenovacoes({ analise }: { analise: AnaliseRamosElementares }) {
+function PainelRenovacoes({ analise, competencia }: { analise: AnaliseRamosElementares; competencia: string }) {
   const [recorte, setRecorte] = useState<RecorteRenovacao>("atual");
   const resumo = analise.renovacoes[recorte];
+  const arquivo = (sufixo: string) => `ramos-elementares-renovacoes-${sufixo}-${recorte}-${competencia}`;
   return (
     <>
       <div className={styles.filtros}>
@@ -229,14 +310,51 @@ function PainelRenovacoes({ analise }: { analise: AnaliseRamosElementares }) {
         <Kpi label="Resultado estimado O2" value={brl(resumo.resultadoEstimado)} note="Comissão menos repasse" tone="ok" />
       </div>
       <div className={styles.duasColunas}>
-        <section className={styles.panel}><h2>Status da carteira</h2><p>{recorte === "atual" ? "Conversão calculada na competência" : "Preparação do próximo período"}</p><ResumoStatus resumo={resumo} /></section>
-        <section className={styles.panel}><h2>Produção por cotador</h2><p>Registros atribuídos a cada responsável</p><Barras dados={resumo.porCotador} limite={12} /></section>
+        <section id="quadro-ramos-renov-status" className={styles.panel}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+            <h2>Status da carteira</h2>
+            <ExportarQuadro quadroId="quadro-ramos-renov-status" nomeArquivo={arquivo("status")} dadosExcel={linhasItemAgrupado(resumo.porStatus)} nomeAbaExcel="Status" />
+          </div>
+          <p>{recorte === "atual" ? "Conversão calculada na competência" : "Preparação do próximo período"}</p>
+          <ResumoStatus resumo={resumo} />
+        </section>
+        <section id="quadro-ramos-renov-cotador" className={styles.panel}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+            <h2>Produção por cotador</h2>
+            <ExportarQuadro quadroId="quadro-ramos-renov-cotador" nomeArquivo={arquivo("cotador")} dadosExcel={linhasItemAgrupado(resumo.porCotador)} nomeAbaExcel="Cotador" />
+          </div>
+          <p>Registros atribuídos a cada responsável</p>
+          <Barras dados={resumo.porCotador} limite={12} />
+        </section>
       </div>
       <div className={styles.duasColunas}>
-        <section className={styles.panel}><h2>Ramos</h2><ListaAgrupada dados={resumo.porRamo} /></section>
-        <section className={styles.panel}><h2>Seguradoras</h2><ListaAgrupada dados={resumo.porSeguradora} /></section>
+        <section id="quadro-ramos-renov-ramo" className={styles.panel}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+            <h2>Ramos</h2>
+            <ExportarQuadro quadroId="quadro-ramos-renov-ramo" nomeArquivo={arquivo("ramos")} dadosExcel={linhasItemAgrupado(resumo.porRamo)} nomeAbaExcel="Ramos" />
+          </div>
+          <ListaAgrupada dados={resumo.porRamo} />
+        </section>
+        <section id="quadro-ramos-renov-seguradora" className={styles.panel}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+            <h2>Seguradoras</h2>
+            <ExportarQuadro quadroId="quadro-ramos-renov-seguradora" nomeArquivo={arquivo("seguradoras")} dadosExcel={linhasItemAgrupado(resumo.porSeguradora)} nomeAbaExcel="Seguradoras" />
+          </div>
+          <ListaAgrupada dados={resumo.porSeguradora} />
+        </section>
       </div>
-      <section className={styles.panel}><h2>Imobiliárias — carteira completa</h2><ListaAgrupada dados={resumo.porImobiliaria} tituloVazio="Nenhuma imobiliária" /></section>
+      <section id="quadro-ramos-renov-imobiliarias" className={styles.panel}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+          <h2>Imobiliárias — carteira completa</h2>
+          <ExportarQuadro
+            quadroId="quadro-ramos-renov-imobiliarias"
+            nomeArquivo={arquivo("imobiliarias")}
+            dadosExcel={linhasItemAgrupado(resumo.porImobiliaria)}
+            nomeAbaExcel="Imobiliárias"
+          />
+        </div>
+        <ListaAgrupada dados={resumo.porImobiliaria} tituloVazio="Nenhuma imobiliária" />
+      </section>
     </>
   );
 }
@@ -253,7 +371,12 @@ function LinhaFinanceira({ nome, resumo }: { nome: string; resumo: ResumoPopulac
   );
 }
 
-function PainelFinanceiro({ analise }: { analise: AnaliseRamosElementares }) {
+function PainelFinanceiro({ analise, competencia }: { analise: AnaliseRamosElementares; competencia: string }) {
+  const origens: { nome: string; resumo: ResumoPopulacao }[] = [
+    { nome: "Novos do mês", resumo: analise.novos.mes },
+    { nome: "Pendências anteriores", resumo: analise.novos.pendentes },
+    { nome: "Renovações da competência", resumo: analise.renovacoes.atual },
+  ];
   return (
     <>
       <div className={styles.avisoNeutro}>Valores operacionais estimados. Não representam receita recebida ou lucro realizado.</div>
@@ -264,23 +387,37 @@ function PainelFinanceiro({ analise }: { analise: AnaliseRamosElementares }) {
         <Kpi label="Resultado estimado O2" value={brl(analise.financeiro.resultadoEstimado)} note="Comissão menos repasse" tone="ok" />
         <Kpi label="Conversão financeira" value={pct(analise.financeiro.conversaoFinanceira)} note="Efetivada ÷ potencial" />
       </div>
-      <section className={styles.panel}>
-        <h2>Comissão potencial versus efetivada</h2>
+      <section id="quadro-ramos-financeiro" className={styles.panel}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+          <h2>Comissão potencial versus efetivada</h2>
+          <ExportarQuadro
+            quadroId="quadro-ramos-financeiro"
+            nomeArquivo={`ramos-elementares-financeiro-${competencia}`}
+            dadosExcel={origens.map(({ nome, resumo }) => ({
+              origem: nome,
+              comissao_potencial: resumo.comissaoPotencial,
+              comissao_efetivada: resumo.comissaoEfetivada,
+              conversao_financeira: resumo.comissaoPotencial > 0 ? (resumo.comissaoEfetivada / resumo.comissaoPotencial) * 100 : "",
+            }))}
+            nomeAbaExcel="Financeiro"
+          />
+        </div>
         <p>As populações permanecem separadas</p>
         <div className={styles.financeHeader}><span>Origem</span><span>Potencial</span><span>Efetivada</span><span>Conversão</span></div>
-        <LinhaFinanceira nome="Novos do mês" resumo={analise.novos.mes} />
-        <LinhaFinanceira nome="Pendências anteriores" resumo={analise.novos.pendentes} />
-        <LinhaFinanceira nome="Renovações da competência" resumo={analise.renovacoes.atual} />
+        {origens.map(({ nome, resumo }) => (
+          <LinhaFinanceira key={nome} nome={nome} resumo={resumo} />
+        ))}
       </section>
     </>
   );
 }
 
-function PainelEndossos({ analise }: { analise: AnaliseRamosElementares }) {
+function PainelEndossos({ analise, competencia }: { analise: AnaliseRamosElementares; competencia: string }) {
   const dados = analise.endossos;
   // Endossos vêm da planilha tanto no modo "planilha" quanto no "hibrida"
   // (só o modo 100% Bitrix, hoje sem uso, tem endossos estruturados no CRM).
   const endossosDoBitrix = tipoFonteExibicao(analise.fonte) === "bitrix";
+  const arquivo = (sufixo: string) => `ramos-elementares-endossos-${sufixo}-${competencia}`;
   return (
     <>
       <div className={styles.kpis}>
@@ -292,12 +429,37 @@ function PainelEndossos({ analise }: { analise: AnaliseRamosElementares }) {
         <Kpi label="Restituição informada" value={brl(dados.restituicaoInformada)} note="Sinal mantido da fonte" />
       </div>
       <div className={styles.duasColunas}>
-        <section className={styles.panel}><h2>Status</h2><p>Não entra na conversão comercial</p><Barras dados={dados.porStatus} /></section>
-        <section className={styles.panel}><h2>Ramos</h2><Barras dados={dados.porRamo} /></section>
+        <section id="quadro-ramos-endossos-status" className={styles.panel}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+            <h2>Status</h2>
+            <ExportarQuadro quadroId="quadro-ramos-endossos-status" nomeArquivo={arquivo("status")} dadosExcel={linhasItemAgrupado(dados.porStatus)} nomeAbaExcel="Status" />
+          </div>
+          <p>Não entra na conversão comercial</p>
+          <Barras dados={dados.porStatus} />
+        </section>
+        <section id="quadro-ramos-endossos-ramo" className={styles.panel}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+            <h2>Ramos</h2>
+            <ExportarQuadro quadroId="quadro-ramos-endossos-ramo" nomeArquivo={arquivo("ramos")} dadosExcel={linhasItemAgrupado(dados.porRamo)} nomeAbaExcel="Ramos" />
+          </div>
+          <Barras dados={dados.porRamo} />
+        </section>
       </div>
       <div className={styles.duasColunas}>
-        <section className={styles.panel}><h2>Responsáveis</h2><Barras dados={dados.porResponsavel} /></section>
-        <section className={styles.panel}><h2>Seguradoras</h2><Barras dados={dados.porSeguradora} /></section>
+        <section id="quadro-ramos-endossos-responsavel" className={styles.panel}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+            <h2>Responsáveis</h2>
+            <ExportarQuadro quadroId="quadro-ramos-endossos-responsavel" nomeArquivo={arquivo("responsaveis")} dadosExcel={linhasItemAgrupado(dados.porResponsavel)} nomeAbaExcel="Responsáveis" />
+          </div>
+          <Barras dados={dados.porResponsavel} />
+        </section>
+        <section id="quadro-ramos-endossos-seguradora" className={styles.panel}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+            <h2>Seguradoras</h2>
+            <ExportarQuadro quadroId="quadro-ramos-endossos-seguradora" nomeArquivo={arquivo("seguradoras")} dadosExcel={linhasItemAgrupado(dados.porSeguradora)} nomeAbaExcel="Seguradoras" />
+          </div>
+          <Barras dados={dados.porSeguradora} />
+        </section>
       </div>
       <div className={styles.avisoNeutro}>
         {endossosDoBitrix
@@ -308,10 +470,18 @@ function PainelEndossos({ analise }: { analise: AnaliseRamosElementares }) {
   );
 }
 
-function ListaAlertas({ titulo, itens }: { titulo: string; itens: AnaliseRamosElementares["qualidade"] }) {
+function ListaAlertas({ titulo, itens, quadroId, nomeArquivo }: { titulo: string; itens: AnaliseRamosElementares["qualidade"]; quadroId: string; nomeArquivo: string }) {
   return (
-    <section className={styles.panel}>
-      <h2>{titulo}</h2>
+    <section id={quadroId} className={styles.panel}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+        <h2>{titulo}</h2>
+        <ExportarQuadro
+          quadroId={quadroId}
+          nomeArquivo={nomeArquivo}
+          dadosExcel={itens.map((item) => ({ titulo: item.titulo, descricao: item.descricao, quantidade: item.quantidade, gravidade: item.gravidade }))}
+          nomeAbaExcel={titulo}
+        />
+      </div>
       <div className={styles.alertasLista}>
         {itens.map((item) => (
           <div className={styles.alertaLinha} key={item.codigo}>
@@ -324,7 +494,7 @@ function ListaAlertas({ titulo, itens }: { titulo: string; itens: AnaliseRamosEl
   );
 }
 
-function PainelAlertas({ analise }: { analise: AnaliseRamosElementares }) {
+function PainelAlertas({ analise, competencia }: { analise: AnaliseRamosElementares; competencia: string }) {
   const totalQualidade = analise.qualidade.reduce((soma, item) => soma + item.quantidade, 0);
   const totalOperacional = analise.alertasOperacionais.reduce((soma, item) => soma + item.quantidade, 0);
   return (
@@ -335,8 +505,18 @@ function PainelAlertas({ analise }: { analise: AnaliseRamosElementares }) {
         <Kpi label="Correções automáticas" value="0" note="A fonte nunca é alterada" tone="ok" />
       </div>
       <div className={styles.duasColunas}>
-        <ListaAlertas titulo="Central de alertas operacionais" itens={analise.alertasOperacionais} />
-        <ListaAlertas titulo="Qualidade dos dados" itens={analise.qualidade} />
+        <ListaAlertas
+          titulo="Central de alertas operacionais"
+          itens={analise.alertasOperacionais}
+          quadroId="quadro-ramos-alertas-operacionais"
+          nomeArquivo={`ramos-elementares-alertas-operacionais-${competencia}`}
+        />
+        <ListaAlertas
+          titulo="Qualidade dos dados"
+          itens={analise.qualidade}
+          quadroId="quadro-ramos-qualidade"
+          nomeArquivo={`ramos-elementares-qualidade-${competencia}`}
+        />
       </div>
     </>
   );
@@ -359,7 +539,15 @@ const LIMIAR_DIAS_AUTORIZACAO_PENDENTE = 2;
 // planilha ainda não reflete, OU o cliente já autorizou e a O2 ainda não
 // fechou o loop. Exclui endossos por pedido explícito -- aqui é só pra
 // negócios (novo/renovação).
-function PainelEmails({ analise, emailsConfirmacao }: { analise: AnaliseRamosElementares; emailsConfirmacao: EmailConfirmacao[] }) {
+function PainelEmails({
+  analise,
+  emailsConfirmacao,
+  competencia,
+}: {
+  analise: AnaliseRamosElementares;
+  emailsConfirmacao: EmailConfirmacao[];
+  competencia: string;
+}) {
   const negociacaoPorId = useMemo(() => {
     const mapa = new Map<string, RegistroNegociacao>();
     for (const item of analise.negociacoes) mapa.set(item.id, item);
@@ -471,8 +659,22 @@ function PainelEmails({ analise, emailsConfirmacao }: { analise: AnaliseRamosEle
       </div>
 
       {autorizacoesPendentes.length > 0 && (
-        <section className={styles.panel} style={{ marginBottom: 16 }}>
-          <h2>⏳ Cliente autorizou — aguardando confirmação da O2</h2>
+        <section id="quadro-ramos-emails-autorizacoes" className={styles.panel} style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+            <h2>⏳ Cliente autorizou — aguardando confirmação da O2</h2>
+            <ExportarQuadro
+              quadroId="quadro-ramos-emails-autorizacoes"
+              nomeArquivo={`ramos-elementares-autorizacoes-pendentes-${competencia}`}
+              dadosExcel={autorizacoesPendentes.map(({ negociacao, autorizacao, dias }) => ({
+                imobiliaria: negociacao.imobiliaria && negociacao.imobiliaria !== "NÃO INFORMADA" ? negociacao.imobiliaria : "",
+                cliente: negociacao.segurado || "",
+                status_na_planilha: negociacao.status,
+                autorizado_em: new Date(autorizacao.recebido_em).toLocaleDateString("pt-BR"),
+                dias_sem_confirmacao: dias,
+              }))}
+              nomeAbaExcel="Autorizações pendentes"
+            />
+          </div>
           <p>
             A imobiliária/cliente já deu o aval (ex: "pode seguir com a contratação") e nenhum e-mail de contratação,
             apólice emitida ou cancelamento chegou depois disso pra esse negócio.
@@ -506,6 +708,25 @@ function PainelEmails({ analise, emailsConfirmacao }: { analise: AnaliseRamosEle
         </section>
       )}
 
+      <div id="quadro-ramos-emails-pendencias" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+        <h2>Negócios com atualização pendente</h2>
+        <ExportarQuadro
+          quadroId="quadro-ramos-emails-pendencias"
+          nomeArquivo={`ramos-elementares-atualizacao-pendente-${competencia}`}
+          dadosExcel={pendencias.map(({ negociacao, email, reemissao }) => ({
+            imobiliaria: negociacao.imobiliaria && negociacao.imobiliaria !== "NÃO INFORMADA" ? negociacao.imobiliaria : "",
+            cliente: negociacao.segurado || "",
+            seguradora: negociacao.seguradora,
+            produto: negociacao.ramo,
+            status_na_planilha: negociacao.status,
+            email_confirma: ROTULOS_TIPO_EMAIL[email.tipo_confirmacao] ?? email.tipo_confirmacao,
+            reemissao: reemissao ? "Sim" : "Não",
+            lote: email.e_lote ? email.cliente_nome || "Lote (sem descrição)" : "",
+            recebido_em: new Date(email.recebido_em).toLocaleDateString("pt-BR"),
+          }))}
+          nomeAbaExcel="Atualização pendente"
+        />
+      </div>
       <p className={styles.avisoNeutro} style={{ marginBottom: 12 }}>
         Abaixo, só negócio (novo ou renovação — endossos ficam de fora) onde um e-mail recebido em
         incendio@o2seguros.com.br confirmou apólice emitida, contratação efetivada ou cancelamento, e o status na
@@ -603,13 +824,13 @@ export default function PainelRamosElementares({
   }, [competencia]);
 
   const conteudo = {
-    visao: <PainelVisao analise={analise} />,
-    novos: <PainelNovos analise={analise} />,
-    renovacoes: <PainelRenovacoes analise={analise} />,
-    financeiro: <PainelFinanceiro analise={analise} />,
-    endossos: <PainelEndossos analise={analise} />,
-    alertas: <PainelAlertas analise={analise} />,
-    emails: <PainelEmails analise={analise} emailsConfirmacao={emailsConfirmacao} />,
+    visao: <PainelVisao analise={analise} competencia={competencia} />,
+    novos: <PainelNovos analise={analise} competencia={competencia} />,
+    renovacoes: <PainelRenovacoes analise={analise} competencia={competencia} />,
+    financeiro: <PainelFinanceiro analise={analise} competencia={competencia} />,
+    endossos: <PainelEndossos analise={analise} competencia={competencia} />,
+    alertas: <PainelAlertas analise={analise} competencia={competencia} />,
+    emails: <PainelEmails analise={analise} emailsConfirmacao={emailsConfirmacao} competencia={competencia} />,
   }[aba];
 
   function atualizarAgora() {
@@ -617,7 +838,7 @@ export default function PainelRamosElementares({
   }
 
   return (
-    <main className={styles.wrap}>
+    <main id="painel-ramos-completo" className={styles.wrap}>
       <div className={styles.topo}>
         <div>
           <div className={styles.eyebrow}>
@@ -634,6 +855,7 @@ export default function PainelRamosElementares({
           </label>
           <button type="button" onClick={atualizarAgora} disabled={atualizando}>{atualizando ? "Atualizando…" : "Atualizar agora"}</button>
           <small>Atualização automática a cada 2 minutos</small>
+          <BotaoExportarPainelPdf painelId="painel-ramos-completo" nomeArquivo={`ramos-elementares-painel-${aba}-${competencia}`} corFundo="#09111a" />
         </div>
       </div>
 

@@ -7,6 +7,7 @@ import { competenciaAtual, competenciaValida, montarPainelCapitalizacao, type Pa
 import PainelCapitalizacao from "./PainelCapitalizacao";
 import SeletorCompetencia from "./SeletorCompetencia";
 import styles from "./painel-capitalizacao.module.css";
+import { BotaoExportarPainelPdf } from "@/components/ExportarQuadro";
 
 export const dynamic = "force-dynamic";
 // Analisar todos os títulos ao vivo pode demorar -- corta antes do limite da
@@ -83,15 +84,19 @@ export default async function PainelCapitalizacaoPage({
     <>
       <AppHeader userEmail={user?.email} logoutAction={signOut} />
       <div className={styles.wrap}>
-        <div className={styles.container}>
+        <div id="painel-capitalizacao-completo" className={styles.container}>
           <div className={styles.masthead}>
             <div>
               <div className={styles.eyebrow}>O2 Seguros · Central de Negócios · SPA Título de Capitalização</div>
               <h1 className={styles.title}>Painel Capitalização — {rotuloCompetencia(competencia)}</h1>
             </div>
             <div className={styles.meta}>
-              <SeletorCompetencia competencia={competencia} />
-              <br />
+              <div style={{ display: "flex", alignItems: "center", gap: 10, justifyContent: "flex-end", marginBottom: 6 }}>
+                <SeletorCompetencia competencia={competencia} />
+                {dados && (
+                  <BotaoExportarPainelPdf painelId="painel-capitalizacao-completo" nomeArquivo={`capitalizacao-painel-${competencia}`} />
+                )}
+              </div>
               {dados && <>Atualizado em {new Date(dados.atualizadoEm).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</>}
             </div>
           </div>
