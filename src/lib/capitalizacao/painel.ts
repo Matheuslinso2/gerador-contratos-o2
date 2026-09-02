@@ -256,6 +256,12 @@ export async function montarPainelCapitalizacao(competencia: string, agora = new
   const mediasPorEtapa = tempoMedioPorEtapa(itens, historico);
   const contagemAtualPorEtapa = new Map<string, number>();
   for (const card of cards) {
+    // Etapa "P" (em andamento) reflete o estado ATUAL, de qualquer origem --
+    // mesmo critério do bloco "Em andamento" acima. Etapas terminais (S/F)
+    // nunca saem de lá uma vez concluídas, então contar todo o histórico
+    // inflaria o funil pra sempre com meses antigos -- contam só as
+    // novidades desta competência, mesmo critério de Emitidos/Perdidos.
+    if (card.semantica !== "P" && competenciaData(card.criadoEm) !== competencia) continue;
     contagemAtualPorEtapa.set(card.etapaId, (contagemAtualPorEtapa.get(card.etapaId) || 0) + 1);
   }
 
