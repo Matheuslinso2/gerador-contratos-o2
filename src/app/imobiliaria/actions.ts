@@ -100,21 +100,24 @@ export async function salvarImobiliaria(formData: FormData) {
   // pro mesmo CNPJ) em vez de completar essa -- a antiga ficava presa como
   // "incompleta" pra sempre, com as faturas_esperadas já vinculadas a ela,
   // e o cadastro de verdade ia parar numa linha órfã que nada referencia.
+  // Se o CNPJ já pertence a uma conta de outra pessoa (ex: outro
+  // funcionário da mesma imobiliária cadastrou antes, com outro login),
+  // NÃO bloqueia quem está preenchendo agora -- só sinaliza pro time da O2
+  // unificar manualmente depois. Bloquear travaria um cadastro legítimo por
+  // causa de uma duplicidade que é problema interno, não da imobiliária.
   let imobiliariaExistente = porUserId;
+  let cnpjDuplicadoEmOutraConta = false;
   if (!imobiliariaExistente && cnpj) {
     const { data: porCnpj } = await supabase
       .from("imobiliarias")
       .select("id, texto_base_contrato, user_id")
       .eq("cnpj", cnpj)
       .maybeSingle();
-    if (porCnpj?.user_id && porCnpj.user_id !== user.id) {
-      redirect(
-        `/imobiliaria?erro=${encodeURIComponent(
-          "Esse CNPJ já está cadastrado em outra conta. Fale com o suporte da O2 se isso não deveria acontecer."
-        )}`
-      );
+    if (porCnpj?.user_id) {
+      cnpjDuplicadoEmOutraConta = true;
+    } else if (porCnpj) {
+      imobiliariaExistente = porCnpj;
     }
-    if (porCnpj) imobiliariaExistente = porCnpj;
   }
   const primeiroCadastro = !imobiliariaExistente;
 
@@ -188,6 +191,21 @@ export async function salvarImobiliaria(formData: FormData) {
         <p><strong>E-mail de login:</strong> ${user.email}</p>
         <p><strong>Índice de reajuste:</strong> ${indice_reajuste}</p>
         <p><strong>Plataforma de assinatura:</strong> ${plataforma_assinatura || "não informado"}</p>
+      `,
+    });
+  }
+
+  if (cnpjDuplicadoEmOutraConta) {
+    await enviarEmail({
+      para: "comercial@o2seguros.com.br",
+      assunto: `Duplicidade de cadastro: ${nome} (CNPJ ${cnpj})`,
+      html: `
+        <h2>CNPJ já cadastrado em outra conta</h2>
+        <p>${nome} (CNPJ ${cnpj}, login ${user.email}) acabou de criar um cadastro novo, mas esse CNPJ já
+        tem um cadastro completo em outra conta no Workspace O2 -- provavelmente outro funcionário da
+        mesma imobiliária, com outro login.</p>
+        <p>O cadastro dela não foi bloqueado por causa disso, mas agora existem 2 cadastros pro mesmo
+        CNPJ. Precisa unificar manualmente (decidir qual fica e migrar o que for necessário do outro).</p>
       `,
     });
   }
