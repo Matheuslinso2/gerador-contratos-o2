@@ -86,11 +86,36 @@ export async function salvarImobiliaria(formData: FormData) {
     redirect(`/imobiliaria?erro=${encodeURIComponent(`Preencha os campos obrigatórios: ${faltando.join(", ")}.`)}`);
   }
 
-  const { data: imobiliariaExistente } = await supabase
+  const { data: porUserId } = await supabase
     .from("imobiliarias")
-    .select("id, texto_base_contrato")
+    .select("id, texto_base_contrato, user_id")
     .eq("user_id", user.id)
     .maybeSingle();
+
+  // Além da conta do usuário, o Faturas cria sozinho um registro
+  // "cadastro_incompleto" (sem user_id) quando identifica uma fatura de
+  // uma imobiliária que ainda não tem conta aqui (ver
+  // resolverOuCriarImobiliaria em faturasIdentificacao.ts). Sem checar por
+  // CNPJ aqui, o primeiro cadastro dela criava uma SEGUNDA linha (duplicada
+  // pro mesmo CNPJ) em vez de completar essa -- a antiga ficava presa como
+  // "incompleta" pra sempre, com as faturas_esperadas já vinculadas a ela,
+  // e o cadastro de verdade ia parar numa linha órfã que nada referencia.
+  let imobiliariaExistente = porUserId;
+  if (!imobiliariaExistente && cnpj) {
+    const { data: porCnpj } = await supabase
+      .from("imobiliarias")
+      .select("id, texto_base_contrato, user_id")
+      .eq("cnpj", cnpj)
+      .maybeSingle();
+    if (porCnpj?.user_id && porCnpj.user_id !== user.id) {
+      redirect(
+        `/imobiliaria?erro=${encodeURIComponent(
+          "Esse CNPJ já está cadastrado em outra conta. Fale com o suporte da O2 se isso não deveria acontecer."
+        )}`
+      );
+    }
+    if (porCnpj) imobiliariaExistente = porCnpj;
+  }
   const primeiroCadastro = !imobiliariaExistente;
 
   // Só roda a limpeza (via IA) quando o texto-base é novo/mudou — evita
@@ -141,7 +166,12 @@ export async function salvarImobiliaria(formData: FormData) {
   if (logo_url) dados.logo_url = logo_url;
   if (garantiaPosicao !== undefined) dados.garantia_posicao_apos_clausula = garantiaPosicao;
 
-  const { error } = await supabase.from("imobiliarias").upsert(dados, { onConflict: "user_id" });
+  const { error } = imobiliariaExistente
+    ? await supabase
+        .from("imobiliarias")
+        .update({ ...dados, cadastro_incompleto: false })
+        .eq("id", imobiliariaExistente.id)
+    : await supabase.from("imobiliarias").insert(dados);
   if (error) redirect(`/imobiliaria?erro=${encodeURIComponent(error.message)}`);
 
   if (primeiroCadastro) {
