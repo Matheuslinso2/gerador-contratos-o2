@@ -71,6 +71,7 @@ export async function salvarSeguradorasImobiliaria(formData: FormData) {
 
   const imobiliariaId = String(formData.get("imobiliaria_id") ?? "");
   const qtd = Number(formData.get("qtd") ?? 0);
+  const voltarPara = String(formData.get("voltar_para") ?? "").trim() || `/faturas/imobiliaria/${imobiliariaId}`;
   if (!imobiliariaId) redirect(`/faturas?erro=${encodeURIComponent("Imobiliária inválida.")}`);
 
   for (let i = 0; i < qtd; i++) {
@@ -99,7 +100,7 @@ export async function salvarSeguradorasImobiliaria(formData: FormData) {
     );
   }
 
-  redirect(`/faturas/imobiliaria/${imobiliariaId}?ok=${encodeURIComponent("Dados salvos.")}`);
+  redirect(`${voltarPara}?ok=${encodeURIComponent("Dados salvos.")}`);
 }
 
 // E-mail pra onde as faturas dessa imobiliária serão enviadas — separado
@@ -109,6 +110,7 @@ export async function atualizarEmailFaturas(formData: FormData) {
 
   const imobiliariaId = String(formData.get("imobiliaria_id") ?? "");
   const email = String(formData.get("email_faturas") ?? "").trim();
+  const voltarPara = String(formData.get("voltar_para") ?? "").trim() || `/faturas/imobiliaria/${imobiliariaId}`;
   if (!imobiliariaId) redirect(`/faturas?erro=${encodeURIComponent("Imobiliária inválida.")}`);
 
   const { error } = await supabase
@@ -116,10 +118,10 @@ export async function atualizarEmailFaturas(formData: FormData) {
     .update({ email_faturas: email || null })
     .eq("id", imobiliariaId);
   if (error) {
-    redirect(`/faturas/imobiliaria/${imobiliariaId}?erro=${encodeURIComponent(error.message)}`);
+    redirect(`${voltarPara}?erro=${encodeURIComponent(error.message)}`);
   }
 
-  redirect(`/faturas/imobiliaria/${imobiliariaId}?ok=${encodeURIComponent("E-mail salvo.")}`);
+  redirect(`${voltarPara}?ok=${encodeURIComponent("E-mail salvo.")}`);
 }
 
 // "Editar" de quem ainda não tem CNPJ/CPF vinculado (nome_provisorio) —
