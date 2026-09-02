@@ -248,7 +248,7 @@ export default function PainelSeguroAuto({ dados }: { dados: PainelSeguroAutoDat
       <section className={styles.section}>
         <div className={styles.sectionHead}>
           <h2>Fichas recebidas</h2>
-          <div className={styles.note}>{fichas.length} ficha(s) na competência</div>
+          <div className={styles.note}>{fichas.length} ficha(s) — novidades do mês + em andamento herdados, mesma lógica dos KPIs acima</div>
         </div>
         <div className={styles.panel}>
           {fichas.length === 0 ? (

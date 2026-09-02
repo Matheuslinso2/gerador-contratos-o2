@@ -342,7 +342,16 @@ export async function montarPainelSeguroAuto(competencia: string, agora = new Da
       numeroParcelas: c.numeroParcelas,
     }));
 
-  const fichas = [...novidades]
+  // Mesma lógica da herança dos KPIs (e da lista "Títulos solicitados" em
+  // capitalizacao/painel.ts): entram na lista as fichas da competência
+  // (novidades, qualquer status) mais as que ainda estão em andamento de
+  // meses anteriores (herdadas) -- uma ficha concluída em outro mês não
+  // aparece aqui, ela já foi contada no mês em que nasceu.
+  const idsNovidades = new Set(novidades.map((c) => c.id));
+  const herdadosEmAndamento = emAndamentoTodos.filter((c) => !idsNovidades.has(c.id));
+  const fichasRelevantes = [...novidades, ...herdadosEmAndamento];
+
+  const fichas = fichasRelevantes
     .sort((a, b) => b.criadoEm.getTime() - a.criadoEm.getTime())
     .map((c) => ({
       id: c.id,
