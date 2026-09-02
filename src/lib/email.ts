@@ -4,6 +4,16 @@ export type AnexoEmail = { nome: string; conteudo: Buffer; tipo?: string; cid?: 
 
 const ENDERECO_REMETENTE = "avisos@notificacoes.o2seguros.com.br";
 
+// email_faturas guarda 1+ endereços separados por vírgula (mesmo separador
+// aceito pelo atributo HTML `multiple` nos inputs type="email") -- usado
+// tanto pro envio (vira lista pro Resend) quanto pra exibição.
+export function separarEmails(valor: string | null | undefined): string[] {
+  return (valor ?? "")
+    .split(",")
+    .map((e) => e.trim())
+    .filter(Boolean);
+}
+
 // Envia e-mail via Resend, usando o domínio dedicado
 // notificacoes.o2seguros.com.br (não mexe no e-mail principal
 // @o2seguros.com.br, que continua no Google Workspace). Falha
@@ -20,7 +30,7 @@ export async function enviarEmail({
   remetente = "Workspace O2",
   throwSeFalhar = false,
 }: {
-  para: string;
+  para: string | string[];
   cc?: string[];
   assunto: string;
   html: string;

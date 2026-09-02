@@ -54,7 +54,8 @@ export default function VinculosFaturas({
           <h2 className="text-sm font-semibold text-o2-navy">E-mail para envio de faturas</h2>
         </div>
         <p className="mb-3 text-xs text-gray-500">
-          Pra onde as faturas dessa imobiliária serão enviadas — diferente do e-mail de login dela.
+          Pra onde as faturas dessa imobiliária serão enviadas — diferente do e-mail de login dela. Pra mais de um
+          destinatário, separe por vírgula.
         </p>
         <form action={atualizarEmailFaturas} className="flex flex-wrap items-end gap-2">
           <input type="hidden" name="imobiliaria_id" value={imobiliariaId} />
@@ -62,7 +63,8 @@ export default function VinculosFaturas({
           <input
             name="email_faturas"
             type="email"
-            placeholder="financeiro@imobiliaria.com.br"
+            multiple
+            placeholder="financeiro@imobiliaria.com.br, outro@imobiliaria.com.br"
             defaultValue={emailFaturas ?? ""}
             className={`${inputClass} max-w-sm`}
           />

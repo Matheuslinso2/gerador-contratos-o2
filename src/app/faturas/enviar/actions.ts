@@ -5,7 +5,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
-import { enviarEmail, type AnexoEmail } from "@/lib/email";
+import { enviarEmail, separarEmails, type AnexoEmail } from "@/lib/email";
 import { montarEmailFatura, type FaturaParaEmail } from "@/lib/faturasEmail";
 
 const BUCKET_FINAL = "faturas";
@@ -57,7 +57,12 @@ export async function confirmarEnvio(formData: FormData) {
         .select("nome, email_faturas")
         .eq("id", imobiliariaId)
         .single();
-      if (!imobiliaria?.email_faturas) {
+      if (!imobiliaria) {
+        falhas++;
+        continue;
+      }
+      const destinatarios = separarEmails(imobiliaria.email_faturas);
+      if (!destinatarios.length) {
         falhas++;
         continue;
       }
@@ -93,7 +98,7 @@ export async function confirmarEnvio(formData: FormData) {
       });
 
       await enviarEmail({
-        para: imobiliaria.email_faturas,
+        para: destinatarios,
         assunto,
         html,
         anexos,
@@ -110,7 +115,7 @@ export async function confirmarEnvio(formData: FormData) {
           faturas_ids: faturas.map((f) => f.id),
           envio_parcial: false,
           autorizado_por_email: user.email,
-          destinatarios: [imobiliaria.email_faturas],
+          destinatarios,
           assunto,
           corpo: html,
           resultado: "sucesso",

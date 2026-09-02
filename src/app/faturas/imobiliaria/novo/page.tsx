@@ -106,12 +106,14 @@ export default async function NovaImobiliariaFaturasPage({
               <h2 className="text-sm font-semibold text-o2-navy">E-mail para envio de faturas</h2>
             </div>
             <p className="mb-3 text-xs text-gray-500">
-              Pra onde as faturas dessa imobiliária serão enviadas — diferente do e-mail de login dela.
+              Pra onde as faturas dessa imobiliária serão enviadas — diferente do e-mail de login dela. Pra mais de
+              um destinatário, separe por vírgula.
             </p>
             <input
               name="email_faturas"
               type="email"
-              placeholder="financeiro@imobiliaria.com.br"
+              multiple
+              placeholder="financeiro@imobiliaria.com.br, outro@imobiliaria.com.br"
               className={`${inputClass} max-w-sm`}
             />
           </div>
