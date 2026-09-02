@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { extrairTextoDocx } from "@/lib/extrairTextoDocx";
 import { extrairTextoPdfComPaginas } from "@/lib/extrairTextoPdf";
 import { auditarContrato, type DocumentoAuditoria, type FonteDocumento, type TipoDocumentoAuditoria } from "@/lib/auditorContrato";
+import { buscarImobiliariaDoUsuario } from "@/lib/imobiliariaDoUsuario";
 
 const BUCKET_TEMP = "auditoria-temp";
 
@@ -140,11 +141,7 @@ export async function auditar(formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: imobiliaria } = await supabase
-    .from("imobiliarias")
-    .select("id")
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const imobiliaria = await buscarImobiliariaDoUsuario(supabase, user);
   if (!imobiliaria) {
     redirect(`/auditar-contrato?erro=${encodeURIComponent("Cadastre sua imobiliária primeiro.")}`);
   }

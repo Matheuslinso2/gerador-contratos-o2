@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { alertarAdmin } from "@/lib/email";
 import { createClient } from "@/lib/supabase/server";
+import { buscarImobiliariaDoUsuario } from "@/lib/imobiliariaDoUsuario";
 
 // error.tsx roda no cliente e não pode chamar o envio de e-mail diretamente
 // (é código de servidor), então ele reporta pra essa rota, que dispara o
@@ -17,8 +18,8 @@ export async function POST(request: NextRequest) {
 
   let nomeImobiliaria: string | null = null;
   if (user) {
-    const { data } = await supabase.from("imobiliarias").select("nome").eq("user_id", user.id).maybeSingle();
-    nomeImobiliaria = data?.nome ?? null;
+    const imobiliaria = await buscarImobiliariaDoUsuario(supabase, user);
+    nomeImobiliaria = imobiliaria?.nome ?? null;
   }
 
   const quem = nomeImobiliaria

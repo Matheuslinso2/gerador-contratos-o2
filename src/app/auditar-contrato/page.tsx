@@ -7,6 +7,7 @@ import AuditorForm from "./AuditorForm";
 import ListaAuditorias from "./ListaAuditorias";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { garantirImobiliariaColaborador } from "@/lib/imobiliariaColaborador";
+import { buscarImobiliariaDoUsuario } from "@/lib/imobiliariaDoUsuario";
 
 export const dynamic = "force-dynamic";
 // Analisar PDF escaneado/imagem (a IA lendo direto das páginas) já demora
@@ -28,12 +29,7 @@ export default async function AuditarContratoPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  let imobiliaria = await supabase
-    .from("imobiliarias")
-    .select("id, nome")
-    .eq("user_id", user!.id)
-    .maybeSingle()
-    .then((r) => r.data);
+  let imobiliaria = await buscarImobiliariaDoUsuario(supabase, user);
 
   if (!imobiliaria && (isAdmin(user?.email) || isColaboradorO2(user?.email))) {
     imobiliaria = await garantirImobiliariaColaborador(supabase, user!.id, user?.email);

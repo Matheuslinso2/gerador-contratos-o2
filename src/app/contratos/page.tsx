@@ -6,6 +6,7 @@ import BackLink from "@/components/BackLink";
 import ListaContratosRealizados from "./ListaContratosRealizados";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { garantirImobiliariaColaborador } from "@/lib/imobiliariaColaborador";
+import { buscarImobiliariaDoUsuario } from "@/lib/imobiliariaDoUsuario";
 
 export const dynamic = "force-dynamic";
 
@@ -22,12 +23,7 @@ export default async function ContratosRealizadosPage({
 
   const vePermitidosDeTodos = isAdmin(user?.email) || isColaboradorO2(user?.email);
 
-  let imobiliaria = await supabase
-    .from("imobiliarias")
-    .select("id")
-    .eq("user_id", user!.id)
-    .maybeSingle()
-    .then((r) => r.data);
+  let imobiliaria = await buscarImobiliariaDoUsuario(supabase, user);
 
   if (!imobiliaria && vePermitidosDeTodos) {
     imobiliaria = await garantirImobiliariaColaborador(supabase, user!.id, user?.email);

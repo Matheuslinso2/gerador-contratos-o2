@@ -7,6 +7,7 @@ import { signOut } from "./actions";
 import AppHeader from "@/components/AppHeader";
 import PainelCategorias from "@/components/PainelCategorias";
 import { PRODUTOS_LANDING_PAGE } from "@/lib/produtosLandingPage";
+import { buscarImobiliariaDoUsuario } from "@/lib/imobiliariaDoUsuario";
 
 export default async function Home() {
   const supabase = await createClient();
@@ -43,11 +44,7 @@ export default async function Home() {
     );
   }
 
-  const { data: imobiliaria } = await supabase
-    .from("imobiliarias")
-    .select("id")
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const imobiliaria = await buscarImobiliariaDoUsuario(supabase, user);
   const cadastroCompleto = !!imobiliaria || isAdmin(user.email) || isColaboradorO2(user.email);
 
   const ferramentas: {

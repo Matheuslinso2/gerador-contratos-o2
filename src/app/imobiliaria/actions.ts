@@ -8,6 +8,8 @@ import { extrairTextoPdf } from "@/lib/extrairTextoPdf";
 import { enviarEmail } from "@/lib/email";
 import { prepararTextoBase } from "@/lib/limparTextoBase";
 import { validarCNPJ } from "@/lib/validacoesBr";
+import { buscarImobiliariaDoUsuario } from "@/lib/imobiliariaDoUsuario";
+import { origem } from "@/lib/origem";
 
 export async function salvarImobiliaria(formData: FormData) {
   const supabase = await createClient();
@@ -86,13 +88,13 @@ export async function salvarImobiliaria(formData: FormData) {
     redirect(`/imobiliaria?erro=${encodeURIComponent(`Preencha os campos obrigatórios: ${faltando.join(", ")}.`)}`);
   }
 
-  const { data: porUserId } = await supabase
-    .from("imobiliarias")
-    .select("id, texto_base_contrato, user_id")
-    .eq("user_id", user.id)
-    .maybeSingle();
+  // Titular (user_id) OU membro convidado (e-mail em imobiliaria_membros) --
+  // um membro salvando esse formulário precisa atualizar o cadastro
+  // COMPARTILHADO, não criar um novo pro próprio login (senão vira a mesma
+  // duplicidade que o CNPJ, só que pela porta dos fundos).
+  let imobiliariaExistente = await buscarImobiliariaDoUsuario(supabase, user);
 
-  // Além da conta do usuário, o Faturas cria sozinho um registro
+  // Além da conta do usuário/membro, o Faturas cria sozinho um registro
   // "cadastro_incompleto" (sem user_id) quando identifica uma fatura de
   // uma imobiliária que ainda não tem conta aqui (ver
   // resolverOuCriarImobiliaria em faturasIdentificacao.ts). Sem checar por
@@ -100,17 +102,16 @@ export async function salvarImobiliaria(formData: FormData) {
   // pro mesmo CNPJ) em vez de completar essa -- a antiga ficava presa como
   // "incompleta" pra sempre, com as faturas_esperadas já vinculadas a ela,
   // e o cadastro de verdade ia parar numa linha órfã que nada referencia.
-  // Se o CNPJ já pertence a uma conta de outra pessoa (ex: outro
-  // funcionário da mesma imobiliária cadastrou antes, com outro login),
-  // NÃO bloqueia quem está preenchendo agora -- só sinaliza pro time da O2
+  // Se o CNPJ já pertence a uma conta de outra pessoa que NÃO é titular nem
+  // membro daqui (duplicidade de verdade, não vínculo já conhecido), NÃO
+  // bloqueia quem está preenchendo agora -- só sinaliza pro time da O2
   // unificar manualmente depois. Bloquear travaria um cadastro legítimo por
   // causa de uma duplicidade que é problema interno, não da imobiliária.
-  let imobiliariaExistente = porUserId;
   let cnpjDuplicadoEmOutraConta = false;
   if (!imobiliariaExistente && cnpj) {
     const { data: porCnpj } = await supabase
       .from("imobiliarias")
-      .select("id, texto_base_contrato, user_id")
+      .select("*")
       .eq("cnpj", cnpj)
       .maybeSingle();
     if (porCnpj?.user_id) {
@@ -120,6 +121,10 @@ export async function salvarImobiliaria(formData: FormData) {
     }
   }
   const primeiroCadastro = !imobiliariaExistente;
+  // user_id/email só é setado quando é o titular salvando (ou reivindicando
+  // um registro esqueleto sem dono) -- um membro editando o cadastro
+  // compartilhado não deve "roubar" a titularidade da conta.
+  const podeAssumirTitularidade = !imobiliariaExistente || !imobiliariaExistente.user_id || imobiliariaExistente.user_id === user.id;
 
   // Só roda a limpeza (via IA) quando o texto-base é novo/mudou — evita
   // reprocessar à toa a cada salvamento do cadastro (custo de API e risco
@@ -150,8 +155,6 @@ export async function salvarImobiliaria(formData: FormData) {
   }
 
   const dados: Record<string, unknown> = {
-    user_id: user.id,
-    email: user.email,
     nome,
     cnpj,
     creci: creci || null,
@@ -166,6 +169,10 @@ export async function salvarImobiliaria(formData: FormData) {
     percentual_honorarios_advocaticios,
     plataforma_assinatura: plataforma_assinatura || null,
   };
+  if (podeAssumirTitularidade) {
+    dados.user_id = user.id;
+    dados.email = user.email;
+  }
   if (logo_url) dados.logo_url = logo_url;
   if (garantiaPosicao !== undefined) dados.garantia_posicao_apos_clausula = garantiaPosicao;
 
@@ -209,6 +216,78 @@ export async function salvarImobiliaria(formData: FormData) {
       `,
     });
   }
+
+  revalidatePath("/imobiliaria");
+  redirect("/imobiliaria?sucesso=1");
+}
+
+// Acesso completo, igual ao titular: qualquer pessoa que já acessa o
+// cadastro (titular ou membro) pode convidar/remover outros membros --
+// mantém simples, sem sistema de papéis/permissões separado.
+export async function adicionarMembroImobiliaria(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const email = String(formData.get("email") ?? "")
+    .trim()
+    .toLowerCase();
+  if (!email || !email.includes("@")) {
+    redirect(`/imobiliaria?erro=${encodeURIComponent("E-mail inválido.")}`);
+  }
+
+  const imobiliaria = await buscarImobiliariaDoUsuario(supabase, user);
+  if (!imobiliaria) {
+    redirect(`/imobiliaria?erro=${encodeURIComponent("Complete o cadastro da imobiliária antes de convidar funcionários.")}`);
+  }
+  if (email === user.email?.toLowerCase()) {
+    redirect(`/imobiliaria?erro=${encodeURIComponent("Esse já é o seu próprio e-mail de login.")}`);
+  }
+
+  const { error } = await supabase
+    .from("imobiliaria_membros")
+    .insert({ imobiliaria_id: imobiliaria.id, email, convidado_por: user.id });
+  if (error) {
+    const mensagem = error.code === "23505" ? "Esse e-mail já foi convidado." : error.message;
+    redirect(`/imobiliaria?erro=${encodeURIComponent(mensagem)}`);
+  }
+
+  const link = `${await origem()}/signup`;
+  await enviarEmail({
+    para: email,
+    assunto: `Você foi convidado para acessar ${imobiliaria.nome} no Workspace O2`,
+    html: `
+      <h2>Convite para o Workspace O2</h2>
+      <p>${user.email} deu a você acesso ao cadastro de <strong>${imobiliaria.nome}</strong> no Workspace O2
+      (geração de contratos, auditoria e demais ferramentas da imobiliária).</p>
+      <p>Crie sua conta usando exatamente este e-mail (${email}) em
+      <a href="${link}">${link}</a> -- assim que confirmar o cadastro, o acesso libera automaticamente.
+      Se você já tiver conta com esse e-mail, é só entrar normalmente.</p>
+    `,
+  });
+
+  revalidatePath("/imobiliaria");
+  redirect("/imobiliaria?sucesso=1");
+}
+
+export async function removerMembroImobiliaria(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const membroId = String(formData.get("membro_id") ?? "").trim();
+  if (!membroId) redirect("/imobiliaria");
+
+  const imobiliaria = await buscarImobiliariaDoUsuario(supabase, user);
+  if (!imobiliaria) redirect("/imobiliaria");
+
+  // RLS já impede mexer em membro de outra imobiliária -- o filtro por
+  // imobiliaria_id aqui é só reforço, não a única barreira.
+  await supabase.from("imobiliaria_membros").delete().eq("id", membroId).eq("imobiliaria_id", imobiliaria.id);
 
   revalidatePath("/imobiliaria");
   redirect("/imobiliaria?sucesso=1");

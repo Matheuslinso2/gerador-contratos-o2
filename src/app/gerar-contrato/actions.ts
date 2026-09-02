@@ -7,6 +7,7 @@ import { extrairTextoDocx } from "@/lib/extrairTextoDocx";
 import { extrairTextoPdf } from "@/lib/extrairTextoPdf";
 import { extrairDadosTitulo } from "@/lib/extrairDadosTitulo";
 import { inserirClausulaGarantiaNaPosicaoCorreta } from "@/lib/numerarClausulasFinais";
+import { buscarImobiliariaDoUsuario } from "@/lib/imobiliariaDoUsuario";
 
 const NOME_TIPO_TITULO = "Título de Capitalização";
 
@@ -68,11 +69,7 @@ export async function gerarContrato(formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: minhaImobiliaria } = await supabase
-    .from("imobiliarias")
-    .select("id")
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const minhaImobiliaria = await buscarImobiliariaDoUsuario(supabase, user);
   if (!minhaImobiliaria) {
     redirect(`/gerar-contrato?erro=${encodeURIComponent("Cadastre sua imobiliária primeiro.")}`);
   }

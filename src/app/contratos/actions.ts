@@ -3,10 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { buscarImobiliariaDoUsuario } from "@/lib/imobiliariaDoUsuario";
 
-async function minhaImobiliariaId(userId: string, supabase: Awaited<ReturnType<typeof createClient>>) {
-  const { data } = await supabase.from("imobiliarias").select("id").eq("user_id", userId).maybeSingle();
-  return data?.id ?? null;
+async function minhaImobiliariaId(
+  user: { id: string; email?: string | null },
+  supabase: Awaited<ReturnType<typeof createClient>>
+) {
+  const imobiliaria = await buscarImobiliariaDoUsuario(supabase, user);
+  return imobiliaria?.id ?? null;
 }
 
 export async function excluirContrato(formData: FormData) {
@@ -17,7 +21,7 @@ export async function excluirContrato(formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const imobiliariaId = await minhaImobiliariaId(user.id, supabase);
+  const imobiliariaId = await minhaImobiliariaId(user, supabase);
   if (!imobiliariaId) redirect("/contratos");
 
   const { data: contrato } = await supabase
@@ -49,7 +53,7 @@ export async function excluirAuditoria(formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const imobiliariaId = await minhaImobiliariaId(user.id, supabase);
+  const imobiliariaId = await minhaImobiliariaId(user, supabase);
   if (!imobiliariaId) redirect("/contratos");
 
   const { data: auditoria } = await supabase

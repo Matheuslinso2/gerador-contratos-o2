@@ -7,6 +7,7 @@ import AppHeader from "@/components/AppHeader";
 import BackLink from "@/components/BackLink";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { garantirImobiliariaColaborador } from "@/lib/imobiliariaColaborador";
+import { buscarImobiliariaDoUsuario } from "@/lib/imobiliariaDoUsuario";
 
 export const dynamic = "force-dynamic";
 // Gerar contrato agora chama a IA (pra inserir a cláusula de garantia na
@@ -26,12 +27,7 @@ export default async function GerarContratoPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  let imobiliaria = await supabase
-    .from("imobiliarias")
-    .select("id, nome")
-    .eq("user_id", user!.id)
-    .maybeSingle()
-    .then((r) => r.data);
+  let imobiliaria = await buscarImobiliariaDoUsuario(supabase, user);
 
   if (!imobiliaria && (isAdmin(user?.email) || isColaboradorO2(user?.email))) {
     imobiliaria = await garantirImobiliariaColaborador(supabase, user!.id, user?.email);

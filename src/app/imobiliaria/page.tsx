@@ -6,6 +6,8 @@ import AppHeader from "@/components/AppHeader";
 import BackLink from "@/components/BackLink";
 import CampoCnpj from "@/components/CampoCnpj";
 import CampoEndereco from "@/components/CampoEndereco";
+import { buscarImobiliariaDoUsuario } from "@/lib/imobiliariaDoUsuario";
+import { adicionarMembroImobiliaria, removerMembroImobiliaria } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -20,11 +22,11 @@ export default async function ImobiliariaPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: imobiliaria } = await supabase
-    .from("imobiliarias")
-    .select("*")
-    .eq("user_id", user!.id)
-    .maybeSingle();
+  const imobiliaria = await buscarImobiliariaDoUsuario(supabase, user);
+
+  const { data: membros } = imobiliaria
+    ? await supabase.from("imobiliaria_membros").select("id, email, criado_em").eq("imobiliaria_id", imobiliaria.id).order("criado_em")
+    : { data: null };
 
   return (
     <>
@@ -276,6 +278,47 @@ export default async function ImobiliariaPage({
         <p className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-700">
           Cadastro atualizado com sucesso!
         </p>
+      )}
+
+      {imobiliaria && (
+        <section className="space-y-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Funcionários com acesso</h2>
+          <p className="text-xs text-gray-500">
+            Adicione o e-mail de quem mais na imobiliária deve acessar esse cadastro — assim que a pessoa criar
+            conta (ou já tiver uma) com esse e-mail exato, ela passa a ver e editar tudo por aqui, igual a você.
+          </p>
+
+          <ul className="space-y-1">
+            {(membros ?? []).length === 0 && <li className="text-sm text-gray-400">Nenhum funcionário adicionado ainda.</li>}
+            {(membros ?? []).map((m) => (
+              <li key={m.id} className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm">
+                <span className="text-o2-navy">{m.email}</span>
+                <form action={removerMembroImobiliaria}>
+                  <input type="hidden" name="membro_id" value={m.id} />
+                  <button type="submit" className="text-xs font-medium text-red-600 hover:underline">
+                    Remover
+                  </button>
+                </form>
+              </li>
+            ))}
+          </ul>
+
+          <form action={adicionarMembroImobiliaria} className="flex gap-2">
+            <input
+              type="email"
+              name="email"
+              required
+              placeholder="email@exemplo.com"
+              className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-o2-coral focus:outline-none"
+            />
+            <button
+              type="submit"
+              className="rounded-lg border border-o2-coral px-4 py-2 text-sm font-medium text-o2-coral transition hover:bg-o2-coral hover:text-white"
+            >
+              Convidar
+            </button>
+          </form>
+        </section>
       )}
       </main>
     </>
