@@ -5,8 +5,9 @@ import { signOut } from "../../actions";
 import AppHeader from "@/components/AppHeader";
 import BackLink from "@/components/BackLink";
 import { apenasDigitos } from "@/lib/pdfComSenha";
-import ImobiliariaCard, { type ImobiliariaAdminRow } from "./ImobiliariaCard";
+import { type ImobiliariaAdminRow } from "./ImobiliariaCard";
 import MesclarDuplicidade, { type ImobiliariaDuplicadaLinha } from "./MesclarDuplicidade";
+import ListaImobiliarias from "./ListaImobiliarias";
 
 export const dynamic = "force-dynamic";
 
@@ -116,12 +117,7 @@ export default async function AdminImobiliariasPage({
 
         <section className="space-y-3">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Todos os cadastros</h2>
-          <div className="space-y-3">
-            {imobiliarias.map((i) => (
-              <ImobiliariaCard key={i.id} imobiliaria={i} />
-            ))}
-            {imobiliarias.length === 0 && <p className="text-sm text-gray-500">Nenhuma imobiliária cadastrada ainda.</p>}
-          </div>
+          <ListaImobiliarias imobiliarias={imobiliarias} />
         </section>
       </main>
     </>
