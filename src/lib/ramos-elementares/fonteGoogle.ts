@@ -87,10 +87,13 @@ function tituloCompativel(titulo: string, competencia: string): boolean {
   const { ano, mes } = decomporCompetencia(competencia);
   const tituloNormalizado = normalizar(titulo);
   const mesNormalizado = normalizar(MESES[mes - 1]);
+  // Quem renomeia a planilha todo mês às vezes digita um espaço a mais perto
+  // da barra ("SETEMBRO /2026") -- não deixa isso quebrar a busca da planilha.
+  const tituloSemEspacoNaBarra = tituloNormalizado.replace(/\s*\/\s*/g, "/");
   return (
     !tituloNormalizado.startsWith("COPIA DE") &&
     tituloNormalizado.includes("COTACAO DIARIA RE") &&
-    (tituloNormalizado.includes(`${mesNormalizado}/${ano}`) || tituloNormalizado.includes(`${mesNormalizado} ${ano}`))
+    (tituloSemEspacoNaBarra.includes(`${mesNormalizado}/${ano}`) || tituloNormalizado.includes(`${mesNormalizado} ${ano}`))
   );
 }
 
