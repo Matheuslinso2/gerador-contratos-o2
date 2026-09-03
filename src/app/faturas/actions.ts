@@ -68,14 +68,16 @@ export async function adicionarEsperada(formData: FormData) {
 // única forma de corrigir um upload errado era subir outro arquivo pra
 // forçar a detecção de duplicidade e escolher "arquivar a antiga" na
 // Conferência, um caminho indireto só pra apagar algo.
-export async function excluirArquivoFatura(formData: FormData) {
+// Usado via formAction (com .bind) num botão dentro do form grande de
+// "Enviar selecionadas" -- NÃO pode ser um <form> aninhado dentro daquele
+// (HTML não permite form dentro de form; o navegador descarta o de
+// dentro e o clique acaba submetendo o formulário errado, silenciosamente).
+export async function excluirArquivoFatura(faturaId: string, voltarPara: string) {
   const supabase = await checarAcesso();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const faturaId = String(formData.get("fatura_id") ?? "").trim();
-  const voltarPara = String(formData.get("voltar_para") ?? "").trim();
   if (!faturaId) redirect(`/faturas?erro=${encodeURIComponent("Arquivo inválido.")}${voltarPara}`);
 
   const { data: fatura } = await supabase

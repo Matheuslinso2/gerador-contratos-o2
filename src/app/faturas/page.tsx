@@ -650,6 +650,7 @@ export default async function FaturasPage({
                     {grupo.linhas.map(({ esperada, fatura, statusChave, arquivos }) => {
                       const boleto = arquivos.find((a) => a.tipo_documento === "boleto");
                       const demonstrativo = arquivos.find((a) => a.tipo_documento === "demonstrativo");
+                      const voltarParaAqui = `&competencia=${competencia}&seguradora=${encodeURIComponent(seguradora)}`;
                       const pronta = STATUS_PRONTO_PARA_ENVIO.includes(statusChave);
                       const duplicata = m.imobiliaria_id ? duplicatasPorImobiliaria.get(m.imobiliaria_id) : undefined;
                       return (
@@ -721,21 +722,14 @@ export default async function FaturasPage({
                                     >
                                       <IconInvoice className="h-4 w-4" />
                                     </a>
-                                    <form action={excluirArquivoFatura}>
-                                      <input type="hidden" name="fatura_id" value={boleto.id} />
-                                      <input
-                                        type="hidden"
-                                        name="voltar_para"
-                                        value={`&competencia=${competencia}&seguradora=${encodeURIComponent(seguradora)}`}
-                                      />
-                                      <SubmitButton
-                                        className="inline-flex text-gray-300 transition hover:text-red-600"
-                                        textoCarregando=""
-                                        confirmarAntes={`Excluir o boleto "${boleto.arquivo_nome}"? Vai sumir da lista de envio.`}
-                                      >
-                                        <IconTrash className="h-3.5 w-3.5" />
-                                      </SubmitButton>
-                                    </form>
+                                    <SubmitButton
+                                      formAction={excluirArquivoFatura.bind(null, boleto.id, voltarParaAqui)}
+                                      className="inline-flex text-gray-300 transition hover:text-red-600"
+                                      textoCarregando=""
+                                      confirmarAntes={`Excluir o boleto "${boleto.arquivo_nome}"? Vai sumir da lista de envio.`}
+                                    >
+                                      <IconTrash className="h-3.5 w-3.5" />
+                                    </SubmitButton>
                                   </>
                                 ) : (
                                   <span className="text-gray-300">—</span>
@@ -754,21 +748,14 @@ export default async function FaturasPage({
                                     >
                                       <IconReceipt className="h-4 w-4" />
                                     </a>
-                                    <form action={excluirArquivoFatura}>
-                                      <input type="hidden" name="fatura_id" value={demonstrativo.id} />
-                                      <input
-                                        type="hidden"
-                                        name="voltar_para"
-                                        value={`&competencia=${competencia}&seguradora=${encodeURIComponent(seguradora)}`}
-                                      />
-                                      <SubmitButton
-                                        className="inline-flex text-gray-300 transition hover:text-red-600"
-                                        textoCarregando=""
-                                        confirmarAntes={`Excluir a fatura "${demonstrativo.arquivo_nome}"? Vai sumir da lista de envio.`}
-                                      >
-                                        <IconTrash className="h-3.5 w-3.5" />
-                                      </SubmitButton>
-                                    </form>
+                                    <SubmitButton
+                                      formAction={excluirArquivoFatura.bind(null, demonstrativo.id, voltarParaAqui)}
+                                      className="inline-flex text-gray-300 transition hover:text-red-600"
+                                      textoCarregando=""
+                                      confirmarAntes={`Excluir a fatura "${demonstrativo.arquivo_nome}"? Vai sumir da lista de envio.`}
+                                    >
+                                      <IconTrash className="h-3.5 w-3.5" />
+                                    </SubmitButton>
                                   </>
                                 ) : (
                                   <span className="text-gray-300">—</span>

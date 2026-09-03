@@ -21,6 +21,7 @@ export function SubmitButton({
   className,
   disabled,
   confirmarAntes,
+  formAction,
 }: {
   children: React.ReactNode;
   textoCarregando?: string;
@@ -29,11 +30,16 @@ export function SubmitButton({
   /** Se definido, pergunta com window.confirm() antes de deixar o clique
    * seguir pro submit -- pra ações que apagam/arquivam algo. */
   confirmarAntes?: string;
+  /** Pra ter uma Server Action diferente da do <form> ambiente, sem
+   * precisar de um <form> aninhado (inválido em HTML -- o navegador
+   * descarta o de dentro e o clique some/vai pro lugar errado). */
+  formAction?: (formData: FormData) => void | Promise<void>;
 }) {
   const [clicado, setClicado] = useState(false);
   return (
     <button
       type="submit"
+      formAction={formAction}
       disabled={disabled}
       aria-disabled={clicado}
       onClick={(e) => {
