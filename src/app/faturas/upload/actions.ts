@@ -212,13 +212,17 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
   const tipoDocumentoReconhecido = tipoDocumento === "boleto" || tipoDocumento === "demonstrativo";
 
   const confianca = imobiliariaId ? resultadoIdent.confianca : null;
+  // "media" = 1 único match por nome/razão social (não por CNPJ) -- não é
+  // ambíguo, só um sinal mais fraco. Só "baixa" (mais de uma imobiliária
+  // parecida) é ambiguidade de verdade e precisa de olho humano.
+  const confiancaSuficiente = confianca === "alta" || confianca === "media";
   const status = duplicataFinal
     ? "duplicada"
     : !imobiliariaId
       ? "aguardando_identificacao"
       : precisaEscolherOrigem
         ? "aguardando_origem"
-        : confianca === "alta" && seguradoraReconhecida && tipoDocumentoReconhecido
+        : confiancaSuficiente && seguradoraReconhecida && tipoDocumentoReconhecido
           ? "fatura_carregada"
           : "aguardando_conferencia";
   // Quando só existe 1 origem possível, já preenche sozinho -- a pergunta
@@ -257,9 +261,9 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
       : "Parece duplicada de uma fatura já enviada.",
     aguardando_identificacao: `Aberta${seguradoraTexto}, mas não identificamos a imobiliária — precisa de conferência.`,
     aguardando_origem: `Identificada: ${nomeIdentificado}${seguradoraTexto}, mas essa imobiliária tem mais de uma origem nessa seguradora — confirme qual na conferência.`,
-    aguardando_conferencia: !seguradoraReconhecida && imobiliariaId && confianca === "alta"
+    aguardando_conferencia: !seguradoraReconhecida && imobiliariaId && confiancaSuficiente
       ? `Identificada: ${nomeIdentificado}, mas a seguradora "${seguradoraNormalizada}" não é uma das conhecidas — confirme na conferência.`
-      : !tipoDocumentoReconhecido && imobiliariaId && confianca === "alta"
+      : !tipoDocumentoReconhecido && imobiliariaId && confiancaSuficiente
         ? `Identificada: ${nomeIdentificado}${seguradoraTexto}, mas não identificamos se é boleto ou demonstrativo — confirme na conferência.`
         : `Aberta${seguradoraTexto}, sugestão: ${nomeIdentificado ?? "?"} — confirme na conferência.`,
     fatura_carregada: `Identificada: ${nomeIdentificado}${seguradoraTexto}${tipoDocumentoTexto}.`,

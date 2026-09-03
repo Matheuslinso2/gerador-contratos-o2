@@ -13,6 +13,7 @@ import {
 import SeletorImobiliaria from "./SeletorImobiliaria";
 import FaturasSubHeader from "../FaturasSubHeader";
 import { IconChecklist } from "../icons";
+import { SubmitButton } from "../SubmitButton";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -108,22 +109,22 @@ export default async function ConferenciaFaturasPage({
                       <form action={resolverDuplicata}>
                         <input type="hidden" name="fatura_id" value={f.id} />
                         <input type="hidden" name="acao" value="manter" />
-                        <button
-                          type="submit"
-                          className="rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+                        <SubmitButton
+                          className="rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          textoCarregando="Arquivando..."
                         >
                           É duplicata mesmo — arquivar
-                        </button>
+                        </SubmitButton>
                       </form>
                       <form action={resolverDuplicata}>
                         <input type="hidden" name="fatura_id" value={f.id} />
                         <input type="hidden" name="acao" value="substituir" />
-                        <button
-                          type="submit"
-                          className="rounded-full bg-o2-coral px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
+                        <SubmitButton
+                          className="rounded-full bg-o2-coral px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                          textoCarregando="Processando..."
                         >
                           Não é duplicata — processar essa e arquivar a antiga
-                        </button>
+                        </SubmitButton>
                       </form>
                     </div>
                   </>
@@ -138,12 +139,12 @@ export default async function ConferenciaFaturasPage({
                         <form key={origem} action={escolherOrigemFatura}>
                           <input type="hidden" name="fatura_id" value={f.id} />
                           <input type="hidden" name="origem" value={origem} />
-                          <button
-                            type="submit"
-                            className="rounded-full border border-o2-navy px-4 py-2 text-sm font-medium text-o2-navy transition hover:bg-o2-navy hover:text-white"
+                          <SubmitButton
+                            className="rounded-full border border-o2-navy px-4 py-2 text-sm font-medium text-o2-navy transition hover:bg-o2-navy hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                            textoCarregando="Confirmando..."
                           >
                             {origem}
-                          </button>
+                          </SubmitButton>
                         </form>
                       ))}
                     </div>
@@ -157,12 +158,12 @@ export default async function ConferenciaFaturasPage({
                       </label>
                       <input name="senha" placeholder="Senha do PDF" className={inputClass} />
                     </div>
-                    <button
-                      type="submit"
-                      className="rounded-full bg-o2-navy px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
+                    <SubmitButton
+                      className="rounded-full bg-o2-navy px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                      textoCarregando="Tentando..."
                     >
                       Tentar abrir
-                    </button>
+                    </SubmitButton>
                   </form>
                 ) : (
                   <>
@@ -176,9 +177,12 @@ export default async function ConferenciaFaturasPage({
                     </details>
                     <form action={reprocessarIdentificacao} className="mb-2">
                       <input type="hidden" name="fatura_id" value={f.id} />
-                      <button type="submit" className="text-xs font-medium text-o2-navy hover:underline">
+                      <SubmitButton
+                        className="text-xs font-medium text-o2-navy hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                        textoCarregando="Reprocessando..."
+                      >
                         Reprocessar identificação (usa o texto já extraído, não baixa o arquivo de novo)
-                      </button>
+                      </SubmitButton>
                     </form>
                     {f.confianca === "baixa" && (
                       <p className="mb-2 rounded-lg border border-yellow-200 bg-yellow-50 p-2 text-xs text-yellow-800">
@@ -198,12 +202,12 @@ export default async function ConferenciaFaturasPage({
                         listId={`imob-lista-${f.id}`}
                       />
                     </div>
-                    <button
-                      type="submit"
-                      className="rounded-full bg-o2-coral px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
+                    <SubmitButton
+                      className="rounded-full bg-o2-coral px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                      textoCarregando="Confirmando..."
                     >
                       Confirmar
-                    </button>
+                    </SubmitButton>
                     </form>
                   </>
                 )}

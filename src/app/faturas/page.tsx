@@ -8,7 +8,8 @@ import SeletorCompetencia from "./SeletorCompetencia";
 import { adicionarEsperada } from "./actions";
 import { SEGURADORAS_CANONICAS } from "@/lib/faturasIdentificacao";
 import { IconCalendar, IconChecklist, IconUpload, IconInvoice, IconReceipt, IconChevron } from "./icons";
-import { CheckboxSelecaoLinha, LinkDuplicata } from "./LinhaInterativa";
+import { CheckboxSelecaoLinha, LinkDuplicata, SelecionarTodas } from "./LinhaInterativa";
+import { SubmitButton } from "./SubmitButton";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -582,12 +583,12 @@ export default async function FaturasPage({
               ))}
             </select>
           </div>
-          <button
-            type="submit"
-            className="rounded-full border border-o2-navy px-4 py-1.5 text-sm font-medium text-o2-navy transition hover:bg-o2-navy hover:text-white"
+          <SubmitButton
+            className="rounded-full border border-o2-navy px-4 py-1.5 text-sm font-medium text-o2-navy transition hover:bg-o2-navy hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+            textoCarregando="Filtrando..."
           >
             Filtrar
-          </button>
+          </SubmitButton>
           {(busca || statusFiltro) && (
             <Link
               href={`/faturas?competencia=${competencia}&seguradora=${encodeURIComponent(seguradora)}`}
@@ -608,17 +609,18 @@ export default async function FaturasPage({
                 : `Nenhuma pronta pra envio em ${seguradora} no momento.`}
             </p>
             <div className="flex items-center gap-3">
+              {prontasParaEnvio.length > 1 && <SelecionarTodas />}
               <label className="flex items-center gap-1.5 text-xs text-gray-600">
                 <input type="checkbox" name="modo_teste" value="1" />
                 Modo teste — manda tudo só pro meu e-mail
               </label>
-              <button
-                type="submit"
+              <SubmitButton
                 disabled={!prontasParaEnvio.length}
                 className="whitespace-nowrap rounded-full bg-o2-navy px-4 py-1.5 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                textoCarregando="Abrindo prévia..."
               >
                 Enviar selecionadas
-              </button>
+              </SubmitButton>
             </div>
           </div>
           {temPendenteCnpj && (
@@ -816,12 +818,12 @@ export default async function FaturasPage({
                 </label>
               ))}
             </div>
-            <button
-              type="submit"
-              className="rounded-full bg-o2-coral px-4 py-1.5 text-xs font-medium text-white transition hover:opacity-90"
+            <SubmitButton
+              className="rounded-full bg-o2-coral px-4 py-1.5 text-xs font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              textoCarregando="Salvando..."
             >
               Adicionar
-            </button>
+            </SubmitButton>
           </form>
         </details>
       </main>

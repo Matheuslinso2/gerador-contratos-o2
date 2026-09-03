@@ -7,6 +7,7 @@ import AppHeader from "@/components/AppHeader";
 import { confirmarEnvio } from "../actions";
 import FaturasSubHeader from "../../FaturasSubHeader";
 import { IconSend } from "../../icons";
+import { SubmitButton } from "../../SubmitButton";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -172,14 +173,14 @@ export default async function ConfirmarEnvioPage({
             {prontas.map((i) => (
               <input key={i.id} type="hidden" name="imob" value={i.id} />
             ))}
-            <button
-              type="submit"
-              className="rounded-full bg-o2-coral px-6 py-2.5 text-sm font-medium text-white transition hover:opacity-90"
+            <SubmitButton
+              className="rounded-full bg-o2-coral px-6 py-2.5 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              textoCarregando="Enviando..."
             >
               {modoTeste
                 ? `Confirmar e enviar ${prontas.length} e-mail(s) de teste`
                 : `Confirmar e enviar ${prontas.length} e-mail(s)`}
-            </button>
+            </SubmitButton>
           </form>
         )}
       </main>
