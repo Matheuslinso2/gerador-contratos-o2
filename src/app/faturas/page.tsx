@@ -7,7 +7,7 @@ import AppHeader from "@/components/AppHeader";
 import SeletorCompetencia from "./SeletorCompetencia";
 import { adicionarEsperada } from "./actions";
 import { SEGURADORAS_CANONICAS } from "@/lib/faturasIdentificacao";
-import { IconCalendar, IconChecklist, IconUpload, IconInvoice, IconReceipt } from "./icons";
+import { IconCalendar, IconChecklist, IconUpload, IconInvoice, IconReceipt, IconChevron } from "./icons";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -439,6 +439,24 @@ export default async function FaturasPage({
   );
   const temPendenteCnpj = linhas.some((l) => !l.m.imobiliaria_id && !!l.m.nome_provisorio);
 
+  // Agrupa as linhas por imobiliária pra exibição em cartão -- nome/CNPJ
+  // aparecem 1x no cabeçalho do cartão mesmo quando a imobiliária tem mais
+  // de 1 relação nessa seguradora (multi-origem, ex: Tokio via O2 Seguros e
+  // via SegImob). A posição do cartão na lista segue a da sua 1ª linha, que
+  // já vem ordenada por prioridade (pendente sobe, enviada desce).
+  type GrupoImobiliaria = { m: LinhaMestre; pendenteCnpj: boolean; linhas: typeof linhas };
+  const gruposPorChave = new Map<string, GrupoImobiliaria>();
+  const grupos: GrupoImobiliaria[] = [];
+  for (const linha of linhas) {
+    let grupo = gruposPorChave.get(linha.m.chave);
+    if (!grupo) {
+      grupo = { m: linha.m, pendenteCnpj: !linha.m.imobiliaria_id && !!linha.m.nome_provisorio, linhas: [] };
+      gruposPorChave.set(linha.m.chave, grupo);
+      grupos.push(grupo);
+    }
+    grupo.linhas.push(linha);
+  }
+
   return (
     <>
       <AppHeader userEmail={user?.email} logoutAction={signOut} />
@@ -599,145 +617,151 @@ export default async function FaturasPage({
           {temPendenteCnpj && (
             <p className="flex items-center gap-1.5 text-xs text-gray-500">
               <span className="inline-block h-3 w-3 rounded-sm bg-orange-50 ring-1 ring-orange-200" />
-              Linha destacada = imobiliária ainda sem CNPJ/CPF vinculado (clique em &quot;Editar&quot; pra completar)
+              Cartão destacado = imobiliária ainda sem CNPJ/CPF vinculado (abra e clique em &quot;Editar&quot; pra completar)
             </p>
           )}
-          <div className="overflow-x-auto rounded-xl border border-o2-navy/10 bg-white shadow-sm">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 bg-o2-gray/30 text-xs text-gray-500">
-                  <th className="px-3 py-2 font-medium"></th>
-                  <th className="px-3 py-2 font-medium">Parceiro</th>
-                  <th className="px-3 py-2 font-medium">CNPJ/CPF</th>
-                  <th className="px-3 py-2 font-medium">E-mail de faturas</th>
-                  <th className="px-3 py-2 font-medium">
-                    Venc. <span className="font-normal text-gray-400">({seguradora})</span>
-                  </th>
-                  <th className="px-3 py-2 font-medium">Origem</th>
-                  <th className="px-3 py-2 font-medium">Observação</th>
-                  <th className="px-3 py-2 font-medium">Boleto</th>
-                  <th className="px-3 py-2 font-medium">Fatura</th>
-                  <th className="px-3 py-2 font-medium">
-                    Situação <span className="font-normal text-gray-400">({seguradora}, {competencia})</span>
-                  </th>
-                  <th className="px-3 py-2 font-medium"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {linhas.map(({ m, esperada, fatura, statusChave, arquivos }) => {
-                  const boleto = arquivos.find((a) => a.tipo_documento === "boleto");
-                  const demonstrativo = arquivos.find((a) => a.tipo_documento === "demonstrativo");
-                  const pendenteCnpj = !m.imobiliaria_id && !!m.nome_provisorio;
-                  const pronta = STATUS_PRONTO_PARA_ENVIO.includes(statusChave);
-                  return (
-                    <tr key={esperada.id} className={`border-b border-gray-50 last:border-0 align-top ${pendenteCnpj ? "bg-orange-50/40" : ""}`}>
-                      <td className="px-3 py-2">
-                        {pronta && m.imobiliaria_id && m.email_faturas ? (
-                          <input type="checkbox" name="imob" value={m.imobiliaria_id} defaultChecked />
-                        ) : pronta && m.imobiliaria_id && !m.email_faturas ? (
-                          <span title="Sem e-mail cadastrado — edite a imobiliária" className="text-xs text-red-500">
-                            ⚠
-                          </span>
-                        ) : null}
-                      </td>
-                      <td className="px-3 py-2 text-gray-800">{m.nome}</td>
-                      <td className="px-3 py-2 text-gray-500">{m.cnpj ?? "—"}</td>
-                      <td className="px-3 py-2 text-gray-500">{m.email_faturas ?? "—"}</td>
-                      <td className="px-3 py-2 text-gray-800">{esperada.dia_vencimento ?? "—"}</td>
-                      <td className="px-3 py-2 text-gray-800">{esperada.cnpj_o2 || "—"}</td>
-                      <td className="px-3 py-2 text-gray-800">{esperada.observacao ?? "—"}</td>
-                      <td className="px-3 py-2 text-center">
-                        {boleto && urlPorCaminho.get(boleto.arquivo_bucket_path) ? (
-                          <a
-                            href={urlPorCaminho.get(boleto.arquivo_bucket_path)}
-                            target="_blank"
-                            rel="noreferrer"
-                            title={boleto.arquivo_nome}
-                            className="inline-flex text-o2-navy/70 transition hover:text-o2-coral"
-                          >
-                            <IconInvoice className="h-4 w-4" />
-                          </a>
-                        ) : (
-                          <span className="text-gray-300">—</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-center">
-                        {demonstrativo && urlPorCaminho.get(demonstrativo.arquivo_bucket_path) ? (
-                          <a
-                            href={urlPorCaminho.get(demonstrativo.arquivo_bucket_path)}
-                            target="_blank"
-                            rel="noreferrer"
-                            title={demonstrativo.arquivo_nome}
-                            className="inline-flex text-o2-navy/70 transition hover:text-o2-coral"
-                          >
-                            <IconReceipt className="h-4 w-4" />
-                          </a>
-                        ) : (
-                          <span className="text-gray-300">—</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        {fatura ? (
-                          <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${COR_STATUS[fatura.status] ?? "bg-gray-100 text-gray-700"}`}>
-                            {ROTULO_STATUS[fatura.status] ?? fatura.status}
-                          </span>
-                        ) : (
-                          <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-500">
-                            Imob com fatura aberta
-                          </span>
-                        )}
-                        {m.imobiliaria_id && duplicatasPorImobiliaria.get(m.imobiliaria_id) && (
-                          <Link
-                            href={`/faturas/conferencia#fatura-${duplicatasPorImobiliaria.get(m.imobiliaria_id)!.primeiraId}`}
-                            className="ml-1.5 whitespace-nowrap text-xs font-medium text-orange-700 hover:underline"
-                          >
-                            +{duplicatasPorImobiliaria.get(m.imobiliaria_id)!.qtd} possível duplicata
-                          </Link>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        <Link
-                          href={
-                            m.imobiliaria_id
-                              ? `/faturas/imobiliaria/${m.imobiliaria_id}`
-                              : `/faturas/imobiliaria/novo?nome=${encodeURIComponent(m.nome_provisorio ?? "")}`
-                          }
-                          className="text-xs font-medium text-o2-navy hover:underline"
-                        >
-                          Editar
-                        </Link>
-                      </td>
-                    </tr>
-                  );
-                })}
+          <div className="space-y-2.5">
+            {grupos.map((grupo) => {
+              const { m, pendenteCnpj } = grupo;
+              const editarHref = m.imobiliaria_id
+                ? `/faturas/imobiliaria/${m.imobiliaria_id}`
+                : `/faturas/imobiliaria/novo?nome=${encodeURIComponent(m.nome_provisorio ?? "")}`;
+              return (
+                <div
+                  key={m.chave}
+                  className={`overflow-hidden rounded-xl border shadow-sm ${
+                    pendenteCnpj ? "border-orange-200 bg-orange-50/30" : "border-o2-navy/10 bg-white"
+                  }`}
+                >
+                  <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-gray-100 bg-o2-gray/20 px-4 py-2">
+                    <span className="text-sm font-semibold text-o2-navy">{m.nome}</span>
+                    <span className="text-xs text-gray-500">{m.cnpj ?? "CNPJ/CPF não vinculado"}</span>
+                  </div>
+                  <div className="divide-y divide-gray-50">
+                    {grupo.linhas.map(({ esperada, fatura, statusChave, arquivos }) => {
+                      const boleto = arquivos.find((a) => a.tipo_documento === "boleto");
+                      const demonstrativo = arquivos.find((a) => a.tipo_documento === "demonstrativo");
+                      const pronta = STATUS_PRONTO_PARA_ENVIO.includes(statusChave);
+                      const duplicata = m.imobiliaria_id ? duplicatasPorImobiliaria.get(m.imobiliaria_id) : undefined;
+                      return (
+                        <details key={esperada.id} className="group/linha">
+                          <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-2 text-sm hover:bg-gray-50 [&::-webkit-details-marker]:hidden">
+                            {pronta && m.imobiliaria_id && m.email_faturas ? (
+                              <input
+                                type="checkbox"
+                                name="imob"
+                                value={m.imobiliaria_id}
+                                defaultChecked
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            ) : pronta && m.imobiliaria_id && !m.email_faturas ? (
+                              <span title="Sem e-mail cadastrado — edite a imobiliária" className="text-xs text-red-500">
+                                ⚠
+                              </span>
+                            ) : (
+                              <span className="w-[13px]" />
+                            )}
+                            <span className="w-28 shrink-0 text-xs text-gray-500">{esperada.cnpj_o2 || "Origem —"}</span>
+                            {fatura ? (
+                              <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${COR_STATUS[fatura.status] ?? "bg-gray-100 text-gray-700"}`}>
+                                {ROTULO_STATUS[fatura.status] ?? fatura.status}
+                              </span>
+                            ) : (
+                              <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-500">
+                                Imob com fatura aberta
+                              </span>
+                            )}
+                            {duplicata && (
+                              <Link
+                                href={`/faturas/conferencia#fatura-${duplicata.primeiraId}`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="whitespace-nowrap text-xs font-medium text-orange-700 hover:underline"
+                              >
+                                +{duplicata.qtd} possível duplicata
+                              </Link>
+                            )}
+                            <IconChevron className="ml-auto h-4 w-4 shrink-0 text-gray-400 transition group-open/linha:rotate-180" />
+                          </summary>
+                          <div className="grid grid-cols-1 gap-x-6 gap-y-2 border-t border-gray-50 bg-o2-gray/10 px-4 py-3 text-xs text-gray-600 sm:grid-cols-2">
+                            <div>
+                              <span className="text-gray-400">E-mail de faturas: </span>
+                              {m.email_faturas ?? "—"}
+                            </div>
+                            <div>
+                              <span className="text-gray-400">
+                                Vencimento ({seguradora}):{" "}
+                              </span>
+                              {esperada.dia_vencimento ?? "—"}
+                            </div>
+                            <div className="sm:col-span-2">
+                              <span className="text-gray-400">Observação: </span>
+                              {esperada.observacao ?? "—"}
+                            </div>
+                            <div className="flex items-center gap-4">
+                              <span className="flex items-center gap-1.5">
+                                <span className="text-gray-400">Boleto:</span>
+                                {boleto && urlPorCaminho.get(boleto.arquivo_bucket_path) ? (
+                                  <a
+                                    href={urlPorCaminho.get(boleto.arquivo_bucket_path)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    title={boleto.arquivo_nome}
+                                    className="inline-flex text-o2-navy/70 transition hover:text-o2-coral"
+                                  >
+                                    <IconInvoice className="h-4 w-4" />
+                                  </a>
+                                ) : (
+                                  <span className="text-gray-300">—</span>
+                                )}
+                              </span>
+                              <span className="flex items-center gap-1.5">
+                                <span className="text-gray-400">Fatura:</span>
+                                {demonstrativo && urlPorCaminho.get(demonstrativo.arquivo_bucket_path) ? (
+                                  <a
+                                    href={urlPorCaminho.get(demonstrativo.arquivo_bucket_path)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    title={demonstrativo.arquivo_nome}
+                                    className="inline-flex text-o2-navy/70 transition hover:text-o2-coral"
+                                  >
+                                    <IconReceipt className="h-4 w-4" />
+                                  </a>
+                                ) : (
+                                  <span className="text-gray-300">—</span>
+                                )}
+                              </span>
+                            </div>
+                            <div className="flex items-center sm:justify-end">
+                              <Link href={editarHref} className="font-medium text-o2-navy hover:underline">
+                                Editar
+                              </Link>
+                            </div>
+                          </div>
+                        </details>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
 
-                {extras.map((f) => (
-                  <tr key={f.id} className="border-b border-gray-50 bg-amber-50/40 last:border-0">
-                    <td />
-                    <td className="px-3 py-2 text-gray-800" colSpan={5}>
-                      Parceiro novo (não cadastrado ainda) — {f.arquivo_nome}
-                    </td>
-                    <td className="px-3 py-2 text-xs text-gray-500">Confirme na Conferência</td>
-                    <td />
-                    <td />
-                    <td className="px-3 py-2">
-                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${COR_STATUS[f.status] ?? "bg-gray-100 text-gray-700"}`}>
-                        {ROTULO_STATUS[f.status] ?? f.status}
-                      </span>
-                    </td>
-                    <td />
-                  </tr>
-                ))}
+            {extras.map((f) => (
+              <div key={f.id} className="rounded-xl border border-amber-200 bg-amber-50/40 px-4 py-2.5 text-sm shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-gray-800">Parceiro novo (não cadastrado ainda) — {f.arquivo_nome}</span>
+                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${COR_STATUS[f.status] ?? "bg-gray-100 text-gray-700"}`}>
+                    {ROTULO_STATUS[f.status] ?? f.status}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs text-gray-500">Confirme na Conferência</p>
+              </div>
+            ))}
 
-                {!linhas.length && !extras.length && (
-                  <tr>
-                    <td colSpan={11} className="px-3 py-8 text-center text-sm text-gray-500">
-                      Nenhuma imobiliária cadastrada ainda.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+            {!linhas.length && !extras.length && (
+              <p className="rounded-xl border border-o2-navy/10 bg-white px-3 py-8 text-center text-sm text-gray-500 shadow-sm">
+                Nenhuma imobiliária cadastrada ainda.
+              </p>
+            )}
           </div>
         </form>
 

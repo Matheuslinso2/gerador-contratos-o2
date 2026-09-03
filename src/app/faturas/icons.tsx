@@ -87,6 +87,14 @@ export function IconCalendar({ className = "h-6 w-6" }: IconProps) {
   );
 }
 
+export function IconChevron({ className = "h-6 w-6" }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <path d="M7 9.5l5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function IconReceipt({ className = "h-6 w-6" }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className}>
