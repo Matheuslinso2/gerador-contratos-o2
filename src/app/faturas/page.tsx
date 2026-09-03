@@ -8,6 +8,7 @@ import SeletorCompetencia from "./SeletorCompetencia";
 import { adicionarEsperada } from "./actions";
 import { SEGURADORAS_CANONICAS } from "@/lib/faturasIdentificacao";
 import { IconCalendar, IconChecklist, IconUpload, IconInvoice, IconReceipt, IconChevron } from "./icons";
+import { CheckboxSelecaoLinha, LinkDuplicata } from "./LinhaInterativa";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -648,13 +649,7 @@ export default async function FaturasPage({
                           <summary className="grid cursor-pointer list-none grid-cols-[22px_92px_1fr_auto_20px] items-stretch text-xs hover:bg-[#e8f0fe] [&::-webkit-details-marker]:hidden">
                             <span className="flex items-center justify-center border-r border-gray-200 py-1.5">
                               {pronta && m.imobiliaria_id && m.email_faturas ? (
-                                <input
-                                  type="checkbox"
-                                  name="imob"
-                                  value={m.imobiliaria_id}
-                                  defaultChecked
-                                  onClick={(e) => e.stopPropagation()}
-                                />
+                                <CheckboxSelecaoLinha imobiliariaId={m.imobiliaria_id} />
                               ) : pronta && m.imobiliaria_id && !m.email_faturas ? (
                                 <span title="Sem e-mail cadastrado — edite a imobiliária" className="text-red-500">
                                   ⚠
@@ -677,13 +672,12 @@ export default async function FaturasPage({
                             </span>
                             <span className="flex items-center border-r border-gray-200 px-2 py-1.5">
                               {duplicata && (
-                                <Link
+                                <LinkDuplicata
                                   href={`/faturas/conferencia#fatura-${duplicata.primeiraId}`}
-                                  onClick={(e) => e.stopPropagation()}
                                   className="whitespace-nowrap text-[11px] font-medium text-orange-700 hover:underline"
                                 >
                                   +{duplicata.qtd} possível duplicata
-                                </Link>
+                                </LinkDuplicata>
                               )}
                             </span>
                             <span className="flex items-center justify-center">
