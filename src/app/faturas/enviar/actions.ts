@@ -11,6 +11,13 @@ import { montarEmailFatura, type FaturaParaEmail } from "@/lib/faturasEmail";
 const BUCKET_FINAL = "faturas";
 const STATUS_PRONTO_PARA_ENVIO = ["fatura_carregada", "pronta_para_envio"];
 
+// "Modo teste" (checkbox na tela de envio): manda pro e-mail do Matheus em
+// vez do e-mail real da imobiliária -- pra revisar layout/conteúdo com
+// anexo e dados reais sem arriscar mandar pra um cliente de verdade. Não
+// precisa de nenhum passo de "reset" depois: é só não marcar a caixinha
+// no próximo envio real, o comportamento normal volta sozinho.
+const EMAIL_MODO_TESTE = "matheus@o2seguros.com.br";
+
 // Mesma variante usada no cabeçalho navy do app (AppHeader) -- preserva o
 // laranja da marca e só converte o texto escuro em branco, em vez de vazar
 // tudo em branco/preto. Embutida via CID em vez de link externo (não
@@ -43,6 +50,7 @@ export async function confirmarEnvio(formData: FormData) {
   const seguradora = String(formData.get("seguradora") ?? "").trim();
   const competencia = String(formData.get("competencia") ?? "").trim();
   const imobiliariaIds = formData.getAll("imob").map(String).filter(Boolean);
+  const modoTeste = formData.get("modo_teste") === "1";
   if (!seguradora || !competencia || !imobiliariaIds.length) {
     redirect(`/faturas?erro=${encodeURIComponent("Seleção inválida.")}`);
   }
@@ -61,11 +69,12 @@ export async function confirmarEnvio(formData: FormData) {
         falhas++;
         continue;
       }
-      const destinatarios = separarEmails(imobiliaria.email_faturas);
-      if (!destinatarios.length) {
+      const destinatariosReais = separarEmails(imobiliaria.email_faturas);
+      if (!destinatariosReais.length) {
         falhas++;
         continue;
       }
+      const destinatarios = modoTeste ? [EMAIL_MODO_TESTE] : destinatariosReais;
 
       const { data: faturas } = await supabase
         .from("faturas")

@@ -607,13 +607,19 @@ export default async function FaturasPage({
                 ? `${prontasParaEnvio.length} pronta(s) pra envio em ${seguradora} (já marcadas abaixo).`
                 : `Nenhuma pronta pra envio em ${seguradora} no momento.`}
             </p>
-            <button
-              type="submit"
-              disabled={!prontasParaEnvio.length}
-              className="whitespace-nowrap rounded-full bg-o2-navy px-4 py-1.5 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Enviar selecionadas
-            </button>
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-1.5 text-xs text-gray-600">
+                <input type="checkbox" name="modo_teste" value="1" />
+                Modo teste — manda tudo só pro meu e-mail
+              </label>
+              <button
+                type="submit"
+                disabled={!prontasParaEnvio.length}
+                className="whitespace-nowrap rounded-full bg-o2-navy px-4 py-1.5 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Enviar selecionadas
+              </button>
+            </div>
           </div>
           {temPendenteCnpj && (
             <p className="flex items-center gap-1.5 text-xs text-gray-500">
