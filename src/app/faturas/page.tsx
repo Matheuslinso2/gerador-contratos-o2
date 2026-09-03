@@ -620,7 +620,7 @@ export default async function FaturasPage({
               Cartão destacado = imobiliária ainda sem CNPJ/CPF vinculado (abra e clique em &quot;Editar&quot; pra completar)
             </p>
           )}
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             {grupos.map((grupo) => {
               const { m, pendenteCnpj } = grupo;
               const editarHref = m.imobiliaria_id
@@ -629,15 +629,15 @@ export default async function FaturasPage({
               return (
                 <div
                   key={m.chave}
-                  className={`overflow-hidden rounded-xl border shadow-sm ${
-                    pendenteCnpj ? "border-orange-200 bg-orange-50/30" : "border-o2-navy/10 bg-white"
+                  className={`overflow-hidden rounded border ${
+                    pendenteCnpj ? "border-orange-300 bg-orange-50/40" : "border-gray-300 bg-white"
                   }`}
                 >
-                  <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-gray-100 bg-o2-gray/20 px-4 py-2">
-                    <span className="text-sm font-semibold text-o2-navy">{m.nome}</span>
-                    <span className="text-xs text-gray-500">{m.cnpj ?? "CNPJ/CPF não vinculado"}</span>
+                  <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 border-b border-gray-300 bg-gray-100 px-3 py-1.5">
+                    <span className="text-sm font-semibold text-gray-800">{m.nome}</span>
+                    <span className="font-mono text-[11px] text-gray-500">{m.cnpj ?? "CNPJ/CPF não vinculado"}</span>
                   </div>
-                  <div className="divide-y divide-gray-50">
+                  <div className="divide-y divide-gray-200">
                     {grupo.linhas.map(({ esperada, fatura, statusChave, arquivos }) => {
                       const boleto = arquivos.find((a) => a.tipo_documento === "boleto");
                       const demonstrativo = arquivos.find((a) => a.tipo_documento === "demonstrativo");
@@ -645,61 +645,69 @@ export default async function FaturasPage({
                       const duplicata = m.imobiliaria_id ? duplicatasPorImobiliaria.get(m.imobiliaria_id) : undefined;
                       return (
                         <details key={esperada.id} className="group/linha">
-                          <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-2 text-sm hover:bg-gray-50 [&::-webkit-details-marker]:hidden">
-                            {pronta && m.imobiliaria_id && m.email_faturas ? (
-                              <input
-                                type="checkbox"
-                                name="imob"
-                                value={m.imobiliaria_id}
-                                defaultChecked
-                                onClick={(e) => e.stopPropagation()}
-                              />
-                            ) : pronta && m.imobiliaria_id && !m.email_faturas ? (
-                              <span title="Sem e-mail cadastrado — edite a imobiliária" className="text-xs text-red-500">
-                                ⚠
-                              </span>
-                            ) : (
-                              <span className="w-[13px]" />
-                            )}
-                            <span className="w-28 shrink-0 text-xs text-gray-500">{esperada.cnpj_o2 || "Origem —"}</span>
-                            {fatura ? (
-                              <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${COR_STATUS[fatura.status] ?? "bg-gray-100 text-gray-700"}`}>
-                                {ROTULO_STATUS[fatura.status] ?? fatura.status}
-                              </span>
-                            ) : (
-                              <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-500">
-                                Imob com fatura aberta
-                              </span>
-                            )}
-                            {duplicata && (
-                              <Link
-                                href={`/faturas/conferencia#fatura-${duplicata.primeiraId}`}
-                                onClick={(e) => e.stopPropagation()}
-                                className="whitespace-nowrap text-xs font-medium text-orange-700 hover:underline"
-                              >
-                                +{duplicata.qtd} possível duplicata
-                              </Link>
-                            )}
-                            <IconChevron className="ml-auto h-4 w-4 shrink-0 text-gray-400 transition group-open/linha:rotate-180" />
+                          <summary className="grid cursor-pointer list-none grid-cols-[22px_92px_1fr_auto_20px] items-stretch text-xs hover:bg-[#e8f0fe] [&::-webkit-details-marker]:hidden">
+                            <span className="flex items-center justify-center border-r border-gray-200 py-1.5">
+                              {pronta && m.imobiliaria_id && m.email_faturas ? (
+                                <input
+                                  type="checkbox"
+                                  name="imob"
+                                  value={m.imobiliaria_id}
+                                  defaultChecked
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              ) : pronta && m.imobiliaria_id && !m.email_faturas ? (
+                                <span title="Sem e-mail cadastrado — edite a imobiliária" className="text-red-500">
+                                  ⚠
+                                </span>
+                              ) : null}
+                            </span>
+                            <span className="flex items-center border-r border-gray-200 px-2 py-1.5 font-mono text-gray-600">
+                              {esperada.cnpj_o2 || "—"}
+                            </span>
+                            <span className="flex items-center gap-2 border-r border-gray-200 px-2 py-1.5">
+                              {fatura ? (
+                                <span className={`rounded-sm px-2 py-0.5 text-[11px] font-medium ${COR_STATUS[fatura.status] ?? "bg-gray-100 text-gray-700"}`}>
+                                  {ROTULO_STATUS[fatura.status] ?? fatura.status}
+                                </span>
+                              ) : (
+                                <span className="rounded-sm bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500">
+                                  Imob com fatura aberta
+                                </span>
+                              )}
+                            </span>
+                            <span className="flex items-center border-r border-gray-200 px-2 py-1.5">
+                              {duplicata && (
+                                <Link
+                                  href={`/faturas/conferencia#fatura-${duplicata.primeiraId}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="whitespace-nowrap text-[11px] font-medium text-orange-700 hover:underline"
+                                >
+                                  +{duplicata.qtd} possível duplicata
+                                </Link>
+                              )}
+                            </span>
+                            <span className="flex items-center justify-center">
+                              <IconChevron className="h-3.5 w-3.5 shrink-0 text-gray-400 transition group-open/linha:rotate-180" />
+                            </span>
                           </summary>
-                          <div className="grid grid-cols-1 gap-x-6 gap-y-2 border-t border-gray-50 bg-o2-gray/10 px-4 py-3 text-xs text-gray-600 sm:grid-cols-2">
-                            <div>
-                              <span className="text-gray-400">E-mail de faturas: </span>
+                          <div className="grid grid-cols-1 gap-px border-t border-gray-200 bg-gray-200 text-xs text-gray-700 sm:grid-cols-2">
+                            <div className="bg-[#f8f9fa] px-3 py-1.5">
+                              <span className="block text-[10px] uppercase tracking-wide text-gray-400">E-mail de faturas</span>
                               {m.email_faturas ?? "—"}
                             </div>
-                            <div>
-                              <span className="text-gray-400">
-                                Vencimento ({seguradora}):{" "}
+                            <div className="bg-[#f8f9fa] px-3 py-1.5">
+                              <span className="block text-[10px] uppercase tracking-wide text-gray-400">
+                                Vencimento ({seguradora})
                               </span>
-                              {esperada.dia_vencimento ?? "—"}
+                              <span className="font-mono">{esperada.dia_vencimento ?? "—"}</span>
                             </div>
-                            <div className="sm:col-span-2">
-                              <span className="text-gray-400">Observação: </span>
+                            <div className="bg-[#f8f9fa] px-3 py-1.5 sm:col-span-2">
+                              <span className="block text-[10px] uppercase tracking-wide text-gray-400">Observação</span>
                               {esperada.observacao ?? "—"}
                             </div>
-                            <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-4 bg-[#f8f9fa] px-3 py-1.5">
                               <span className="flex items-center gap-1.5">
-                                <span className="text-gray-400">Boleto:</span>
+                                <span className="text-[10px] uppercase tracking-wide text-gray-400">Boleto</span>
                                 {boleto && urlPorCaminho.get(boleto.arquivo_bucket_path) ? (
                                   <a
                                     href={urlPorCaminho.get(boleto.arquivo_bucket_path)}
@@ -715,7 +723,7 @@ export default async function FaturasPage({
                                 )}
                               </span>
                               <span className="flex items-center gap-1.5">
-                                <span className="text-gray-400">Fatura:</span>
+                                <span className="text-[10px] uppercase tracking-wide text-gray-400">Fatura</span>
                                 {demonstrativo && urlPorCaminho.get(demonstrativo.arquivo_bucket_path) ? (
                                   <a
                                     href={urlPorCaminho.get(demonstrativo.arquivo_bucket_path)}
@@ -731,7 +739,7 @@ export default async function FaturasPage({
                                 )}
                               </span>
                             </div>
-                            <div className="flex items-center sm:justify-end">
+                            <div className="flex items-center justify-end bg-[#f8f9fa] px-3 py-1.5">
                               <Link href={editarHref} className="font-medium text-o2-navy hover:underline">
                                 Editar
                               </Link>
@@ -746,10 +754,10 @@ export default async function FaturasPage({
             })}
 
             {extras.map((f) => (
-              <div key={f.id} className="rounded-xl border border-amber-200 bg-amber-50/40 px-4 py-2.5 text-sm shadow-sm">
+              <div key={f.id} className="rounded border border-amber-300 bg-amber-50/50 px-3 py-2 text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-gray-800">Parceiro novo (não cadastrado ainda) — {f.arquivo_nome}</span>
-                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${COR_STATUS[f.status] ?? "bg-gray-100 text-gray-700"}`}>
+                  <span className={`rounded-sm px-2 py-0.5 text-xs font-medium ${COR_STATUS[f.status] ?? "bg-gray-100 text-gray-700"}`}>
                     {ROTULO_STATUS[f.status] ?? f.status}
                   </span>
                 </div>
@@ -758,7 +766,7 @@ export default async function FaturasPage({
             ))}
 
             {!linhas.length && !extras.length && (
-              <p className="rounded-xl border border-o2-navy/10 bg-white px-3 py-8 text-center text-sm text-gray-500 shadow-sm">
+              <p className="rounded border border-gray-300 bg-white px-3 py-8 text-center text-sm text-gray-500">
                 Nenhuma imobiliária cadastrada ainda.
               </p>
             )}
