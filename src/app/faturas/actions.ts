@@ -63,6 +63,44 @@ export async function adicionarEsperada(formData: FormData) {
   redirect(`/faturas?ok=${encodeURIComponent("Imobiliária salva.")}${voltarPara}`);
 }
 
+// Exclui (arquiva, mesmo padrão já usado na Conferência pra duplicata
+// descartada) um arquivo de fatura/boleto já carregado -- sem isso, a
+// única forma de corrigir um upload errado era subir outro arquivo pra
+// forçar a detecção de duplicidade e escolher "arquivar a antiga" na
+// Conferência, um caminho indireto só pra apagar algo.
+export async function excluirArquivoFatura(formData: FormData) {
+  const supabase = await checarAcesso();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const faturaId = String(formData.get("fatura_id") ?? "").trim();
+  const voltarPara = String(formData.get("voltar_para") ?? "").trim();
+  if (!faturaId) redirect(`/faturas?erro=${encodeURIComponent("Arquivo inválido.")}${voltarPara}`);
+
+  const { data: fatura } = await supabase
+    .from("faturas")
+    .select("historico_identificacao, status")
+    .eq("id", faturaId)
+    .single();
+  if (!fatura) redirect(`/faturas?erro=${encodeURIComponent("Arquivo não encontrado.")}${voltarPara}`);
+  if (fatura!.status === "enviada") {
+    redirect(`/faturas?erro=${encodeURIComponent("Essa fatura já foi enviada -- não dá pra excluir.")}${voltarPara}`);
+  }
+
+  const historico = [
+    ...(fatura!.historico_identificacao ?? []),
+    { usuario: user?.email ?? "", data: new Date().toISOString(), acao: "excluido_manualmente", detalhe: "" },
+  ];
+  const { error } = await supabase
+    .from("faturas")
+    .update({ status: "cancelada", historico_identificacao: historico })
+    .eq("id", faturaId);
+  if (error) redirect(`/faturas?erro=${encodeURIComponent(error.message)}${voltarPara}`);
+
+  redirect(`/faturas?ok=${encodeURIComponent("Arquivo excluído.")}${voltarPara}`);
+}
+
 // Único lugar onde vencimento/CNPJ da O2/observação/ativo de uma
 // imobiliária podem ser alterados — a tela principal de Faturas é só
 // leitura, tudo passa por aqui (botão "Editar" por imobiliária).

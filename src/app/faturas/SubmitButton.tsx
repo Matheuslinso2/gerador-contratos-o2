@@ -20,11 +20,15 @@ export function SubmitButton({
   textoCarregando = "Enviando...",
   className,
   disabled,
+  confirmarAntes,
 }: {
   children: React.ReactNode;
   textoCarregando?: string;
   className?: string;
   disabled?: boolean;
+  /** Se definido, pergunta com window.confirm() antes de deixar o clique
+   * seguir pro submit -- pra ações que apagam/arquivam algo. */
+  confirmarAntes?: string;
 }) {
   const [clicado, setClicado] = useState(false);
   return (
@@ -34,6 +38,10 @@ export function SubmitButton({
       aria-disabled={clicado}
       onClick={(e) => {
         if (clicado) {
+          e.preventDefault();
+          return;
+        }
+        if (confirmarAntes && !window.confirm(confirmarAntes)) {
           e.preventDefault();
           return;
         }

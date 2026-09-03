@@ -95,6 +95,17 @@ export function IconChevron({ className = "h-6 w-6" }: IconProps) {
   );
 }
 
+export function IconTrash({ className = "h-4 w-4" }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <path d="M5 7h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M9.5 7V5.2a1 1 0 011-1h3a1 1 0 011 1V7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M6.5 7l.7 12a1.5 1.5 0 001.5 1.4h6.6a1.5 1.5 0 001.5-1.4l.7-12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M10 11v6M14 11v6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function IconSpinner({ className = "h-4 w-4" }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={`${className} animate-spin`}>

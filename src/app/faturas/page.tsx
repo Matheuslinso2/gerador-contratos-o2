@@ -5,9 +5,9 @@ import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
 import SeletorCompetencia from "./SeletorCompetencia";
-import { adicionarEsperada } from "./actions";
+import { adicionarEsperada, excluirArquivoFatura } from "./actions";
 import { SEGURADORAS_CANONICAS } from "@/lib/faturasIdentificacao";
-import { IconCalendar, IconChecklist, IconUpload, IconInvoice, IconReceipt, IconChevron } from "./icons";
+import { IconCalendar, IconChecklist, IconUpload, IconInvoice, IconReceipt, IconChevron, IconTrash } from "./icons";
 import { CheckboxSelecaoLinha, LinkDuplicata, SelecionarTodas } from "./LinhaInterativa";
 import { SubmitButton } from "./SubmitButton";
 
@@ -711,15 +711,32 @@ export default async function FaturasPage({
                               <span className="flex items-center gap-1.5">
                                 <span className="text-[10px] uppercase tracking-wide text-gray-400">Boleto</span>
                                 {boleto && urlPorCaminho.get(boleto.arquivo_bucket_path) ? (
-                                  <a
-                                    href={urlPorCaminho.get(boleto.arquivo_bucket_path)}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    title={boleto.arquivo_nome}
-                                    className="inline-flex text-o2-navy/70 transition hover:text-o2-coral"
-                                  >
-                                    <IconInvoice className="h-4 w-4" />
-                                  </a>
+                                  <>
+                                    <a
+                                      href={urlPorCaminho.get(boleto.arquivo_bucket_path)}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      title={boleto.arquivo_nome}
+                                      className="inline-flex text-o2-navy/70 transition hover:text-o2-coral"
+                                    >
+                                      <IconInvoice className="h-4 w-4" />
+                                    </a>
+                                    <form action={excluirArquivoFatura}>
+                                      <input type="hidden" name="fatura_id" value={boleto.id} />
+                                      <input
+                                        type="hidden"
+                                        name="voltar_para"
+                                        value={`&competencia=${competencia}&seguradora=${encodeURIComponent(seguradora)}`}
+                                      />
+                                      <SubmitButton
+                                        className="inline-flex text-gray-300 transition hover:text-red-600"
+                                        textoCarregando=""
+                                        confirmarAntes={`Excluir o boleto "${boleto.arquivo_nome}"? Vai sumir da lista de envio.`}
+                                      >
+                                        <IconTrash className="h-3.5 w-3.5" />
+                                      </SubmitButton>
+                                    </form>
+                                  </>
                                 ) : (
                                   <span className="text-gray-300">—</span>
                                 )}
@@ -727,15 +744,32 @@ export default async function FaturasPage({
                               <span className="flex items-center gap-1.5">
                                 <span className="text-[10px] uppercase tracking-wide text-gray-400">Fatura</span>
                                 {demonstrativo && urlPorCaminho.get(demonstrativo.arquivo_bucket_path) ? (
-                                  <a
-                                    href={urlPorCaminho.get(demonstrativo.arquivo_bucket_path)}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    title={demonstrativo.arquivo_nome}
-                                    className="inline-flex text-o2-navy/70 transition hover:text-o2-coral"
-                                  >
-                                    <IconReceipt className="h-4 w-4" />
-                                  </a>
+                                  <>
+                                    <a
+                                      href={urlPorCaminho.get(demonstrativo.arquivo_bucket_path)}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      title={demonstrativo.arquivo_nome}
+                                      className="inline-flex text-o2-navy/70 transition hover:text-o2-coral"
+                                    >
+                                      <IconReceipt className="h-4 w-4" />
+                                    </a>
+                                    <form action={excluirArquivoFatura}>
+                                      <input type="hidden" name="fatura_id" value={demonstrativo.id} />
+                                      <input
+                                        type="hidden"
+                                        name="voltar_para"
+                                        value={`&competencia=${competencia}&seguradora=${encodeURIComponent(seguradora)}`}
+                                      />
+                                      <SubmitButton
+                                        className="inline-flex text-gray-300 transition hover:text-red-600"
+                                        textoCarregando=""
+                                        confirmarAntes={`Excluir a fatura "${demonstrativo.arquivo_nome}"? Vai sumir da lista de envio.`}
+                                      >
+                                        <IconTrash className="h-3.5 w-3.5" />
+                                      </SubmitButton>
+                                    </form>
+                                  </>
                                 ) : (
                                   <span className="text-gray-300">—</span>
                                 )}
