@@ -1,3 +1,33 @@
+// `imobiliarias.nome` às vezes carrega uma tag de desambiguação interna
+// (quando a mesma imobiliária tem 2 CNPJs cadastrados, ex: um CNPJ antigo
+// com fatura ainda vigente e outro novo) -- útil pra distinguir no
+// workspace, mas não deve vazar pro e-mail que o cliente recebe. Mapa
+// exato (não regex) pra nunca arriscar cortar um nome fantasia de verdade
+// por engano.
+const NOME_PARA_EMAIL: Record<string, string> = {
+  "LUMAR (BASE)": "LUMAR",
+  "JGM DE MESQUITA (BASE)": "JGM DE MESQUITA",
+  "LIBERTY CENTRO (BASE)": "LIBERTY CENTRO",
+  "SANDRA XAVIER (BASE)": "SANDRA XAVIER",
+  "IMOVEL LIVRE (BASE)": "IMOVEL LIVRE",
+  "RIBAS - HP (BASE)": "RIBAS - HP",
+  "MONTE ALEGRE (ANTIGO)": "MONTE ALEGRE",
+  "AG RIO IMOBILIÁRIA (ANTIGO)": "AG RIO IMOBILIÁRIA",
+  "AG RIO IMOBILIÁRIA (ANEXO ADM)": "AG RIO IMOBILIÁRIA",
+  "MARCUS DREHER IMOVEIS (PF)": "MARCUS DREHER IMÓVEIS",
+  "BERGE IMÓVEIS LTDA (CRECI)": "BERGE IMÓVEIS LTDA",
+  "PROCED LOPES & FONSECA (NOVO)": "PROCED LOPES & FONSECA",
+  "SMART ADM (MARCOS)": "SMART ADM",
+  "WALKER CORR. E ADM DE COND (MARCOS)": "WALKER CORR. E ADM DE COND",
+  "EXCLUSIVA DIGITAL NEG (SUPERLOGICA)": "EXCLUSIVA DIGITAL NEG",
+  "VALVERDE E FERNANDES (SUPERLOGICA)": "VALVERDE E FERNANDES",
+  "TDC IMOVEIS (HOMEHUB AMERICAS)": "TDC IMOVEIS",
+};
+
+function nomeParaEmail(nome: string): string {
+  return NOME_PARA_EMAIL[nome] ?? nome;
+}
+
 const MESES_PT = [
   "janeiro", "fevereiro", "março", "abril", "maio", "junho",
   "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
@@ -45,7 +75,8 @@ export function montarEmailFatura({
   faturas: FaturaParaEmail[];
 }): { assunto: string; html: string } {
   const competenciaTexto = formatarCompetencia(competencia);
-  const assunto = `Fatura ${seguradora} — ${competenciaTexto} — ${nomeImobiliaria}`;
+  const nomeCliente = nomeParaEmail(nomeImobiliaria);
+  const assunto = `Fatura ${seguradora} — ${competenciaTexto} — ${nomeCliente}`;
 
   // Vencimento/valor de referência: prioriza o boleto (é o documento
   // pagável); se não tiver nenhum marcado como boleto, usa o primeiro que
@@ -77,7 +108,7 @@ export function montarEmailFatura({
         <img src="cid:o2-logo" alt="O2 Seguros" height="28" style="display: block;" />
       </div>
       <div style="border: 1px solid #eee; border-top: none; border-radius: 0 0 10px 10px; padding: 24px;">
-        <p style="margin: 0 0 16px; font-size: 15px; color: #01192e;">Olá, ${nomeImobiliaria}!</p>
+        <p style="margin: 0 0 16px; font-size: 15px; color: #01192e;">Olá, ${nomeCliente}!</p>
         <p style="margin: 0 0 20px; font-size: 14px; color: #333; line-height: 1.5;">
           Segue em anexo a fatura da <strong>${seguradora}</strong> referente a <strong>${competenciaTexto}</strong>.
         </p>
