@@ -13,6 +13,12 @@ export const maxDuration = 60;
 
 const STATUS_PRONTO_PARA_ENVIO = ["fatura_carregada", "pronta_para_envio"];
 
+// Duplicado de EMAIL_MODO_TESTE em ../actions.ts -- não pode importar de
+// lá pra cá porque esse arquivo é "use server" (só pode exportar funções
+// async). Só usado aqui pra exibir o aviso, o valor que decide de verdade
+// pra onde o e-mail vai é o de actions.ts.
+const EMAIL_MODO_TESTE = "matheus@o2seguros.com.br";
+
 type FaturaPronta = {
   id: string;
   arquivo_nome: string;
@@ -33,9 +39,16 @@ function formatarValor(valor: number | null): string {
 export default async function ConfirmarEnvioPage({
   searchParams,
 }: {
-  searchParams: Promise<{ seguradora?: string; competencia?: string; imob?: string | string[]; erro?: string }>;
+  searchParams: Promise<{
+    seguradora?: string;
+    competencia?: string;
+    imob?: string | string[];
+    erro?: string;
+    modo_teste?: string;
+  }>;
 }) {
-  const { seguradora, competencia, imob, erro } = await searchParams;
+  const { seguradora, competencia, imob, erro, modo_teste } = await searchParams;
+  const modoTeste = modo_teste === "1";
   const supabase = await createClient();
   const {
     data: { user },
@@ -81,6 +94,19 @@ export default async function ConfirmarEnvioPage({
           voltarHref={`/faturas?seguradora=${encodeURIComponent(seguradora)}&competencia=${competencia}`}
         />
 
+        {modoTeste && (
+          <div className="flex items-start gap-3 rounded-xl border-2 border-o2-coral bg-orange-50 p-4">
+            <span className="text-xl">🧪</span>
+            <div>
+              <p className="text-sm font-semibold text-o2-navy">Modo teste ativo</p>
+              <p className="text-sm text-gray-700">
+                Nenhum dos e-mails reais listados abaixo vai receber nada. Todos os {prontas.length} e-mail(s) vão
+                pra <strong>{EMAIL_MODO_TESTE}</strong> (o seu), com o conteúdo/anexos reais de cada imobiliária.
+              </p>
+            </div>
+          </div>
+        )}
+
         {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">⚠️ {erro}</p>}
 
         {!prontas.length && (
@@ -94,21 +120,31 @@ export default async function ConfirmarEnvioPage({
             const arquivos = faturasPorImobiliaria.get(i.id) ?? [];
             const referencia = arquivos.find((a) => a.tipo_documento === "boleto") ?? arquivos[0];
             const senha = arquivos.map((a) => a.senha_pdf).find(Boolean) ?? null;
-            const hrefSemEsta = `/faturas/enviar/confirmar?seguradora=${encodeURIComponent(seguradora)}&competencia=${competencia}${prontas
+            const paramModoTeste = modoTeste ? "&modo_teste=1" : "";
+            const hrefSemEsta = `/faturas/enviar/confirmar?seguradora=${encodeURIComponent(seguradora)}&competencia=${competencia}${paramModoTeste}${prontas
               .filter((p) => p.id !== i.id)
               .map((p) => `&imob=${p.id}`)
               .join("")}`;
             return (
               <div key={i.id} className="rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm">
-                <div className="mb-2 flex items-center justify-between">
-                  <p className="text-sm font-semibold text-o2-navy">{i.nome}</p>
-                  <div className="flex items-center gap-2">
-                    <p className="text-xs text-gray-500">{i.email_faturas}</p>
-                    <Link href={hrefSemEsta} className="text-xs font-medium text-gray-400 hover:text-red-600 hover:underline">
-                      Remover da leva
-                    </Link>
-                  </div>
+                <div className="mb-2 flex items-start justify-between gap-3">
+                  <p className="text-sm font-semibold leading-snug text-o2-navy">{i.nome}</p>
+                  <Link
+                    href={hrefSemEsta}
+                    className="shrink-0 whitespace-nowrap text-xs font-medium text-gray-400 hover:text-red-600 hover:underline"
+                  >
+                    Remover da leva
+                  </Link>
                 </div>
+                {modoTeste ? (
+                  <p className="mb-2 text-xs text-gray-500">
+                    <span className="line-through decoration-gray-400">{i.email_faturas}</span>
+                    {" → vai pra "}
+                    <span className="font-medium text-o2-coral">{EMAIL_MODO_TESTE}</span>
+                  </p>
+                ) : (
+                  <p className="mb-2 break-all text-xs text-gray-500">{i.email_faturas}</p>
+                )}
                 <p className="mb-1 text-xs text-gray-500">
                   Vencimento {referencia?.vencimento ?? "—"} · {formatarValor(referencia?.valor ?? null)}
                 </p>
@@ -132,6 +168,7 @@ export default async function ConfirmarEnvioPage({
           <form action={confirmarEnvio} className="flex justify-end">
             <input type="hidden" name="seguradora" value={seguradora} />
             <input type="hidden" name="competencia" value={competencia} />
+            {modoTeste && <input type="hidden" name="modo_teste" value="1" />}
             {prontas.map((i) => (
               <input key={i.id} type="hidden" name="imob" value={i.id} />
             ))}
@@ -139,7 +176,9 @@ export default async function ConfirmarEnvioPage({
               type="submit"
               className="rounded-full bg-o2-coral px-6 py-2.5 text-sm font-medium text-white transition hover:opacity-90"
             >
-              Confirmar e enviar {prontas.length} e-mail(s)
+              {modoTeste
+                ? `Confirmar e enviar ${prontas.length} e-mail(s) de teste`
+                : `Confirmar e enviar ${prontas.length} e-mail(s)`}
             </button>
           </form>
         )}
