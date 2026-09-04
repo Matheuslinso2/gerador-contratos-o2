@@ -446,14 +446,32 @@ export default async function FaturasPage({
   // de 1 relação nessa seguradora (multi-origem, ex: Tokio via O2 Seguros e
   // via SegImob). A posição do cartão na lista segue a da sua 1ª linha, que
   // já vem ordenada por prioridade (pendente sobe, enviada desce).
+  //
+  // Alguns pares/trios de CNPJ são a MESMA empresa de verdade (confirmado
+  // manualmente durante a conciliação -- CNPJ antigo com fatura ainda
+  // vigente + CNPJ novo com produção nova, ou pessoa física + jurídica da
+  // mesma pessoa) mas continuam sendo 2+ registros DISTINTOS em
+  // `imobiliarias` de propósito (cada um com seu e-mail/vencimento, e o
+  // envio de fatura é por CNPJ) -- só a exibição aqui agrupa num cartão só,
+  // pra não parecer duplicidade na lista. GRUPOS_VISUAIS mapeia cnpj ->
+  // chave do grupo; nada disso afeta banco, e-mail ou envio.
+  const GRUPOS_VISUAIS: Record<string, string> = {
+    "37460218000139": "visual:ACESSE_RJ",
+    "02038854000192": "visual:ACESSE_RJ",
+  };
+  function chaveVisual(m: LinhaMestre): string {
+    const cnpj = m.cnpj?.trim();
+    return (cnpj && GRUPOS_VISUAIS[cnpj]) || m.chave;
+  }
   type GrupoImobiliaria = { m: LinhaMestre; pendenteCnpj: boolean; linhas: typeof linhas };
   const gruposPorChave = new Map<string, GrupoImobiliaria>();
   const grupos: GrupoImobiliaria[] = [];
   for (const linha of linhas) {
-    let grupo = gruposPorChave.get(linha.m.chave);
+    const chave = chaveVisual(linha.m);
+    let grupo = gruposPorChave.get(chave);
     if (!grupo) {
       grupo = { m: linha.m, pendenteCnpj: !linha.m.imobiliaria_id && !!linha.m.nome_provisorio, linhas: [] };
-      gruposPorChave.set(linha.m.chave, grupo);
+      gruposPorChave.set(chave, grupo);
       grupos.push(grupo);
     }
     grupo.linhas.push(linha);
@@ -632,9 +650,13 @@ export default async function FaturasPage({
           <div className="space-y-2">
             {grupos.map((grupo) => {
               const { m, pendenteCnpj } = grupo;
-              const editarHref = m.imobiliaria_id
-                ? `/faturas/imobiliaria/${m.imobiliaria_id}`
-                : `/faturas/imobiliaria/novo?nome=${encodeURIComponent(m.nome_provisorio ?? "")}`;
+              // Um grupo visual (GRUPOS_VISUAIS) pode juntar linhas de MAIS
+              // DE 1 imobiliária/CNPJ debaixo do mesmo cartão -- por isso
+              // cada linha usa o `m` DELA (linha.m), nunca o `m` do grupo
+              // (que é só a 1ª linha encontrada), pra checkbox/e-mail/editar
+              // nunca apontar pra imobiliária errada.
+              const distintos = Array.from(new Map(grupo.linhas.map((l) => [l.m.chave, l.m])).values());
+              const multiplasImobs = distintos.length > 1;
               return (
                 <div
                   key={m.chave}
@@ -642,31 +664,48 @@ export default async function FaturasPage({
                     pendenteCnpj ? "border-orange-300 bg-orange-50/40" : "border-gray-300 bg-white"
                   }`}
                 >
-                  <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 border-b border-gray-300 bg-gray-100 px-3 py-1.5">
-                    <span className="text-sm font-semibold text-gray-800">{m.nome}</span>
-                    <span className="font-mono text-[11px] text-gray-500">{m.cnpj ?? "CNPJ/CPF não vinculado"}</span>
+                  <div className="border-b border-gray-300 bg-gray-100 px-3 py-1.5">
+                    {multiplasImobs ? (
+                      <div className="space-y-0.5">
+                        {distintos.map((mi) => (
+                          <div key={mi.chave} className="flex flex-wrap items-baseline gap-x-3">
+                            <span className="text-sm font-semibold text-gray-800">{mi.nome}</span>
+                            <span className="font-mono text-[11px] text-gray-500">{mi.cnpj ?? "CNPJ/CPF não vinculado"}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+                        <span className="text-sm font-semibold text-gray-800">{m.nome}</span>
+                        <span className="font-mono text-[11px] text-gray-500">{m.cnpj ?? "CNPJ/CPF não vinculado"}</span>
+                      </div>
+                    )}
                   </div>
                   <div className="divide-y divide-gray-200">
-                    {grupo.linhas.map(({ esperada, fatura, statusChave, arquivos }) => {
+                    {grupo.linhas.map(({ m: linhaM, esperada, fatura, statusChave, arquivos }) => {
                       const boleto = arquivos.find((a) => a.tipo_documento === "boleto");
                       const demonstrativo = arquivos.find((a) => a.tipo_documento === "demonstrativo");
                       const voltarParaAqui = `&competencia=${competencia}&seguradora=${encodeURIComponent(seguradora)}`;
                       const pronta = STATUS_PRONTO_PARA_ENVIO.includes(statusChave);
-                      const duplicata = m.imobiliaria_id ? duplicatasPorImobiliaria.get(m.imobiliaria_id) : undefined;
+                      const duplicata = linhaM.imobiliaria_id ? duplicatasPorImobiliaria.get(linhaM.imobiliaria_id) : undefined;
+                      const editarHref = linhaM.imobiliaria_id
+                        ? `/faturas/imobiliaria/${linhaM.imobiliaria_id}`
+                        : `/faturas/imobiliaria/novo?nome=${encodeURIComponent(linhaM.nome_provisorio ?? "")}`;
                       return (
                         <details key={esperada.id} className="group/linha">
                           <summary className="grid cursor-pointer list-none grid-cols-[22px_92px_1fr_auto_20px] items-stretch text-xs hover:bg-[#e8f0fe] [&::-webkit-details-marker]:hidden">
                             <span className="flex items-center justify-center border-r border-gray-200 py-1.5">
-                              {pronta && m.imobiliaria_id && m.email_faturas ? (
-                                <CheckboxSelecaoLinha imobiliariaId={m.imobiliaria_id} />
-                              ) : pronta && m.imobiliaria_id && !m.email_faturas ? (
+                              {pronta && linhaM.imobiliaria_id && linhaM.email_faturas ? (
+                                <CheckboxSelecaoLinha imobiliariaId={linhaM.imobiliaria_id} />
+                              ) : pronta && linhaM.imobiliaria_id && !linhaM.email_faturas ? (
                                 <span title="Sem e-mail cadastrado — edite a imobiliária" className="text-red-500">
                                   ⚠
                                 </span>
                               ) : null}
                             </span>
-                            <span className="flex items-center border-r border-gray-200 px-2 py-1.5 font-mono text-gray-600">
-                              {esperada.cnpj_o2 || "—"}
+                            <span className="flex flex-col justify-center border-r border-gray-200 px-2 py-1 font-mono text-gray-600">
+                              <span>{esperada.cnpj_o2 || "—"}</span>
+                              {multiplasImobs && <span className="text-[10px] text-gray-400">{linhaM.cnpj}</span>}
                             </span>
                             <span className="flex items-center gap-2 border-r border-gray-200 px-2 py-1.5">
                               {fatura ? (
@@ -696,7 +735,7 @@ export default async function FaturasPage({
                           <div className="grid grid-cols-1 gap-px border-t border-gray-200 bg-gray-200 text-xs text-gray-700 sm:grid-cols-2">
                             <div className="bg-[#f8f9fa] px-3 py-1.5">
                               <span className="block text-[10px] uppercase tracking-wide text-gray-400">E-mail de faturas</span>
-                              {m.email_faturas ?? "—"}
+                              {linhaM.email_faturas ?? "—"}
                             </div>
                             <div className="bg-[#f8f9fa] px-3 py-1.5">
                               <span className="block text-[10px] uppercase tracking-wide text-gray-400">
