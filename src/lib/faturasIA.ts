@@ -15,21 +15,21 @@ export type DadosFaturaExtraidos = {
   identificacao_texto: string | null; // razão social / nome fantasia como aparecem no boleto
 };
 
-// Conhecimento acumulado sobre particularidades de cada seguradora -- vira
-// um parágrafo extra no prompt quando a seguradora já é sabida de antemão
-// (o usuário escolhe no upload, ou já está gravada na fatura em caso de
-// reprocessamento), pra guiar a extração em vez da IA adivinhar do zero em
-// cada arquivo. Preenchido aos poucos conforme confirmado com a O2 --
-// seguradora sem entrada aqui não ganha dica nenhuma além do prompt geral.
-const PERFIS_SEGURADORAS: Record<string, string> = {
-  TOKIO: `Particularidade conhecida da TOKIO: os documentos dela (principalmente o demonstrativo, que costuma vir em CSV) geralmente NÃO trazem o nome nem o CNPJ da imobiliária em lugar nenhum do conteúdo -- só o nome do inquilino/segurado em cada linha. Nesse caso, o NOME DO ARQUIVO (informado abaixo, se houver) é a fonte de identificação: a O2 salva esses arquivos já renomeados com o nome da imobiliária (ex: "RELATÓRIO NOME DA IMOBILIÁRIA.csv", "BOLETO NOME DA IMOBILIÁRIA.pdf"). Se o texto do documento não trouxer identificacao_texto nem cnpj_tomador, use o nome do arquivo (tirando palavras como BOLETO/RELATÓRIO/DEMONSTRATIVO do início e a extensão do final) como identificacao_texto.`,
-};
+// Conhecimento acumulado sobre particularidades de UMA seguradora
+// específica (não o caso geral abaixo) -- vira um parágrafo extra no
+// prompt quando a seguradora já é sabida de antemão. Preenchido só quando
+// confirmado com um arquivo real da O2; seguradora sem entrada aqui não
+// ganha dica nenhuma além do prompt geral (que já cobre o caso comum de
+// demonstrativo sem identificação nenhuma no conteúdo, pra qualquer uma).
+const PERFIS_SEGURADORAS: Record<string, string> = {};
 
 const SYSTEM_PROMPT_BASE = `Você extrai dados estruturados de um boleto/fatura de seguradora que a O2 Seguros (corretora) precisa repassar para a imobiliária correspondente.
 
 Você vai receber o nome do arquivo (quando disponível) e o texto extraído de um PDF/planilha de fatura. Extraia SOMENTE o que estiver realmente presente nesse material — nunca invente ou deduza um valor que não apareça. Se um campo não for identificável, retorne null para ele.
 
 Algumas seguradoras mandam a cobrança em 2 arquivos separados por mês, pra mesma imobiliária: um BOLETO (o instrumento de pagamento em si -- tem linha digitável/código de barras, "ficha de compensação", um valor único a pagar) e um DEMONSTRATIVO/RELATÓRIO (lista/detalha as apólices ou inquilinos cobrados naquele boleto, pode ter várias linhas e um total, mas não é ele mesmo pagável). Você pode receber qualquer um dos dois.
+
+Alguns demonstrativos (principalmente em CSV ou planilha) não trazem o nome nem o CNPJ da imobiliária/tomador em lugar nenhum do conteúdo -- só listam segurado/inquilino, apólice e valores, linha a linha. Isso acontece com mais de uma seguradora e é normal, não é falha sua. Nesse caso: NUNCA invente identificacao_texto ou cnpj_tomador a partir do nome de um segurado/inquilino ou do corretor -- retorne null pros dois. O NOME DO ARQUIVO (informado abaixo, quando houver) costuma ser a fonte de identificação nesse caso: a O2 salva esses arquivos já renomeados com o nome da imobiliária (ex: "RELATÓRIO NOME DA IMOBILIÁRIA.csv", "BOLETO NOME DA IMOBILIÁRIA.pdf") -- se o conteúdo não trouxer nada, use o nome do arquivo (tirando um prefixo como BOLETO/RELATÓRIO/DEMONSTRATIVO e a extensão) como identificacao_texto.
 
 Preencha:
 - seguradora: nome da seguradora emissora (ex: "Porto Seguro", "Tokio Marine", "Pottencial").
