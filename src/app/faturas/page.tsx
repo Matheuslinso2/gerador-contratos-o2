@@ -106,7 +106,7 @@ function mesAtualDefault(): string {
 
 const POR_PAGINA = 20;
 
-type ImobiliariaJoin = { nome: string; cnpj: string | null; email_faturas: string | null };
+type ImobiliariaJoin = { nome: string; cnpj: string | null; email_faturas: string[] | null };
 
 type EsperadaBrutaRow = {
   id: string;
@@ -141,7 +141,7 @@ type LinhaMestre = {
   nome_provisorio: string | null;
   nome: string;
   cnpj: string | null;
-  email_faturas: string | null;
+  email_faturas: string[] | null;
 };
 
 // Status "prontos pra enviar" -- só esses habilitam a caixinha de seleção.
@@ -416,7 +416,7 @@ export default async function FaturasPage({
   const totalLinhas = linhasOrdenadas.length;
   const linhas = linhasOrdenadas.slice(0, limite);
   const prontasParaEnvio = linhas.filter(
-    ({ m, statusChave }) => STATUS_PRONTO_PARA_ENVIO.includes(statusChave) && m.email_faturas
+    ({ m, statusChave }) => STATUS_PRONTO_PARA_ENVIO.includes(statusChave) && (m.email_faturas?.length ?? 0) > 0
   );
 
   // Link de download por arquivo -- só pra quem está sendo exibido nessa
@@ -689,9 +689,9 @@ export default async function FaturasPage({
                         <details key={esperada.id} className="group/linha">
                           <summary className="grid cursor-pointer list-none grid-cols-[22px_92px_1fr_auto_20px] items-stretch text-xs hover:bg-[#e8f0fe] [&::-webkit-details-marker]:hidden">
                             <span className="flex items-center justify-center border-r border-gray-200 py-1.5">
-                              {pronta && linhaM.imobiliaria_id && linhaM.email_faturas ? (
+                              {pronta && linhaM.imobiliaria_id && linhaM.email_faturas?.length ? (
                                 <CheckboxSelecaoLinha imobiliariaId={linhaM.imobiliaria_id} />
-                              ) : pronta && linhaM.imobiliaria_id && !linhaM.email_faturas ? (
+                              ) : pronta && linhaM.imobiliaria_id && !linhaM.email_faturas?.length ? (
                                 <span title="Sem e-mail cadastrado — edite a imobiliária" className="text-red-500">
                                   ⚠
                                 </span>
@@ -730,7 +730,7 @@ export default async function FaturasPage({
                           <div className="grid grid-cols-1 gap-px border-t border-gray-200 bg-gray-200 text-xs text-gray-700 sm:grid-cols-2">
                             <div className="bg-[#f8f9fa] px-3 py-1.5">
                               <span className="block text-[10px] uppercase tracking-wide text-gray-400">E-mail de faturas</span>
-                              {linhaM.email_faturas ?? "—"}
+                              {linhaM.email_faturas?.length ? linhaM.email_faturas.join(", ") : "—"}
                             </div>
                             <div className="bg-[#f8f9fa] px-3 py-1.5">
                               <span className="block text-[10px] uppercase tracking-wide text-gray-400">

@@ -4,14 +4,14 @@ export type AnexoEmail = { nome: string; conteudo: Buffer; tipo?: string; cid?: 
 
 const ENDERECO_REMETENTE = "avisos@notificacoes.o2seguros.com.br";
 
-// email_faturas guarda 1+ endereços separados por vírgula (mesmo separador
-// aceito pelo atributo HTML `multiple` nos inputs type="email") -- usado
-// tanto pro envio (vira lista pro Resend) quanto pra exibição.
-export function separarEmails(valor: string | null | undefined): string[] {
-  return (valor ?? "")
-    .split(",")
-    .map((e) => e.trim())
-    .filter(Boolean);
+// email_faturas hoje é um array no banco (1 endereço por posição) -- essa
+// função aceita tanto o array já pronto (leitura normal) quanto uma string
+// separada por vírgula (mesmo separador aceito pelo atributo HTML
+// `multiple` nos inputs type="email", ainda usado nos formulários de
+// cadastro rápido) e devolve sempre a lista limpa, sem vazios.
+export function separarEmails(valor: string | string[] | null | undefined): string[] {
+  const lista = Array.isArray(valor) ? valor : (valor ?? "").split(",");
+  return lista.map((e) => e.trim()).filter(Boolean);
 }
 
 // Envia e-mail via Resend, usando o domínio dedicado

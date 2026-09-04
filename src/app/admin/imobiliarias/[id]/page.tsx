@@ -208,7 +208,7 @@ export default async function AdminImobiliariaDetalhePage({
           </h2>
           <VinculosFaturas
             imobiliariaId={imobiliaria.id}
-            emailFaturas={imobiliaria.email_faturas}
+            emailsFaturas={imobiliaria.email_faturas ?? []}
             vinculos={(vinculosData ?? []) as Vinculo[]}
             voltarPara={voltarPara}
           />

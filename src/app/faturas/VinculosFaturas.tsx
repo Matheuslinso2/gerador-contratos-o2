@@ -1,6 +1,7 @@
-import { salvarSeguradorasImobiliaria, atualizarEmailFaturas } from "./actions";
+import { salvarSeguradorasImobiliaria, adicionarEmailFatura, removerEmailFatura } from "./actions";
 import { SEGURADORAS_CANONICAS } from "@/lib/faturasIdentificacao";
-import { IconMail, IconChecklist } from "./icons";
+import { IconMail, IconChecklist, IconTrash } from "./icons";
+import { SubmitButton } from "./SubmitButton";
 
 const inputClass = "w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-o2-coral focus:outline-none";
 
@@ -18,12 +19,12 @@ export type Vinculo = {
 // depois de salvar (voltarPara).
 export default function VinculosFaturas({
   imobiliariaId,
-  emailFaturas,
+  emailsFaturas,
   vinculos,
   voltarPara,
 }: {
   imobiliariaId: string;
-  emailFaturas: string | null;
+  emailsFaturas: string[];
   vinculos: Vinculo[];
   voltarPara: string;
 }) {
@@ -54,26 +55,51 @@ export default function VinculosFaturas({
           <h2 className="text-sm font-semibold text-o2-navy">E-mail para envio de faturas</h2>
         </div>
         <p className="mb-3 text-xs text-gray-500">
-          Pra onde as faturas dessa imobiliária serão enviadas — diferente do e-mail de login dela. Pra mais de um
-          destinatário, separe por vírgula.
+          Pra onde as faturas dessa imobiliária serão enviadas — diferente do e-mail de login dela. Pode cadastrar
+          mais de um destinatário.
         </p>
-        <form action={atualizarEmailFaturas} className="flex flex-wrap items-end gap-2">
+
+        {emailsFaturas.length === 0 && (
+          <p className="mb-3 text-xs font-medium text-red-600">⚠️ Nenhum e-mail cadastrado ainda — não dá pra enviar fatura.</p>
+        )}
+
+        {emailsFaturas.length > 0 && (
+          <div className="mb-3 space-y-1.5">
+            {emailsFaturas.map((email) => (
+              <div key={email} className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 px-3 py-1.5">
+                <span className="break-all text-sm text-gray-800">{email}</span>
+                <form action={removerEmailFatura}>
+                  <input type="hidden" name="imobiliaria_id" value={imobiliariaId} />
+                  <input type="hidden" name="voltar_para" value={voltarPara} />
+                  <input type="hidden" name="email" value={email} />
+                  <SubmitButton
+                    className="shrink-0 text-gray-400 transition hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+                    textoCarregando="…"
+                    confirmarAntes={`Remover "${email}" do envio de faturas dessa imobiliária?`}
+                  >
+                    <IconTrash className="h-3.5 w-3.5" />
+                  </SubmitButton>
+                </form>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <form action={adicionarEmailFatura} className="flex flex-wrap items-end gap-2">
           <input type="hidden" name="imobiliaria_id" value={imobiliariaId} />
           <input type="hidden" name="voltar_para" value={voltarPara} />
           <input
-            name="email_faturas"
+            name="email"
             type="email"
-            multiple
-            placeholder="financeiro@imobiliaria.com.br, outro@imobiliaria.com.br"
-            defaultValue={emailFaturas ?? ""}
-            className={`${inputClass} max-w-sm`}
+            placeholder="novo@imobiliaria.com.br"
+            className={`${inputClass} max-w-xs`}
           />
-          <button
-            type="submit"
-            className="rounded-full bg-o2-navy px-4 py-1.5 text-sm font-medium text-white transition hover:opacity-90"
+          <SubmitButton
+            className="rounded-full bg-o2-navy px-4 py-1.5 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            textoCarregando="Adicionando..."
           >
-            Salvar e-mail
-          </button>
+            + Adicionar e-mail
+          </SubmitButton>
         </form>
       </div>
 

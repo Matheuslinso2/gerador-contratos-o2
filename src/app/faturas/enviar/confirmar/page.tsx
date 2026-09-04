@@ -82,7 +82,9 @@ export default async function ConfirmarEnvioPage({
   // Só entra na prévia quem realmente tem e-mail + pelo menos 1 arquivo
   // pronto -- se algo mudou entre a tela anterior e agora (ex: alguém já
   // editou), essa imobiliária simplesmente não aparece aqui.
-  const prontas = imobiliarias.filter((i) => i.email_faturas && (faturasPorImobiliaria.get(i.id)?.length ?? 0) > 0);
+  const prontas = imobiliarias.filter(
+    (i) => (i.email_faturas?.length ?? 0) > 0 && (faturasPorImobiliaria.get(i.id)?.length ?? 0) > 0
+  );
 
   return (
     <>
@@ -139,12 +141,12 @@ export default async function ConfirmarEnvioPage({
                 </div>
                 {modoTeste ? (
                   <p className="mb-2 text-xs text-gray-500">
-                    <span className="line-through decoration-gray-400">{i.email_faturas}</span>
+                    <span className="line-through decoration-gray-400">{i.email_faturas?.join(", ")}</span>
                     {" → vai pra "}
                     <span className="font-medium text-o2-coral">{EMAIL_MODO_TESTE}</span>
                   </p>
                 ) : (
-                  <p className="mb-2 break-all text-xs text-gray-500">{i.email_faturas}</p>
+                  <p className="mb-2 break-all text-xs text-gray-500">{i.email_faturas?.join(", ")}</p>
                 )}
                 <p className="mb-1 text-xs text-gray-500">
                   Vencimento {referencia?.vencimento ?? "—"} · {formatarValor(referencia?.valor ?? null)}

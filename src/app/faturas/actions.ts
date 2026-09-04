@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { resolverOuCriarImobiliaria } from "@/lib/faturasIdentificacao";
+import { separarEmails } from "@/lib/email";
 
 async function checarAcesso() {
   const supabase = await createClient();
@@ -44,7 +45,7 @@ export async function adicionarEsperada(formData: FormData) {
   }
 
   if (emailFaturas) {
-    await supabase.from("imobiliarias").update({ email_faturas: emailFaturas }).eq("id", imobiliariaId);
+    await supabase.from("imobiliarias").update({ email_faturas: separarEmails(emailFaturas) }).eq("id", imobiliariaId);
   }
 
   const linhas = seguradorasSelecionadas.map((seguradora) => ({
@@ -143,25 +144,67 @@ export async function salvarSeguradorasImobiliaria(formData: FormData) {
   redirect(`${voltarPara}?ok=${encodeURIComponent("Dados salvos.")}`);
 }
 
-// E-mail pra onde as faturas dessa imobiliária serão enviadas — separado
-// do e-mail de login dela (esse aqui é só pro fluxo de Faturas).
-export async function atualizarEmailFaturas(formData: FormData) {
+// E-mails pra onde as faturas dessa imobiliária serão enviadas — separado
+// do e-mail de login dela (esse aqui é só pro fluxo de Faturas). Cada
+// endereço é sua própria posição no array (email_faturas), adicionado e
+// removido individualmente em vez de reescrever a lista inteira de uma vez
+// -- evita apagar um endereço por engano ao editar outro.
+export async function adicionarEmailFatura(formData: FormData) {
   const supabase = await checarAcesso();
 
   const imobiliariaId = String(formData.get("imobiliaria_id") ?? "");
-  const email = String(formData.get("email_faturas") ?? "").trim();
+  const email = String(formData.get("email") ?? "").trim();
   const voltarPara = String(formData.get("voltar_para") ?? "").trim() || `/faturas/imobiliaria/${imobiliariaId}`;
   if (!imobiliariaId) redirect(`/faturas?erro=${encodeURIComponent("Imobiliária inválida.")}`);
+  if (!email || !email.includes("@")) {
+    redirect(`${voltarPara}?erro=${encodeURIComponent("Informe um e-mail válido.")}`);
+  }
+
+  const { data: imobiliaria } = await supabase
+    .from("imobiliarias")
+    .select("email_faturas")
+    .eq("id", imobiliariaId)
+    .single();
+  const atuais: string[] = imobiliaria?.email_faturas ?? [];
+  if (atuais.some((e) => e.toLowerCase() === email.toLowerCase())) {
+    redirect(`${voltarPara}?erro=${encodeURIComponent("Esse e-mail já está cadastrado.")}`);
+  }
 
   const { error } = await supabase
     .from("imobiliarias")
-    .update({ email_faturas: email || null })
+    .update({ email_faturas: [...atuais, email] })
     .eq("id", imobiliariaId);
   if (error) {
     redirect(`${voltarPara}?erro=${encodeURIComponent(error.message)}`);
   }
 
-  redirect(`${voltarPara}?ok=${encodeURIComponent("E-mail salvo.")}`);
+  redirect(`${voltarPara}?ok=${encodeURIComponent("E-mail adicionado.")}`);
+}
+
+export async function removerEmailFatura(formData: FormData) {
+  const supabase = await checarAcesso();
+
+  const imobiliariaId = String(formData.get("imobiliaria_id") ?? "");
+  const email = String(formData.get("email") ?? "").trim();
+  const voltarPara = String(formData.get("voltar_para") ?? "").trim() || `/faturas/imobiliaria/${imobiliariaId}`;
+  if (!imobiliariaId) redirect(`/faturas?erro=${encodeURIComponent("Imobiliária inválida.")}`);
+
+  const { data: imobiliaria } = await supabase
+    .from("imobiliarias")
+    .select("email_faturas")
+    .eq("id", imobiliariaId)
+    .single();
+  const atuais: string[] = imobiliaria?.email_faturas ?? [];
+
+  const { error } = await supabase
+    .from("imobiliarias")
+    .update({ email_faturas: atuais.filter((e) => e !== email) })
+    .eq("id", imobiliariaId);
+  if (error) {
+    redirect(`${voltarPara}?erro=${encodeURIComponent(error.message)}`);
+  }
+
+  redirect(`${voltarPara}?ok=${encodeURIComponent("E-mail removido.")}`);
 }
 
 // "Editar" de quem ainda não tem CNPJ/CPF vinculado (nome_provisorio) —
@@ -198,7 +241,7 @@ export async function resolverImobiliariaProvisoria(formData: FormData) {
 
   const emailFaturas = String(formData.get("email_faturas") ?? "").trim();
   if (emailFaturas) {
-    await supabase.from("imobiliarias").update({ email_faturas: emailFaturas }).eq("id", imobiliariaId);
+    await supabase.from("imobiliarias").update({ email_faturas: separarEmails(emailFaturas) }).eq("id", imobiliariaId);
   }
 
   const qtd = Number(formData.get("qtd") ?? 0);

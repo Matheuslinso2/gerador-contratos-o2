@@ -61,7 +61,7 @@ export default async function ImobiliariaFaturasPage({
 
         <VinculosFaturas
           imobiliariaId={imobiliaria.id}
-          emailFaturas={imobiliaria.email_faturas}
+          emailsFaturas={imobiliaria.email_faturas ?? []}
           vinculos={vinculos}
           voltarPara={`/faturas/imobiliaria/${imobiliaria.id}`}
         />
