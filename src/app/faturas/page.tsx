@@ -163,19 +163,24 @@ function contarPendentesPorSeguradora(
     const esperadas = esperadasTodas.filter((e) => e.seguradora === seg);
     const faturasDaSeguradora = faturasCompetencia.filter((f) => f.seguradora === seg);
 
-    const porChaveOrigem = new Map<string, FaturaCompetenciaRow>();
-    const aguardandoOrigemPorImob = new Map<string, FaturaCompetenciaRow>();
+    // Junta TODAS as faturas por chave (não só a de maior prioridade) --
+    // achado real (ADJUVE): um boleto já "enviada" e outro ainda pendente
+    // na MESMA origem faziam essa aba contar como "nada pendente", porque
+    // só o vencedor por prioridade (enviada sempre ganha) era considerado.
+    const porChaveOrigem = new Map<string, FaturaCompetenciaRow[]>();
+    const aguardandoOrigemPorImob = new Map<string, FaturaCompetenciaRow[]>();
     for (const f of faturasDaSeguradora) {
       if (!f.imobiliaria_id) continue;
       if (f.status === "aguardando_origem") {
-        aguardandoOrigemPorImob.set(f.imobiliaria_id, f);
+        const lista = aguardandoOrigemPorImob.get(f.imobiliaria_id) ?? [];
+        lista.push(f);
+        aguardandoOrigemPorImob.set(f.imobiliaria_id, lista);
         continue;
       }
       const chave = `${f.imobiliaria_id}|${f.origem ?? ""}`;
-      const atual = porChaveOrigem.get(chave);
-      const prioridadeNova = PRIORIDADE_STATUS[f.status] ?? 99;
-      const prioridadeAtual = atual ? (PRIORIDADE_STATUS[atual.status] ?? 99) : 100;
-      if (!atual || prioridadeNova < prioridadeAtual) porChaveOrigem.set(chave, f);
+      const lista = porChaveOrigem.get(chave) ?? [];
+      lista.push(f);
+      porChaveOrigem.set(chave, lista);
     }
 
     let pendentes = 0;
@@ -185,9 +190,13 @@ function contarPendentesPorSeguradora(
         continue;
       }
       const chave = `${e.imobiliaria_id}|${e.cnpj_o2 ?? ""}`;
-      const fatura = porChaveOrigem.get(chave) ?? aguardandoOrigemPorImob.get(e.imobiliaria_id);
-      const status = fatura ? fatura.status : "aguardando_upload";
-      if (status !== "enviada" && status !== "cancelada") pendentes++;
+      const faturasDaChave = [
+        ...(porChaveOrigem.get(chave) ?? []),
+        ...(aguardandoOrigemPorImob.get(e.imobiliaria_id) ?? []),
+      ];
+      const temPendente =
+        faturasDaChave.length === 0 || faturasDaChave.some((f) => f.status !== "enviada" && f.status !== "cancelada");
+      if (temPendente) pendentes++;
     }
     // Faturas de imobiliárias totalmente novas (ainda sem nenhum vínculo cadastrado).
     for (const f of faturasDaSeguradora) {
@@ -390,6 +399,7 @@ export default async function FaturasPage({
     fatura: NonNullable<typeof faturasData>[number] | undefined;
     statusChave: string;
     arquivos: NonNullable<typeof faturasData>;
+    algumaProntaParaEnvio: boolean;
   };
   const buscaNormalizada = busca.toLowerCase();
   const linhasExpandidas: LinhaExibicao[] = [];
@@ -401,7 +411,14 @@ export default async function FaturasPage({
       const fatura = faturaDaLinha(m, esperada);
       const statusChave = fatura ? fatura.status : "aguardando_upload";
       if (statusFiltro && statusChave !== statusFiltro) continue;
-      linhasExpandidas.push({ m, esperada, fatura, statusChave, arquivos: arquivosDaLinha(m, esperada) });
+      const arquivos = arquivosDaLinha(m, esperada);
+      // Não usa statusChave aqui de propósito -- statusChave é só 1 fatura
+      // "vencedora" por prioridade (achado real: ADJUVE tinha 1 boleto já
+      // enviado e outro ainda pendente na MESMA origem; "enviada" sempre
+      // ganha a prioridade e escondia que ainda tinha 1 pronto pra mandar).
+      // Aqui olha TODOS os arquivos da linha, não só o vencedor.
+      const algumaProntaParaEnvio = arquivos.some((a) => STATUS_PRONTO_PARA_ENVIO.includes(a.status));
+      linhasExpandidas.push({ m, esperada, fatura, statusChave, arquivos, algumaProntaParaEnvio });
     }
   }
 
@@ -416,7 +433,7 @@ export default async function FaturasPage({
   const totalLinhas = linhasOrdenadas.length;
   const linhas = linhasOrdenadas.slice(0, limite);
   const prontasParaEnvio = linhas.filter(
-    ({ m, statusChave }) => STATUS_PRONTO_PARA_ENVIO.includes(statusChave) && (m.email_faturas?.length ?? 0) > 0
+    ({ m, algumaProntaParaEnvio }) => algumaProntaParaEnvio && (m.email_faturas?.length ?? 0) > 0
   );
 
   // Link de download por arquivo -- só pra quem está sendo exibido nessa
@@ -676,7 +693,7 @@ export default async function FaturasPage({
                     )}
                   </div>
                   <div className="divide-y divide-gray-200">
-                    {grupo.linhas.map(({ m: linhaM, esperada, fatura, statusChave, arquivos }) => {
+                    {grupo.linhas.map(({ m: linhaM, esperada, fatura, arquivos, algumaProntaParaEnvio }) => {
                       // Lista, não 1 único -- uma imobiliária pode ter mais
                       // de 1 apólice/boleto vivo simultâneo na MESMA origem
                       // (achado real: ADJUVE, 2 boletos com números de
@@ -686,7 +703,7 @@ export default async function FaturasPage({
                       const boletos = arquivos.filter((a) => a.tipo_documento === "boleto");
                       const demonstrativos = arquivos.filter((a) => a.tipo_documento === "demonstrativo");
                       const voltarParaAqui = `&competencia=${competencia}&seguradora=${encodeURIComponent(seguradora)}`;
-                      const pronta = STATUS_PRONTO_PARA_ENVIO.includes(statusChave);
+                      const pronta = algumaProntaParaEnvio;
                       const duplicata = linhaM.imobiliaria_id ? duplicatasPorImobiliaria.get(linhaM.imobiliaria_id) : undefined;
                       const editarHref = linhaM.imobiliaria_id
                         ? `/faturas/imobiliaria/${linhaM.imobiliaria_id}`
