@@ -11,7 +11,6 @@ import {
   buscarImobiliariaPorCnpjNoTexto,
   sugerirImobiliariaPorTexto,
   resolverOuCriarImobiliaria,
-  normalizarSeguradora,
   origensAtivasDaImobiliaria,
   SEGURADORAS_CANONICAS,
   type ImobiliariaBasica,
@@ -67,11 +66,20 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
   if (!isAdmin(user.email) && !isColaboradorO2(user.email)) redirect("/");
 
   const competencia = String(formData.get("competencia") ?? "").trim();
+  const seguradora = String(formData.get("seguradora") ?? "").trim();
   const path = String(formData.get("arquivo_path") ?? "").trim();
   const nomeArquivo = String(formData.get("arquivo_nome") ?? "").trim();
 
   if (!competencia || !path) {
     return { ok: false, nomeArquivo, mensagem: "Faltou a competência ou o arquivo." };
+  }
+  // A seguradora agora é escolhida pelo usuário antes do lote inteiro (não
+  // mais adivinhada pela IA a partir do conteúdo do documento) -- alguns
+  // demonstrativos (ex: relatório CSV da Pottencial) nunca mencionam o nome
+  // da seguradora em lugar nenhum do texto, o que tornava a extração por IA
+  // impossível pra esses casos e deixava a fatura sem seguradora pra sempre.
+  if (!SEGURADORAS_CANONICAS.includes(seguradora)) {
+    return { ok: false, nomeArquivo, mensagem: "Faltou selecionar a seguradora desse lote." };
   }
 
   const { data: baixado, error: erroDownload } = await supabase.storage.from(BUCKET_TEMP).download(path);
@@ -166,7 +174,9 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
     console.error("[faturas] erro ao extrair dados por IA:", e);
   }
 
-  const seguradoraNormalizada = normalizarSeguradora(dadosIA?.seguradora ?? null);
+  // Fonte da verdade é o que o usuário escolheu no upload, não mais o que a
+  // IA leu do documento (dadosIA?.seguradora fica sem uso pra esse campo).
+  const seguradoraNormalizada = seguradora;
   const tipoDocumento = dadosIA?.tipo_documento ?? null;
 
   const { data: conhecidasData } = await supabase.from("imobiliarias_conhecidas").select("id, nome, cnpj");
@@ -224,11 +234,6 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
   }
   const duplicataFinal = duplicata ?? duplicataConteudo;
 
-  // Seguradora que a IA leu mas não bate com nenhuma das 6 conhecidas
-  // nunca deve sair como "pronta" automaticamente -- senão a fatura fica
-  // sem aba pra aparecer na tela principal (nenhuma faturas_esperadas
-  // referencia esse nome) e desaparece de vista. Força conferência manual.
-  const seguradoraReconhecida = seguradoraNormalizada ? SEGURADORAS_CANONICAS.includes(seguradoraNormalizada) : false;
   // Mesma lógica pro tipo de documento -- se a IA não conseguiu dizer se é
   // boleto ou demonstrativo, alguém precisa olhar antes de confiar no
   // vencimento/valor extraído.
@@ -245,7 +250,7 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
       ? "aguardando_identificacao"
       : precisaEscolherOrigem
         ? "aguardando_origem"
-        : confiancaSuficiente && seguradoraReconhecida && tipoDocumentoReconhecido
+        : confiancaSuficiente && tipoDocumentoReconhecido
           ? "fatura_carregada"
           : "aguardando_conferencia";
   // Quando só existe 1 origem possível, já preenche sozinho -- a pergunta
@@ -284,11 +289,9 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
       : "Parece duplicada de uma fatura já enviada.",
     aguardando_identificacao: `Aberta${seguradoraTexto}, mas não identificamos a imobiliária — precisa de conferência.`,
     aguardando_origem: `Identificada: ${nomeIdentificado}${seguradoraTexto}, mas essa imobiliária tem mais de uma origem nessa seguradora — confirme qual na conferência.`,
-    aguardando_conferencia: !seguradoraReconhecida && imobiliariaId && confiancaSuficiente
-      ? `Identificada: ${nomeIdentificado}, mas a seguradora "${seguradoraNormalizada}" não é uma das conhecidas — confirme na conferência.`
-      : !tipoDocumentoReconhecido && imobiliariaId && confiancaSuficiente
-        ? `Identificada: ${nomeIdentificado}${seguradoraTexto}, mas não identificamos se é boleto ou demonstrativo — confirme na conferência.`
-        : `Aberta${seguradoraTexto}, sugestão: ${nomeIdentificado ?? "?"} — confirme na conferência.`,
+    aguardando_conferencia: !tipoDocumentoReconhecido && imobiliariaId && confiancaSuficiente
+      ? `Identificada: ${nomeIdentificado}${seguradoraTexto}, mas não identificamos se é boleto ou demonstrativo — confirme na conferência.`
+      : `Aberta${seguradoraTexto}, sugestão: ${nomeIdentificado ?? "?"} — confirme na conferência.`,
     fatura_carregada: `Identificada: ${nomeIdentificado}${seguradoraTexto}${tipoDocumentoTexto}.`,
   };
 

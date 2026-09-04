@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
 import { processarFaturaUpload, type ResultadoProcessamento } from "./actions";
+import { SEGURADORAS_CANONICAS } from "@/lib/faturasIdentificacao";
 
 const BUCKET_TEMP = "faturas-temp";
 const EXTENSOES_ACEITAS = [".pdf", ".xls", ".xlsx", ".csv"];
@@ -28,8 +29,14 @@ export default function UploadFaturaForm({ userId }: { userId: string }) {
 
     const form = e.currentTarget;
     const competencia = (form.elements.namedItem("competencia") as HTMLInputElement).value;
+    const seguradora = (form.elements.namedItem("seguradora") as HTMLSelectElement).value;
     const inputArquivos = form.elements.namedItem("arquivos") as HTMLInputElement;
     const arquivos = Array.from(inputArquivos.files ?? []);
+
+    if (!seguradora) {
+      setErro("Selecione a seguradora desse lote antes de enviar.");
+      return;
+    }
 
     if (!arquivos.length) {
       setErro("Selecione ao menos um arquivo PDF.");
@@ -66,6 +73,7 @@ export default function UploadFaturaForm({ userId }: { userId: string }) {
 
         const dados = new FormData();
         dados.set("competencia", competencia);
+        dados.set("seguradora", seguradora);
         dados.set("arquivo_path", path);
         dados.set("arquivo_nome", arquivo.name);
 
@@ -91,17 +99,40 @@ export default function UploadFaturaForm({ userId }: { userId: string }) {
       <form onSubmit={aoEnviar} className="space-y-4">
         {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
 
-        <div>
-          <label className="mb-1 block text-sm text-gray-600">Competência</label>
-          <input
-            name="competencia"
-            type="month"
-            required
-            defaultValue={mesAtualDefault()}
-            disabled={enviando}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none disabled:bg-gray-50"
-          />
-          <p className="mt-1 text-xs text-gray-500">Vale pra todos os arquivos enviados juntos.</p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-sm text-gray-600">Seguradora</label>
+            <select
+              name="seguradora"
+              required
+              defaultValue=""
+              disabled={enviando}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none disabled:bg-gray-50"
+            >
+              <option value="" disabled>
+                Selecione...
+              </option>
+              {SEGURADORAS_CANONICAS.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-gray-500">Vale pra todos os arquivos desse lote.</p>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm text-gray-600">Competência</label>
+            <input
+              name="competencia"
+              type="month"
+              required
+              defaultValue={mesAtualDefault()}
+              disabled={enviando}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none disabled:bg-gray-50"
+            />
+            <p className="mt-1 text-xs text-gray-500">Vale pra todos os arquivos enviados juntos.</p>
+          </div>
         </div>
 
         <div>
