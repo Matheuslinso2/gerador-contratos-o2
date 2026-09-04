@@ -18,12 +18,13 @@ const STATUS_PRONTO_PARA_ENVIO = ["fatura_carregada", "pronta_para_envio"];
 // no próximo envio real, o comportamento normal volta sozinho.
 const EMAIL_MODO_TESTE = "matheus@o2seguros.com.br";
 
-// Mesma variante usada no cabeçalho navy do app (AppHeader) -- preserva o
-// laranja da marca e só converte o texto escuro em branco, em vez de vazar
-// tudo em branco/preto. Embutida via CID em vez de link externo (não
-// depende do cliente de e-mail carregar imagem de fora).
+// Mesmo logo horizontal usado no topo das landing pages públicas (Ficha
+// Fiança, RC Obras) -- O2 laranja + "Seguros" navy, feito pra fundo claro
+// (a variante "navy" usada antes tinha o texto branco, certa só pra fundo
+// escuro, que não é mais o caso aqui). Embutida via CID em vez de link
+// externo (não depende do cliente de e-mail carregar imagem de fora).
 async function anexoLogoO2() {
-  const conteudo = await fs.readFile(path.join(process.cwd(), "public", "o2-logo-navy.png"));
+  const conteudo = await fs.readFile(path.join(process.cwd(), "public", "marca-o2", "o2-logo-horizontal.png"));
   return { nome: "o2-logo.png", conteudo, tipo: "image/png", cid: "o2-logo" };
 }
 

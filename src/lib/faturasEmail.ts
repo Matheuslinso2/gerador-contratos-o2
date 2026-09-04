@@ -102,17 +102,37 @@ export function montarEmailFatura({
         </div>`
     : "";
 
+  // Mesma linguagem visual das landing pages públicas (Ficha Fiança, RC
+  // Obras, etc): fundo branco, logo horizontal centralizado, pílula laranja
+  // com a categoria, título navy, subtítulo cinza -- em vez da barra navy
+  // sólida usada antes, que não tinha nada a ver com o resto da marca O2
+  // que o cliente já vê nas fichas online. O "brilho" atrás do logo nas
+  // landing pages é um blur de CSS -- não confiável em cliente de e-mail
+  // (principalmente Outlook desktop), então aqui vira só um círculo sólido
+  // clarinho atrás, sem o blur.
   const html = `
-    <div style="max-width: 560px; margin: 0 auto; font-family: Arial, sans-serif;">
-      <div style="background: #01192e; padding: 20px 24px; border-radius: 10px 10px 0 0;">
-        <img src="cid:o2-logo" alt="O2 Seguros" height="28" style="display: block;" />
+    <div style="max-width: 560px; margin: 0 auto; font-family: Arial, sans-serif; background: #ffffff;">
+      <div style="text-align: center; padding: 32px 24px 20px;">
+        <table role="presentation" align="center" style="margin: 0 auto 16px; border-collapse: collapse;">
+          <tr>
+            <td style="background: #fff1ea; border-radius: 999px; padding: 22px 30px; text-align: center;">
+              <img src="cid:o2-logo" alt="O2 Seguros" width="150" style="display: block; margin: 0 auto;" />
+            </td>
+          </tr>
+        </table>
+        <span style="display: inline-block; background: #F8540D; color: #ffffff; font-size: 12px; font-weight: 600; padding: 6px 16px; border-radius: 999px;">
+          Fatura ${seguradora}
+        </span>
+        <h1 style="margin: 12px 0 4px; font-size: 19px; font-weight: 600; color: #01192e;">
+          ${competenciaTexto}
+        </h1>
+        <p style="margin: 0; font-size: 14px; color: #666;">Olá, ${nomeCliente}!</p>
       </div>
-      <div style="border: 1px solid #eee; border-top: none; border-radius: 0 0 10px 10px; padding: 24px;">
-        <p style="margin: 0 0 16px; font-size: 15px; color: #01192e;">Olá, ${nomeCliente}!</p>
-        <p style="margin: 0 0 20px; font-size: 14px; color: #333; line-height: 1.5;">
+      <div style="padding: 0 24px 28px;">
+        <p style="margin: 0 0 20px; font-size: 14px; color: #333; line-height: 1.5; text-align: center;">
           Segue em anexo a fatura da <strong>${seguradora}</strong> referente a <strong>${competenciaTexto}</strong>.
         </p>
-        <div style="background: #f7f9fb; border: 1px solid #e5e9ee; border-radius: 8px; padding: 16px 20px; margin-bottom: 20px;">
+        <div style="border: 1px solid #e5e5e5; border-radius: 12px; padding: 16px 20px; margin-bottom: 20px;">
           <table style="width: 100%; border-collapse: collapse; font-size: 14px; color: #01192e;">
             <tr>
               <td style="padding: 4px 0; color: #888;">Seguradora</td>
@@ -139,11 +159,11 @@ export function montarEmailFatura({
         <ul style="margin: 0 0 20px; padding-left: 18px; font-size: 13px; color: #333;">
           ${linhasAnexos}
         </ul>
-        <p style="margin: 0; font-size: 13px; color: #888; line-height: 1.5;">
+        <p style="margin: 0; font-size: 13px; color: #888; line-height: 1.5; text-align: center;">
           Qualquer dúvida, fale com a sua corretora O2 Seguros.
         </p>
       </div>
-      <p style="text-align: center; color: #aaa; font-size: 11px; margin-top: 12px;">
+      <p style="text-align: center; color: #aaa; font-size: 11px; margin: 0; padding: 16px 24px; border-top: 1px solid #f0f0f0;">
         Enviado automaticamente pelo sistema de faturas da O2 Seguros.
       </p>
     </div>
