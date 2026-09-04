@@ -697,9 +697,10 @@ export default async function FaturasPage({
                                 </span>
                               ) : null}
                             </span>
-                            <span className="flex flex-col justify-center border-r border-gray-200 px-2 py-1 font-mono text-gray-600">
-                              <span>{esperada.cnpj_o2 || "—"}</span>
-                              {multiplasImobs && <span className="text-[10px] text-gray-400">{linhaM.cnpj}</span>}
+                            <span className="flex flex-col justify-center border-r border-gray-200 px-2 py-1">
+                              <span className="text-[9px] uppercase tracking-wide text-gray-400">Origem</span>
+                              <span className="font-mono text-gray-600">{esperada.cnpj_o2 || "—"}</span>
+                              {multiplasImobs && <span className="font-mono text-[10px] text-gray-400">{linhaM.cnpj}</span>}
                             </span>
                             <span className="flex items-center gap-2 border-r border-gray-200 px-2 py-1.5">
                               {fatura ? (
