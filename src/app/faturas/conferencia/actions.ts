@@ -422,14 +422,17 @@ export async function escolherOrigemFatura(formData: FormData) {
 
   const { data: fatura } = await supabase
     .from("faturas")
-    .select("imobiliaria_id, seguradora, competencia, confianca, tipo_documento, historico_identificacao")
+    .select("imobiliaria_id, seguradora, competencia, confianca, tipo_documento, numero_documento, historico_identificacao")
     .eq("id", faturaId)
     .single();
   if (!fatura) redirect(`/faturas/conferencia?erro=${encodeURIComponent("Fatura não encontrada.")}`);
 
   // Só agora, com a origem conhecida, dá pra checar duplicidade de verdade
   // -- outra fatura viva da mesma imobiliária+seguradora+competência+
-  // origem+tipo de documento.
+  // origem+tipo de documento. Também compara pelo número do documento
+  // (achado real: uma imobiliária pode ter mais de 1 apólice/boleto
+  // simultâneo na MESMA origem -- números de documento diferentes não são
+  // duplicata um do outro, só coincidem no resto).
   let consulta = supabase
     .from("faturas")
     .select("id")
@@ -440,6 +443,9 @@ export async function escolherOrigemFatura(formData: FormData) {
     .neq("id", faturaId)
     .in("status", STATUS_ATIVOS);
   consulta = fatura!.tipo_documento ? consulta.eq("tipo_documento", fatura!.tipo_documento) : consulta.is("tipo_documento", null);
+  consulta = fatura!.numero_documento
+    ? consulta.eq("numero_documento", fatura!.numero_documento)
+    : consulta.is("numero_documento", null);
   const { data: duplicataConteudo } = await consulta.maybeSingle();
 
   const seguradoraReconhecida = fatura!.seguradora ? SEGURADORAS_CANONICAS.includes(fatura!.seguradora) : false;

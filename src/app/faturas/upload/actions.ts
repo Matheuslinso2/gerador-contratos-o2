@@ -235,12 +235,22 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
   const precisaEscolherOrigem = origensPossiveis.length > 1;
 
   // Duplicidade também por conteúdo, não só por arquivo idêntico -- pega o
-  // caso de reemissão/redownload do mesmo boleto (bytes diferentes, mesma
-  // imobiliária+seguradora+competência já com uma fatura viva carregada).
-  // Sempre filtrado também por tipo_documento: boleto e demonstrativo da
-  // mesma competência são um PAR legítimo (ex: Pottencial/Too/Tokio), não
-  // uma duplicata um do outro. Pulado quando ainda não se sabe a origem --
-  // a comparação certa só é possível depois que a origem for escolhida.
+  // caso de reemissão/redownload do mesmo boleto (bytes diferentes, mesmo
+  // número de documento, mesma imobiliária+seguradora+competência já com
+  // uma fatura viva carregada). Sempre filtrado também por tipo_documento:
+  // boleto e demonstrativo da mesma competência são um PAR legítimo (ex:
+  // Pottencial/Too/Tokio), não uma duplicata um do outro. Pulado quando
+  // ainda não se sabe a origem -- a comparação certa só é possível depois
+  // que a origem for escolhida.
+  //
+  // Também compara pelo número do documento (achado real: ADJUVE tem 2
+  // boletos vivos na MESMA origem/competência, apólices diferentes, números
+  // de documento diferentes) -- sem isso, uma imobiliária com mais de uma
+  // apólice/boleto simultâneo na mesma origem tinha o segundo sempre
+  // marcado como "provável duplicata" só por coincidir imobiliária+
+  // seguradora+competência+tipo, mesmo sendo um documento genuinamente
+  // diferente. Quando o número não foi extraído de nenhum dos dois lados,
+  // cai no comportamento antigo (mais largo) por falta de sinal melhor.
   let duplicataConteudo: { id: string } | null = null;
   if (!duplicata && imobiliariaId && seguradoraNormalizada && !precisaEscolherOrigem) {
     let consulta = supabase
@@ -251,6 +261,9 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
       .eq("competencia", competencia)
       .in("status", STATUS_ATIVOS);
     consulta = tipoDocumento ? consulta.eq("tipo_documento", tipoDocumento) : consulta.is("tipo_documento", null);
+    consulta = dadosIA?.numero_documento
+      ? consulta.eq("numero_documento", dadosIA.numero_documento)
+      : consulta.is("numero_documento", null);
     const { data } = await consulta.maybeSingle();
     duplicataConteudo = data;
   }
