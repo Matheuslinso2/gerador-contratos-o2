@@ -7,6 +7,7 @@ import AppHeader from "@/components/AppHeader";
 import SeletorCompetencia from "./SeletorCompetencia";
 import { adicionarEsperada, excluirArquivoFatura } from "./actions";
 import { SEGURADORAS_CANONICAS } from "@/lib/faturasIdentificacao";
+import { GRUPOS_VISUAIS } from "@/lib/gruposVisuaisImobiliarias";
 import { IconCalendar, IconChecklist, IconUpload, IconInvoice, IconReceipt, IconChevron, IconTrash } from "./icons";
 import { CheckboxSelecaoLinha, LinkDuplicata, SelecionarTodas } from "./LinhaInterativa";
 import { SubmitButton } from "./SubmitButton";
@@ -447,21 +448,14 @@ export default async function FaturasPage({
   // via SegImob). A posição do cartão na lista segue a da sua 1ª linha, que
   // já vem ordenada por prioridade (pendente sobe, enviada desce).
   //
-  // Alguns pares/trios de CNPJ são a MESMA empresa de verdade (confirmado
-  // manualmente durante a conciliação -- CNPJ antigo com fatura ainda
-  // vigente + CNPJ novo com produção nova, ou pessoa física + jurídica da
-  // mesma pessoa) mas continuam sendo 2+ registros DISTINTOS em
-  // `imobiliarias` de propósito (cada um com seu e-mail/vencimento, e o
-  // envio de fatura é por CNPJ) -- só a exibição aqui agrupa num cartão só,
-  // pra não parecer duplicidade na lista. GRUPOS_VISUAIS mapeia cnpj ->
-  // chave do grupo; nada disso afeta banco, e-mail ou envio.
-  const GRUPOS_VISUAIS: Record<string, string> = {
-    "37460218000139": "visual:ACESSE_RJ",
-    "02038854000192": "visual:ACESSE_RJ",
-  };
+  // GRUPOS_VISUAIS (src/lib/gruposVisuaisImobiliarias.ts) mapeia cnpj ->
+  // grupo pra CNPJs confirmados como a mesma empresa/grupo econômico --
+  // nada disso afeta banco, e-mail ou envio, só decide quais linhas
+  // aparecem juntas num cartão só, pra não parecer duplicidade na lista.
   function chaveVisual(m: LinhaMestre): string {
     const cnpj = m.cnpj?.trim();
-    return (cnpj && GRUPOS_VISUAIS[cnpj]) || m.chave;
+    const grupo = cnpj ? GRUPOS_VISUAIS[cnpj] : undefined;
+    return grupo ? `visual:${grupo.chave}` : m.chave;
   }
   type GrupoImobiliaria = { m: LinhaMestre; pendenteCnpj: boolean; linhas: typeof linhas };
   const gruposPorChave = new Map<string, GrupoImobiliaria>();
