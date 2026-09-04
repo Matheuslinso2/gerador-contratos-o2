@@ -18,6 +18,11 @@ const STATUS_PRONTO_PARA_ENVIO = ["fatura_carregada", "pronta_para_envio"];
 // no próximo envio real, o comportamento normal volta sozinho.
 const EMAIL_MODO_TESTE = "matheus@o2seguros.com.br";
 
+// Toda fatura enviada de verdade vai em cópia pra cobrança acompanhar --
+// não entra no modo teste (que já manda tudo só pro e-mail do Matheus, sem
+// nada indo pra caixa de cobrança de verdade nesse caso).
+const EMAIL_COBRANCA_CC = "cobranca@o2seguros.com.br";
+
 // Mesmo logo horizontal usado no topo das landing pages públicas (Ficha
 // Fiança, RC Obras) -- O2 laranja + "Seguros" navy, feito pra fundo claro
 // (a variante "navy" usada antes tinha o texto branco, certa só pra fundo
@@ -118,6 +123,7 @@ export async function confirmarEnvio(formData: FormData) {
 
       await enviarEmail({
         para: destinatarios,
+        cc: modoTeste ? undefined : [EMAIL_COBRANCA_CC],
         assunto,
         html,
         anexos,
