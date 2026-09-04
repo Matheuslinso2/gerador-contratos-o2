@@ -134,7 +134,7 @@ export async function gerarContrato(formData: FormData) {
     }
   }
 
-  const [{ data: imobiliaria }, { data: tipoGarantia }, { data: produto }, { data: produtoIncendio }] =
+  const [{ data: imobiliariaComNotaInterna }, { data: tipoGarantia }, { data: produto }, { data: produtoIncendio }] =
     await Promise.all([
       supabase.from("imobiliarias").select("*").eq("id", imobiliaria_id).single(),
       tipo_garantia_id
@@ -155,6 +155,18 @@ export async function gerarContrato(formData: FormData) {
             .single()
         : Promise.resolve({ data: null }),
     ]);
+
+  // observacao_interna é nota de uso exclusivo da equipe O2 -- essa action
+  // gera o contrato pra própria imobiliária (imobiliaria_id vem de
+  // buscarImobiliariaDoUsuario, ver acima), então nunca deve carregar esse
+  // campo além desse ponto.
+  const imobiliaria = imobiliariaComNotaInterna
+    ? (() => {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars -- descartado de propósito
+        const { observacao_interna: _omitido, ...resto } = imobiliariaComNotaInterna;
+        return resto;
+      })()
+    : null;
 
   if (!imobiliaria) {
     redirect(`/gerar-contrato?erro=${encodeURIComponent("Imobiliária não encontrada.")}`);

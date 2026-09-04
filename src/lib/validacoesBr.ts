@@ -61,6 +61,16 @@ export function validarCNPJ(valor: string): boolean {
   return calcularDigito(12) === digitos[12] && calcularDigito(13) === digitos[13];
 }
 
+// Aceita tanto CNPJ (14 dígitos) quanto CPF (11 dígitos) com dígito
+// verificador válido -- várias imobiliárias reais são pessoa física
+// cadastradas por CPF no mesmo campo `cnpj`.
+export function validarCnpjOuCpf(valor: string): boolean {
+  const d = apenasDigitos(valor);
+  if (d.length === 11) return validarCPF(d);
+  if (d.length === 14) return validarCNPJ(d);
+  return false;
+}
+
 export function validarCEP(valor: string): boolean {
   return apenasDigitos(valor).length === 8;
 }

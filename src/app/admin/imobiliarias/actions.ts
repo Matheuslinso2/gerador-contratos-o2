@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin } from "@/lib/admin";
-import { validarCNPJ } from "@/lib/validacoesBr";
+import { validarCnpjOuCpf } from "@/lib/validacoesBr";
 import { prepararTextoBase } from "@/lib/limparTextoBase";
 
 async function exigirAdmin() {
@@ -29,8 +29,8 @@ export async function atualizarImobiliariaAdmin(formData: FormData) {
   const cnpj = String(formData.get("cnpj") ?? "").trim();
   const voltarPara = String(formData.get("voltar_para") ?? "").trim() || "/admin/imobiliarias";
   if (!id || !nome) redirect(voltarPara);
-  if (cnpj && !validarCNPJ(cnpj)) {
-    redirect(`${voltarPara}?erro=${encodeURIComponent("CNPJ inválido — confira os números digitados.")}`);
+  if (cnpj && !validarCnpjOuCpf(cnpj)) {
+    redirect(`${voltarPara}?erro=${encodeURIComponent("CNPJ ou CPF inválido — confira os números digitados.")}`);
   }
 
   const { data: atual } = await supabase.from("imobiliarias").select("texto_base_contrato").eq("id", id).maybeSingle();
@@ -62,6 +62,11 @@ export async function atualizarImobiliariaAdmin(formData: FormData) {
     percentual_multa_atraso: Number(formData.get("percentual_multa_atraso") ?? 0),
     percentual_juros_mora: Number(formData.get("percentual_juros_mora") ?? 0),
     percentual_honorarios_advocaticios: Number(formData.get("percentual_honorarios_advocaticios") ?? 0),
+    // Uso interno da O2 -- só existe nessa tela (admin), nunca no
+    // autoatendimento da imobiliária (ver imobiliariaDoUsuario.ts, que
+    // remove esse campo explicitamente de quem loga como a própria
+    // imobiliária).
+    observacao_interna: String(formData.get("observacao_interna") ?? "").trim() || null,
   };
   if (garantiaPosicao !== undefined) dados.garantia_posicao_apos_clausula = garantiaPosicao;
 
@@ -71,6 +76,45 @@ export async function atualizarImobiliariaAdmin(formData: FormData) {
   revalidatePath("/admin/imobiliarias");
   revalidatePath(voltarPara);
   redirect(`${voltarPara}?sucesso=${encodeURIComponent("Cadastro atualizado.")}`);
+}
+
+// Cadastro mínimo (nome + CNPJ/CPF) -- o resto (contrato-base, financeiro,
+// e-mail de faturas, vínculos por seguradora) fica pra tela unificada [id],
+// que já reúne tudo isso.
+export async function criarImobiliariaAdmin(formData: FormData) {
+  const supabase = await exigirAdmin();
+
+  const nome = String(formData.get("nome") ?? "").trim();
+  const cnpjDigitos = String(formData.get("cnpj") ?? "").replace(/\D/g, "");
+  if (!nome || !cnpjDigitos) {
+    redirect(`/admin/imobiliarias/novo?erro=${encodeURIComponent("Informe nome e CNPJ ou CPF.")}`);
+  }
+  if (!validarCnpjOuCpf(cnpjDigitos)) {
+    redirect(`/admin/imobiliarias/novo?erro=${encodeURIComponent("CNPJ ou CPF inválido — confira os números digitados.")}`);
+  }
+
+  const { data: nova, error } = await supabase
+    .from("imobiliarias")
+    .insert({
+      nome,
+      cnpj: cnpjDigitos,
+      texto_base_contrato: "",
+      indice_reajuste: "",
+      percentual_multa_atraso: 0,
+      percentual_juros_mora: 0,
+      percentual_honorarios_advocaticios: 0,
+      dia_vencimento_aluguel: 1,
+      cadastro_incompleto: true,
+    })
+    .select("id")
+    .single();
+  if (error || !nova) {
+    const mensagem = error?.code === "23505" ? "Já existe um cadastro com esse CNPJ/CPF." : error?.message ?? "Falha ao criar.";
+    redirect(`/admin/imobiliarias/novo?erro=${encodeURIComponent(mensagem)}`);
+  }
+
+  revalidatePath("/admin/imobiliarias");
+  redirect(`/admin/imobiliarias/${nova.id}?sucesso=${encodeURIComponent("Imobiliária criada — complete o resto do cadastro abaixo.")}`);
 }
 
 // Junta duas imobiliarias numa só (ver função mesclar_imobiliarias no

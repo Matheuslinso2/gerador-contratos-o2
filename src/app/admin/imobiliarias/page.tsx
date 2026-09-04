@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin } from "@/lib/admin";
 import { signOut } from "../../actions";
@@ -79,12 +80,20 @@ export default async function AdminImobiliariasPage({
       <main className="mx-auto max-w-4xl flex-1 space-y-6 p-8">
         <div className="space-y-2">
           <BackLink />
-          <div>
-            <h1 className="text-xl font-semibold text-o2-navy">Imobiliárias cadastradas</h1>
-            <p className="text-sm text-gray-500">
-              {imobiliarias.length} conta(s) cadastrada(s)
-              {duplicidades.length > 0 && ` · ${duplicidades.length} CNPJ(s) com cadastro duplicado`}
-            </p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h1 className="text-xl font-semibold text-o2-navy">Imobiliárias cadastradas</h1>
+              <p className="text-sm text-gray-500">
+                {imobiliarias.length} conta(s) cadastrada(s)
+                {duplicidades.length > 0 && ` · ${duplicidades.length} CNPJ(s) com cadastro duplicado`}
+              </p>
+            </div>
+            <Link
+              href="/admin/imobiliarias/novo"
+              className="whitespace-nowrap rounded-full bg-o2-coral px-4 py-1.5 text-sm font-medium text-white transition hover:opacity-90"
+            >
+              + Nova imobiliária
+            </Link>
           </div>
         </div>
 

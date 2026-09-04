@@ -179,6 +179,24 @@ export default async function AdminImobiliariaDetalhePage({
             </div>
           </section>
 
+          <section className="space-y-2 rounded-xl border border-yellow-300 bg-yellow-50 p-4">
+            <h2 className="flex items-center gap-1.5 text-sm font-semibold text-yellow-900">
+              🔒 Observação interna
+              <span className="font-normal normal-case text-yellow-700">— só a equipe O2 vê isso</span>
+            </h2>
+            <p className="text-xs text-yellow-800">
+              Nunca é enviada por e-mail nem aparece pra imobiliária, mesmo se ela tiver login próprio ou funcionário
+              com acesso.
+            </p>
+            <textarea
+              name="observacao_interna"
+              rows={3}
+              defaultValue={imobiliaria.observacao_interna ?? ""}
+              placeholder="Ex: histórico de atraso, ponto de atenção, combinado verbal..."
+              className="w-full rounded-lg border border-yellow-300 bg-white px-3 py-2 text-sm focus:border-o2-coral focus:outline-none"
+            />
+          </section>
+
           <button type="submit" className="rounded-full bg-o2-coral px-6 py-2.5 font-medium text-white transition hover:opacity-90">
             Salvar
           </button>
