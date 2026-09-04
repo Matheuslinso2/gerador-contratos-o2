@@ -677,8 +677,14 @@ export default async function FaturasPage({
                   </div>
                   <div className="divide-y divide-gray-200">
                     {grupo.linhas.map(({ m: linhaM, esperada, fatura, statusChave, arquivos }) => {
-                      const boleto = arquivos.find((a) => a.tipo_documento === "boleto");
-                      const demonstrativo = arquivos.find((a) => a.tipo_documento === "demonstrativo");
+                      // Lista, não 1 único -- uma imobiliária pode ter mais
+                      // de 1 apólice/boleto vivo simultâneo na MESMA origem
+                      // (achado real: ADJUVE, 2 boletos com números de
+                      // documento diferentes na mesma competência). Pegar só
+                      // o primeiro escondia o outro do usuário mesmo pronto
+                      // pra envio.
+                      const boletos = arquivos.filter((a) => a.tipo_documento === "boleto");
+                      const demonstrativos = arquivos.filter((a) => a.tipo_documento === "demonstrativo");
                       const voltarParaAqui = `&competencia=${competencia}&seguradora=${encodeURIComponent(seguradora)}`;
                       const pronta = STATUS_PRONTO_PARA_ENVIO.includes(statusChave);
                       const duplicata = linhaM.imobiliaria_id ? duplicatasPorImobiliaria.get(linhaM.imobiliaria_id) : undefined;
@@ -742,55 +748,63 @@ export default async function FaturasPage({
                               <span className="block text-[10px] uppercase tracking-wide text-gray-400">Observação</span>
                               {esperada.observacao ?? "—"}
                             </div>
-                            <div className="flex items-center gap-4 bg-[#f8f9fa] px-3 py-1.5">
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 bg-[#f8f9fa] px-3 py-1.5">
                               <span className="flex items-center gap-1.5">
                                 <span className="text-[10px] uppercase tracking-wide text-gray-400">Boleto</span>
-                                {boleto && urlPorCaminho.get(boleto.arquivo_bucket_path) ? (
-                                  <>
-                                    <a
-                                      href={urlPorCaminho.get(boleto.arquivo_bucket_path)}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      title={boleto.arquivo_nome}
-                                      className="inline-flex text-o2-navy/70 transition hover:text-o2-coral"
-                                    >
-                                      <IconInvoice className="h-4 w-4" />
-                                    </a>
-                                    <SubmitButton
-                                      formAction={excluirArquivoFatura.bind(null, boleto.id, voltarParaAqui)}
-                                      className="inline-flex text-gray-300 transition hover:text-red-600"
-                                      textoCarregando=""
-                                      confirmarAntes={`Excluir o boleto "${boleto.arquivo_nome}"? Vai sumir da lista de envio.`}
-                                    >
-                                      <IconTrash className="h-3.5 w-3.5" />
-                                    </SubmitButton>
-                                  </>
+                                {boletos.length ? (
+                                  boletos.map((b) =>
+                                    urlPorCaminho.get(b.arquivo_bucket_path) ? (
+                                      <span key={b.id} className="inline-flex items-center gap-0.5">
+                                        <a
+                                          href={urlPorCaminho.get(b.arquivo_bucket_path)}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          title={b.arquivo_nome}
+                                          className="inline-flex text-o2-navy/70 transition hover:text-o2-coral"
+                                        >
+                                          <IconInvoice className="h-4 w-4" />
+                                        </a>
+                                        <SubmitButton
+                                          formAction={excluirArquivoFatura.bind(null, b.id, voltarParaAqui)}
+                                          className="inline-flex text-gray-300 transition hover:text-red-600"
+                                          textoCarregando=""
+                                          confirmarAntes={`Excluir o boleto "${b.arquivo_nome}"? Vai sumir da lista de envio.`}
+                                        >
+                                          <IconTrash className="h-3.5 w-3.5" />
+                                        </SubmitButton>
+                                      </span>
+                                    ) : null
+                                  )
                                 ) : (
                                   <span className="text-gray-300">—</span>
                                 )}
                               </span>
                               <span className="flex items-center gap-1.5">
                                 <span className="text-[10px] uppercase tracking-wide text-gray-400">Fatura</span>
-                                {demonstrativo && urlPorCaminho.get(demonstrativo.arquivo_bucket_path) ? (
-                                  <>
-                                    <a
-                                      href={urlPorCaminho.get(demonstrativo.arquivo_bucket_path)}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      title={demonstrativo.arquivo_nome}
-                                      className="inline-flex text-o2-navy/70 transition hover:text-o2-coral"
-                                    >
-                                      <IconReceipt className="h-4 w-4" />
-                                    </a>
-                                    <SubmitButton
-                                      formAction={excluirArquivoFatura.bind(null, demonstrativo.id, voltarParaAqui)}
-                                      className="inline-flex text-gray-300 transition hover:text-red-600"
-                                      textoCarregando=""
-                                      confirmarAntes={`Excluir a fatura "${demonstrativo.arquivo_nome}"? Vai sumir da lista de envio.`}
-                                    >
-                                      <IconTrash className="h-3.5 w-3.5" />
-                                    </SubmitButton>
-                                  </>
+                                {demonstrativos.length ? (
+                                  demonstrativos.map((d) =>
+                                    urlPorCaminho.get(d.arquivo_bucket_path) ? (
+                                      <span key={d.id} className="inline-flex items-center gap-0.5">
+                                        <a
+                                          href={urlPorCaminho.get(d.arquivo_bucket_path)}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          title={d.arquivo_nome}
+                                          className="inline-flex text-o2-navy/70 transition hover:text-o2-coral"
+                                        >
+                                          <IconReceipt className="h-4 w-4" />
+                                        </a>
+                                        <SubmitButton
+                                          formAction={excluirArquivoFatura.bind(null, d.id, voltarParaAqui)}
+                                          className="inline-flex text-gray-300 transition hover:text-red-600"
+                                          textoCarregando=""
+                                          confirmarAntes={`Excluir a fatura "${d.arquivo_nome}"? Vai sumir da lista de envio.`}
+                                        >
+                                          <IconTrash className="h-3.5 w-3.5" />
+                                        </SubmitButton>
+                                      </span>
+                                    ) : null
+                                  )
                                 ) : (
                                   <span className="text-gray-300">—</span>
                                 )}
