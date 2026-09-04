@@ -11,6 +11,7 @@ import {
   normalizarSeguradora,
   origensAtivasDaImobiliaria,
   nomeCandidatoDoArquivo,
+  idsImobiliariasComSeguradoraAtiva,
   SEGURADORAS_CANONICAS,
   type ImobiliariaBasica,
 } from "@/lib/faturasIdentificacao";
@@ -43,7 +44,7 @@ export async function confirmarIdentificacao(formData: FormData) {
 
   const { data: fatura } = await supabase
     .from("faturas")
-    .select("historico_identificacao, seguradora, codigo_produtor")
+    .select("historico_identificacao, seguradora, codigo_produtor, tipo_documento")
     .eq("id", faturaId)
     .single();
 
@@ -74,6 +75,16 @@ export async function confirmarIdentificacao(formData: FormData) {
   const origensPossiveis = await origensAtivasDaImobiliaria(supabase, imobiliariaId, seguradora);
   const precisaEscolherOrigem = origensPossiveis.length > 1;
   const origemFatura = origensPossiveis.length === 1 ? origensPossiveis[0] : null;
+  // Mesma checagem que upload/reprocessamento já fazem antes de marcar
+  // "fatura_carregada" -- essa tela não mostra o tipo_documento pra quem
+  // está confirmando, então sem essa trava um documento cuja IA não
+  // conseguiu dizer se é boleto ou demonstrativo virava "pronto" mesmo
+  // assim: ficava sem aparecer nos ícones de Boleto/Fatura da tela
+  // principal (que casam pelo tipo_documento) e, pior, um boleto+
+  // demonstrativo legítimos com os dois tipo_documento nulos passavam a
+  // ser detectados como duplicata um do outro (comparação de duplicidade
+  // também usa tipo_documento).
+  const tipoDocumentoReconhecido = fatura?.tipo_documento === "boleto" || fatura?.tipo_documento === "demonstrativo";
 
   const { error } = await supabase
     .from("faturas")
@@ -82,7 +93,7 @@ export async function confirmarIdentificacao(formData: FormData) {
       seguradora,
       origem: origemFatura,
       confianca: "alta",
-      status: precisaEscolherOrigem ? "aguardando_origem" : "fatura_carregada",
+      status: precisaEscolherOrigem ? "aguardando_origem" : tipoDocumentoReconhecido ? "fatura_carregada" : "aguardando_conferencia",
       historico_identificacao: historico,
     })
     .eq("id", faturaId);
@@ -142,14 +153,20 @@ export async function reprocessarIdentificacao(formData: FormData) {
   // plataforma, não existe mais uma lista de referência separada.
   const { data: conhecidasData } = await supabase.from("imobiliarias").select("id, nome, cnpj");
   const conhecidas = (conhecidasData ?? []) as ImobiliariaBasica[];
+  // Mesmo escopo do upload normal: restringe a busca por nome/arquivo (não
+  // a por CNPJ, que é exata) a quem já é cliente conhecido dessa seguradora
+  // -- reduz ambiguidade entre empresas de nome parecido. Só dá pra
+  // restringir quando a fatura já tem uma seguradora sabida.
+  const idsDaSeguradora = fatura.seguradora ? await idsImobiliariasComSeguradoraAtiva(supabase, fatura.seguradora) : null;
+  const conhecidasParaNome = idsDaSeguradora ? conhecidas.filter((c) => idsDaSeguradora.has(c.id)) : conhecidas;
 
   let resultadoIdent = buscarImobiliariaPorCnpjNoTexto(dadosIA?.cnpj_tomador ?? null, conhecidas);
   if (!resultadoIdent.imobiliaria_id && dadosIA?.identificacao_texto) {
-    resultadoIdent = sugerirImobiliariaPorTexto(dadosIA.identificacao_texto, conhecidas);
+    resultadoIdent = sugerirImobiliariaPorTexto(dadosIA.identificacao_texto, conhecidasParaNome);
   }
   if (!resultadoIdent.imobiliaria_id) {
     const candidatoArquivo = nomeCandidatoDoArquivo(fatura?.arquivo_nome);
-    if (candidatoArquivo) resultadoIdent = sugerirImobiliariaPorTexto(candidatoArquivo, conhecidas);
+    if (candidatoArquivo) resultadoIdent = sugerirImobiliariaPorTexto(candidatoArquivo, conhecidasParaNome);
   }
   const conhecidaEscolhida = resultadoIdent.imobiliaria_id
     ? conhecidas.find((c) => c.id === resultadoIdent.imobiliaria_id)
@@ -159,7 +176,16 @@ export async function reprocessarIdentificacao(formData: FormData) {
   // id real do cadastro, não precisa resolver/criar de novo.
   const imobiliariaId: string | null = conhecidaEscolhida?.id ?? null;
   const confianca = imobiliariaId ? resultadoIdent.confianca : null;
-  const seguradoraNormalizada = normalizarSeguradora(dadosIA?.seguradora ?? null);
+  // Fonte da verdade é a seguradora já gravada na fatura (a mesma que foi
+  // passada pra IA como pista), não o que ela ecoou de volta no campo
+  // "seguradora" -- o prompt instrui a IA a só repetir esse valor, mas
+  // repetir uma instrução de volta não é garantido (mesmo problema já visto
+  // na identificação por nome de arquivo: uma instrução de texto pra IA não
+  // é tão confiável quanto usar o valor que já se sabe de verdade). Só cai
+  // pro que a IA extraiu quando a fatura nunca teve seguradora nenhuma.
+  const seguradoraNormalizada = fatura.seguradora
+    ? normalizarSeguradora(fatura.seguradora)
+    : normalizarSeguradora(dadosIA?.seguradora ?? null);
   const seguradoraReconhecida = seguradoraNormalizada ? SEGURADORAS_CANONICAS.includes(seguradoraNormalizada) : false;
   const tipoDocumentoReconhecido = dadosIA?.tipo_documento === "boleto" || dadosIA?.tipo_documento === "demonstrativo";
 
@@ -249,14 +275,20 @@ export async function tentarReabrirComSenha(formData: FormData) {
   // plataforma, não existe mais uma lista de referência separada.
   const { data: conhecidasData } = await supabase.from("imobiliarias").select("id, nome, cnpj");
   const conhecidas = (conhecidasData ?? []) as ImobiliariaBasica[];
+  // Mesmo escopo do upload normal: restringe a busca por nome/arquivo (não
+  // a por CNPJ, que é exata) a quem já é cliente conhecido dessa seguradora
+  // -- reduz ambiguidade entre empresas de nome parecido. Só dá pra
+  // restringir quando a fatura já tem uma seguradora sabida.
+  const idsDaSeguradora = fatura.seguradora ? await idsImobiliariasComSeguradoraAtiva(supabase, fatura.seguradora) : null;
+  const conhecidasParaNome = idsDaSeguradora ? conhecidas.filter((c) => idsDaSeguradora.has(c.id)) : conhecidas;
 
   let resultadoIdent = buscarImobiliariaPorCnpjNoTexto(dadosIA?.cnpj_tomador ?? null, conhecidas);
   if (!resultadoIdent.imobiliaria_id && dadosIA?.identificacao_texto) {
-    resultadoIdent = sugerirImobiliariaPorTexto(dadosIA.identificacao_texto, conhecidas);
+    resultadoIdent = sugerirImobiliariaPorTexto(dadosIA.identificacao_texto, conhecidasParaNome);
   }
   if (!resultadoIdent.imobiliaria_id) {
     const candidatoArquivo = nomeCandidatoDoArquivo(fatura?.arquivo_nome);
-    if (candidatoArquivo) resultadoIdent = sugerirImobiliariaPorTexto(candidatoArquivo, conhecidas);
+    if (candidatoArquivo) resultadoIdent = sugerirImobiliariaPorTexto(candidatoArquivo, conhecidasParaNome);
   }
   const conhecidaEscolhida = resultadoIdent.imobiliaria_id
     ? conhecidas.find((c) => c.id === resultadoIdent.imobiliaria_id)
@@ -266,7 +298,16 @@ export async function tentarReabrirComSenha(formData: FormData) {
   // id real do cadastro, não precisa resolver/criar de novo.
   const imobiliariaId: string | null = conhecidaEscolhida?.id ?? null;
   const confianca = imobiliariaId ? resultadoIdent.confianca : null;
-  const seguradoraNormalizada = normalizarSeguradora(dadosIA?.seguradora ?? null);
+  // Fonte da verdade é a seguradora já gravada na fatura (a mesma que foi
+  // passada pra IA como pista), não o que ela ecoou de volta no campo
+  // "seguradora" -- o prompt instrui a IA a só repetir esse valor, mas
+  // repetir uma instrução de volta não é garantido (mesmo problema já visto
+  // na identificação por nome de arquivo: uma instrução de texto pra IA não
+  // é tão confiável quanto usar o valor que já se sabe de verdade). Só cai
+  // pro que a IA extraiu quando a fatura nunca teve seguradora nenhuma.
+  const seguradoraNormalizada = fatura.seguradora
+    ? normalizarSeguradora(fatura.seguradora)
+    : normalizarSeguradora(dadosIA?.seguradora ?? null);
   const seguradoraReconhecida = seguradoraNormalizada ? SEGURADORAS_CANONICAS.includes(seguradoraNormalizada) : false;
   const tipoDocumentoReconhecido = dadosIA?.tipo_documento === "boleto" || dadosIA?.tipo_documento === "demonstrativo";
 

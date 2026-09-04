@@ -91,6 +91,29 @@ export async function origensAtivasDaImobiliaria(
   return origens;
 }
 
+// IDs das imobiliárias que já têm vínculo ativo com essa seguradora
+// (faturas_esperadas). Usado pra restringir a identificação por NOME/
+// arquivo (a parte sujeita a ambiguidade -- duas empresas com nome
+// parecido, ex: "Real Up" e "Real Imóveis") só a quem já é cliente
+// conhecido dessa seguradora, em vez de comparar contra o cadastro
+// inteiro (500+ imobiliárias de todas as seguradoras e módulos juntos).
+// A identificação por CNPJ não usa esse filtro -- é exata, sem ambiguidade,
+// e restringir por aqui impediria detectar sozinho quando uma imobiliária
+// já cadastrada (por outra seguradora ou módulo) está tendo a primeira
+// fatura dessa seguradora.
+export async function idsImobiliariasComSeguradoraAtiva(
+  supabase: SupabaseServerClient,
+  seguradora: string
+): Promise<Set<string>> {
+  const { data } = await supabase
+    .from("faturas_esperadas")
+    .select("imobiliaria_id")
+    .eq("seguradora", seguradora)
+    .eq("ativo", true)
+    .not("imobiliaria_id", "is", null);
+  return new Set((data ?? []).map((d) => d.imobiliaria_id as string));
+}
+
 export type ResultadoIdentificacao = {
   imobiliaria_id: string | null;
   confianca: "alta" | "media" | "baixa" | null;

@@ -12,6 +12,7 @@ import {
   sugerirImobiliariaPorTexto,
   origensAtivasDaImobiliaria,
   nomeCandidatoDoArquivo,
+  idsImobiliariasComSeguradoraAtiva,
   SEGURADORAS_CANONICAS,
   type ImobiliariaBasica,
 } from "@/lib/faturasIdentificacao";
@@ -38,8 +39,12 @@ const BUCKET_FINAL = "faturas";
 
 // Status que ainda representam uma fatura "viva" pra fins de checar
 // duplicidade de conteúdo -- uma fatura já duplicada ou cancelada não
-// conta como a "original" pra comparar contra.
-const STATUS_ATIVOS = ["aguardando_identificacao", "aguardando_conferencia", "fatura_carregada", "pronta_para_envio", "enviada"];
+// conta como a "original" pra comparar contra. Inclui aguardando_origem
+// (achado na auditoria: essa lista aqui estava sem esse status, diferente
+// da mesma constante em conferencia/actions.ts -- uma fatura presa
+// esperando a escolha de origem não contava como "viva" pra esse checador,
+// deixando passar um reenvio do mesmo conteúdo sem avisar).
+const STATUS_ATIVOS = ["aguardando_identificacao", "aguardando_conferencia", "aguardando_origem", "fatura_carregada", "pronta_para_envio", "enviada"];
 
 export type ResultadoProcessamento = {
   ok: boolean;
@@ -188,18 +193,26 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
   // de fatura.
   const { data: conhecidasData } = await supabase.from("imobiliarias").select("id, nome, cnpj");
   const conhecidas = (conhecidasData ?? []) as ImobiliariaBasica[];
+  // Restringe a identificação por NOME (texto do conteúdo ou do arquivo --
+  // a parte sujeita a ambiguidade entre empresas parecidas, ex: "Real Up" x
+  // "Real Imóveis") só a quem já é cliente conhecido dessa seguradora, já
+  // que ela vem escolhida no upload. CNPJ continua buscando na base toda
+  // (é exato, e permite achar sozinho a primeira fatura dessa seguradora
+  // pra uma imobiliária que já existe por outro motivo).
+  const idsDaSeguradora = await idsImobiliariasComSeguradoraAtiva(supabase, seguradora);
+  const conhecidasDaSeguradora = conhecidas.filter((c) => idsDaSeguradora.has(c.id));
 
   // Prioridade: CNPJ lido no documento (mais confiável) > nome/razão social.
   let resultadoIdent = buscarImobiliariaPorCnpjNoTexto(dadosIA?.cnpj_tomador ?? null, conhecidas);
   if (!resultadoIdent.imobiliaria_id && dadosIA?.identificacao_texto) {
-    resultadoIdent = sugerirImobiliariaPorTexto(dadosIA.identificacao_texto, conhecidas);
+    resultadoIdent = sugerirImobiliariaPorTexto(dadosIA.identificacao_texto, conhecidasDaSeguradora);
   }
   // Último recurso: nem CNPJ nem texto do CONTEÚDO bateram -- tenta o nome
   // do arquivo (a O2 costuma salvar já renomeado com o nome da imobiliária,
   // sinal que existe independente do que a IA conseguiu ler do documento).
   if (!resultadoIdent.imobiliaria_id) {
     const candidatoArquivo = nomeCandidatoDoArquivo(nomeArquivo);
-    if (candidatoArquivo) resultadoIdent = sugerirImobiliariaPorTexto(candidatoArquivo, conhecidas);
+    if (candidatoArquivo) resultadoIdent = sugerirImobiliariaPorTexto(candidatoArquivo, conhecidasDaSeguradora);
   }
 
   const conhecidaEscolhida = resultadoIdent.imobiliaria_id
