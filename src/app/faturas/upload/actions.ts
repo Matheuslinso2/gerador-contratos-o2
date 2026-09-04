@@ -166,7 +166,10 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
 
   let dadosIA = null;
   try {
-    dadosIA = await comLimiteDeTempo(extrairDadosFatura(texto), LIMITE_TEMPO_IA_MS);
+    dadosIA = await comLimiteDeTempo(
+      extrairDadosFatura(texto, { seguradora, nomeArquivo }),
+      LIMITE_TEMPO_IA_MS
+    );
   } catch (e) {
     // dadosIA fica null (seja por erro da IA ou por estourar o prazo) --
     // o fluxo abaixo já trata isso como "não identificado" e manda pra

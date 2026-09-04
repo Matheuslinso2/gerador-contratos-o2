@@ -100,7 +100,7 @@ export async function reprocessarIdentificacao(formData: FormData) {
 
   const { data: fatura } = await supabase
     .from("faturas")
-    .select("texto_bruto_extraido, historico_identificacao")
+    .select("texto_bruto_extraido, historico_identificacao, arquivo_nome, seguradora")
     .eq("id", faturaId)
     .single();
   if (!fatura?.texto_bruto_extraido) {
@@ -109,7 +109,10 @@ export async function reprocessarIdentificacao(formData: FormData) {
 
   let dadosIA = null;
   try {
-    dadosIA = await extrairDadosFatura(fatura.texto_bruto_extraido);
+    dadosIA = await extrairDadosFatura(fatura.texto_bruto_extraido, {
+      seguradora: fatura.seguradora ?? null,
+      nomeArquivo: fatura.arquivo_nome ?? null,
+    });
   } catch (e) {
     console.error("[faturas] erro ao extrair dados por IA (reprocessamento):", e);
   }
@@ -192,7 +195,7 @@ export async function tentarReabrirComSenha(formData: FormData) {
 
   const { data: fatura } = await supabase
     .from("faturas")
-    .select("arquivo_bucket_path, historico_identificacao")
+    .select("arquivo_bucket_path, historico_identificacao, arquivo_nome, seguradora")
     .eq("id", faturaId)
     .single();
   if (!fatura) redirect(`/faturas/conferencia?erro=${encodeURIComponent("Fatura não encontrada.")}`);
@@ -212,7 +215,10 @@ export async function tentarReabrirComSenha(formData: FormData) {
 
   let dadosIA = null;
   try {
-    dadosIA = await extrairDadosFatura(resultado.texto);
+    dadosIA = await extrairDadosFatura(resultado.texto, {
+      seguradora: fatura.seguradora ?? null,
+      nomeArquivo: fatura.arquivo_nome ?? null,
+    });
   } catch (e) {
     console.error("[faturas] erro ao extrair dados por IA (reabertura):", e);
   }
