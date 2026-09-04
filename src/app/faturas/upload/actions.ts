@@ -5,7 +5,7 @@ import crypto from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { abrirTextoPdfComSenha, candidatosSenhaO2 } from "@/lib/pdfComSenha";
-import { extrairTextoPlanilha, ehArquivoPlanilha } from "@/lib/planilhaFatura";
+import { extrairTextoPlanilha, extrairTextoCsv, ehArquivoPlanilha, ehArquivoCsv } from "@/lib/planilhaFatura";
 import { extrairDadosFatura } from "@/lib/faturasIA";
 import {
   buscarImobiliariaPorCnpjNoTexto,
@@ -88,21 +88,24 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
     .eq("arquivo_hash", hash)
     .maybeSingle();
 
-  // Algumas seguradoras (Pottencial) mandam o demonstrativo em planilha em
-  // vez de PDF -- não tem senha, então pula direto pra leitura.
+  // Algumas seguradoras (Pottencial) mandam o demonstrativo em planilha ou
+  // CSV em vez de PDF -- não tem senha, então pula direto pra leitura.
   const ehPlanilha = ehArquivoPlanilha(nomeArquivo);
-  const extensao = ehPlanilha ? (nomeArquivo.toLowerCase().endsWith(".xlsx") ? "xlsx" : "xls") : "pdf";
-  const contentType = ehPlanilha
-    ? extensao === "xlsx"
-      ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-      : "application/vnd.ms-excel"
-    : "application/pdf";
+  const ehCsv = ehArquivoCsv(nomeArquivo);
+  const extensao = ehCsv ? "csv" : ehPlanilha ? (nomeArquivo.toLowerCase().endsWith(".xlsx") ? "xlsx" : "xls") : "pdf";
+  const contentType = ehCsv
+    ? "text/csv"
+    : ehPlanilha
+      ? extensao === "xlsx"
+        ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        : "application/vnd.ms-excel"
+      : "application/pdf";
 
   let texto: string | null = null;
   let senhaPdf: string | null = null;
   if (ehPlanilha) {
     try {
-      texto = extrairTextoPlanilha(buffer);
+      texto = ehCsv ? extrairTextoCsv(buffer) : extrairTextoPlanilha(buffer);
     } catch (e) {
       console.error("[faturas] erro ao ler planilha:", e);
     }

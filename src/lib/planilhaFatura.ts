@@ -14,6 +14,19 @@ export function extrairTextoPlanilha(buffer: Buffer): string {
   return partes.join("\n\n").trim();
 }
 
+// CSV já é texto puro -- não passa pela lib xlsx (que lê formato binário
+// de planilha), só decodifica o buffer direto. Exportado como UTF-8 com
+// BOM (﻿ no início) é comum em relatório gerado por sistema legado
+// brasileiro (ex: Corp) -- precisa remover, senão sobra um caractere
+// invisível colado no primeiro cabeçalho da coluna.
+export function extrairTextoCsv(buffer: Buffer): string {
+  return buffer.toString("utf8").replace(/^﻿/, "");
+}
+
+export function ehArquivoCsv(nomeArquivo: string): boolean {
+  return /\.csv$/i.test(nomeArquivo);
+}
+
 export function ehArquivoPlanilha(nomeArquivo: string): boolean {
-  return /\.(xls|xlsx)$/i.test(nomeArquivo);
+  return /\.(xls|xlsx|csv)$/i.test(nomeArquivo);
 }

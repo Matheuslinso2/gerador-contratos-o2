@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/browser";
 import { processarFaturaUpload, type ResultadoProcessamento } from "./actions";
 
 const BUCKET_TEMP = "faturas-temp";
+const EXTENSOES_ACEITAS = [".pdf", ".xls", ".xlsx", ".csv"];
 
 function mesAtualDefault(): string {
   const hoje = new Date();
@@ -32,6 +33,18 @@ export default function UploadFaturaForm({ userId }: { userId: string }) {
 
     if (!arquivos.length) {
       setErro("Selecione ao menos um arquivo PDF.");
+      return;
+    }
+    // Validação por extensão feita aqui (não só no atributo `accept` do
+    // input) -- arquivo num drive sincronizado (Google Drive Desktop,
+    // OneDrive) que ainda não baixou o conteúdo de verdade ("placeholder")
+    // pode não passar na verificação de tipo do seletor nativo do Windows
+    // mesmo com a extensão certa, e some da lista sem explicação nenhuma.
+    const invalidos = arquivos.filter((a) => !EXTENSOES_ACEITAS.some((ext) => a.name.toLowerCase().endsWith(ext)));
+    if (invalidos.length) {
+      setErro(
+        `Arquivo(s) com tipo não aceito: ${invalidos.map((a) => a.name).join(", ")}. Só PDF, .xls, .xlsx ou .csv.`
+      );
       return;
     }
 
@@ -92,15 +105,17 @@ export default function UploadFaturaForm({ userId }: { userId: string }) {
         </div>
 
         <div>
-          <label className="mb-1 block text-sm text-gray-600">Arquivos das faturas (PDF ou planilha)</label>
+          <label className="mb-1 block text-sm text-gray-600">Arquivos das faturas (PDF, planilha ou CSV)</label>
           <input
             name="arquivos"
             type="file"
-            // Extensão sozinha (.xls/.xlsx) às vezes não é reconhecida pelo
-            // seletor de arquivo nativo do Windows (associação de tipo MIME
-            // menos padronizada que a de PDF) e o arquivo some da lista --
-            // reforça com os MIME types explícitos, mais confiável.
-            accept=".pdf,.xls,.xlsx,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            // Sem `accept` de propósito -- com ele, o seletor nativo do
+            // Windows tenta verificar o tipo do arquivo (por extensão ou
+            // MIME) antes de listar, e um arquivo "placeholder" de pasta
+            // sincronizada (Google Drive Desktop, OneDrive) que ainda não
+            // baixou o conteúdo de verdade falha nessa checagem e some da
+            // lista, mesmo com a extensão certa. A validação de tipo de
+            // verdade acontece depois, em aoEnviar.
             multiple
             required
             disabled={enviando}
@@ -109,7 +124,7 @@ export default function UploadFaturaForm({ userId }: { userId: string }) {
           <p className="mt-1 text-xs text-gray-500">
             Pode selecionar boleto e demonstrativo juntos, de várias imobiliárias de uma vez —
             o sistema identifica cada um e junta os dois automaticamente. Algumas seguradoras
-            mandam o demonstrativo em planilha (.xls/.xlsx), aceito também.
+            mandam o demonstrativo em planilha (.xls/.xlsx) ou CSV, aceito também.
           </p>
         </div>
 
