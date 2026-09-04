@@ -10,6 +10,7 @@ import { prepararTextoBase } from "@/lib/limparTextoBase";
 import { validarCNPJ } from "@/lib/validacoesBr";
 import { buscarImobiliariaDoUsuario } from "@/lib/imobiliariaDoUsuario";
 import { origem } from "@/lib/origem";
+import { apenasDigitos } from "@/lib/pdfComSenha";
 
 export async function salvarImobiliaria(formData: FormData) {
   const supabase = await createClient();
@@ -109,11 +110,15 @@ export async function salvarImobiliaria(formData: FormData) {
   // causa de uma duplicidade que é problema interno, não da imobiliária.
   let cnpjDuplicadoEmOutraConta = false;
   if (!imobiliariaExistente && cnpj) {
-    const { data: porCnpj } = await supabase
-      .from("imobiliarias")
-      .select("*")
-      .eq("cnpj", cnpj)
-      .maybeSingle();
+    // Comparação por dígitos (não string exata) -- mesmo cuidado já usado
+    // em resolverOuCriarImobiliaria (faturasIdentificacao.ts): o CNPJ pode
+    // estar salvo com ou sem pontuação dependendo de qual pipeline criou o
+    // registro (fatura, lista de referência, cadastro manual), e uma
+    // comparação exata deixava passar batido um CNPJ que é o mesmo, só
+    // formatado diferente.
+    const cnpjDigitos = apenasDigitos(cnpj);
+    const { data: todasPorCnpj } = await supabase.from("imobiliarias").select("*");
+    const porCnpj = (todasPorCnpj ?? []).find((i) => apenasDigitos(i.cnpj ?? "") === cnpjDigitos) ?? null;
     if (porCnpj?.user_id) {
       cnpjDuplicadoEmOutraConta = true;
     } else if (porCnpj) {

@@ -10,7 +10,6 @@ import { extrairDadosFatura } from "@/lib/faturasIA";
 import {
   buscarImobiliariaPorCnpjNoTexto,
   sugerirImobiliariaPorTexto,
-  resolverOuCriarImobiliaria,
   origensAtivasDaImobiliaria,
   nomeCandidatoDoArquivo,
   SEGURADORAS_CANONICAS,
@@ -183,7 +182,11 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
   const seguradoraNormalizada = seguradora;
   const tipoDocumento = dadosIA?.tipo_documento ?? null;
 
-  const { data: conhecidasData } = await supabase.from("imobiliarias_conhecidas").select("id, nome, cnpj");
+  // Busca direto contra `imobiliarias` -- o cadastro é único pra toda a
+  // plataforma (Faturas, Auditor, Gerador de Contrato, Multa Rescisória),
+  // não existe mais uma lista de referência separada só pra identificação
+  // de fatura.
+  const { data: conhecidasData } = await supabase.from("imobiliarias").select("id, nome, cnpj");
   const conhecidas = (conhecidasData ?? []) as ImobiliariaBasica[];
 
   // Prioridade: CNPJ lido no documento (mais confiável) > nome/razão social.
@@ -204,14 +207,9 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
     : null;
   const nomeIdentificado = conhecidaEscolhida?.nome ?? null;
 
-  let imobiliariaId: string | null = null;
-  if (conhecidaEscolhida?.cnpj) {
-    try {
-      imobiliariaId = await resolverOuCriarImobiliaria(supabase, conhecidaEscolhida.nome, conhecidaEscolhida.cnpj);
-    } catch (e) {
-      console.error("[faturas] erro ao resolver/criar imobiliária:", e);
-    }
-  }
+  // A busca já roda direto contra `imobiliarias` -- o id encontrado já É o
+  // id real do cadastro, não precisa resolver/criar de novo.
+  const imobiliariaId: string | null = conhecidaEscolhida?.id ?? null;
 
   // Se a imobiliária tem mais de 1 relação ativa com essa seguradora (ex:
   // Tokio via O2 Seguros e via SegImob, cada uma com vencimento próprio),

@@ -8,7 +8,6 @@ import { extrairDadosFatura } from "@/lib/faturasIA";
 import {
   buscarImobiliariaPorCnpjNoTexto,
   sugerirImobiliariaPorTexto,
-  resolverOuCriarImobiliaria,
   normalizarSeguradora,
   origensAtivasDaImobiliaria,
   nomeCandidatoDoArquivo,
@@ -139,7 +138,9 @@ export async function reprocessarIdentificacao(formData: FormData) {
     console.error("[faturas] erro ao extrair dados por IA (reprocessamento):", e);
   }
 
-  const { data: conhecidasData } = await supabase.from("imobiliarias_conhecidas").select("id, nome, cnpj");
+  // Busca direto contra `imobiliarias` -- cadastro único pra toda a
+  // plataforma, não existe mais uma lista de referência separada.
+  const { data: conhecidasData } = await supabase.from("imobiliarias").select("id, nome, cnpj");
   const conhecidas = (conhecidasData ?? []) as ImobiliariaBasica[];
 
   let resultadoIdent = buscarImobiliariaPorCnpjNoTexto(dadosIA?.cnpj_tomador ?? null, conhecidas);
@@ -154,14 +155,9 @@ export async function reprocessarIdentificacao(formData: FormData) {
     ? conhecidas.find((c) => c.id === resultadoIdent.imobiliaria_id)
     : null;
 
-  let imobiliariaId: string | null = null;
-  if (conhecidaEscolhida?.cnpj) {
-    try {
-      imobiliariaId = await resolverOuCriarImobiliaria(supabase, conhecidaEscolhida.nome, conhecidaEscolhida.cnpj);
-    } catch (e) {
-      console.error("[faturas] erro ao resolver/criar imobiliária:", e);
-    }
-  }
+  // A busca já roda direto contra `imobiliarias` -- o id encontrado já É o
+  // id real do cadastro, não precisa resolver/criar de novo.
+  const imobiliariaId: string | null = conhecidaEscolhida?.id ?? null;
   const confianca = imobiliariaId ? resultadoIdent.confianca : null;
   const seguradoraNormalizada = normalizarSeguradora(dadosIA?.seguradora ?? null);
   const seguradoraReconhecida = seguradoraNormalizada ? SEGURADORAS_CANONICAS.includes(seguradoraNormalizada) : false;
@@ -249,7 +245,9 @@ export async function tentarReabrirComSenha(formData: FormData) {
     console.error("[faturas] erro ao extrair dados por IA (reabertura):", e);
   }
 
-  const { data: conhecidasData } = await supabase.from("imobiliarias_conhecidas").select("id, nome, cnpj");
+  // Busca direto contra `imobiliarias` -- cadastro único pra toda a
+  // plataforma, não existe mais uma lista de referência separada.
+  const { data: conhecidasData } = await supabase.from("imobiliarias").select("id, nome, cnpj");
   const conhecidas = (conhecidasData ?? []) as ImobiliariaBasica[];
 
   let resultadoIdent = buscarImobiliariaPorCnpjNoTexto(dadosIA?.cnpj_tomador ?? null, conhecidas);
@@ -264,14 +262,9 @@ export async function tentarReabrirComSenha(formData: FormData) {
     ? conhecidas.find((c) => c.id === resultadoIdent.imobiliaria_id)
     : null;
 
-  let imobiliariaId: string | null = null;
-  if (conhecidaEscolhida?.cnpj) {
-    try {
-      imobiliariaId = await resolverOuCriarImobiliaria(supabase, conhecidaEscolhida.nome, conhecidaEscolhida.cnpj);
-    } catch (e) {
-      console.error("[faturas] erro ao resolver/criar imobiliária:", e);
-    }
-  }
+  // A busca já roda direto contra `imobiliarias` -- o id encontrado já É o
+  // id real do cadastro, não precisa resolver/criar de novo.
+  const imobiliariaId: string | null = conhecidaEscolhida?.id ?? null;
   const confianca = imobiliariaId ? resultadoIdent.confianca : null;
   const seguradoraNormalizada = normalizarSeguradora(dadosIA?.seguradora ?? null);
   const seguradoraReconhecida = seguradoraNormalizada ? SEGURADORAS_CANONICAS.includes(seguradoraNormalizada) : false;

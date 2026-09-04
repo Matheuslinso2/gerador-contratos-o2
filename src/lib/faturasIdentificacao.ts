@@ -11,12 +11,12 @@ export type ImobiliariaBasica = { id: string; nome: string; cnpj: string | null 
 // principal e do formulário de edição, pra nunca ficarem fora de sincronia.
 export const SEGURADORAS_CANONICAS = ["TOKIO", "PORTO FIANÇA", "PORTO RE", "TOO", "POTTENCIAL", "YELUM"];
 
-// A senha do PDF é validada contra a base grande (imobiliarias_conhecidas,
-// ~445 registros vindos do CRM/Produtores), não contra a tabela de contas
-// com login — a maioria das imobiliárias reais ainda não tem conta aqui.
-// Depois de identificar por lá, resolve (ou cria) o registro correspondente
-// em `imobiliarias`, que é quem a fatura referencia de verdade (é lá que vai
-// morar o e-mail de destino do envio, na Fase 2).
+// Cadastro único pra toda a plataforma -- `imobiliarias` é a mesma base
+// usada por Faturas, Auditor de Contrato, Gerador de Contrato e Multa
+// Rescisória (a antiga tabela separada `imobiliarias_conhecidas`, só de
+// referência do CRM, foi incorporada aqui). Usado quando um CNPJ digitado
+// à mão (cadastro manual pela tela de Faturas) ainda não tem registro --
+// resolve pelo CNPJ se já existir, ou cria um novo "esqueleto" incompleto.
 export async function resolverOuCriarImobiliaria(
   supabase: SupabaseServerClient,
   nome: string,

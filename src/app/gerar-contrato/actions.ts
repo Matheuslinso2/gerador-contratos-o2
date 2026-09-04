@@ -156,14 +156,14 @@ export async function gerarContrato(formData: FormData) {
         : Promise.resolve({ data: null }),
     ]);
 
-  // observacao_interna é nota de uso exclusivo da equipe O2 -- essa action
-  // gera o contrato pra própria imobiliária (imobiliaria_id vem de
-  // buscarImobiliariaDoUsuario, ver acima), então nunca deve carregar esse
-  // campo além desse ponto.
+  // observacao_interna, classificacao_crm e responsavel_crm são de uso
+  // exclusivo da equipe O2 -- essa action gera o contrato pra própria
+  // imobiliária (imobiliaria_id vem de buscarImobiliariaDoUsuario, ver
+  // acima), então nunca deve carregar esses campos além desse ponto.
   const imobiliaria = imobiliariaComNotaInterna
     ? (() => {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars -- descartado de propósito
-        const { observacao_interna: _omitido, ...resto } = imobiliariaComNotaInterna;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars -- descartados de propósito
+        const { observacao_interna: _o, classificacao_crm: _c, responsavel_crm: _r, ...resto } = imobiliariaComNotaInterna;
         return resto;
       })()
     : null;

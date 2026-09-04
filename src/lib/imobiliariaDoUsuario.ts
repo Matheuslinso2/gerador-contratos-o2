@@ -9,16 +9,20 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // colaborador O2 enxerga TODAS as imobiliarias via RLS (leitura de
 // suporte) -- filtrar direto por user_id evita que maybeSingle() quebre
 // com "mais de uma linha" pra esse perfil.
-// observacao_interna é nota de uso EXCLUSIVO da equipe O2 (ex: histórico de
-// atrito, sinalização interna) -- nunca deve chegar no lado de quem loga
-// como a própria imobiliária (titular ou membro convidado). Tira do
-// resultado aqui, no único ponto de resolução usado por esse lado, em vez
-// de confiar que cada tela que usa essa função nunca vai renderizar/expor
-// o campo por engano.
-function semObservacaoInterna<T extends { observacao_interna?: unknown }>(linha: T | null): Omit<T, "observacao_interna"> | null {
+// observacao_interna, classificacao_crm e responsavel_crm são de uso
+// EXCLUSIVO da equipe O2 (nota interna, classificação/responsável do CRM
+// vindos da lista de referência unificada em imobiliarias) -- nunca devem
+// chegar no lado de quem loga como a própria imobiliária (titular ou
+// membro convidado). Tira do resultado aqui, no único ponto de resolução
+// usado por esse lado, em vez de confiar que cada tela que usa essa função
+// nunca vai renderizar/expor o campo por engano.
+type CamposInternosO2 = "observacao_interna" | "classificacao_crm" | "responsavel_crm";
+function semCamposInternosO2<T extends Partial<Record<CamposInternosO2, unknown>>>(
+  linha: T | null
+): Omit<T, CamposInternosO2> | null {
   if (!linha) return null;
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- descartado de propósito
-  const { observacao_interna: _omitido, ...resto } = linha;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- descartados de propósito
+  const { observacao_interna: _o, classificacao_crm: _c, responsavel_crm: _r, ...resto } = linha;
   return resto;
 }
 
@@ -29,7 +33,7 @@ export async function buscarImobiliariaDoUsuario(
   if (!user) return null;
 
   const { data: comoTitular } = await supabase.from("imobiliarias").select("*").eq("user_id", user.id).maybeSingle();
-  if (comoTitular) return semObservacaoInterna(comoTitular);
+  if (comoTitular) return semCamposInternosO2(comoTitular);
 
   if (!user.email) return null;
   const { data: membro } = await supabase
@@ -44,5 +48,5 @@ export async function buscarImobiliariaDoUsuario(
     .select("*")
     .eq("id", membro.imobiliaria_id)
     .maybeSingle();
-  return semObservacaoInterna(comoMembro);
+  return semCamposInternosO2(comoMembro);
 }
