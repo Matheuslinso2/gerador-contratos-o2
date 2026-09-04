@@ -76,17 +76,26 @@ export async function confirmarEnvio(formData: FormData) {
       }
       const destinatarios = modoTeste ? [EMAIL_MODO_TESTE] : destinatariosReais;
 
-      const { data: faturas } = await supabase
+      const { data: faturasSemOrdem } = await supabase
         .from("faturas")
         .select("id, arquivo_bucket_path, arquivo_nome, tipo_documento, vencimento, valor, numero_documento, senha_pdf")
         .eq("imobiliaria_id", imobiliariaId)
         .eq("seguradora", seguradora)
         .eq("competencia", competencia)
         .in("status", STATUS_PRONTO_PARA_ENVIO);
-      if (!faturas?.length) {
+      if (!faturasSemOrdem?.length) {
         falhas++;
         continue;
       }
+      // Sem isso a ordem dos anexos (na lista do e-mail e na ordem em que
+      // vão anexados) depende de como o Postgres devolveu as linhas --
+      // sem ORDER BY isso não é garantido nem estável entre execuções
+      // (confirmado: 2 envios de teste da mesma fatura saíram com a lista
+      // em ordem trocada). Boleto sempre primeiro, é o documento pagável.
+      const ORDEM_TIPO: Record<string, number> = { boleto: 0, demonstrativo: 1 };
+      const faturas = [...faturasSemOrdem].sort(
+        (a, b) => (ORDEM_TIPO[a.tipo_documento ?? ""] ?? 2) - (ORDEM_TIPO[b.tipo_documento ?? ""] ?? 2)
+      );
 
       const anexos: AnexoEmail[] = [await anexoLogoO2()];
       for (const f of faturas) {
