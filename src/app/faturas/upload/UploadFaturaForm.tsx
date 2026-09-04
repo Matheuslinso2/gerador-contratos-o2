@@ -96,7 +96,11 @@ export default function UploadFaturaForm({ userId }: { userId: string }) {
           <input
             name="arquivos"
             type="file"
-            accept=".pdf,.xls,.xlsx"
+            // Extensão sozinha (.xls/.xlsx) às vezes não é reconhecida pelo
+            // seletor de arquivo nativo do Windows (associação de tipo MIME
+            // menos padronizada que a de PDF) e o arquivo some da lista --
+            // reforça com os MIME types explícitos, mais confiável.
+            accept=".pdf,.xls,.xlsx,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             multiple
             required
             disabled={enviando}
