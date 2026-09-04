@@ -96,6 +96,30 @@ export default async function AdminImobiliariaDetalhePage({
               <label className={labelClass}>Endereço</label>
               <input name="endereco" defaultValue={imobiliaria.endereco ?? ""} className={inputClass} />
             </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
+              <div>
+                <label className={labelClass}>Cidade</label>
+                <input name="cidade" defaultValue={imobiliaria.cidade ?? ""} className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>UF</label>
+                <input name="uf" maxLength={2} defaultValue={imobiliaria.uf ?? ""} className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>Bairro</label>
+                <input name="bairro" defaultValue={imobiliaria.bairro ?? ""} className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>Qtd. de imóveis</label>
+                <input
+                  name="quantidade_imoveis"
+                  type="number"
+                  min={0}
+                  defaultValue={imobiliaria.quantidade_imoveis ?? ""}
+                  className={inputClass}
+                />
+              </div>
+            </div>
           </section>
 
           <section className="space-y-3 border-t border-gray-200 pt-6">
@@ -179,22 +203,43 @@ export default async function AdminImobiliariaDetalhePage({
             </div>
           </section>
 
-          <section className="space-y-2 rounded-xl border border-yellow-300 bg-yellow-50 p-4">
+          <section className="space-y-3 rounded-xl border border-yellow-300 bg-yellow-50 p-4">
             <h2 className="flex items-center gap-1.5 text-sm font-semibold text-yellow-900">
-              🔒 Observação interna
-              <span className="font-normal normal-case text-yellow-700">— só a equipe O2 vê isso</span>
+              🔒 Uso interno O2
+              <span className="font-normal normal-case text-yellow-700">— nunca aparece pra imobiliária</span>
             </h2>
             <p className="text-xs text-yellow-800">
-              Nunca é enviada por e-mail nem aparece pra imobiliária, mesmo se ela tiver login próprio ou funcionário
-              com acesso.
+              Nunca é enviado por e-mail nem aparece pro lado de quem loga como a própria imobiliária, mesmo com
+              login próprio ou funcionário com acesso.
             </p>
-            <textarea
-              name="observacao_interna"
-              rows={3}
-              defaultValue={imobiliaria.observacao_interna ?? ""}
-              placeholder="Ex: histórico de atraso, ponto de atenção, combinado verbal..."
-              className="w-full rounded-lg border border-yellow-300 bg-white px-3 py-2 text-sm focus:border-o2-coral focus:outline-none"
-            />
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div>
+                <label className={labelClass}>Classificação (CRM)</label>
+                <input
+                  name="classificacao_crm"
+                  defaultValue={imobiliaria.classificacao_crm ?? ""}
+                  className="w-full rounded-lg border border-yellow-300 bg-white px-3 py-2 text-sm focus:border-o2-coral focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Responsável (CRM)</label>
+                <input
+                  name="responsavel_crm"
+                  defaultValue={imobiliaria.responsavel_crm ?? ""}
+                  className="w-full rounded-lg border border-yellow-300 bg-white px-3 py-2 text-sm focus:border-o2-coral focus:outline-none"
+                />
+              </div>
+            </div>
+            <div>
+              <label className={labelClass}>Observação interna</label>
+              <textarea
+                name="observacao_interna"
+                rows={3}
+                defaultValue={imobiliaria.observacao_interna ?? ""}
+                placeholder="Ex: histórico de atraso, ponto de atenção, combinado verbal..."
+                className="w-full rounded-lg border border-yellow-300 bg-white px-3 py-2 text-sm focus:border-o2-coral focus:outline-none"
+              />
+            </div>
           </section>
 
           <button type="submit" className="rounded-full bg-o2-coral px-6 py-2.5 font-medium text-white transition hover:opacity-90">

@@ -54,6 +54,12 @@ export async function atualizarImobiliariaAdmin(formData: FormData) {
     creci: String(formData.get("creci") ?? "").trim() || null,
     telefone: String(formData.get("telefone") ?? "").trim() || null,
     endereco: String(formData.get("endereco") ?? "").trim() || null,
+    cidade: String(formData.get("cidade") ?? "").trim() || null,
+    uf: String(formData.get("uf") ?? "").trim() || null,
+    bairro: String(formData.get("bairro") ?? "").trim() || null,
+    quantidade_imoveis: String(formData.get("quantidade_imoveis") ?? "").trim()
+      ? Number(formData.get("quantidade_imoveis"))
+      : null,
     texto_base_contrato,
     clausula_fiador: String(formData.get("clausula_fiador") ?? "").trim() || null,
     clausula_caucao: String(formData.get("clausula_caucao") ?? "").trim() || null,
@@ -62,11 +68,13 @@ export async function atualizarImobiliariaAdmin(formData: FormData) {
     percentual_multa_atraso: Number(formData.get("percentual_multa_atraso") ?? 0),
     percentual_juros_mora: Number(formData.get("percentual_juros_mora") ?? 0),
     percentual_honorarios_advocaticios: Number(formData.get("percentual_honorarios_advocaticios") ?? 0),
-    // Uso interno da O2 -- só existe nessa tela (admin), nunca no
+    // Uso interno da O2 -- só existem nessa tela (admin), nunca no
     // autoatendimento da imobiliária (ver imobiliariaDoUsuario.ts, que
-    // remove esse campo explicitamente de quem loga como a própria
+    // remove esses campos explicitamente de quem loga como a própria
     // imobiliária).
     observacao_interna: String(formData.get("observacao_interna") ?? "").trim() || null,
+    classificacao_crm: String(formData.get("classificacao_crm") ?? "").trim() || null,
+    responsavel_crm: String(formData.get("responsavel_crm") ?? "").trim() || null,
   };
   if (garantiaPosicao !== undefined) dados.garantia_posicao_apos_clausula = garantiaPosicao;
 

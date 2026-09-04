@@ -94,6 +94,47 @@ export default async function ImobiliariaPage({
             label="Endereço do escritório"
             defaultValue={imobiliaria?.endereco ?? ""}
           />
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
+            <div>
+              <label className="text-sm text-gray-600">Cidade</label>
+              <input
+                name="cidade"
+                placeholder="Cidade"
+                defaultValue={imobiliaria?.cidade ?? ""}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-gray-600">UF</label>
+              <input
+                name="uf"
+                placeholder="UF"
+                maxLength={2}
+                defaultValue={imobiliaria?.uf ?? ""}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-gray-600">Bairro</label>
+              <input
+                name="bairro"
+                placeholder="Bairro"
+                defaultValue={imobiliaria?.bairro ?? ""}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-gray-600">Qtd. de imóveis administrados</label>
+              <input
+                name="quantidade_imoveis"
+                type="number"
+                min={0}
+                placeholder="Ex: 120"
+                defaultValue={imobiliaria?.quantidade_imoveis ?? ""}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+              />
+            </div>
+          </div>
           <div>
             <label className="text-sm text-gray-600">
               Logo da imobiliária (opcional, aparece no Word gerado)
@@ -253,8 +294,8 @@ export default async function ImobiliariaPage({
             </div>
           </div>
           <p className="text-xs text-gray-500">
-            O dia de vencimento do aluguel agora é definido em cada contrato (na tela "Gerar
-            contrato"), já que pode variar de locação para locação.
+            O dia de vencimento do aluguel agora é definido em cada contrato (na tela &quot;Gerar
+            contrato&quot;), já que pode variar de locação para locação.
           </p>
         </section>
 
@@ -331,6 +372,10 @@ type ImobiliariaRow = {
   creci?: string | null;
   telefone?: string | null;
   endereco?: string | null;
+  cidade?: string | null;
+  uf?: string | null;
+  bairro?: string | null;
+  quantidade_imoveis?: number | null;
   logo_url?: string | null;
   texto_base_contrato?: string | null;
   indice_reajuste?: string | null;

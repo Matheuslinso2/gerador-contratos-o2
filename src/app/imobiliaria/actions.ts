@@ -30,6 +30,10 @@ export async function salvarImobiliaria(formData: FormData) {
   const creci = String(formData.get("creci") ?? "").trim();
   const telefone = String(formData.get("telefone") ?? "").trim();
   const endereco = String(formData.get("endereco") ?? "").trim();
+  const cidade = String(formData.get("cidade") ?? "").trim();
+  const uf = String(formData.get("uf") ?? "").trim();
+  const bairro = String(formData.get("bairro") ?? "").trim();
+  const quantidadeImoveisTexto = String(formData.get("quantidade_imoveis") ?? "").trim();
   const indice_reajuste = String(formData.get("indice_reajuste") ?? "").trim();
   const clausula_fiador = String(formData.get("clausula_fiador") ?? "").trim();
   const clausula_caucao = String(formData.get("clausula_caucao") ?? "").trim();
@@ -165,6 +169,10 @@ export async function salvarImobiliaria(formData: FormData) {
     creci: creci || null,
     telefone: telefone || null,
     endereco: endereco || null,
+    cidade: cidade || null,
+    uf: uf || null,
+    bairro: bairro || null,
+    quantidade_imoveis: quantidadeImoveisTexto ? Number(quantidadeImoveisTexto) : null,
     texto_base_contrato,
     indice_reajuste,
     clausula_fiador: clausula_fiador || null,
