@@ -12,6 +12,7 @@ import {
   sugerirImobiliariaPorTexto,
   resolverOuCriarImobiliaria,
   origensAtivasDaImobiliaria,
+  nomeCandidatoDoArquivo,
   SEGURADORAS_CANONICAS,
   type ImobiliariaBasica,
 } from "@/lib/faturasIdentificacao";
@@ -189,6 +190,13 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
   let resultadoIdent = buscarImobiliariaPorCnpjNoTexto(dadosIA?.cnpj_tomador ?? null, conhecidas);
   if (!resultadoIdent.imobiliaria_id && dadosIA?.identificacao_texto) {
     resultadoIdent = sugerirImobiliariaPorTexto(dadosIA.identificacao_texto, conhecidas);
+  }
+  // Último recurso: nem CNPJ nem texto do CONTEÚDO bateram -- tenta o nome
+  // do arquivo (a O2 costuma salvar já renomeado com o nome da imobiliária,
+  // sinal que existe independente do que a IA conseguiu ler do documento).
+  if (!resultadoIdent.imobiliaria_id) {
+    const candidatoArquivo = nomeCandidatoDoArquivo(nomeArquivo);
+    if (candidatoArquivo) resultadoIdent = sugerirImobiliariaPorTexto(candidatoArquivo, conhecidas);
   }
 
   const conhecidaEscolhida = resultadoIdent.imobiliaria_id

@@ -11,6 +11,7 @@ import {
   resolverOuCriarImobiliaria,
   normalizarSeguradora,
   origensAtivasDaImobiliaria,
+  nomeCandidatoDoArquivo,
   SEGURADORAS_CANONICAS,
   type ImobiliariaBasica,
 } from "@/lib/faturasIdentificacao";
@@ -65,26 +66,47 @@ export async function confirmarIdentificacao(formData: FormData) {
     { usuario: user.email, data: new Date().toISOString(), acao: "confirmacao_manual", detalhe: imobiliariaId },
   ];
 
+  // Sem isso a fatura ficava com origem null pra sempre -- a confirmação
+  // manual nunca perguntava/resolvia isso (diferente do upload normal),
+  // e a tela principal casa fatura com vínculo por imobiliária+origem
+  // EXATOS, então ficava "confirmada" no banco mas invisível lá (achado
+  // real: a DAHER FERES SOBRINHO, com 1 única origem -- SegImob -- ficou
+  // sem vincular depois de confirmada manualmente).
+  const origensPossiveis = await origensAtivasDaImobiliaria(supabase, imobiliariaId, seguradora);
+  const precisaEscolherOrigem = origensPossiveis.length > 1;
+  const origemFatura = origensPossiveis.length === 1 ? origensPossiveis[0] : null;
+
   const { error } = await supabase
     .from("faturas")
     .update({
       imobiliaria_id: imobiliariaId,
       seguradora,
+      origem: origemFatura,
       confianca: "alta",
-      status: "fatura_carregada",
+      status: precisaEscolherOrigem ? "aguardando_origem" : "fatura_carregada",
       historico_identificacao: historico,
     })
     .eq("id", faturaId);
   if (error) redirect(`/faturas/conferencia?erro=${encodeURIComponent(error.message)}`);
 
-  await supabase
-    .from("faturas_esperadas")
-    .upsert(
-      { imobiliaria_id: imobiliariaId, seguradora, codigo_produtor: fatura?.codigo_produtor ?? "", ativo: true },
-      { onConflict: "imobiliaria_id, seguradora, cnpj_o2" }
-    );
+  await supabase.from("faturas_esperadas").upsert(
+    {
+      imobiliaria_id: imobiliariaId,
+      seguradora,
+      cnpj_o2: origemFatura ?? "",
+      codigo_produtor: fatura?.codigo_produtor ?? "",
+      ativo: true,
+    },
+    { onConflict: "imobiliaria_id, seguradora, cnpj_o2" }
+  );
 
-  redirect(`/faturas/conferencia?ok=${encodeURIComponent("Identificação confirmada.")}`);
+  redirect(
+    `/faturas/conferencia?ok=${encodeURIComponent(
+      precisaEscolherOrigem
+        ? "Identificação confirmada -- essa imobiliária tem mais de uma origem, escolha qual na lista."
+        : "Identificação confirmada."
+    )}`
+  );
 }
 
 // Reprocessa a identificação de uma fatura que já tem texto extraído
@@ -123,6 +145,10 @@ export async function reprocessarIdentificacao(formData: FormData) {
   let resultadoIdent = buscarImobiliariaPorCnpjNoTexto(dadosIA?.cnpj_tomador ?? null, conhecidas);
   if (!resultadoIdent.imobiliaria_id && dadosIA?.identificacao_texto) {
     resultadoIdent = sugerirImobiliariaPorTexto(dadosIA.identificacao_texto, conhecidas);
+  }
+  if (!resultadoIdent.imobiliaria_id) {
+    const candidatoArquivo = nomeCandidatoDoArquivo(fatura?.arquivo_nome);
+    if (candidatoArquivo) resultadoIdent = sugerirImobiliariaPorTexto(candidatoArquivo, conhecidas);
   }
   const conhecidaEscolhida = resultadoIdent.imobiliaria_id
     ? conhecidas.find((c) => c.id === resultadoIdent.imobiliaria_id)
@@ -229,6 +255,10 @@ export async function tentarReabrirComSenha(formData: FormData) {
   let resultadoIdent = buscarImobiliariaPorCnpjNoTexto(dadosIA?.cnpj_tomador ?? null, conhecidas);
   if (!resultadoIdent.imobiliaria_id && dadosIA?.identificacao_texto) {
     resultadoIdent = sugerirImobiliariaPorTexto(dadosIA.identificacao_texto, conhecidas);
+  }
+  if (!resultadoIdent.imobiliaria_id) {
+    const candidatoArquivo = nomeCandidatoDoArquivo(fatura?.arquivo_nome);
+    if (candidatoArquivo) resultadoIdent = sugerirImobiliariaPorTexto(candidatoArquivo, conhecidas);
   }
   const conhecidaEscolhida = resultadoIdent.imobiliaria_id
     ? conhecidas.find((c) => c.id === resultadoIdent.imobiliaria_id)

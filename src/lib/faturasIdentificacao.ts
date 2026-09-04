@@ -129,3 +129,20 @@ export function sugerirImobiliariaPorTexto(
   }
   return { imobiliaria_id: null, confianca: null };
 }
+
+const PREFIXOS_ARQUIVO_FATURA = /^(BOLETO|RELAT[ÓO]RIO|DEMONSTRATIVO)\s+/i;
+
+// Fallback determinístico (não depende da IA acertar) pra quando nem CNPJ
+// nem identificacao_texto do CONTEÚDO do documento bateram com nada -- é o
+// caso real da TOKIO: o demonstrativo (CSV) não menciona a imobiliária em
+// lugar nenhum do conteúdo, só o inquilino/segurado em cada linha. A O2
+// salva esses arquivos já renomeados com o nome dela (ex: "RELATÓRIO NOME
+// DA IMOBILIÁRIA.csv", às vezes com um "(1)" de redownload no final), então
+// o nome do arquivo em si já é o sinal de identificação.
+export function nomeCandidatoDoArquivo(nomeArquivo: string | null | undefined): string | null {
+  if (!nomeArquivo) return null;
+  const semExtensao = nomeArquivo.replace(/\.[a-z0-9]+$/i, "");
+  const semDuplicata = semExtensao.replace(/\s*\(\d+\)\s*$/, "");
+  const semPrefixo = semDuplicata.replace(PREFIXOS_ARQUIVO_FATURA, "").trim();
+  return semPrefixo || null;
+}

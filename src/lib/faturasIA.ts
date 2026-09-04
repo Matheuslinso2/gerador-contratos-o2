@@ -74,7 +74,7 @@ const FERRAMENTA_EXTRACAO: Anthropic.Tool = {
       },
       identificacao_texto: {
         type: ["string", "null"],
-        description: "Razão social, nome fantasia ou nome completo da imobiliária/tomador como aparecem no documento.",
+        description: "Razão social, nome fantasia ou nome completo da imobiliária/tomador como aparecem no documento (ou no nome do arquivo, se instruído acima).",
       },
     },
     required: [
