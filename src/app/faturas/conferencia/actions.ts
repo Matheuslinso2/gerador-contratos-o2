@@ -47,6 +47,19 @@ export async function confirmarIdentificacao(formData: FormData) {
     .eq("id", faturaId)
     .single();
 
+  // O documento (ex: um relatório em CSV/planilha que só lista segurado e
+  // prêmio, sem mencionar a seguradora em lugar nenhum) pode não ter
+  // seguradora alguma extraída pela IA -- nesse caso pede pra escolher
+  // aqui mesmo, na confirmação manual (ver campo condicional na tela).
+  // Sem isso, a fatura virava "pronta pra envio" com seguradora nula --
+  // some da lista principal (que agrupa por imobiliária+seguradora) sem
+  // nenhum aviso, só o boleto ficava visível, nunca o demonstrativo.
+  const seguradoraForm = String(formData.get("seguradora") ?? "").trim();
+  const seguradora = fatura?.seguradora || seguradoraForm || null;
+  if (!seguradora) {
+    redirect(`/faturas/conferencia?erro=${encodeURIComponent("Esse documento não tem seguradora identificada — selecione uma antes de confirmar.")}`);
+  }
+
   const historico = [
     ...(fatura?.historico_identificacao ?? []),
     { usuario: user.email, data: new Date().toISOString(), acao: "confirmacao_manual", detalhe: imobiliariaId },
@@ -56,6 +69,7 @@ export async function confirmarIdentificacao(formData: FormData) {
     .from("faturas")
     .update({
       imobiliaria_id: imobiliariaId,
+      seguradora,
       confianca: "alta",
       status: "fatura_carregada",
       historico_identificacao: historico,
@@ -63,14 +77,12 @@ export async function confirmarIdentificacao(formData: FormData) {
     .eq("id", faturaId);
   if (error) redirect(`/faturas/conferencia?erro=${encodeURIComponent(error.message)}`);
 
-  if (fatura?.seguradora) {
-    await supabase
-      .from("faturas_esperadas")
-      .upsert(
-        { imobiliaria_id: imobiliariaId, seguradora: fatura.seguradora, codigo_produtor: fatura.codigo_produtor ?? "", ativo: true },
-        { onConflict: "imobiliaria_id, seguradora, cnpj_o2" }
-      );
-  }
+  await supabase
+    .from("faturas_esperadas")
+    .upsert(
+      { imobiliaria_id: imobiliariaId, seguradora, codigo_produtor: fatura?.codigo_produtor ?? "", ativo: true },
+      { onConflict: "imobiliaria_id, seguradora, cnpj_o2" }
+    );
 
   redirect(`/faturas/conferencia?ok=${encodeURIComponent("Identificação confirmada.")}`);
 }

@@ -14,6 +14,7 @@ import SeletorImobiliaria from "./SeletorImobiliaria";
 import FaturasSubHeader from "../FaturasSubHeader";
 import { IconChecklist } from "../icons";
 import { SubmitButton } from "../SubmitButton";
+import { SEGURADORAS_CANONICAS } from "@/lib/faturasIdentificacao";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -192,6 +193,23 @@ export default async function ConferenciaFaturasPage({
                     )}
                     <form action={confirmarIdentificacao} className="flex flex-wrap items-end gap-2">
                     <input type="hidden" name="fatura_id" value={f.id} />
+                    {!f.seguradora && (
+                      <div>
+                        <label className="mb-1 block text-xs text-gray-600 text-red-600">
+                          Seguradora ⚠️ não identificada no documento
+                        </label>
+                        <select name="seguradora" required defaultValue="" className="rounded-lg border border-red-300 px-3 py-2 text-sm focus:border-o2-coral focus:outline-none">
+                          <option value="" disabled>
+                            Selecione...
+                          </option>
+                          {SEGURADORAS_CANONICAS.map((s) => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     <div className="flex-1">
                       <label className="mb-1 block text-xs text-gray-600">
                         Imobiliária {f.confianca ? `(sugestão: confiança ${f.confianca})` : ""}
