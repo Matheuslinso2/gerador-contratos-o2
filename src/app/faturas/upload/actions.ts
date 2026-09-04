@@ -18,6 +18,23 @@ import {
 } from "@/lib/faturasIdentificacao";
 
 const BUCKET_TEMP = "faturas-temp";
+
+// maxDuration da página é 60s (ver page.tsx) -- corta a chamada à IA um
+// pouco antes disso, com folga pro catch abaixo ainda rodar e devolver um
+// resultado tratado pro arquivo, em vez de deixar a Vercel matar a função
+// "na marra" (sem passar por try/catch nenhum). Mesmo padrão já usado em
+// auditar-contrato/actions.ts pro mesmo tipo de problema (lá com IA
+// analisando um contrato inteiro, aqui só o texto já extraído de 1
+// boleto/fatura -- risco bem menor, mas não zero).
+const LIMITE_TEMPO_IA_MS = 50_000;
+
+function comLimiteDeTempo<T>(promessa: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const limite = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`A identificação demorou mais que ${Math.round(ms / 1000)}s.`)), ms);
+  });
+  return Promise.race([promessa, limite]).finally(() => clearTimeout(timer)) as Promise<T>;
+}
 const BUCKET_FINAL = "faturas";
 
 // Status que ainda representam uma fatura "viva" pra fins de checar
@@ -138,8 +155,11 @@ export async function processarFaturaUpload(formData: FormData): Promise<Resulta
 
   let dadosIA = null;
   try {
-    dadosIA = await extrairDadosFatura(texto);
+    dadosIA = await comLimiteDeTempo(extrairDadosFatura(texto), LIMITE_TEMPO_IA_MS);
   } catch (e) {
+    // dadosIA fica null (seja por erro da IA ou por estourar o prazo) --
+    // o fluxo abaixo já trata isso como "não identificado" e manda pra
+    // conferência manual, em vez de falhar o upload inteiro.
     console.error("[faturas] erro ao extrair dados por IA:", e);
   }
 
