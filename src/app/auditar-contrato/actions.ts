@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { extrairTextoDoc, extrairTextoDocx } from "@/lib/extrairTextoDocx";
 import { extrairTextoPdfComPaginas } from "@/lib/extrairTextoPdf";
+import { extrairImagensDoOle, extrairImagensDocx, type ImagemExtraida } from "@/lib/extrairImagensDocumento";
 import { auditarContrato, type DocumentoAuditoria, type FonteDocumento, type TipoDocumentoAuditoria } from "@/lib/auditorContrato";
 import { buscarImobiliariaDoUsuario } from "@/lib/imobiliariaDoUsuario";
 
@@ -57,9 +58,13 @@ async function extrairDocumento(
   pdfBase64: string | null;
   imagemBase64: string | null;
   imagemMediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp" | null;
+  // Página escaneada anexada DENTRO do próprio .doc/.docx como imagem (ex:
+  // condições da seguradora, laudo de vistoria) em vez de arquivo à parte --
+  // texto/pdfBase64/imagemBase64 acima não enxergam isso, só texto puro.
+  imagensExtras: ImagemExtraida[];
 }> {
   if (!path) {
-    return { texto: texto0, nomeArquivo: null, pdfBase64: null, imagemBase64: null, imagemMediaType: null };
+    return { texto: texto0, nomeArquivo: null, pdfBase64: null, imagemBase64: null, imagemMediaType: null, imagensExtras: [] };
   }
 
   const nomeLower = (nomeArquivo ?? path).toLowerCase();
@@ -94,18 +99,22 @@ async function extrairDocumento(
       pdfBase64: null,
       imagemBase64: buffer.toString("base64"),
       imagemMediaType: EXTENSOES_IMAGEM[extensaoImagem],
+      imagensExtras: [],
     };
   }
 
   let texto = "";
   let numPaginasPdf = 0;
+  let imagensExtras: ImagemExtraida[] = [];
   try {
     if (ehPdf) {
       ({ texto, numPaginas: numPaginasPdf } = await extrairTextoPdfComPaginas(buffer));
     } else if (ehDocAntigo) {
       texto = await extrairTextoDoc(buffer);
+      imagensExtras = extrairImagensDoOle(buffer);
     } else {
       texto = await extrairTextoDocx(buffer);
+      imagensExtras = await extrairImagensDocx(buffer);
     }
   } catch (erroExtracao) {
     // Motivo genérico pro usuário; o real fica só no log do servidor --
@@ -138,7 +147,7 @@ async function extrairDocumento(
       ? buffer.toString("base64")
       : null;
 
-  return { texto: pdfBase64 ? "" : texto, nomeArquivo, pdfBase64, imagemBase64: null, imagemMediaType: null };
+  return { texto: pdfBase64 ? "" : texto, nomeArquivo, pdfBase64, imagemBase64: null, imagemMediaType: null, imagensExtras };
 }
 
 export async function auditar(formData: FormData) {
@@ -174,7 +183,7 @@ export async function auditar(formData: FormData) {
     // leitura visual sempre, pra pegar valor de campo de formulário que a
     // extração de texto simples não vê -- ver comentário em extrairDocumento.
     const sempreLerPdfVisualmente = tipo === "cotacao" || tipo === "certificado";
-    const { texto, pdfBase64, imagemBase64, imagemMediaType } = await extrairDocumento(
+    const { texto, pdfBase64, imagemBase64, imagemMediaType, imagensExtras } = await extrairDocumento(
       supabase,
       { texto0, path, nomeArquivo },
       sempreLerPdfVisualmente
@@ -193,6 +202,18 @@ export async function auditar(formData: FormData) {
     documentos.push({ tipo, fonte, nomeArquivo });
     nomesPorTipo[tipo].push(nomeArquivo ?? "texto colado");
     if (tipo === "contrato" && texto) textosContrato.push(texto);
+
+    // Página escaneada anexada DENTRO do .doc/.docx como imagem (ex:
+    // condições da seguradora, laudo de vistoria) -- entra como mais uma
+    // "parte" do MESMO papel (contrato/cotação/certificado/outro), pra IA
+    // enxergar sem precisar de upload separado.
+    imagensExtras.forEach((imagem, indice) => {
+      documentos.push({
+        tipo,
+        fonte: { tipo: "imagem", base64: imagem.base64, mediaType: imagem.mediaType },
+        nomeArquivo: nomeArquivo ? `${nomeArquivo} — página anexada ${indice + 1}` : `página anexada ${indice + 1}`,
+      });
+    });
   }
 
   if (!documentos.some((d) => d.tipo === "contrato")) {
