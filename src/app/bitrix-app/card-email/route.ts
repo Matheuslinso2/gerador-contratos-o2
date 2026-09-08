@@ -7,13 +7,32 @@ export const dynamic = "force-dynamic";
 // que o mecanismo funciona, sem lógica de e-mail ainda -- ver
 // C:\Users\O2-Grupo\.claude\plans\frolicking-floating-frog.md).
 //
-// O Bitrix sempre faz POST (não GET) toda vez que a aba do placement é
-// aberta, reemitindo um token de acesso novo a cada abertura -- nomes de
-// campo padrão (AUTH_ID/REFRESH_ID/AUTH_EXPIRES/DOMAIN/member_id) conforme a
-// documentação de aplicativo local do Bitrix24, mas isso NUNCA foi testado
-// contra este portal nesta sessão. Se o parsing abaixo não achar os campos
-// esperados, os logs do Vercel vão mostrar as chaves recebidas de verdade
-// para ajuste.
+// O Bitrix chama essa URL em pelo menos 2 formatos diferentes de POST,
+// confirmados nos logs de produção (2026-09-08, instalação real feita pelo
+// Codex) -- nenhum dos dois bate com o nome de campo "documentação genérica"
+// que eu tinha assumido antes de testar:
+//
+// 1) Evento ONAPPINSTALL (disparado 1x na instalação do app): campos
+//    aninhados com colchete literal na chave (form-urlencoded, não JSON
+//    aninhado de verdade) -- "auth[access_token]", "auth[refresh_token]",
+//    "auth[domain]", "auth[member_id]", "auth[expires_in]".
+// 2) Abertura do placement (toda vez que a aba é aberta num card): campos
+//    soltos "AUTH_ID"/"REFRESH_ID"/"AUTH_EXPIRES"/"member_id", mas SEM
+//    "DOMAIN" -- só vem "SERVER_ENDPOINT" (ex:
+//    "https://o2seguros.bitrix24.com.br/rest/"), de onde o domínio é
+//    derivado.
+function extrairDadosAuth(campos: Record<string, string>) {
+  const accessToken = campos["auth[access_token]"] ?? campos.AUTH_ID;
+  const refreshToken = campos["auth[refresh_token]"] ?? campos.REFRESH_ID;
+  const memberId = campos["auth[member_id]"] ?? campos.member_id;
+  const expiresIn = campos["auth[expires_in]"] ?? campos.AUTH_EXPIRES;
+  let dominio = campos["auth[domain]"] ?? campos.DOMAIN;
+  if (!dominio && campos.SERVER_ENDPOINT) {
+    dominio = campos.SERVER_ENDPOINT.replace(/^https?:\/\//, "").replace(/\/rest\/?$/, "");
+  }
+  return { accessToken, refreshToken, memberId, expiresIn, dominio };
+}
+
 export async function POST(request: NextRequest) {
   const contentType = request.headers.get("content-type") ?? "";
   let campos: Record<string, string> = {};
@@ -31,26 +50,27 @@ export async function POST(request: NextRequest) {
 
   console.log("Placement Bitrix recebeu POST com as chaves:", Object.keys(campos));
 
-  const authId = campos.AUTH_ID;
-  const refreshId = campos.REFRESH_ID;
-  const authExpires = campos.AUTH_EXPIRES;
-  const dominio = campos.DOMAIN;
-  const memberId = campos.member_id;
+  const { accessToken, refreshToken, memberId, expiresIn, dominio } = extrairDadosAuth(campos);
 
-  if (authId && refreshId && dominio && memberId) {
+  if (accessToken && refreshToken && dominio && memberId) {
     try {
       await salvarInstalacao({
         dominio,
         memberId,
-        accessToken: authId,
-        refreshToken: refreshId,
-        expiresInSegundos: Number(authExpires ?? 3600),
+        accessToken,
+        refreshToken,
+        expiresInSegundos: Number(expiresIn ?? 3600),
       });
     } catch (erro) {
       console.error("Falha ao salvar token do app Bitrix:", erro);
     }
   } else {
-    console.warn("POST do placement sem os campos de auth esperados -- token não foi salvo/atualizado.");
+    console.warn("POST do placement sem os campos de auth esperados -- token não foi salvo/atualizado.", {
+      temAccessToken: Boolean(accessToken),
+      temRefreshToken: Boolean(refreshToken),
+      temDominio: Boolean(dominio),
+      temMemberId: Boolean(memberId),
+    });
   }
 
   // PLACEMENT_OPTIONS vem como string JSON (ex: '{"ID":"1540"}' para
