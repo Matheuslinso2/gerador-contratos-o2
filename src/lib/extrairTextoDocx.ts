@@ -1,4 +1,16 @@
 import JSZip from "jszip";
+import WordExtractor from "word-extractor";
+
+// Contrato antigo reaproveitado de um modelo salvo há anos costuma vir em
+// .doc (formato binário OLE do Word 97-2003), não .docx (ZIP/XML) -- o
+// e.g. "CONTRATO fulano.doc" que travou o Auditor pro Matheus é assim. O
+// parser de .docx acima não lê esse formato de jeito nenhum (não é nem
+// ZIP), por isso usa uma lib à parte só pra esse caso.
+export async function extrairTextoDoc(buffer: Buffer): Promise<string> {
+  const extractor = new WordExtractor();
+  const documento = await extractor.extract(buffer);
+  return documento.getBody().trim();
+}
 
 export async function extrairTextoDocx(buffer: Buffer): Promise<string> {
   const zip = await JSZip.loadAsync(buffer);

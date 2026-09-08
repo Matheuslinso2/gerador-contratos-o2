@@ -7,7 +7,7 @@ import { auditar } from "./actions";
 import type { TipoDocumentoAuditoria } from "@/lib/auditorContrato";
 
 const BUCKET_TEMP = "auditoria-temp";
-const ACCEPT_ARQUIVOS = ".docx,.pdf,.png,.jpg,.jpeg,.webp,.gif";
+const ACCEPT_ARQUIVOS = ".docx,.doc,.pdf,.png,.jpg,.jpeg,.webp,.gif";
 
 const ROTULO_TIPO: Record<TipoDocumentoAuditoria, string> = {
   contrato: "Contrato/Aditivo",

@@ -71,7 +71,7 @@ export default async function AuditarContratoPage({
           <div>
             <h1 className="text-xl font-semibold text-o2-navy">Auditar contrato</h1>
             <p className="text-sm text-gray-500">
-              Analisa um contrato já pronto (colado, .docx ou .pdf) e aponta erros e
+              Analisa um contrato já pronto (colado, .docx, .doc ou .pdf) e aponta erros e
               inconsistências — não gera um contrato novo.
             </p>
           </div>

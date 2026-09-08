@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { extrairTextoDocx } from "@/lib/extrairTextoDocx";
+import { extrairTextoDoc, extrairTextoDocx } from "@/lib/extrairTextoDocx";
 import { extrairTextoPdfComPaginas } from "@/lib/extrairTextoPdf";
 import { auditarContrato, type DocumentoAuditoria, type FonteDocumento, type TipoDocumentoAuditoria } from "@/lib/auditorContrato";
 import { buscarImobiliariaDoUsuario } from "@/lib/imobiliariaDoUsuario";
@@ -64,11 +64,12 @@ async function extrairDocumento(
 
   const nomeLower = (nomeArquivo ?? path).toLowerCase();
   const ehPdf = nomeLower.endsWith(".pdf");
+  const ehDocAntigo = nomeLower.endsWith(".doc") && !nomeLower.endsWith(".docx");
   const extensaoImagem = Object.keys(EXTENSOES_IMAGEM).find((ext) => nomeLower.endsWith(ext));
-  if (!nomeLower.endsWith(".docx") && !ehPdf && !extensaoImagem) {
+  if (!nomeLower.endsWith(".docx") && !ehDocAntigo && !ehPdf && !extensaoImagem) {
     redirect(
       `/auditar-contrato?erro=${encodeURIComponent(
-        "Envie um arquivo .docx, .pdf ou uma imagem (print de tela em .png/.jpg), ou cole o texto diretamente."
+        "Envie um arquivo .docx, .doc, .pdf ou uma imagem (print de tela em .png/.jpg), ou cole o texto diretamente."
       )}`
     );
   }
@@ -101,13 +102,19 @@ async function extrairDocumento(
   try {
     if (ehPdf) {
       ({ texto, numPaginas: numPaginasPdf } = await extrairTextoPdfComPaginas(buffer));
+    } else if (ehDocAntigo) {
+      texto = await extrairTextoDoc(buffer);
     } else {
       texto = await extrairTextoDocx(buffer);
     }
-  } catch {
+  } catch (erroExtracao) {
+    // Motivo genérico pro usuário; o real fica só no log do servidor --
+    // sem isso, um caso como "PDF com senha" ou "extensão .doc que a lib
+    // não reconhece" fica impossível de diagnosticar remotamente depois.
+    console.error(`Auditor de Contrato: falha ao ler "${nomeArquivo}" (${path}):`, erroExtracao);
     redirect(
       `/auditar-contrato?erro=${encodeURIComponent(
-        `Não foi possível ler o arquivo "${nomeArquivo}" — ele pode estar corrompido ou num formato inesperado.`
+        `Não foi possível ler o arquivo "${nomeArquivo}" — ele pode estar corrompido, protegido por senha ou num formato inesperado.`
       )}`
     );
   }
