@@ -45,6 +45,14 @@ const ROTAS_PUBLICAS = [
   // escolhe o produto e é levada pra rota individual de sempre (nenhuma
   // delas muda). Ver src/lib/produtosLandingPage.tsx (fonte única).
   "/cotacao",
+  // Placement/handler do aplicativo local do Bitrix (e-mail dentro do card
+  // do Sucesso do Cliente) -- o Bitrix chama essa URL direto (instalação e
+  // toda abertura da aba), sem cookie de sessão nenhum. Não tem segredo
+  // compartilhado como os outros webhooks acima porque o próprio handshake
+  // OAuth (AUTH_ID/REFRESH_ID) é o que autentica -- ver
+  // src/lib/bitrix/appAuth.ts. Ver
+  // C:\Users\O2-Grupo\.claude\plans\frolicking-floating-frog.md.
+  "/bitrix-app",
 ];
 const ROTAS_SO_DESLOGADO = ["/login", "/signup"];
 
