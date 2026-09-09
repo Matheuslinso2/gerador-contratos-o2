@@ -21,15 +21,29 @@ export const dynamic = "force-dynamic";
 //    "DOMAIN" -- só vem "SERVER_ENDPOINT" (ex:
 //    "https://o2seguros.bitrix24.com.br/rest/"), de onde o domínio é
 //    derivado.
+//
+// Achado real #2 (reinstalação de 2026-09-09, confirmado pelo Codex): no
+// ONAPPINSTALL desse portal, "auth[domain]" veio "oauth.bitrix.info" --
+// o servidor de OAuth, não o portal -- então chamadas de API construídas
+// com ele iam falhar (https://oauth.bitrix.info/rest/... não existe).
+// SERVER_ENDPOINT é sempre o endereço real de onde a chamada chegou, então
+// vira a fonte PREFERIDA; "auth[domain]"/"DOMAIN" só entra como fallback
+// quando SERVER_ENDPOINT não vem, e mesmo assim é descartado se for esse
+// valor claramente errado.
 function extrairDadosAuth(campos: Record<string, string>) {
   const accessToken = campos["auth[access_token]"] ?? campos.AUTH_ID;
   const refreshToken = campos["auth[refresh_token]"] ?? campos.REFRESH_ID;
   const memberId = campos["auth[member_id]"] ?? campos.member_id;
   const expiresIn = campos["auth[expires_in]"] ?? campos.AUTH_EXPIRES;
-  let dominio = campos["auth[domain]"] ?? campos.DOMAIN;
-  if (!dominio && campos.SERVER_ENDPOINT) {
+
+  let dominio: string | undefined;
+  if (campos.SERVER_ENDPOINT) {
     dominio = campos.SERVER_ENDPOINT.replace(/^https?:\/\//, "").replace(/\/rest\/?$/, "");
+  } else {
+    const dominioAuth = campos["auth[domain]"] ?? campos.DOMAIN;
+    dominio = dominioAuth && dominioAuth !== "oauth.bitrix.info" ? dominioAuth : undefined;
   }
+
   return { accessToken, refreshToken, memberId, expiresIn, dominio };
 }
 
