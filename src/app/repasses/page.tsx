@@ -36,6 +36,8 @@ function mesAtualDefault(): string {
   return `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}`;
 }
 
+const POR_PAGINA = 20;
+
 type RepasseRow = {
   id: string;
   imobiliaria_id: string | null;
@@ -53,11 +55,26 @@ type RepasseRow = {
 export default async function RepassesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ok?: string; erro?: string; aviso?: string; competencia?: string; busca?: string }>;
+  searchParams: Promise<{
+    ok?: string;
+    erro?: string;
+    aviso?: string;
+    competencia?: string;
+    busca?: string;
+    limite?: string;
+  }>;
 }) {
-  const { ok, erro, aviso, competencia: competenciaParam, busca: buscaParam } = await searchParams;
+  const {
+    ok,
+    erro,
+    aviso,
+    competencia: competenciaParam,
+    busca: buscaParam,
+    limite: limiteParam,
+  } = await searchParams;
   const competencia = competenciaParam || mesAtualDefault();
   const busca = (buscaParam ?? "").trim().toLowerCase();
+  const limite = Math.max(POR_PAGINA, Number(limiteParam) || POR_PAGINA);
 
   const supabase = await createClient();
   const {
@@ -65,7 +82,14 @@ export default async function RepassesPage({
   } = await supabase.auth.getUser();
   if (!isAdmin(user?.email) && !isColaboradorO2(user?.email)) redirect("/");
 
-  const [{ data: repassesData }, { data: imobiliariasData }] = await Promise.all([
+  // Lista mestre: toda imobiliária já reconhecida como produtor no Corp
+  // (tem código cadastrado) aparece aqui, com ou sem repasse carregado
+  // esse mês -- mesmo papel que faturas_esperadas cumpre em Faturas, pra
+  // dar visão de quem deveria estar recebendo repasse, não só de quem já
+  // tem arquivo. "imobiliariasTodas" (sem esse filtro) segue existindo só
+  // pra alimentar a busca da Conferência (que precisa achar qualquer
+  // imobiliária, mesmo sem código ainda).
+  const [{ data: repassesData }, { data: imobiliariasData }, { data: mestreData }] = await Promise.all([
     supabase
       .from("repasses")
       .select(
@@ -75,16 +99,17 @@ export default async function RepassesPage({
       .neq("status", "cancelada")
       .order("created_at", { ascending: false }),
     supabase.from("imobiliarias").select("id, nome").order("nome"),
+    supabase
+      .from("imobiliarias")
+      .select("id, nome, email_repasses, codigo_produtor_corp")
+      .not("codigo_produtor_corp", "is", null)
+      .order("nome"),
   ]);
 
   const repasses = (repassesData ?? []) as RepasseRow[];
   const imobiliariasTodas = imobiliariasData ?? [];
-
-  const { data: imobiliariasDetalheData } = await supabase
-    .from("imobiliarias")
-    .select("id, nome, email_repasses")
-    .in("id", Array.from(new Set(repasses.map((r) => r.imobiliaria_id).filter(Boolean) as string[])));
-  const detalhePorImobiliaria = new Map((imobiliariasDetalheData ?? []).map((i) => [i.id, i]));
+  const listaMestre = mestreData ?? [];
+  const idsNaListaMestre = new Set(listaMestre.map((m) => m.id));
 
   const PENDENTES_CONFERENCIA = ["aguardando_identificacao", "aguardando_conferencia", "duplicada"];
   const pendentes = repasses.filter((r) => PENDENTES_CONFERENCIA.includes(r.status));
@@ -97,44 +122,74 @@ export default async function RepassesPage({
     porImobiliaria.set(r.imobiliaria_id!, lista);
   }
 
+  // Quem tem repasse carregado mas ainda não tem código cadastrado (ex:
+  // acabou de ser confirmado manualmente e o arquivo não trazia código) --
+  // acaba de fora da lista mestre por definição, mas não pode simplesmente
+  // sumir da tela (mesmo bug já corrigido em Faturas: imobiliária conhecida
+  // por outro caminho ficava invisível numa aba que não olhava pra ela).
+  const idsComRepasseForaDaLista = Array.from(porImobiliaria.keys()).filter((id) => !idsNaListaMestre.has(id));
+  const { data: extrasDetalheData } = idsComRepasseForaDaLista.length
+    ? await supabase
+        .from("imobiliarias")
+        .select("id, nome, email_repasses, codigo_produtor_corp")
+        .in("id", idsComRepasseForaDaLista)
+    : { data: [] };
+
+  type ImobiliariaBasica = { id: string; nome: string; email_repasses: string[] | null; codigo_produtor_corp: string | null };
+  const todasParaListagem: ImobiliariaBasica[] = [...listaMestre, ...(extrasDetalheData ?? [])];
+
   type Par = {
     imobiliariaId: string;
     nome: string;
     emails: string[];
+    codigoProdutor: string | null;
     relatorio: RepasseRow | null;
     comprovante: RepasseRow | null;
-    estado: "enviado" | "pronto" | "divergente" | "aguardando_comprovante" | "aguardando_relatorio";
+    estado: "enviado" | "pronto" | "divergente" | "aguardando_comprovante" | "aguardando_relatorio" | "sem_repasse";
   };
   const pares: Par[] = [];
-  for (const [imobiliariaId, linhas] of porImobiliaria) {
-    const detalhe = detalhePorImobiliaria.get(imobiliariaId);
-    const nome = detalhe?.nome ?? "—";
-    if (busca && !nome.toLowerCase().includes(busca)) continue;
+  for (const imob of todasParaListagem) {
+    if (busca && !imob.nome.toLowerCase().includes(busca)) continue;
+    const linhas = porImobiliaria.get(imob.id) ?? [];
     const relatorio = linhas.find((l) => l.tipo_documento === "relatorio") ?? null;
     const comprovante = linhas.find((l) => l.tipo_documento === "comprovante") ?? null;
     const estado: Par["estado"] =
       relatorio?.status === "enviada" || comprovante?.status === "enviada"
         ? "enviado"
-        : !relatorio
-          ? "aguardando_relatorio"
-          : !comprovante
-            ? "aguardando_comprovante"
-            : valoresBatem(relatorio.valor, comprovante.valor)
-              ? "pronto"
-              : "divergente";
-    pares.push({ imobiliariaId, nome, emails: detalhe?.email_repasses ?? [], relatorio, comprovante, estado });
+        : !relatorio && !comprovante
+          ? "sem_repasse"
+          : !relatorio
+            ? "aguardando_relatorio"
+            : !comprovante
+              ? "aguardando_comprovante"
+              : valoresBatem(relatorio.valor, comprovante.valor)
+                ? "pronto"
+                : "divergente";
+    pares.push({
+      imobiliariaId: imob.id,
+      nome: imob.nome,
+      emails: imob.email_repasses ?? [],
+      codigoProdutor: imob.codigo_produtor_corp,
+      relatorio,
+      comprovante,
+      estado,
+    });
   }
-  pares.sort((a, b) => {
-    const prioridade: Record<Par["estado"], number> = {
-      pronto: 0,
-      divergente: 1,
-      aguardando_comprovante: 2,
-      aguardando_relatorio: 2,
-      enviado: 3,
-    };
-    return prioridade[a.estado] - prioridade[b.estado] || a.nome.localeCompare(b.nome, "pt-BR");
-  });
+  const PRIORIDADE_ESTADO: Record<Par["estado"], number> = {
+    pronto: 0,
+    divergente: 1,
+    aguardando_comprovante: 2,
+    aguardando_relatorio: 2,
+    sem_repasse: 3,
+    enviado: 4,
+  };
+  pares.sort(
+    (a, b) => PRIORIDADE_ESTADO[a.estado] - PRIORIDADE_ESTADO[b.estado] || a.nome.localeCompare(b.nome, "pt-BR")
+  );
 
+  const totalPares = pares.length;
+  const paresExibidos = pares.slice(0, limite);
+  const pendentesAcao = pares.filter((p) => !["sem_repasse", "enviado"].includes(p.estado)).length;
   const prontosParaEnvio = pares.filter((p) => p.estado === "pronto" && p.emails.length > 0);
 
   const caminhos = repasses.map((r) => r.arquivo_bucket_path);
@@ -152,6 +207,7 @@ export default async function RepassesPage({
     divergente: "Valores não batem",
     aguardando_comprovante: "Aguardando comprovante",
     aguardando_relatorio: "Aguardando relatório",
+    sem_repasse: "Sem repasse esse mês",
   };
   const COR_ESTADO: Record<Par["estado"], string> = {
     enviado: "bg-green-100 text-green-700",
@@ -159,6 +215,7 @@ export default async function RepassesPage({
     divergente: "bg-red-100 text-red-700",
     aguardando_comprovante: "bg-yellow-100 text-yellow-800",
     aguardando_relatorio: "bg-yellow-100 text-yellow-800",
+    sem_repasse: "bg-gray-100 text-gray-500",
   };
 
   return (
@@ -268,6 +325,12 @@ export default async function RepassesPage({
           </div>
         )}
 
+        {pendentesAcao === 0 && !busca && (
+          <p className="rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-sm text-green-700">
+            ✅ Tudo em dia nessa competência — nenhum repasse pendente de par, conferência ou envio.
+          </p>
+        )}
+
         <form action="/repasses" className="flex flex-wrap items-end gap-2 rounded-xl border border-o2-navy/10 bg-white p-3 shadow-sm">
           <input type="hidden" name="competencia" value={competencia} />
           <div>
@@ -297,8 +360,8 @@ export default async function RepassesPage({
           <div className="flex items-center justify-between">
             <p className="text-xs text-gray-500">
               {prontosParaEnvio.length > 0
-                ? `${prontosParaEnvio.length} pronto(s) pra envio (já marcados abaixo).`
-                : "Nenhum repasse pronto pra envio no momento."}
+                ? `${prontosParaEnvio.length} pronto(s) pra envio (já marcados abaixo) — ${totalPares} imobiliária(s) no total nessa competência.`
+                : `Nenhum repasse pronto pra envio no momento — ${totalPares} imobiliária(s) no total nessa competência.`}
             </p>
             <div className="flex items-center gap-3">
               {prontosParaEnvio.length > 1 && <SelecionarTodas />}
@@ -317,7 +380,7 @@ export default async function RepassesPage({
           </div>
 
           <div className="space-y-2">
-            {pares.map((p) => {
+            {paresExibidos.map((p) => {
               const arquivos = [p.relatorio, p.comprovante].filter(Boolean) as RepasseRow[];
               const podeSelecionar = p.estado === "pronto" && p.emails.length > 0;
               return (
@@ -330,18 +393,25 @@ export default async function RepassesPage({
                         <span title="Sem e-mail de repasse cadastrado" className="text-red-500">⚠</span>
                       ) : null}
                       <span className="text-sm font-semibold text-gray-800">{p.nome}</span>
+                      {p.codigoProdutor && (
+                        <span className="font-mono text-[10px] text-gray-400">#{p.codigoProdutor}</span>
+                      )}
                     </div>
                     <span className={`rounded-sm px-2 py-0.5 text-[11px] font-medium ${COR_ESTADO[p.estado]}`}>
                       {ROTULO_ESTADO[p.estado]}
                     </span>
                   </div>
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 text-xs text-gray-600">
-                    <span>
-                      Relatório: {p.relatorio ? formatarValor(p.relatorio.valor) : <span className="text-gray-300">—</span>}
-                    </span>
-                    <span>
-                      Comprovante: {p.comprovante ? formatarValor(p.comprovante.valor) : <span className="text-gray-300">—</span>}
-                    </span>
+                    {p.estado !== "sem_repasse" && (
+                      <>
+                        <span>
+                          Relatório: {p.relatorio ? formatarValor(p.relatorio.valor) : <span className="text-gray-300">—</span>}
+                        </span>
+                        <span>
+                          Comprovante: {p.comprovante ? formatarValor(p.comprovante.valor) : <span className="text-gray-300">—</span>}
+                        </span>
+                      </>
+                    )}
                     <span className="flex items-center gap-1">
                       <IconMail className="h-3 w-3" />
                       {p.emails.length ? p.emails.join(", ") : "sem e-mail de repasse"}
@@ -368,13 +438,27 @@ export default async function RepassesPage({
               );
             })}
 
-            {!pares.length && (
+            {!totalPares && (
               <p className="rounded border border-gray-300 bg-white px-3 py-8 text-center text-sm text-gray-500">
-                Nenhum repasse identificado nessa competência ainda.
+                {busca
+                  ? "Nenhuma imobiliária encontrada com esse nome."
+                  : "Nenhuma imobiliária com código de produtor cadastrado ainda."}
               </p>
             )}
           </div>
         </form>
+
+        {totalPares > paresExibidos.length && (
+          <div className="text-center">
+            <Link
+              href={`/repasses?competencia=${competencia}&limite=${limite + POR_PAGINA}&busca=${encodeURIComponent(busca)}`}
+              className="text-sm font-medium text-o2-navy hover:underline"
+            >
+              Mostrar mais {Math.min(POR_PAGINA, totalPares - paresExibidos.length)} (
+              {paresExibidos.length} de {totalPares})
+            </Link>
+          </div>
+        )}
       </main>
     </>
   );
