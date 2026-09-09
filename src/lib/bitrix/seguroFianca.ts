@@ -657,7 +657,7 @@ function mediana(valores: number[]): number {
   return ordenado.length % 2 ? ordenado[meio] : (ordenado[meio - 1] + ordenado[meio]) / 2;
 }
 
-type EstatisticaTempo = { media: number; mediana: number; min: number; max: number; n: number };
+export type EstatisticaTempo = { media: number; mediana: number; min: number; max: number; n: number };
 function estatisticasTempo(minutos: number[]): EstatisticaTempo {
   const ordenado = [...minutos].sort((a, b) => a - b);
   return { media: media(minutos), mediana: mediana(minutos), min: ordenado[0] ?? 0, max: ordenado[ordenado.length - 1] ?? 0, n: minutos.length };

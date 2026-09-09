@@ -68,6 +68,33 @@
   line-height: 1.6;
 }
 
+.tabBar {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 28px;
+  padding-bottom: 0;
+}
+.tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--ink-muted);
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 10px 16px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.tab:hover {
+  color: var(--ink);
+}
+.tabAtiva {
+  color: var(--accent-ink);
+  border-bottom-color: var(--accent);
+}
+
 .kpis {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

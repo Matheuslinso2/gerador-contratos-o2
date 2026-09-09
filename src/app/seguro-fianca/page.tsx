@@ -6,6 +6,7 @@ import AppHeader from "@/components/AppHeader";
 import SeletorCompetencia from "./SeletorCompetencia";
 import AtualizarAgora from "./AtualizarAgora";
 import ImobiliariasTabela from "./ImobiliariasTabela";
+import { AbasProvider, AbaSlot, type DefinicaoAba } from "./AbasPainel";
 import styles from "./seguro-fianca.module.css";
 import ExportarQuadro, { BotaoExportarPainelPdf } from "@/components/ExportarQuadro";
 import {
@@ -19,6 +20,7 @@ import {
   montarAnaliseGerencial,
   normalizarQuadroDiario,
   type AnaliseGerencial,
+  type EstatisticaTempo as EstatisticaTempoTipo,
   type QuadroDiario,
 } from "@/lib/bitrix/seguroFianca";
 
@@ -73,6 +75,22 @@ function fmtTendencia(atual: number, anterior: number): string {
   const pct = t.direcao === "flat" ? "" : ` ${t.pct.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}%`;
   return `${seta}${pct} vs. mês anterior (${anterior})`;
 }
+
+// Abas reais do painel (09/09/2026, pedido do Matheus) -- classificação dos
+// quadros por assunto: Cotações/Fechamento são os 2 funis (quadros híbridos
+// que hoje mostram os 2 juntos entram split, cada metade na sua aba),
+// Seguradora e Imobiliária são os quadros agrupados por essas entidades, e
+// Equipe é produtividade/tempo por responsável (não se encaixava nas 4
+// categorias pedidas). Visão Geral junta os KPIs de topo + Qualidade dos
+// Dados (também não são "assunto", são visão executiva/meta).
+const ABAS: DefinicaoAba[] = [
+  { id: "visao-geral", label: "Visão Geral" },
+  { id: "cotacoes", label: "Cotações" },
+  { id: "fechamento", label: "Fechamento" },
+  { id: "seguradora", label: "Seguradora" },
+  { id: "imobiliaria", label: "Imobiliária" },
+  { id: "equipe", label: "Equipe" },
+];
 
 function fmtDuracao(minutosTotais: number): string {
   const min = Math.round(minutosTotais);
@@ -499,7 +517,8 @@ export default async function SeguroFiancaPage({
           )}
 
           {gerencial && (
-            <>
+            <AbasProvider abas={ABAS}>
+              <AbaSlot aba="visao-geral">
               <div id="quadro-fianca-total-analises" className={styles.kpis} style={{ marginBottom: 20 }}>
                 <Kpi
                   label="Total de Análises do Mês"
@@ -567,96 +586,149 @@ export default async function SeguroFiancaPage({
                 <Kpi label="Negativados" value={String(gerencial.kpis.perdidos.herdado)} sub="negativados este mês, criados antes" tone="negative" />
                 <Kpi label="Convertidos" value={String(gerencial.kpis.convertidos.herdado)} sub="convertidos este mês, criados antes" />
               </div>
+              </AbaSlot>
 
               {(() => {
                 // "Em andamento" mostra tudo (novidades + herdados); os
                 // terminais (Recusado/Aprovado/Perdido/Convertido) só o que
                 // aconteceu neste mês -- por isso o total de cada barra é a
-                // soma dos próprios segmentos, não um KPI pronto.
+                // soma dos próprios segmentos, não um KPI pronto. Quadro
+                // híbrido (09/09/2026): split por funil, cada metade na sua
+                // aba (Cotações/Fechamento).
                 const segmentosFunil1 = construirSegmentosFunil(gerencial, CATEGORIA_ANALISE);
                 const segmentosFunil2 = construirSegmentosFunil(gerencial, CATEGORIA_NEGOCIACAO);
                 const totalFunil1 = segmentosFunil1.reduce((a, s) => a + s.value, 0);
                 const totalFunil2 = segmentosFunil2.reduce((a, s) => a + s.value, 0);
                 return (
-                  <section id="quadro-fianca-distribuicao" className={styles.section}>
-                    <div className={styles.sectionHead}>
-                      <h2>Distribuição por funil e etapa</h2>
-                      <div className={styles.note}>em andamento (todos) + terminais deste mês</div>
-                      <ExportarQuadro
-                        quadroId="quadro-fianca-distribuicao"
-                        nomeArquivo={`seguro-fianca-distribuicao-${competencia}`}
-                        dadosExcel={[
-                          ...segmentosFunil1.map((s) => ({ funil: "Análise e Cotação", etapa: s.label, cards: s.value })),
-                          ...segmentosFunil2.map((s) => ({ funil: "Negociação e Contrato", etapa: s.label, cards: s.value })),
-                        ]}
-                        nomeAbaExcel="Distribuição"
-                      />
-                    </div>
-                    <div className={styles.panel}>
-                      <div className={styles.stackGroup}>
-                        <div className={styles.glabel}>
-                          <span>Análise e Cotação — em andamento (todos) + recusado/aprovado deste mês</span>
-                          <span className={styles.num}>{totalFunil1} cards</span>
+                  <>
+                    <AbaSlot aba="cotacoes">
+                      <section id="quadro-fianca-distribuicao-cotacoes" className={styles.section}>
+                        <div className={styles.sectionHead}>
+                          <h2>Distribuição por etapa — Análise e Cotação</h2>
+                          <div className={styles.note}>em andamento (todos) + recusado/aprovado deste mês</div>
+                          <ExportarQuadro
+                            quadroId="quadro-fianca-distribuicao-cotacoes"
+                            nomeArquivo={`seguro-fianca-distribuicao-cotacoes-${competencia}`}
+                            dadosExcel={segmentosFunil1.map((s) => ({ etapa: s.label, cards: s.value }))}
+                            nomeAbaExcel="Distribuição Cotações"
+                          />
                         </div>
-                        <StackBar segments={segmentosFunil1} total={totalFunil1} />
-                      </div>
-                      <div className={styles.stackGroup}>
-                        <div className={styles.glabel}>
-                          <span>Negociação e Contrato — em andamento (todos) + convertido/negativado deste mês</span>
-                          <span className={styles.num}>{totalFunil2} cards</span>
+                        <div className={styles.panel}>
+                          <div className={styles.stackGroup}>
+                            <div className={styles.glabel}>
+                              <span>Análise e Cotação — em andamento (todos) + recusado/aprovado deste mês</span>
+                              <span className={styles.num}>{totalFunil1} cards</span>
+                            </div>
+                            <StackBar segments={segmentosFunil1} total={totalFunil1} />
+                          </div>
+                          <div className={styles.legendRow}>
+                            <div className={styles.legendItem}>
+                              <span className={styles.swatch} style={{ background: "var(--accent)" }} /> Em andamento
+                            </div>
+                            <div className={styles.legendItem}>
+                              <span className={styles.swatch} style={{ background: "var(--info)" }} /> Aprovado (este mês)
+                            </div>
+                            <div className={styles.legendItem}>
+                              <span className={styles.swatch} style={{ background: "var(--negative)" }} /> Recusado (este mês)
+                            </div>
+                          </div>
                         </div>
-                        <StackBar segments={segmentosFunil2} total={totalFunil2} />
-                      </div>
-                      <div className={styles.legendRow}>
-                        <div className={styles.legendItem}>
-                          <span className={styles.swatch} style={{ background: "var(--accent)" }} /> Em andamento
+                      </section>
+                    </AbaSlot>
+                    <AbaSlot aba="fechamento">
+                      <section id="quadro-fianca-distribuicao-fechamento" className={styles.section}>
+                        <div className={styles.sectionHead}>
+                          <h2>Distribuição por etapa — Negociação e Contrato</h2>
+                          <div className={styles.note}>em andamento (todos) + convertido/negativado deste mês</div>
+                          <ExportarQuadro
+                            quadroId="quadro-fianca-distribuicao-fechamento"
+                            nomeArquivo={`seguro-fianca-distribuicao-fechamento-${competencia}`}
+                            dadosExcel={segmentosFunil2.map((s) => ({ etapa: s.label, cards: s.value }))}
+                            nomeAbaExcel="Distribuição Fechamento"
+                          />
                         </div>
-                        <div className={styles.legendItem}>
-                          <span className={styles.swatch} style={{ background: "var(--info)" }} /> Aprovado/Convertido (este mês)
+                        <div className={styles.panel}>
+                          <div className={styles.stackGroup}>
+                            <div className={styles.glabel}>
+                              <span>Negociação e Contrato — em andamento (todos) + convertido/negativado deste mês</span>
+                              <span className={styles.num}>{totalFunil2} cards</span>
+                            </div>
+                            <StackBar segments={segmentosFunil2} total={totalFunil2} />
+                          </div>
+                          <div className={styles.legendRow}>
+                            <div className={styles.legendItem}>
+                              <span className={styles.swatch} style={{ background: "var(--accent)" }} /> Em andamento
+                            </div>
+                            <div className={styles.legendItem}>
+                              <span className={styles.swatch} style={{ background: "var(--info)" }} /> Convertido (este mês)
+                            </div>
+                            <div className={styles.legendItem}>
+                              <span className={styles.swatch} style={{ background: "var(--negative)" }} /> Negativado (este mês)
+                            </div>
+                          </div>
                         </div>
-                        <div className={styles.legendItem}>
-                          <span className={styles.swatch} style={{ background: "var(--negative)" }} /> Recusado/Negativado (este mês)
-                        </div>
-                      </div>
-                    </div>
-                  </section>
+                      </section>
+                    </AbaSlot>
+                  </>
                 );
               })()}
 
-              <section id="quadro-fianca-analise-resumo" className={styles.section}>
-                <div className={styles.sectionHead}>
-                  <h2>Análise, recusa e negativação</h2>
-                  <div className={styles.note}>total de análise = todo o conjunto ativo do mês (novidades + herdados ativos)</div>
-                  <ExportarQuadro
-                    quadroId="quadro-fianca-analise-resumo"
-                    nomeArquivo={`seguro-fianca-analise-resumo-${competencia}`}
-                    dadosExcel={[
-                      { indicador: "Total de Análise", valor: gerencial.kpis.totalRelevantes },
-                      { indicador: "Negativados", valor: gerencial.kpis.perdidos.total },
-                      { indicador: "Aprovados", valor: gerencial.kpis.aprovados.total },
-                      { indicador: "Recusados", valor: gerencial.kpis.recusados.total },
-                      {
-                        indicador: "% de Negativação",
-                        valor: gerencial.kpis.totalRelevantes > 0 ? (gerencial.kpis.perdidos.total / gerencial.kpis.totalRelevantes) * 100 : 0,
-                      },
-                    ]}
-                    nomeAbaExcel="Análise resumo"
-                  />
-                </div>
-                <div className={styles.kpis}>
-                  <Kpi label="Total de Análise" value={String(gerencial.kpis.totalRelevantes)} sub="novidades + herdados ativos no mês" />
-                  <Kpi label="Negativados" value={String(gerencial.kpis.perdidos.total)} sub="cliente não quis contratar, mês do evento" tone="negative" />
-                  <Kpi label="Aprovados" value={String(gerencial.kpis.aprovados.total)} sub="passaram p/ Negociação, mês do evento" tone="info" />
-                  <Kpi label="Recusados" value={String(gerencial.kpis.recusados.total)} sub="seguradora negou, mês do evento" tone="negative" />
-                  <Kpi
-                    label="% de Negativação"
-                    value={fmtPct(gerencial.kpis.totalRelevantes > 0 ? (gerencial.kpis.perdidos.total / gerencial.kpis.totalRelevantes) * 100 : 0)}
-                    sub="negativados ÷ total de análise"
-                    tone={gerencial.kpis.totalRelevantes > 0 && gerencial.kpis.perdidos.total / gerencial.kpis.totalRelevantes > 0.2 ? "warning" : undefined}
-                  />
-                </div>
-              </section>
+              {/* Quadro híbrido (09/09/2026): "Análise, recusa e negativação" split -- Total/Aprovados/Recusados são desfecho do
+                  funil 1 (Cotações); Negativados/% de Negativação são desfecho do funil 2 (Fechamento). */}
+              <AbaSlot aba="cotacoes">
+                <section id="quadro-fianca-analise-resumo-cotacoes" className={styles.section}>
+                  <div className={styles.sectionHead}>
+                    <h2>Análise, recusa e aprovação</h2>
+                    <div className={styles.note}>total de análise = todo o conjunto ativo do mês (novidades + herdados ativos)</div>
+                    <ExportarQuadro
+                      quadroId="quadro-fianca-analise-resumo-cotacoes"
+                      nomeArquivo={`seguro-fianca-analise-resumo-cotacoes-${competencia}`}
+                      dadosExcel={[
+                        { indicador: "Total de Análise", valor: gerencial.kpis.totalRelevantes },
+                        { indicador: "Aprovados", valor: gerencial.kpis.aprovados.total },
+                        { indicador: "Recusados", valor: gerencial.kpis.recusados.total },
+                      ]}
+                      nomeAbaExcel="Análise resumo"
+                    />
+                  </div>
+                  <div className={styles.kpis}>
+                    <Kpi label="Total de Análise" value={String(gerencial.kpis.totalRelevantes)} sub="novidades + herdados ativos no mês" />
+                    <Kpi label="Aprovados" value={String(gerencial.kpis.aprovados.total)} sub="passaram p/ Negociação, mês do evento" tone="info" />
+                    <Kpi label="Recusados" value={String(gerencial.kpis.recusados.total)} sub="seguradora negou, mês do evento" tone="negative" />
+                  </div>
+                </section>
+              </AbaSlot>
+              <AbaSlot aba="fechamento">
+                <section id="quadro-fianca-analise-resumo-fechamento" className={styles.section}>
+                  <div className={styles.sectionHead}>
+                    <h2>Negativação</h2>
+                    <div className={styles.note}>% sobre o total de análise (novidades + herdados ativos) — ver aba Cotações</div>
+                    <ExportarQuadro
+                      quadroId="quadro-fianca-analise-resumo-fechamento"
+                      nomeArquivo={`seguro-fianca-analise-resumo-fechamento-${competencia}`}
+                      dadosExcel={[
+                        { indicador: "Negativados", valor: gerencial.kpis.perdidos.total },
+                        {
+                          indicador: "% de Negativação",
+                          valor: gerencial.kpis.totalRelevantes > 0 ? (gerencial.kpis.perdidos.total / gerencial.kpis.totalRelevantes) * 100 : 0,
+                        },
+                      ]}
+                      nomeAbaExcel="Negativação"
+                    />
+                  </div>
+                  <div className={styles.kpis}>
+                    <Kpi label="Negativados" value={String(gerencial.kpis.perdidos.total)} sub="cliente não quis contratar, mês do evento" tone="negative" />
+                    <Kpi
+                      label="% de Negativação"
+                      value={fmtPct(gerencial.kpis.totalRelevantes > 0 ? (gerencial.kpis.perdidos.total / gerencial.kpis.totalRelevantes) * 100 : 0)}
+                      sub={`negativados ÷ ${gerencial.kpis.totalRelevantes} análises do mês`}
+                      tone={gerencial.kpis.totalRelevantes > 0 && gerencial.kpis.perdidos.total / gerencial.kpis.totalRelevantes > 0.2 ? "warning" : undefined}
+                    />
+                  </div>
+                </section>
+              </AbaSlot>
 
+              <AbaSlot aba="seguradora">
               <section id="quadro-fianca-seguradora-plano" className={styles.section}>
                 <div className={styles.sectionHead}>
                   <h2>Análise por seguradora e plano</h2>
@@ -745,7 +817,9 @@ export default async function SeguroFiancaPage({
                   </div>
                 </div>
               </section>
+              </AbaSlot>
 
+              <AbaSlot aba="equipe">
               <section id="quadro-fianca-produtividade" className={styles.section}>
                 <div className={styles.sectionHead}>
                   <h2>Produtividade por responsável, por funil</h2>
@@ -790,7 +864,9 @@ export default async function SeguroFiancaPage({
                   </div>
                 </div>
               </section>
+              </AbaSlot>
 
+              <AbaSlot aba="seguradora">
               <section id="quadro-fianca-taxa-parcela" className={styles.section}>
                 <div className={styles.sectionHead}>
                   <h2>Taxa média da parcela sobre o pacote de locação</h2>
@@ -944,7 +1020,9 @@ export default async function SeguroFiancaPage({
                   )}
                 </div>
               </section>
+              </AbaSlot>
 
+              <AbaSlot aba="cotacoes">
               <section id="quadro-fianca-valores" className={styles.section}>
                 <div className={styles.sectionHead}>
                   <h2>Valores trabalhados no mês</h2>
@@ -994,13 +1072,14 @@ export default async function SeguroFiancaPage({
                 </div>
               </section>
 
-              <section id="quadro-fianca-tempo-ciclo" className={styles.section}>
+              {/* "Tempo de ciclo por funil" -- híbrido, split (09/09/2026): cada linha na sua aba. */}
+              <section id="quadro-fianca-tempo-ciclo-cotacoes" className={styles.section}>
                 <div className={styles.sectionHead}>
-                  <h2>Tempo de ciclo por funil</h2>
-                  <div className={styles.note}>do início até sair de cada funil (aprovado/recusado em Análise e Cotação, convertido/negativado em Negociação e Contrato)</div>
+                  <h2>Tempo de ciclo — Análise e Cotação</h2>
+                  <div className={styles.note}>do início até aprovar/recusar</div>
                   <ExportarQuadro
-                    quadroId="quadro-fianca-tempo-ciclo"
-                    nomeArquivo={`seguro-fianca-tempo-ciclo-${competencia}`}
+                    quadroId="quadro-fianca-tempo-ciclo-cotacoes"
+                    nomeArquivo={`seguro-fianca-tempo-ciclo-cotacoes-${competencia}`}
                     dadosExcel={[
                       {
                         funil: "Análise e Cotação",
@@ -1009,14 +1088,6 @@ export default async function SeguroFiancaPage({
                         mediana_min: gerencial.tempoPorFunil.analiseECotacao.mediana,
                         minimo_min: gerencial.tempoPorFunil.analiseECotacao.min,
                         maximo_min: gerencial.tempoPorFunil.analiseECotacao.max,
-                      },
-                      {
-                        funil: "Negociação e Contrato",
-                        cards: gerencial.tempoPorFunil.negociacaoEContrato.n,
-                        media_min: gerencial.tempoPorFunil.negociacaoEContrato.media,
-                        mediana_min: gerencial.tempoPorFunil.negociacaoEContrato.mediana,
-                        minimo_min: gerencial.tempoPorFunil.negociacaoEContrato.min,
-                        maximo_min: gerencial.tempoPorFunil.negociacaoEContrato.max,
                       },
                     ]}
                     nomeAbaExcel="Tempo de ciclo"
@@ -1044,6 +1115,51 @@ export default async function SeguroFiancaPage({
                           <td className={`${styles.numCol} ${styles.num}`}>{fmtDuracao(gerencial.tempoPorFunil.analiseECotacao.min)}</td>
                           <td className={`${styles.numCol} ${styles.num}`}>{fmtDuracao(gerencial.tempoPorFunil.analiseECotacao.max)}</td>
                         </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className={styles.panelSub} style={{ marginTop: 12 }}>
+                    &quot;Cards&quot; conta quem já tem esse tempo definido.
+                  </div>
+                </div>
+              </section>
+              </AbaSlot>
+
+              <AbaSlot aba="fechamento">
+              <section id="quadro-fianca-tempo-ciclo-fechamento" className={styles.section}>
+                <div className={styles.sectionHead}>
+                  <h2>Tempo de ciclo — Negociação e Contrato</h2>
+                  <div className={styles.note}>do início do funil 2 até converter/perder</div>
+                  <ExportarQuadro
+                    quadroId="quadro-fianca-tempo-ciclo-fechamento"
+                    nomeArquivo={`seguro-fianca-tempo-ciclo-fechamento-${competencia}`}
+                    dadosExcel={[
+                      {
+                        funil: "Negociação e Contrato",
+                        cards: gerencial.tempoPorFunil.negociacaoEContrato.n,
+                        media_min: gerencial.tempoPorFunil.negociacaoEContrato.media,
+                        mediana_min: gerencial.tempoPorFunil.negociacaoEContrato.mediana,
+                        minimo_min: gerencial.tempoPorFunil.negociacaoEContrato.min,
+                        maximo_min: gerencial.tempoPorFunil.negociacaoEContrato.max,
+                      },
+                    ]}
+                    nomeAbaExcel="Tempo de ciclo"
+                  />
+                </div>
+                <div className={styles.panel}>
+                  <div className={styles.tableWrap}>
+                    <table className={styles.data}>
+                      <thead>
+                        <tr>
+                          <th>Funil</th>
+                          <th className={styles.numCol}>Cards</th>
+                          <th className={styles.numCol}>Média</th>
+                          <th className={styles.numCol}>Mediana</th>
+                          <th className={styles.numCol}>Mín.</th>
+                          <th className={styles.numCol}>Máx.</th>
+                        </tr>
+                      </thead>
+                      <tbody>
                         <tr>
                           <td>Negociação e Contrato (até converter/perder)</td>
                           <td className={`${styles.numCol} ${styles.num}`}>{gerencial.tempoPorFunil.negociacaoEContrato.n}</td>
@@ -1056,11 +1172,13 @@ export default async function SeguroFiancaPage({
                     </table>
                   </div>
                   <div className={styles.panelSub} style={{ marginTop: 12 }}>
-                    &quot;Cards&quot; aqui conta quem já tem esse tempo definido — Negociação e Contrato só existe pra quem foi aprovado em Análise e Cotação.
+                    &quot;Cards&quot; conta quem já tem esse tempo definido — só existe pra quem foi aprovado em Análise e Cotação.
                   </div>
                 </div>
               </section>
+              </AbaSlot>
 
+              <AbaSlot aba="equipe">
               <section id="quadro-fianca-tempo-cotacao" className={styles.section}>
                 <div className={styles.sectionHead}>
                   <h2>Tempo de cotação por responsável</h2>
@@ -1237,7 +1355,9 @@ export default async function SeguroFiancaPage({
                   </div>
                 </div>
               </section>
+              </AbaSlot>
 
+              <AbaSlot aba="fechamento">
               <section id="quadro-fianca-contratos-tardios" className={styles.section}>
                 <div className={styles.sectionHead}>
                   <h2>Contratos e contratação tardios</h2>
@@ -1281,24 +1401,14 @@ export default async function SeguroFiancaPage({
                   <Kpi label="Ag. Contrato (Tardia)" value={String(gerencial.contratosTardios.agContratoTardia)} sub="herdados parados em Aguardando Contrato" />
                 </div>
               </section>
+              </AbaSlot>
 
-              <section id="quadro-fianca-tempo-aberto" className={styles.section}>
-                <div className={styles.panel}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-                    <h3>Tempo em aberto por etapa</h3>
-                    <ExportarQuadro
-                      quadroId="quadro-fianca-tempo-aberto"
-                      nomeArquivo={`seguro-fianca-tempo-aberto-${competencia}`}
-                      dadosExcel={Object.entries(gerencial.tempoPorEtapa).map(([etapa, t]) => ({
-                        etapa: rotuloEtapaTempoAberto(etapa),
-                        cards: t.n,
-                        media_min: t.media,
-                        maximo_min: t.max,
-                      }))}
-                      nomeAbaExcel="Tempo em aberto"
-                    />
-                  </div>
-                  <div className={styles.panelSub}>só os cards que estão na etapa agora, cada card contando uma vez, pelo tempo da passagem atual</div>
+              {(() => {
+                // "Tempo em aberto por etapa" -- híbrido, split (09/09/2026):
+                // a chave já vem como "Análise e Cotação | Etapa" ou
+                // "Negociação e Contrato | Etapa" (ver porFunilEtapa/
+                // tempoPorEtapa na lib), então dá pra filtrar por prefixo.
+                const TabelaTempoAberto = ({ entradas, tituloVazio }: { entradas: [string, EstatisticaTempoTipo][]; tituloVazio: string }) => (
                   <div className={styles.tableWrap}>
                     <table className={styles.data}>
                       <thead>
@@ -1310,7 +1420,7 @@ export default async function SeguroFiancaPage({
                         </tr>
                       </thead>
                       <tbody>
-                        {Object.entries(gerencial.tempoPorEtapa).map(([etapa, t]) => (
+                        {entradas.map(([etapa, t]) => (
                           <tr key={etapa}>
                             <td>{rotuloEtapaTempoAberto(etapa)}</td>
                             <td className={`${styles.numCol} ${styles.num}`}>{t.n}</td>
@@ -1318,67 +1428,124 @@ export default async function SeguroFiancaPage({
                             <td className={`${styles.numCol} ${styles.num}`}>{fmtDuracao(t.max)}</td>
                           </tr>
                         ))}
-                        {Object.keys(gerencial.tempoPorEtapa).length === 0 && (
+                        {entradas.length === 0 && (
                           <tr>
                             <td colSpan={4} style={{ color: "var(--ink-faint)" }}>
-                              Nenhum card em aberto neste período.
+                              {tituloVazio}
                             </td>
                           </tr>
                         )}
                       </tbody>
                     </table>
                   </div>
+                );
+                const entradasCotacoes = Object.entries(gerencial.tempoPorEtapa).filter(([etapa]) => etapa.startsWith("Análise e Cotação"));
+                const entradasFechamento = Object.entries(gerencial.tempoPorEtapa).filter(([etapa]) => etapa.startsWith("Negociação e Contrato"));
+                return (
+                  <>
+                    <AbaSlot aba="cotacoes">
+                      <section id="quadro-fianca-tempo-aberto-cotacoes" className={styles.section}>
+                        <div className={styles.panel}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+                            <h3>Tempo em aberto por etapa — Análise e Cotação</h3>
+                            <ExportarQuadro
+                              quadroId="quadro-fianca-tempo-aberto-cotacoes"
+                              nomeArquivo={`seguro-fianca-tempo-aberto-cotacoes-${competencia}`}
+                              dadosExcel={entradasCotacoes.map(([etapa, t]) => ({
+                                etapa: rotuloEtapaTempoAberto(etapa),
+                                cards: t.n,
+                                media_min: t.media,
+                                maximo_min: t.max,
+                              }))}
+                              nomeAbaExcel="Tempo em aberto"
+                            />
+                          </div>
+                          <div className={styles.panelSub}>só os cards que estão na etapa agora, cada card contando uma vez, pelo tempo da passagem atual</div>
+                          <TabelaTempoAberto entradas={entradasCotacoes} tituloVazio="Nenhum card em aberto neste período." />
+                        </div>
+                      </section>
+                    </AbaSlot>
+                    <AbaSlot aba="fechamento">
+                      <section id="quadro-fianca-tempo-aberto-fechamento" className={styles.section}>
+                        <div className={styles.panel}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+                            <h3>Tempo em aberto por etapa — Negociação e Contrato</h3>
+                            <ExportarQuadro
+                              quadroId="quadro-fianca-tempo-aberto-fechamento"
+                              nomeArquivo={`seguro-fianca-tempo-aberto-fechamento-${competencia}`}
+                              dadosExcel={entradasFechamento.map(([etapa, t]) => ({
+                                etapa: rotuloEtapaTempoAberto(etapa),
+                                cards: t.n,
+                                media_min: t.media,
+                                maximo_min: t.max,
+                              }))}
+                              nomeAbaExcel="Tempo em aberto"
+                            />
+                          </div>
+                          <div className={styles.panelSub}>só os cards que estão na etapa agora, cada card contando uma vez, pelo tempo da passagem atual</div>
+                          <TabelaTempoAberto entradas={entradasFechamento} tituloVazio="Nenhum card em aberto neste período." />
+                        </div>
+                      </section>
+                    </AbaSlot>
+                  </>
+                );
+              })()}
+
+              <AbaSlot aba="cotacoes">
+              <section id="quadro-fianca-motivos-recusa" className={styles.section}>
+                <div className={styles.sectionHead}>
+                  <h2>Motivos de recusa</h2>
+                  <div className={styles.note}>{gerencial.motivosRecusaFunil1.total} recusados em Análise e Cotação</div>
+                </div>
+                <div className={styles.panel}>
+                  <h3>Recusas — Análise e Cotação</h3>
+                  <div className={styles.panelSub}>decisão de compliance da seguradora, sem motivo interno esperado</div>
+                  <div className={styles.barlist}>
+                    <BarraProporcional label="Total de recusas" value={gerencial.motivosRecusaFunil1.total} max={Math.max(gerencial.motivosRecusaFunil1.total, 1)} />
+                  </div>
                 </div>
               </section>
+              </AbaSlot>
 
-              <section id="quadro-fianca-motivos" className={styles.section}>
+              <AbaSlot aba="fechamento">
+              <section id="quadro-fianca-motivos-negativacao" className={styles.section}>
                 <div className={styles.sectionHead}>
-                  <h2>Motivos de recusa/perda</h2>
-                  <div className={styles.note}>
-                    {gerencial.motivosRecusaFunil1.total} recusados em Análise e Cotação + {gerencial.motivosPerdaFunil2.total} negativados em Negociação e Contrato
-                  </div>
+                  <h2>Motivos de negativação</h2>
+                  <div className={styles.note}>{gerencial.motivosPerdaFunil2.total} negativados em Negociação e Contrato</div>
                   <ExportarQuadro
-                    quadroId="quadro-fianca-motivos"
-                    nomeArquivo={`seguro-fianca-motivos-${competencia}`}
+                    quadroId="quadro-fianca-motivos-negativacao"
+                    nomeArquivo={`seguro-fianca-motivos-negativacao-${competencia}`}
                     dadosExcel={[
                       ...Object.entries(gerencial.motivosPerdaFunil2.porMotivo).map(([motivo, n]) => ({
-                        tipo: "Negativação — Negociação e Contrato",
                         motivo,
                         cards: n,
                       })),
                       ...(gerencial.motivosPerdaFunil2.semMotivo > 0
-                        ? [{ tipo: "Perda — Negociação e Contrato", motivo: "Sem motivo registrado", cards: gerencial.motivosPerdaFunil2.semMotivo }]
+                        ? [{ motivo: "Sem motivo registrado", cards: gerencial.motivosPerdaFunil2.semMotivo }]
                         : []),
                     ]}
                     nomeAbaExcel="Motivos"
                   />
                 </div>
-                <div className={styles.grid2}>
-                  <div className={styles.panel}>
-                    <h3>Recusas — Análise e Cotação</h3>
-                    <div className={styles.panelSub}>decisão de compliance da seguradora, sem motivo interno esperado</div>
-                    <div className={styles.barlist}>
-                      <BarraProporcional label="Total de recusas" value={gerencial.motivosRecusaFunil1.total} max={Math.max(gerencial.motivosRecusaFunil1.total, 1)} />
-                    </div>
-                  </div>
-                  <div className={styles.panel}>
-                    <h3>Negativações — Negociação e Contrato</h3>
-                    <div className={styles.panelSub}>{gerencial.motivosPerdaFunil2.total} cards negativados</div>
-                    <div className={styles.barlist}>
-                      {Object.entries(gerencial.motivosPerdaFunil2.porMotivo).map(([motivo, n]) => (
-                        <BarraProporcional key={motivo} label={motivo} value={n} max={gerencial.motivosPerdaFunil2.total} />
-                      ))}
-                      {gerencial.motivosPerdaFunil2.semMotivo > 0 && (
-                        <BarraProporcional label="Sem motivo registrado" value={gerencial.motivosPerdaFunil2.semMotivo} max={gerencial.motivosPerdaFunil2.total} warning />
-                      )}
-                      {gerencial.motivosPerdaFunil2.total === 0 && (
-                        <div style={{ color: "var(--ink-faint)", fontSize: 12.5 }}>Nenhuma negativação registrada neste período.</div>
-                      )}
-                    </div>
+                <div className={styles.panel}>
+                  <h3>Negativações — Negociação e Contrato</h3>
+                  <div className={styles.panelSub}>{gerencial.motivosPerdaFunil2.total} cards negativados</div>
+                  <div className={styles.barlist}>
+                    {Object.entries(gerencial.motivosPerdaFunil2.porMotivo).map(([motivo, n]) => (
+                      <BarraProporcional key={motivo} label={motivo} value={n} max={gerencial.motivosPerdaFunil2.total} />
+                    ))}
+                    {gerencial.motivosPerdaFunil2.semMotivo > 0 && (
+                      <BarraProporcional label="Sem motivo registrado" value={gerencial.motivosPerdaFunil2.semMotivo} max={gerencial.motivosPerdaFunil2.total} warning />
+                    )}
+                    {gerencial.motivosPerdaFunil2.total === 0 && (
+                      <div style={{ color: "var(--ink-faint)", fontSize: 12.5 }}>Nenhuma negativação registrada neste período.</div>
+                    )}
                   </div>
                 </div>
               </section>
+              </AbaSlot>
 
+              <AbaSlot aba="imobiliaria">
               <section id="quadro-fianca-imobiliarias" className={styles.section}>
                 <div className={styles.sectionHead}>
                   <h2>Imobiliárias — status de todos os cards</h2>
@@ -1851,7 +2018,9 @@ export default async function SeguroFiancaPage({
                   </section>
                 );
               })()}
+              </AbaSlot>
 
+              <AbaSlot aba="visao-geral">
               <section id="quadro-fianca-qualidade" className={styles.section}>
                 <div className={styles.sectionHead}>
                   <h2>Qualidade dos dados</h2>
@@ -1923,6 +2092,7 @@ export default async function SeguroFiancaPage({
                   );
                 })()}
               </section>
+              </AbaSlot>
 
               <footer className={styles.footer}>
                 Fonte: Bitrix24, SPA &quot;Seguro Fiança&quot; (entityTypeId {ENTITY_TYPE_ID}), funis &quot;Análise e Cotação&quot; ({CATEGORIA_ANALISE}) e &quot;Negociação e Contrato&quot; ({CATEGORIA_NEGOCIACAO}
@@ -1930,7 +2100,7 @@ export default async function SeguroFiancaPage({
                 card — o CRM não guarda histórico de troca de responsável via API, só de troca de etapa. &quot;Valores trabalhados&quot; mostram volume de trabalho, não receita da corretora;
                 receita real só existe a partir do prêmio líquido e comissão de contratos convertidos.
               </footer>
-            </>
+            </AbasProvider>
           )}
         </div>
       </div>
