@@ -5,6 +5,7 @@ import { isAdmin } from "@/lib/admin";
 import { signOut } from "../../../actions";
 import AppHeader from "@/components/AppHeader";
 import VinculosFaturas, { type Vinculo } from "../../../faturas/VinculosFaturas";
+import VinculosRepasse from "../../../faturas/VinculosRepasse";
 import { atualizarImobiliariaAdmin, adicionarMembroImobiliariaAdmin, removerMembroImobiliariaAdmin } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -255,6 +256,18 @@ export default async function AdminImobiliariaDetalhePage({
             imobiliariaId={imobiliaria.id}
             emailsFaturas={imobiliaria.email_faturas ?? []}
             vinculos={(vinculosData ?? []) as Vinculo[]}
+            voltarPara={voltarPara}
+          />
+        </section>
+
+        <section className="space-y-3 border-t border-gray-200 pt-6">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">
+            Repasse <span className="font-normal normal-case text-gray-400">— e-mail de envio e código do produtor no Corp</span>
+          </h2>
+          <VinculosRepasse
+            imobiliariaId={imobiliaria.id}
+            emailsRepasses={imobiliaria.email_repasses ?? []}
+            codigoProdutorCorp={imobiliaria.codigo_produtor_corp}
             voltarPara={voltarPara}
           />
         </section>

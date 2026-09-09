@@ -207,6 +207,91 @@ export async function removerEmailFatura(formData: FormData) {
   redirect(`${voltarPara}?ok=${encodeURIComponent("E-mail removido.")}`);
 }
 
+// E-mails pra onde os REPASSES (relatório de comissão + comprovante de
+// pagamento) dessa imobiliária serão enviados -- lista própria, separada
+// de email_faturas de propósito: várias imobiliárias exigem que o repasse
+// de valores vá direto pro dono/diretoria, não pro mesmo contato
+// financeiro que recebe fatura de seguradora.
+export async function adicionarEmailRepasse(formData: FormData) {
+  const supabase = await checarAcesso();
+
+  const imobiliariaId = String(formData.get("imobiliaria_id") ?? "");
+  const email = String(formData.get("email") ?? "").trim();
+  const voltarPara = String(formData.get("voltar_para") ?? "").trim() || `/faturas/imobiliaria/${imobiliariaId}`;
+  if (!imobiliariaId) redirect(`/faturas?erro=${encodeURIComponent("Imobiliária inválida.")}`);
+  if (!email || !email.includes("@")) {
+    redirect(`${voltarPara}?erro=${encodeURIComponent("Informe um e-mail válido.")}`);
+  }
+
+  const { data: imobiliaria } = await supabase
+    .from("imobiliarias")
+    .select("email_repasses")
+    .eq("id", imobiliariaId)
+    .single();
+  const atuais: string[] = imobiliaria?.email_repasses ?? [];
+  if (atuais.some((e) => e.toLowerCase() === email.toLowerCase())) {
+    redirect(`${voltarPara}?erro=${encodeURIComponent("Esse e-mail já está cadastrado.")}`);
+  }
+
+  const { error } = await supabase
+    .from("imobiliarias")
+    .update({ email_repasses: [...atuais, email] })
+    .eq("id", imobiliariaId);
+  if (error) {
+    redirect(`${voltarPara}?erro=${encodeURIComponent(error.message)}`);
+  }
+
+  redirect(`${voltarPara}?ok=${encodeURIComponent("E-mail de repasse adicionado.")}`);
+}
+
+export async function removerEmailRepasse(formData: FormData) {
+  const supabase = await checarAcesso();
+
+  const imobiliariaId = String(formData.get("imobiliaria_id") ?? "");
+  const email = String(formData.get("email") ?? "").trim();
+  const voltarPara = String(formData.get("voltar_para") ?? "").trim() || `/faturas/imobiliaria/${imobiliariaId}`;
+  if (!imobiliariaId) redirect(`/faturas?erro=${encodeURIComponent("Imobiliária inválida.")}`);
+
+  const { data: imobiliaria } = await supabase
+    .from("imobiliarias")
+    .select("email_repasses")
+    .eq("id", imobiliariaId)
+    .single();
+  const atuais: string[] = imobiliaria?.email_repasses ?? [];
+
+  const { error } = await supabase
+    .from("imobiliarias")
+    .update({ email_repasses: atuais.filter((e) => e !== email) })
+    .eq("id", imobiliariaId);
+  if (error) {
+    redirect(`${voltarPara}?erro=${encodeURIComponent(error.message)}`);
+  }
+
+  redirect(`${voltarPara}?ok=${encodeURIComponent("E-mail de repasse removido.")}`);
+}
+
+// Código interno do Corp (ex: "406") que identifica essa imobiliária como
+// "Produtor" nos relatórios de repasse -- casa com precisão assim que
+// cadastrado, sem depender de adivinhar por nome/CPF a cada mês.
+export async function salvarCodigoProdutorCorp(formData: FormData) {
+  const supabase = await checarAcesso();
+
+  const imobiliariaId = String(formData.get("imobiliaria_id") ?? "");
+  const codigo = String(formData.get("codigo_produtor_corp") ?? "").trim();
+  const voltarPara = String(formData.get("voltar_para") ?? "").trim() || `/faturas/imobiliaria/${imobiliariaId}`;
+  if (!imobiliariaId) redirect(`/faturas?erro=${encodeURIComponent("Imobiliária inválida.")}`);
+
+  const { error } = await supabase
+    .from("imobiliarias")
+    .update({ codigo_produtor_corp: codigo || null })
+    .eq("id", imobiliariaId);
+  if (error) {
+    redirect(`${voltarPara}?erro=${encodeURIComponent(error.message)}`);
+  }
+
+  redirect(`${voltarPara}?ok=${encodeURIComponent("Código do produtor salvo.")}`);
+}
+
 // "Editar" de quem ainda não tem CNPJ/CPF vinculado (nome_provisorio) —
 // resolve/cria o registro de verdade em imobiliarias E já salva tudo que
 // foi preenchido na mesma tela (e-mail de faturas + dados de cada

@@ -7,6 +7,7 @@ import AppHeader from "@/components/AppHeader";
 import FaturasSubHeader from "../../FaturasSubHeader";
 import { IconBuilding } from "../../icons";
 import VinculosFaturas, { type Vinculo } from "../../VinculosFaturas";
+import VinculosRepasse from "../../VinculosRepasse";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,11 @@ export default async function ImobiliariaFaturasPage({
   if (!isAdmin(user?.email) && !isColaboradorO2(user?.email)) redirect("/");
 
   const [{ data: imobiliaria }, { data: vinculosData }] = await Promise.all([
-    supabase.from("imobiliarias").select("id, nome, cnpj, email_faturas, cadastro_incompleto").eq("id", id).single(),
+    supabase
+      .from("imobiliarias")
+      .select("id, nome, cnpj, email_faturas, email_repasses, codigo_produtor_corp, cadastro_incompleto")
+      .eq("id", id)
+      .single(),
     supabase
       .from("faturas_esperadas")
       .select("seguradora, ativo, dia_vencimento, cnpj_o2, observacao")
@@ -63,6 +68,13 @@ export default async function ImobiliariaFaturasPage({
           imobiliariaId={imobiliaria.id}
           emailsFaturas={imobiliaria.email_faturas ?? []}
           vinculos={vinculos}
+          voltarPara={`/faturas/imobiliaria/${imobiliaria.id}`}
+        />
+
+        <VinculosRepasse
+          imobiliariaId={imobiliaria.id}
+          emailsRepasses={imobiliaria.email_repasses ?? []}
+          codigoProdutorCorp={imobiliaria.codigo_produtor_corp}
           voltarPara={`/faturas/imobiliaria/${imobiliaria.id}`}
         />
       </main>
