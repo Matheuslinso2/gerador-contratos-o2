@@ -22,8 +22,11 @@ function fmtDias(v: number | null): string {
   return `média ${v.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} dias`;
 }
 
-function fmtData(v: Date): string {
-  return v.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+// Em competências passadas, `criadoEm` vem do retrato salvo no Supabase
+// (jsonb) -- o Date virou string ISO no round-trip do JSON, apesar do tipo
+// dizer Date. `new Date(v)` cobre os dois casos (Date ao vivo ou string do retrato).
+function fmtData(v: Date | string): string {
+  return new Date(v).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
 }
 
 function Kpi({
