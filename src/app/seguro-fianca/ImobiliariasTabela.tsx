@@ -195,8 +195,8 @@ export default function ImobiliariasTabela({
             <Th coluna="recusados" ordenacao={ordenacao} onClick={alternarOrdenacao} numerica title="Recusados">
               Recus.
             </Th>
-            <Th coluna="perdidos" ordenacao={ordenacao} onClick={alternarOrdenacao} numerica title="Perdidos">
-              Perd.
+            <Th coluna="perdidos" ordenacao={ordenacao} onClick={alternarOrdenacao} numerica title="Negativados">
+              Neg.
             </Th>
             <Th coluna="convertidos" ordenacao={ordenacao} onClick={alternarOrdenacao} numerica title="Convertidos">
               Conv.

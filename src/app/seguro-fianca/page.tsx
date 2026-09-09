@@ -13,6 +13,7 @@ import {
   CATEGORIA_NEGOCIACAO,
   ENTITY_TYPE_ID,
   ETAPAS,
+  NOME_NAO_ADMINISTRADA,
   SEGURADORAS,
   buscarAnaliseGerencialAoVivo,
   montarAnaliseGerencial,
@@ -55,6 +56,22 @@ function fmtPct(v: number | null): string {
 // "Negociação e Contrato | PERDIDO", que usa "Perdido" mesmo de propósito.
 function rotuloEtapaTempoAberto(chave: string): string {
   return chave === "Análise e Cotação | PERDIDO" ? "Análise e Cotação | Recusado" : chave;
+}
+
+// Tendência simples (mesma lógica da coluna "Tend." de ImobiliariasTabela,
+// usada aqui pro comparativo de Total de Análises do Bloco 1).
+function tendenciaSimples(atual: number, anterior: number): { pct: number; direcao: "up" | "down" | "flat" } {
+  if (atual === anterior) return { pct: 0, direcao: "flat" };
+  if (anterior === 0) return { pct: 100, direcao: "up" };
+  const variacao = ((atual - anterior) / anterior) * 100;
+  return { pct: Math.abs(variacao), direcao: variacao >= 0 ? "up" : "down" };
+}
+
+function fmtTendencia(atual: number, anterior: number): string {
+  const t = tendenciaSimples(atual, anterior);
+  const seta = t.direcao === "flat" ? "—" : t.direcao === "up" ? "▲" : "▼";
+  const pct = t.direcao === "flat" ? "" : ` ${t.pct.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}%`;
+  return `${seta}${pct} vs. mês anterior (${anterior})`;
 }
 
 function fmtDuracao(minutosTotais: number): string {
@@ -107,6 +124,25 @@ function normalizarSnapshot(
       herdado: normalizarQuadroDiario(contratosRecebidosPorDia?.herdado, competencia),
     },
     efetivacoesPorDia: normalizarQuadroDiario(payload.efetivacoesPorDia, competencia),
+    // Retratos congelados antes de 09/09/2026 não têm nada disso -- entram
+    // zerados/vazios em vez de quebrar a página ao reabrir um mês antigo.
+    aba2Taxas: payload.aba2Taxas ?? { menor: null, media: null, n: 0 },
+    top3AprovacaoPottencial: payload.top3AprovacaoPottencial ?? [],
+    contratosTardios: payload.contratosTardios ?? {
+      tardios: 0,
+      contratacaoTardia: 0,
+      pctContratacaoTardiaSobreFechamentos: 0,
+      premioLiquidoContratacaoTardia: 0,
+      negociacaoTardia: 0,
+      agContratoTardia: 0,
+    },
+    topImobiliarias: payload.topImobiliarias.map((im) => ({
+      ...im,
+      menorTaxaMediaGeral: im.menorTaxaMediaGeral ?? null,
+      menorTaxaMediaNegativados: im.menorTaxaMediaNegativados ?? null,
+      clienteNovo: im.clienteNovo ?? false,
+    })),
+    qualidade: { ...payload.qualidade, naoAdministrados: payload.qualidade.naoAdministrados ?? 0 },
   };
 }
 
@@ -138,7 +174,7 @@ function construirSegmentosFunil(
       segmentos.push({ label: "Convertido", value: gerencial.kpis.convertidos.total, classe: styles.segInfo });
     }
     if (gerencial.kpis.perdidos.total > 0) {
-      segmentos.push({ label: "Perdido", value: gerencial.kpis.perdidos.total, classe: styles.segNeg });
+      segmentos.push({ label: "Negativado", value: gerencial.kpis.perdidos.total, classe: styles.segNeg });
     }
   }
   return segmentos;
@@ -408,10 +444,21 @@ export default async function SeguroFiancaPage({
     .select("payload")
     .eq("competencia", competenciaAnterior(competencia))
     .maybeSingle();
+  const topImobiliariasMesAnterior = (snapshotAnterior?.payload as AnaliseGerencial | undefined)?.topImobiliarias ?? [];
   const totalMesAnteriorPorImobiliaria: Record<string, number> = {};
-  for (const im of (snapshotAnterior?.payload as AnaliseGerencial | undefined)?.topImobiliarias ?? []) {
+  const convertidosMesAnteriorPorImobiliaria: Record<string, number> = {};
+  const premioEfetivadoMesAnteriorPorImobiliaria: Record<string, number> = {};
+  const comissaoEfetivadaMesAnteriorPorImobiliaria: Record<string, number> = {};
+  for (const im of topImobiliariasMesAnterior) {
     totalMesAnteriorPorImobiliaria[im.nome] = im.total;
+    convertidosMesAnteriorPorImobiliaria[im.nome] = im.convertidos;
+    premioEfetivadoMesAnteriorPorImobiliaria[im.nome] = im.premioEfetivado;
+    comissaoEfetivadaMesAnteriorPorImobiliaria[im.nome] = im.comissaoEfetivada;
   }
+  // Comparativo "Total de Análises" do Bloco 1 (Visão Geral) -- mesma base
+  // que a Aba 1 usa (novidades + herdados ativos no mês), pra bater com o
+  // resto do painel.
+  const totalRelevantesMesAnterior = (snapshotAnterior?.payload as AnaliseGerencial | undefined)?.kpis.totalRelevantes ?? 0;
 
   return (
     <>
@@ -453,6 +500,15 @@ export default async function SeguroFiancaPage({
 
           {gerencial && (
             <>
+              <div id="quadro-fianca-total-analises" className={styles.kpis} style={{ marginBottom: 20 }}>
+                <Kpi
+                  label="Total de Análises do Mês"
+                  value={String(gerencial.kpis.totalRelevantes)}
+                  sub={`${fmtTendencia(gerencial.kpis.totalRelevantes, totalRelevantesMesAnterior)} — novidades + herdados ativos`}
+                  tone="info"
+                />
+              </div>
+
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
                 <h2 style={{ fontSize: 14, fontWeight: 700, margin: "0 0 8px", color: "var(--ink)" }}>Novidades do mês</h2>
                 <ExportarQuadro
@@ -464,7 +520,7 @@ export default async function SeguroFiancaPage({
                     { indicador: "Em Andamento", valor: gerencial.kpis.emAndamento.mesAtual },
                     { indicador: "Recusados", valor: gerencial.kpis.recusados.mesAtual },
                     { indicador: "Aprovados", valor: gerencial.kpis.aprovados.mesAtual },
-                    { indicador: "Perdidos", valor: gerencial.kpis.perdidos.mesAtual },
+                    { indicador: "Negativados", valor: gerencial.kpis.perdidos.mesAtual },
                     { indicador: "Convertidos", valor: gerencial.kpis.convertidos.mesAtual },
                     { indicador: "Cards com Alerta", valor: gerencial.kpis.comAlerta },
                   ]}
@@ -477,7 +533,7 @@ export default async function SeguroFiancaPage({
                 <Kpi label="Em Andamento" value={String(gerencial.kpis.emAndamento.mesAtual)} sub="deste mês, ainda sendo trabalhados" tone="positive" />
                 <Kpi label="Recusados" value={String(gerencial.kpis.recusados.mesAtual)} sub="deste mês, não avançaram em Análise e Cotação" tone="negative" />
                 <Kpi label="Aprovados" value={String(gerencial.kpis.aprovados.mesAtual)} sub="deste mês, saíram p/ Negociação" tone="info" />
-                <Kpi label="Perdidos" value={String(gerencial.kpis.perdidos.mesAtual)} sub="deste mês, não fecharam em Negociação e Contrato" tone="negative" />
+                <Kpi label="Negativados" value={String(gerencial.kpis.perdidos.mesAtual)} sub="deste mês, cliente não quis contratar" tone="negative" />
                 <Kpi label="Convertidos" value={String(gerencial.kpis.convertidos.mesAtual)} sub="deste mês, contrato fechado" />
                 <Kpi
                   label="Cards com Alerta"
@@ -497,7 +553,7 @@ export default async function SeguroFiancaPage({
                     { indicador: "Em Andamento", valor: gerencial.kpis.emAndamento.herdado },
                     { indicador: "Recusados", valor: gerencial.kpis.recusados.herdado },
                     { indicador: "Aprovados", valor: gerencial.kpis.aprovados.herdado },
-                    { indicador: "Perdidos", valor: gerencial.kpis.perdidos.herdado },
+                    { indicador: "Negativados", valor: gerencial.kpis.perdidos.herdado },
                     { indicador: "Convertidos", valor: gerencial.kpis.convertidos.herdado },
                   ]}
                   nomeAbaExcel="Herdado"
@@ -508,7 +564,7 @@ export default async function SeguroFiancaPage({
                 <Kpi label="Em Andamento" value={String(gerencial.kpis.emAndamento.herdado)} sub="ainda em aberto, de outros meses" tone="positive" />
                 <Kpi label="Recusados" value={String(gerencial.kpis.recusados.herdado)} sub="recusados este mês, criados antes" tone="negative" />
                 <Kpi label="Aprovados" value={String(gerencial.kpis.aprovados.herdado)} sub="aprovados este mês, criados antes" tone="info" />
-                <Kpi label="Perdidos" value={String(gerencial.kpis.perdidos.herdado)} sub="perdidos este mês, criados antes" tone="negative" />
+                <Kpi label="Negativados" value={String(gerencial.kpis.perdidos.herdado)} sub="negativados este mês, criados antes" tone="negative" />
                 <Kpi label="Convertidos" value={String(gerencial.kpis.convertidos.herdado)} sub="convertidos este mês, criados antes" />
               </div>
 
@@ -546,7 +602,7 @@ export default async function SeguroFiancaPage({
                       </div>
                       <div className={styles.stackGroup}>
                         <div className={styles.glabel}>
-                          <span>Negociação e Contrato — em andamento (todos) + convertido/perdido deste mês</span>
+                          <span>Negociação e Contrato — em andamento (todos) + convertido/negativado deste mês</span>
                           <span className={styles.num}>{totalFunil2} cards</span>
                         </div>
                         <StackBar segments={segmentosFunil2} total={totalFunil2} />
@@ -559,13 +615,47 @@ export default async function SeguroFiancaPage({
                           <span className={styles.swatch} style={{ background: "var(--info)" }} /> Aprovado/Convertido (este mês)
                         </div>
                         <div className={styles.legendItem}>
-                          <span className={styles.swatch} style={{ background: "var(--negative)" }} /> Recusado/Perdido (este mês)
+                          <span className={styles.swatch} style={{ background: "var(--negative)" }} /> Recusado/Negativado (este mês)
                         </div>
                       </div>
                     </div>
                   </section>
                 );
               })()}
+
+              <section id="quadro-fianca-analise-resumo" className={styles.section}>
+                <div className={styles.sectionHead}>
+                  <h2>Análise, recusa e negativação</h2>
+                  <div className={styles.note}>total de análise = todo o conjunto ativo do mês (novidades + herdados ativos)</div>
+                  <ExportarQuadro
+                    quadroId="quadro-fianca-analise-resumo"
+                    nomeArquivo={`seguro-fianca-analise-resumo-${competencia}`}
+                    dadosExcel={[
+                      { indicador: "Total de Análise", valor: gerencial.kpis.totalRelevantes },
+                      { indicador: "Negativados", valor: gerencial.kpis.perdidos.total },
+                      { indicador: "Aprovados", valor: gerencial.kpis.aprovados.total },
+                      { indicador: "Recusados", valor: gerencial.kpis.recusados.total },
+                      {
+                        indicador: "% de Negativação",
+                        valor: gerencial.kpis.totalRelevantes > 0 ? (gerencial.kpis.perdidos.total / gerencial.kpis.totalRelevantes) * 100 : 0,
+                      },
+                    ]}
+                    nomeAbaExcel="Análise resumo"
+                  />
+                </div>
+                <div className={styles.kpis}>
+                  <Kpi label="Total de Análise" value={String(gerencial.kpis.totalRelevantes)} sub="novidades + herdados ativos no mês" />
+                  <Kpi label="Negativados" value={String(gerencial.kpis.perdidos.total)} sub="cliente não quis contratar, mês do evento" tone="negative" />
+                  <Kpi label="Aprovados" value={String(gerencial.kpis.aprovados.total)} sub="passaram p/ Negociação, mês do evento" tone="info" />
+                  <Kpi label="Recusados" value={String(gerencial.kpis.recusados.total)} sub="seguradora negou, mês do evento" tone="negative" />
+                  <Kpi
+                    label="% de Negativação"
+                    value={fmtPct(gerencial.kpis.totalRelevantes > 0 ? (gerencial.kpis.perdidos.total / gerencial.kpis.totalRelevantes) * 100 : 0)}
+                    sub="negativados ÷ total de análise"
+                    tone={gerencial.kpis.totalRelevantes > 0 && gerencial.kpis.perdidos.total / gerencial.kpis.totalRelevantes > 0.2 ? "warning" : undefined}
+                  />
+                </div>
+              </section>
 
               <section id="quadro-fianca-seguradora-plano" className={styles.section}>
                 <div className={styles.sectionHead}>
@@ -624,6 +714,34 @@ export default async function SeguroFiancaPage({
                     <div className={styles.legendItem}>
                       <span className={styles.swatch} style={{ background: "var(--ink-faint)", opacity: 0.4 }} /> Não analisar
                     </div>
+                  </div>
+                </div>
+              </section>
+
+              <section id="quadro-fianca-top3-pottencial" className={styles.section}>
+                <div className={styles.sectionHead}>
+                  <h2>Top 3 imobiliárias — aprovação na Pottencial</h2>
+                  <div className={styles.note}>aprovado/pré-aprovado em qualquer um dos 2 planos (Taxa Fixa ou Tradicional), cards deste mês</div>
+                  <ExportarQuadro
+                    quadroId="quadro-fianca-top3-pottencial"
+                    nomeArquivo={`seguro-fianca-top3-pottencial-${competencia}`}
+                    dadosExcel={gerencial.top3AprovacaoPottencial.map((im) => ({ imobiliaria: im.nome, aprovados_pottencial: im.aprovados }))}
+                    nomeAbaExcel="Top3 Pottencial"
+                  />
+                </div>
+                <div className={styles.panel}>
+                  <div className={styles.barlist}>
+                    {gerencial.top3AprovacaoPottencial.map((im) => (
+                      <BarraProporcional
+                        key={im.nome}
+                        label={im.nome}
+                        value={im.aprovados}
+                        max={gerencial.top3AprovacaoPottencial[0]?.aprovados ?? 1}
+                      />
+                    ))}
+                    {gerencial.top3AprovacaoPottencial.length === 0 && (
+                      <div style={{ color: "var(--ink-faint)", fontSize: 12.5 }}>Nenhuma aprovação na Pottencial neste período.</div>
+                    )}
                   </div>
                 </div>
               </section>
@@ -879,7 +997,7 @@ export default async function SeguroFiancaPage({
               <section id="quadro-fianca-tempo-ciclo" className={styles.section}>
                 <div className={styles.sectionHead}>
                   <h2>Tempo de ciclo por funil</h2>
-                  <div className={styles.note}>do início até sair de cada funil (aprovado/recusado em Análise e Cotação, convertido/perdido em Negociação e Contrato)</div>
+                  <div className={styles.note}>do início até sair de cada funil (aprovado/recusado em Análise e Cotação, convertido/negativado em Negociação e Contrato)</div>
                   <ExportarQuadro
                     quadroId="quadro-fianca-tempo-ciclo"
                     nomeArquivo={`seguro-fianca-tempo-ciclo-${competencia}`}
@@ -938,7 +1056,7 @@ export default async function SeguroFiancaPage({
                     </table>
                   </div>
                   <div className={styles.panelSub} style={{ marginTop: 12 }}>
-                    "Cards" aqui conta quem já tem esse tempo definido — Negociação e Contrato só existe pra quem foi aprovado em Análise e Cotação.
+                    &quot;Cards&quot; aqui conta quem já tem esse tempo definido — Negociação e Contrato só existe pra quem foi aprovado em Análise e Cotação.
                   </div>
                 </div>
               </section>
@@ -1008,6 +1126,87 @@ export default async function SeguroFiancaPage({
                 </div>
               </section>
 
+              {(() => {
+                // Aba 5 (09/09/2026): tempo de retorno + total de análises,
+                // combinados por analista -- reaproveita
+                // tempoCotacaoPorResponsavel (recusado + aprovado) e
+                // porResponsavelFunil1[nome].novos (mesmo "novos" do quadro
+                // de Produtividade), só junta os dois numa visão só. Corte
+                // novos × renovação fica de fora (Fase 2, pipeline ainda não
+                // existe).
+                const nomes = new Set([...Object.keys(gerencial.tempoCotacaoPorResponsavel), ...Object.keys(gerencial.porResponsavelFunil1)]);
+                const linhas = [...nomes]
+                  .map((nome) => {
+                    const t = gerencial.tempoCotacaoPorResponsavel[nome];
+                    const nComTempo = (t?.recusado.n ?? 0) + (t?.aprovado.n ?? 0);
+                    const mediaRetorno =
+                      nComTempo > 0
+                        ? Math.round((((t?.recusado.media ?? 0) * (t?.recusado.n ?? 0) + (t?.aprovado.media ?? 0) * (t?.aprovado.n ?? 0)) / nComTempo) * 10) / 10
+                        : null;
+                    return { nome, mediaRetorno, nComTempo, totalAnalises: gerencial.porResponsavelFunil1[nome]?.novos ?? 0 };
+                  })
+                  .filter((l) => l.totalAnalises > 0 || l.nComTempo > 0)
+                  .sort((a, b) => b.totalAnalises - a.totalAnalises);
+                const somaPonderada = linhas.reduce((a, l) => a + (l.mediaRetorno ?? 0) * l.nComTempo, 0);
+                const somaN = linhas.reduce((a, l) => a + l.nComTempo, 0);
+                const mediaGeralTime = somaN > 0 ? Math.round((somaPonderada / somaN) * 10) / 10 : null;
+                return (
+                  <section id="quadro-fianca-retorno-analista" className={styles.section}>
+                    <div className={styles.sectionHead}>
+                      <h2>Tempo de retorno e produção por analista</h2>
+                      <div className={styles.note}>
+                        tempo de retorno = média entre recusados e aprovados/liberados (HORA INICIO → HORA FIM); total de análises = cotações novas
+                        criadas neste mês atribuídas à pessoa
+                      </div>
+                      <ExportarQuadro
+                        quadroId="quadro-fianca-retorno-analista"
+                        nomeArquivo={`seguro-fianca-retorno-analista-${competencia}`}
+                        dadosExcel={linhas.map((l) => ({
+                          analista: l.nome,
+                          tempo_retorno_medio_min: l.mediaRetorno ?? "",
+                          total_analises: l.totalAnalises,
+                        }))}
+                        nomeAbaExcel="Retorno por analista"
+                      />
+                    </div>
+                    <div className={styles.kpis} style={{ marginBottom: 16 }}>
+                      <Kpi
+                        label="Tempo de Retorno — Média Geral"
+                        value={mediaGeralTime !== null ? fmtDuracao(mediaGeralTime) : "—"}
+                        sub="média do time, ponderada pelo nº de cards"
+                      />
+                    </div>
+                    <div className={styles.panel}>
+                      <div className={styles.tableWrap}>
+                        <table className={`${styles.data} ${styles.compacta}`}>
+                          <thead>
+                            <tr>
+                              <th>Analista</th>
+                              <th className={styles.numCol}>Tempo de Retorno (média)</th>
+                              <th className={styles.numCol}>Total de Análises</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {linhas.map((l) => (
+                              <tr key={l.nome}>
+                                <td>{l.nome}</td>
+                                <td className={`${styles.numCol} ${styles.num}`}>{l.mediaRetorno !== null ? fmtDuracao(l.mediaRetorno) : "—"}</td>
+                                <td className={`${styles.numCol} ${styles.num}`} style={{ fontWeight: 700 }}>{l.totalAnalises}</td>
+                              </tr>
+                            ))}
+                            {linhas.length === 0 && (
+                              <tr>
+                                <td colSpan={3} style={{ color: "var(--ink-faint)" }}>Nenhum analista com dado neste período.</td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </section>
+                );
+              })()}
+
               <section id="quadro-fianca-diarios" className={styles.section}>
                 <div className={styles.sectionHead}>
                   <h2>Quadros diários por responsável de etapa</h2>
@@ -1036,6 +1235,50 @@ export default async function SeguroFiancaPage({
                     </div>
                     <QuadroDiarioTabela quadro={gerencial.efetivacoesPorDia} />
                   </div>
+                </div>
+              </section>
+
+              <section id="quadro-fianca-contratos-tardios" className={styles.section}>
+                <div className={styles.sectionHead}>
+                  <h2>Contratos e contratação tardios</h2>
+                  <div className={styles.note}>
+                    contrato tardio = criado em mês anterior, entrou em &quot;Contrato Recebido&quot; este mês. Contratação tardia = recebeu o
+                    contrato num mês anterior, mas só converteu (fechou) este mês
+                  </div>
+                  <ExportarQuadro
+                    quadroId="quadro-fianca-contratos-tardios"
+                    nomeArquivo={`seguro-fianca-contratos-tardios-${competencia}`}
+                    dadosExcel={[
+                      { indicador: "Contratos Tardios", valor: gerencial.contratosTardios.tardios },
+                      { indicador: "Contratação Tardia", valor: gerencial.contratosTardios.contratacaoTardia },
+                      { indicador: "% s/ Total de Fechamentos", valor: gerencial.contratosTardios.pctContratacaoTardiaSobreFechamentos },
+                      { indicador: "Prêmio Líquido (Contratação Tardia)", valor: gerencial.contratosTardios.premioLiquidoContratacaoTardia },
+                      { indicador: "Negociação (Tardia)", valor: gerencial.contratosTardios.negociacaoTardia },
+                      { indicador: "Ag. Contrato (Tardia)", valor: gerencial.contratosTardios.agContratoTardia },
+                    ]}
+                    nomeAbaExcel="Contratos tardios"
+                  />
+                </div>
+                <div className={styles.kpis}>
+                  <Kpi label="Contratos Tardios" value={String(gerencial.contratosTardios.tardios)} sub="criados antes, receberam contrato este mês" />
+                  <Kpi
+                    label="Contratação Tardia"
+                    value={String(gerencial.contratosTardios.contratacaoTardia)}
+                    sub="recebeu contrato antes, converteu este mês"
+                    tone="warning"
+                  />
+                  <Kpi
+                    label="% s/ Total de Fechamentos"
+                    value={fmtPct(gerencial.contratosTardios.pctContratacaoTardiaSobreFechamentos)}
+                    sub="contratação tardia ÷ convertidos do mês"
+                  />
+                  <Kpi
+                    label="Prêmio Líquido (Tardia)"
+                    value={fmtBRL(gerencial.contratosTardios.premioLiquidoContratacaoTardia)}
+                    sub="soma do prêmio líquido da contratação tardia"
+                  />
+                  <Kpi label="Negociação (Tardia)" value={String(gerencial.contratosTardios.negociacaoTardia)} sub="herdados parados em Em Negociação" />
+                  <Kpi label="Ag. Contrato (Tardia)" value={String(gerencial.contratosTardios.agContratoTardia)} sub="herdados parados em Aguardando Contrato" />
                 </div>
               </section>
 
@@ -1092,14 +1335,14 @@ export default async function SeguroFiancaPage({
                 <div className={styles.sectionHead}>
                   <h2>Motivos de recusa/perda</h2>
                   <div className={styles.note}>
-                    {gerencial.motivosRecusaFunil1.total} recusados em Análise e Cotação + {gerencial.motivosPerdaFunil2.total} perdidos em Negociação e Contrato
+                    {gerencial.motivosRecusaFunil1.total} recusados em Análise e Cotação + {gerencial.motivosPerdaFunil2.total} negativados em Negociação e Contrato
                   </div>
                   <ExportarQuadro
                     quadroId="quadro-fianca-motivos"
                     nomeArquivo={`seguro-fianca-motivos-${competencia}`}
                     dadosExcel={[
                       ...Object.entries(gerencial.motivosPerdaFunil2.porMotivo).map(([motivo, n]) => ({
-                        tipo: "Perda — Negociação e Contrato",
+                        tipo: "Negativação — Negociação e Contrato",
                         motivo,
                         cards: n,
                       })),
@@ -1119,8 +1362,8 @@ export default async function SeguroFiancaPage({
                     </div>
                   </div>
                   <div className={styles.panel}>
-                    <h3>Perdas — Negociação e Contrato</h3>
-                    <div className={styles.panelSub}>{gerencial.motivosPerdaFunil2.total} cards perdidos</div>
+                    <h3>Negativações — Negociação e Contrato</h3>
+                    <div className={styles.panelSub}>{gerencial.motivosPerdaFunil2.total} cards negativados</div>
                     <div className={styles.barlist}>
                       {Object.entries(gerencial.motivosPerdaFunil2.porMotivo).map(([motivo, n]) => (
                         <BarraProporcional key={motivo} label={motivo} value={n} max={gerencial.motivosPerdaFunil2.total} />
@@ -1129,7 +1372,7 @@ export default async function SeguroFiancaPage({
                         <BarraProporcional label="Sem motivo registrado" value={gerencial.motivosPerdaFunil2.semMotivo} max={gerencial.motivosPerdaFunil2.total} warning />
                       )}
                       {gerencial.motivosPerdaFunil2.total === 0 && (
-                        <div style={{ color: "var(--ink-faint)", fontSize: 12.5 }}>Nenhuma perda registrada neste período.</div>
+                        <div style={{ color: "var(--ink-faint)", fontSize: 12.5 }}>Nenhuma negativação registrada neste período.</div>
                       )}
                     </div>
                   </div>
@@ -1148,7 +1391,7 @@ export default async function SeguroFiancaPage({
                       total: im.total,
                       em_andamento: im.emAndamento,
                       recusados: im.recusados,
-                      perdidos: im.perdidos,
+                      negativados: im.perdidos,
                       convertidos: im.convertidos,
                       ticket_medio_premio: im.premioCotado,
                       comissao_media_cotada: im.comissaoCotada,
@@ -1167,6 +1410,447 @@ export default async function SeguroFiancaPage({
                   />
                 </div>
               </section>
+
+              {(() => {
+                // Item 1 (09/09/2026): detalhamento por imobiliária, com %
+                // sobre o total de cotações DAQUELA imobiliária (base =
+                // im.total, novidades -- leitura mais direta de "cotações
+                // realizadas"; diferente da base "todo o ativo do mês" usada
+                // no quadro geral "Análise, recusa e negativação" acima).
+                const linhas = gerencial.topImobiliarias.filter((im) => im.total > 0).sort((a, b) => b.total - a.total);
+                return (
+                  <section id="quadro-fianca-detalhe-imobiliaria" className={styles.section}>
+                    <div className={styles.sectionHead}>
+                      <h2>Detalhamento por imobiliária</h2>
+                      <div className={styles.note}>% sobre o total de cotações de cada imobiliária no mês</div>
+                      <ExportarQuadro
+                        quadroId="quadro-fianca-detalhe-imobiliaria"
+                        nomeArquivo={`seguro-fianca-detalhe-imobiliaria-${competencia}`}
+                        dadosExcel={linhas.map((im) => ({
+                          imobiliaria: im.nome,
+                          cotacoes: im.total,
+                          recusados: im.recusados,
+                          pct_recusados: im.total > 0 ? (im.recusados / im.total) * 100 : 0,
+                          negativados: im.perdidos,
+                          pct_negativados: im.total > 0 ? (im.perdidos / im.total) * 100 : 0,
+                          contratados: im.convertidos,
+                          pct_contratados: im.total > 0 ? (im.convertidos / im.total) * 100 : 0,
+                          em_andamento: im.emAndamento,
+                        }))}
+                        nomeAbaExcel="Detalhe imobiliária"
+                      />
+                    </div>
+                    <div className={styles.panel}>
+                      <div className={styles.tableWrap}>
+                        <table className={`${styles.data} ${styles.compacta}`}>
+                          <thead>
+                            <tr>
+                              <th>Imobiliária</th>
+                              <th className={styles.numCol}>Cotações</th>
+                              <th className={styles.numCol}>Recusados</th>
+                              <th className={styles.numCol}>% Recus.</th>
+                              <th className={styles.numCol}>Negativados</th>
+                              <th className={styles.numCol}>% Neg.</th>
+                              <th className={styles.numCol}>Contratados</th>
+                              <th className={styles.numCol}>% Contr.</th>
+                              <th className={styles.numCol}>Andamento</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {linhas.map((im) => (
+                              <tr key={im.nome}>
+                                <td>{im.nome}</td>
+                                <td className={`${styles.numCol} ${styles.num}`} style={{ fontWeight: 700 }}>{im.total}</td>
+                                <td className={`${styles.numCol} ${styles.num}`}>{im.recusados}</td>
+                                <td className={`${styles.numCol} ${styles.num}`}>{fmtPct((im.recusados / im.total) * 100)}</td>
+                                <td className={`${styles.numCol} ${styles.num}`}>{im.perdidos}</td>
+                                <td className={`${styles.numCol} ${styles.num}`}>{fmtPct((im.perdidos / im.total) * 100)}</td>
+                                <td className={`${styles.numCol} ${styles.num}`}>{im.convertidos}</td>
+                                <td className={`${styles.numCol} ${styles.num}`}>{fmtPct((im.convertidos / im.total) * 100)}</td>
+                                <td className={`${styles.numCol} ${styles.num}`}>{im.emAndamento}</td>
+                              </tr>
+                            ))}
+                            {linhas.length === 0 && (
+                              <tr>
+                                <td colSpan={9} style={{ color: "var(--ink-faint)" }}>Nenhuma cotação registrada neste período.</td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </section>
+                );
+              })()}
+
+              {(() => {
+                // Itens 2/3 (09/09/2026): taxa média (menor entre
+                // seguradoras cotadas POR CARD, depois média entre os
+                // cards), por imobiliária -- geral e só negativados.
+                const linhas = gerencial.topImobiliarias.filter((im) => im.menorTaxaMediaGeral !== null || im.menorTaxaMediaNegativados !== null);
+                return (
+                  <section id="quadro-fianca-taxa-imobiliaria" className={styles.section}>
+                    <div className={styles.sectionHead}>
+                      <h2>Taxa de locação por imobiliária (menor entre seguradoras)</h2>
+                      <div className={styles.note}>por card, pega a menor taxa entre as seguradoras que cotaram; depois tira a média entre os cards</div>
+                      <ExportarQuadro
+                        quadroId="quadro-fianca-taxa-imobiliaria"
+                        nomeArquivo={`seguro-fianca-taxa-imobiliaria-${competencia}`}
+                        dadosExcel={[
+                          { indicador: "Menor Taxa do Mês (negativados + contratados)", valor: gerencial.aba2Taxas.menor ?? "" },
+                          { indicador: "Taxa Média do Mês (negativados + contratados)", valor: gerencial.aba2Taxas.media ?? "" },
+                          ...linhas.map((im) => ({
+                            imobiliaria: im.nome,
+                            taxa_media_geral: im.menorTaxaMediaGeral ?? "",
+                            taxa_media_negativados: im.menorTaxaMediaNegativados ?? "",
+                          })),
+                        ]}
+                        nomeAbaExcel="Taxa por imobiliária"
+                      />
+                    </div>
+                    <div className={styles.kpis} style={{ marginBottom: 16 }}>
+                      <Kpi label="Menor Taxa do Mês" value={fmtPct(gerencial.aba2Taxas.menor)} sub="mínimo absoluto — negativados + contratados" />
+                      <Kpi label="Taxa Média do Mês" value={fmtPct(gerencial.aba2Taxas.media)} sub={`média entre ${gerencial.aba2Taxas.n} card(s) — negativados + contratados`} />
+                    </div>
+                    <div className={styles.panel}>
+                      <div className={styles.tableWrap}>
+                        <table className={`${styles.data} ${styles.compacta}`}>
+                          <thead>
+                            <tr>
+                              <th>Imobiliária</th>
+                              <th className={styles.numCol}>Taxa Média (geral)</th>
+                              <th className={styles.numCol}>Taxa Média (negativados)</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {linhas.map((im) => (
+                              <tr key={im.nome}>
+                                <td>{im.nome}</td>
+                                <td className={`${styles.numCol} ${styles.num}`}>{fmtPct(im.menorTaxaMediaGeral)}</td>
+                                <td className={`${styles.numCol} ${styles.num}`}>{fmtPct(im.menorTaxaMediaNegativados)}</td>
+                              </tr>
+                            ))}
+                            {linhas.length === 0 && (
+                              <tr>
+                                <td colSpan={3} style={{ color: "var(--ink-faint)" }}>Nenhuma taxa cotada neste período.</td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </section>
+                );
+              })()}
+
+              {(() => {
+                // Item 4 (09/09/2026): clientes novos = imobiliária cuja 1ª
+                // cotação de toda a história caiu neste mês (calculado na
+                // lib, ver clienteNovo em montarAnaliseGerencial).
+                const linhas = gerencial.topImobiliarias.filter((im) => im.clienteNovo && im.total > 0).sort((a, b) => b.total - a.total);
+                return (
+                  <section id="quadro-fianca-clientes-novos" className={styles.section}>
+                    <div className={styles.sectionHead}>
+                      <h2>Clientes novos</h2>
+                      <div className={styles.note}>imobiliárias cuja 1ª cotação de toda a história caiu neste mês</div>
+                      <ExportarQuadro
+                        quadroId="quadro-fianca-clientes-novos"
+                        nomeArquivo={`seguro-fianca-clientes-novos-${competencia}`}
+                        dadosExcel={linhas.map((im) => ({
+                          imobiliaria: im.nome,
+                          cotacoes: im.total,
+                          recusados: im.recusados,
+                          negativados: im.perdidos,
+                          contratados: im.convertidos,
+                          em_andamento: im.emAndamento,
+                        }))}
+                        nomeAbaExcel="Clientes novos"
+                      />
+                    </div>
+                    <div className={styles.panel}>
+                      <div className={styles.tableWrap}>
+                        <table className={`${styles.data} ${styles.compacta}`}>
+                          <thead>
+                            <tr>
+                              <th>Imobiliária</th>
+                              <th className={styles.numCol}>Cotações</th>
+                              <th className={styles.numCol}>Recusados</th>
+                              <th className={styles.numCol}>Negativados</th>
+                              <th className={styles.numCol}>Contratados</th>
+                              <th className={styles.numCol}>Andamento</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {linhas.map((im) => (
+                              <tr key={im.nome}>
+                                <td>{im.nome}</td>
+                                <td className={`${styles.numCol} ${styles.num}`} style={{ fontWeight: 700 }}>{im.total}</td>
+                                <td className={`${styles.numCol} ${styles.num}`}>{im.recusados}</td>
+                                <td className={`${styles.numCol} ${styles.num}`}>{im.perdidos}</td>
+                                <td className={`${styles.numCol} ${styles.num}`}>{im.convertidos}</td>
+                                <td className={`${styles.numCol} ${styles.num}`}>{im.emAndamento}</td>
+                              </tr>
+                            ))}
+                            {linhas.length === 0 && (
+                              <tr>
+                                <td colSpan={6} style={{ color: "var(--ink-faint)" }}>Nenhum cliente novo neste período.</td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </section>
+                );
+              })()}
+
+              {(() => {
+                // Item 5 (09/09/2026): Top 5 crescimento/queda em cotações e
+                // em conversões, comparando com o mês anterior completo.
+                const nomes = new Set([...gerencial.topImobiliarias.map((im) => im.nome), ...topImobiliariasMesAnterior.map((im) => im.nome)]);
+                const comparativo = [...nomes]
+                  .filter((n) => n !== NOME_NAO_ADMINISTRADA)
+                  .map((nome) => {
+                    const atual = gerencial.topImobiliarias.find((im) => im.nome === nome);
+                    const anterior = topImobiliariasMesAnterior.find((im) => im.nome === nome);
+                    return {
+                      nome,
+                      cotAtual: atual?.total ?? 0,
+                      cotAnterior: anterior?.total ?? 0,
+                      convAtual: atual?.convertidos ?? 0,
+                      convAnterior: anterior?.convertidos ?? 0,
+                    };
+                  });
+                const porCotacoes = comparativo.map((c) => ({ nome: c.nome, delta: c.cotAtual - c.cotAnterior, atual: c.cotAtual, anterior: c.cotAnterior }));
+                const porConversoes = comparativo.map((c) => ({ nome: c.nome, delta: c.convAtual - c.convAnterior, atual: c.convAtual, anterior: c.convAnterior }));
+                const top5CresCot = [...porCotacoes].filter((c) => c.delta > 0).sort((a, b) => b.delta - a.delta).slice(0, 5);
+                const top5QuedaCot = [...porCotacoes].filter((c) => c.delta < 0).sort((a, b) => a.delta - b.delta).slice(0, 5);
+                const top5CresConv = [...porConversoes].filter((c) => c.delta > 0).sort((a, b) => b.delta - a.delta).slice(0, 5);
+                const top5QuedaConv = [...porConversoes].filter((c) => c.delta < 0).sort((a, b) => a.delta - b.delta).slice(0, 5);
+                const ListaTop5 = ({ titulo, itens }: { titulo: string; itens: { nome: string; delta: number; atual: number; anterior: number }[] }) => (
+                  <div className={styles.panel}>
+                    <h3>{titulo}</h3>
+                    {itens.length === 0 ? (
+                      <div style={{ color: "var(--ink-faint)", fontSize: 12.5 }}>Nenhuma imobiliária nesse recorte.</div>
+                    ) : (
+                      <div className={styles.tableWrap}>
+                        <table className={`${styles.data} ${styles.compacta}`}>
+                          <thead>
+                            <tr>
+                              <th>Imobiliária</th>
+                              <th className={styles.numCol}>Anterior</th>
+                              <th className={styles.numCol}>Atual</th>
+                              <th className={styles.numCol}>Variação</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {itens.map((i) => (
+                              <tr key={i.nome}>
+                                <td>{i.nome}</td>
+                                <td className={`${styles.numCol} ${styles.num}`}>{i.anterior}</td>
+                                <td className={`${styles.numCol} ${styles.num}`}>{i.atual}</td>
+                                <td className={`${styles.numCol} ${styles.num}`} style={{ color: i.delta >= 0 ? "var(--info)" : "var(--negative)", fontWeight: 700 }}>
+                                  {i.delta > 0 ? "+" : ""}{i.delta}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                );
+                return (
+                  <section id="quadro-fianca-top5-comparativo" className={styles.section}>
+                    <div className={styles.sectionHead}>
+                      <h2>Comparativo com o mês anterior — Top 5</h2>
+                      <div className={styles.note}>maior crescimento e maior queda, em cotações e em conversões</div>
+                      <ExportarQuadro
+                        quadroId="quadro-fianca-top5-comparativo"
+                        nomeArquivo={`seguro-fianca-top5-comparativo-${competencia}`}
+                        dadosExcel={[
+                          ...top5CresCot.map((i) => ({ recorte: "Maior crescimento em cotações", imobiliaria: i.nome, anterior: i.anterior, atual: i.atual, variacao: i.delta })),
+                          ...top5QuedaCot.map((i) => ({ recorte: "Maior queda em cotações", imobiliaria: i.nome, anterior: i.anterior, atual: i.atual, variacao: i.delta })),
+                          ...top5CresConv.map((i) => ({ recorte: "Maior crescimento em conversões", imobiliaria: i.nome, anterior: i.anterior, atual: i.atual, variacao: i.delta })),
+                          ...top5QuedaConv.map((i) => ({ recorte: "Maior queda em conversões", imobiliaria: i.nome, anterior: i.anterior, atual: i.atual, variacao: i.delta })),
+                        ]}
+                        nomeAbaExcel="Top5 comparativo"
+                      />
+                    </div>
+                    <div className={styles.grid2}>
+                      <ListaTop5 titulo="Maior crescimento em cotações" itens={top5CresCot} />
+                      <ListaTop5 titulo="Maior queda em cotações" itens={top5QuedaCot} />
+                      <ListaTop5 titulo="Maior crescimento em conversões" itens={top5CresConv} />
+                      <ListaTop5 titulo="Maior queda em conversões" itens={top5QuedaConv} />
+                    </div>
+                  </section>
+                );
+              })()}
+
+              {(() => {
+                // Item 6 (09/09/2026): entraram/sumiram entre os 2 meses --
+                // "cotou" = total (novidades) > 0. Categoria fica de fora
+                // (Fase 2, ainda sem critério definido).
+                const nomesAtual = new Set(gerencial.topImobiliarias.filter((im) => im.total > 0 && im.nome !== NOME_NAO_ADMINISTRADA).map((im) => im.nome));
+                const nomesAnterior = new Set(topImobiliariasMesAnterior.filter((im) => im.total > 0 && im.nome !== NOME_NAO_ADMINISTRADA).map((im) => im.nome));
+                const entraram = [...nomesAtual].filter((n) => !nomesAnterior.has(n)).sort();
+                const sairam = [...nomesAnterior].filter((n) => !nomesAtual.has(n)).sort();
+                return (
+                  <section id="quadro-fianca-entraram-sumiram" className={styles.section}>
+                    <div className={styles.sectionHead}>
+                      <h2>Entraram e sumiram</h2>
+                      <div className={styles.note}>imobiliárias que cotaram só num dos 2 meses — categoria por tier ainda não existe (Fase 2)</div>
+                      <ExportarQuadro
+                        quadroId="quadro-fianca-entraram-sumiram"
+                        nomeArquivo={`seguro-fianca-entraram-sumiram-${competencia}`}
+                        dadosExcel={[
+                          ...entraram.map((nome) => ({ imobiliaria: nome, situacao: "Entrou este mês" })),
+                          ...sairam.map((nome) => ({ imobiliaria: nome, situacao: "Sumiu este mês" })),
+                        ]}
+                        nomeAbaExcel="Entraram e sumiram"
+                      />
+                    </div>
+                    <div className={styles.grid2}>
+                      <div className={styles.panel}>
+                        <h3>Cotaram só este mês ({entraram.length})</h3>
+                        {entraram.length === 0 ? (
+                          <div style={{ color: "var(--ink-faint)", fontSize: 12.5 }}>Nenhuma.</div>
+                        ) : (
+                          <ul style={{ margin: 0, paddingLeft: 18 }}>
+                            {entraram.map((nome) => <li key={nome}>{nome}</li>)}
+                          </ul>
+                        )}
+                      </div>
+                      <div className={styles.panel}>
+                        <h3>Cotaram só no mês anterior ({sairam.length})</h3>
+                        {sairam.length === 0 ? (
+                          <div style={{ color: "var(--ink-faint)", fontSize: 12.5 }}>Nenhuma.</div>
+                        ) : (
+                          <ul style={{ margin: 0, paddingLeft: 18 }}>
+                            {sairam.map((nome) => <li key={nome}>{nome}</li>)}
+                          </ul>
+                        )}
+                      </div>
+                    </div>
+                  </section>
+                );
+              })()}
+
+              {(() => {
+                // Aba 3 (09/09/2026): ranking de quem mais contratou no mês.
+                // "Não Administrada" não compete em rankings/comparativos
+                // (não é uma imobiliária de verdade) -- só entra como linha
+                // própria nas tabelas informativas (pedido do Matheus).
+                const linhas = gerencial.topImobiliarias
+                  .filter((im) => im.convertidos > 0 && im.nome !== NOME_NAO_ADMINISTRADA)
+                  .sort((a, b) => b.convertidos - a.convertidos);
+                return (
+                  <section id="quadro-fianca-ranking-contratacoes" className={styles.section}>
+                    <div className={styles.sectionHead}>
+                      <h2>Ranking de contratações no mês</h2>
+                      <div className={styles.note}>imobiliárias que fecharam contrato, da que mais fechou pra que menos fechou</div>
+                      <ExportarQuadro
+                        quadroId="quadro-fianca-ranking-contratacoes"
+                        nomeArquivo={`seguro-fianca-ranking-contratacoes-${competencia}`}
+                        dadosExcel={linhas.map((im) => ({ imobiliaria: im.nome, contratos_fechados: im.convertidos }))}
+                        nomeAbaExcel="Ranking contratações"
+                      />
+                    </div>
+                    <div className={styles.panel}>
+                      <div className={styles.barlist}>
+                        {linhas.map((im) => (
+                          <BarraProporcional key={im.nome} label={im.nome} value={im.convertidos} max={linhas[0]?.convertidos ?? 1} />
+                        ))}
+                        {linhas.length === 0 && <div style={{ color: "var(--ink-faint)", fontSize: 12.5 }}>Nenhum contrato fechado neste período.</div>}
+                      </div>
+                    </div>
+                  </section>
+                );
+              })()}
+
+              {(() => {
+                // Item 8 (09/09/2026): prêmio líquido e comissão por
+                // imobiliária, mês vigente × anterior, absoluto e %. "Não
+                // Administrada" fica de fora (não compete como imobiliária),
+                // inclusive do total usado como base do %.
+                const nomes = new Set(
+                  [...gerencial.topImobiliarias.map((im) => im.nome), ...topImobiliariasMesAnterior.map((im) => im.nome)].filter(
+                    (n) => n !== NOME_NAO_ADMINISTRADA
+                  )
+                );
+                const totalAtual = gerencial.topImobiliarias.filter((im) => im.nome !== NOME_NAO_ADMINISTRADA).reduce((a, im) => a + im.premioEfetivado, 0);
+                const totalAnterior = topImobiliariasMesAnterior
+                  .filter((im) => im.nome !== NOME_NAO_ADMINISTRADA)
+                  .reduce((a, im) => a + im.premioEfetivado, 0);
+                const linhas = [...nomes]
+                  .map((nome) => {
+                    const atual = gerencial.topImobiliarias.find((im) => im.nome === nome);
+                    const anterior = topImobiliariasMesAnterior.find((im) => im.nome === nome);
+                    return {
+                      nome,
+                      premioAtual: atual?.premioEfetivado ?? 0,
+                      comissaoAtual: atual?.comissaoEfetivada ?? 0,
+                      premioAnterior: anterior?.premioEfetivado ?? 0,
+                      pctAtual: totalAtual > 0 ? ((atual?.premioEfetivado ?? 0) / totalAtual) * 100 : 0,
+                      pctAnterior: totalAnterior > 0 ? ((anterior?.premioEfetivado ?? 0) / totalAnterior) * 100 : 0,
+                    };
+                  })
+                  .filter((l) => l.premioAtual > 0 || l.premioAnterior > 0)
+                  .sort((a, b) => b.premioAtual - a.premioAtual);
+                return (
+                  <section id="quadro-fianca-premio-imobiliaria" className={styles.section}>
+                    <div className={styles.sectionHead}>
+                      <h2>Prêmio líquido e comissão por imobiliária — mês × mês</h2>
+                      <div className={styles.note}>participação de cada imobiliária no total efetivado do mês, em valor absoluto e %</div>
+                      <ExportarQuadro
+                        quadroId="quadro-fianca-premio-imobiliaria"
+                        nomeArquivo={`seguro-fianca-premio-imobiliaria-${competencia}`}
+                        dadosExcel={linhas.map((l) => ({
+                          imobiliaria: l.nome,
+                          premio_liquido_atual: l.premioAtual,
+                          pct_atual: l.pctAtual,
+                          premio_liquido_anterior: l.premioAnterior,
+                          pct_anterior: l.pctAnterior,
+                        }))}
+                        nomeAbaExcel="Prêmio por imobiliária"
+                      />
+                    </div>
+                    <div className={styles.panel}>
+                      <div className={styles.tableWrap}>
+                        <table className={`${styles.data} ${styles.compacta}`}>
+                          <thead>
+                            <tr>
+                              <th>Imobiliária</th>
+                              <th className={styles.numCol}>Prêmio Líquido (mês)</th>
+                              <th className={styles.numCol}>% do mês</th>
+                              <th className={styles.numCol}>Comissão (mês)</th>
+                              <th className={styles.numCol}>Prêmio Líquido (anterior)</th>
+                              <th className={styles.numCol}>% do anterior</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {linhas.map((l) => (
+                              <tr key={l.nome}>
+                                <td>{l.nome}</td>
+                                <td className={`${styles.numCol} ${styles.num}`} style={{ fontWeight: 700 }}>{fmtBRL(l.premioAtual)}</td>
+                                <td className={`${styles.numCol} ${styles.num}`}>{fmtPct(l.pctAtual)}</td>
+                                <td className={`${styles.numCol} ${styles.num}`}>{fmtBRL(l.comissaoAtual)}</td>
+                                <td className={`${styles.numCol} ${styles.num}`}>{fmtBRL(l.premioAnterior)}</td>
+                                <td className={`${styles.numCol} ${styles.num}`}>{fmtPct(l.pctAnterior)}</td>
+                              </tr>
+                            ))}
+                            {linhas.length === 0 && (
+                              <tr>
+                                <td colSpan={6} style={{ color: "var(--ink-faint)" }}>Nenhum prêmio efetivado nos 2 meses.</td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </section>
+                );
+              })()}
 
               <section id="quadro-fianca-qualidade" className={styles.section}>
                 <div className={styles.sectionHead}>
@@ -1211,7 +1895,7 @@ export default async function SeguroFiancaPage({
                         </div>
                         <div>
                           {gerencial.motivosPerdaFunil2.total > 0
-                            ? `${Math.round(((gerencial.motivosPerdaFunil2.total - gerencial.qualidade.perdidosFunil2SemMotivo) / gerencial.motivosPerdaFunil2.total) * 100)}% das perdas em Negociação e Contrato (${gerencial.motivosPerdaFunil2.total - gerencial.qualidade.perdidosFunil2SemMotivo} de ${gerencial.motivosPerdaFunil2.total}) têm motivo registrado. `
+                            ? `${Math.round(((gerencial.motivosPerdaFunil2.total - gerencial.qualidade.perdidosFunil2SemMotivo) / gerencial.motivosPerdaFunil2.total) * 100)}% das negativações em Negociação e Contrato (${gerencial.motivosPerdaFunil2.total - gerencial.qualidade.perdidosFunil2SemMotivo} de ${gerencial.motivosPerdaFunil2.total}) têm motivo registrado. `
                             : "Nenhuma perda em Negociação e Contrato ainda este mês. "}
                           Recusas em Análise e Cotação não exigem motivo — são decisão de compliance da própria seguradora, não do time.
                         </div>
@@ -1228,6 +1912,11 @@ export default async function SeguroFiancaPage({
                         )}
                         {gerencial.qualidade.semResponsavelEfetivacao > 0 && (
                           <div>{gerencial.qualidade.semResponsavelEfetivacao} card(s) com Data de Efetivação preenchida sem Responsável pela Efetivação.</div>
+                        )}
+                        {gerencial.qualidade.naoAdministrados > 0 && (
+                          <div style={{ color: "var(--ink-faint)" }}>
+                            {gerencial.qualidade.naoAdministrados} card(s) marcados como &quot;Não Administrada&quot; (proprietário direto, sem imobiliária) — informativo, não é alerta.
+                          </div>
                         )}
                       </div>
                     </div>

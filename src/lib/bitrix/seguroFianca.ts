@@ -200,6 +200,15 @@ const CAMPO_RESPONSAVEL_CADASTRO = "ufCrm10_1786644365";
 const CAMPO_RESPONSAVEIS_COTACAO = "ufCrm10_1786644429";
 const CAMPO_RESPONSAVEIS_NEGOCIACAO = "ufCrm10_1786644450";
 const CAMPO_RESPONSAVEL_EFETIVACAO = "ufCrm10_1786644465";
+// Campo "ADMINISTRADO?" -- checkbox (tipo boolean, não lista), identifica
+// locação sem imobiliária administrando (proprietário direto). Confirmado
+// via crm.item.fields (09/09/2026): existem 2 campos com esse mesmo rótulo
+// -- ufCrm10_1788957828053 está vazio em 100% dos cards (parece duplicado/
+// abandonado) e NÃO é usado; ufCrm10_1788957284213 é o real, em uso.
+// Serializa como string "Y"/"N" (Bitrix, campo boolean) -- "" ou ausente
+// quando o checkbox nunca foi tocado (não é o mesmo que "N" explícito).
+const CAMPO_ADMINISTRADO = "ufCrm10_1788957284213";
+export const NOME_NAO_ADMINISTRADA = "Não Administrada";
 
 function enumLabel(defs: Record<string, BitrixDefinicaoCampo>, campo: string, valor: unknown): string {
   if (valor === null || valor === undefined || valor === "") return "";
@@ -489,6 +498,20 @@ export function montarContagemMensal(
           fallbackData
         : "";
 
+    // Empresa vinculada sempre manda. O campo ADMINISTRADO? nasceu com "Não"
+    // de fábrica em todo card antigo (valor padrão retroativo ao criar o
+    // campo), então só é confiável quando NÃO há empresa: aí sim "Não"
+    // identifica o caso legítimo (locação sem imobiliária, proprietário
+    // direto) -- qualquer outro valor sem empresa continua sendo falha de
+    // preenchimento real, não intenção.
+    const empresaNome = nomeEmpresa(empresas, item.companyId);
+    // Checkbox boolean -- Bitrix serializa "Y"/"N" (confirmado via dado real,
+    // 09/09/2026); "" ou ausente = nunca tocado, NÃO é a mesma coisa que "N"
+    // explícito (ver CAMPO_ADMINISTRADO acima). Só "N" explícito conta.
+    const administradoRaw = item[CAMPO_ADMINISTRADO];
+    const naoAdministradoExplicito = administradoRaw === "N";
+    const imobiliariaResolvida = empresaNome || (naoAdministradoExplicito ? NOME_NAO_ADMINISTRADA : "");
+
     const motivoRecusaPerda = enumLabel(defs, CAMPO_MOTIVO_RECUSA, item[CAMPO_MOTIVO_RECUSA]);
     const responsaveisCotacao = nomesResponsaveis(usuarios, item[CAMPO_RESPONSAVEIS_COTACAO]);
     const responsaveisNegociacao = nomesResponsaveis(usuarios, item[CAMPO_RESPONSAVEIS_NEGOCIACAO]);
@@ -510,7 +533,7 @@ export function montarContagemMensal(
     // Alerta" (primeiro painel, KPI) espelhar exatamente o mesmo critério, em
     // vez de cobrir só um subconjunto delas.
     const alertas: string[] = [];
-    if (!item.companyId) alertas.push("Sem imobiliária/empresa vinculada");
+    if (!imobiliariaResolvida) alertas.push("Sem imobiliária/empresa vinculada");
     // Recusa em Análise e Cotação (categoryId 18) não exige motivo — só perdas em Negociação e Contrato (categoryId 20).
     if (resultado === "Perdido" && !motivoRecusaPerda) alertas.push("Perdido sem motivo registrado");
     if (resultado === "Convertido" && !enumLabel(defs, CAMPO_SEGURADORA_ESCOLHIDA, item[CAMPO_SEGURADORA_ESCOLHIDA])) {
@@ -565,7 +588,7 @@ export function montarContagemMensal(
     return {
       id: item.id,
       nome: item.title,
-      imobiliaria: nomeEmpresa(empresas, item.companyId),
+      imobiliaria: imobiliariaResolvida,
       tipoLocacao: enumLabel(defs, CAMPO_TIPO_LOCACAO, item[CAMPO_TIPO_LOCACAO]),
       finalidadeImovel: enumLabel(defs, CAMPO_FINALIDADE_IMOVEL, item[CAMPO_FINALIDADE_IMOVEL]),
       competencia: dataBrasiliaDeInstante(item.createdTime).slice(0, 7),
@@ -676,6 +699,13 @@ export type AnaliseGerencial = {
   cotadoPorSeguradora: Record<string, { n: number; premio: number; comissao: number }>; // "novidades"
   convertidoPorSeguradora: Record<string, { n: number; premio: number; comissao: number }>; // mês do evento
   taxaPorSeguradora: Record<string, { n: number; pctLocacao: number; pctAluguel: number }>; // "novidades"
+  // Aba 2 (09/09/2026): menor taxa do mês (mínimo absoluto) + média, olhando
+  // negativados e contratados juntos -- null quando não há nenhum card com
+  // taxa cotada nesse conjunto.
+  aba2Taxas: { menor: number | null; media: number | null; n: number };
+  // Aba 3 (09/09/2026): até 3 imobiliárias com mais aprovação/pré-aprovação
+  // na Pottencial (qualquer um dos 2 planos), "novidades".
+  top3AprovacaoPottencial: { nome: string; aprovados: number }[];
   motivosRecusaFunil1: { total: number; semMotivo: number }; // mês do evento
   motivosPerdaFunil2: { porMotivo: Record<string, number>; semMotivo: number; total: number }; // mês do evento
   topImobiliarias: {
@@ -691,6 +721,13 @@ export type AnaliseGerencial = {
     comissaoEfetivada: number; // mês do evento -- continua SOMA
     ticketMedio: number; // "Parcela Média" -- média só da parcela/mensalidade cotada (sem multiplicar por nº de parcelas), não confundir com premioCotado acima
     mediaPercentualPacote: number; // "novidades"
+    // Itens 2/3/4 (09/09/2026): média das MENORES taxas por card (não a
+    // menor taxa média) -- null quando não há nenhum card com taxa cotada
+    // nesse conjunto. clienteNovo = 1ª cotação de toda a história da
+    // imobiliária caiu nesta competência.
+    menorTaxaMediaGeral: number | null;
+    menorTaxaMediaNegativados: number | null;
+    clienteNovo: boolean;
   }[];
   valoresTrabalhados: { aluguel: number; pacoteLocacao: number }; // "novidades"
   faixasPacoteLocacao: { faixa: string; cards: number; pacoteMedio: number; seguroMedio: number }[]; // "novidades"
@@ -700,9 +737,20 @@ export type AnaliseGerencial = {
   tempoCotacaoPorResponsavel: Record<string, { recusado: EstatisticaTempo; aprovado: EstatisticaTempo }>; // mês do evento (HORA FIM)
   analisesDiariasPorResponsavel: QuadroDiario; // já era só "novidades" (dataCriacao) — sem mudança
   contratosRecebidosPorDia: { mesAtual: QuadroDiario; herdado: QuadroDiario };
+  // Aba 4 (09/09/2026): contratos/contratação tardia -- ver comentário onde é
+  // calculado, em montarAnaliseGerencial.
+  contratosTardios: {
+    tardios: number;
+    contratacaoTardia: number;
+    pctContratacaoTardiaSobreFechamentos: number;
+    premioLiquidoContratacaoTardia: number;
+    negociacaoTardia: number;
+    agContratoTardia: number;
+  };
   efetivacoesPorDia: QuadroDiario; // por evento, sem separar origem — sem mudança
   qualidade: {
     semImobiliaria: number;
+    naoAdministrados: number; // informativo, não é alerta -- ver comentário em montarAnaliseGerencial
     perdidosFunil2SemMotivo: number;
     totalPerdidosFunil2: number;
     cotacaoTempoInconsistente: number;
@@ -930,6 +978,36 @@ export function montarAnaliseGerencial(
     convertidoPorSeguradora[nome] = atual;
   }
 
+  // Aba 2 (09/09/2026): menor taxa do mês (mínimo absoluto, não média) +
+  // média, olhando negativados e contratados JUNTOS -- visão geral, não por
+  // imobiliária (essa já sai em porImobiliaria acima).
+  const taxasNegativadosOuContratados = [...perdidosEsteMes, ...convertidosEsteMes]
+    .map(menorTaxaLocacaoDoCard)
+    .filter((v): v is number => v !== null);
+  const aba2Taxas = {
+    menor: taxasNegativadosOuContratados.length ? Math.min(...taxasNegativadosOuContratados) : null,
+    media: taxasNegativadosOuContratados.length ? media(taxasNegativadosOuContratados) : null,
+    n: taxasNegativadosOuContratados.length,
+  };
+
+  // Aba 3 (09/09/2026): Top 3 imobiliárias com mais aprovação/pré-aprovação
+  // na Pottencial -- os 2 planos (Taxa Fixa/Tradicional) contam pro mesmo
+  // total, card conta uma vez mesmo se os 2 planos vierem aprovados. Mesmo
+  // conjunto OK usado no quadro "Análise por seguradora e plano" da página.
+  const STATUS_OK_POTTENCIAL = new Set(["Aprov", "Aprov.", "Aprovado", "Pré-Aprov.", "Pré-Aprovado"]);
+  const pottencialAprovadoPorImobiliaria: Record<string, number> = {};
+  for (const l of novidades) {
+    if (!l.imobiliaria || l.imobiliaria === NOME_NAO_ADMINISTRADA) continue;
+    const taxaFixa = l.seguradoras["Pottencial (Taxa Fixa)"]?.status["Status"];
+    const tradicional = l.seguradoras["Pottencial (Tradicional)"]?.status["Status"];
+    const aprovado = (!!taxaFixa && STATUS_OK_POTTENCIAL.has(taxaFixa)) || (!!tradicional && STATUS_OK_POTTENCIAL.has(tradicional));
+    if (aprovado) pottencialAprovadoPorImobiliaria[l.imobiliaria] = (pottencialAprovadoPorImobiliaria[l.imobiliaria] ?? 0) + 1;
+  }
+  const top3AprovacaoPottencial = Object.entries(pottencialAprovadoPorImobiliaria)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([nome, aprovados]) => ({ nome, aprovados }));
+
   const motivosPerdaFunil2: Record<string, number> = {};
   let perdasSemMotivo = 0;
   for (const l of perdidosEsteMes) {
@@ -970,6 +1048,15 @@ export function montarAnaliseGerencial(
     );
     return valores.length ? media(valores) : null;
   }
+  // Menor taxa entre as seguradoras que cotaram o card (itens 2/3 e Aba 2 do
+  // pedido do Matheus, 09/09/2026) -- diferente de percentualPacoteMedioDoCard
+  // acima, que tira a MÉDIA entre as seguradoras; aqui é o MÍNIMO.
+  function menorTaxaLocacaoDoCard(l: LinhaContagem): number | null {
+    const valores = SEGURADORAS.map((seg) => l.seguradoras[seg.nome]?.pctLocacao).filter(
+      (v): v is number => typeof v === "number" && v > 0
+    );
+    return valores.length ? Math.min(...valores) : null;
+  }
 
   // Tabela de imobiliárias -- cada coluna vem de um conjunto diferente (ver
   // tipo AnaliseGerencial acima), por isso itera separado em vez de um loop
@@ -993,6 +1080,11 @@ export function montarAnaliseGerencial(
       comissaoCotadoValores: number[];
       ticketMedioValores: number[];
       percentualPacoteValores: number[];
+      // Item 2/3 (09/09/2026): menor taxa por card, não a média -- geral
+      // (todas as análises = novidades) e só as negativadas (perdidas este
+      // mês, qualquer origem, mesmo escopo que `perdidos` usa acima).
+      menorTaxaGeralValores: number[];
+      menorTaxaNegativadosValores: number[];
     }
   > = {};
   function obterOuCriarImob(nome: string) {
@@ -1008,6 +1100,8 @@ export function montarAnaliseGerencial(
       comissaoCotadoValores: [],
       ticketMedioValores: [],
       percentualPacoteValores: [],
+      menorTaxaGeralValores: [],
+      menorTaxaNegativadosValores: [],
     };
     return porImobiliaria[nome];
   }
@@ -1023,6 +1117,8 @@ export function montarAnaliseGerencial(
     if (ticketCard !== null) d.ticketMedioValores.push(ticketCard);
     const pctCard = percentualPacoteMedioDoCard(l);
     if (pctCard !== null) d.percentualPacoteValores.push(pctCard);
+    const menorTaxaCard = menorTaxaLocacaoDoCard(l);
+    if (menorTaxaCard !== null) d.menorTaxaGeralValores.push(menorTaxaCard);
   }
   for (const l of relevantes) {
     if (l.imobiliaria && l.resultado === "Em andamento") obterOuCriarImob(l.imobiliaria).emAndamento++;
@@ -1031,7 +1127,11 @@ export function montarAnaliseGerencial(
     if (l.imobiliaria) obterOuCriarImob(l.imobiliaria).recusados++;
   }
   for (const l of perdidosEsteMes) {
-    if (l.imobiliaria) obterOuCriarImob(l.imobiliaria).perdidos++;
+    if (!l.imobiliaria) continue;
+    const d = obterOuCriarImob(l.imobiliaria);
+    d.perdidos++;
+    const menorTaxaCard = menorTaxaLocacaoDoCard(l);
+    if (menorTaxaCard !== null) d.menorTaxaNegativadosValores.push(menorTaxaCard);
   }
   for (const l of convertidosEsteMes) {
     if (!l.imobiliaria) continue;
@@ -1042,12 +1142,35 @@ export function montarAnaliseGerencial(
     d.premioEfetivado += premio;
     d.comissaoEfetivada += premio * (pct / 100);
   }
+  // Item 4 (09/09/2026): "cliente novo" = imobiliária cuja 1ª cotação de
+  // TODA a história (não só desta competência) caiu neste mês. `linhas` já
+  // vem sem filtro de data (listarItensSpa busca o SPA inteiro), então dá
+  // pra calcular isso sem tabela extra no Supabase -- só olhando a menor
+  // dataCriacao de cada imobiliária no universo inteiro de cards já buscado.
+  const primeiraCotacaoPorImobiliaria = new Map<string, string>();
+  for (const l of linhas) {
+    if (!l.imobiliaria || l.imobiliaria === NOME_NAO_ADMINISTRADA || !l.dataCriacao) continue;
+    const atual = primeiraCotacaoPorImobiliaria.get(l.imobiliaria);
+    if (!atual || l.dataCriacao < atual) primeiraCotacaoPorImobiliaria.set(l.imobiliaria, l.dataCriacao);
+  }
+  const clientesNovos = new Set(
+    [...primeiraCotacaoPorImobiliaria.entries()].filter(([, primeira]) => primeira.startsWith(competencia)).map(([nome]) => nome)
+  );
+
   // Todas as imobiliárias com pelo menos 1 card em algum dos conjuntos
   // acima, ordenadas por volume de novidades — a UI decide quantas mostrar
   // por padrão (ver ImobiliariasTabela.tsx).
   const topImobiliarias = Object.entries(porImobiliaria)
     .map(([nome, d]) => {
-      const { premioCotadoValores, comissaoCotadoValores, ticketMedioValores, percentualPacoteValores, ...resto } = d;
+      const {
+        premioCotadoValores,
+        comissaoCotadoValores,
+        ticketMedioValores,
+        percentualPacoteValores,
+        menorTaxaGeralValores,
+        menorTaxaNegativadosValores,
+        ...resto
+      } = d;
       return {
         nome,
         ...resto,
@@ -1055,6 +1178,12 @@ export function montarAnaliseGerencial(
         comissaoCotada: mediaMoeda(comissaoCotadoValores),
         ticketMedio: mediaMoeda(ticketMedioValores),
         mediaPercentualPacote: media(percentualPacoteValores),
+        // Média das menores taxas por card (não a menor taxa média) -- ver
+        // menorTaxaLocacaoDoCard acima. null quando não há nenhum card com
+        // taxa cotada nesse conjunto, pra distinguir de "taxa zero".
+        menorTaxaMediaGeral: menorTaxaGeralValores.length ? media(menorTaxaGeralValores) : null,
+        menorTaxaMediaNegativados: menorTaxaNegativadosValores.length ? media(menorTaxaNegativadosValores) : null,
+        clienteNovo: clientesNovos.has(nome),
       };
     })
     .sort((a, b) => b.total - a.total);
@@ -1111,6 +1240,7 @@ export function montarAnaliseGerencial(
   // Qualidade dos dados (conjunto "relevantes" -- tudo que pertence à
   // competência, sem zerar, sem dividir por origem).
   let semImobiliaria = 0;
+  let naoAdministrados = 0;
   let cotacaoTempoInconsistente = 0;
   let saiuFunil1SemHoraFim = 0;
   let semResponsavelCotacao = 0;
@@ -1118,6 +1248,9 @@ export function montarAnaliseGerencial(
   let semResponsavelEfetivacao = 0;
   for (const l of relevantes) {
     if (!l.imobiliaria) semImobiliaria++;
+    // Informativo, não é alerta -- "Não Administrada" é um estado legítimo
+    // (proprietário direto), ver comentário em montarContagemMensal.
+    if (l.imobiliaria === NOME_NAO_ADMINISTRADA) naoAdministrados++;
     const jaPassouPelaCotacao = l.funil === "Negociação e Contrato" || l.resultado === "Aprovado";
     const saiuFunil1 = jaPassouPelaCotacao || l.resultado === "Recusado";
     if (saiuFunil1 && !l.dataCotacao) saiuFunil1SemHoraFim++;
@@ -1181,6 +1314,42 @@ export function montarAnaliseGerencial(
     herdado: montarQuadroDiario(entradasContratoRecebido.filter((e) => !e.origemMesAtual), competencia),
   };
 
+  // Aba 4 (09/09/2026): "contrato tardio" = card criado em competência
+  // anterior (qualquer uma, mesma convenção de "herdado" usada no resto do
+  // painel) que entrou em Contrato Recebido neste mês -- mesmo conjunto que
+  // alimenta contratosRecebidosPorDia.herdado acima, só que aqui como lista
+  // de cards (não quebra por dia) pra poder somar prêmio líquido depois.
+  // "Contratação tardia" = entrou em Contrato Recebido num mês anterior, mas
+  // só converteu (fechou) neste mês -- por isso precisa da DATA real de
+  // entrada em Contrato Recebido (primeiraEntradaContratoRecebido acima),
+  // não só do boolean entrouContratoRecebido.
+  const cardsContratoTardio = linhas.filter((l) => {
+    const dia = primeiraEntradaContratoRecebido.get(l.id);
+    return !!dia && dia.startsWith(competencia) && l.competencia !== competencia;
+  });
+  const cardsContratacaoTardia = linhas.filter((l) => {
+    const diaEntrada = primeiraEntradaContratoRecebido.get(l.id);
+    return !!diaEntrada && !diaEntrada.startsWith(competencia) && !!l.dataConversao && l.dataConversao.startsWith(competencia);
+  });
+  const premioLiquidoContratacaoTardia = cardsContratacaoTardia.reduce(
+    (a, l) => a + (typeof l.premioLiquido === "number" ? l.premioLiquido : 0),
+    0
+  );
+  // Tardios ainda parados agora (não é mais sobre quem já recebeu contrato --
+  // é quem é herdado, ainda em andamento, e está numa dessas 2 etapas
+  // específicas de Negociação e Contrato, esperando pra chegar lá).
+  const herdadosEmAberto = relevantes.filter((l) => l.competencia !== competencia && l.resultado === "Em andamento");
+  const contratosTardios = {
+    tardios: cardsContratoTardio.length,
+    contratacaoTardia: cardsContratacaoTardia.length,
+    pctContratacaoTardiaSobreFechamentos: convertidosEsteMes.length
+      ? Math.round((cardsContratacaoTardia.length / convertidosEsteMes.length) * 1000) / 10
+      : 0,
+    premioLiquidoContratacaoTardia,
+    negociacaoTardia: herdadosEmAberto.filter((l) => l.etapaAtual === "Em Negociação").length,
+    agContratoTardia: herdadosEmAberto.filter((l) => l.etapaAtual === "Aguardando Contrato").length,
+  };
+
   // Calendário diário de Efetivação — dia da Data de Efetivação, por evento,
   // sem separar origem (confirmado com o Matheus). Sem mudança.
   const efetivacoesPorDia = montarQuadroDiario(
@@ -1224,16 +1393,19 @@ export function montarAnaliseGerencial(
       perdidos,
       convertidos,
       comAlerta,
-      imobiliarias: new Set(novidades.map((l) => l.imobiliaria).filter(Boolean)).size,
+      // "Não Administrada" não é uma imobiliária de verdade -- fica de fora
+      // dessas 3 contagens (ela tem linha própria nas tabelas por
+      // imobiliária, mas não deve inflar "quantas imobiliárias cotaram").
+      imobiliarias: new Set(novidades.map((l) => l.imobiliaria).filter((n) => n && n !== NOME_NAO_ADMINISTRADA)).size,
       imobiliariasHerdado: new Set(
-        relevantes.filter((l) => l.competencia !== competencia).map((l) => l.imobiliaria).filter(Boolean)
+        relevantes.filter((l) => l.competencia !== competencia).map((l) => l.imobiliaria).filter((n) => n && n !== NOME_NAO_ADMINISTRADA)
       ).size,
       // Novos + herdados RELEVANTES este mês (mesmo escopo de "relevantes"
       // usado em imobiliariasHerdado acima) -- um herdado que se resolveu
       // (recusado/perdido/convertido) DURANTE este mês continua contando até
       // o fim do mês, só muda de categoria. Só sai da conta um herdado que já
       // tinha se resolvido num mês anterior a este.
-      imobiliariasAtivas: new Set(relevantes.map((l) => l.imobiliaria).filter(Boolean)).size,
+      imobiliariasAtivas: new Set(relevantes.map((l) => l.imobiliaria).filter((n) => n && n !== NOME_NAO_ADMINISTRADA)).size,
     },
     porFunilEtapa,
     porResponsavelFunil1,
@@ -1242,6 +1414,8 @@ export function montarAnaliseGerencial(
     cotadoPorSeguradora,
     convertidoPorSeguradora,
     taxaPorSeguradora,
+    aba2Taxas,
+    top3AprovacaoPottencial,
     motivosRecusaFunil1: { total: recusadosEsteMs.length, semMotivo: recusadosEsteMs.length },
     motivosPerdaFunil2: { porMotivo: motivosPerdaFunil2, semMotivo: perdasSemMotivo, total: perdidosEsteMes.length },
     topImobiliarias,
@@ -1253,9 +1427,11 @@ export function montarAnaliseGerencial(
     tempoCotacaoPorResponsavel,
     analisesDiariasPorResponsavel,
     contratosRecebidosPorDia,
+    contratosTardios,
     efetivacoesPorDia,
     qualidade: {
       semImobiliaria,
+      naoAdministrados,
       perdidosFunil2SemMotivo: perdasSemMotivo,
       totalPerdidosFunil2: perdidosEsteMes.length,
       cotacaoTempoInconsistente,
