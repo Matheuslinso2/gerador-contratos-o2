@@ -8,7 +8,7 @@ import SeletorCompetencia from "./SeletorCompetencia";
 import { adicionarEsperada, excluirArquivoFatura } from "./actions";
 import { SEGURADORAS_CANONICAS } from "@/lib/faturasIdentificacao";
 import { GRUPOS_VISUAIS } from "@/lib/gruposVisuaisImobiliarias";
-import { IconCalendar, IconChecklist, IconUpload, IconInvoice, IconReceipt, IconChevron, IconTrash } from "./icons";
+import { IconCalendar, IconChecklist, IconUpload, IconInvoice, IconReceipt, IconChevron, IconTrash, IconReport } from "./icons";
 import { CheckboxSelecaoLinha, LinkDuplicata, SelecionarTodas } from "./LinhaInterativa";
 import { SubmitButton } from "./SubmitButton";
 
@@ -531,6 +531,13 @@ export default async function FaturasPage({
                   Conferência ({pendentes})
                 </Link>
               )}
+              <Link
+                href={`/faturas/fechamento?competencia=${competencia}`}
+                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-white/30 bg-white/10 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-white/20"
+              >
+                <IconReport className="h-4 w-4" />
+                Fechamento
+              </Link>
               <Link
                 href="/faturas/upload"
                 className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-4 py-1.5 text-sm font-medium text-o2-navy shadow-sm transition hover:bg-white/90"

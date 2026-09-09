@@ -8,7 +8,7 @@ import SeletorCompetenciaRepasses from "./SeletorCompetenciaRepasses";
 import SeletorImobiliaria from "../faturas/conferencia/SeletorImobiliaria";
 import { confirmarIdentificacaoRepasse, excluirArquivoRepasse } from "./actions";
 import { valoresBatem } from "@/lib/repassesIdentificacao";
-import { IconCalendar, IconUpload, IconReceipt, IconTrash, IconMail } from "../faturas/icons";
+import { IconCalendar, IconUpload, IconReceipt, IconTrash, IconMail, IconReport } from "../faturas/icons";
 import { SubmitButton } from "../faturas/SubmitButton";
 import { SelecionarTodas } from "../faturas/LinhaInterativa";
 
@@ -246,13 +246,22 @@ export default async function RepassesPage({
                 <SeletorCompetenciaRepasses competencia={competencia} />
               </div>
             </div>
-            <Link
-              href="/repasses/upload"
-              className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-4 py-1.5 text-sm font-medium text-o2-navy shadow-sm transition hover:bg-white/90"
-            >
-              <IconUpload className="h-4 w-4" />
-              Carregar repasse
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link
+                href={`/repasses/fechamento?competencia=${competencia}`}
+                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-white/30 bg-white/10 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-white/20"
+              >
+                <IconReport className="h-4 w-4" />
+                Fechamento
+              </Link>
+              <Link
+                href="/repasses/upload"
+                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-4 py-1.5 text-sm font-medium text-o2-navy shadow-sm transition hover:bg-white/90"
+              >
+                <IconUpload className="h-4 w-4" />
+                Carregar repasse
+              </Link>
+            </div>
           </div>
         </div>
 

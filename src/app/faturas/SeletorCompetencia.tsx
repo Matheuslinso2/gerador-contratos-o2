@@ -2,14 +2,23 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function SeletorCompetencia({ competencia }: { competencia: string }) {
+export default function SeletorCompetencia({
+  competencia,
+  basePath = "/faturas",
+}: {
+  competencia: string;
+  /** Pra onde navegar ao trocar o mês -- default é a tela principal de
+   * Faturas, mas o fechamento (mesmo campo) precisa ficar na própria
+   * URL dele em vez de voltar pra lista. */
+  basePath?: string;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   function aoMudar(valor: string) {
     const params = new URLSearchParams(searchParams.toString());
     params.set("competencia", valor);
-    router.push(`/faturas?${params.toString()}`);
+    router.push(`${basePath}?${params.toString()}`);
   }
 
   return (

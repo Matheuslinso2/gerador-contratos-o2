@@ -2,14 +2,20 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function SeletorCompetenciaRepasses({ competencia }: { competencia: string }) {
+export default function SeletorCompetenciaRepasses({
+  competencia,
+  basePath = "/repasses",
+}: {
+  competencia: string;
+  basePath?: string;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   function aoMudar(valor: string) {
     const params = new URLSearchParams(searchParams.toString());
     params.set("competencia", valor);
-    router.push(`/repasses?${params.toString()}`);
+    router.push(`${basePath}?${params.toString()}`);
   }
 
   return (

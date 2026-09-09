@@ -29,6 +29,20 @@ export function IconChecklist({ className = "h-6 w-6" }: IconProps) {
   );
 }
 
+export function IconReport({ className = "h-6 w-6" }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <path
+        d="M6.5 3.5h11a1 1 0 011 1V19a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 016.5 19V3.5z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <path d="M9.5 8.5h5M9.5 12h5M9.5 15.5h3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function IconUpload({ className = "h-6 w-6" }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className}>
