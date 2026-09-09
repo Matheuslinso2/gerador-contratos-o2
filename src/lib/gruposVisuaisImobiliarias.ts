@@ -21,4 +21,5 @@ export const GRUPOS_VISUAIS: Record<string, { chave: string; nomeGrupo: string }
   "92786854000163": { chave: "TERUSZKIN", nomeGrupo: "Grupo Teruszkin" },
   "08984167000146": { chave: "TERUSZKIN", nomeGrupo: "Grupo Teruszkin" },
   "09008875000104": { chave: "TERUSZKIN", nomeGrupo: "Grupo Teruszkin" },
+  "28822660000177": { chave: "TERUSZKIN", nomeGrupo: "Grupo Teruszkin" },
 };
