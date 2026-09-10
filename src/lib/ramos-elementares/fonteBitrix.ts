@@ -1,3 +1,4 @@
+
 import "server-only";
 
 import {
@@ -29,8 +30,15 @@ const CAMPOS = {
   competencia: "ufCrm12CompetenciaOperacional",
   fimVigencia: "ufCrm12FimVigencia",
   premioTotal: "ufCrm12PremioTotal",
-  comissao: "ufCrm12Comissao",
-  repasse: "ufCrm12Repasse",
+  // Achado real (2026-09-10): não existe campo "ufCrm12Comissao"/"ufCrm12Repasse"
+  // nessa SPA -- o card só guarda o PERCENTUAL de cada um ("Comissão (%)" /
+  // "Repasse (%)", campos type:"double"), confirmado via crm.item.fields. O
+  // valor em R$ precisa ser calculado (ver valorComissao/valorRepasse
+  // abaixo) -- ler esses dois nomes antigos direto sempre dava undefined,
+  // então toda comissão/repasse do lado Bitrix (Novos, desde a migração de
+  // 01/09) saía zerada, mesmo com prêmio preenchido certo.
+  comissaoPercentual: "ufCrm12ComissaoPercentual",
+  repassePercentual: "ufCrm12RepassePercentual",
   comissaoAnterior: "ufCrm12ComissaoAnterior",
   restituicao: "ufCrm12Restituicao",
   tipoMovimentacao: "ufCrm12TipoMovimentacao",
@@ -71,6 +79,20 @@ function dinheiro(valor: unknown): number {
     : bruto;
   const convertido = Number(normalizado);
   return Number.isFinite(convertido) ? convertido : 0;
+}
+
+// Comissão e repasse só existem como PERCENTUAL no card (ver comentário em
+// CAMPOS) -- os dois incidem sobre o PRÊMIO TOTAL, não um sobre o outro
+// (confirmado com o Matheus: repasse não é uma fatia da comissão, é o mesmo
+// tipo de cálculo dela, só que com o percentual de repasse).
+function valorComissao(item: BitrixItemRaw, premioTotal: number): number {
+  const percentual = dinheiro(item[CAMPOS.comissaoPercentual]);
+  return premioTotal * (percentual / 100);
+}
+
+function valorRepasse(item: BitrixItemRaw, premioTotal: number): number {
+  const percentual = dinheiro(item[CAMPOS.repassePercentual]);
+  return premioTotal * (percentual / 100);
 }
 
 function dataValida(valor: unknown): Date | null {
@@ -167,9 +189,11 @@ function linhaNovo(params: {
   linha[25] = produto;
   linha[26] = seguradora;
   linha[27] = texto(item[CAMPOS.numeroOrcamento]);
-  linha[29] = dinheiro(item[CAMPOS.premioTotal]);
-  linha[32] = dinheiro(item[CAMPOS.comissao]);
-  linha[34] = dinheiro(item[CAMPOS.repasse]);
+  const premioTotal = dinheiro(item[CAMPOS.premioTotal]);
+  const comissao = valorComissao(item, premioTotal);
+  linha[29] = premioTotal;
+  linha[32] = comissao;
+  linha[34] = valorRepasse(item, premioTotal);
   linha[39] = serialGoogle(dataTerminal(eventos));
   return linha;
 }
@@ -193,10 +217,12 @@ function linhaRenovacao(params: {
   linha[4] = imobiliaria;
   linha[7] = produto;
   linha[8] = seguradora;
+  const premioTotal = dinheiro(item[CAMPOS.premioTotal]);
+  const comissao = valorComissao(item, premioTotal);
   linha[13] = dinheiro(item[CAMPOS.comissaoAnterior]);
-  linha[15] = dinheiro(item[CAMPOS.premioTotal]);
-  linha[17] = dinheiro(item[CAMPOS.comissao]);
-  linha[19] = dinheiro(item[CAMPOS.repasse]);
+  linha[15] = premioTotal;
+  linha[17] = comissao;
+  linha[19] = valorRepasse(item, premioTotal);
   linha[20] = normalizar(origem) === "SEGIMOB" ? "IMOBILIARIA" : responsavel;
   linha[21] = serialGoogle(dataValida(item.createdTime));
   linha[25] = serialGoogle(dataTerminal(eventos));
