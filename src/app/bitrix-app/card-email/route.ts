@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { salvarInstalacao } from "@/lib/bitrix/appAuth";
+import { entityTypeIdPorPlacement } from "@/lib/bitrix/entidadesCard";
 
 export const dynamic = "force-dynamic";
 
@@ -94,16 +95,24 @@ export async function POST(request: NextRequest) {
   }
 
   // PLACEMENT_OPTIONS vem como string JSON (ex: '{"ID":"1540"}' para
-  // CRM_DEAL_DETAIL_TAB). Mostramos o id aqui via BX24 no cliente também,
-  // como caminho mais confiável -- ver comentário no HTML abaixo.
-  let dealIdDoPost: string | null = null;
+  // CRM_DEAL_DETAIL_TAB). BX24.placement.info() no cliente é o caminho mais
+  // confiável (não depende de parsear o POST cru), mas mantemos esse valor
+  // do servidor como fallback caso o BX24.init demore/falhe.
+  let itemIdDoPost: string | null = null;
   try {
     const placementOptions = campos.PLACEMENT_OPTIONS ? JSON.parse(campos.PLACEMENT_OPTIONS) : null;
-    dealIdDoPost = placementOptions?.ID ? String(placementOptions.ID) : null;
+    itemIdDoPost = placementOptions?.ID ? String(placementOptions.ID) : null;
   } catch {
     // PLACEMENT_OPTIONS ausente ou em formato inesperado -- sem problema,
     // a leitura via BX24.placement.info() no cliente é a fonte confiável.
   }
+
+  // O nome do placement (ex: "CRM_DEAL_DETAIL_TAB") identifica em qual das
+  // 6 entidades (Lead/Deal/4 SPAs) o card foi aberto -- é isso que decide o
+  // CC certo no envio (ver src/lib/bitrix/entidadesCard.ts). Vem tanto no
+  // POST quanto em BX24.placement.info().placement; usamos o do POST como
+  // fonte inicial e reforçamos com o do cliente.
+  const entityTypeIdDoPost = entityTypeIdPorPlacement(campos.PLACEMENT) ?? null;
 
   const html = `<!doctype html>
 <html lang="pt-BR">
@@ -112,24 +121,100 @@ export async function POST(request: NextRequest) {
   <title>E-mail do card — O2 Seguros</title>
   <script src="https://api.bitrix24.com/api/v1/"></script>
   <style>
-    body { font-family: system-ui, sans-serif; margin: 0; padding: 24px; color: #01192e; }
-    #status { font-size: 15px; }
+    body { font-family: 'Poppins', system-ui, sans-serif; margin: 0; padding: 20px; color: #01192e; background: #fff; }
+    #status { font-size: 13px; color: #8d8683; margin-bottom: 12px; }
+    label { display: block; font-size: 12px; font-weight: 600; color: #444440; margin: 12px 0 4px; }
+    input, textarea { width: 100%; box-sizing: border-box; padding: 9px 10px; border: 1px solid #d9d9d9; border-radius: 8px; font-family: inherit; font-size: 14px; }
+    textarea { resize: vertical; min-height: 140px; }
+    button { margin-top: 16px; background: #F8540D; color: #fff; border: none; padding: 10px 24px; border-radius: 999px; font-weight: 700; font-size: 14px; cursor: pointer; }
+    button:disabled { opacity: 0.6; cursor: default; }
+    #mensagem { margin-top: 12px; font-size: 13px; }
+    #mensagem.erro { color: #c0392b; }
+    #mensagem.sucesso { color: #1a7a3c; }
   </style>
 </head>
 <body>
   <div id="status">Carregando informações do card…</div>
+
+  <form id="form-email" style="display:none;">
+    <label for="para">Para</label>
+    <input id="para" type="email" required placeholder="cliente@exemplo.com" />
+
+    <label for="assunto">Assunto</label>
+    <input id="assunto" type="text" required />
+
+    <label for="corpo">Mensagem</label>
+    <textarea id="corpo" required></textarea>
+
+    <button id="botao-enviar" type="submit">Enviar</button>
+    <div id="mensagem"></div>
+  </form>
+
   <script>
-    function mostrar(texto) {
+    var itemId = ${JSON.stringify(itemIdDoPost)};
+    var entityTypeId = ${JSON.stringify(entityTypeIdDoPost)};
+
+    function mostrarStatus(texto) {
       document.getElementById("status").textContent = texto;
     }
+
+    function habilitarFormulario() {
+      if (!itemId || !entityTypeId) {
+        mostrarStatus("Não foi possível identificar este card (placement não reconhecido). Avise o time de tecnologia.");
+        return;
+      }
+      mostrarStatus("Card #" + itemId + " carregado.");
+      document.getElementById("form-email").style.display = "block";
+    }
+
     try {
       BX24.init(function () {
         var info = BX24.placement.info();
-        var id = (info && info.options && info.options.ID) || ${JSON.stringify(dealIdDoPost)};
-        mostrar(id ? ("Card #" + id + " carregado com sucesso.") : "Placement carregado, mas não veio ID do card.");
+        if (info && info.options && info.options.ID) itemId = String(info.options.ID);
+        habilitarFormulario();
+
+        document.getElementById("form-email").addEventListener("submit", function (evento) {
+          evento.preventDefault();
+          var botao = document.getElementById("botao-enviar");
+          var mensagem = document.getElementById("mensagem");
+          mensagem.className = "";
+          mensagem.textContent = "";
+          botao.disabled = true;
+
+          var auth = BX24.getAuth();
+          fetch("/bitrix-app/enviar-email", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              authId: auth && auth.access_token,
+              entityTypeId: entityTypeId,
+              itemId: Number(itemId),
+              para: document.getElementById("para").value,
+              assunto: document.getElementById("assunto").value,
+              corpo: document.getElementById("corpo").value,
+            }),
+          })
+            .then(function (resp) { return resp.json().then(function (dados) { return { ok: resp.ok, dados: dados }; }); })
+            .then(function (resultado) {
+              botao.disabled = false;
+              if (resultado.ok && resultado.dados.ok) {
+                mensagem.className = "sucesso";
+                mensagem.textContent = "E-mail enviado.";
+                document.getElementById("form-email").reset();
+              } else {
+                mensagem.className = "erro";
+                mensagem.textContent = (resultado.dados && resultado.dados.erro) || "Falha ao enviar.";
+              }
+            })
+            .catch(function () {
+              botao.disabled = false;
+              mensagem.className = "erro";
+              mensagem.textContent = "Falha de conexão. Tente de novo.";
+            });
+        });
       });
     } catch (erro) {
-      mostrar("Falha ao inicializar BX24: " + erro);
+      mostrarStatus("Falha ao inicializar BX24: " + erro);
     }
   </script>
 </body>
