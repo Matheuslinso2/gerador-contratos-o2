@@ -28,6 +28,7 @@ export async function enviarEmail({
   html,
   anexos,
   remetente = "Workspace O2",
+  replyTo,
   throwSeFalhar = false,
 }: {
   para: string | string[];
@@ -36,6 +37,7 @@ export async function enviarEmail({
   html: string;
   anexos?: AnexoEmail[];
   remetente?: string;
+  replyTo?: string;
   throwSeFalhar?: boolean;
 }) {
   const chave = process.env.RESEND_API_KEY;
@@ -53,6 +55,7 @@ export async function enviarEmail({
       from: `${remetente} <${ENDERECO_REMETENTE}>`,
       to: para,
       cc: cc?.length ? cc : undefined,
+      replyTo,
       subject: assunto,
       html,
       attachments: anexos?.map((a) => ({
