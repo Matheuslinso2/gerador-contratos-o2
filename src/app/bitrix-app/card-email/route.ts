@@ -36,12 +36,18 @@ function extrairDadosAuth(campos: Record<string, string>) {
   const memberId = campos["auth[member_id]"] ?? campos.member_id;
   const expiresIn = campos["auth[expires_in]"] ?? campos.AUTH_EXPIRES;
 
+  // "oauth.bitrix.info" é o servidor de OAuth, nunca um portal de verdade --
+  // visto vindo tanto em auth[domain]/DOMAIN quanto (confirmado em produção,
+  // 2026-09-10) em SERVER_ENDPOINT. Rejeitar nos dois caminhos, sempre.
+  const dominioValido = (valor: string | undefined) =>
+    valor && !valor.includes("oauth.bitrix.info") ? valor : undefined;
+
   let dominio: string | undefined;
   if (campos.SERVER_ENDPOINT) {
-    dominio = campos.SERVER_ENDPOINT.replace(/^https?:\/\//, "").replace(/\/rest\/?$/, "");
-  } else {
-    const dominioAuth = campos["auth[domain]"] ?? campos.DOMAIN;
-    dominio = dominioAuth && dominioAuth !== "oauth.bitrix.info" ? dominioAuth : undefined;
+    dominio = dominioValido(campos.SERVER_ENDPOINT.replace(/^https?:\/\//, "").replace(/\/rest\/?$/, ""));
+  }
+  if (!dominio) {
+    dominio = dominioValido(campos["auth[domain]"] ?? campos.DOMAIN);
   }
 
   return { accessToken, refreshToken, memberId, expiresIn, dominio };
