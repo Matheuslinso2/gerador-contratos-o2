@@ -123,6 +123,7 @@ export async function POST(request: NextRequest) {
       assunto: assunto.trim(),
       corpo: montarHtmlEmailCard(corpo.trim()),
       direcao: "enviado",
+      enderecoEnvolvido: para.trim(),
     });
   } catch (erro) {
     // O e-mail já saiu -- não desfaz o envio por causa disso, só avisa nos
