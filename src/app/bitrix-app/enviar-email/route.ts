@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { enviarEmail } from "@/lib/email";
-import { ccPorEntidade, gerarEnderecoRespostaCard, gerarLinkCard, nomeProdutoPorEntidade } from "@/lib/bitrix/entidadesCard";
+import { ccPorEntidade, gerarEnderecoRespostaCard } from "@/lib/bitrix/entidadesCard";
 import { registrarAtividadeEmail } from "@/lib/bitrix/atividades";
-import { buscarItem, buscarEmpresas, buscarUsuarios } from "@/lib/bitrix/client";
+import { tokenBitrixValido, buscarInfoCardParaEmail } from "@/lib/bitrix/emailNoCard";
 
 export const dynamic = "force-dynamic";
 
@@ -13,22 +13,6 @@ export const dynamic = "force-dynamic";
 // Bitrix pra esse portal antes de mandar e-mail ou escrever no card --
 // senão vira relay aberto pra mandar e-mail em nome da O2 pra qualquer
 // endereço e gravar atividade falsa em qualquer card.
-const DOMINIO_PORTAL = "o2seguros.bitrix24.com.br";
-
-async function tokenBitrixValido(authId: string): Promise<boolean> {
-  try {
-    const resp = await fetch(`https://${DOMINIO_PORTAL}/rest/profile.json`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ auth: authId }),
-      signal: AbortSignal.timeout(10_000),
-    });
-    const dados = await resp.json();
-    return resp.ok && !dados.error && Boolean(dados.result);
-  } catch {
-    return false;
-  }
-}
 
 const O2_NAVY = "#01192e";
 const O2_LARANJA = "#F8540D";
@@ -150,31 +134,23 @@ export async function POST(request: NextRequest) {
 
   const cc = ccPorEntidade(entityTypeId);
   const replyTo = gerarEnderecoRespostaCard(entityTypeId, itemId);
-  const badge = nomeProdutoPorEntidade(entityTypeId);
-  const link = gerarLinkCard(entityTypeId, itemId);
 
   // Melhor esforço: busca título/empresa/responsável do card pra dar
-  // contexto no e-mail (quem recebe em cópia não precisa abrir o Bitrix
-  // pra saber do que se trata). Se falhar por qualquer motivo, o e-mail
-  // ainda sai -- só sem esse bloco, nunca bloqueia o envio por causa disso.
-  let blocoInfo = "";
-  try {
-    const item = await buscarItem(entityTypeId, itemId);
-    const [empresas, responsaveis] = await Promise.all([
-      item.companyId ? buscarEmpresas([item.companyId]) : Promise.resolve({} as Record<number, string>),
-      item.assignedById ? buscarUsuarios([item.assignedById]) : Promise.resolve({} as Record<number, string>),
-    ]);
-    blocoInfo = montarBlocoInfoCard(
-      [
-        { rotulo: "Card", valor: item.title ? `#${itemId} · ${item.title}` : `#${itemId}` },
-        { rotulo: "Empresa/Imóvel", valor: item.companyId ? (empresas[item.companyId] ?? "") : "" },
-        { rotulo: "Responsável", valor: item.assignedById ? (responsaveis[item.assignedById] ?? "") : "" },
-      ],
-      link
-    );
-  } catch (erro) {
-    console.warn("Falha ao buscar dados do card pro e-mail (seguindo sem o bloco de contexto):", erro);
-  }
+  // contexto no e-mail (quem recebe em cópia não precisa abrir o Bitrix pra
+  // saber do que se trata). Se falhar por qualquer motivo, o e-mail ainda
+  // sai -- só sem esse bloco, nunca bloqueia o envio por causa disso.
+  const info = await buscarInfoCardParaEmail(entityTypeId, itemId);
+  const badge = info?.badge ?? "O2 Seguros";
+  const blocoInfo = info
+    ? montarBlocoInfoCard(
+        [
+          { rotulo: "Card", valor: info.tituloCard ? `#${itemId} · ${info.tituloCard}` : `#${itemId}` },
+          { rotulo: "Empresa/Imóvel", valor: info.empresa ?? "" },
+          { rotulo: "Responsável", valor: info.responsavel ?? "" },
+        ],
+        info.link
+      )
+    : "";
 
   const html = montarHtmlEmailCard({ corpoHtml: sanitizarHtmlSimples(corpo), badge, blocoInfo });
 

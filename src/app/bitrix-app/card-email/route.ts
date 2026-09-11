@@ -138,10 +138,17 @@ export async function POST(request: NextRequest) {
     #mensagem { margin-top: 12px; font-size: 13px; }
     #mensagem.erro { color: #c0392b; }
     #mensagem.sucesso { color: #1a7a3c; }
+    #preview-card { display: none; background: #f8f8f7; border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; font-size: 12px; }
+    #preview-card .linha { display: flex; gap: 8px; padding: 3px 0; }
+    #preview-card .rotulo { color: #8d8683; width: 90px; flex-shrink: 0; }
+    #preview-card .valor { color: #01192e; font-weight: 600; }
+    #preview-card .aviso { color: #8d8683; font-style: italic; }
   </style>
 </head>
 <body>
   <div id="status">Carregando informações do card…</div>
+
+  <div id="preview-card"></div>
 
   <form id="form-email" style="display:none;">
     <label for="para">Para</label>
@@ -180,6 +187,32 @@ export async function POST(request: NextRequest) {
       document.getElementById("form-email").style.display = "block";
     }
 
+    // Prévia do bloco "sobre este card" que vai automaticamente em todo
+    // e-mail enviado por aqui (ver enviar-email/route.ts) -- pedido do
+    // Matheus depois de perguntar onde isso aparecia: antes, só era visível
+    // no e-mail final, nunca na tela de composição.
+    function carregarPreviaCard(authId) {
+      var previaEl = document.getElementById("preview-card");
+      fetch("/bitrix-app/info-card", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ authId: authId, entityTypeId: entityTypeId, itemId: Number(itemId) }),
+      })
+        .then(function (resp) { return resp.json(); })
+        .then(function (resultado) {
+          if (!resultado.ok || !resultado.info) return; // best-effort, some silenciosamente
+          var info = resultado.info;
+          var linhas = "";
+          if (info.tituloCard) linhas += '<div class="linha"><span class="rotulo">Card</span><span class="valor">#' + itemId + ' · ' + info.tituloCard + '</span></div>';
+          if (info.empresa) linhas += '<div class="linha"><span class="rotulo">Empresa/Imóvel</span><span class="valor">' + info.empresa + '</span></div>';
+          if (info.responsavel) linhas += '<div class="linha"><span class="rotulo">Responsável</span><span class="valor">' + info.responsavel + '</span></div>';
+          linhas += '<div class="aviso" style="margin-top:6px;">Esse bloco (+ o selo "' + info.badge + '") entra automaticamente no e-mail, junto com sua mensagem.</div>';
+          previaEl.innerHTML = linhas;
+          previaEl.style.display = "block";
+        })
+        .catch(function () {}); // prévia é só conveniência, nunca trava a composição
+    }
+
     // execCommand é tecnicamente "obsoleto", mas continua funcionando em
     // todos os browsers modernos pra formatação simples dentro de um iframe
     // interno -- suficiente aqui sem adicionar uma lib de editor rich text
@@ -203,6 +236,9 @@ export async function POST(request: NextRequest) {
         var info = BX24.placement.info();
         if (info && info.options && info.options.ID) itemId = String(info.options.ID);
         habilitarFormulario();
+
+        var authInicial = BX24.getAuth();
+        if (itemId && entityTypeId) carregarPreviaCard(authInicial && authInicial.access_token);
 
         document.getElementById("form-email").addEventListener("submit", function (evento) {
           evento.preventDefault();
