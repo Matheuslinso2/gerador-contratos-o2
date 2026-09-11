@@ -106,6 +106,17 @@ export async function listarItensSpa(entityTypeId: number): Promise<BitrixItemRa
   return buscarTodasPaginas<BitrixItemRaw>("crm.item.list", { entityTypeId, select: ["*", "UF_*"] });
 }
 
+// crm.item.get é universal (Lead/Deal/qualquer SPA, mesmo entityTypeId
+// numérico já usado em todo o "E-mail no card") -- usado aqui pra montar o
+// bloco de contexto ("sobre este card") dentro do e-mail, sem precisar de
+// um fetcher dedicado por entidade como listarItensSpa/comercial.ts fazem
+// pros painéis (aqui só precisamos de 3 campos universais, não da ficha
+// completa).
+export async function buscarItem(entityTypeId: number, id: number): Promise<BitrixItemRaw> {
+  const resposta = await chamarBitrix<{ result: { item: BitrixItemRaw } }>("crm.item.get", { entityTypeId, id });
+  return resposta.result.item;
+}
+
 export async function listarHistoricoEtapas(entityTypeId: number): Promise<BitrixStageHistoryEvent[]> {
   return buscarTodasPaginas<BitrixStageHistoryEvent>("crm.stagehistory.list", { entityTypeId, "order[id]": "asc" });
 }

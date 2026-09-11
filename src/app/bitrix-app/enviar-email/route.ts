@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { enviarEmail } from "@/lib/email";
-import { ccPorEntidade, gerarEnderecoRespostaCard } from "@/lib/bitrix/entidadesCard";
+import { ccPorEntidade, gerarEnderecoRespostaCard, gerarLinkCard, nomeProdutoPorEntidade } from "@/lib/bitrix/entidadesCard";
 import { registrarAtividadeEmail } from "@/lib/bitrix/atividades";
+import { buscarItem, buscarEmpresas, buscarUsuarios } from "@/lib/bitrix/client";
 
 export const dynamic = "force-dynamic";
 
@@ -31,39 +32,88 @@ async function tokenBitrixValido(authId: string): Promise<boolean> {
 
 const O2_NAVY = "#01192e";
 const O2_LARANJA = "#F8540D";
+const O2_CINZA_CLARO = "#d9d9d9";
+const O2_CINZA_MEDIO = "#8d8683";
 const FONTE = "'Poppins', Arial, sans-serif";
 const LOGO_URL = "https://gerador-contratos-o2.vercel.app/marca-o2/o2-logo-horizontal.png";
 
-// E-mail de pessoa pra pessoa (colaborador -> cliente), não uma
-// notificação estruturada -- por isso não reaproveita envolverEmailO2
-// (feito pra "card de formulário preenchido", com badge/protocolo). Só a
-// identidade visual (logo, cores, fonte) é compartilhada.
-function montarHtmlEmailCard(corpo: string): string {
-  const paragrafos = corpo
-    .split(/\n{2,}/)
-    .map((p) => `<p style="margin:0 0 14px;font-size:14px;line-height:1.6;color:${O2_NAVY};font-family:${FONTE};white-space:pre-line;">${p}</p>`)
+// Bloco "sobre este card" -- contexto pra quem recebe uma cópia (CC) ou lê o
+// e-mail depois, sem precisar abrir o Bitrix pra saber do que se trata.
+// Best-effort: qualquer campo que não vier (empresa/responsável) some da
+// lista em vez de mostrar "undefined" ou travar o envio.
+function montarBlocoInfoCard(linhas: { rotulo: string; valor: string }[], link: string): string {
+  const linhasHtml = linhas
+    .filter((l) => l.valor)
+    .map(
+      (l) => `
+      <tr>
+        <td style="padding:6px 0;font-size:12px;color:${O2_CINZA_MEDIO};font-family:${FONTE};width:110px;vertical-align:top;">${l.rotulo}</td>
+        <td style="padding:6px 0;font-size:13px;color:${O2_NAVY};font-family:${FONTE};font-weight:600;">${l.valor}</td>
+      </tr>`
+    )
     .join("");
   return `
+    <tr>
+      <td style="padding:0 28px 20px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8f8f7;border-radius:10px;padding:14px 16px;border-collapse:collapse;">
+          ${linhasHtml}
+          <tr>
+            <td colspan="2" style="padding:10px 0 0;">
+              <a href="${link}" style="font-size:12px;color:${O2_LARANJA};font-family:${FONTE};font-weight:700;text-decoration:none;">Abrir card no Bitrix →</a>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>`;
+}
+
+// E-mail de pessoa pra pessoa (colaborador -> cliente), não uma notificação
+// estruturada de formulário -- por isso não reaproveita envolverEmailO2
+// integralmente (feito pra "card de formulário preenchido", com badge fixo
+// de produto + protocolo). Aqui o corpo já vem em HTML (editado na tela de
+// composição), então é inserido direto, sem reprocessar quebra de linha.
+function montarHtmlEmailCard(params: { corpoHtml: string; badge: string; blocoInfo: string }): string {
+  return `
     <div style="background:#f4f4f4;padding:28px 12px;font-family:${FONTE};">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #d9d9d9;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid ${O2_CINZA_CLARO};">
         <tr>
           <td style="padding:24px 28px 8px;" align="center">
             <img src="${LOGO_URL}" alt="O2 Seguros" width="140" style="display:block;" />
           </td>
         </tr>
         <tr>
-          <td style="padding:20px 28px 28px;">${paragrafos}</td>
+          <td style="padding:14px 28px 4px;" align="center">
+            <span style="display:inline-block;background:${O2_LARANJA};color:#ffffff;font-family:${FONTE};font-weight:700;font-size:11px;letter-spacing:0.6px;text-transform:uppercase;padding:6px 16px;border-radius:999px;">${params.badge}</span>
+          </td>
+        </tr>
+        ${params.blocoInfo}
+        <tr>
+          <td style="padding:4px 28px 24px;font-size:14px;line-height:1.6;color:${O2_NAVY};font-family:${FONTE};">${params.corpoHtml}</td>
         </tr>
         <tr>
           <td style="padding:0 28px 24px;">
-            <hr style="border:none;border-top:1px solid #d9d9d9;margin:0 0 16px;" />
-            <p style="margin:0;font-size:11px;color:#8d8683;font-family:${FONTE};text-align:center;">
+            <hr style="border:none;border-top:1px solid ${O2_CINZA_CLARO};margin:0 0 16px;" />
+            <p style="margin:0;font-size:11px;color:${O2_CINZA_MEDIO};font-family:${FONTE};text-align:center;">
               O2 Seguros · <span style="color:${O2_LARANJA};">#SomosTodosO2</span>
             </p>
           </td>
         </tr>
       </table>
     </div>`;
+}
+
+// Sanitização leve, não uma lib completa: o corpo já passa por uma tela
+// autenticada (token do Bitrix validado antes de chegar aqui) escrita por
+// colaborador da O2, não por qualquer visitante da internet -- o risco real
+// aqui é conteúdo colado (Word/site) trazendo <script>/handlers por
+// acidente, não um ataque deliberado. Mesmo assim, nunca confiar cegamente.
+function sanitizarHtmlSimples(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/\son\w+="[^"]*"/gi, "")
+    .replace(/\son\w+='[^']*'/gi, "")
+    .replace(/javascript:/gi, "");
 }
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -100,13 +150,40 @@ export async function POST(request: NextRequest) {
 
   const cc = ccPorEntidade(entityTypeId);
   const replyTo = gerarEnderecoRespostaCard(entityTypeId, itemId);
+  const badge = nomeProdutoPorEntidade(entityTypeId);
+  const link = gerarLinkCard(entityTypeId, itemId);
+
+  // Melhor esforço: busca título/empresa/responsável do card pra dar
+  // contexto no e-mail (quem recebe em cópia não precisa abrir o Bitrix
+  // pra saber do que se trata). Se falhar por qualquer motivo, o e-mail
+  // ainda sai -- só sem esse bloco, nunca bloqueia o envio por causa disso.
+  let blocoInfo = "";
+  try {
+    const item = await buscarItem(entityTypeId, itemId);
+    const [empresas, responsaveis] = await Promise.all([
+      item.companyId ? buscarEmpresas([item.companyId]) : Promise.resolve({} as Record<number, string>),
+      item.assignedById ? buscarUsuarios([item.assignedById]) : Promise.resolve({} as Record<number, string>),
+    ]);
+    blocoInfo = montarBlocoInfoCard(
+      [
+        { rotulo: "Card", valor: item.title ? `#${itemId} · ${item.title}` : `#${itemId}` },
+        { rotulo: "Empresa/Imóvel", valor: item.companyId ? (empresas[item.companyId] ?? "") : "" },
+        { rotulo: "Responsável", valor: item.assignedById ? (responsaveis[item.assignedById] ?? "") : "" },
+      ],
+      link
+    );
+  } catch (erro) {
+    console.warn("Falha ao buscar dados do card pro e-mail (seguindo sem o bloco de contexto):", erro);
+  }
+
+  const html = montarHtmlEmailCard({ corpoHtml: sanitizarHtmlSimples(corpo), badge, blocoInfo });
 
   try {
     await enviarEmail({
       para: para.trim(),
       cc: [cc],
       assunto: assunto.trim(),
-      html: montarHtmlEmailCard(corpo.trim()),
+      html,
       replyTo,
       remetente: "O2 Seguros",
       throwSeFalhar: true,
@@ -121,7 +198,7 @@ export async function POST(request: NextRequest) {
       entityTypeId,
       itemId,
       assunto: assunto.trim(),
-      corpo: montarHtmlEmailCard(corpo.trim()),
+      corpo: html,
       direcao: "enviado",
       enderecoEnvolvido: para.trim(),
     });

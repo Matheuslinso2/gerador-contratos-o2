@@ -68,3 +68,29 @@ export function entityTypeIdPorPlacement(placement: string | undefined): number 
   if (!placement) return undefined;
   return ENTITY_TYPE_ID_POR_PLACEMENT[placement];
 }
+
+// Nome amigável pro badge do e-mail (Fase 3 -- melhoria de conteúdo/layout,
+// ver plano). Não precisa ser idêntico ao nome exato do funil no Bitrix,
+// só reconhecível pra quem recebe o e-mail.
+const NOME_POR_ENTIDADE: Record<number, string> = {
+  [ENTITY_TYPE_ID_LEAD]: "Lead",
+  [ENTITY_TYPE_ID_DEAL]: "Sucesso do Cliente",
+  [ENTITY_TYPE_ID_SEGURO_FIANCA]: "Seguro Fiança",
+  [ENTITY_TYPE_ID_RAMOS_ELEMENTARES]: "Seguro Incêndio",
+  [ENTITY_TYPE_ID_CAPITALIZACAO]: "Capitalização",
+  [ENTITY_TYPE_ID_SEGURO_AUTO]: "Seguro Automóvel",
+};
+
+export function nomeProdutoPorEntidade(entityTypeId: number): string {
+  return NOME_POR_ENTIDADE[entityTypeId] ?? "O2 Seguros";
+}
+
+// URL de abertura direta do card no Bitrix -- 3 padrões diferentes
+// conforme a entidade (Lead e Deal têm rota própria fixa; toda SPA usa
+// /crm/type/<entityTypeId>/).
+export function gerarLinkCard(entityTypeId: number, itemId: number): string {
+  const dominio = "https://o2seguros.bitrix24.com.br";
+  if (entityTypeId === ENTITY_TYPE_ID_LEAD) return `${dominio}/crm/lead/details/${itemId}/`;
+  if (entityTypeId === ENTITY_TYPE_ID_DEAL) return `${dominio}/crm/deal/details/${itemId}/`;
+  return `${dominio}/crm/type/${entityTypeId}/details/${itemId}/`;
+}

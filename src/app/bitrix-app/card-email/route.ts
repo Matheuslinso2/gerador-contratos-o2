@@ -124,10 +124,17 @@ export async function POST(request: NextRequest) {
     body { font-family: 'Poppins', system-ui, sans-serif; margin: 0; padding: 20px; color: #01192e; background: #fff; }
     #status { font-size: 13px; color: #8d8683; margin-bottom: 12px; }
     label { display: block; font-size: 12px; font-weight: 600; color: #444440; margin: 12px 0 4px; }
-    input, textarea { width: 100%; box-sizing: border-box; padding: 9px 10px; border: 1px solid #d9d9d9; border-radius: 8px; font-family: inherit; font-size: 14px; }
-    textarea { resize: vertical; min-height: 140px; }
-    button { margin-top: 16px; background: #F8540D; color: #fff; border: none; padding: 10px 24px; border-radius: 999px; font-weight: 700; font-size: 14px; cursor: pointer; }
-    button:disabled { opacity: 0.6; cursor: default; }
+    input { width: 100%; box-sizing: border-box; padding: 9px 10px; border: 1px solid #d9d9d9; border-radius: 8px; font-family: inherit; font-size: 14px; }
+    #barra-formatacao { display: flex; gap: 4px; margin-top: 6px; }
+    #barra-formatacao button { margin: 0; background: #fff; color: #01192e; border: 1px solid #d9d9d9; border-radius: 6px; width: 30px; height: 30px; padding: 0; font-size: 13px; font-weight: 700; cursor: pointer; line-height: 1; }
+    #barra-formatacao button:hover { background: #f4f4f4; }
+    #barra-formatacao button[data-cmd="italic"] { font-style: italic; }
+    #corpo { min-height: 140px; box-sizing: border-box; padding: 9px 10px; border: 1px solid #d9d9d9; border-radius: 8px; font-family: inherit; font-size: 14px; margin-top: 6px; }
+    #corpo:focus { outline: 2px solid #F8540D22; }
+    #corpo ul, #corpo ol { margin: 0 0 0 20px; padding: 0; }
+    #corpo a { color: #F8540D; }
+    button.enviar { margin-top: 16px; background: #F8540D; color: #fff; border: none; padding: 10px 24px; border-radius: 999px; font-weight: 700; font-size: 14px; cursor: pointer; }
+    button.enviar:disabled { opacity: 0.6; cursor: default; }
     #mensagem { margin-top: 12px; font-size: 13px; }
     #mensagem.erro { color: #c0392b; }
     #mensagem.sucesso { color: #1a7a3c; }
@@ -144,9 +151,15 @@ export async function POST(request: NextRequest) {
     <input id="assunto" type="text" required />
 
     <label for="corpo">Mensagem</label>
-    <textarea id="corpo" required></textarea>
+    <div id="barra-formatacao">
+      <button type="button" data-cmd="bold" title="Negrito"><b>B</b></button>
+      <button type="button" data-cmd="italic" title="Itálico">I</button>
+      <button type="button" data-cmd="insertUnorderedList" title="Lista">•—</button>
+      <button type="button" data-cmd="createLink" title="Link">🔗</button>
+    </div>
+    <div id="corpo" contenteditable="true" role="textbox" aria-multiline="true"></div>
 
-    <button id="botao-enviar" type="submit">Enviar</button>
+    <button class="enviar" id="botao-enviar" type="submit">Enviar</button>
     <div id="mensagem"></div>
   </form>
 
@@ -167,6 +180,24 @@ export async function POST(request: NextRequest) {
       document.getElementById("form-email").style.display = "block";
     }
 
+    // execCommand é tecnicamente "obsoleto", mas continua funcionando em
+    // todos os browsers modernos pra formatação simples dentro de um iframe
+    // interno -- suficiente aqui sem adicionar uma lib de editor rich text
+    // só pra negrito/itálico/lista/link.
+    document.querySelectorAll("#barra-formatacao button").forEach(function (botao) {
+      botao.addEventListener("click", function () {
+        document.getElementById("corpo").focus();
+        var cmd = botao.getAttribute("data-cmd");
+        if (cmd === "createLink") {
+          var url = window.prompt("Link (com https://):");
+          if (!url) return;
+          document.execCommand(cmd, false, url);
+        } else {
+          document.execCommand(cmd, false, null);
+        }
+      });
+    });
+
     try {
       BX24.init(function () {
         var info = BX24.placement.info();
@@ -175,10 +206,19 @@ export async function POST(request: NextRequest) {
 
         document.getElementById("form-email").addEventListener("submit", function (evento) {
           evento.preventDefault();
-          var botao = document.getElementById("botao-enviar");
+          var corpoEl = document.getElementById("corpo");
           var mensagem = document.getElementById("mensagem");
           mensagem.className = "";
           mensagem.textContent = "";
+
+          if (!corpoEl.textContent.trim()) {
+            mensagem.className = "erro";
+            mensagem.textContent = "Escreva uma mensagem.";
+            corpoEl.focus();
+            return;
+          }
+
+          var botao = document.getElementById("botao-enviar");
           botao.disabled = true;
 
           var auth = BX24.getAuth();
@@ -191,7 +231,7 @@ export async function POST(request: NextRequest) {
               itemId: Number(itemId),
               para: document.getElementById("para").value,
               assunto: document.getElementById("assunto").value,
-              corpo: document.getElementById("corpo").value,
+              corpo: corpoEl.innerHTML,
             }),
           })
             .then(function (resp) { return resp.json().then(function (dados) { return { ok: resp.ok, dados: dados }; }); })
@@ -201,6 +241,7 @@ export async function POST(request: NextRequest) {
                 mensagem.className = "sucesso";
                 mensagem.textContent = "E-mail enviado.";
                 document.getElementById("form-email").reset();
+                corpoEl.innerHTML = "";
               } else {
                 mensagem.className = "erro";
                 mensagem.textContent = (resultado.dados && resultado.dados.erro) || "Falha ao enviar.";
