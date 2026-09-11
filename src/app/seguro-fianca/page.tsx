@@ -6,6 +6,7 @@ import AppHeader from "@/components/AppHeader";
 import SeletorCompetencia from "./SeletorCompetencia";
 import AtualizarAgora from "./AtualizarAgora";
 import ImobiliariasTabela from "./ImobiliariasTabela";
+import DetalheImobiliariaTabela from "./DetalheImobiliariaTabela";
 import { AbasProvider, AbaSlot, type DefinicaoAba } from "./AbasPainel";
 import styles from "./seguro-fianca.module.css";
 import ExportarQuadro, { BotaoExportarPainelPdf } from "@/components/ExportarQuadro";
@@ -1608,43 +1609,7 @@ export default async function SeguroFiancaPage({
                       />
                     </div>
                     <div className={styles.panel}>
-                      <div className={styles.tableWrap}>
-                        <table className={`${styles.data} ${styles.compacta}`}>
-                          <thead>
-                            <tr>
-                              <th>Imobiliária</th>
-                              <th className={styles.numCol}>Cotações</th>
-                              <th className={styles.numCol}>Recusados</th>
-                              <th className={styles.numCol}>% Recus.</th>
-                              <th className={styles.numCol}>Negativados</th>
-                              <th className={styles.numCol}>% Neg.</th>
-                              <th className={styles.numCol}>Contratados</th>
-                              <th className={styles.numCol}>% Contr.</th>
-                              <th className={styles.numCol}>Andamento</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {linhas.map((im) => (
-                              <tr key={im.nome}>
-                                <td>{im.nome}</td>
-                                <td className={`${styles.numCol} ${styles.num}`} style={{ fontWeight: 700 }}>{im.total}</td>
-                                <td className={`${styles.numCol} ${styles.num}`}>{im.recusados}</td>
-                                <td className={`${styles.numCol} ${styles.num}`}>{fmtPct((im.recusados / im.total) * 100)}</td>
-                                <td className={`${styles.numCol} ${styles.num}`}>{im.perdidos}</td>
-                                <td className={`${styles.numCol} ${styles.num}`}>{fmtPct((im.perdidos / im.total) * 100)}</td>
-                                <td className={`${styles.numCol} ${styles.num}`}>{im.convertidos}</td>
-                                <td className={`${styles.numCol} ${styles.num}`}>{fmtPct((im.convertidos / im.total) * 100)}</td>
-                                <td className={`${styles.numCol} ${styles.num}`}>{im.emAndamento}</td>
-                              </tr>
-                            ))}
-                            {linhas.length === 0 && (
-                              <tr>
-                                <td colSpan={9} style={{ color: "var(--ink-faint)" }}>Nenhuma cotação registrada neste período.</td>
-                              </tr>
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
+                      <DetalheImobiliariaTabela linhas={linhas} />
                     </div>
                   </section>
                 );
