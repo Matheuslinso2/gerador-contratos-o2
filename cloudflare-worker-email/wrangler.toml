@@ -1,0 +1,9 @@
+name = "o2-bitrix-email-resposta"
+main = "src/index.js"
+compatibility_date = "2026-01-01"
+
+# URL do webhook na Plataforma O2 -- não é segredo, pode ficar em texto
+# plano. O segredo de verdade (BITRIX_EMAIL_RESPOSTA_SECRET) é setado à
+# parte, via `npm run secret` (wrangler secret put), nunca aqui no arquivo.
+[vars]
+WEBHOOK_URL = "https://contratos.o2seguros.com.br/api/integracoes/bitrix-email-resposta"

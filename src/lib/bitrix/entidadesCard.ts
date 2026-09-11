@@ -40,6 +40,16 @@ export function gerarEnderecoRespostaCard(entityTypeId: number, itemId: number):
   return `card-${entityTypeId}-${itemId}@notificacoes.o2seguros.com.br`;
 }
 
+// Caminho inverso: extrai entityTypeId/itemId do endereço "Para" de um
+// e-mail recebido (Fase 2). Só aceita o formato exato gerado acima --
+// qualquer coisa fora do padrão (ex: alguém respondeu um e-mail antigo de
+// antes desse endereço existir) retorna null em vez de adivinhar.
+export function parseEnderecoResposta(enderecoTo: string): { entityTypeId: number; itemId: number } | null {
+  const casado = enderecoTo.trim().toLowerCase().match(/^card-(\d+)-(\d+)@notificacoes\.o2seguros\.com\.br$/);
+  if (!casado) return null;
+  return { entityTypeId: Number(casado[1]), itemId: Number(casado[2]) };
+}
+
 // Nome do placement do Bitrix (PLACEMENT no POST de abertura da aba) ->
 // entityTypeId. Usado pelo handler do placement pra saber em qual entidade
 // o card foi aberto -- ver Passo 2 do prompt-codex-registrar-placements-restantes.md

@@ -1,0 +1,17 @@
+{
+  "name": "o2-bitrix-email-resposta",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cloudflare Email Worker: recebe respostas em *@notificacoes.o2seguros.com.br e repassa pro webhook da Plataforma O2 (Fase 2 do E-mail no Card).",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "secret": "wrangler secret put BITRIX_EMAIL_RESPOSTA_SECRET"
+  },
+  "dependencies": {
+    "postal-mime": "^2.2.7"
+  },
+  "devDependencies": {
+    "wrangler": "^3.90.0"
+  }
+}

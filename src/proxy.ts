@@ -19,6 +19,10 @@ const ROTAS_PUBLICAS = [
   // Recebe e-mails da caixa incendio@ via gatilho do Google Apps Script,
   // sem cookie de usuário. Valida um token secreto próprio (mesmo padrão).
   "/api/integracoes/incendio-email",
+  // Recebe a resposta do cliente ao e-mail enviado pelo card (Fase 2 do
+  // e-mail no card), via Cloudflare Email Worker -- mesmo padrão de token
+  // secreto próprio dos outros webhooks acima.
+  "/api/integracoes/bitrix-email-resposta",
   // Formulário público de Capitalização — preenchido por imobiliárias,
   // corretores e proprietários que não têm (nem precisam ter) conta na
   // Plataforma O2.
