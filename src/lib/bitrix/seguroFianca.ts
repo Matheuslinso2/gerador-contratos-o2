@@ -727,6 +727,10 @@ export type AnaliseGerencial = {
     // imobiliária caiu nesta competência.
     menorTaxaMediaGeral: number | null;
     menorTaxaMediaNegativados: number | null;
+    // 10/09/2026: mínimo absoluto (não média) entre todas as cotações do
+    // mês, e média da taxa efetivamente contratada nos convertidos.
+    menorTaxaGeral: number | null;
+    taxaMediaConvertidos: number | null;
     clienteNovo: boolean;
   }[];
   valoresTrabalhados: { aluguel: number; pacoteLocacao: number }; // "novidades"
@@ -1058,6 +1062,16 @@ export function montarAnaliseGerencial(
     return valores.length ? Math.min(...valores) : null;
   }
 
+  // Taxa da seguradora que FOI CONTRATADA de verdade (não a menor cotada) --
+  // pedido do Matheus, 10/09/2026: "taxa média de convertidos" deve refletir
+  // o produto que realmente fechou em cada card, mesmo que outra seguradora
+  // tivesse cotado mais barato.
+  function taxaContratadaDoCard(l: LinhaContagem): number | null {
+    if (!l.seguradoraEscolhida) return null;
+    const taxa = l.seguradoras[l.seguradoraEscolhida]?.pctLocacao;
+    return typeof taxa === "number" && taxa > 0 ? taxa : null;
+  }
+
   // Tabela de imobiliárias -- cada coluna vem de um conjunto diferente (ver
   // tipo AnaliseGerencial acima), por isso itera separado em vez de um loop
   // único como antes.
@@ -1085,6 +1099,9 @@ export function montarAnaliseGerencial(
       // mês, qualquer origem, mesmo escopo que `perdidos` usa acima).
       menorTaxaGeralValores: number[];
       menorTaxaNegativadosValores: number[];
+      // 10/09/2026: taxa da seguradora efetivamente contratada em cada
+      // convertido (não a menor cotada) -- ver taxaContratadaDoCard.
+      taxaContratadaConvertidosValores: number[];
     }
   > = {};
   function obterOuCriarImob(nome: string) {
@@ -1102,6 +1119,7 @@ export function montarAnaliseGerencial(
       percentualPacoteValores: [],
       menorTaxaGeralValores: [],
       menorTaxaNegativadosValores: [],
+      taxaContratadaConvertidosValores: [],
     };
     return porImobiliaria[nome];
   }
@@ -1141,6 +1159,8 @@ export function montarAnaliseGerencial(
     const pct = typeof l.comissaoFinalPct === "number" ? l.comissaoFinalPct : 0;
     d.premioEfetivado += premio;
     d.comissaoEfetivada += premio * (pct / 100);
+    const taxaContratada = taxaContratadaDoCard(l);
+    if (taxaContratada !== null) d.taxaContratadaConvertidosValores.push(taxaContratada);
   }
   // Item 4 (09/09/2026): "cliente novo" = imobiliária cuja 1ª cotação de
   // TODA a história (não só desta competência) caiu neste mês. `linhas` já
@@ -1169,6 +1189,7 @@ export function montarAnaliseGerencial(
         percentualPacoteValores,
         menorTaxaGeralValores,
         menorTaxaNegativadosValores,
+        taxaContratadaConvertidosValores,
         ...resto
       } = d;
       return {
@@ -1183,6 +1204,14 @@ export function montarAnaliseGerencial(
         // taxa cotada nesse conjunto, pra distinguir de "taxa zero".
         menorTaxaMediaGeral: menorTaxaGeralValores.length ? media(menorTaxaGeralValores) : null,
         menorTaxaMediaNegativados: menorTaxaNegativadosValores.length ? media(menorTaxaNegativadosValores) : null,
+        // 10/09/2026: mínimo absoluto (não média) entre TODAS as cotações do
+        // mês da imobiliária -- mesma base de menorTaxaMediaGeral, só troca
+        // média por mínimo (pedido do Matheus).
+        menorTaxaGeral: menorTaxaGeralValores.length ? Math.min(...menorTaxaGeralValores) : null,
+        // 10/09/2026: média da taxa REALMENTE CONTRATADA (não a menor
+        // cotada) entre os convertidos da imobiliária -- ver
+        // taxaContratadaDoCard.
+        taxaMediaConvertidos: taxaContratadaConvertidosValores.length ? media(taxaContratadaConvertidosValores) : null,
         clienteNovo: clientesNovos.has(nome),
       };
     })

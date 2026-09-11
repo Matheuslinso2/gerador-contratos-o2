@@ -159,6 +159,9 @@ function normalizarSnapshot(
       ...im,
       menorTaxaMediaGeral: im.menorTaxaMediaGeral ?? null,
       menorTaxaMediaNegativados: im.menorTaxaMediaNegativados ?? null,
+      // Retratos congelados antes de 10/09/2026 não têm esses 2 campos.
+      menorTaxaGeral: im.menorTaxaGeral ?? null,
+      taxaMediaConvertidos: im.taxaMediaConvertidos ?? null,
       clienteNovo: im.clienteNovo ?? false,
     })),
     qualidade: { ...payload.qualidade, naoAdministrados: payload.qualidade.naoAdministrados ?? 0 },
@@ -1619,7 +1622,9 @@ export default async function SeguroFiancaPage({
                 // Itens 2/3 (09/09/2026): taxa média (menor entre
                 // seguradoras cotadas POR CARD, depois média entre os
                 // cards), por imobiliária -- geral e só negativados.
-                const linhas = gerencial.topImobiliarias.filter((im) => im.menorTaxaMediaGeral !== null || im.menorTaxaMediaNegativados !== null);
+                const linhas = gerencial.topImobiliarias.filter(
+                  (im) => im.menorTaxaMediaGeral !== null || im.menorTaxaMediaNegativados !== null || im.taxaMediaConvertidos !== null
+                );
                 return (
                   <section id="quadro-fianca-taxa-imobiliaria" className={styles.section}>
                     <div className={styles.sectionHead}>
@@ -1633,8 +1638,10 @@ export default async function SeguroFiancaPage({
                           { indicador: "Taxa Média do Mês (negativados + contratados)", valor: gerencial.aba2Taxas.media ?? "" },
                           ...linhas.map((im) => ({
                             imobiliaria: im.nome,
+                            menor_taxa: im.menorTaxaGeral ?? "",
                             taxa_media_geral: im.menorTaxaMediaGeral ?? "",
                             taxa_media_negativados: im.menorTaxaMediaNegativados ?? "",
+                            taxa_media_convertidos: im.taxaMediaConvertidos ?? "",
                           })),
                         ]}
                         nomeAbaExcel="Taxa por imobiliária"
@@ -1650,21 +1657,25 @@ export default async function SeguroFiancaPage({
                           <thead>
                             <tr>
                               <th>Imobiliária</th>
+                              <th className={styles.numCol}>Menor Taxa</th>
                               <th className={styles.numCol}>Taxa Média (geral)</th>
                               <th className={styles.numCol}>Taxa Média (negativados)</th>
+                              <th className={styles.numCol}>Taxa Média (convertidos)</th>
                             </tr>
                           </thead>
                           <tbody>
                             {linhas.map((im) => (
                               <tr key={im.nome}>
                                 <td>{im.nome}</td>
+                                <td className={`${styles.numCol} ${styles.num}`} style={{ fontWeight: 700 }}>{fmtPct(im.menorTaxaGeral)}</td>
                                 <td className={`${styles.numCol} ${styles.num}`}>{fmtPct(im.menorTaxaMediaGeral)}</td>
                                 <td className={`${styles.numCol} ${styles.num}`}>{fmtPct(im.menorTaxaMediaNegativados)}</td>
+                                <td className={`${styles.numCol} ${styles.num}`}>{fmtPct(im.taxaMediaConvertidos)}</td>
                               </tr>
                             ))}
                             {linhas.length === 0 && (
                               <tr>
-                                <td colSpan={3} style={{ color: "var(--ink-faint)" }}>Nenhuma taxa cotada neste período.</td>
+                                <td colSpan={5} style={{ color: "var(--ink-faint)" }}>Nenhuma taxa cotada neste período.</td>
                               </tr>
                             )}
                           </tbody>
@@ -1737,8 +1748,9 @@ export default async function SeguroFiancaPage({
               })()}
 
               {(() => {
-                // Item 5 (09/09/2026): Top 5 crescimento/queda em cotações e
-                // em conversões, comparando com o mês anterior completo.
+                // Item 5 (09/09/2026): Top 10 crescimento/queda em cotações e
+                // em conversões, comparando com o mês anterior completo
+                // (ampliado de Top 5 pra Top 10 em 10/09/2026, pedido do Matheus).
                 const nomes = new Set([...gerencial.topImobiliarias.map((im) => im.nome), ...topImobiliariasMesAnterior.map((im) => im.nome)]);
                 const comparativo = [...nomes]
                   .filter((n) => n !== NOME_NAO_ADMINISTRADA)
@@ -1755,11 +1767,11 @@ export default async function SeguroFiancaPage({
                   });
                 const porCotacoes = comparativo.map((c) => ({ nome: c.nome, delta: c.cotAtual - c.cotAnterior, atual: c.cotAtual, anterior: c.cotAnterior }));
                 const porConversoes = comparativo.map((c) => ({ nome: c.nome, delta: c.convAtual - c.convAnterior, atual: c.convAtual, anterior: c.convAnterior }));
-                const top5CresCot = [...porCotacoes].filter((c) => c.delta > 0).sort((a, b) => b.delta - a.delta).slice(0, 5);
-                const top5QuedaCot = [...porCotacoes].filter((c) => c.delta < 0).sort((a, b) => a.delta - b.delta).slice(0, 5);
-                const top5CresConv = [...porConversoes].filter((c) => c.delta > 0).sort((a, b) => b.delta - a.delta).slice(0, 5);
-                const top5QuedaConv = [...porConversoes].filter((c) => c.delta < 0).sort((a, b) => a.delta - b.delta).slice(0, 5);
-                const ListaTop5 = ({ titulo, itens }: { titulo: string; itens: { nome: string; delta: number; atual: number; anterior: number }[] }) => (
+                const top10CresCot = [...porCotacoes].filter((c) => c.delta > 0).sort((a, b) => b.delta - a.delta).slice(0, 10);
+                const top10QuedaCot = [...porCotacoes].filter((c) => c.delta < 0).sort((a, b) => a.delta - b.delta).slice(0, 10);
+                const top10CresConv = [...porConversoes].filter((c) => c.delta > 0).sort((a, b) => b.delta - a.delta).slice(0, 10);
+                const top10QuedaConv = [...porConversoes].filter((c) => c.delta < 0).sort((a, b) => a.delta - b.delta).slice(0, 10);
+                const ListaTop10 = ({ titulo, itens }: { titulo: string; itens: { nome: string; delta: number; atual: number; anterior: number }[] }) => (
                   <div className={styles.panel}>
                     <h3>{titulo}</h3>
                     {itens.length === 0 ? (
@@ -1795,25 +1807,25 @@ export default async function SeguroFiancaPage({
                 return (
                   <section id="quadro-fianca-top5-comparativo" className={styles.section}>
                     <div className={styles.sectionHead}>
-                      <h2>Comparativo com o mês anterior — Top 5</h2>
+                      <h2>Comparativo com o mês anterior — Top 10</h2>
                       <div className={styles.note}>maior crescimento e maior queda, em cotações e em conversões</div>
                       <ExportarQuadro
                         quadroId="quadro-fianca-top5-comparativo"
-                        nomeArquivo={`seguro-fianca-top5-comparativo-${competencia}`}
+                        nomeArquivo={`seguro-fianca-top10-comparativo-${competencia}`}
                         dadosExcel={[
-                          ...top5CresCot.map((i) => ({ recorte: "Maior crescimento em cotações", imobiliaria: i.nome, anterior: i.anterior, atual: i.atual, variacao: i.delta })),
-                          ...top5QuedaCot.map((i) => ({ recorte: "Maior queda em cotações", imobiliaria: i.nome, anterior: i.anterior, atual: i.atual, variacao: i.delta })),
-                          ...top5CresConv.map((i) => ({ recorte: "Maior crescimento em conversões", imobiliaria: i.nome, anterior: i.anterior, atual: i.atual, variacao: i.delta })),
-                          ...top5QuedaConv.map((i) => ({ recorte: "Maior queda em conversões", imobiliaria: i.nome, anterior: i.anterior, atual: i.atual, variacao: i.delta })),
+                          ...top10CresCot.map((i) => ({ recorte: "Maior crescimento em cotações", imobiliaria: i.nome, anterior: i.anterior, atual: i.atual, variacao: i.delta })),
+                          ...top10QuedaCot.map((i) => ({ recorte: "Maior queda em cotações", imobiliaria: i.nome, anterior: i.anterior, atual: i.atual, variacao: i.delta })),
+                          ...top10CresConv.map((i) => ({ recorte: "Maior crescimento em conversões", imobiliaria: i.nome, anterior: i.anterior, atual: i.atual, variacao: i.delta })),
+                          ...top10QuedaConv.map((i) => ({ recorte: "Maior queda em conversões", imobiliaria: i.nome, anterior: i.anterior, atual: i.atual, variacao: i.delta })),
                         ]}
-                        nomeAbaExcel="Top5 comparativo"
+                        nomeAbaExcel="Top10 comparativo"
                       />
                     </div>
                     <div className={styles.grid2}>
-                      <ListaTop5 titulo="Maior crescimento em cotações" itens={top5CresCot} />
-                      <ListaTop5 titulo="Maior queda em cotações" itens={top5QuedaCot} />
-                      <ListaTop5 titulo="Maior crescimento em conversões" itens={top5CresConv} />
-                      <ListaTop5 titulo="Maior queda em conversões" itens={top5QuedaConv} />
+                      <ListaTop10 titulo="Maior crescimento em cotações" itens={top10CresCot} />
+                      <ListaTop10 titulo="Maior queda em cotações" itens={top10QuedaCot} />
+                      <ListaTop10 titulo="Maior crescimento em conversões" itens={top10CresConv} />
+                      <ListaTop10 titulo="Maior queda em conversões" itens={top10QuedaConv} />
                     </div>
                   </section>
                 );
