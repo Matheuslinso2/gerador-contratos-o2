@@ -2,6 +2,8 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
+import PageHeader from "@/components/PageHeader";
+import { IconFolder } from "@/components/icons";
 import BackLink from "@/components/BackLink";
 import ListaContratosRealizados from "./ListaContratosRealizados";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
@@ -35,7 +37,7 @@ export default async function ContratosRealizadosPage({
         <AppHeader userEmail={user?.email} logoutAction={signOut} />
         <main className="mx-auto max-w-3xl flex-1 space-y-4 p-8">
           <BackLink />
-          <h1 className="text-xl font-semibold text-o2-navy">Contratos realizados</h1>
+          <PageHeader icon={<IconFolder />} titulo="Contratos realizados" />
           <p className="rounded-lg border border-yellow-400 bg-yellow-50 p-3 text-sm text-yellow-800">
             Antes de ver seus contratos, complete o cadastro da sua imobiliária em{" "}
             <Link href="/imobiliaria" className="underline">
@@ -81,12 +83,11 @@ export default async function ContratosRealizadosPage({
       <main className="mx-auto max-w-3xl flex-1 space-y-6 p-8">
         <div className="space-y-2">
           <BackLink />
-          <div>
-            <h1 className="text-xl font-semibold text-o2-navy">Contratos realizados</h1>
-            <p className="text-sm text-gray-500">
-              Todos os contratos gerados e todas as auditorias feitas por esta conta, num só lugar.
-            </p>
-          </div>
+          <PageHeader
+            icon={<IconFolder />}
+            titulo="Contratos realizados"
+            subtitulo="Todos os contratos gerados e todas as auditorias feitas por esta conta, num só lugar."
+          />
         </div>
 
         {erro && (

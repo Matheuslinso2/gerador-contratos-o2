@@ -50,7 +50,7 @@ export default function ListaAuditorias({
         <details
           key={a.id}
           open={a.id === destaque}
-          className="rounded-xl border border-o2-navy/10 bg-white p-3"
+          className="rounded-xl border border-o2-navy/10 bg-quadro p-3"
         >
           <summary className="cursor-pointer font-medium text-o2-navy">
             {a.locador_identificado || "Locador não identificado"} × {a.locatario_identificado || "Locatário não identificado"} — {a.endereco_identificado || "Endereço não identificado"}

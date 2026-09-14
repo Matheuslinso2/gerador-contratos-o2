@@ -166,7 +166,7 @@ export default function ListaContratosRealizados({
 
       {itensFiltrados.map((item) =>
         item.tipo === "gerado" ? (
-          <details key={`g-${item.data.id}`} className="rounded-xl border border-o2-navy/10 bg-white p-3">
+          <details key={`g-${item.data.id}`} className="rounded-xl border border-o2-navy/10 bg-quadro p-3">
             <summary className="cursor-pointer font-medium text-o2-navy">
               <span className="mr-2 rounded-full bg-o2-coral/10 px-2 py-0.5 text-xs font-semibold text-o2-coral">
                 Gerado
@@ -221,7 +221,7 @@ export default function ListaContratosRealizados({
             <pre className="mt-2 whitespace-pre-wrap text-sm text-gray-700">{item.data.texto_gerado}</pre>
           </details>
         ) : (
-          <details key={`a-${item.data.id}`} className="rounded-xl border border-o2-navy/10 bg-white p-3">
+          <details key={`a-${item.data.id}`} className="rounded-xl border border-o2-navy/10 bg-quadro p-3">
             <summary className="cursor-pointer font-medium text-o2-navy">
               <span className="mr-2 rounded-full bg-o2-navy/10 px-2 py-0.5 text-xs font-semibold text-o2-navy">
                 Auditado

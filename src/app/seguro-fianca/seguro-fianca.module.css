@@ -1,23 +1,26 @@
-/* Tema escuro dedicado a este painel — deliberadamente diferente do resto
-   do site (ver plano). CSS Module: as classes abaixo são escopadas só pra
-   este arquivo, não vazam pro resto do app. */
+/* Tema claro padronizado (10/09/2026) -- mesma identidade do resto do
+   Workspace (o2-navy/o2-coral). Os componentes deste painel (KPIs, barras,
+   tabelas) continuam lendo tudo via variável CSS, por isso a conversão do
+   tema escuro pro claro é só nesse bloco de variáveis. CSS Module: classes
+   escopadas só pra este arquivo, não vazam pro resto do app. */
 
 .wrap {
-  --paper: #0e131a;
-  --surface: #161e28;
-  --surface-2: #131a23;
-  --ink: #e7ebef;
-  --ink-muted: #93a2b5;
-  --ink-faint: #5f6d80;
-  --line: #263241;
-  --accent: #4fb6ac;
-  --accent-ink: #bfe9e3;
-  --positive: #55b483;
-  --positive-soft: rgba(85, 180, 131, 0.14);
-  --negative: #e2807c;
-  --negative-soft: rgba(226, 128, 124, 0.14);
-  --warning: #d9ab5a;
-  --info: #7fa6e8;
+  --paper: #f7f8fa;
+  --surface: #ffffff;
+  --surface-2: #eef1f4;
+  --kpi-bg: #e3edfb;
+  --ink: #01192e;
+  --ink-muted: #5b6b7c;
+  --ink-faint: #8a97a6;
+  --line: #e5e7eb;
+  --accent: #f8540d;
+  --accent-ink: #f8540d;
+  --positive: #1f9d5c;
+  --positive-soft: rgba(31, 157, 92, 0.12);
+  --negative: #d9483f;
+  --negative-soft: rgba(217, 72, 63, 0.1);
+  --warning: #b87f1f;
+  --info: #3568c4;
 
   background: var(--paper);
   color: var(--ink);
@@ -34,7 +37,7 @@
 }
 
 .container {
-  max-width: 1180px;
+  max-width: 1400px;
   margin: 0 auto;
 }
 
@@ -44,22 +47,9 @@
   align-items: flex-end;
   gap: 24px;
   flex-wrap: wrap;
-  border-bottom: 2px solid var(--ink);
+  border-bottom: 1px solid var(--line);
   padding-bottom: 18px;
   margin-bottom: 28px;
-}
-.eyebrow {
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
-  font-size: 11px;
-  color: var(--accent-ink);
-  font-weight: 700;
-  margin-bottom: 6px;
-}
-.title {
-  font-size: 28px;
-  font-weight: 700;
-  margin: 0;
 }
 .meta {
   text-align: right;
@@ -101,12 +91,13 @@
   gap: 1px;
   background: var(--line);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 12px;
   overflow: hidden;
   margin-bottom: 32px;
+  box-shadow: 0 1px 2px rgba(1, 25, 46, 0.05);
 }
 .kpi {
-  background: var(--surface);
+  background: var(--kpi-bg);
   padding: 16px 18px;
   display: flex;
   flex-direction: column;
@@ -190,10 +181,11 @@
 }
 
 .panel {
-  background: var(--surface);
+  background: var(--kpi-bg);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 18px 20px 16px;
+  box-shadow: 0 1px 2px rgba(1, 25, 46, 0.05);
 }
 .panel h3 {
   font-size: 14.5px;
@@ -268,7 +260,7 @@
   height: 100%;
 }
 .seg + .seg {
-  border-left: 2px solid var(--surface);
+  border-left: 2px solid var(--kpi-bg);
 }
 .segNeg {
   background: var(--negative);
@@ -321,7 +313,7 @@
   height: 100%;
 }
 .insSeg + .insSeg {
-  border-left: 2px solid var(--surface);
+  border-left: 2px solid var(--kpi-bg);
 }
 .insOk {
   background: var(--positive);
@@ -406,11 +398,12 @@ table.data,
 }
 
 .stampPanel {
-  background: var(--surface);
+  background: var(--kpi-bg);
   border: 1px solid var(--line);
   border-left: 4px solid var(--positive);
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 18px 22px;
+  box-shadow: 0 1px 2px rgba(1, 25, 46, 0.05);
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 20px;

@@ -13,6 +13,10 @@
   --color-o2-indigo: #1c165c;
   --color-o2-blue: #00447E;
   --color-o2-gray: #e4eaee;
+  /* Fundo azul clarinho dos "quadros" (cards/seções) do Workspace inteiro --
+     mesmo tom usado nos painéis via var(--kpi-bg) em CSS module (10/09/2026,
+     pedido do Matheus: unificar layout claro em todas as páginas). */
+  --color-quadro: #e3edfb;
   --color-o2-cinza-medio: #8d8683;
   --color-o2-cinza-escuro: #444440;
   --font-sans: var(--font-poppins);

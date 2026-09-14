@@ -12,7 +12,7 @@ import {
 } from "./actions";
 import SeletorImobiliaria from "./SeletorImobiliaria";
 import FaturasSubHeader from "../FaturasSubHeader";
-import { IconChecklist } from "../icons";
+import { IconChecklist } from "@/components/icons";
 import { SubmitButton } from "../SubmitButton";
 import { SEGURADORAS_CANONICAS } from "@/lib/faturasIdentificacao";
 
@@ -89,7 +89,7 @@ export default async function ConferenciaFaturasPage({
               <div
                 key={f.id}
                 id={`fatura-${f.id}`}
-                className="rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm target:ring-2 target:ring-o2-coral"
+                className="rounded-xl border border-o2-navy/10 bg-quadro p-4 shadow-sm target:ring-2 target:ring-o2-coral"
               >
                 <div className="mb-2 flex items-center justify-between">
                   <p className="text-sm font-medium text-o2-navy">{f.arquivo_nome}</p>
@@ -234,7 +234,7 @@ export default async function ConferenciaFaturasPage({
           })}
 
           {!pendentes?.length && (
-            <p className="rounded-xl border border-o2-navy/10 bg-white p-6 text-center text-sm text-gray-500 shadow-sm">
+            <p className="rounded-xl border border-o2-navy/10 bg-quadro p-6 text-center text-sm text-gray-500 shadow-sm">
               Nada pendente de conferência.
             </p>
           )}

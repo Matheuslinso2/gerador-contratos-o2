@@ -42,7 +42,7 @@ export default function CalculadoraMulta() {
 
   return (
     <div className="space-y-6">
-      <section className="space-y-4 rounded-xl border border-o2-navy/10 bg-white p-4">
+      <section className="space-y-4 rounded-xl border border-o2-navy/10 bg-quadro p-4">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Dados do contrato</h2>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

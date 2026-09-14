@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { IconSpinner } from "./icons";
 
 // Exportação 100% no navegador -- nada é enviado pro servidor, nada é
 // salvo/registrado. "PDF" é uma captura visual do quadro exatamente como
 // está na tela (cores, barras, tabelas); "Excel" é os dados por trás
 // daquele quadro, prontos pra filtrar/somar/copiar.
 
-const COR_FUNDO_PADRAO = "#0e131a"; // --paper dos painéis escuros (Capitalização/Seguro Auto/Fiança/Ramos Elementares)
+const COR_FUNDO_PADRAO = "#f7f8fa"; // --paper do tema claro padrão (10/09/2026) -- todo painel já passa isso explícito, esse valor só é rede de segurança
 
 async function capturarQuadroComoPdf(quadroId: string, nomeArquivo: string, corFundo: string) {
   const elemento = document.getElementById(quadroId);
@@ -37,14 +38,17 @@ function baixarComoExcel(dados: Record<string, unknown>[], nomeArquivo: string, 
   });
 }
 
+// Formato pill (borderRadius 9999) pra bater com o botão das landing pages
+// (ex: "Enviar ficha" em /capitalizacao) -- mesma linguagem visual adotada
+// pro resto do Workspace (10/09/2026).
 const botaoEstilo: React.CSSProperties = {
   fontSize: 11.5,
   fontWeight: 600,
   color: "var(--ink-muted, #93a2b5)",
   background: "transparent",
   border: "1px solid var(--line, #263241)",
-  borderRadius: 6,
-  padding: "3px 9px",
+  borderRadius: 9999,
+  padding: "3px 11px",
   cursor: "pointer",
   lineHeight: 1.4,
 };
@@ -82,7 +86,7 @@ export default function ExportarQuadro({
       )}
       <button
         type="button"
-        style={{ ...botaoEstilo, opacity: carregandoPdf ? 0.6 : 1 }}
+        style={{ ...botaoEstilo, opacity: carregandoPdf ? 0.7 : 1 }}
         disabled={carregandoPdf}
         onClick={async () => {
           setCarregandoPdf(true);
@@ -93,7 +97,14 @@ export default function ExportarQuadro({
           }
         }}
       >
-        {carregandoPdf ? "Gerando..." : "PDF"}
+        {carregandoPdf ? (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <IconSpinner className="h-3 w-3" />
+            Gerando...
+          </span>
+        ) : (
+          "PDF"
+        )}
       </button>
     </div>
   );
@@ -122,10 +133,10 @@ export function BotaoExportarPainelPdf({
         color: "var(--ink, #e7ebef)",
         background: "var(--surface, #161e28)",
         border: "1px solid var(--line, #263241)",
-        borderRadius: 8,
-        padding: "8px 14px",
+        borderRadius: 9999,
+        padding: "8px 16px",
         cursor: "pointer",
-        opacity: carregando ? 0.6 : 1,
+        opacity: carregando ? 0.7 : 1,
       }}
       disabled={carregando}
       onClick={async () => {
@@ -137,7 +148,14 @@ export function BotaoExportarPainelPdf({
         }
       }}
     >
-      {carregando ? "Gerando PDF..." : "Baixar painel em PDF"}
+      {carregando ? (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <IconSpinner className="h-3.5 w-3.5" />
+          Gerando PDF...
+        </span>
+      ) : (
+        "Baixar painel em PDF"
+      )}
     </button>
   );
 }

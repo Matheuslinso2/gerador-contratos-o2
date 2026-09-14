@@ -40,7 +40,7 @@ export default function ResultadoAnalise({ resultado }: { resultado: AnaliseFian
       <section className="space-y-3">
         <TituloEtapa numero="1" titulo="Parecer analítico" subtitulo="Uso interno — comparativo e leitura do caso" />
 
-        <div className="space-y-4 rounded-xl border border-o2-navy/10 bg-white p-5 shadow-sm">
+        <div className="space-y-4 rounded-xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
           {resultado.opcoes.length > 0 && (
             <div className="overflow-x-auto rounded-lg border border-gray-200">
               <table className="w-full text-left text-sm">
@@ -75,7 +75,7 @@ export default function ResultadoAnalise({ resultado }: { resultado: AnaliseFian
       <section className="space-y-3">
         <TituloEtapa numero="2" titulo="Visão comercial" subtitulo="Mensagem pronta para copiar e enviar ao cliente/imobiliária" />
 
-        <div className="rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm">
+        <div className="rounded-xl border border-o2-navy/10 bg-quadro p-4 shadow-sm">
           <div className="mb-1.5 flex items-center justify-between">
             <p className="text-sm font-semibold text-o2-navy">WhatsApp</p>
             <BotaoCopiar texto={resultado.mensagem_whatsapp} />

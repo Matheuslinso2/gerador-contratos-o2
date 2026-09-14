@@ -1,6 +1,6 @@
 import { salvarSeguradorasImobiliaria, adicionarEmailFatura, removerEmailFatura } from "./actions";
 import { SEGURADORAS_CANONICAS } from "@/lib/faturasIdentificacao";
-import { IconMail, IconChecklist, IconTrash } from "./icons";
+import { IconMail, IconChecklist, IconTrash } from "@/components/icons";
 import { SubmitButton } from "./SubmitButton";
 
 const inputClass = "w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-o2-coral focus:outline-none";
@@ -47,7 +47,7 @@ export default function VinculosFaturas({
 
   return (
     <>
-      <div className="rounded-2xl border border-o2-navy/10 bg-white p-6 shadow-sm">
+      <div className="rounded-2xl border border-o2-navy/10 bg-quadro p-6 shadow-sm">
         <div className="mb-1 flex items-center gap-2">
           <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-o2-navy/5 text-o2-navy">
             <IconMail className="h-4 w-4" />
@@ -103,7 +103,7 @@ export default function VinculosFaturas({
         </form>
       </div>
 
-      <div className="rounded-2xl border border-o2-navy/10 bg-white p-6 shadow-sm">
+      <div className="rounded-2xl border border-o2-navy/10 bg-quadro p-6 shadow-sm">
         <div className="mb-1 flex items-center gap-2">
           <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-o2-navy/5 text-o2-navy">
             <IconChecklist className="h-4 w-4" />

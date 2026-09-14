@@ -1,6 +1,8 @@
 // Ícones de linha no mesmo estilo dos cards da tela inicial (viewBox 24x24,
-// stroke currentColor, strokeWidth 1.6) -- reaproveitados em todo o módulo
-// de Faturas pra manter a mesma identidade visual.
+// stroke currentColor, strokeWidth 1.6) -- movido de src/app/faturas/icons.tsx
+// (10/09/2026) pra @/components porque virou o conjunto usado no cabeçalho
+// padrão (ver PageHeader.tsx) de todas as ferramentas do Workspace, não só
+// Faturas/Repasses.
 
 type IconProps = { className?: string };
 
@@ -125,6 +127,109 @@ export function IconSpinner({ className = "h-4 w-4" }: IconProps) {
     <svg viewBox="0 0 24 24" fill="none" className={`${className} animate-spin`}>
       <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2.2" opacity="0.25" />
       <path d="M21 12a9 9 0 00-9-9" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function IconFolder({ className = "h-6 w-6" }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <path
+        d="M4 7.5A1.5 1.5 0 015.5 6h4l2 2h7A1.5 1.5 0 0120 9.5v8A1.5 1.5 0 0118.5 19h-13A1.5 1.5 0 014 17.5v-10z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function IconCalculator({ className = "h-6 w-6" }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <rect x="5.5" y="3.5" width="13" height="17" rx="1.8" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M8 7.5h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path
+        d="M8 11h.01M12 11h.01M16 11h.01M8 14.5h.01M12 14.5h.01M16 14.5h.01M8 18h.01M12 18h.01"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+export function IconBook({ className = "h-6 w-6" }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <path
+        d="M5 5.2A1.7 1.7 0 016.7 3.5H12v17H6.7A1.7 1.7 0 015 18.8V5.2z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M19 5.2a1.7 1.7 0 00-1.7-1.7H12v17h5.3a1.7 1.7 0 001.7-1.7V5.2z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function IconChart({ className = "h-6 w-6" }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <path d="M4 20V4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M4 20h16" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <rect x="7" y="13" width="2.6" height="7" rx="0.5" stroke="currentColor" strokeWidth="1.6" />
+      <rect x="11.7" y="9" width="2.6" height="11" rx="0.5" stroke="currentColor" strokeWidth="1.6" />
+      <rect x="16.4" y="6" width="2.6" height="14" rx="0.5" stroke="currentColor" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
+export function IconCar({ className = "h-6 w-6" }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <path
+        d="M4.5 15.5l1.4-5.2a2 2 0 011.93-1.5h8.34a2 2 0 011.93 1.5l1.4 5.2"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <rect x="3" y="15.5" width="18" height="4" rx="1.4" stroke="currentColor" strokeWidth="1.6" />
+      <circle cx="7.5" cy="19.5" r="1.4" stroke="currentColor" strokeWidth="1.6" />
+      <circle cx="16.5" cy="19.5" r="1.4" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M6 12.5h12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function IconFlame({ className = "h-6 w-6" }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <path
+        d="M12 3.5c1.2 2 1.4 3.4.6 4.9 1.4-.4 2.2-1.3 2.6-2.6 1.6 1.8 2.3 3.8 2.3 5.7 0 3.9-3.2 7-7.1 7-3.6 0-6.4-2.6-6.4-6 0-2.3 1-3.9 2.5-5.5-.1 1.4.3 2.3 1.3 3-.6-2.3.2-4.5 4.2-6.5z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function IconShield({ className = "h-6 w-6" }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <path
+        d="M12 3.5l6.5 2.4V11c0 4.6-2.8 7.9-6.5 9.5-3.7-1.6-6.5-4.9-6.5-9.5V5.9L12 3.5z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <path d="M9 12l2 2 4-4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

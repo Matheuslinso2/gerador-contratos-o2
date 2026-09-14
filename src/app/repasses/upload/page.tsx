@@ -5,7 +5,7 @@ import { signOut } from "../../actions";
 import AppHeader from "@/components/AppHeader";
 import UploadRepasseForm from "./UploadRepasseForm";
 import FaturasSubHeader from "../../faturas/FaturasSubHeader";
-import { IconUpload } from "../../faturas/icons";
+import { IconUpload } from "@/components/icons";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -38,7 +38,7 @@ export default async function UploadRepassePage({
           <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>
         )}
 
-        <div className="rounded-2xl border border-o2-navy/10 bg-white p-6 shadow-sm">
+        <div className="rounded-2xl border border-o2-navy/10 bg-quadro p-6 shadow-sm">
           <UploadRepasseForm userId={user!.id} />
         </div>
       </main>

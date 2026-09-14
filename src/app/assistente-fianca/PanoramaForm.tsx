@@ -60,7 +60,7 @@ export default function PanoramaForm() {
 
   return (
     <div className="space-y-6">
-      <form onSubmit={aoEnviar} className="space-y-3 rounded-xl border border-o2-navy/10 bg-white p-5 shadow-sm">
+      <form onSubmit={aoEnviar} className="space-y-3 rounded-xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
         <div>
           <label className="mb-1 block text-sm font-medium text-o2-navy">Panorama do caso</label>
           <p className="mb-2 text-xs text-gray-500">

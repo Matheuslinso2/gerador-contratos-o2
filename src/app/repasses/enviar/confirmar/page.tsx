@@ -7,7 +7,7 @@ import AppHeader from "@/components/AppHeader";
 import { confirmarEnvioRepasse } from "../actions";
 import { valoresBatem } from "@/lib/repassesIdentificacao";
 import FaturasSubHeader from "../../../faturas/FaturasSubHeader";
-import { IconSend } from "../../../faturas/icons";
+import { IconSend } from "@/components/icons";
 import { SubmitButton } from "../../../faturas/SubmitButton";
 
 export const dynamic = "force-dynamic";
@@ -106,7 +106,7 @@ export default async function ConfirmarEnvioRepassePage({
         {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">⚠️ {erro}</p>}
 
         {!prontas.length && (
-          <p className="rounded-xl border border-o2-navy/10 bg-white p-6 text-center text-sm text-gray-500 shadow-sm">
+          <p className="rounded-xl border border-o2-navy/10 bg-quadro p-6 text-center text-sm text-gray-500 shadow-sm">
             Nenhuma das selecionadas está pronta pra envio agora (verifique e-mail de repasse cadastrado, par
             relatório+comprovante completo e valores batendo).
           </p>
@@ -122,7 +122,7 @@ export default async function ConfirmarEnvioRepassePage({
               .map((p) => `&imob=${p.id}`)
               .join("")}`;
             return (
-              <div key={i.id} className="rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm">
+              <div key={i.id} className="rounded-xl border border-o2-navy/10 bg-quadro p-4 shadow-sm">
                 <div className="mb-2 flex items-start justify-between gap-3">
                   <p className="text-sm font-semibold leading-snug text-o2-navy">{i.nome}</p>
                   <Link

@@ -1,18 +1,27 @@
+/* Tema claro padronizado (10/09/2026) -- mesma identidade do resto do
+   Workspace (o2-navy/o2-coral). --re-surface vira a cor de fundo de TODO
+   "quadro" da página (KPI, painel, aviso), igual o padrão --kpi-bg adotado
+   nos outros painéis; --re-input-bg fica reservado pra campo/botão de
+   filtro, que continuam brancos (igual formulário em qualquer outra parte
+   do app), não azulados como os quadros de conteúdo. */
+
 .wrap {
-  --re-bg: #09111a;
-  --re-surface: #101d29;
-  --re-surface-2: #142433;
-  --re-line: #263b4d;
-  --re-text: #edf5fa;
-  --re-muted: #91a8b8;
-  --re-green: #3bd69a;
-  --re-blue: #5ba9ff;
-  --re-amber: #f0bd62;
-  --re-red: #ff7b86;
+  --re-bg: #f7f8fa;
+  --re-surface: #e3edfb;
+  --re-input-bg: #ffffff;
+  --re-surface-2: #eef1f4;
+  --re-line: #e5e7eb;
+  --re-text: #01192e;
+  --re-muted: #5b6b7c;
+  --re-accent: #f8540d;
+  --re-positive: #1f9d5c;
+  --re-blue: #3568c4;
+  --re-amber: #b87f1f;
+  --re-red: #d9483f;
   min-height: calc(100vh - 128px);
   background: var(--re-bg);
   color: var(--re-text);
-  padding: 26px max(18px, calc((100vw - 1180px) / 2));
+  padding: 26px max(18px, calc((100vw - 1400px) / 2));
   overflow-x: clip;
 }
 
@@ -24,14 +33,6 @@
   align-items: flex-start;
   gap: 24px;
   margin-bottom: 18px;
-}
-
-.eyebrow {
-  color: var(--re-green);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: .08em;
-  text-transform: uppercase;
 }
 
 .topo h1 {
@@ -58,12 +59,12 @@
   min-height: 38px;
   border: 1px solid var(--re-line);
   border-radius: 8px;
-  background: var(--re-surface);
+  background: var(--re-input-bg);
   color: var(--re-text);
   padding: 8px 11px;
 }
-.controles button { cursor: pointer; color: var(--re-green); }
-.controles button:hover { border-color: var(--re-green); }
+.controles button { cursor: pointer; color: var(--re-accent); }
+.controles button:hover { border-color: var(--re-accent); }
 .controles button:disabled { opacity: .55; cursor: wait; }
 .controles small { flex-basis: 100%; text-align: right; }
 
@@ -72,13 +73,13 @@
   justify-content: space-between;
   align-items: center;
   gap: 15px;
-  background: rgba(59, 214, 154, .08);
-  border: 1px solid rgba(59, 214, 154, .3);
+  background: rgba(31, 157, 92, .08);
+  border: 1px solid rgba(31, 157, 92, .3);
   border-radius: 9px;
   padding: 11px 13px;
   margin-bottom: 10px;
 }
-.estadoFonteAlerta { background: rgba(240, 189, 98, .08); border-color: rgba(240, 189, 98, .35); }
+.estadoFonteAlerta { background: rgba(184, 127, 31, .08); border-color: rgba(184, 127, 31, .35); }
 .estadoFonte div { display: grid; gap: 2px; }
 .estadoFonte strong { font-size: 12px; }
 .estadoFonte span { color: var(--re-muted); font-size: 10px; }
@@ -94,7 +95,7 @@
   font-size: 11px;
   overflow-wrap: anywhere;
 }
-.erroFonte { border-color: rgba(255, 123, 134, .45); background: rgba(255, 123, 134, .08); color: var(--re-red); }
+.erroFonte { border-color: rgba(217, 72, 63, .45); background: rgba(217, 72, 63, .08); color: var(--re-red); }
 .avisoNeutro { background: var(--re-surface); color: var(--re-muted); }
 .avisosFonte { background: var(--re-surface); color: var(--re-muted); }
 .avisosFonte summary { color: var(--re-text); cursor: pointer; }
@@ -116,7 +117,7 @@
   cursor: pointer;
   white-space: normal;
 }
-.abas button[aria-current="page"] { color: var(--re-text); border-bottom-color: var(--re-green); }
+.abas button[aria-current="page"] { color: var(--re-text); border-bottom-color: var(--re-accent); }
 
 .conteudo { padding-top: 17px; }
 .kpis {
@@ -128,13 +129,14 @@
 .kpi {
   background: var(--re-surface);
   border: 1px solid var(--re-line);
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 13px;
+  box-shadow: 0 1px 2px rgba(1, 25, 46, 0.05);
 }
 .kpiLabel { color: var(--re-muted); font-size: 10px; min-height: 27px; }
 .kpiValue { font-size: clamp(19px, 2.4vw, 25px); font-weight: 700; letter-spacing: -.025em; margin-top: 4px; overflow-wrap: anywhere; }
 .kpiNote { color: var(--re-muted); font-size: 9.5px; margin-top: 5px; }
-.ok { color: var(--re-green) !important; }
+.ok { color: var(--re-positive) !important; }
 .warning { color: var(--re-amber) !important; }
 .danger { color: var(--re-red) !important; }
 
@@ -200,9 +202,10 @@
 .panel {
   background: var(--re-surface);
   border: 1px solid var(--re-line);
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 14px;
   margin-bottom: 12px;
+  box-shadow: 0 1px 2px rgba(1, 25, 46, 0.05);
 }
 .duasColunas .panel { margin-bottom: 0; }
 .panel h2 { font-size: 13px; margin: 0 0 4px; }
@@ -211,7 +214,7 @@
 .barras { display: grid; gap: 9px; }
 .barraLinha { display: grid; grid-template-columns: minmax(95px, 1fr) minmax(80px, 2fr) 42px; gap: 8px; align-items: center; font-size: 10.5px; }
 .barraNome { white-space: normal; overflow-wrap: anywhere; }
-.trilho { height: 8px; background: #1b2d3d; border-radius: 999px; overflow: hidden; }
+.trilho { height: 8px; background: var(--re-surface-2); border-radius: 999px; overflow: hidden; }
 .preenchimento { height: 100%; background: var(--re-blue); border-radius: inherit; }
 .barraValor { text-align: right; font-variant-numeric: tabular-nums; }
 
@@ -235,7 +238,7 @@
 }
 .listaCabecalho { color: var(--re-muted); font-size: 9px; padding: 7px 6px; border-bottom: 1px solid var(--re-line); }
 .listaCabecalho span:not(:first-child) { text-align: right; }
-.listaLinha { padding: 9px 6px; border-bottom: 1px solid rgba(38, 59, 77, .7); font-size: 10.5px; }
+.listaLinha { padding: 9px 6px; border-bottom: 1px solid var(--re-line); font-size: 10.5px; }
 .listaLinha:last-child { border-bottom: 0; }
 .listaLinha strong { font-weight: 600; overflow-wrap: anywhere; }
 .listaLinha span { text-align: right; font-variant-numeric: tabular-nums; }
@@ -249,7 +252,7 @@
   gap: 12px;
   align-items: center;
   padding: 9px 0;
-  border-bottom: 1px solid rgba(38, 59, 77, .7);
+  border-bottom: 1px solid var(--re-line);
 }
 .alertaCompacto:last-child, .alertaLinha:last-child { border-bottom: 0; }
 .alertaCompacto div, .alertaLinha div { display: grid; gap: 2px; }
@@ -265,7 +268,7 @@
 }
 .financeHeader { color: var(--re-muted); font-size: 9px; padding: 7px 6px; border-bottom: 1px solid var(--re-line); }
 .financeHeader span:not(:first-child) { text-align: right; }
-.financeRow { padding: 11px 6px; border-bottom: 1px solid rgba(38, 59, 77, .7); font-size: 10.5px; }
+.financeRow { padding: 11px 6px; border-bottom: 1px solid var(--re-line); font-size: 10.5px; }
 .financeRow:last-child { border-bottom: 0; }
 .financeRow span { text-align: right; font-variant-numeric: tabular-nums; }
 .financeRow small { display: none; color: var(--re-muted); }

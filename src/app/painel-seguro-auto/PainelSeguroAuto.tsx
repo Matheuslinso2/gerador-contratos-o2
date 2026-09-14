@@ -26,7 +26,9 @@ function fmtDias(v: number | null): string {
 // (jsonb) -- o Date virou string ISO no round-trip do JSON, apesar do tipo
 // dizer Date. `new Date(v)` cobre os dois casos (Date ao vivo ou string do retrato).
 function fmtData(v: Date | string): string {
-  return new Date(v).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+  return new Date(v).toLocaleDateString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+  });
 }
 
 function Kpi({
@@ -43,14 +45,22 @@ function Kpi({
   return (
     <div className={styles.kpi}>
       <div className={styles.kpiLabel}>{label}</div>
-      <div className={`${styles.kpiValue} ${styles.num} ${tone ? styles[tone] : ""}`}>{value}</div>
+      <div
+        className={`${styles.kpiValue} ${styles.num} ${tone ? styles[tone] : ""}`}
+      >
+        {value}
+      </div>
       <div className={styles.kpiSub}>{sub}</div>
     </div>
   );
 }
 
 function Check({ ok }: { ok: boolean }) {
-  return <span className={ok ? styles.positive : styles.negative}>{ok ? "✓" : "—"}</span>;
+  return (
+    <span className={ok ? styles.positive : styles.negative}>
+      {ok ? "✓" : "—"}
+    </span>
+  );
 }
 
 const CLASSE_FILL: Record<string, string> = {
@@ -59,52 +69,145 @@ const CLASSE_FILL: Record<string, string> = {
   F: styles.fillNegative,
 };
 
-export default function PainelSeguroAuto({ dados }: { dados: PainelSeguroAutoData }) {
-  const { kpis, funil, distribuicaoUtilizacao, distribuicaoGaragem, cardsAlerta, convertidasFinanceiro, fichas } = dados;
-  const maiorQuantidadeFunil = Math.max(1, ...funil.map((e) => e.quantidadeAtual));
-  const maiorUtilizacao = Math.max(1, ...distribuicaoUtilizacao.map((d) => d.quantidade));
-  const totalGaragem = Math.max(1, distribuicaoGaragem.comGaragem + distribuicaoGaragem.semGaragem);
-  const arquivo = (sufixo: string) => `seguro-auto-${sufixo}-${dados.competencia}`;
+export default function PainelSeguroAuto({
+  dados,
+}: {
+  dados: PainelSeguroAutoData;
+}) {
+  const {
+    kpis,
+    funil,
+    distribuicaoUtilizacao,
+    distribuicaoGaragem,
+    cardsAlerta,
+    convertidasFinanceiro,
+    fichas,
+  } = dados;
+  const maiorQuantidadeFunil = Math.max(
+    1,
+    ...funil.map((e) => e.quantidadeAtual),
+  );
+  const maiorUtilizacao = Math.max(
+    1,
+    ...distribuicaoUtilizacao.map((d) => d.quantidade),
+  );
+  const totalGaragem = Math.max(
+    1,
+    distribuicaoGaragem.comGaragem + distribuicaoGaragem.semGaragem,
+  );
+  const arquivo = (sufixo: string) =>
+    `seguro-auto-${sufixo}-${dados.competencia}`;
 
   return (
     <>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-        <h2 style={{ fontSize: 14, fontWeight: 700, margin: "0 0 8px", color: "var(--ink)" }}>Novidades do mês</h2>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "baseline",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <h2
+          style={{
+            fontSize: 14,
+            fontWeight: 700,
+            margin: "0 0 8px",
+            color: "var(--ink)",
+          }}
+        >
+          Novidades do mês
+        </h2>
         <ExportarQuadro
           quadroId="quadro-auto-novidades"
+          corFundo="#f7f8fa"
           nomeArquivo={arquivo("novidades")}
           dadosExcel={[
             { indicador: "Fichas no mês", valor: kpis.total },
             { indicador: "Convertidas", valor: kpis.convertidos },
             { indicador: "Perdidas", valor: kpis.perdidos },
-            { indicador: "Taxa de conversão", valor: fmtPct(kpis.taxaConversao) },
+            {
+              indicador: "Taxa de conversão",
+              valor: fmtPct(kpis.taxaConversao),
+            },
             { indicador: "Prêmio efetivado", valor: kpis.premioEfetivado },
             { indicador: "Comissão gerada", valor: kpis.comissaoGerada },
-            { indicador: "% de comissão médio", valor: fmtPctDireto(kpis.percentualComissaoMedio) },
-            { indicador: "Com CNH anexada", valor: fmtPct(kpis.percentualComCnh) },
-            { indicador: "Com CRLV anexado", valor: fmtPct(kpis.percentualComCrlv) },
-            { indicador: "Com apólice anterior", valor: kpis.comApoliceAnterior },
+            {
+              indicador: "% de comissão médio",
+              valor: fmtPctDireto(kpis.percentualComissaoMedio),
+            },
+            {
+              indicador: "Com CNH anexada",
+              valor: fmtPct(kpis.percentualComCnh),
+            },
+            {
+              indicador: "Com CRLV anexado",
+              valor: fmtPct(kpis.percentualComCrlv),
+            },
+            {
+              indicador: "Com apólice anterior",
+              valor: kpis.comApoliceAnterior,
+            },
           ]}
           nomeAbaExcel="Novidades do mês"
         />
       </div>
-      <p style={{ fontSize: 11.5, color: "var(--ink-muted, #93a2b5)", margin: "0 0 8px" }}>
-        Convertidas/Perdidas contam pelo mês em que a ficha foi criada, não pelo mês em que o Bitrix registrou a
-        conclusão.
+      <p
+        style={{
+          fontSize: 11.5,
+          color: "var(--ink-muted, #93a2b5)",
+          margin: "0 0 8px",
+        }}
+      >
+        Convertidas/Perdidas contam pelo mês em que a ficha foi criada, não pelo
+        mês em que o Bitrix registrou a conclusão.
       </p>
       <div id="quadro-auto-novidades" className={styles.kpis}>
-        <Kpi label="Fichas no mês" value={String(kpis.total)} sub="cards criados na competência" />
-        <Kpi label="Convertidas" value={String(kpis.convertidos)} sub="cotação fechada com sucesso" tone="positive" />
-        <Kpi label="Perdidas" value={String(kpis.perdidos)} sub="não fechou" tone="negative" />
+        <Kpi
+          label="Fichas no mês"
+          value={String(kpis.total)}
+          sub="cards criados na competência"
+        />
+        <Kpi
+          label="Convertidas"
+          value={String(kpis.convertidos)}
+          sub="cotação fechada com sucesso"
+          tone="positive"
+        />
+        <Kpi
+          label="Perdidas"
+          value={String(kpis.perdidos)}
+          sub="não fechou"
+          tone="negative"
+        />
         <Kpi
           label="Taxa de conversão"
           value={fmtPct(kpis.taxaConversao)}
           sub="convertidas ÷ (convertidas + perdidas)"
-          tone={kpis.taxaConversao !== null && kpis.taxaConversao >= 0.5 ? "positive" : undefined}
+          tone={
+            kpis.taxaConversao !== null && kpis.taxaConversao >= 0.5
+              ? "positive"
+              : undefined
+          }
         />
-        <Kpi label="Prêmio efetivado" value={fmtBRL(kpis.premioEfetivado)} sub="soma do prêmio das convertidas" tone="positive" />
-        <Kpi label="Comissão gerada" value={fmtBRL(kpis.comissaoGerada)} sub="soma da comissão das convertidas" tone="positive" />
-        <Kpi label="% de comissão médio" value={fmtPctDireto(kpis.percentualComissaoMedio)} sub="média entre as convertidas com % preenchido" />
+        <Kpi
+          label="Prêmio efetivado"
+          value={fmtBRL(kpis.premioEfetivado)}
+          sub="soma do prêmio das convertidas"
+          tone="positive"
+        />
+        <Kpi
+          label="Comissão gerada"
+          value={fmtBRL(kpis.comissaoGerada)}
+          sub="soma da comissão das convertidas"
+          tone="positive"
+        />
+        <Kpi
+          label="% de comissão médio"
+          value={fmtPctDireto(kpis.percentualComissaoMedio)}
+          sub="média entre as convertidas com % preenchido"
+        />
         <Kpi
           label="Com CNH anexada"
           value={fmtPct(kpis.percentualComCnh)}
@@ -117,13 +220,36 @@ export default function PainelSeguroAuto({ dados }: { dados: PainelSeguroAutoDat
           sub="fichas novas com documento do veículo"
           tone={kpis.percentualComCrlv >= 0.8 ? "positive" : "warning"}
         />
-        <Kpi label="Com apólice anterior" value={String(kpis.comApoliceAnterior)} sub="já tinham seguro vigente — possível troca de seguradora" tone="info" />
+        <Kpi
+          label="Com apólice anterior"
+          value={String(kpis.comApoliceAnterior)}
+          sub="já tinham seguro vigente — possível troca de seguradora"
+          tone="info"
+        />
       </div>
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-        <h2 style={{ fontSize: 14, fontWeight: 700, margin: "20px 0 8px", color: "var(--ink)" }}>Em andamento (novos + herdados)</h2>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "baseline",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <h2
+          style={{
+            fontSize: 14,
+            fontWeight: 700,
+            margin: "20px 0 8px",
+            color: "var(--ink)",
+          }}
+        >
+          Em andamento (novos + herdados)
+        </h2>
         <ExportarQuadro
           quadroId="quadro-auto-andamento"
+          corFundo="#f7f8fa"
           nomeArquivo={arquivo("em-andamento")}
           dadosExcel={[
             { indicador: "Novas", valor: kpis.emAndamento.mesAtual },
@@ -134,14 +260,36 @@ export default function PainelSeguroAuto({ dados }: { dados: PainelSeguroAutoDat
           nomeAbaExcel="Em andamento"
         />
       </div>
-      <p style={{ fontSize: 11.5, color: "var(--ink-muted, #93a2b5)", margin: "0 0 8px" }}>
-        Único quadro que herda de meses anteriores — assim que a ficha conclui (convertida/perdida), ela deixa de ser
-        herdada e passa a contar no mês em que nasceu, acima.
+      <p
+        style={{
+          fontSize: 11.5,
+          color: "var(--ink-muted, #93a2b5)",
+          margin: "0 0 8px",
+        }}
+      >
+        Único quadro que herda de meses anteriores — assim que a ficha conclui
+        (convertida/perdida), ela deixa de ser herdada e passa a contar no mês
+        em que nasceu, acima.
       </p>
       <div id="quadro-auto-andamento" className={styles.kpis}>
-        <Kpi label="Novas" value={String(kpis.emAndamento.mesAtual)} sub="criadas neste mês, ainda em aberto" tone="info" />
-        <Kpi label="Herdadas" value={String(kpis.emAndamento.herdado)} sub="criadas antes, ainda em aberto" tone="info" />
-        <Kpi label="Total" value={String(kpis.emAndamento.total)} sub="soma, todas ainda em aberto" tone="info" />
+        <Kpi
+          label="Novas"
+          value={String(kpis.emAndamento.mesAtual)}
+          sub="criadas neste mês, ainda em aberto"
+          tone="info"
+        />
+        <Kpi
+          label="Herdadas"
+          value={String(kpis.emAndamento.herdado)}
+          sub="criadas antes, ainda em aberto"
+          tone="info"
+        />
+        <Kpi
+          label="Total"
+          value={String(kpis.emAndamento.total)}
+          sub="soma, todas ainda em aberto"
+          tone="info"
+        />
         <Kpi
           label="Cards com alerta"
           value={String(kpis.cardsComAlerta)}
@@ -155,6 +303,7 @@ export default function PainelSeguroAuto({ dados }: { dados: PainelSeguroAutoDat
           <h2>Funil e tempo por etapa</h2>
           <ExportarQuadro
             quadroId="quadro-auto-funil"
+            corFundo="#f7f8fa"
             nomeArquivo={arquivo("funil")}
             dadosExcel={funil.map((e) => ({
               etapa: e.nome,
@@ -172,24 +321,41 @@ export default function PainelSeguroAuto({ dados }: { dados: PainelSeguroAutoDat
                 <div className={styles.track}>
                   <div
                     className={CLASSE_FILL[etapa.semantica]}
-                    style={{ width: `${(etapa.quantidadeAtual / maiorQuantidadeFunil) * 100}%`, height: "100%" }}
+                    style={{
+                      width: `${(etapa.quantidadeAtual / maiorQuantidadeFunil) * 100}%`,
+                      height: "100%",
+                    }}
                   />
                 </div>
                 <div className={`${styles.rvalue} ${styles.num}`}>
-                  {etapa.quantidadeAtual} card{etapa.quantidadeAtual === 1 ? "" : "s"} · {fmtDias(etapa.tempoMedioDiasFechado)}
+                  {etapa.quantidadeAtual} card
+                  {etapa.quantidadeAtual === 1 ? "" : "s"} ·{" "}
+                  {fmtDias(etapa.tempoMedioDiasFechado)}
                 </div>
               </div>
             ))}
           </div>
           <div className={styles.legendRow}>
             <div className={styles.legendItem}>
-              <span className={styles.swatch} style={{ background: "var(--accent)" }} /> Em andamento
+              <span
+                className={styles.swatch}
+                style={{ background: "var(--accent)" }}
+              />{" "}
+              Em andamento
             </div>
             <div className={styles.legendItem}>
-              <span className={styles.swatch} style={{ background: "var(--positive)" }} /> Sucesso
+              <span
+                className={styles.swatch}
+                style={{ background: "var(--positive)" }}
+              />{" "}
+              Sucesso
             </div>
             <div className={styles.legendItem}>
-              <span className={styles.swatch} style={{ background: "var(--negative)" }} /> Perda
+              <span
+                className={styles.swatch}
+                style={{ background: "var(--negative)" }}
+              />{" "}
+              Perda
             </div>
           </div>
         </div>
@@ -198,36 +364,60 @@ export default function PainelSeguroAuto({ dados }: { dados: PainelSeguroAutoDat
       <section id="quadro-auto-perfil" className={styles.section}>
         <div className={styles.sectionHead}>
           <h2>Perfil das fichas do mês</h2>
-          <div className={styles.note}>utilização declarada do veículo e presença de garagem</div>
+          <div className={styles.note}>
+            utilização declarada do veículo e presença de garagem
+          </div>
           <ExportarQuadro
             quadroId="quadro-auto-perfil"
+            corFundo="#f7f8fa"
             nomeArquivo={arquivo("perfil")}
             dadosExcel={[
-              ...distribuicaoUtilizacao.map((d) => ({ utilizacao: d.rotulo, fichas: d.quantidade })),
-              { utilizacao: "Com garagem", fichas: distribuicaoGaragem.comGaragem },
-              { utilizacao: "Sem garagem", fichas: distribuicaoGaragem.semGaragem },
+              ...distribuicaoUtilizacao.map((d) => ({
+                utilizacao: d.rotulo,
+                fichas: d.quantidade,
+              })),
+              {
+                utilizacao: "Com garagem",
+                fichas: distribuicaoGaragem.comGaragem,
+              },
+              {
+                utilizacao: "Sem garagem",
+                fichas: distribuicaoGaragem.semGaragem,
+              },
             ]}
             nomeAbaExcel="Perfil das fichas"
           />
         </div>
         <div className={styles.panel}>
           {distribuicaoUtilizacao.length === 0 ? (
-            <div className={styles.panelSub}>Nenhuma ficha registrada neste período.</div>
+            <div className={styles.panelSub}>
+              Nenhuma ficha registrada neste período.
+            </div>
           ) : (
             <div className={styles.barlist}>
               {distribuicaoUtilizacao.map((d) => (
                 <div key={d.rotulo} className={styles.barrow}>
                   <div className={styles.rlabel}>{d.rotulo}</div>
                   <div className={styles.track}>
-                    <div className={styles.fill} style={{ width: `${(d.quantidade / maiorUtilizacao) * 100}%`, height: "100%" }} />
+                    <div
+                      className={styles.fill}
+                      style={{
+                        width: `${(d.quantidade / maiorUtilizacao) * 100}%`,
+                        height: "100%",
+                      }}
+                    />
                   </div>
-                  <div className={`${styles.rvalue} ${styles.num}`}>{d.quantidade}</div>
+                  <div className={`${styles.rvalue} ${styles.num}`}>
+                    {d.quantidade}
+                  </div>
                 </div>
               ))}
             </div>
           )}
           <div className={styles.panelSub} style={{ marginTop: 14 }}>
-            Garagem: {distribuicaoGaragem.comGaragem} de {totalGaragem} ({fmtPct(distribuicaoGaragem.comGaragem / totalGaragem)}) têm garagem na residência.
+            Garagem: {distribuicaoGaragem.comGaragem} de {totalGaragem} (
+            {fmtPct(distribuicaoGaragem.comGaragem / totalGaragem)}) têm garagem
+            na residência.
           </div>
         </div>
       </section>
@@ -235,9 +425,13 @@ export default function PainelSeguroAuto({ dados }: { dados: PainelSeguroAutoDat
       <section id="quadro-auto-alerta" className={styles.section}>
         <div className={styles.sectionHead}>
           <h2>Cards que pedem atenção</h2>
-          <div className={styles.note}>parados 3+ dias sem mudar de etapa — todas as fichas ativas, sem filtro de mês</div>
+          <div className={styles.note}>
+            parados 3+ dias sem mudar de etapa — todas as fichas ativas, sem
+            filtro de mês
+          </div>
           <ExportarQuadro
             quadroId="quadro-auto-alerta"
+            corFundo="#f7f8fa"
             nomeArquivo={arquivo("cards-alerta")}
             dadosExcel={cardsAlerta.map((c) => ({
               card: c.titulo || `Card #${c.id}`,
@@ -249,7 +443,9 @@ export default function PainelSeguroAuto({ dados }: { dados: PainelSeguroAutoDat
         </div>
         <div className={styles.panel}>
           {cardsAlerta.length === 0 ? (
-            <div className={styles.panelSub}>Nenhum card parado no momento.</div>
+            <div className={styles.panelSub}>
+              Nenhum card parado no momento.
+            </div>
           ) : (
             <div className={styles.tableWrap}>
               <table className={styles.data}>
@@ -265,7 +461,9 @@ export default function PainelSeguroAuto({ dados }: { dados: PainelSeguroAutoDat
                     <tr key={card.id}>
                       <td>{card.titulo || `Card #${card.id}`}</td>
                       <td>{card.etapaNome}</td>
-                      <td className={`${styles.numCol} ${styles.num}`}>{card.diasParado}</td>
+                      <td className={`${styles.numCol} ${styles.num}`}>
+                        {card.diasParado}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -278,9 +476,13 @@ export default function PainelSeguroAuto({ dados }: { dados: PainelSeguroAutoDat
       <section id="quadro-auto-convertidas" className={styles.section}>
         <div className={styles.sectionHead}>
           <h2>Convertidas — prêmio e comissão</h2>
-          <div className={styles.note}>preenchido manualmente pelo time depois do fechamento, só nas fichas da competência selecionada</div>
+          <div className={styles.note}>
+            preenchido manualmente pelo time depois do fechamento, só nas fichas
+            da competência selecionada
+          </div>
           <ExportarQuadro
             quadroId="quadro-auto-convertidas"
+            corFundo="#f7f8fa"
             nomeArquivo={arquivo("convertidas")}
             dadosExcel={convertidasFinanceiro.map((c) => ({
               cliente: c.nome || `Card #${c.id}`,
@@ -294,7 +496,9 @@ export default function PainelSeguroAuto({ dados }: { dados: PainelSeguroAutoDat
         </div>
         <div className={styles.panel}>
           {convertidasFinanceiro.length === 0 ? (
-            <div className={styles.panelSub}>Nenhuma conversão com prêmio/comissão registrados neste período.</div>
+            <div className={styles.panelSub}>
+              Nenhuma conversão com prêmio/comissão registrados neste período.
+            </div>
           ) : (
             <div className={styles.tableWrap}>
               <table className={styles.data}>
@@ -311,10 +515,18 @@ export default function PainelSeguroAuto({ dados }: { dados: PainelSeguroAutoDat
                   {convertidasFinanceiro.map((c) => (
                     <tr key={c.id}>
                       <td>{c.nome || `Card #${c.id}`}</td>
-                      <td className={`${styles.numCol} ${styles.num}`}>{fmtBRL(c.premioEfetivado)}</td>
-                      <td className={`${styles.numCol} ${styles.num}`}>{fmtBRL(c.comissaoGerada)}</td>
-                      <td className={`${styles.numCol} ${styles.num}`}>{fmtPctDireto(c.percentualComissao || null)}</td>
-                      <td className={`${styles.numCol} ${styles.num}`}>{c.numeroParcelas || "—"}</td>
+                      <td className={`${styles.numCol} ${styles.num}`}>
+                        {fmtBRL(c.premioEfetivado)}
+                      </td>
+                      <td className={`${styles.numCol} ${styles.num}`}>
+                        {fmtBRL(c.comissaoGerada)}
+                      </td>
+                      <td className={`${styles.numCol} ${styles.num}`}>
+                        {fmtPctDireto(c.percentualComissao || null)}
+                      </td>
+                      <td className={`${styles.numCol} ${styles.num}`}>
+                        {c.numeroParcelas || "—"}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -327,9 +539,13 @@ export default function PainelSeguroAuto({ dados }: { dados: PainelSeguroAutoDat
       <section id="quadro-auto-fichas" className={styles.section}>
         <div className={styles.sectionHead}>
           <h2>Fichas recebidas</h2>
-          <div className={styles.note}>{fichas.length} ficha(s) — novidades do mês + em andamento herdados, mesma lógica dos KPIs acima</div>
+          <div className={styles.note}>
+            {fichas.length} ficha(s) — novidades do mês + em andamento herdados,
+            mesma lógica dos KPIs acima
+          </div>
           <ExportarQuadro
             quadroId="quadro-auto-fichas"
+            corFundo="#f7f8fa"
             nomeArquivo={arquivo("fichas")}
             dadosExcel={fichas.map((f) => ({
               nome: f.nome || "",
@@ -345,7 +561,9 @@ export default function PainelSeguroAuto({ dados }: { dados: PainelSeguroAutoDat
         </div>
         <div className={styles.panel}>
           {fichas.length === 0 ? (
-            <div className={styles.panelSub}>Nenhuma ficha recebida neste período.</div>
+            <div className={styles.panelSub}>
+              Nenhuma ficha recebida neste período.
+            </div>
           ) : (
             <div className={styles.tableWrap}>
               <table className={styles.data}>

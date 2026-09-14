@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
+import PageHeader from "@/components/PageHeader";
+import { IconChart } from "@/components/icons";
 import { RAMOS_PRODUCAO, rotuloRamo } from "@/lib/producaoRamos";
 
 export const dynamic = "force-dynamic";
@@ -238,14 +240,13 @@ export default async function ProducaoPage({
   return (
     <>
       <AppHeader userEmail={user?.email} logoutAction={signOut} />
-      <main className="mx-auto max-w-5xl flex-1 space-y-6 p-8">
+      <main className="mx-auto max-w-[1400px] flex-1 space-y-6 p-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-semibold text-o2-navy">Produção</h1>
-            <p className="text-sm text-gray-500">
-              Estatísticas de mercado — prêmio, comissão e ticket médio por produto e período.
-            </p>
-          </div>
+          <PageHeader
+            icon={<IconChart />}
+            titulo="Produção"
+            subtitulo="Estatísticas de mercado — prêmio, comissão e ticket médio por produto e período."
+          />
           <Link
             href="/producao/upload"
             className="whitespace-nowrap rounded-full bg-o2-coral px-4 py-1.5 text-sm font-medium text-white transition hover:opacity-90"
@@ -255,7 +256,7 @@ export default async function ProducaoPage({
         </div>
 
         {semDadoNenhum ? (
-          <div className="rounded-xl border border-o2-navy/10 bg-white p-8 text-center shadow-sm">
+          <div className="rounded-xl border border-o2-navy/10 bg-quadro p-8 text-center shadow-sm">
             <p className="text-sm text-gray-500">
               Nenhuma grade de produção carregada ainda.{" "}
               <Link href="/producao/upload" className="font-medium text-o2-navy hover:underline">
@@ -300,17 +301,17 @@ export default async function ProducaoPage({
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div className="rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm">
+              <div className="rounded-xl border border-o2-navy/10 bg-quadro p-4 shadow-sm">
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Apólices</p>
                 <p className="mt-1 text-2xl font-bold text-o2-navy">{fmtNumero(totalApolices)}</p>
               </div>
-              <div className="rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm">
+              <div className="rounded-xl border border-o2-navy/10 bg-quadro p-4 shadow-sm">
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Ticket médio do prêmio</p>
                 <p className="mt-1 text-2xl font-bold text-o2-navy">
                   {totalApolices ? fmtMoeda(totalPremio / totalApolices) : "—"}
                 </p>
               </div>
-              <div className="rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm">
+              <div className="rounded-xl border border-o2-navy/10 bg-quadro p-4 shadow-sm">
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Ticket médio da comissão</p>
                 <p className="mt-1 text-2xl font-bold text-o2-navy">
                   {totalApolices ? fmtMoeda(totalComissao / totalApolices) : "—"}
@@ -318,7 +319,7 @@ export default async function ProducaoPage({
               </div>
             </div>
 
-            <section className="rounded-xl border border-o2-navy/10 bg-white p-5 shadow-sm">
+            <section className="rounded-xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
               <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-400">
                 Evolução mensal {ramoSelecionado ? `— ${rotuloRamo(ramoSelecionado)}` : ""}
               </h2>
@@ -351,7 +352,7 @@ export default async function ProducaoPage({
             </section>
 
             {!ramoSelecionado && (attachRateAuto !== null || cestaProdutos.length > 0) ? (
-              <section className="rounded-xl border border-o2-navy/10 bg-white p-5 shadow-sm">
+              <section className="rounded-xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
                 <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-gray-400">Cross-sell</h2>
                 <p className="mb-4 text-xs text-gray-500">
                   Cruzamento por CPF/CNPJ do cliente entre ramos — só números agregados, sem nomes.
@@ -405,7 +406,7 @@ export default async function ProducaoPage({
             ) : null}
 
             {!ramoSelecionado && dispersaoOrdenada.length ? (
-              <section className="rounded-xl border border-o2-navy/10 bg-white p-5 shadow-sm">
+              <section className="rounded-xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
                 <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-gray-400">Dispersão de prêmio por ramo</h2>
                 <p className="mb-4 text-xs text-gray-500">
                   Quanto maior o coeficiente de variação, mais inconsistente é a precificação dentro do produto — muita
@@ -460,7 +461,7 @@ export default async function ProducaoPage({
 
             <div className={`grid grid-cols-1 gap-4 ${ramoSelecionado ? "" : "lg:grid-cols-2"}`}>
               {!ramoSelecionado ? (
-                <section className="rounded-xl border border-o2-navy/10 bg-white p-5 shadow-sm">
+                <section className="rounded-xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
                   <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-400">Ticket médio por ramo</h2>
                   {ticketPorRamo.length ? (
                     <div className="space-y-2">
@@ -485,7 +486,7 @@ export default async function ProducaoPage({
                 </section>
               ) : null}
 
-              <section className="rounded-xl border border-o2-navy/10 bg-white p-5 shadow-sm">
+              <section className="rounded-xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
                 <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-gray-400">Mix por seguradora</h2>
                 <p className="mb-4 text-xs text-gray-500">Ticket médio do prêmio e da comissão, por seguradora.</p>
                 {mixSeguradoras.length ? (
@@ -514,7 +515,7 @@ export default async function ProducaoPage({
               </section>
             </div>
 
-            <section className="rounded-xl border border-o2-navy/10 bg-white p-5 shadow-sm">
+            <section className="rounded-xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
               <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-gray-400">
                 Por bairro {ramoSelecionado ? `— ${rotuloRamo(ramoSelecionado)}` : ""}
               </h2>

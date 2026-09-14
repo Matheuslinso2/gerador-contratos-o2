@@ -5,7 +5,7 @@ import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../../../actions";
 import AppHeader from "@/components/AppHeader";
 import FaturasSubHeader from "../../FaturasSubHeader";
-import { IconBuilding } from "../../icons";
+import { IconBuilding } from "@/components/icons";
 import VinculosFaturas, { type Vinculo } from "../../VinculosFaturas";
 import VinculosRepasse from "../../VinculosRepasse";
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { IconSpinner } from "./icons";
+import { IconSpinner } from "@/components/icons";
 
 // Botão de submit com sinalização de carregando. Usa estado local (não
 // useFormStatus) de propósito -- precisa funcionar tanto em forms de

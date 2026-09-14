@@ -29,7 +29,7 @@ export default function ImobiliariaCard({ imobiliaria: i }: { imobiliaria: Imobi
   const semDadosLigados = i.contratos + i.auditorias + i.faturasEsperadas + i.membros === 0;
 
   return (
-    <div className="rounded-xl border border-o2-navy/10 bg-white p-4">
+    <div className="rounded-xl border border-o2-navy/10 bg-quadro p-4">
       <div className="flex items-start justify-between gap-3">
         <Link href={`/admin/imobiliarias/${i.id}`} className="font-medium text-o2-navy hover:underline">
           {i.nome}

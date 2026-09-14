@@ -19,7 +19,7 @@ export default function ListaUsuarios({ usuarios }: { usuarios: Usuario[] }) {
   return (
     <div className="space-y-3">
       {usuarios.map((u) => (
-        <div key={u.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-o2-navy/10 bg-white p-4">
+        <div key={u.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-o2-navy/10 bg-quadro p-4">
           <div>
             <p className="font-medium text-o2-navy">{u.email}</p>
             <p className="text-xs text-gray-400">

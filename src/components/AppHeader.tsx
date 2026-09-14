@@ -55,17 +55,32 @@ export default function AppHeader({
             {(isAdmin(userEmail) || isColaboradorO2(userEmail)) && (
               <NavDropdown
                 label="Uso interno"
-                items={[
-                  { href: "/producao", label: "Produção" },
-                  { href: "/faturas", label: "Faturas" },
-                  { href: "/repasses", label: "Repasses" },
-                  { href: "/painel-comercial", label: "Comercial" },
-                  { href: "/seguro-fianca", label: "Seguro Fiança" },
-                  { href: "/assistente-fianca", label: "Assistente de Vendas — Fiança" },
-                  { href: "/painel-capitalizacao", label: "Capitalização" },
-                  { href: "/painel-seguro-auto", label: "Automóvel" },
-                  { href: "/ramos-elementares", label: "Ramos Elementares" },
-                  { href: "/social-media", label: "Social Media" },
+                groups={[
+                  {
+                    titulo: "Produtos",
+                    items: [
+                      { href: "/painel-capitalizacao", label: "Capitalização" },
+                      { href: "/painel-seguro-auto", label: "Automóvel" },
+                      { href: "/ramos-elementares", label: "Ramos Elementares" },
+                      { href: "/seguro-fianca", label: "Seguro Fiança" },
+                    ],
+                  },
+                  {
+                    titulo: "Ferramentas de controle",
+                    items: [
+                      { href: "/producao", label: "Produção" },
+                      { href: "/faturas", label: "Faturas" },
+                      { href: "/repasses", label: "Repasses" },
+                    ],
+                  },
+                  {
+                    titulo: "Ferramentas comerciais",
+                    items: [
+                      { href: "/painel-comercial", label: "Comercial" },
+                      { href: "/social-media", label: "Social Media" },
+                      { href: "/assistente-fianca", label: "Assistente de Vendas — Fiança" },
+                    ],
+                  },
                 ]}
               />
             )}

@@ -4,6 +4,8 @@ import FormularioContrato from "./FormularioContrato";
 import ListaContratos from "./ListaContratos";
 import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
+import PageHeader from "@/components/PageHeader";
+import { IconReport } from "@/components/icons";
 import BackLink from "@/components/BackLink";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { garantirImobiliariaColaborador } from "@/lib/imobiliariaColaborador";
@@ -39,7 +41,7 @@ export default async function GerarContratoPage({
         <AppHeader userEmail={user?.email} logoutAction={signOut} />
         <main className="mx-auto max-w-3xl flex-1 space-y-4 p-8">
           <BackLink />
-          <h1 className="text-xl font-semibold text-o2-navy">Gerar contrato de locação</h1>
+          <PageHeader icon={<IconReport />} titulo="Gerar contrato de locação" />
           <p className="rounded-lg border border-yellow-400 bg-yellow-50 p-3 text-sm text-yellow-800">
             Antes de gerar contratos, complete o cadastro da sua imobiliária em{" "}
             <Link href="/imobiliaria" className="underline">
@@ -74,10 +76,7 @@ export default async function GerarContratoPage({
       <main className="mx-auto max-w-3xl flex-1 space-y-8 p-8">
         <div className="space-y-2">
           <BackLink />
-          <div>
-            <h1 className="text-xl font-semibold text-o2-navy">Gerar contrato de locação</h1>
-            <p className="text-sm text-gray-500">Imobiliária: {imobiliaria.nome}</p>
-          </div>
+          <PageHeader icon={<IconReport />} titulo="Gerar contrato de locação" subtitulo={`Imobiliária: ${imobiliaria.nome}`} />
         </div>
 
         {erro && (
@@ -89,7 +88,7 @@ export default async function GerarContratoPage({
           </p>
         )}
 
-        <div className="rounded-xl border border-o2-navy/10 bg-white p-5 shadow-sm">
+        <div className="rounded-xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
           <FormularioContrato tiposGarantia={tiposGarantia ?? []} produtos={produtos ?? []} />
         </div>
 

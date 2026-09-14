@@ -54,6 +54,7 @@ export default function PainelCapitalizacao({ dados }: { dados: PainelCapitaliza
         <h2 style={{ fontSize: 14, fontWeight: 700, margin: "0 0 8px", color: "var(--ink)" }}>Novidades do mês</h2>
         <ExportarQuadro
           quadroId="quadro-cap-novidades"
+          corFundo="#f7f8fa"
           nomeArquivo={arquivo("novidades")}
           dadosExcel={[
             { indicador: "Solicitações no mês", valor: kpis.total },
@@ -70,7 +71,7 @@ export default function PainelCapitalizacao({ dados }: { dados: PainelCapitaliza
           nomeAbaExcel="Novidades do mês"
         />
       </div>
-      <p style={{ fontSize: 11.5, color: "var(--ink-muted, #93a2b5)", margin: "0 0 8px" }}>
+      <p style={{ fontSize: 11.5, color: "var(--ink-muted, #5b6b7c)", margin: "0 0 8px" }}>
         Emitidos/Perdidos contam pelo mês em que o card foi criado, não pelo mês em que o Bitrix registrou a conclusão
         (evita atribuir ao mês errado um card que só teve a etapa atualizada depois, ex: esperando o Controle
         confirmar no Corp).
@@ -97,6 +98,7 @@ export default function PainelCapitalizacao({ dados }: { dados: PainelCapitaliza
         <h2 style={{ fontSize: 14, fontWeight: 700, margin: "20px 0 8px", color: "var(--ink)" }}>Em andamento (novos + herdados)</h2>
         <ExportarQuadro
           quadroId="quadro-cap-andamento"
+          corFundo="#f7f8fa"
           nomeArquivo={arquivo("em-andamento")}
           dadosExcel={[
             { indicador: "Novos", valor: kpis.emAndamento.mesAtual },
@@ -107,7 +109,7 @@ export default function PainelCapitalizacao({ dados }: { dados: PainelCapitaliza
           nomeAbaExcel="Em andamento"
         />
       </div>
-      <p style={{ fontSize: 11.5, color: "var(--ink-muted, #93a2b5)", margin: "0 0 8px" }}>
+      <p style={{ fontSize: 11.5, color: "var(--ink-muted, #5b6b7c)", margin: "0 0 8px" }}>
         Único quadro que herda de meses anteriores — assim que o card conclui (emitido/perdido), ele deixa de ser
         herdado e passa a contar no mês em que nasceu, acima.
       </p>
@@ -132,6 +134,7 @@ export default function PainelCapitalizacao({ dados }: { dados: PainelCapitaliza
           </div>
           <ExportarQuadro
             quadroId="quadro-cap-funil"
+            corFundo="#f7f8fa"
             nomeArquivo={arquivo("funil")}
             dadosExcel={funil.map((e) => ({
               etapa: e.nome,
@@ -178,6 +181,7 @@ export default function PainelCapitalizacao({ dados }: { dados: PainelCapitaliza
           <div className={styles.note}>parados 3+ dias sem mudar de etapa — todos os títulos ativos, sem filtro de mês</div>
           <ExportarQuadro
             quadroId="quadro-cap-alerta"
+            corFundo="#f7f8fa"
             nomeArquivo={arquivo("cards-alerta")}
             dadosExcel={cardsAlerta.map((c) => ({
               card: c.titulo || `Card #${c.id}`,
@@ -221,6 +225,7 @@ export default function PainelCapitalizacao({ dados }: { dados: PainelCapitaliza
           <div className={styles.note}>novidades do mês + em andamento herdados — mesma lógica dos KPIs acima</div>
           <ExportarQuadro
             quadroId="quadro-cap-titulos"
+            corFundo="#f7f8fa"
             nomeArquivo={arquivo("titulos")}
             dadosExcel={titulos.map((t) => ({
               titular: t.titular,

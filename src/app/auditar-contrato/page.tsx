@@ -2,6 +2,8 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
+import PageHeader from "@/components/PageHeader";
+import { IconChecklist } from "@/components/icons";
 import BackLink from "@/components/BackLink";
 import AuditorForm from "./AuditorForm";
 import ListaAuditorias from "./ListaAuditorias";
@@ -41,7 +43,7 @@ export default async function AuditarContratoPage({
         <AppHeader userEmail={user?.email} logoutAction={signOut} />
         <main className="mx-auto max-w-3xl flex-1 space-y-4 p-8">
           <BackLink />
-          <h1 className="text-xl font-semibold text-o2-navy">Auditar contrato</h1>
+          <PageHeader icon={<IconChecklist />} titulo="Auditar contrato" />
           <p className="rounded-lg border border-yellow-400 bg-yellow-50 p-3 text-sm text-yellow-800">
             Antes de auditar contratos, complete o cadastro da sua imobiliária em{" "}
             <Link href="/imobiliaria" className="underline">
@@ -68,20 +70,18 @@ export default async function AuditarContratoPage({
       <main className="mx-auto max-w-3xl flex-1 space-y-8 p-8">
         <div className="space-y-2">
           <BackLink />
-          <div>
-            <h1 className="text-xl font-semibold text-o2-navy">Auditar contrato</h1>
-            <p className="text-sm text-gray-500">
-              Analisa um contrato já pronto (colado, .docx, .doc ou .pdf) e aponta erros e
-              inconsistências — não gera um contrato novo.
-            </p>
-          </div>
+          <PageHeader
+            icon={<IconChecklist />}
+            titulo="Auditar contrato"
+            subtitulo="Analisa um contrato já pronto (colado, .docx, .doc ou .pdf) e aponta erros e inconsistências — não gera um contrato novo."
+          />
         </div>
 
         {erro && (
           <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>
         )}
 
-        <div className="rounded-xl border border-o2-navy/10 bg-white p-5 shadow-sm">
+        <div className="rounded-xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
           <AuditorForm userId={user!.id} ultimoId={ultimo} />
         </div>
 

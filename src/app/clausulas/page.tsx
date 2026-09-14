@@ -4,6 +4,8 @@ import { isAdmin } from "@/lib/admin";
 import { addSeguradora, addProduto, addCobertura } from "./actions";
 import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
+import PageHeader from "@/components/PageHeader";
+import { IconBook } from "@/components/icons";
 import BackLink from "@/components/BackLink";
 
 export const dynamic = "force-dynamic";
@@ -35,7 +37,7 @@ export default async function ClausulasPage() {
       <main className="mx-auto max-w-3xl flex-1 space-y-12 p-8">
       <div className="space-y-2">
         <BackLink />
-        <h1 className="text-xl font-semibold text-o2-navy">Biblioteca de cláusulas de garantia</h1>
+        <PageHeader icon={<IconBook />} titulo="Biblioteca de cláusulas de garantia" />
       </div>
 
       {/* Seguradoras */}
@@ -104,7 +106,7 @@ export default async function ClausulasPage() {
             const seguradora = Array.isArray(p.seguradoras) ? p.seguradoras[0] : p.seguradoras;
             const tipo = Array.isArray(p.tipos_garantia) ? p.tipos_garantia[0] : p.tipos_garantia;
             return (
-              <li key={p.id} className="rounded-xl border border-o2-navy/10 bg-white p-3">
+              <li key={p.id} className="rounded-xl border border-o2-navy/10 bg-quadro p-3">
                 <p className="font-medium">
                   {seguradora?.nome ? `${seguradora.nome} — ` : ""}
                   {p.nome} <span className="text-sm text-gray-500">({tipo?.nome})</span>
@@ -158,7 +160,7 @@ export default async function ClausulasPage() {
           {coberturas?.map((c) => {
             const produto = Array.isArray(c.produtos) ? c.produtos[0] : c.produtos;
             return (
-              <li key={c.id} className="rounded-xl border border-o2-navy/10 bg-white p-3">
+              <li key={c.id} className="rounded-xl border border-o2-navy/10 bg-quadro p-3">
                 <p className="font-medium">
                   {c.nome} <span className="text-sm text-gray-500">({produto?.nome})</span>
                 </p>

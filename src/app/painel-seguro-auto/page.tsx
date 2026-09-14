@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
+import PageHeader from "@/components/PageHeader";
+import { IconCar } from "@/components/icons";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "../actions";
@@ -87,16 +89,21 @@ export default async function PainelSeguroAutoPage({
       <div className={styles.wrap}>
         <div id="painel-seguro-auto-completo" className={styles.container}>
           <div className={styles.masthead}>
-            <div>
-              <div className={styles.eyebrow}>O2 Seguros · Central de Negócios · SPA Seguro Automóvel</div>
-              <h1 className={styles.title}>Painel Seguro Auto — {rotuloCompetencia(competencia)}</h1>
-            </div>
+            <PageHeader
+              icon={<IconCar />}
+              titulo="Automóvel"
+              subtitulo={`${rotuloCompetencia(competencia)} — SPA Seguro Automóvel (Bitrix24)`}
+            />
             <div className={styles.meta}>
               <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "flex-end" }}>
                 <SeletorCompetencia competencia={competencia} />
                 {ehCompetenciaAtual && <AtualizarAgora />}
                 {dados && (
-                  <BotaoExportarPainelPdf painelId="painel-seguro-auto-completo" nomeArquivo={`seguro-auto-painel-${competencia}`} />
+                  <BotaoExportarPainelPdf
+                    painelId="painel-seguro-auto-completo"
+                    nomeArquivo={`seguro-auto-painel-${competencia}`}
+                    corFundo="#f7f8fa"
+                  />
                 )}
               </div>
               <br />

@@ -68,7 +68,7 @@ export default async function AdminAcessosPage() {
           {dias.map((dia) => {
             const linhas = (porDia.get(dia) ?? []).sort((a, b) => a.email.localeCompare(b.email));
             return (
-              <div key={dia} className="rounded-xl border border-o2-navy/10 bg-white p-4">
+              <div key={dia} className="rounded-xl border border-o2-navy/10 bg-quadro p-4">
                 <p className="mb-2 font-medium text-o2-navy">
                   {fmtDia(dia)} <span className="text-sm font-normal text-gray-400">({linhas.length} pessoa(s))</span>
                 </p>

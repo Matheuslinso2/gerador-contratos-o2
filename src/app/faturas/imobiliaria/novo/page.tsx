@@ -6,7 +6,7 @@ import AppHeader from "@/components/AppHeader";
 import { resolverImobiliariaProvisoria } from "../../actions";
 import { SEGURADORAS_CANONICAS } from "@/lib/faturasIdentificacao";
 import FaturasSubHeader from "../../FaturasSubHeader";
-import { IconBuilding, IconInvoice, IconMail, IconChecklist } from "../../icons";
+import { IconBuilding, IconInvoice, IconMail, IconChecklist } from "@/components/icons";
 
 export const dynamic = "force-dynamic";
 
@@ -85,7 +85,7 @@ export default async function NovaImobiliariaFaturasPage({
         <form action={resolverImobiliariaProvisoria} className="space-y-6">
           <input type="hidden" name="nome_provisorio" value={nomeProvisorio} />
 
-          <div className="rounded-2xl border border-o2-navy/10 bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border border-o2-navy/10 bg-quadro p-6 shadow-sm">
             <div className="mb-1 flex items-center gap-2">
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-o2-navy/5 text-o2-navy">
                 <IconInvoice className="h-4 w-4" />
@@ -98,7 +98,7 @@ export default async function NovaImobiliariaFaturasPage({
             <input name="cnpj" placeholder="Só números" required className={`${inputClass} max-w-xs`} />
           </div>
 
-          <div className="rounded-2xl border border-o2-navy/10 bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border border-o2-navy/10 bg-quadro p-6 shadow-sm">
             <div className="mb-1 flex items-center gap-2">
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-o2-navy/5 text-o2-navy">
                 <IconMail className="h-4 w-4" />
@@ -118,7 +118,7 @@ export default async function NovaImobiliariaFaturasPage({
             />
           </div>
 
-          <div className="rounded-2xl border border-o2-navy/10 bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border border-o2-navy/10 bg-quadro p-6 shadow-sm">
             <div className="mb-1 flex items-center gap-2">
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-o2-navy/5 text-o2-navy">
                 <IconChecklist className="h-4 w-4" />

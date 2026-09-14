@@ -73,7 +73,7 @@ export default function ListaImobiliarias({ imobiliarias }: { imobiliarias: Imob
 
       {itens.map((item) =>
         item.membros.length > 1 ? (
-          <details key={item.chave} className="group/grupo rounded-xl border border-o2-navy/10 bg-white open:pb-1" open>
+          <details key={item.chave} className="group/grupo rounded-xl border border-o2-navy/10 bg-quadro open:pb-1" open>
             <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-4 [&::-webkit-details-marker]:hidden">
               <span className="text-sm font-semibold text-o2-navy">
                 {item.nomeGrupo} <span className="font-normal text-gray-400">· {item.membros.length} CNPJs</span>

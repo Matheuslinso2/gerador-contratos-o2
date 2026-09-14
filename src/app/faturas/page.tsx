@@ -4,11 +4,12 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
+import PageHeader from "@/components/PageHeader";
 import SeletorCompetencia from "./SeletorCompetencia";
 import { adicionarEsperada, excluirArquivoFatura } from "./actions";
 import { SEGURADORAS_CANONICAS } from "@/lib/faturasIdentificacao";
 import { GRUPOS_VISUAIS } from "@/lib/gruposVisuaisImobiliarias";
-import { IconCalendar, IconChecklist, IconUpload, IconInvoice, IconReceipt, IconChevron, IconTrash, IconReport } from "./icons";
+import { IconCalendar, IconChecklist, IconUpload, IconInvoice, IconReceipt, IconChevron, IconTrash, IconReport } from "@/components/icons";
 import { CheckboxSelecaoLinha, LinkDuplicata, SelecionarTodas } from "./LinhaInterativa";
 import { SubmitButton } from "./SubmitButton";
 
@@ -492,17 +493,11 @@ export default async function FaturasPage({
     <>
       <AppHeader userEmail={user?.email} logoutAction={signOut} />
       <main className="mx-auto max-w-[1400px] flex-1 space-y-6 p-8">
-        <div className="flex items-center gap-3">
-          <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-o2-coral to-orange-400 text-white shadow-sm">
-            <IconInvoice />
-          </span>
-          <div>
-            <h1 className="text-xl font-semibold text-o2-navy">Faturas mensais</h1>
-            <p className="text-sm text-gray-500">
-              Boletos de seguradora recebidos para reenvio às imobiliárias — uso interno O2.
-            </p>
-          </div>
-        </div>
+        <PageHeader
+          icon={<IconInvoice />}
+          titulo="Faturas mensais"
+          subtitulo="Boletos de seguradora recebidos para reenvio às imobiliárias — uso interno O2."
+        />
 
         <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-o2-indigo to-o2-navy p-5 text-white shadow-md sm:p-6">
           <div className="relative flex flex-wrap items-center justify-between gap-4">
@@ -590,7 +585,7 @@ export default async function FaturasPage({
         )}
 
         <form
-          className="flex flex-wrap items-end gap-2 rounded-xl border border-o2-navy/10 bg-white p-3 shadow-sm"
+          className="flex flex-wrap items-end gap-2 rounded-xl border border-o2-navy/10 bg-quadro p-3 shadow-sm"
           action="/faturas"
         >
           <input type="hidden" name="competencia" value={competencia} />
@@ -880,7 +875,7 @@ export default async function FaturasPage({
           </div>
         )}
 
-        <details className="rounded-2xl border border-o2-navy/10 bg-white p-5 shadow-sm">
+        <details className="rounded-2xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
           <summary className="cursor-pointer text-sm font-medium text-o2-navy">+ Adicionar imobiliária</summary>
           <p className="mt-1 text-xs text-gray-500">
             Um cadastro só, marcando quais seguradoras essa imobiliária tem — não precisa repetir

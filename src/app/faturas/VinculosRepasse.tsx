@@ -1,5 +1,5 @@
 import { adicionarEmailRepasse, removerEmailRepasse, salvarCodigoProdutorCorp } from "./actions";
-import { IconReceipt, IconTrash } from "./icons";
+import { IconReceipt, IconTrash } from "@/components/icons";
 import { SubmitButton } from "./SubmitButton";
 
 const inputClass = "w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-o2-coral focus:outline-none";
@@ -18,7 +18,7 @@ export default function VinculosRepasse({
   voltarPara: string;
 }) {
   return (
-    <div className="rounded-2xl border border-o2-navy/10 bg-white p-6 shadow-sm">
+    <div className="rounded-2xl border border-o2-navy/10 bg-quadro p-6 shadow-sm">
       <div className="mb-1 flex items-center gap-2">
         <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-o2-navy/5 text-o2-navy">
           <IconReceipt className="h-4 w-4" />

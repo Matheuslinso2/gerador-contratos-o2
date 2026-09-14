@@ -45,13 +45,13 @@ export default async function UploadProducaoPage({
         {ok && <p className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-700">✅ {ok}</p>}
         {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">⚠️ {erro}</p>}
 
-        <div className="rounded-xl border border-o2-navy/10 bg-white p-5 shadow-sm">
+        <div className="rounded-xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
           <h2 className="mb-1 text-sm font-semibold text-o2-navy">1. Grade de produção</h2>
           <p className="mb-4 text-xs text-gray-500">Prêmio, comissão e volume — obrigatório pra cada ramo.</p>
           <UploadProducaoForm userId={user!.id} />
         </div>
 
-        <div className="rounded-xl border border-o2-navy/10 bg-white p-5 shadow-sm">
+        <div className="rounded-xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
           <h2 className="mb-1 text-sm font-semibold text-o2-navy">2. Endereços (opcional)</h2>
           <p className="mb-4 text-xs text-gray-500">
             Enriquece a produção já carregada com bairro/cidade e valor de aluguel, quando disponível.

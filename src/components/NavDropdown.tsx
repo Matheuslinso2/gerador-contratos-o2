@@ -4,17 +4,26 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+type ItemNav = { href: string; label: string };
+type GrupoNav = { titulo: string; items: ItemNav[] };
+
+// Aceita uma lista simples (`items`) ou, quando o menu junta assuntos
+// diferentes debaixo de um rótulo só (ex: "Uso interno"), uma lista de
+// grupos com subtítulo (`groups`) -- só um dos dois é passado por vez.
 export default function NavDropdown({
   label,
   items,
+  groups,
 }: {
   label: string;
-  items: { href: string; label: string }[];
+  items?: ItemNav[];
+  groups?: GrupoNav[];
 }) {
   const [aberto, setAberto] = useState(false);
   const pathname = usePathname();
   const ref = useRef<HTMLDivElement>(null);
-  const ativo = items.some((item) => pathname.startsWith(item.href));
+  const todosItens = items ?? groups?.flatMap((g) => g.items) ?? [];
+  const ativo = todosItens.some((item) => pathname.startsWith(item.href));
 
   useEffect(() => {
     function aoClicarFora(e: MouseEvent) {
@@ -52,20 +61,42 @@ export default function NavDropdown({
       </button>
 
       {aberto && (
-        <div className="absolute left-0 top-full z-20 mt-1 min-w-[220px] rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
-          {items.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`block px-4 py-2 text-sm ${
-                pathname.startsWith(item.href)
-                  ? "bg-o2-gray/60 font-medium text-o2-navy"
-                  : "text-gray-700 hover:bg-gray-50"
-              }`}
-            >
-              {item.label}
-            </Link>
-          ))}
+        <div className="absolute left-0 top-full z-20 mt-1 min-w-[240px] rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+          {items &&
+            items.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`block px-4 py-2 text-sm ${
+                  pathname.startsWith(item.href)
+                    ? "bg-o2-gray/60 font-medium text-o2-navy"
+                    : "text-gray-700 hover:bg-gray-50"
+                }`}
+              >
+                {item.label}
+              </Link>
+            ))}
+          {groups &&
+            groups.map((grupo, indice) => (
+              <div key={grupo.titulo} className={indice > 0 ? "mt-1 border-t border-gray-100 pt-1" : ""}>
+                <div className="px-4 pb-1 pt-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-gray-400">
+                  {grupo.titulo}
+                </div>
+                {grupo.items.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`block px-4 py-2 text-sm ${
+                      pathname.startsWith(item.href)
+                        ? "bg-o2-gray/60 font-medium text-o2-navy"
+                        : "text-gray-700 hover:bg-gray-50"
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+              </div>
+            ))}
         </div>
       )}
     </div>

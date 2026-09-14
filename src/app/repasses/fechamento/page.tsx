@@ -5,7 +5,7 @@ import { signOut } from "../../actions";
 import AppHeader from "@/components/AppHeader";
 import FaturasSubHeader from "../../faturas/FaturasSubHeader";
 import SeletorCompetenciaRepasses from "../SeletorCompetenciaRepasses";
-import { IconReport } from "../../faturas/icons";
+import { IconReport } from "@/components/icons";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -104,30 +104,30 @@ export default async function FechamentoRepassesPage({
           voltarTexto="Voltar para Repasses"
         />
 
-        <div className="flex items-center gap-3 rounded-xl border border-o2-navy/10 bg-white p-3 shadow-sm">
+        <div className="flex items-center gap-3 rounded-xl border border-o2-navy/10 bg-quadro p-3 shadow-sm">
           <span className="text-xs font-medium text-gray-500">Competência</span>
           <SeletorCompetenciaRepasses competencia={competencia} basePath="/repasses/fechamento" />
           <span className="text-sm font-semibold text-o2-navy">{formatarCompetencia(competencia)}</span>
         </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm">
+          <div className="rounded-xl border border-o2-navy/10 bg-quadro p-4 shadow-sm">
             <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Enviados com sucesso</p>
             <p className="mt-1 text-2xl font-semibold text-o2-navy">{enviadosComSucesso.length}</p>
           </div>
-          <div className="rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm">
+          <div className="rounded-xl border border-o2-navy/10 bg-quadro p-4 shadow-sm">
             <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Com erro</p>
             <p className={`mt-1 text-2xl font-semibold ${comErro.length ? "text-red-600" : "text-o2-navy"}`}>
               {comErro.length}
             </p>
           </div>
-          <div className="rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm">
+          <div className="rounded-xl border border-o2-navy/10 bg-quadro p-4 shadow-sm">
             <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Valor líquido total repassado</p>
             <p className="mt-1 text-2xl font-semibold text-o2-coral">{formatarValor(valorTotal)}</p>
           </div>
         </div>
 
-        <div className="rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm">
+        <div className="rounded-xl border border-o2-navy/10 bg-quadro p-4 shadow-sm">
           <h2 className="mb-3 text-sm font-semibold text-o2-navy">Envios ({envios.length})</h2>
           {!envios.length ? (
             <p className="py-6 text-center text-sm text-gray-500">Nenhum envio registrado nessa competência.</p>

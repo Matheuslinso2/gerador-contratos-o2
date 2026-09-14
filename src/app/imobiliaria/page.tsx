@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { salvarImobiliaria } from "./actions";
 import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
+import PageHeader from "@/components/PageHeader";
+import { IconBuilding } from "@/components/icons";
 import BackLink from "@/components/BackLink";
 import CampoCnpj from "@/components/CampoCnpj";
 import CampoEndereco from "@/components/CampoEndereco";
@@ -34,9 +36,10 @@ export default async function ImobiliariaPage({
       <main className="mx-auto max-w-3xl flex-1 space-y-8 p-8">
       <div className="space-y-2">
         <BackLink />
-        <h1 className="text-xl font-semibold text-o2-navy">
-          {imobiliaria ? "Configuração da imobiliária" : "Complete o cadastro da sua imobiliária"}
-        </h1>
+        <PageHeader
+          icon={<IconBuilding />}
+          titulo={imobiliaria ? "Configuração da imobiliária" : "Complete o cadastro da sua imobiliária"}
+        />
       </div>
 
       {erro && (

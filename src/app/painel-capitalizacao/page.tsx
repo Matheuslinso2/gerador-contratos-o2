@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
+import PageHeader from "@/components/PageHeader";
+import { IconChart } from "@/components/icons";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "../actions";
@@ -86,15 +88,20 @@ export default async function PainelCapitalizacaoPage({
       <div className={styles.wrap}>
         <div id="painel-capitalizacao-completo" className={styles.container}>
           <div className={styles.masthead}>
-            <div>
-              <div className={styles.eyebrow}>O2 Seguros · Central de Negócios · SPA Título de Capitalização</div>
-              <h1 className={styles.title}>Painel Capitalização — {rotuloCompetencia(competencia)}</h1>
-            </div>
+            <PageHeader
+              icon={<IconChart />}
+              titulo="Capitalização"
+              subtitulo={`${rotuloCompetencia(competencia)} — SPA Título de Capitalização (Bitrix24)`}
+            />
             <div className={styles.meta}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, justifyContent: "flex-end", marginBottom: 6 }}>
                 <SeletorCompetencia competencia={competencia} />
                 {dados && (
-                  <BotaoExportarPainelPdf painelId="painel-capitalizacao-completo" nomeArquivo={`capitalizacao-painel-${competencia}`} />
+                  <BotaoExportarPainelPdf
+                    painelId="painel-capitalizacao-completo"
+                    nomeArquivo={`capitalizacao-painel-${competencia}`}
+                    corFundo="#f7f8fa"
+                  />
                 )}
               </div>
               {dados && <>Atualizado em {new Date(dados.atualizadoEm).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</>}

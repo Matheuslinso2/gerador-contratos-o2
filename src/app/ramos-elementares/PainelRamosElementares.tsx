@@ -2,9 +2,18 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { AnaliseRamosElementares, ItemAgrupado, RegistroNegociacao, ResumoPopulacao } from "@/lib/ramos-elementares/analise";
+import type {
+  AnaliseRamosElementares,
+  ItemAgrupado,
+  RegistroNegociacao,
+  ResumoPopulacao,
+} from "@/lib/ramos-elementares/analise";
 import styles from "./ramos-elementares.module.css";
-import ExportarQuadro, { BotaoExportarPainelPdf } from "@/components/ExportarQuadro";
+import ExportarQuadro, {
+  BotaoExportarPainelPdf,
+} from "@/components/ExportarQuadro";
+import PageHeader from "@/components/PageHeader";
+import { IconFlame } from "@/components/icons";
 
 function linhasItemAgrupado(dados: ItemAgrupado[]): Record<string, unknown>[] {
   return dados.map((item) => ({
@@ -17,7 +26,14 @@ function linhasItemAgrupado(dados: ItemAgrupado[]): Record<string, unknown>[] {
   }));
 }
 
-type AbaPainel = "visao" | "novos" | "renovacoes" | "financeiro" | "endossos" | "alertas" | "emails";
+type AbaPainel =
+  | "visao"
+  | "novos"
+  | "renovacoes"
+  | "financeiro"
+  | "endossos"
+  | "alertas"
+  | "emails";
 type EmailConfirmacao = {
   aba: string | null;
   linha: number | null;
@@ -39,9 +55,12 @@ type EmailConfirmacao = {
 type RecorteNovos = "consolidado" | "mes" | "pendentes";
 type RecorteRenovacao = "atual" | "futura";
 
-function tipoFonteExibicao(fonte: AnaliseRamosElementares["fonte"]): "bitrix" | "hibrida" | "planilha" {
+function tipoFonteExibicao(
+  fonte: AnaliseRamosElementares["fonte"],
+): "bitrix" | "hibrida" | "planilha" {
   if (fonte.tipo === "hibrido") return "hibrida";
-  if (fonte.tipo === "bitrix24" || fonte.id.startsWith("bitrix-spa-")) return "bitrix";
+  if (fonte.tipo === "bitrix24" || fonte.id.startsWith("bitrix-spa-"))
+    return "bitrix";
   return "planilha";
 }
 
@@ -50,7 +69,9 @@ function brl(valor: number): string {
 }
 
 function pct(valor: number | null): string {
-  return valor === null ? "Sem amostra" : `${valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+  return valor === null
+    ? "Sem amostra"
+    : `${valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
 }
 
 function duracao(minutos: number | null): string {
@@ -63,26 +84,48 @@ function duracao(minutos: number | null): string {
   return `${mins}min ${String(segundos).padStart(2, "0")}s`;
 }
 
-function Kpi({ label, value, note, tone }: { label: string; value: string; note: string; tone?: "ok" | "warning" | "danger" }) {
+function Kpi({
+  label,
+  value,
+  note,
+  tone,
+}: {
+  label: string;
+  value: string;
+  note: string;
+  tone?: "ok" | "warning" | "danger";
+}) {
   return (
     <div className={styles.kpi}>
       <div className={styles.kpiLabel}>{label}</div>
-      <div className={`${styles.kpiValue} ${tone ? styles[tone] : ""}`}>{value}</div>
+      <div className={`${styles.kpiValue} ${tone ? styles[tone] : ""}`}>
+        {value}
+      </div>
       <div className={styles.kpiNote}>{note}</div>
     </div>
   );
 }
-function Barras({ dados, limite = 8 }: { dados: ItemAgrupado[]; limite?: number }) {
+function Barras({
+  dados,
+  limite = 8,
+}: {
+  dados: ItemAgrupado[];
+  limite?: number;
+}) {
   const visiveis = dados.slice(0, limite);
   const maximo = Math.max(...visiveis.map((item) => item.total), 1);
-  if (!visiveis.length) return <div className={styles.zeroState}>Nenhum registro — 0</div>;
+  if (!visiveis.length)
+    return <div className={styles.zeroState}>Nenhum registro — 0</div>;
   return (
     <div className={styles.barras}>
       {visiveis.map((item) => (
         <div className={styles.barraLinha} key={item.nome}>
           <div className={styles.barraNome}>{item.nome}</div>
           <div className={styles.trilho}>
-            <div className={styles.preenchimento} style={{ width: `${Math.max(2, (item.total / maximo) * 100)}%` }} />
+            <div
+              className={styles.preenchimento}
+              style={{ width: `${Math.max(2, (item.total / maximo) * 100)}%` }}
+            />
           </div>
           <div className={styles.barraValor}>{item.total}</div>
         </div>
@@ -91,28 +134,54 @@ function Barras({ dados, limite = 8 }: { dados: ItemAgrupado[]; limite?: number 
   );
 }
 
-function ListaAgrupada({ dados, tituloVazio = "Nenhum registro" }: { dados: ItemAgrupado[]; tituloVazio?: string }) {
+function ListaAgrupada({
+  dados,
+  tituloVazio = "Nenhum registro",
+}: {
+  dados: ItemAgrupado[];
+  tituloVazio?: string;
+}) {
   const [expandida, setExpandida] = useState(false);
   const visiveis = expandida ? dados : dados.slice(0, 10);
   return (
     <div>
       <div className={styles.listaCabecalho} aria-hidden="true">
-        <span>Nome</span><span>Total</span><span>Efetivados</span><span>Conversão</span>
+        <span>Nome</span>
+        <span>Total</span>
+        <span>Efetivados</span>
+        <span>Conversão</span>
       </div>
       <div className={styles.listaDados}>
         {visiveis.map((item) => (
           <div className={styles.listaLinha} key={item.nome}>
             <strong>{item.nome}</strong>
-            <span><small>Total</small>{item.total}</span>
-            <span><small>Efetivados</small>{item.efetivados}</span>
-            <span><small>Conversão</small>{pct(item.conversao)}</span>
+            <span>
+              <small>Total</small>
+              {item.total}
+            </span>
+            <span>
+              <small>Efetivados</small>
+              {item.efetivados}
+            </span>
+            <span>
+              <small>Conversão</small>
+              {pct(item.conversao)}
+            </span>
           </div>
         ))}
-        {!dados.length && <div className={styles.zeroState}>{tituloVazio} — 0</div>}
+        {!dados.length && (
+          <div className={styles.zeroState}>{tituloVazio} — 0</div>
+        )}
       </div>
       {dados.length > 10 && (
-        <button type="button" className={styles.expandir} onClick={() => setExpandida((valor) => !valor)}>
-          {expandida ? "Mostrar apenas as 10 maiores" : `Mostrar todas (mais ${dados.length - 10})`}
+        <button
+          type="button"
+          className={styles.expandir}
+          onClick={() => setExpandida((valor) => !valor)}
+        >
+          {expandida
+            ? "Mostrar apenas as 10 maiores"
+            : `Mostrar todas (mais ${dados.length - 10})`}
         </button>
       )}
     </div>
@@ -123,9 +192,20 @@ function ResumoStatus({ resumo }: { resumo: ResumoPopulacao }) {
   return <Barras dados={resumo.porStatus} limite={12} />;
 }
 
-function PainelVisao({ analise, competencia }: { analise: AnaliseRamosElementares; competencia: string }) {
-  const atencao = [...analise.alertasOperacionais, ...analise.qualidade].filter((item) => item.quantidade > 0).slice(0, 5);
-  const ramosMaiorVolume = [...analise.novos.consolidado.porRamo, ...analise.renovacoes.atual.porRamo]
+function PainelVisao({
+  analise,
+  competencia,
+}: {
+  analise: AnaliseRamosElementares;
+  competencia: string;
+}) {
+  const atencao = [...analise.alertasOperacionais, ...analise.qualidade]
+    .filter((item) => item.quantidade > 0)
+    .slice(0, 5);
+  const ramosMaiorVolume = [
+    ...analise.novos.consolidado.porRamo,
+    ...analise.renovacoes.atual.porRamo,
+  ]
     .reduce<ItemAgrupado[]>((acumulado, item) => {
       const existente = acumulado.find((atual) => atual.nome === item.nome);
       if (existente) {
@@ -133,7 +213,9 @@ function PainelVisao({ analise, competencia }: { analise: AnaliseRamosElementare
         existente.efetivados += item.efetivados;
         existente.comissao += item.comissao;
         existente.comissaoEfetivada += item.comissaoEfetivada;
-        existente.conversao = existente.total ? (existente.efetivados / existente.total) * 100 : null;
+        existente.conversao = existente.total
+          ? (existente.efetivados / existente.total) * 100
+          : null;
       } else acumulado.push({ ...item });
       return acumulado;
     }, [])
@@ -142,34 +224,86 @@ function PainelVisao({ analise, competencia }: { analise: AnaliseRamosElementare
   return (
     <>
       <div className={styles.kpis}>
-        <Kpi label="Novas entradas" value={String(analise.visaoGeral.novasEntradas)} note="NOVOS MÊS" />
-        <Kpi label="Pendências anteriores" value={String(analise.visaoGeral.pendenciasAnteriores)} note="Carteira de entrada" />
-        <Kpi label="Renovações da competência" value={String(analise.visaoGeral.renovacoesCompetencia)} note="Competência selecionada" />
-        <Kpi label="Novos efetivados" value={String(analise.visaoGeral.novosEfetivados)} note="Mês + pendências" tone="ok" />
-        <Kpi label="Renovações efetivadas" value={String(analise.visaoGeral.renovacoesEfetivadas)} note={pct(analise.renovacoes.atual.conversao)} tone="ok" />
-        <Kpi label="Comissão dos efetivados" value={brl(analise.visaoGeral.comissaoEfetivada)} note="Valor estimado" tone="ok" />
+        <Kpi
+          label="Novas entradas"
+          value={String(analise.visaoGeral.novasEntradas)}
+          note="NOVOS MÊS"
+        />
+        <Kpi
+          label="Pendências anteriores"
+          value={String(analise.visaoGeral.pendenciasAnteriores)}
+          note="Carteira de entrada"
+        />
+        <Kpi
+          label="Renovações da competência"
+          value={String(analise.visaoGeral.renovacoesCompetencia)}
+          note="Competência selecionada"
+        />
+        <Kpi
+          label="Novos efetivados"
+          value={String(analise.visaoGeral.novosEfetivados)}
+          note="Mês + pendências"
+          tone="ok"
+        />
+        <Kpi
+          label="Renovações efetivadas"
+          value={String(analise.visaoGeral.renovacoesEfetivadas)}
+          note={pct(analise.renovacoes.atual.conversao)}
+          tone="ok"
+        />
+        <Kpi
+          label="Comissão dos efetivados"
+          value={brl(analise.visaoGeral.comissaoEfetivada)}
+          note="Valor estimado"
+          tone="ok"
+        />
       </div>
       <div className={styles.duasColunas}>
         <section id="quadro-ramos-novos-situacao" className={styles.panel}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
             <h2>Novos negócios — situação atual</h2>
             <ExportarQuadro
               quadroId="quadro-ramos-novos-situacao"
+              corFundo="#f7f8fa"
               nomeArquivo={`ramos-elementares-novos-situacao-${competencia}`}
-              dadosExcel={linhasItemAgrupado(analise.novos.consolidado.porStatus)}
+              dadosExcel={linhasItemAgrupado(
+                analise.novos.consolidado.porStatus,
+              )}
               nomeAbaExcel="Novos - situação"
             />
           </div>
-          <p>{analise.novos.consolidado.total} registros entre novos do mês e pendências anteriores</p>
+          <p>
+            {analise.novos.consolidado.total} registros entre novos do mês e
+            pendências anteriores
+          </p>
           <ResumoStatus resumo={analise.novos.consolidado} />
         </section>
         <section id="quadro-ramos-renovacoes-situacao" className={styles.panel}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
             <h2>Renovações — competência atual</h2>
             <ExportarQuadro
               quadroId="quadro-ramos-renovacoes-situacao"
+              corFundo="#f7f8fa"
               nomeArquivo={`ramos-elementares-renovacoes-situacao-${competencia}`}
-              dadosExcel={linhasItemAgrupado(analise.renovacoes.atual.porStatus)}
+              dadosExcel={linhasItemAgrupado(
+                analise.renovacoes.atual.porStatus,
+              )}
               nomeAbaExcel="Renovações - situação"
             />
           </div>
@@ -179,10 +313,19 @@ function PainelVisao({ analise, competencia }: { analise: AnaliseRamosElementare
       </div>
       <div className={styles.duasColunas}>
         <section id="quadro-ramos-maior-volume" className={styles.panel}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
             <h2>Ramos com maior volume</h2>
             <ExportarQuadro
               quadroId="quadro-ramos-maior-volume"
+              corFundo="#f7f8fa"
               nomeArquivo={`ramos-elementares-maior-volume-${competencia}`}
               dadosExcel={linhasItemAgrupado(ramosMaiorVolume)}
               nomeAbaExcel="Ramos maior volume"
@@ -192,12 +335,26 @@ function PainelVisao({ analise, competencia }: { analise: AnaliseRamosElementare
           <Barras dados={ramosMaiorVolume} />
         </section>
         <section id="quadro-ramos-atencao" className={styles.panel}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
             <h2>Pontos que exigem atenção</h2>
             <ExportarQuadro
               quadroId="quadro-ramos-atencao"
+              corFundo="#f7f8fa"
               nomeArquivo={`ramos-elementares-atencao-${competencia}`}
-              dadosExcel={atencao.map((item) => ({ titulo: item.titulo, descricao: item.descricao, quantidade: item.quantidade, gravidade: item.gravidade }))}
+              dadosExcel={atencao.map((item) => ({
+                titulo: item.titulo,
+                descricao: item.descricao,
+                quantidade: item.quantidade,
+                gravidade: item.gravidade,
+              }))}
               nomeAbaExcel="Pontos de atenção"
             />
           </div>
@@ -205,11 +362,22 @@ function PainelVisao({ analise, competencia }: { analise: AnaliseRamosElementare
           <div className={styles.alertasCompactos}>
             {atencao.map((item) => (
               <div className={styles.alertaCompacto} key={item.codigo}>
-                <div><strong>{item.titulo}</strong><span>{item.descricao}</span></div>
-                <b className={item.gravidade === "alta" ? styles.danger : styles.warning}>{item.quantidade}</b>
+                <div>
+                  <strong>{item.titulo}</strong>
+                  <span>{item.descricao}</span>
+                </div>
+                <b
+                  className={
+                    item.gravidade === "alta" ? styles.danger : styles.warning
+                  }
+                >
+                  {item.quantidade}
+                </b>
               </div>
             ))}
-            {!atencao.length && <div className={styles.zeroState}>Nenhum alerta ativo — 0</div>}
+            {!atencao.length && (
+              <div className={styles.zeroState}>Nenhum alerta ativo — 0</div>
+            )}
           </div>
         </section>
       </div>
@@ -217,40 +385,111 @@ function PainelVisao({ analise, competencia }: { analise: AnaliseRamosElementare
   );
 }
 
-function PainelNovos({ analise, competencia }: { analise: AnaliseRamosElementares; competencia: string }) {
+function PainelNovos({
+  analise,
+  competencia,
+}: {
+  analise: AnaliseRamosElementares;
+  competencia: string;
+}) {
   const [recorte, setRecorte] = useState<RecorteNovos>("consolidado");
   const resumo = analise.novos[recorte];
-  const arquivo = (sufixo: string) => `ramos-elementares-novos-${sufixo}-${recorte}-${competencia}`;
+  const arquivo = (sufixo: string) =>
+    `ramos-elementares-novos-${sufixo}-${recorte}-${competencia}`;
   return (
     <>
       <div className={styles.filtros}>
         {(["consolidado", "mes", "pendentes"] as RecorteNovos[]).map((item) => (
-          <button key={item} type="button" className={recorte === item ? styles.filtroAtivo : styles.filtro} onClick={() => setRecorte(item)}>
-            {item === "consolidado" ? "Consolidado" : item === "mes" ? "Novos do mês" : "Pendências anteriores"}
+          <button
+            key={item}
+            type="button"
+            className={recorte === item ? styles.filtroAtivo : styles.filtro}
+            onClick={() => setRecorte(item)}
+          >
+            {item === "consolidado"
+              ? "Consolidado"
+              : item === "mes"
+                ? "Novos do mês"
+                : "Pendências anteriores"}
           </button>
         ))}
       </div>
       <div className={styles.kpis}>
-        <Kpi label="Total" value={String(resumo.total)} note="Registros com status" />
-        <Kpi label="Efetivados" value={String(resumo.efetivados)} note={pct(resumo.conversao)} tone="ok" />
-        <Kpi label="Comissão potencial" value={brl(resumo.comissaoPotencial)} note="Carteira selecionada" />
-        <Kpi label="Comissão dos efetivados" value={brl(resumo.comissaoEfetivada)} note="Somente efetivados" tone="ok" />
-        <Kpi label="Resultado estimado O2" value={brl(resumo.resultadoEstimado)} note="Comissão menos repasse" tone="ok" />
-        <Kpi label="Tempo médio" value={duracao(resumo.tempoMedioMinutos)} note={`${resumo.temposValidos} tempos válidos`} />
+        <Kpi
+          label="Total"
+          value={String(resumo.total)}
+          note="Registros com status"
+        />
+        <Kpi
+          label="Efetivados"
+          value={String(resumo.efetivados)}
+          note={pct(resumo.conversao)}
+          tone="ok"
+        />
+        <Kpi
+          label="Comissão potencial"
+          value={brl(resumo.comissaoPotencial)}
+          note="Carteira selecionada"
+        />
+        <Kpi
+          label="Comissão dos efetivados"
+          value={brl(resumo.comissaoEfetivada)}
+          note="Somente efetivados"
+          tone="ok"
+        />
+        <Kpi
+          label="Resultado estimado O2"
+          value={brl(resumo.resultadoEstimado)}
+          note="Comissão menos repasse"
+          tone="ok"
+        />
+        <Kpi
+          label="Tempo médio"
+          value={duracao(resumo.tempoMedioMinutos)}
+          note={`${resumo.temposValidos} tempos válidos`}
+        />
       </div>
       <div className={styles.duasColunas}>
         <section id="quadro-ramos-novos-status" className={styles.panel}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
             <h2>Status</h2>
-            <ExportarQuadro quadroId="quadro-ramos-novos-status" nomeArquivo={arquivo("status")} dadosExcel={linhasItemAgrupado(resumo.porStatus)} nomeAbaExcel="Status" />
+            <ExportarQuadro
+              quadroId="quadro-ramos-novos-status"
+              corFundo="#f7f8fa"
+              nomeArquivo={arquivo("status")}
+              dadosExcel={linhasItemAgrupado(resumo.porStatus)}
+              nomeAbaExcel="Status"
+            />
           </div>
           <p>Distribuição atual dos registros</p>
           <ResumoStatus resumo={resumo} />
         </section>
         <section id="quadro-ramos-novos-cotador" className={styles.panel}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
             <h2>Produção por cotador ou origem</h2>
-            <ExportarQuadro quadroId="quadro-ramos-novos-cotador" nomeArquivo={arquivo("cotador")} dadosExcel={linhasItemAgrupado(resumo.porCotador)} nomeAbaExcel="Cotador" />
+            <ExportarQuadro
+              quadroId="quadro-ramos-novos-cotador"
+              corFundo="#f7f8fa"
+              nomeArquivo={arquivo("cotador")}
+              dadosExcel={linhasItemAgrupado(resumo.porCotador)}
+              nomeAbaExcel="Cotador"
+            />
           </div>
           <p>Produção direta permanece separada das pessoas</p>
           <Barras dados={resumo.porCotador} limite={12} />
@@ -258,70 +497,197 @@ function PainelNovos({ analise, competencia }: { analise: AnaliseRamosElementare
       </div>
       <div className={styles.duasColunas}>
         <section id="quadro-ramos-novos-ramo" className={styles.panel}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
             <h2>Ramos</h2>
-            <ExportarQuadro quadroId="quadro-ramos-novos-ramo" nomeArquivo={arquivo("ramos")} dadosExcel={linhasItemAgrupado(resumo.porRamo)} nomeAbaExcel="Ramos" />
+            <ExportarQuadro
+              quadroId="quadro-ramos-novos-ramo"
+              corFundo="#f7f8fa"
+              nomeArquivo={arquivo("ramos")}
+              dadosExcel={linhasItemAgrupado(resumo.porRamo)}
+              nomeAbaExcel="Ramos"
+            />
           </div>
           <p>Quantidade, efetivação e conversão</p>
           <ListaAgrupada dados={resumo.porRamo} />
         </section>
         <section id="quadro-ramos-novos-seguradora" className={styles.panel}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
             <h2>Seguradoras</h2>
-            <ExportarQuadro quadroId="quadro-ramos-novos-seguradora" nomeArquivo={arquivo("seguradoras")} dadosExcel={linhasItemAgrupado(resumo.porSeguradora)} nomeAbaExcel="Seguradoras" />
+            <ExportarQuadro
+              quadroId="quadro-ramos-novos-seguradora"
+              corFundo="#f7f8fa"
+              nomeArquivo={arquivo("seguradoras")}
+              dadosExcel={linhasItemAgrupado(resumo.porSeguradora)}
+              nomeAbaExcel="Seguradoras"
+            />
           </div>
           <p>Segimob é apresentado como origem sem seguradora informada</p>
           <ListaAgrupada dados={resumo.porSeguradora} />
         </section>
       </div>
       <section id="quadro-ramos-novos-imobiliarias" className={styles.panel}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "baseline",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
           <h2>Imobiliárias — 100% da produção</h2>
           <ExportarQuadro
             quadroId="quadro-ramos-novos-imobiliarias"
+            corFundo="#f7f8fa"
             nomeArquivo={arquivo("imobiliarias")}
             dadosExcel={linhasItemAgrupado(resumo.porImobiliaria)}
             nomeAbaExcel="Imobiliárias"
           />
         </div>
-        <p>As 10 maiores aparecem primeiro; o botão revela todas com pelo menos um registro</p>
-        <ListaAgrupada dados={resumo.porImobiliaria} tituloVazio="Nenhuma imobiliária" />
+        <p>
+          As 10 maiores aparecem primeiro; o botão revela todas com pelo menos
+          um registro
+        </p>
+        <ListaAgrupada
+          dados={resumo.porImobiliaria}
+          tituloVazio="Nenhuma imobiliária"
+        />
       </section>
     </>
   );
 }
 
-function PainelRenovacoes({ analise, competencia }: { analise: AnaliseRamosElementares; competencia: string }) {
+function PainelRenovacoes({
+  analise,
+  competencia,
+}: {
+  analise: AnaliseRamosElementares;
+  competencia: string;
+}) {
   const [recorte, setRecorte] = useState<RecorteRenovacao>("atual");
   const resumo = analise.renovacoes[recorte];
-  const arquivo = (sufixo: string) => `ramos-elementares-renovacoes-${sufixo}-${recorte}-${competencia}`;
+  const arquivo = (sufixo: string) =>
+    `ramos-elementares-renovacoes-${sufixo}-${recorte}-${competencia}`;
   return (
     <>
       <div className={styles.filtros}>
-        <button type="button" className={recorte === "atual" ? styles.filtroAtivo : styles.filtro} onClick={() => setRecorte("atual")}>Competência atual</button>
-        <button type="button" className={recorte === "futura" ? styles.filtroAtivo : styles.filtro} onClick={() => setRecorte("futura")}>Próxima competência</button>
+        <button
+          type="button"
+          className={recorte === "atual" ? styles.filtroAtivo : styles.filtro}
+          onClick={() => setRecorte("atual")}
+        >
+          Competência atual
+        </button>
+        <button
+          type="button"
+          className={recorte === "futura" ? styles.filtroAtivo : styles.filtro}
+          onClick={() => setRecorte("futura")}
+        >
+          Próxima competência
+        </button>
       </div>
       <div className={styles.kpis}>
-        <Kpi label="Carteira" value={String(resumo.total)} note={recorte === "atual" ? "Resultado atual" : "Previsão operacional"} />
-        <Kpi label="Efetivados" value={String(resumo.efetivados)} note={recorte === "atual" ? pct(resumo.conversao) : "Não misturar com o mês atual"} tone="ok" />
-        <Kpi label="Comissão anterior" value={brl(resumo.comissaoAnterior)} note="Referência registrada" />
-        <Kpi label="Comissão atual prevista" value={brl(resumo.comissaoPotencial)} note="Carteira total" />
-        <Kpi label="Comissão dos efetivados" value={brl(resumo.comissaoEfetivada)} note="Somente efetivados" tone="ok" />
-        <Kpi label="Resultado estimado O2" value={brl(resumo.resultadoEstimado)} note="Comissão menos repasse" tone="ok" />
+        <Kpi
+          label="Carteira"
+          value={String(resumo.total)}
+          note={
+            recorte === "atual" ? "Resultado atual" : "Previsão operacional"
+          }
+        />
+        <Kpi
+          label="Efetivados"
+          value={String(resumo.efetivados)}
+          note={
+            recorte === "atual"
+              ? pct(resumo.conversao)
+              : "Não misturar com o mês atual"
+          }
+          tone="ok"
+        />
+        <Kpi
+          label="Comissão anterior"
+          value={brl(resumo.comissaoAnterior)}
+          note="Referência registrada"
+        />
+        <Kpi
+          label="Comissão atual prevista"
+          value={brl(resumo.comissaoPotencial)}
+          note="Carteira total"
+        />
+        <Kpi
+          label="Comissão dos efetivados"
+          value={brl(resumo.comissaoEfetivada)}
+          note="Somente efetivados"
+          tone="ok"
+        />
+        <Kpi
+          label="Resultado estimado O2"
+          value={brl(resumo.resultadoEstimado)}
+          note="Comissão menos repasse"
+          tone="ok"
+        />
       </div>
       <div className={styles.duasColunas}>
         <section id="quadro-ramos-renov-status" className={styles.panel}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
             <h2>Status da carteira</h2>
-            <ExportarQuadro quadroId="quadro-ramos-renov-status" nomeArquivo={arquivo("status")} dadosExcel={linhasItemAgrupado(resumo.porStatus)} nomeAbaExcel="Status" />
+            <ExportarQuadro
+              quadroId="quadro-ramos-renov-status"
+              corFundo="#f7f8fa"
+              nomeArquivo={arquivo("status")}
+              dadosExcel={linhasItemAgrupado(resumo.porStatus)}
+              nomeAbaExcel="Status"
+            />
           </div>
-          <p>{recorte === "atual" ? "Conversão calculada na competência" : "Preparação do próximo período"}</p>
+          <p>
+            {recorte === "atual"
+              ? "Conversão calculada na competência"
+              : "Preparação do próximo período"}
+          </p>
           <ResumoStatus resumo={resumo} />
         </section>
         <section id="quadro-ramos-renov-cotador" className={styles.panel}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
             <h2>Produção por cotador</h2>
-            <ExportarQuadro quadroId="quadro-ramos-renov-cotador" nomeArquivo={arquivo("cotador")} dadosExcel={linhasItemAgrupado(resumo.porCotador)} nomeAbaExcel="Cotador" />
+            <ExportarQuadro
+              quadroId="quadro-ramos-renov-cotador"
+              corFundo="#f7f8fa"
+              nomeArquivo={arquivo("cotador")}
+              dadosExcel={linhasItemAgrupado(resumo.porCotador)}
+              nomeAbaExcel="Cotador"
+            />
           </div>
           <p>Registros atribuídos a cada responsável</p>
           <Barras dados={resumo.porCotador} limite={12} />
@@ -329,49 +695,113 @@ function PainelRenovacoes({ analise, competencia }: { analise: AnaliseRamosEleme
       </div>
       <div className={styles.duasColunas}>
         <section id="quadro-ramos-renov-ramo" className={styles.panel}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
             <h2>Ramos</h2>
-            <ExportarQuadro quadroId="quadro-ramos-renov-ramo" nomeArquivo={arquivo("ramos")} dadosExcel={linhasItemAgrupado(resumo.porRamo)} nomeAbaExcel="Ramos" />
+            <ExportarQuadro
+              quadroId="quadro-ramos-renov-ramo"
+              corFundo="#f7f8fa"
+              nomeArquivo={arquivo("ramos")}
+              dadosExcel={linhasItemAgrupado(resumo.porRamo)}
+              nomeAbaExcel="Ramos"
+            />
           </div>
           <ListaAgrupada dados={resumo.porRamo} />
         </section>
         <section id="quadro-ramos-renov-seguradora" className={styles.panel}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
             <h2>Seguradoras</h2>
-            <ExportarQuadro quadroId="quadro-ramos-renov-seguradora" nomeArquivo={arquivo("seguradoras")} dadosExcel={linhasItemAgrupado(resumo.porSeguradora)} nomeAbaExcel="Seguradoras" />
+            <ExportarQuadro
+              quadroId="quadro-ramos-renov-seguradora"
+              corFundo="#f7f8fa"
+              nomeArquivo={arquivo("seguradoras")}
+              dadosExcel={linhasItemAgrupado(resumo.porSeguradora)}
+              nomeAbaExcel="Seguradoras"
+            />
           </div>
           <ListaAgrupada dados={resumo.porSeguradora} />
         </section>
       </div>
       <section id="quadro-ramos-renov-imobiliarias" className={styles.panel}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "baseline",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
           <h2>Imobiliárias — carteira completa</h2>
           <ExportarQuadro
             quadroId="quadro-ramos-renov-imobiliarias"
+            corFundo="#f7f8fa"
             nomeArquivo={arquivo("imobiliarias")}
             dadosExcel={linhasItemAgrupado(resumo.porImobiliaria)}
             nomeAbaExcel="Imobiliárias"
           />
         </div>
-        <ListaAgrupada dados={resumo.porImobiliaria} tituloVazio="Nenhuma imobiliária" />
+        <ListaAgrupada
+          dados={resumo.porImobiliaria}
+          tituloVazio="Nenhuma imobiliária"
+        />
       </section>
     </>
   );
 }
 
-function LinhaFinanceira({ nome, resumo }: { nome: string; resumo: ResumoPopulacao }) {
-  const conversao = resumo.comissaoPotencial > 0 ? (resumo.comissaoEfetivada / resumo.comissaoPotencial) * 100 : null;
+function LinhaFinanceira({
+  nome,
+  resumo,
+}: {
+  nome: string;
+  resumo: ResumoPopulacao;
+}) {
+  const conversao =
+    resumo.comissaoPotencial > 0
+      ? (resumo.comissaoEfetivada / resumo.comissaoPotencial) * 100
+      : null;
   return (
     <div className={styles.financeRow}>
       <strong>{nome}</strong>
-      <span><small>Potencial</small>{brl(resumo.comissaoPotencial)}</span>
-      <span><small>Efetivada</small>{brl(resumo.comissaoEfetivada)}</span>
-      <span><small>Conversão financeira</small>{pct(conversao)}</span>
+      <span>
+        <small>Potencial</small>
+        {brl(resumo.comissaoPotencial)}
+      </span>
+      <span>
+        <small>Efetivada</small>
+        {brl(resumo.comissaoEfetivada)}
+      </span>
+      <span>
+        <small>Conversão financeira</small>
+        {pct(conversao)}
+      </span>
     </div>
   );
 }
 
-function PainelFinanceiro({ analise, competencia }: { analise: AnaliseRamosElementares; competencia: string }) {
+function PainelFinanceiro({
+  analise,
+  competencia,
+}: {
+  analise: AnaliseRamosElementares;
+  competencia: string;
+}) {
   const origens: { nome: string; resumo: ResumoPopulacao }[] = [
     { nome: "Novos do mês", resumo: analise.novos.mes },
     { nome: "Pendências anteriores", resumo: analise.novos.pendentes },
@@ -379,31 +809,73 @@ function PainelFinanceiro({ analise, competencia }: { analise: AnaliseRamosEleme
   ];
   return (
     <>
-      <div className={styles.avisoNeutro}>Valores operacionais estimados. Não representam receita recebida ou lucro realizado.</div>
+      <div className={styles.avisoNeutro}>
+        Valores operacionais estimados. Não representam receita recebida ou
+        lucro realizado.
+      </div>
       <div className={styles.kpis}>
-        <Kpi label="Comissão potencial" value={brl(analise.financeiro.comissaoPotencial)} note="Carteira total atual" />
-        <Kpi label="Comissão dos efetivados" value={brl(analise.financeiro.comissaoEfetivada)} note="Status EFETIVADO" tone="ok" />
-        <Kpi label="Repasse estimado" value={brl(analise.financeiro.repasseEstimado)} note="Somente efetivados" />
-        <Kpi label="Resultado estimado O2" value={brl(analise.financeiro.resultadoEstimado)} note="Comissão menos repasse" tone="ok" />
-        <Kpi label="Conversão financeira" value={pct(analise.financeiro.conversaoFinanceira)} note="Efetivada ÷ potencial" />
+        <Kpi
+          label="Comissão potencial"
+          value={brl(analise.financeiro.comissaoPotencial)}
+          note="Carteira total atual"
+        />
+        <Kpi
+          label="Comissão dos efetivados"
+          value={brl(analise.financeiro.comissaoEfetivada)}
+          note="Status EFETIVADO"
+          tone="ok"
+        />
+        <Kpi
+          label="Repasse estimado"
+          value={brl(analise.financeiro.repasseEstimado)}
+          note="Somente efetivados"
+        />
+        <Kpi
+          label="Resultado estimado O2"
+          value={brl(analise.financeiro.resultadoEstimado)}
+          note="Comissão menos repasse"
+          tone="ok"
+        />
+        <Kpi
+          label="Conversão financeira"
+          value={pct(analise.financeiro.conversaoFinanceira)}
+          note="Efetivada ÷ potencial"
+        />
       </div>
       <section id="quadro-ramos-financeiro" className={styles.panel}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "baseline",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
           <h2>Comissão potencial versus efetivada</h2>
           <ExportarQuadro
             quadroId="quadro-ramos-financeiro"
+            corFundo="#f7f8fa"
             nomeArquivo={`ramos-elementares-financeiro-${competencia}`}
             dadosExcel={origens.map(({ nome, resumo }) => ({
               origem: nome,
               comissao_potencial: resumo.comissaoPotencial,
               comissao_efetivada: resumo.comissaoEfetivada,
-              conversao_financeira: resumo.comissaoPotencial > 0 ? (resumo.comissaoEfetivada / resumo.comissaoPotencial) * 100 : "",
+              conversao_financeira:
+                resumo.comissaoPotencial > 0
+                  ? (resumo.comissaoEfetivada / resumo.comissaoPotencial) * 100
+                  : "",
             }))}
             nomeAbaExcel="Financeiro"
           />
         </div>
         <p>As populações permanecem separadas</p>
-        <div className={styles.financeHeader}><span>Origem</span><span>Potencial</span><span>Efetivada</span><span>Conversão</span></div>
+        <div className={styles.financeHeader}>
+          <span>Origem</span>
+          <span>Potencial</span>
+          <span>Efetivada</span>
+          <span>Conversão</span>
+        </div>
         {origens.map(({ nome, resumo }) => (
           <LinhaFinanceira key={nome} nome={nome} resumo={resumo} />
         ))}
@@ -412,51 +884,143 @@ function PainelFinanceiro({ analise, competencia }: { analise: AnaliseRamosEleme
   );
 }
 
-function PainelEndossos({ analise, competencia }: { analise: AnaliseRamosElementares; competencia: string }) {
+function PainelEndossos({
+  analise,
+  competencia,
+}: {
+  analise: AnaliseRamosElementares;
+  competencia: string;
+}) {
   const dados = analise.endossos;
   // Endossos vêm da planilha tanto no modo "planilha" quanto no "hibrida"
   // (só o modo 100% Bitrix, hoje sem uso, tem endossos estruturados no CRM).
   const endossosDoBitrix = tipoFonteExibicao(analise.fonte) === "bitrix";
-  const arquivo = (sufixo: string) => `ramos-elementares-endossos-${sufixo}-${competencia}`;
+  const arquivo = (sufixo: string) =>
+    `ramos-elementares-endossos-${sufixo}-${competencia}`;
   return (
     <>
       <div className={styles.kpis}>
-        <Kpi label="Solicitações" value={String(dados.total)} note="Linhas operacionais" />
-        <Kpi label="Cancelados" value={String(dados.cancelados)} note="Fluxo concluído" tone="ok" />
-        <Kpi label="Pendentes" value={String(dados.pendentes)} note="Exigem acompanhamento" tone={dados.pendentes ? "warning" : "ok"} />
-        <Kpi label="Tempos válidos" value={String(dados.temposValidos)} note={`${dados.temposInvalidos} inválidos`} />
-        <Kpi label="Tempo médio" value={duracao(dados.tempoMedioMinutos)} note="Somente durações válidas" />
-        <Kpi label="Restituição informada" value={brl(dados.restituicaoInformada)} note="Sinal mantido da fonte" />
+        <Kpi
+          label="Solicitações"
+          value={String(dados.total)}
+          note="Linhas operacionais"
+        />
+        <Kpi
+          label="Cancelados"
+          value={String(dados.cancelados)}
+          note="Fluxo concluído"
+          tone="ok"
+        />
+        <Kpi
+          label="Pendentes"
+          value={String(dados.pendentes)}
+          note="Exigem acompanhamento"
+          tone={dados.pendentes ? "warning" : "ok"}
+        />
+        <Kpi
+          label="Tempos válidos"
+          value={String(dados.temposValidos)}
+          note={`${dados.temposInvalidos} inválidos`}
+        />
+        <Kpi
+          label="Tempo médio"
+          value={duracao(dados.tempoMedioMinutos)}
+          note="Somente durações válidas"
+        />
+        <Kpi
+          label="Restituição informada"
+          value={brl(dados.restituicaoInformada)}
+          note="Sinal mantido da fonte"
+        />
       </div>
       <div className={styles.duasColunas}>
         <section id="quadro-ramos-endossos-status" className={styles.panel}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
             <h2>Status</h2>
-            <ExportarQuadro quadroId="quadro-ramos-endossos-status" nomeArquivo={arquivo("status")} dadosExcel={linhasItemAgrupado(dados.porStatus)} nomeAbaExcel="Status" />
+            <ExportarQuadro
+              quadroId="quadro-ramos-endossos-status"
+              corFundo="#f7f8fa"
+              nomeArquivo={arquivo("status")}
+              dadosExcel={linhasItemAgrupado(dados.porStatus)}
+              nomeAbaExcel="Status"
+            />
           </div>
           <p>Não entra na conversão comercial</p>
           <Barras dados={dados.porStatus} />
         </section>
         <section id="quadro-ramos-endossos-ramo" className={styles.panel}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
             <h2>Ramos</h2>
-            <ExportarQuadro quadroId="quadro-ramos-endossos-ramo" nomeArquivo={arquivo("ramos")} dadosExcel={linhasItemAgrupado(dados.porRamo)} nomeAbaExcel="Ramos" />
+            <ExportarQuadro
+              quadroId="quadro-ramos-endossos-ramo"
+              corFundo="#f7f8fa"
+              nomeArquivo={arquivo("ramos")}
+              dadosExcel={linhasItemAgrupado(dados.porRamo)}
+              nomeAbaExcel="Ramos"
+            />
           </div>
           <Barras dados={dados.porRamo} />
         </section>
       </div>
       <div className={styles.duasColunas}>
-        <section id="quadro-ramos-endossos-responsavel" className={styles.panel}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+        <section
+          id="quadro-ramos-endossos-responsavel"
+          className={styles.panel}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
             <h2>Responsáveis</h2>
-            <ExportarQuadro quadroId="quadro-ramos-endossos-responsavel" nomeArquivo={arquivo("responsaveis")} dadosExcel={linhasItemAgrupado(dados.porResponsavel)} nomeAbaExcel="Responsáveis" />
+            <ExportarQuadro
+              quadroId="quadro-ramos-endossos-responsavel"
+              corFundo="#f7f8fa"
+              nomeArquivo={arquivo("responsaveis")}
+              dadosExcel={linhasItemAgrupado(dados.porResponsavel)}
+              nomeAbaExcel="Responsáveis"
+            />
           </div>
           <Barras dados={dados.porResponsavel} />
         </section>
         <section id="quadro-ramos-endossos-seguradora" className={styles.panel}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
             <h2>Seguradoras</h2>
-            <ExportarQuadro quadroId="quadro-ramos-endossos-seguradora" nomeArquivo={arquivo("seguradoras")} dadosExcel={linhasItemAgrupado(dados.porSeguradora)} nomeAbaExcel="Seguradoras" />
+            <ExportarQuadro
+              quadroId="quadro-ramos-endossos-seguradora"
+              corFundo="#f7f8fa"
+              nomeArquivo={arquivo("seguradoras")}
+              dadosExcel={linhasItemAgrupado(dados.porSeguradora)}
+              nomeAbaExcel="Seguradoras"
+            />
           </div>
           <Barras dados={dados.porSeguradora} />
         </section>
@@ -470,23 +1034,60 @@ function PainelEndossos({ analise, competencia }: { analise: AnaliseRamosElement
   );
 }
 
-function ListaAlertas({ titulo, itens, quadroId, nomeArquivo }: { titulo: string; itens: AnaliseRamosElementares["qualidade"]; quadroId: string; nomeArquivo: string }) {
+function ListaAlertas({
+  titulo,
+  itens,
+  quadroId,
+  nomeArquivo,
+}: {
+  titulo: string;
+  itens: AnaliseRamosElementares["qualidade"];
+  quadroId: string;
+  nomeArquivo: string;
+}) {
   return (
     <section id={quadroId} className={styles.panel}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "baseline",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
         <h2>{titulo}</h2>
         <ExportarQuadro
           quadroId={quadroId}
+          corFundo="#f7f8fa"
           nomeArquivo={nomeArquivo}
-          dadosExcel={itens.map((item) => ({ titulo: item.titulo, descricao: item.descricao, quantidade: item.quantidade, gravidade: item.gravidade }))}
+          dadosExcel={itens.map((item) => ({
+            titulo: item.titulo,
+            descricao: item.descricao,
+            quantidade: item.quantidade,
+            gravidade: item.gravidade,
+          }))}
           nomeAbaExcel={titulo}
         />
       </div>
       <div className={styles.alertasLista}>
         {itens.map((item) => (
           <div className={styles.alertaLinha} key={item.codigo}>
-            <div><strong>{item.titulo}</strong><span>{item.descricao}</span></div>
-            <b className={item.quantidade === 0 ? styles.ok : item.gravidade === "alta" ? styles.danger : styles.warning}>{item.quantidade}</b>
+            <div>
+              <strong>{item.titulo}</strong>
+              <span>{item.descricao}</span>
+            </div>
+            <b
+              className={
+                item.quantidade === 0
+                  ? styles.ok
+                  : item.gravidade === "alta"
+                    ? styles.danger
+                    : styles.warning
+              }
+            >
+              {item.quantidade}
+            </b>
           </div>
         ))}
       </div>
@@ -494,15 +1095,42 @@ function ListaAlertas({ titulo, itens, quadroId, nomeArquivo }: { titulo: string
   );
 }
 
-function PainelAlertas({ analise, competencia }: { analise: AnaliseRamosElementares; competencia: string }) {
-  const totalQualidade = analise.qualidade.reduce((soma, item) => soma + item.quantidade, 0);
-  const totalOperacional = analise.alertasOperacionais.reduce((soma, item) => soma + item.quantidade, 0);
+function PainelAlertas({
+  analise,
+  competencia,
+}: {
+  analise: AnaliseRamosElementares;
+  competencia: string;
+}) {
+  const totalQualidade = analise.qualidade.reduce(
+    (soma, item) => soma + item.quantidade,
+    0,
+  );
+  const totalOperacional = analise.alertasOperacionais.reduce(
+    (soma, item) => soma + item.quantidade,
+    0,
+  );
   return (
     <>
       <div className={styles.kpis}>
-        <Kpi label="Alertas operacionais" value={String(totalOperacional)} note="Itens que pedem ação" tone={totalOperacional ? "warning" : "ok"} />
-        <Kpi label="Ocorrências de qualidade" value={String(totalQualidade)} note="Categorias podem se sobrepor" tone={totalQualidade ? "warning" : "ok"} />
-        <Kpi label="Correções automáticas" value="0" note="A fonte nunca é alterada" tone="ok" />
+        <Kpi
+          label="Alertas operacionais"
+          value={String(totalOperacional)}
+          note="Itens que pedem ação"
+          tone={totalOperacional ? "warning" : "ok"}
+        />
+        <Kpi
+          label="Ocorrências de qualidade"
+          value={String(totalQualidade)}
+          note="Categorias podem se sobrepor"
+          tone={totalQualidade ? "warning" : "ok"}
+        />
+        <Kpi
+          label="Correções automáticas"
+          value="0"
+          note="A fonte nunca é alterada"
+          tone="ok"
+        />
       </div>
       <div className={styles.duasColunas}>
         <ListaAlertas
@@ -572,52 +1200,86 @@ function PainelEmails({
   // uma correção administrativa, não um negócio perdido de verdade, então
   // não deve entrar como alerta "urgente".
   function ehReemissao(email: EmailConfirmacao): boolean {
-    if (email.tipo_confirmacao !== "cancelamento_confirmado" || !email.gmail_thread_id) return false;
+    if (
+      email.tipo_confirmacao !== "cancelamento_confirmado" ||
+      !email.gmail_thread_id
+    )
+      return false;
     return emailsConfirmacao.some(
       (outro) =>
         outro.gmail_thread_id === email.gmail_thread_id &&
-        (outro.tipo_confirmacao === "contratacao_confirmada" || outro.tipo_confirmacao === "apolice_emitida")
+        (outro.tipo_confirmacao === "contratacao_confirmada" ||
+          outro.tipo_confirmacao === "apolice_emitida"),
     );
   }
 
   const pendencias = useMemo(() => {
-    const porNegociacao = new Map<string, { negociacao: RegistroNegociacao; email: EmailConfirmacao }>();
+    const porNegociacao = new Map<
+      string,
+      { negociacao: RegistroNegociacao; email: EmailConfirmacao }
+    >();
     for (const email of emailsConfirmacao) {
-      if (!email.divergencia || email.divergencia_tipo !== "status_desatualizado") continue;
+      if (
+        !email.divergencia ||
+        email.divergencia_tipo !== "status_desatualizado"
+      )
+        continue;
       if (!email.aba || !email.linha) continue;
       const negociacao = negociacaoPorId.get(`${email.aba}|${email.linha}`);
       if (!negociacao || negociacao.tipo === "endosso") continue;
       const atual = porNegociacao.get(negociacao.id);
-      if (!atual || new Date(email.recebido_em) > new Date(atual.email.recebido_em)) {
+      if (
+        !atual ||
+        new Date(email.recebido_em) > new Date(atual.email.recebido_em)
+      ) {
         porNegociacao.set(negociacao.id, { negociacao, email });
       }
     }
     return [...porNegociacao.values()]
       .map((item) => ({ ...item, reemissao: ehReemissao(item.email) }))
       .sort((a, b) => {
-        const urgenteA = a.email.tipo_confirmacao === "cancelamento_confirmado" && !a.reemissao ? 0 : 1;
-        const urgenteB = b.email.tipo_confirmacao === "cancelamento_confirmado" && !b.reemissao ? 0 : 1;
+        const urgenteA =
+          a.email.tipo_confirmacao === "cancelamento_confirmado" && !a.reemissao
+            ? 0
+            : 1;
+        const urgenteB =
+          b.email.tipo_confirmacao === "cancelamento_confirmado" && !b.reemissao
+            ? 0
+            : 1;
         if (urgenteA !== urgenteB) return urgenteA - urgenteB;
-        return new Date(b.email.recebido_em).getTime() - new Date(a.email.recebido_em).getTime();
+        return (
+          new Date(b.email.recebido_em).getTime() -
+          new Date(a.email.recebido_em).getTime()
+        );
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [emailsConfirmacao, negociacaoPorId]);
 
   const cancelamentosNaoRefletidos = pendencias.filter(
-    (item) => item.email.tipo_confirmacao === "cancelamento_confirmado" && !item.reemissao
+    (item) =>
+      item.email.tipo_confirmacao === "cancelamento_confirmado" &&
+      !item.reemissao,
   );
 
   // Cliente já deu o aval ("pode seguir com a contratação") mas nenhum
   // e-mail de confirmação da O2 (contratação/apólice/cancelamento) chegou
   // depois disso pra mesma linha -- o loop ficou aberto.
   const autorizacoesPendentes = useMemo(() => {
-    const resultado: { negociacao: RegistroNegociacao; autorizacao: EmailConfirmacao; dias: number }[] = [];
+    const resultado: {
+      negociacao: RegistroNegociacao;
+      autorizacao: EmailConfirmacao;
+      dias: number;
+    }[] = [];
     for (const [id, emails] of emailsPorNegociacao) {
       const negociacao = negociacaoPorId.get(id);
       if (!negociacao || negociacao.tipo === "endosso") continue;
       const autorizacoes = emails
         .filter((email) => email.tipo_confirmacao === "autorizacao_cliente")
-        .sort((a, b) => new Date(b.recebido_em).getTime() - new Date(a.recebido_em).getTime());
+        .sort(
+          (a, b) =>
+            new Date(b.recebido_em).getTime() -
+            new Date(a.recebido_em).getTime(),
+        );
       if (autorizacoes.length === 0) continue;
       const ultimaAutorizacao = autorizacoes[0];
       const jaConfirmouDepois = emails.some(
@@ -625,10 +1287,13 @@ function PainelEmails({
           (email.tipo_confirmacao === "contratacao_confirmada" ||
             email.tipo_confirmacao === "apolice_emitida" ||
             email.tipo_confirmacao === "cancelamento_confirmado") &&
-          new Date(email.recebido_em) > new Date(ultimaAutorizacao.recebido_em)
+          new Date(email.recebido_em) > new Date(ultimaAutorizacao.recebido_em),
       );
       if (jaConfirmouDepois) continue;
-      const dias = Math.floor((Date.now() - new Date(ultimaAutorizacao.recebido_em).getTime()) / 86_400_000);
+      const dias = Math.floor(
+        (Date.now() - new Date(ultimaAutorizacao.recebido_em).getTime()) /
+          86_400_000,
+      );
       if (dias < LIMIAR_DIAS_AUTORIZACAO_PENDENTE) continue;
       resultado.push({ negociacao, autorizacao: ultimaAutorizacao, dias });
     }
@@ -659,25 +1324,47 @@ function PainelEmails({
       </div>
 
       {autorizacoesPendentes.length > 0 && (
-        <section id="quadro-ramos-emails-autorizacoes" className={styles.panel} style={{ marginBottom: 16 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+        <section
+          id="quadro-ramos-emails-autorizacoes"
+          className={styles.panel}
+          style={{ marginBottom: 16 }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
             <h2>⏳ Cliente autorizou — aguardando confirmação da O2</h2>
             <ExportarQuadro
               quadroId="quadro-ramos-emails-autorizacoes"
+              corFundo="#f7f8fa"
               nomeArquivo={`ramos-elementares-autorizacoes-pendentes-${competencia}`}
-              dadosExcel={autorizacoesPendentes.map(({ negociacao, autorizacao, dias }) => ({
-                imobiliaria: negociacao.imobiliaria && negociacao.imobiliaria !== "NÃO INFORMADA" ? negociacao.imobiliaria : "",
-                cliente: negociacao.segurado || "",
-                status_na_planilha: negociacao.status,
-                autorizado_em: new Date(autorizacao.recebido_em).toLocaleDateString("pt-BR"),
-                dias_sem_confirmacao: dias,
-              }))}
+              dadosExcel={autorizacoesPendentes.map(
+                ({ negociacao, autorizacao, dias }) => ({
+                  imobiliaria:
+                    negociacao.imobiliaria &&
+                    negociacao.imobiliaria !== "NÃO INFORMADA"
+                      ? negociacao.imobiliaria
+                      : "",
+                  cliente: negociacao.segurado || "",
+                  status_na_planilha: negociacao.status,
+                  autorizado_em: new Date(
+                    autorizacao.recebido_em,
+                  ).toLocaleDateString("pt-BR"),
+                  dias_sem_confirmacao: dias,
+                }),
+              )}
               nomeAbaExcel="Autorizações pendentes"
             />
           </div>
           <p>
-            A imobiliária/cliente já deu o aval (ex: "pode seguir com a contratação") e nenhum e-mail de contratação,
-            apólice emitida ou cancelamento chegou depois disso pra esse negócio.
+            A imobiliária/cliente já deu o aval (ex: "pode seguir com a
+            contratação") e nenhum e-mail de contratação, apólice emitida ou
+            cancelamento chegou depois disso pra esse negócio.
           </p>
           <div className={styles.tabelaWrap}>
             <table className={styles.tabela}>
@@ -691,47 +1378,84 @@ function PainelEmails({
                 </tr>
               </thead>
               <tbody>
-                {autorizacoesPendentes.map(({ negociacao, autorizacao, dias }) => (
-                  <tr key={negociacao.id}>
-                    <td>{negociacao.imobiliaria && negociacao.imobiliaria !== "NÃO INFORMADA" ? negociacao.imobiliaria : "—"}</td>
-                    <td>{negociacao.segurado || "—"}</td>
-                    <td>{negociacao.status}</td>
-                    <td>{new Date(autorizacao.recebido_em).toLocaleDateString("pt-BR")}</td>
-                    <td>
-                      <span className={`${styles.badge} ${styles.badgeUrgente}`}>{dias}d</span>
-                    </td>
-                  </tr>
-                ))}
+                {autorizacoesPendentes.map(
+                  ({ negociacao, autorizacao, dias }) => (
+                    <tr key={negociacao.id}>
+                      <td>
+                        {negociacao.imobiliaria &&
+                        negociacao.imobiliaria !== "NÃO INFORMADA"
+                          ? negociacao.imobiliaria
+                          : "—"}
+                      </td>
+                      <td>{negociacao.segurado || "—"}</td>
+                      <td>{negociacao.status}</td>
+                      <td>
+                        {new Date(autorizacao.recebido_em).toLocaleDateString(
+                          "pt-BR",
+                        )}
+                      </td>
+                      <td>
+                        <span
+                          className={`${styles.badge} ${styles.badgeUrgente}`}
+                        >
+                          {dias}d
+                        </span>
+                      </td>
+                    </tr>
+                  ),
+                )}
               </tbody>
             </table>
           </div>
         </section>
       )}
 
-      <div id="quadro-ramos-emails-pendencias" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+      <div
+        id="quadro-ramos-emails-pendencias"
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "baseline",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
         <h2>Negócios com atualização pendente</h2>
         <ExportarQuadro
           quadroId="quadro-ramos-emails-pendencias"
+          corFundo="#f7f8fa"
           nomeArquivo={`ramos-elementares-atualizacao-pendente-${competencia}`}
           dadosExcel={pendencias.map(({ negociacao, email, reemissao }) => ({
-            imobiliaria: negociacao.imobiliaria && negociacao.imobiliaria !== "NÃO INFORMADA" ? negociacao.imobiliaria : "",
+            imobiliaria:
+              negociacao.imobiliaria &&
+              negociacao.imobiliaria !== "NÃO INFORMADA"
+                ? negociacao.imobiliaria
+                : "",
             cliente: negociacao.segurado || "",
             seguradora: negociacao.seguradora,
             produto: negociacao.ramo,
             status_na_planilha: negociacao.status,
-            email_confirma: ROTULOS_TIPO_EMAIL[email.tipo_confirmacao] ?? email.tipo_confirmacao,
+            email_confirma:
+              ROTULOS_TIPO_EMAIL[email.tipo_confirmacao] ??
+              email.tipo_confirmacao,
             reemissao: reemissao ? "Sim" : "Não",
-            lote: email.e_lote ? email.cliente_nome || "Lote (sem descrição)" : "",
-            recebido_em: new Date(email.recebido_em).toLocaleDateString("pt-BR"),
+            lote: email.e_lote
+              ? email.cliente_nome || "Lote (sem descrição)"
+              : "",
+            recebido_em: new Date(email.recebido_em).toLocaleDateString(
+              "pt-BR",
+            ),
           }))}
           nomeAbaExcel="Atualização pendente"
         />
       </div>
       <p className={styles.avisoNeutro} style={{ marginBottom: 12 }}>
-        Abaixo, só negócio (novo ou renovação — endossos ficam de fora) onde um e-mail recebido em
-        incendio@o2seguros.com.br confirmou apólice emitida, contratação efetivada ou cancelamento, e o status na
-        planilha ainda não foi atualizado pra refletir isso. Cancelamento que é reemissão (mesmo atendimento cancelou
-        uma apólice errada e emitiu a correta) aparece marcado como "reemissão", não como urgente.
+        Abaixo, só negócio (novo ou renovação — endossos ficam de fora) onde um
+        e-mail recebido em incendio@o2seguros.com.br confirmou apólice emitida,
+        contratação efetivada ou cancelamento, e o status na planilha ainda não
+        foi atualizado pra refletir isso. Cancelamento que é reemissão (mesmo
+        atendimento cancelou uma apólice errada e emitiu a correta) aparece
+        marcado como "reemissão", não como urgente.
       </p>
       {pendencias.length === 0 ? (
         <div className={styles.zeroState}>Nenhuma pendência encontrada — 0</div>
@@ -754,14 +1478,24 @@ function PainelEmails({
               {pendencias.map(({ negociacao, email, reemissao }) => (
                 <tr key={negociacao.id}>
                   <td>
-                    {negociacao.imobiliaria && negociacao.imobiliaria !== "NÃO INFORMADA" ? negociacao.imobiliaria : "—"}
-                    {(negociacao.negociador || (negociacao.diasSemContato !== null && negociacao.diasSemContato >= 0)) && (
+                    {negociacao.imobiliaria &&
+                    negociacao.imobiliaria !== "NÃO INFORMADA"
+                      ? negociacao.imobiliaria
+                      : "—"}
+                    {(negociacao.negociador ||
+                      (negociacao.diasSemContato !== null &&
+                        negociacao.diasSemContato >= 0)) && (
                       <>
                         <br />
                         <small className={styles.tabelaSub}>
                           {negociacao.negociador ?? ""}
-                          {negociacao.negociador && negociacao.diasSemContato !== null && negociacao.diasSemContato >= 0 ? " · " : ""}
-                          {negociacao.diasSemContato !== null && negociacao.diasSemContato >= 0
+                          {negociacao.negociador &&
+                          negociacao.diasSemContato !== null &&
+                          negociacao.diasSemContato >= 0
+                            ? " · "
+                            : ""}
+                          {negociacao.diasSemContato !== null &&
+                          negociacao.diasSemContato >= 0
                             ? `${negociacao.diasSemContato}d sem contato`
                             : ""}
                         </small>
@@ -773,7 +1507,8 @@ function PainelEmails({
                   <td>{negociacao.ramo}</td>
                   <td>{negociacao.status}</td>
                   <td>
-                    {ROTULOS_TIPO_EMAIL[email.tipo_confirmacao] ?? email.tipo_confirmacao}
+                    {ROTULOS_TIPO_EMAIL[email.tipo_confirmacao] ??
+                      email.tipo_confirmacao}
                     {email.tipo_confirmacao === "cancelamento_confirmado" && (
                       <span
                         className={`${styles.badge} ${reemissao ? styles.badgeNeutro : styles.badgeUrgente}`}
@@ -783,8 +1518,14 @@ function PainelEmails({
                       </span>
                     )}
                   </td>
-                  <td>{email.e_lote ? email.cliente_nome || "Lote (sem descrição)" : "—"}</td>
-                  <td>{new Date(email.recebido_em).toLocaleDateString("pt-BR")}</td>
+                  <td>
+                    {email.e_lote
+                      ? email.cliente_nome || "Lote (sem descrição)"
+                      : "—"}
+                  </td>
+                  <td>
+                    {new Date(email.recebido_em).toLocaleDateString("pt-BR")}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -820,17 +1561,31 @@ export default function PainelRamosElementares({
 
   const tituloCompetencia = useMemo(() => {
     const [ano, mes] = competencia.split("-").map(Number);
-    return new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(ano, mes - 1, 1)));
+    return new Intl.DateTimeFormat("pt-BR", {
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(new Date(Date.UTC(ano, mes - 1, 1)));
   }, [competencia]);
 
   const conteudo = {
     visao: <PainelVisao analise={analise} competencia={competencia} />,
     novos: <PainelNovos analise={analise} competencia={competencia} />,
-    renovacoes: <PainelRenovacoes analise={analise} competencia={competencia} />,
-    financeiro: <PainelFinanceiro analise={analise} competencia={competencia} />,
+    renovacoes: (
+      <PainelRenovacoes analise={analise} competencia={competencia} />
+    ),
+    financeiro: (
+      <PainelFinanceiro analise={analise} competencia={competencia} />
+    ),
     endossos: <PainelEndossos analise={analise} competencia={competencia} />,
     alertas: <PainelAlertas analise={analise} competencia={competencia} />,
-    emails: <PainelEmails analise={analise} emailsConfirmacao={emailsConfirmacao} competencia={competencia} />,
+    emails: (
+      <PainelEmails
+        analise={analise}
+        emailsConfirmacao={emailsConfirmacao}
+        competencia={competencia}
+      />
+    ),
   }[aba];
 
   function atualizarAgora() {
@@ -840,26 +1595,48 @@ export default function PainelRamosElementares({
   return (
     <main id="painel-ramos-completo" className={styles.wrap}>
       <div className={styles.topo}>
-        <div>
-          <div className={styles.eyebrow}>
-            O2 Seguros · Uso interno · Fonte{" "}
-            {tipoFonte === "hibrida" ? "Bitrix24 (novos) + Planilha (renovações/endossos)" : tipoFonte === "bitrix" ? "CRM Bitrix24" : "Google Sheets"}
-          </div>
-          <h1>Ramos Elementares</h1>
-          <p>Painel de produção — {tituloCompetencia}</p>
-        </div>
+        <PageHeader
+          icon={<IconFlame />}
+          titulo="Ramos Elementares"
+          subtitulo={
+            <>
+              {tituloCompetencia} — Fonte:{" "}
+              {tipoFonte === "hibrida"
+                ? "Bitrix24 (novos) + Planilha (renovações/endossos)"
+                : tipoFonte === "bitrix"
+                  ? "CRM Bitrix24"
+                  : "Google Sheets"}
+            </>
+          }
+        />
         <div className={styles.controles}>
           <label>
             <span>Competência</span>
-            <input type="month" value={competencia} onChange={(evento) => router.push(`/ramos-elementares?competencia=${evento.target.value}`)} />
+            <input
+              type="month"
+              value={competencia}
+              onChange={(evento) =>
+                router.push(
+                  `/ramos-elementares?competencia=${evento.target.value}`,
+                )
+              }
+            />
           </label>
-          <button type="button" onClick={atualizarAgora} disabled={atualizando}>{atualizando ? "Atualizando…" : "Atualizar agora"}</button>
+          <button type="button" onClick={atualizarAgora} disabled={atualizando}>
+            {atualizando ? "Atualizando…" : "Atualizar agora"}
+          </button>
           <small>Atualização automática a cada 2 minutos</small>
-          <BotaoExportarPainelPdf painelId="painel-ramos-completo" nomeArquivo={`ramos-elementares-painel-${aba}-${competencia}`} corFundo="#09111a" />
+          <BotaoExportarPainelPdf
+            painelId="painel-ramos-completo"
+            nomeArquivo={`ramos-elementares-painel-${aba}-${competencia}`}
+            corFundo="#f7f8fa"
+          />
         </div>
       </div>
 
-      <div className={`${styles.estadoFonte} ${origem === "snapshot" || origem === "indisponivel" ? styles.estadoFonteAlerta : ""}`}>
+      <div
+        className={`${styles.estadoFonte} ${origem === "snapshot" || origem === "indisponivel" ? styles.estadoFonteAlerta : ""}`}
+      >
         <div>
           <strong>
             {origem === "hibrida"
@@ -870,38 +1647,71 @@ export default function PainelRamosElementares({
                   ? "Exibindo o último retrato salvo"
                   : "Fonte indisponível"}
           </strong>
-          <span>Última leitura: {new Date(analise.atualizadoEm).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</span>
+          <span>
+            Última leitura:{" "}
+            {new Date(analise.atualizadoEm).toLocaleString("pt-BR", {
+              timeZone: "America/Sao_Paulo",
+            })}
+          </span>
         </div>
         <div className={styles.linksFonte}>
           {analise.fonte.url ? (
-            <a href={analise.fonte.url} target="_blank" rel="noreferrer">{tipoFonte === "planilha" ? "Abrir planilha fonte" : "Abrir CRM"}</a>
+            <a href={analise.fonte.url} target="_blank" rel="noreferrer">
+              {tipoFonte === "planilha" ? "Abrir planilha fonte" : "Abrir CRM"}
+            </a>
           ) : null}
           {tipoFonte === "hibrida" && analise.fonte.urlSecundaria ? (
-            <a href={analise.fonte.urlSecundaria} target="_blank" rel="noreferrer">Abrir planilha fonte</a>
+            <a
+              href={analise.fonte.urlSecundaria}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Abrir planilha fonte
+            </a>
           ) : null}
         </div>
       </div>
 
       {erroFonte && <div className={styles.erroFonte}>{erroFonte}</div>}
-      {analise.semAmostra && <div className={styles.avisoNeutro}>Não há amostra operacional nesta competência. Todos os quadros permanecem visíveis com valores zerados.</div>}
+      {analise.semAmostra && (
+        <div className={styles.avisoNeutro}>
+          Não há amostra operacional nesta competência. Todos os quadros
+          permanecem visíveis com valores zerados.
+        </div>
+      )}
       {analise.avisosFonte.length > 0 && (
         <details className={styles.avisosFonte}>
-          <summary>Avisos sobre a estrutura da fonte ({analise.avisosFonte.length})</summary>
-          <ul>{analise.avisosFonte.map((aviso) => <li key={aviso}>{aviso}</li>)}</ul>
+          <summary>
+            Avisos sobre a estrutura da fonte ({analise.avisosFonte.length})
+          </summary>
+          <ul>
+            {analise.avisosFonte.map((aviso) => (
+              <li key={aviso}>{aviso}</li>
+            ))}
+          </ul>
         </details>
       )}
 
       <nav className={styles.abas} aria-label="Seções de Ramos Elementares">
-        {([
-          ["visao", "Visão geral"],
-          ["novos", "Novos negócios"],
-          ["renovacoes", "Renovações"],
-          ["financeiro", "Financeiro estimado"],
-          ["endossos", "Endossos"],
-          ["alertas", "Alertas e qualidade"],
-          ["emails", "Verificação por E-mail"],
-        ] as [AbaPainel, string][]).map(([valor, rotulo]) => (
-          <button key={valor} type="button" aria-current={aba === valor ? "page" : undefined} onClick={() => setAba(valor)}>{rotulo}</button>
+        {(
+          [
+            ["visao", "Visão geral"],
+            ["novos", "Novos negócios"],
+            ["renovacoes", "Renovações"],
+            ["financeiro", "Financeiro estimado"],
+            ["endossos", "Endossos"],
+            ["alertas", "Alertas e qualidade"],
+            ["emails", "Verificação por E-mail"],
+          ] as [AbaPainel, string][]
+        ).map(([valor, rotulo]) => (
+          <button
+            key={valor}
+            type="button"
+            aria-current={aba === valor ? "page" : undefined}
+            onClick={() => setAba(valor)}
+          >
+            {rotulo}
+          </button>
         ))}
       </nav>
 

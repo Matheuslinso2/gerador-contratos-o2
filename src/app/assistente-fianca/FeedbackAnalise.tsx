@@ -60,7 +60,7 @@ export default function FeedbackAnalise({ analiseId }: { analiseId: string }) {
   }
 
   return (
-    <div className="space-y-3 rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm">
+    <div className="space-y-3 rounded-xl border border-o2-navy/10 bg-quadro p-4 shadow-sm">
       <p className="text-sm font-semibold text-o2-navy">Como foi essa análise?</p>
 
       <div className="flex flex-wrap items-center justify-between gap-2">

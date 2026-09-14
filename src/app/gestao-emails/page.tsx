@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
+import PageHeader from "@/components/PageHeader";
+import { IconMail } from "@/components/icons";
 import { isMatheus } from "@/lib/admin";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "../actions";
@@ -85,13 +87,12 @@ export default async function GestaoEmailsPage() {
   return (
     <>
       <AppHeader userEmail={user?.email} logoutAction={signOut} />
-      <main className="mx-auto max-w-4xl flex-1 space-y-6 p-8">
-        <div>
-          <h1 className="text-xl font-semibold text-o2-navy">Gestão de E-mails</h1>
-          <p className="text-sm text-gray-500">
-            Filtro executivo da sua caixa: gestão macro, API seguradoras, contábil PF e demandas diretas.
-          </p>
-        </div>
+      <main className="mx-auto max-w-3xl flex-1 space-y-6 p-8">
+        <PageHeader
+          icon={<IconMail />}
+          titulo="Gestão de E-mails"
+          subtitulo="Filtro executivo da sua caixa: gestão macro, API seguradoras, contábil PF e demandas diretas."
+        />
 
         {erro ? (
           <p className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{erro}</p>

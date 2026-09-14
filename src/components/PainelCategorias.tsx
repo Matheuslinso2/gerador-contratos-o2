@@ -40,7 +40,7 @@ function Cartao({ item, accent }: { item: Item; accent: Accent }) {
   return (
     <Link
       href={item.href}
-      className="flex items-start gap-3 rounded-2xl border border-o2-navy/10 bg-white p-4 transition hover:-translate-y-0.5 hover:shadow-md"
+      className="flex items-start gap-3 rounded-2xl border border-o2-navy/10 bg-quadro p-4 transition hover:-translate-y-0.5 hover:shadow-md"
     >
       <span className={`flex h-10 w-10 flex-none items-center justify-center rounded-xl ${ACCENT_BADGE[accent]}`}>
         {item.icone}

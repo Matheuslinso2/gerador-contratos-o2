@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
+import PageHeader from "@/components/PageHeader";
+import { IconChart } from "@/components/icons";
 import SeletorCompetencia from "./SeletorCompetencia";
 import AtualizarAgora from "../seguro-fianca/AtualizarAgora";
 import styles from "./painel-comercial.module.css";
@@ -204,10 +206,7 @@ export default async function PainelComercialPage({
       <div className={styles.wrap}>
         <div className={styles.container}>
           <div className={styles.masthead}>
-            <div>
-              <div className={styles.eyebrow}>O2 Seguros · Central de Negócios · Painel Comercial</div>
-              <h1 className={styles.title}>Ativação &amp; Sucesso do Cliente — {competencia}</h1>
-            </div>
+            <PageHeader icon={<IconChart />} titulo="Comercial" subtitulo={`Ativação & Sucesso do Cliente — ${competencia}`} />
             <div className={styles.meta}>
               <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "flex-end" }}>
                 <SeletorCompetencia competencia={competencia} />

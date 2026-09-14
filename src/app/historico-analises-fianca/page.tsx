@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
+import PageHeader from "@/components/PageHeader";
+import { IconFolder } from "@/components/icons";
 import BackLink from "@/components/BackLink";
 import type { AnaliseFianca } from "@/lib/assistenteFianca";
 
@@ -56,16 +58,17 @@ export default async function HistoricoAnalisesFiancaPage() {
   return (
     <>
       <AppHeader userEmail={user?.email} logoutAction={signOut} />
-      <main className="mx-auto max-w-4xl flex-1 space-y-4 p-8">
+      <main className="mx-auto max-w-3xl flex-1 space-y-4 p-8">
         <div className="space-y-2">
           <BackLink />
-          <div>
-            <h1 className="text-xl font-semibold text-o2-navy">Histórico de análises — Assistente de Vendas Fiança</h1>
-            <p className="text-sm text-gray-500">Resumo curto de cada caso analisado, com o feedback do negociador.</p>
-          </div>
+          <PageHeader
+            icon={<IconFolder />}
+            titulo="Histórico de análises — Assistente de Vendas Fiança"
+            subtitulo="Resumo curto de cada caso analisado, com o feedback do negociador."
+          />
         </div>
 
-        <div className="flex flex-wrap gap-4 rounded-xl border border-o2-navy/10 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap gap-4 rounded-xl border border-o2-navy/10 bg-quadro p-4 shadow-sm">
           <div>
             <p className="text-xs text-gray-500">Precisão média</p>
             <p className="text-lg font-semibold text-o2-navy">
@@ -86,7 +89,7 @@ export default async function HistoricoAnalisesFiancaPage() {
           </div>
         </div>
 
-        <div className="overflow-x-auto rounded-xl border border-o2-navy/10 bg-white shadow-sm">
+        <div className="overflow-x-auto rounded-xl border border-o2-navy/10 bg-quadro shadow-sm">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-o2-gray/30 text-xs text-gray-500">
