@@ -10,7 +10,7 @@ import { adicionarEsperada, excluirArquivoFatura } from "./actions";
 import { SEGURADORAS_CANONICAS } from "@/lib/faturasIdentificacao";
 import { GRUPOS_VISUAIS } from "@/lib/gruposVisuaisImobiliarias";
 import { IconCalendar, IconChecklist, IconUpload, IconInvoice, IconReceipt, IconChevron, IconTrash, IconReport } from "@/components/icons";
-import { CheckboxSelecaoLinha, LinkDuplicata, SelecionarTodas } from "./LinhaInterativa";
+import { CheckboxSelecaoLinha, LinkDuplicata, SelecionarTodas, EnviarSelecionadasButton } from "./LinhaInterativa";
 import { SubmitButton } from "./SubmitButton";
 
 export const dynamic = "force-dynamic";
@@ -645,13 +645,13 @@ export default async function FaturasPage({
                 <input type="checkbox" name="modo_teste" value="1" />
                 Modo teste — manda tudo só pro meu e-mail
               </label>
-              <SubmitButton
+              <EnviarSelecionadasButton
+                hrefBase={`/faturas/enviar/confirmar?seguradora=${encodeURIComponent(seguradora)}&competencia=${competencia}`}
                 disabled={!prontasParaEnvio.length}
                 className="whitespace-nowrap rounded-full bg-o2-navy px-4 py-1.5 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-                textoCarregando="Abrindo prévia..."
               >
                 Enviar selecionadas
-              </SubmitButton>
+              </EnviarSelecionadasButton>
             </div>
           </div>
           {temPendenteCnpj && (
