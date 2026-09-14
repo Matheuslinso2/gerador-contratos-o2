@@ -34,6 +34,7 @@ const FIELD = {
 
 export type SeguroAutoPayload = {
   responseId: string;
+  tipoVeiculo: string; // "Carro/Moto" | "Bicicleta Elétrica"
   nomeCompleto: string;
   email: string;
   telefone: string;
@@ -46,6 +47,7 @@ export type SeguroAutoPayload = {
   anexoCnh: string; // caminho no bucket seguro-auto-anexos, "" se não enviado
   anexoCrlv: string;
   anexoApolice: string;
+  anexoNotaFiscal: string; // só Bicicleta Elétrica -- não tem CNH/CRLV, vira "prova do veículo" no lugar do CRLV (ver criarCardSeguroAuto)
 };
 
 const BUCKET_ANEXOS = "seguro-auto-anexos";
@@ -143,9 +145,14 @@ export async function criarCardSeguroAuto(payload: SeguroAutoPayload, supabase: 
   set(fields, FIELD.utilizacao, enumId(defs, FIELD.utilizacao, payload.utilizacaoVeiculo));
   set(fields, FIELD.usoDiario, enumId(defs, FIELD.usoDiario, payload.usoCarroDetalhado));
 
+  // Bicicleta elétrica não tem CNH nem CRLV -- a SPA não tem campo próprio
+  // pra isso ainda, então a nota fiscal (prova do veículo) ocupa o campo do
+  // CRLV, e o campo de CNH fica vazio. Revisitar se um dia a SPA ganhar um
+  // campo de arquivo dedicado.
+  const ehBicicleta = payload.tipoVeiculo === "Bicicleta Elétrica";
   const [cnh, crlv, apolice] = await Promise.all([
-    arquivoParaCampoBitrix(supabase, payload.anexoCnh, "cnh"),
-    arquivoParaCampoBitrix(supabase, payload.anexoCrlv, "crlv"),
+    ehBicicleta ? Promise.resolve(undefined) : arquivoParaCampoBitrix(supabase, payload.anexoCnh, "cnh"),
+    ehBicicleta ? arquivoParaCampoBitrix(supabase, payload.anexoNotaFiscal, "nota-fiscal") : arquivoParaCampoBitrix(supabase, payload.anexoCrlv, "crlv"),
     arquivoParaCampoBitrix(supabase, payload.anexoApolice, "apolice-anterior"),
   ]);
   set(fields, FIELD.cnh, cnh);
@@ -163,11 +170,18 @@ const BITRIX_BASE_URL = "https://o2seguros.bitrix24.com.br";
 // na hora que chegou uma ficha nova, sem precisar ficar checando o Bitrix.
 export function montarEmailSeguroAuto(payload: SeguroAutoPayload, resultado: { created: boolean; item: { id: number } }): { assunto: string; html: string } {
   const linkCard = `${BITRIX_BASE_URL}/crm/type/${ENTITY_TYPE_ID}/details/${resultado.item.id}/`;
+  const ehBicicleta = payload.tipoVeiculo === "Bicicleta Elétrica";
 
   const corpoHtml = [
     blocoSecao(
       "Contato",
-      [linhaCampo("Nome completo", payload.nomeCompleto), linhaCampo("E-mail", payload.email), linhaCampo("Telefone", payload.telefone), linhaCampo("Estado civil", payload.estadoCivil)].join("")
+      [
+        linhaCampo("Tipo de veículo", payload.tipoVeiculo),
+        linhaCampo("Nome completo", payload.nomeCompleto),
+        linhaCampo("E-mail", payload.email),
+        linhaCampo("Telefone", payload.telefone),
+        linhaCampo("Estado civil", payload.estadoCivil),
+      ].join("")
     ),
     blocoSecao(
       "Veículo e uso",
@@ -176,16 +190,20 @@ export function montarEmailSeguroAuto(payload: SeguroAutoPayload, resultado: { c
         linhaCampo("Possui garagem", payload.possuiGaragem),
         linhaCampo("Portão", payload.portao),
         linhaCampo("Utilização do veículo", payload.utilizacaoVeiculo),
-        linhaCampo("Uso detalhado do carro", payload.usoCarroDetalhado),
+        linhaCampo("Uso detalhado", payload.usoCarroDetalhado),
       ].join("")
     ),
     blocoSecao(
       "Anexos enviados",
-      [
-        linhaCampo("CNH", payload.anexoCnh ? "✅ Enviada" : "— Não enviada"),
-        linhaCampo("CRLV", payload.anexoCrlv ? "✅ Enviado" : "— Não enviado"),
-        linhaCampo("Apólice anterior", payload.anexoApolice ? "✅ Enviada" : "— Não enviada"),
-      ].join("")
+      (ehBicicleta
+        ? [linhaCampo("Nota fiscal", payload.anexoNotaFiscal ? "✅ Enviada" : "— Não enviada")]
+        : [
+            linhaCampo("CNH", payload.anexoCnh ? "✅ Enviada" : "— Não enviada"),
+            linhaCampo("CRLV", payload.anexoCrlv ? "✅ Enviado" : "— Não enviado"),
+          ]
+      )
+        .concat([linhaCampo("Apólice anterior", payload.anexoApolice ? "✅ Enviada" : "— Não enviada")])
+        .join("")
     ),
     botaoPill(linkCard, resultado.created ? "Ver card no Bitrix →" : "Ver card existente no Bitrix →"),
   ].join("");

@@ -218,6 +218,62 @@ const CONFIG = {
       "Tipo de obra (detalhado)",
     ],
   },
+
+  seguro_celular: {
+    aba: "Seguro Celular",
+    cabecalho: [
+      "Data/Hora",
+      "Protocolo",
+      "Status",
+
+      "E-mail de contato",
+      "Telefone de contato",
+      "Nome completo",
+      "CPF",
+      "Endereço",
+
+      "Número de telefone utilizado no aparelho",
+      "Idade do aparelho",
+      "Nota fiscal",
+    ],
+  },
+
+  rcp: {
+    aba: "RCP",
+    cabecalho: [
+      "Data/Hora",
+      "Protocolo",
+      "Status",
+
+      "E-mail de contato",
+      "Telefone de contato",
+      "Nome da empresa",
+      "CNPJ",
+      "Atividade da empresa",
+      "Endereço",
+      "Valor de cobertura",
+    ],
+  },
+
+  condominio: {
+    aba: "Condomínio",
+    cabecalho: [
+      "Data/Hora",
+      "Protocolo",
+      "Status",
+
+      "Nome do condomínio",
+      "CNPJ",
+      "Endereço",
+      "Vertical ou horizontal",
+      "Possui elevador",
+      "Quantidade de elevadores",
+      "Quantidade de andares",
+      "Telefone do síndico",
+      "E-mail do síndico",
+      "Apólice anterior",
+    ],
+  },
 };
 
 function respostaJson(objeto) {

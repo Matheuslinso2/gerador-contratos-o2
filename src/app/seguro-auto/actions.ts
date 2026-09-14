@@ -43,6 +43,7 @@ export async function enviarFichaSeguroAuto(
 
   const payload: SeguroAutoPayload = {
     responseId,
+    tipoVeiculo: campo(formData, "tipo_veiculo"),
     email: campo(formData, "email"),
     nomeCompleto: campo(formData, "nome_completo"),
     telefone: campo(formData, "telefone"),
@@ -55,6 +56,7 @@ export async function enviarFichaSeguroAuto(
     anexoCnh: campo(formData, "anexo_cnh"),
     anexoCrlv: campo(formData, "anexo_crlv"),
     anexoApolice: campo(formData, "anexo_apolice"),
+    anexoNotaFiscal: campo(formData, "anexo_nota_fiscal"),
   };
 
   if (!payload.email || !payload.nomeCompleto || !payload.telefone) {

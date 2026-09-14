@@ -151,10 +151,12 @@ function CampoUpload({
 const UTILIZACAO_OPCOES = ["Passeio", "Trabalho (aplicativo, táxi ou entregas)", "Passeio e trabalho"] as const;
 const USO_DETALHADO_OPCOES = ["Somente passeio", "Somente trabalho/faculdade", "Passeio e trabalho/faculdade"] as const;
 const PORTAO_OPCOES = ["Manual", "Automático", "Não possui garagem"] as const;
+const TIPO_VEICULO_OPCOES = ["Carro/Moto", "Bicicleta Elétrica"] as const;
 
 function SeguroAutoFormInterno({ aoConcluirNova }: { aoConcluirNova: () => void }) {
   const [estado, formAction, enviando] = useActionState<EstadoEnvioSeguroAuto, FormData>(enviarFichaSeguroAuto, null);
   const [responseId] = useState(() => crypto.randomUUID());
+  const [tipoVeiculo, setTipoVeiculo] = useState("");
   const [possuiGaragem, setPossuiGaragem] = useState("");
   const [portao, setPortao] = useState("");
   const [utilizacaoVeiculo, setUtilizacaoVeiculo] = useState("");
@@ -162,6 +164,7 @@ function SeguroAutoFormInterno({ aoConcluirNova }: { aoConcluirNova: () => void 
   const [anexoCnh, setAnexoCnh] = useState("");
   const [anexoCrlv, setAnexoCrlv] = useState("");
   const [anexoApolice, setAnexoApolice] = useState("");
+  const [anexoNotaFiscal, setAnexoNotaFiscal] = useState("");
 
   if (estado?.ok) {
     return (
@@ -196,7 +199,11 @@ function SeguroAutoFormInterno({ aoConcluirNova }: { aoConcluirNova: () => void 
       <input type="hidden" name="response_id" value={responseId} />
       {estado?.erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">⚠️ {estado.erro}</p>}
 
-      <Secao numero={1} titulo="Seus dados">
+      <Secao numero={1} titulo="Tipo de veículo">
+        <SeletorUnico name="tipo_veiculo" label="O que você quer segurar?" required opcoes={TIPO_VEICULO_OPCOES} valor={tipoVeiculo} aoMudar={setTipoVeiculo} />
+      </Secao>
+
+      <Secao numero={2} titulo="Seus dados">
         <div className="grid grid-cols-2 gap-2">
           <Campo name="nome_completo" label="Nome Completo" required placeholder="" />
           <Campo name="email" label="E-mail" type="email" required />
@@ -205,16 +212,16 @@ function SeguroAutoFormInterno({ aoConcluirNova }: { aoConcluirNova: () => void 
         </div>
       </Secao>
 
-      <Secao numero={2} titulo="Endereço" subtitulo="Onde o veículo pernoita">
+      <Secao numero={3} titulo="Endereço" subtitulo="Onde o veículo pernoita">
         <Campo name="endereco_residencial" label="Endereço Residencial (rua, número, complemento e CEP)" required />
       </Secao>
 
-      <Secao numero={3} titulo="Garagem">
+      <Secao numero={4} titulo="Garagem">
         <SeletorUnico name="possui_garagem" label="Possui garagem na residência?" required opcoes={["Sim", "Não"]} valor={possuiGaragem} aoMudar={setPossuiGaragem} />
         <SeletorUnico name="portao" label="Portão Manual ou Automático?" required opcoes={PORTAO_OPCOES} valor={portao} aoMudar={setPortao} />
       </Secao>
 
-      <Secao numero={4} titulo="Uso do veículo">
+      <Secao numero={5} titulo="Uso do veículo">
         <SeletorUnico
           name="utilizacao_veiculo"
           label="Utilização do veículo:"
@@ -234,27 +241,42 @@ function SeguroAutoFormInterno({ aoConcluirNova }: { aoConcluirNova: () => void 
         />
       </Secao>
 
-      <Secao numero={5} titulo="Documentos" subtitulo="Se tiver dificuldade pra anexar, pode mandar por e-mail pra auto@o2seguros.com.br (com seu nome no assunto)">
-        <CampoUpload
-          responseId={responseId}
-          pasta="cnh"
-          label="Anexar CNH do condutor"
-          detalhe="1 arquivo, PDF/imagem/documento, até 20MB."
-          maxMb={20}
-          hiddenName="anexo_cnh"
-          path={anexoCnh}
-          setPath={setAnexoCnh}
-        />
-        <CampoUpload
-          responseId={responseId}
-          pasta="crlv"
-          label="Anexar CRLV do veículo"
-          detalhe="1 arquivo, PDF/imagem/documento, até 10MB. Se o veículo for 0KM, mande a nota fiscal por e-mail."
-          maxMb={10}
-          hiddenName="anexo_crlv"
-          path={anexoCrlv}
-          setPath={setAnexoCrlv}
-        />
+      <Secao numero={6} titulo="Documentos" subtitulo="Se tiver dificuldade pra anexar, pode mandar por e-mail pra auto@o2seguros.com.br (com seu nome no assunto)">
+        {tipoVeiculo === "Bicicleta Elétrica" ? (
+          <CampoUpload
+            responseId={responseId}
+            pasta="nota-fiscal"
+            label="Anexar nota fiscal da bicicleta"
+            detalhe="1 arquivo, PDF/imagem/documento, até 20MB."
+            maxMb={20}
+            hiddenName="anexo_nota_fiscal"
+            path={anexoNotaFiscal}
+            setPath={setAnexoNotaFiscal}
+          />
+        ) : (
+          <>
+            <CampoUpload
+              responseId={responseId}
+              pasta="cnh"
+              label="Anexar CNH do condutor"
+              detalhe="1 arquivo, PDF/imagem/documento, até 20MB."
+              maxMb={20}
+              hiddenName="anexo_cnh"
+              path={anexoCnh}
+              setPath={setAnexoCnh}
+            />
+            <CampoUpload
+              responseId={responseId}
+              pasta="crlv"
+              label="Anexar CRLV do veículo"
+              detalhe="1 arquivo, PDF/imagem/documento, até 10MB. Se o veículo for 0KM, mande a nota fiscal por e-mail."
+              maxMb={10}
+              hiddenName="anexo_crlv"
+              path={anexoCrlv}
+              setPath={setAnexoCrlv}
+            />
+          </>
+        )}
         <CampoUpload
           responseId={responseId}
           pasta="apolice"

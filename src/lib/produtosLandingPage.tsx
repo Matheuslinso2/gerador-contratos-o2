@@ -91,4 +91,43 @@ export const PRODUTOS_LANDING_PAGE: ProdutoLandingPage[] = [
       </svg>
     ),
   },
+  {
+    href: "/seguro-celular",
+    titulo: "Seguro Celular",
+    descricao: "Ficha online para cotação de seguro celular",
+    icone: (
+      <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
+        <rect x="7" y="2.5" width="10" height="19" rx="2" stroke="currentColor" strokeWidth="1.6" />
+        <path d="M10.5 18.2h3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
+    href: "/rcp",
+    titulo: "RCP",
+    descricao: "Ficha online para cotação de Responsabilidade Civil Profissional",
+    icone: (
+      <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
+        <path
+          d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinejoin="round"
+        />
+        <path d="M9 12.2l1.9 1.9L15.5 9.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
+  {
+    href: "/condominio",
+    titulo: "Condomínio",
+    descricao: "Ficha online para cotação de seguro condomínio",
+    icone: (
+      <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
+        <rect x="5" y="4" width="14" height="16.5" rx="1.2" stroke="currentColor" strokeWidth="1.6" />
+        <path d="M8.5 7.5h1.6M13.9 7.5h1.6M8.5 11h1.6M13.9 11h1.6M8.5 14.5h1.6M13.9 14.5h1.6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        <path d="M10 20.5v-3.2a2 2 0 014 0v3.2" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
 ];
