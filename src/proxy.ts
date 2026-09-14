@@ -45,7 +45,13 @@ const ROTAS_PUBLICAS = [
   // pra incendio@o2seguros.com.br e registra na planilha compartilhada de
   // conferência (ver src/app/rc-obras/actions.ts).
   "/rc-obras",
-  // Vitrine pública que reúne as 5 fichas acima num link só — a pessoa
+  // Formulários públicos de Seguro Celular, RCP e Condomínio — mesma
+  // lógica do RC Obras: sem SPA no Bitrix ainda, só e-mail pra
+  // comercial@o2seguros.com.br + planilha compartilhada de conferência.
+  "/seguro-celular",
+  "/rcp",
+  "/condominio",
+  // Vitrine pública que reúne as fichas acima num link só — a pessoa
   // escolhe o produto e é levada pra rota individual de sempre (nenhuma
   // delas muda). Ver src/lib/produtosLandingPage.tsx (fonte única).
   "/cotacao",
