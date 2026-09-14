@@ -4,11 +4,13 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
+import PageHeader from "@/components/PageHeader";
 import SeletorCompetenciaRepasses from "./SeletorCompetenciaRepasses";
 import SeletorImobiliaria from "../faturas/conferencia/SeletorImobiliaria";
 import { confirmarIdentificacaoRepasse, excluirArquivoRepasse } from "./actions";
 import { valoresBatem } from "@/lib/repassesIdentificacao";
-import { IconCalendar, IconUpload, IconReceipt, IconTrash, IconMail, IconReport } from "../faturas/icons";
+import { GRUPOS_VISUAIS } from "@/lib/gruposVisuaisImobiliarias";
+import { IconCalendar, IconUpload, IconReceipt, IconTrash, IconMail, IconReport } from "@/components/icons";
 import { SubmitButton } from "../faturas/SubmitButton";
 import { SelecionarTodas } from "../faturas/LinhaInterativa";
 
@@ -101,7 +103,7 @@ export default async function RepassesPage({
     supabase.from("imobiliarias").select("id, nome").order("nome"),
     supabase
       .from("imobiliarias")
-      .select("id, nome, email_repasses, codigo_produtor_corp")
+      .select("id, nome, cnpj, email_repasses, codigo_produtor_corp")
       .not("codigo_produtor_corp", "is", null)
       .order("nome"),
   ]);
@@ -131,16 +133,23 @@ export default async function RepassesPage({
   const { data: extrasDetalheData } = idsComRepasseForaDaLista.length
     ? await supabase
         .from("imobiliarias")
-        .select("id, nome, email_repasses, codigo_produtor_corp")
+        .select("id, nome, cnpj, email_repasses, codigo_produtor_corp")
         .in("id", idsComRepasseForaDaLista)
     : { data: [] };
 
-  type ImobiliariaBasica = { id: string; nome: string; email_repasses: string[] | null; codigo_produtor_corp: string | null };
+  type ImobiliariaBasica = {
+    id: string;
+    nome: string;
+    cnpj: string | null;
+    email_repasses: string[] | null;
+    codigo_produtor_corp: string | null;
+  };
   const todasParaListagem: ImobiliariaBasica[] = [...listaMestre, ...(extrasDetalheData ?? [])];
 
   type Par = {
     imobiliariaId: string;
     nome: string;
+    cnpj: string | null;
     emails: string[];
     codigoProdutor: string | null;
     relatorio: RepasseRow | null;
@@ -168,6 +177,7 @@ export default async function RepassesPage({
     pares.push({
       imobiliariaId: imob.id,
       nome: imob.nome,
+      cnpj: imob.cnpj,
       emails: imob.email_repasses ?? [],
       codigoProdutor: imob.codigo_produtor_corp,
       relatorio,
@@ -183,12 +193,45 @@ export default async function RepassesPage({
     sem_repasse: 3,
     enviado: 4,
   };
-  pares.sort(
-    (a, b) => PRIORIDADE_ESTADO[a.estado] - PRIORIDADE_ESTADO[b.estado] || a.nome.localeCompare(b.nome, "pt-BR")
+
+  // Agrupamento visual: CNPJs diferentes que são o mesmo produtor/grupo
+  // econômico (ex: Ribas-HP / Pintas / HC Consultoria, o mesmo Helio Ribas
+  // renomeado 2x no Corp) aparecem juntos, num card só, em vez de parecer
+  // cadastro duplicado -- mesmo mecanismo já usado em Faturas
+  // (gruposVisuaisImobiliarias.ts). Cada membro mantém seu próprio
+  // relatório/comprovante/e-mail -- o agrupamento é só de exibição.
+  function chaveVisual(p: Par): string {
+    const cnpj = p.cnpj?.trim();
+    const grupo = cnpj ? GRUPOS_VISUAIS[cnpj] : undefined;
+    return grupo ? `visual:${grupo.chave}` : p.imobiliariaId;
+  }
+  type GrupoPar = { chave: string; membros: Par[]; estado: Par["estado"] };
+  const gruposPorChave = new Map<string, GrupoPar>();
+  const grupos: GrupoPar[] = [];
+  for (const p of pares) {
+    const chave = chaveVisual(p);
+    let grupo = gruposPorChave.get(chave);
+    if (!grupo) {
+      grupo = { chave, membros: [], estado: p.estado };
+      gruposPorChave.set(chave, grupo);
+      grupos.push(grupo);
+    }
+    grupo.membros.push(p);
+    // O grupo "vale" pelo membro em estado mais urgente (pronto/divergente
+    // sobem, mesmo que outro membro do mesmo grupo esteja sem repasse esse
+    // mês) -- senão um grupo com 1 membro pronto e outro sem repasse cairia
+    // no fim da lista por causa do 2º.
+    if (PRIORIDADE_ESTADO[p.estado] < PRIORIDADE_ESTADO[grupo.estado]) grupo.estado = p.estado;
+  }
+  grupos.sort(
+    (a, b) =>
+      PRIORIDADE_ESTADO[a.estado] - PRIORIDADE_ESTADO[b.estado] ||
+      a.membros[0].nome.localeCompare(b.membros[0].nome, "pt-BR")
   );
 
   const totalPares = pares.length;
-  const paresExibidos = pares.slice(0, limite);
+  const totalGrupos = grupos.length;
+  const gruposExibidos = grupos.slice(0, limite);
   const pendentesAcao = pares.filter((p) => !["sem_repasse", "enviado"].includes(p.estado)).length;
   const prontosParaEnvio = pares.filter((p) => p.estado === "pronto" && p.emails.length > 0);
 
@@ -222,17 +265,11 @@ export default async function RepassesPage({
     <>
       <AppHeader userEmail={user?.email} logoutAction={signOut} />
       <main className="mx-auto max-w-[1100px] flex-1 space-y-6 p-8">
-        <div className="flex items-center gap-3">
-          <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-o2-coral to-orange-400 text-white shadow-sm">
-            <IconReceipt />
-          </span>
-          <div>
-            <h1 className="text-xl font-semibold text-o2-navy">Repasses de comissão</h1>
-            <p className="text-sm text-gray-500">
-              Relatório do Corp + comprovante de pagamento pra imobiliária/produtor — uso interno O2.
-            </p>
-          </div>
-        </div>
+        <PageHeader
+          icon={<IconReceipt />}
+          titulo="Repasses de comissão"
+          subtitulo="Relatório do Corp + comprovante de pagamento pra imobiliária/produtor — uso interno O2."
+        />
 
         <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-o2-indigo to-o2-navy p-5 text-white shadow-md sm:p-6">
           <div className="relative flex flex-wrap items-center justify-between gap-4">
@@ -340,7 +377,7 @@ export default async function RepassesPage({
           </p>
         )}
 
-        <form action="/repasses" className="flex flex-wrap items-end gap-2 rounded-xl border border-o2-navy/10 bg-white p-3 shadow-sm">
+        <form action="/repasses" className="flex flex-wrap items-end gap-2 rounded-xl border border-o2-navy/10 bg-quadro p-3 shadow-sm">
           <input type="hidden" name="competencia" value={competencia} />
           <div>
             <label className="mb-0.5 block text-xs text-gray-500">Buscar imobiliária</label>
@@ -389,59 +426,73 @@ export default async function RepassesPage({
           </div>
 
           <div className="space-y-2">
-            {paresExibidos.map((p) => {
-              const arquivos = [p.relatorio, p.comprovante].filter(Boolean) as RepasseRow[];
-              const podeSelecionar = p.estado === "pronto" && p.emails.length > 0;
+            {gruposExibidos.map((grupo) => {
+              const multiplosMembros = grupo.membros.length > 1;
               return (
-                <div key={p.imobiliariaId} className="overflow-hidden rounded border border-gray-300 bg-white">
-                  <div className="flex items-center justify-between gap-2 border-b border-gray-300 bg-gray-100 px-3 py-1.5">
-                    <div className="flex items-center gap-2">
-                      {podeSelecionar ? (
-                        <input type="checkbox" name="imob" value={p.imobiliariaId} defaultChecked />
-                      ) : p.estado === "pronto" && !p.emails.length ? (
-                        <span title="Sem e-mail de repasse cadastrado" className="text-red-500">⚠</span>
-                      ) : null}
-                      <span className="text-sm font-semibold text-gray-800">{p.nome}</span>
-                      {p.codigoProdutor && (
-                        <span className="font-mono text-[10px] text-gray-400">#{p.codigoProdutor}</span>
-                      )}
+                <div key={grupo.chave} className="overflow-hidden rounded border border-gray-300 bg-white">
+                  {multiplosMembros && (
+                    <div className="border-b border-gray-300 bg-gray-50 px-3 py-1 text-[11px] font-medium text-gray-500">
+                      {grupo.membros.map((m) => m.nome).join(" / ")}
                     </div>
-                    <span className={`rounded-sm px-2 py-0.5 text-[11px] font-medium ${COR_ESTADO[p.estado]}`}>
-                      {ROTULO_ESTADO[p.estado]}
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 text-xs text-gray-600">
-                    {p.estado !== "sem_repasse" && (
-                      <>
-                        <span>
-                          Relatório: {p.relatorio ? formatarValor(p.relatorio.valor) : <span className="text-gray-300">—</span>}
-                        </span>
-                        <span>
-                          Comprovante: {p.comprovante ? formatarValor(p.comprovante.valor) : <span className="text-gray-300">—</span>}
-                        </span>
-                      </>
-                    )}
-                    <span className="flex items-center gap-1">
-                      <IconMail className="h-3 w-3" />
-                      {p.emails.length ? p.emails.join(", ") : "sem e-mail de repasse"}
-                    </span>
-                    <span className="ml-auto flex items-center gap-2">
-                      {arquivos.map((a) =>
-                        urlPorCaminho.get(a.arquivo_bucket_path) ? (
-                          <a
-                            key={a.id}
-                            href={urlPorCaminho.get(a.arquivo_bucket_path)}
-                            target="_blank"
-                            rel="noreferrer"
-                            title={a.arquivo_nome}
-                            className="inline-flex items-center gap-1 text-o2-navy/70 transition hover:text-o2-coral"
-                          >
-                            <IconReceipt className="h-3.5 w-3.5" />
-                            {a.tipo_documento}
-                          </a>
-                        ) : null
-                      )}
-                    </span>
+                  )}
+                  <div className="divide-y divide-gray-200">
+                    {grupo.membros.map((p) => {
+                      const arquivos = [p.relatorio, p.comprovante].filter(Boolean) as RepasseRow[];
+                      const podeSelecionar = p.estado === "pronto" && p.emails.length > 0;
+                      return (
+                        <div key={p.imobiliariaId}>
+                          <div className="flex items-center justify-between gap-2 border-b border-gray-300 bg-gray-100 px-3 py-1.5">
+                            <div className="flex items-center gap-2">
+                              {podeSelecionar ? (
+                                <input type="checkbox" name="imob" value={p.imobiliariaId} defaultChecked />
+                              ) : p.estado === "pronto" && !p.emails.length ? (
+                                <span title="Sem e-mail de repasse cadastrado" className="text-red-500">⚠</span>
+                              ) : null}
+                              {!multiplosMembros && <span className="text-sm font-semibold text-gray-800">{p.nome}</span>}
+                              {p.codigoProdutor && (
+                                <span className="font-mono text-[10px] text-gray-400">#{p.codigoProdutor}</span>
+                              )}
+                            </div>
+                            <span className={`rounded-sm px-2 py-0.5 text-[11px] font-medium ${COR_ESTADO[p.estado]}`}>
+                              {ROTULO_ESTADO[p.estado]}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 text-xs text-gray-600">
+                            {p.estado !== "sem_repasse" && (
+                              <>
+                                <span>
+                                  Relatório: {p.relatorio ? formatarValor(p.relatorio.valor) : <span className="text-gray-300">—</span>}
+                                </span>
+                                <span>
+                                  Comprovante: {p.comprovante ? formatarValor(p.comprovante.valor) : <span className="text-gray-300">—</span>}
+                                </span>
+                              </>
+                            )}
+                            <span className="flex items-center gap-1">
+                              <IconMail className="h-3 w-3" />
+                              {p.emails.length ? p.emails.join(", ") : "sem e-mail de repasse"}
+                            </span>
+                            <span className="ml-auto flex items-center gap-2">
+                              {arquivos.map((a) =>
+                                urlPorCaminho.get(a.arquivo_bucket_path) ? (
+                                  <a
+                                    key={a.id}
+                                    href={urlPorCaminho.get(a.arquivo_bucket_path)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    title={a.arquivo_nome}
+                                    className="inline-flex items-center gap-1 text-o2-navy/70 transition hover:text-o2-coral"
+                                  >
+                                    <IconReceipt className="h-3.5 w-3.5" />
+                                    {a.tipo_documento}
+                                  </a>
+                                ) : null
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               );
@@ -457,14 +508,14 @@ export default async function RepassesPage({
           </div>
         </form>
 
-        {totalPares > paresExibidos.length && (
+        {totalGrupos > gruposExibidos.length && (
           <div className="text-center">
             <Link
               href={`/repasses?competencia=${competencia}&limite=${limite + POR_PAGINA}&busca=${encodeURIComponent(busca)}`}
               className="text-sm font-medium text-o2-navy hover:underline"
             >
-              Mostrar mais {Math.min(POR_PAGINA, totalPares - paresExibidos.length)} (
-              {paresExibidos.length} de {totalPares})
+              Mostrar mais {Math.min(POR_PAGINA, totalGrupos - gruposExibidos.length)} (
+              {gruposExibidos.length} de {totalGrupos})
             </Link>
           </div>
         )}

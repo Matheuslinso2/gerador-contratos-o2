@@ -22,4 +22,10 @@ export const GRUPOS_VISUAIS: Record<string, { chave: string; nomeGrupo: string }
   "08984167000146": { chave: "TERUSZKIN", nomeGrupo: "Grupo Teruszkin" },
   "09008875000104": { chave: "TERUSZKIN", nomeGrupo: "Grupo Teruszkin" },
   "28822660000177": { chave: "TERUSZKIN", nomeGrupo: "Grupo Teruszkin" },
+  // Mesmo produtor (Helio Ribas), 3 nomes ao longo do tempo no Corp:
+  // RIBAS-HP -> Pintas Assessoria -> HC Consultoria Imobiliária (código
+  // Corp mais recente, 703, já atualizado direto no cadastro da Pintas em
+  // vez de um 3º registro).
+  "07930322000189": { chave: "RIBAS_HP", nomeGrupo: "Ribas-HP / Pintas / HC Consultoria" },
+  "49915542000183": { chave: "RIBAS_HP", nomeGrupo: "Ribas-HP / Pintas / HC Consultoria" },
 };
