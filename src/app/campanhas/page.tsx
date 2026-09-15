@@ -20,6 +20,7 @@ type CampanhaRow = {
   total_enviados: number;
   total_falhas: number;
   created_at: string;
+  agendado_para: string | null;
 };
 
 export default async function CampanhasPage({
@@ -36,7 +37,7 @@ export default async function CampanhasPage({
 
   const { data: campanhasData } = await supabase
     .from("campanhas")
-    .select("id, nome, status, total_destinatarios, total_enviados, total_falhas, created_at")
+    .select("id, nome, status, total_destinatarios, total_enviados, total_falhas, created_at, agendado_para")
     .order("created_at", { ascending: false });
   const campanhas = (campanhasData ?? []) as CampanhaRow[];
 
@@ -90,7 +91,13 @@ export default async function CampanhasPage({
                   <p className="truncate text-sm font-semibold text-o2-navy">{c.nome}</p>
                   <p className="text-xs text-gray-500">
                     {new Date(c.created_at).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
-                    {c.status !== "rascunho" && (
+                    {c.status === "agendada" && c.agendado_para && (
+                      <>
+                        {" · agendada pra "}
+                        {new Date(c.agendado_para).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })}
+                      </>
+                    )}
+                    {(c.status === "enviando" || c.status === "concluida") && (
                       <>
                         {" · "}
                         {c.total_enviados}/{c.total_destinatarios} enviados
@@ -117,7 +124,7 @@ export default async function CampanhasPage({
                     <input type="hidden" name="campanha_id" value={c.id} />
                     <ExcluirCampanhaButton
                       nomeCampanha={c.nome}
-                      jaEnviada={c.status !== "rascunho"}
+                      jaEnviada={c.status === "enviando" || c.status === "concluida"}
                       className="whitespace-nowrap rounded-full border border-red-300 px-3 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50"
                     />
                   </form>

@@ -3,7 +3,14 @@
 import { useMemo, useState } from "react";
 import SubmitButton from "@/components/SubmitButton";
 import { ConfirmarDisparoButton } from "./ConfirmarDisparoButton";
-import { alternarImobiliariaCampanha, alternarGrupoCampanha, removerContatoExternoCampanha, enviarTesteCampanha, confirmarDisparoCampanha } from "./actions";
+import {
+  alternarImobiliariaCampanha,
+  alternarGrupoCampanha,
+  removerContatoExternoCampanha,
+  enviarTesteCampanha,
+  confirmarDisparoCampanha,
+  agendarDisparoCampanha,
+} from "./actions";
 
 // Só 2 telas no fluxo de criação de campanha (pedido do Matheus,
 // 15/09/2026): criar + esta tela, que também é onde se gerencia quem
@@ -40,6 +47,15 @@ export function GerenciarDestinatarios({
   const [filtro, setFiltro] = useState("");
   const [idPendente, setIdPendente] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+
+  // Piso do <input datetime-local> -- 5 min à frente (mesma granularidade
+  // do cron que dispara agendamentos, ver vercel.json). Calculado uma vez
+  // só, não precisa ser exato ao segundo.
+  const minAgendamento = useMemo(() => {
+    const d = new Date(Date.now() + 5 * 60_000);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }, []);
 
   const imobiliariasPorId = useMemo(() => new Map(imobiliarias.map((i) => [i.id, i])), [imobiliarias]);
   const selecionadasLista = useMemo(
@@ -213,6 +229,30 @@ export function GerenciarDestinatarios({
           </div>
         )}
       </div>
+
+      {/* Item 9 da reunião de 15/09/2026: agendar disparo pra mais tarde
+          em vez de mandar agora -- cancelável antes do envio (volta pra
+          rascunho, ver seção "Agendamento" quando o status já virou
+          "agendada"). */}
+      <form action={agendarDisparoCampanha} className="flex flex-wrap items-end gap-2 rounded-xl border border-o2-navy/10 bg-quadro p-3">
+        <input type="hidden" name="campanha_id" value={campanhaId} />
+        <div>
+          <label className="mb-0.5 block text-xs text-gray-500">Ou agende o disparo pra depois</label>
+          <input
+            type="datetime-local"
+            name="agendado_para"
+            min={minAgendamento}
+            required
+            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-o2-coral focus:outline-none"
+          />
+        </div>
+        <SubmitButton
+          className="rounded-full border border-o2-navy px-4 py-1.5 text-sm font-medium text-o2-navy transition hover:bg-o2-navy hover:text-white"
+          textoCarregando="Agendando..."
+        >
+          Agendar disparo
+        </SubmitButton>
+      </form>
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
         <form action={enviarTesteCampanha}>

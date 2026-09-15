@@ -11,10 +11,12 @@ import { ROTULO_STATUS_CAMPANHA, COR_STATUS_CAMPANHA } from "@/lib/campanhas/rot
 import { rotuloProdutoCampanha } from "@/lib/campanhas/produtos";
 import { montarHtmlCampanha, type CampanhaRow } from "@/lib/campanhas/processarLote";
 import { emailsElegiveisCampanha } from "@/lib/campanhas/elegibilidade";
+import SubmitButton from "@/components/SubmitButton";
 import { CampanhaProgresso } from "./CampanhaProgresso";
 import { salvarLinhaProducao, removerLinhaProducao } from "./producao/actions";
 import { GerenciarDestinatarios } from "./GerenciarDestinatarios";
 import { duplicarCampanha } from "../actions";
+import { cancelarAgendamentoCampanha } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -63,6 +65,12 @@ export default async function CampanhaDetalhePage({
   const { data: campanha } = await supabase.from("campanhas").select("*").eq("id", id).single();
   if (!campanha) redirect("/campanhas");
   const rascunho = campanha.status === "rascunho";
+  // Item 9 da reunião de 15/09/2026: campanha agendada não é rascunho (não
+  // dá mais pra editar destinatários) nem já foi enviada (não tem
+  // resumo/produção ainda) -- é um terceiro estado, com sua própria seção
+  // (nome/data do agendamento + botão de cancelar, que volta pra rascunho).
+  const agendada = campanha.status === "agendada";
+  const jaEnviadaOuEnviando = campanha.status === "enviando" || campanha.status === "concluida";
 
   // Lógica invertida (pedido da reunião de 15/09/2026): campanha em
   // rascunho fica nesta mesma tela -- a seleção de destinatários vira uma
@@ -116,6 +124,21 @@ export default async function CampanhaDetalhePage({
     imobiliariaIds: (g.imobiliaria_ids as string[] | null) ?? [],
     contatos: contatosPorGrupo.get(g.id) ?? [],
   }));
+
+  // Só pra exibição -- agendada é somente-leitura (cancelar volta pra
+  // rascunho, onde dá pra editar a seleção de novo).
+  const idsSelecionadosAgendada = agendada ? ((campanha.imobiliarias_selecionadas as string[] | null) ?? []) : [];
+  const contatosIdsSelecionadosAgendada = agendada ? ((campanha.contatos_externos_selecionados as string[] | null) ?? []) : [];
+  const [{ data: nomesImobiliariasAgendada }, { data: nomesContatosAgendada }] = await Promise.all([
+    idsSelecionadosAgendada.length
+      ? supabase.from("imobiliarias").select("id, nome").in("id", idsSelecionadosAgendada)
+      : Promise.resolve({ data: [] }),
+    contatosIdsSelecionadosAgendada.length
+      ? supabase.from("campanhas_grupos_contatos").select("id, nome").in("id", contatosIdsSelecionadosAgendada)
+      : Promise.resolve({ data: [] }),
+  ]);
+  const totalSelecionadosAgendada = idsSelecionadosAgendada.length + contatosIdsSelecionadosAgendada.length;
+  const nomesSelecionadosAgendada = [...(nomesImobiliariasAgendada ?? []), ...(nomesContatosAgendada ?? [])].map((i) => i.nome);
 
   const percentualEnviado = campanha.total_destinatarios
     ? Math.round(((campanha.total_enviados + campanha.total_falhas) / campanha.total_destinatarios) * 100)
@@ -228,8 +251,31 @@ export default async function CampanhaDetalhePage({
           </section>
         )}
 
+        {agendada && (
+          <section className="space-y-3">
+            <h2 className="text-sm font-semibold text-o2-navy">Agendamento</h2>
+            <p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+              Disparo agendado pra{" "}
+              <strong>
+                {campanha.agendado_para &&
+                  new Date(campanha.agendado_para).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })}
+              </strong>
+              . <strong>{totalSelecionadosAgendada}</strong> destinatário(s): {nomesSelecionadosAgendada.join(", ")}
+            </p>
+            <form action={cancelarAgendamentoCampanha}>
+              <input type="hidden" name="campanha_id" value={id} />
+              <SubmitButton
+                className="rounded-full border border-red-300 px-5 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50"
+                textoCarregando="Cancelando..."
+              >
+                Cancelar agendamento
+              </SubmitButton>
+            </form>
+          </section>
+        )}
+
         {/* Resumo geral do disparo */}
-        {!rascunho && (
+        {jaEnviadaOuEnviando && (
         <section className="space-y-3">
           <h2 className="text-sm font-semibold text-o2-navy">Resumo do envio</h2>
           <div className="grid grid-cols-3 gap-1 overflow-hidden rounded-xl border border-o2-navy/10 bg-gray-200 shadow-sm">
@@ -297,7 +343,7 @@ export default async function CampanhaDetalhePage({
 
         {/* Template do e-mail */}
         <section className="space-y-3">
-          <h2 className="text-sm font-semibold text-o2-navy">{rascunho ? "Prévia do e-mail" : "Template do e-mail enviado"}</h2>
+          <h2 className="text-sm font-semibold text-o2-navy">{jaEnviadaOuEnviando ? "Template do e-mail enviado" : "Prévia do e-mail"}</h2>
           <div className="overflow-hidden rounded-2xl border border-o2-navy/10 bg-white shadow-sm">
             <p className="border-b border-o2-navy/10 bg-quadro px-4 py-2 text-xs font-medium uppercase tracking-wide text-o2-navy">Assunto: {campanha.assunto}</p>
             <div className="max-h-[480px] overflow-y-auto" dangerouslySetInnerHTML={{ __html: htmlEmail }} />
@@ -305,7 +351,7 @@ export default async function CampanhaDetalhePage({
         </section>
 
         {/* Produção gerada */}
-        {!rascunho && (
+        {jaEnviadaOuEnviando && (
         <section className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-sm font-semibold text-o2-navy">Produção gerada</h2>

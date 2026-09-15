@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { processarLote } from "@/lib/campanhas/processarLote";
+import { dispararCampanha } from "@/lib/campanhas/dispararCampanha";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -12,6 +13,12 @@ export const maxDuration = 60;
 // "enviando" com linhas ainda pendentes caso a aba tenha sido fechada antes
 // da fila esvaziar. Uma campanha falhando não trava as outras (mesmo
 // princípio de congelar-paineis/route.ts).
+//
+// Também é o único lugar que dispara agendamentos vencidos (item 9 da
+// reunião de 15/09/2026) -- roda a cada 5 min (ver vercel.json), então o
+// agendamento tem essa margem de precisão. Depois de virar "enviando",
+// processa logo o primeiro lote no mesmo ciclo, em vez de esperar a
+// próxima passada do cron só pra começar.
 //
 // Protegida por CRON_SECRET — a Vercel manda esse valor no header
 // Authorization automaticamente para crons configurados no próprio
@@ -28,6 +35,20 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = createServiceClient();
+
+  const { data: agendadasVencidas } = await supabase
+    .from("campanhas")
+    .select("id")
+    .eq("status", "agendada")
+    .lte("agendado_para", new Date().toISOString());
+
+  const resultadosAgendamento = await Promise.all(
+    (agendadasVencidas ?? []).map(async (c) => {
+      const resultado = await dispararCampanha(supabase, c.id);
+      return { campanhaId: c.id, ...resultado };
+    })
+  );
+
   const { data: campanhas } = await supabase.from("campanhas").select("id").eq("status", "enviando");
 
   const resultados = await Promise.all(
@@ -41,6 +62,9 @@ export async function GET(request: NextRequest) {
     })
   );
 
-  const ok = resultados.every((r) => r.ok);
-  return NextResponse.json({ ok, processadas: resultados.length, resultados }, { status: ok ? 200 : 500 });
+  const ok = resultados.every((r) => r.ok) && resultadosAgendamento.every((r) => r.ok);
+  return NextResponse.json(
+    { ok, agendamentosDisparados: resultadosAgendamento, processadas: resultados.length, resultados },
+    { status: ok ? 200 : 500 }
+  );
 }
