@@ -6,6 +6,7 @@ import { signOut } from "../../../actions";
 import AppHeader from "@/components/AppHeader";
 import VinculosFaturas, { type Vinculo } from "../../../faturas/VinculosFaturas";
 import VinculosRepasse from "../../../faturas/VinculosRepasse";
+import VinculosCampanhas from "../../../campanhas/VinculosCampanhas";
 import { atualizarImobiliariaAdmin, adicionarMembroImobiliariaAdmin, removerMembroImobiliariaAdmin } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -270,6 +271,13 @@ export default async function AdminImobiliariaDetalhePage({
             codigoProdutorCorp={imobiliaria.codigo_produtor_corp}
             voltarPara={voltarPara}
           />
+        </section>
+
+        <section className="space-y-3 border-t border-gray-200 pt-6">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">
+            Campanhas <span className="font-normal normal-case text-gray-400">— e-mail de envio pra campanhas comerciais</span>
+          </h2>
+          <VinculosCampanhas imobiliariaId={imobiliaria.id} emailsCampanhas={imobiliaria.email_campanhas ?? []} voltarPara={voltarPara} />
         </section>
 
         <section className="space-y-3 rounded-xl border border-gray-200 bg-gray-50 p-4">

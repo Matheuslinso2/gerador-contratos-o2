@@ -12,6 +12,7 @@ import { rotuloProdutoCampanha } from "@/lib/campanhas/produtos";
 import { montarHtmlCampanha, type CampanhaRow } from "@/lib/campanhas/processarLote";
 import { CampanhaProgresso } from "./CampanhaProgresso";
 import { salvarLinhaProducao, removerLinhaProducao } from "./producao/actions";
+import { duplicarCampanha } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -59,7 +60,17 @@ export default async function CampanhaDetalhePage({
 
   const { data: campanha } = await supabase.from("campanhas").select("*").eq("id", id).single();
   if (!campanha) redirect("/campanhas");
-  if (campanha.status === "rascunho") redirect(`/campanhas/${id}/destinatarios`);
+  const rascunho = campanha.status === "rascunho";
+
+  // Lógica invertida (pedido da reunião de 15/09/2026): campanha em
+  // rascunho fica nesta mesma tela -- a seleção de destinatários vira uma
+  // etapa salva aqui dentro, e o botão de disparo só aparece depois dela
+  // existir. Antes, criar a campanha já jogava direto pro fluxo de envio.
+  const idsSelecionados = rascunho ? ((campanha.imobiliarias_selecionadas as string[] | null) ?? []) : [];
+  const { data: imobiliariasSelecionadasData } = idsSelecionados.length
+    ? await supabase.from("imobiliarias").select("id, nome").in("id", idsSelecionados).order("nome")
+    : { data: [] };
+  const qsDisparo = idsSelecionados.map((i) => `imob=${encodeURIComponent(i)}`).join("&");
 
   const percentualEnviado = campanha.total_destinatarios
     ? Math.round(((campanha.total_enviados + campanha.total_falhas) / campanha.total_destinatarios) * 100)
@@ -127,6 +138,15 @@ export default async function CampanhaDetalhePage({
             <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${COR_STATUS_CAMPANHA[campanha.status] ?? "bg-gray-100 text-gray-600"}`}>
               {ROTULO_STATUS_CAMPANHA[campanha.status] ?? campanha.status}
             </span>
+            <form action={duplicarCampanha}>
+              <input type="hidden" name="campanha_id" value={id} />
+              <button
+                type="submit"
+                className="whitespace-nowrap rounded-full border border-o2-navy px-3 py-1 text-xs font-medium text-o2-navy transition hover:bg-o2-navy hover:text-white"
+              >
+                Duplicar campanha
+              </button>
+            </form>
           </div>
         </div>
 
@@ -144,7 +164,40 @@ export default async function CampanhaDetalhePage({
 
         <CampanhaProgresso campanhaId={id} status={campanha.status} />
 
+        {rascunho && (
+          <section className="space-y-3">
+            <h2 className="text-sm font-semibold text-o2-navy">Destinatários</h2>
+            {idsSelecionados.length === 0 ? (
+              <p className="rounded-lg border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800">
+                Nenhum destinatário selecionado ainda. Escolha quem vai receber antes de disparar.
+              </p>
+            ) : (
+              <p className="text-sm text-gray-600">
+                <strong>{idsSelecionados.length}</strong> imobiliária(s) selecionada(s):{" "}
+                {(imobiliariasSelecionadasData ?? []).map((i) => i.nome).join(", ")}
+              </p>
+            )}
+            <div className="flex flex-wrap gap-3">
+              <Link
+                href={`/campanhas/${id}/destinatarios`}
+                className="rounded-full border border-o2-navy px-5 py-2 text-sm font-medium text-o2-navy transition hover:bg-o2-navy hover:text-white"
+              >
+                {idsSelecionados.length ? "Editar destinatários" : "Selecionar destinatários"}
+              </Link>
+              {idsSelecionados.length > 0 && (
+                <Link
+                  href={`/campanhas/${id}/revisar?${qsDisparo}`}
+                  className="rounded-full bg-o2-coral px-6 py-2.5 text-sm font-medium text-white transition hover:opacity-90"
+                >
+                  Revisar e disparar
+                </Link>
+              )}
+            </div>
+          </section>
+        )}
+
         {/* Resumo geral do disparo */}
+        {!rascunho && (
         <section className="space-y-3">
           <h2 className="text-sm font-semibold text-o2-navy">Resumo do envio</h2>
           <div className="grid grid-cols-3 gap-1 overflow-hidden rounded-xl border border-o2-navy/10 bg-gray-200 shadow-sm">
@@ -191,10 +244,11 @@ export default async function CampanhaDetalhePage({
             )}
           </dl>
         </section>
+        )}
 
-        {/* Template do e-mail enviado */}
+        {/* Template do e-mail */}
         <section className="space-y-3">
-          <h2 className="text-sm font-semibold text-o2-navy">Template do e-mail enviado</h2>
+          <h2 className="text-sm font-semibold text-o2-navy">{rascunho ? "Prévia do e-mail" : "Template do e-mail enviado"}</h2>
           <div className="overflow-hidden rounded-2xl border border-o2-navy/10 bg-white shadow-sm">
             <p className="border-b border-o2-navy/10 bg-quadro px-4 py-2 text-xs font-medium uppercase tracking-wide text-o2-navy">Assunto: {campanha.assunto}</p>
             <div className="max-h-[480px] overflow-y-auto" dangerouslySetInnerHTML={{ __html: htmlEmail }} />
@@ -202,6 +256,7 @@ export default async function CampanhaDetalhePage({
         </section>
 
         {/* Produção gerada */}
+        {!rascunho && (
         <section className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-sm font-semibold text-o2-navy">Produção gerada</h2>
@@ -317,6 +372,7 @@ export default async function CampanhaDetalhePage({
             </table>
           </div>
         </section>
+        )}
 
         <Link href="/campanhas" className="text-sm font-medium text-o2-navy hover:underline">
           ← Voltar pra lista de campanhas

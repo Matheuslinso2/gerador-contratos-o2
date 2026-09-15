@@ -8,6 +8,7 @@ import PageHeader from "@/components/PageHeader";
 import { IconMail } from "@/components/icons";
 import { emailsElegiveisCampanha } from "@/lib/campanhas/elegibilidade";
 import { SelecionarTodas } from "./Selecionar";
+import { salvarDestinatarios } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,7 @@ type ImobiliariaRow = {
   email: string | null;
   email_faturas: string[] | null;
   email_repasses: string[] | null;
+  email_campanhas: string[] | null;
 };
 
 export default async function DestinatariosPage({
@@ -37,7 +39,7 @@ export default async function DestinatariosPage({
   } = await supabase.auth.getUser();
   if (!isAdmin(user?.email) && !isColaboradorO2(user?.email)) redirect("/");
 
-  const { data: campanha } = await supabase.from("campanhas").select("id, nome, status").eq("id", id).single();
+  const { data: campanha } = await supabase.from("campanhas").select("id, nome, status, imobiliarias_selecionadas").eq("id", id).single();
   if (!campanha) redirect("/campanhas");
   if (campanha.status !== "rascunho") redirect(`/campanhas/${id}`);
 
@@ -46,7 +48,7 @@ export default async function DestinatariosPage({
   // não tem relação com poder receber e-mail de campanha (antes escondia
   // 497 das 500 imobiliárias por padrão).
   const [{ data: imobiliariasData }, { data: descadastrosData }, { data: gruposData }, { data: grupoAtual }] = await Promise.all([
-    supabase.from("imobiliarias").select("id, nome, cnpj, email, email_faturas, email_repasses").order("nome"),
+    supabase.from("imobiliarias").select("id, nome, cnpj, email, email_faturas, email_repasses, email_campanhas").order("nome"),
     supabase.from("campanhas_descadastros").select("email"),
     supabase.from("campanhas_grupos").select("id, nome").order("nome"),
     grupoId ? supabase.from("campanhas_grupos").select("imobiliaria_ids").eq("id", grupoId).maybeSingle() : Promise.resolve({ data: null }),
@@ -61,6 +63,8 @@ export default async function DestinatariosPage({
   }
 
   const membrosGrupo = grupoAtual?.imobiliaria_ids ? new Set<string>(grupoAtual.imobiliaria_ids as string[]) : null;
+  const selecaoSalva = (campanha.imobiliarias_selecionadas as string[] | null) ?? [];
+  const jaTemSelecaoSalva = selecaoSalva.length > 0;
 
   const elegiveis = imobiliarias
     .map((imob) => ({ imob, emails: emailsElegiveisCampanha(imob, descadastrados) }))
@@ -117,11 +121,17 @@ export default async function DestinatariosPage({
           </a>
         </form>
 
-        <form method="get" action={`/campanhas/${id}/revisar`} className="space-y-3">
+        <form action={salvarDestinatarios} className="space-y-3">
+          <input type="hidden" name="campanha_id" value={id} />
           <div className="flex items-center justify-between">
             <p className="text-xs text-gray-500">
               {elegiveis.length} imobiliária(s) com e-mail disponível
-              {membrosGrupo && ` · grupo aplicado pré-marca ${membrosGrupo.size} delas`}.
+              {membrosGrupo
+                ? ` · grupo aplicado pré-marca ${membrosGrupo.size} delas`
+                : jaTemSelecaoSalva
+                  ? ` · seleção salva anteriormente já está pré-marcada`
+                  : ""}
+              .
             </p>
             {elegiveis.length > 1 && <SelecionarTodas />}
           </div>
@@ -129,7 +139,12 @@ export default async function DestinatariosPage({
           <div className="divide-y divide-gray-200 overflow-hidden rounded-xl border border-o2-navy/10 bg-white shadow-sm">
             {elegiveis.map(({ imob, emails }) => (
               <label key={imob.id} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-[#e8f0fe]">
-                <input type="checkbox" name="imob" value={imob.id} defaultChecked={membrosGrupo ? membrosGrupo.has(imob.id) : true} />
+                <input
+                  type="checkbox"
+                  name="imob"
+                  value={imob.id}
+                  defaultChecked={membrosGrupo ? membrosGrupo.has(imob.id) : jaTemSelecaoSalva ? selecaoSalva.includes(imob.id) : true}
+                />
                 <span className="flex-1">
                   <span className="font-medium text-o2-navy">{imob.nome}</span>
                   <span className="ml-2 text-xs text-gray-400">{emails.join(", ")}</span>
@@ -149,7 +164,7 @@ export default async function DestinatariosPage({
                 type="submit"
                 className="rounded-full bg-o2-coral px-6 py-2.5 text-sm font-medium text-white transition hover:opacity-90"
               >
-                Continuar — revisar
+                Salvar seleção
               </button>
             </div>
           )}

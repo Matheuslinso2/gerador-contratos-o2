@@ -45,7 +45,7 @@ export default async function RevisarCampanhaPage({
   if (campanha.status !== "rascunho") redirect(`/campanhas/${id}`);
 
   const [{ data: imobiliariasData }, { data: descadastrosData }] = await Promise.all([
-    supabase.from("imobiliarias").select("id, nome, email, email_faturas, email_repasses").in("id", imobiliariaIds),
+    supabase.from("imobiliarias").select("id, nome, email, email_faturas, email_repasses, email_campanhas").in("id", imobiliariaIds),
     supabase.from("campanhas_descadastros").select("email"),
   ]);
   const descadastrados = new Set((descadastrosData ?? []).map((d) => d.email.toLowerCase()));

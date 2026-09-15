@@ -220,3 +220,58 @@ export async function removerMembroImobiliariaAdmin(formData: FormData) {
   revalidatePath(`/admin/imobiliarias/${imobiliariaId}`);
   redirect(`/admin/imobiliarias/${imobiliariaId}?sucesso=${encodeURIComponent("Membro removido.")}`);
 }
+
+// Mesmo padrão de adicionarEmailRepasse/removerEmailRepasse (src/app/
+// faturas/actions.ts) -- terceiro campo de e-mail, dedicado a Campanhas
+// comerciais, separado de email (faturas) e email_repasses.
+export async function adicionarEmailCampanha(formData: FormData) {
+  const supabase = await exigirAdmin();
+
+  const imobiliariaId = String(formData.get("imobiliaria_id") ?? "");
+  const email = String(formData.get("email") ?? "").trim();
+  const voltarPara = String(formData.get("voltar_para") ?? "").trim() || `/admin/imobiliarias/${imobiliariaId}`;
+  if (!imobiliariaId) redirect("/admin/imobiliarias");
+  if (!email || !email.includes("@")) {
+    redirect(`${voltarPara}?erro=${encodeURIComponent("Informe um e-mail válido.")}`);
+  }
+
+  const { data: imobiliaria } = await supabase.from("imobiliarias").select("email_campanhas").eq("id", imobiliariaId).single();
+  const atuais: string[] = imobiliaria?.email_campanhas ?? [];
+  if (atuais.some((e) => e.toLowerCase() === email.toLowerCase())) {
+    redirect(`${voltarPara}?erro=${encodeURIComponent("Esse e-mail já está cadastrado.")}`);
+  }
+
+  const { error } = await supabase
+    .from("imobiliarias")
+    .update({ email_campanhas: [...atuais, email] })
+    .eq("id", imobiliariaId);
+  if (error) {
+    redirect(`${voltarPara}?erro=${encodeURIComponent(error.message)}`);
+  }
+
+  revalidatePath(voltarPara);
+  redirect(`${voltarPara}?sucesso=${encodeURIComponent("E-mail de campanhas adicionado.")}`);
+}
+
+export async function removerEmailCampanha(formData: FormData) {
+  const supabase = await exigirAdmin();
+
+  const imobiliariaId = String(formData.get("imobiliaria_id") ?? "");
+  const email = String(formData.get("email") ?? "").trim();
+  const voltarPara = String(formData.get("voltar_para") ?? "").trim() || `/admin/imobiliarias/${imobiliariaId}`;
+  if (!imobiliariaId) redirect("/admin/imobiliarias");
+
+  const { data: imobiliaria } = await supabase.from("imobiliarias").select("email_campanhas").eq("id", imobiliariaId).single();
+  const atuais: string[] = imobiliaria?.email_campanhas ?? [];
+
+  const { error } = await supabase
+    .from("imobiliarias")
+    .update({ email_campanhas: atuais.filter((e) => e !== email) })
+    .eq("id", imobiliariaId);
+  if (error) {
+    redirect(`${voltarPara}?erro=${encodeURIComponent(error.message)}`);
+  }
+
+  revalidatePath(voltarPara);
+  redirect(`${voltarPara}?sucesso=${encodeURIComponent("E-mail de campanhas removido.")}`);
+}
