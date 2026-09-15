@@ -8,6 +8,7 @@ import PageHeader from "@/components/PageHeader";
 import SubmitButton from "@/components/SubmitButton";
 import { IconMail } from "@/components/icons";
 import { PRODUTOS_CAMPANHA } from "@/lib/campanhas/produtos";
+import { EditorCorpo } from "../EditorCorpo";
 import { criarCampanha } from "./actions";
 
 const inputClass =
@@ -95,13 +96,7 @@ export default async function NovaCampanhaPage({
 
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">Corpo do e-mail</label>
-            <textarea
-              name="corpo"
-              required
-              rows={8}
-              placeholder="Escreva normalmente. Deixe uma linha em branco entre parágrafos."
-              className={inputClass}
-            />
+            <EditorCorpo name="corpo_html" />
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
