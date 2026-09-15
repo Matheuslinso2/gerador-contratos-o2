@@ -34,7 +34,7 @@ export default async function NovaCampanhaPage({
           ← Voltar pra lista de campanhas
         </Link>
 
-        <PageHeader icon={<IconMail />} titulo="Nova campanha" subtitulo="Passo 1 de 3 — conteúdo do e-mail." />
+        <PageHeader icon={<IconMail />} titulo="Nova campanha" subtitulo="Passo 1 de 2 — conteúdo do e-mail." />
 
         {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
 

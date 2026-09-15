@@ -26,6 +26,17 @@ export type TemplateAvisoInterno = {
 
 export const TEMPLATES_AVISO_INTERNO: TemplateAvisoInterno[] = [
   {
+    id: "generico",
+    nome: "Aviso geral",
+    descricao: "Modelo livre pra avisos que não têm data marcada nem se encaixam nos outros.",
+    badge: "AVISO",
+    campos: [{ key: "titulo", label: "Título do aviso", tipo: "text", obrigatorio: true }],
+    montarAssunto: (v) => v.titulo,
+    montarTitulo: (v) => v.titulo,
+    introducao: "Comunicado da equipe O2.",
+    montarDestaques: () => [],
+  },
+  {
     id: "admissao",
     nome: "Admissão de novo funcionário",
     descricao: "Boas-vindas a quem está entrando no time.",

@@ -4,9 +4,8 @@ import { useMemo, useState } from "react";
 
 type ImobiliariaOpcao = { id: string; nome: string; cnpj: string | null };
 
-// Filtro client-side (não recarrega a página) -- diferente da busca de
-// src/app/campanhas/[id]/destinatarios/page.tsx (que é por GET), aqui
-// precisa manter marcado quem já foi selecionado numa busca anterior
+// Filtro client-side (não recarrega a página) -- precisa manter marcado
+// quem já foi selecionado numa busca anterior
 // enquanto o usuário troca o termo pra achar mais gente. Com ~500
 // imobiliárias no total, filtrar tudo no cliente é leve e evita esse
 // problema (checkbox escondido via CSS mantém o estado, diferente de

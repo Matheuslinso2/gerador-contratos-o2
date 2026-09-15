@@ -60,5 +60,9 @@ export async function criarCampanha(formData: FormData) {
     redirect(`/campanhas/nova?erro=${encodeURIComponent(error?.message ?? "Falha ao criar a campanha.")}`);
   }
 
-  redirect(`/campanhas/${campanha.id}/destinatarios`);
+  // Só 2 telas no fluxo (pedido do Matheus, 15/09/2026): daqui já vai
+  // direto pra tela principal da campanha, onde a seleção de destinatários
+  // acontece (GerenciarDestinatarios) -- não existe mais uma tela
+  // intermediária só pra escolher quem recebe.
+  redirect(`/campanhas/${campanha.id}`);
 }

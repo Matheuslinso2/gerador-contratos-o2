@@ -11,158 +11,76 @@ import { emailsElegiveisCampanha } from "@/lib/campanhas/elegibilidade";
 // Mesmo endereço de modo teste usado em faturas/enviar.
 const EMAIL_MODO_TESTE = "matheus@o2seguros.com.br";
 
-// Pedido da reunião de 15/09/2026: relançar uma campanha parecida sem
-// reescrever tudo do zero. Copia só o conteúdo e a seleção de
-// destinatários -- nunca o histórico de envio/produção, que é específico
-// do disparo original.
-export async function duplicarCampanha(formData: FormData) {
+async function exigirAcessoRascunhoRPC(campanhaId: string) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-  if (!isAdmin(user.email) && !isColaboradorO2(user.email)) redirect("/");
-
-  const campanhaId = String(formData.get("campanha_id") ?? "");
-
-  const { data: original } = await supabase
-    .from("campanhas")
-    .select(
-      "nome, assunto, template, titulo, introducao, valido_de, valido_ate, produto, corpo_html, cta_texto, cta_href, imobiliarias_selecionadas, contatos_externos_selecionados"
-    )
-    .eq("id", campanhaId)
-    .single();
-  if (!original) redirect(`/campanhas/${campanhaId}?erro=${encodeURIComponent("Campanha não encontrada.")}`);
-
-  const { data: copia, error } = await supabase
-    .from("campanhas")
-    .insert({
-      nome: `${original.nome} (cópia)`,
-      assunto: original.assunto,
-      template: original.template,
-      titulo: original.titulo,
-      introducao: original.introducao,
-      valido_de: original.valido_de,
-      valido_ate: original.valido_ate,
-      produto: original.produto,
-      corpo_html: original.corpo_html,
-      cta_texto: original.cta_texto,
-      cta_href: original.cta_href,
-      imobiliarias_selecionadas: original.imobiliarias_selecionadas,
-      contatos_externos_selecionados: original.contatos_externos_selecionados,
-      status: "rascunho",
-      criado_por: user.id,
-      criado_por_email: user.email,
-    })
-    .select("id")
-    .single();
-
-  if (error || !copia) {
-    redirect(`/campanhas/${campanhaId}?erro=${encodeURIComponent(error?.message ?? "Falha ao duplicar a campanha.")}`);
-  }
-
-  redirect(`/campanhas/${copia.id}`);
-}
-
-async function exigirAcessoRascunho(campanhaId: string) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-  if (!isAdmin(user.email) && !isColaboradorO2(user.email)) redirect("/");
+  if (!user) throw new Error("Sessão expirada, recarregue a página.");
+  if (!isAdmin(user.email) && !isColaboradorO2(user.email)) throw new Error("Sem permissão.");
 
   const { data: campanha } = await supabase
     .from("campanhas")
     .select("id, status, imobiliarias_selecionadas, contatos_externos_selecionados")
     .eq("id", campanhaId)
     .single();
-  if (!campanha) redirect("/campanhas");
-  if (campanha.status !== "rascunho") redirect(`/campanhas/${campanhaId}`);
+  if (!campanha) throw new Error("Campanha não encontrada.");
+  if (campanha.status !== "rascunho") throw new Error("Essa campanha não está mais em rascunho -- recarregue a página.");
 
   return { supabase, campanha };
 }
 
-// Edição inline da lista de destinatários direto na tela principal da
-// campanha (pedido do Matheus, 15/09/2026 -- "poderemos excluir uma imob da
-// listagem, incluir uma imob, incluir um grupo ou excluir um grupo" sem
-// precisar voltar pra tela de seleção). Cada ação só mexe no array
-// correspondente e redireciona de volta pra mesma tela.
+// Chamadas imperativamente do componente cliente GerenciarDestinatarios
+// (pedido do Matheus, 15/09/2026: edição sem recarregar a página) -- nunca
+// fazem redirect, só gravam e devolvem/lançam erro, pro componente
+// atualizar o estado local sozinho sem um novo carregamento de página.
 
-export async function adicionarImobiliariaAvulsa(formData: FormData) {
-  const campanhaId = String(formData.get("campanha_id") ?? "");
-  const imobiliariaId = String(formData.get("imobiliaria_id") ?? "");
-  const { supabase, campanha } = await exigirAcessoRascunho(campanhaId);
-  if (!imobiliariaId) redirect(`/campanhas/${campanhaId}`);
-
+export async function alternarImobiliariaCampanha(campanhaId: string, imobiliariaId: string, incluir: boolean) {
+  const { supabase, campanha } = await exigirAcessoRascunhoRPC(campanhaId);
   const atuais = new Set<string>((campanha.imobiliarias_selecionadas as string[] | null) ?? []);
-  atuais.add(imobiliariaId);
-  await supabase.from("campanhas").update({ imobiliarias_selecionadas: [...atuais] }).eq("id", campanhaId);
-  redirect(`/campanhas/${campanhaId}`);
+  if (incluir) atuais.add(imobiliariaId);
+  else atuais.delete(imobiliariaId);
+
+  const { error } = await supabase.from("campanhas").update({ imobiliarias_selecionadas: [...atuais] }).eq("id", campanhaId);
+  if (error) throw new Error(error.message);
 }
 
-export async function removerImobiliariaSelecionada(formData: FormData) {
-  const campanhaId = String(formData.get("campanha_id") ?? "");
-  const imobiliariaId = String(formData.get("imobiliaria_id") ?? "");
-  const { supabase, campanha } = await exigirAcessoRascunho(campanhaId);
-
-  const atuais = ((campanha.imobiliarias_selecionadas as string[] | null) ?? []).filter((i) => i !== imobiliariaId);
-  await supabase.from("campanhas").update({ imobiliarias_selecionadas: atuais }).eq("id", campanhaId);
-  redirect(`/campanhas/${campanhaId}`);
-}
-
-export async function removerContatoExternoSelecionado(formData: FormData) {
-  const campanhaId = String(formData.get("campanha_id") ?? "");
-  const contatoId = String(formData.get("contato_id") ?? "");
-  const { supabase, campanha } = await exigirAcessoRascunho(campanhaId);
-
-  const atuais = ((campanha.contatos_externos_selecionados as string[] | null) ?? []).filter((i) => i !== contatoId);
-  await supabase.from("campanhas").update({ contatos_externos_selecionados: atuais }).eq("id", campanhaId);
-  redirect(`/campanhas/${campanhaId}`);
-}
-
-export async function adicionarGrupoSelecao(formData: FormData) {
-  const campanhaId = String(formData.get("campanha_id") ?? "");
-  const grupoId = String(formData.get("grupo_id") ?? "");
-  const { supabase, campanha } = await exigirAcessoRascunho(campanhaId);
-  if (!grupoId) redirect(`/campanhas/${campanhaId}`);
-
-  const { data: grupo } = await supabase.from("campanhas_grupos").select("imobiliaria_ids").eq("id", grupoId).maybeSingle();
-  const { data: contatosGrupo } = await supabase.from("campanhas_grupos_contatos").select("id").eq("grupo_id", grupoId);
-
-  const imobiliariasAtuais = new Set<string>((campanha.imobiliarias_selecionadas as string[] | null) ?? []);
-  ((grupo?.imobiliaria_ids as string[] | null) ?? []).forEach((i) => imobiliariasAtuais.add(i));
-
+// grupo_imobiliaria_ids/grupo_contato_ids vêm do próprio cliente (ele já
+// tem os membros do grupo carregados) -- não é furo de segurança: quem tem
+// acesso a essa tela já pode incluir qualquer imobiliária individualmente
+// do mesmo jeito, então passar os ids do grupo não abre nada que já não
+// desse pra fazer um por um.
+export async function alternarGrupoCampanha(
+  campanhaId: string,
+  grupoImobiliariaIds: string[],
+  grupoContatoIds: string[],
+  incluir: boolean
+) {
+  const { supabase, campanha } = await exigirAcessoRascunhoRPC(campanhaId);
+  const imobsAtuais = new Set<string>((campanha.imobiliarias_selecionadas as string[] | null) ?? []);
   const contatosAtuais = new Set<string>((campanha.contatos_externos_selecionados as string[] | null) ?? []);
-  (contatosGrupo ?? []).forEach((c) => contatosAtuais.add(c.id));
 
-  await supabase
+  if (incluir) {
+    grupoImobiliariaIds.forEach((i) => imobsAtuais.add(i));
+    grupoContatoIds.forEach((c) => contatosAtuais.add(c));
+  } else {
+    grupoImobiliariaIds.forEach((i) => imobsAtuais.delete(i));
+    grupoContatoIds.forEach((c) => contatosAtuais.delete(c));
+  }
+
+  const { error } = await supabase
     .from("campanhas")
-    .update({ imobiliarias_selecionadas: [...imobiliariasAtuais], contatos_externos_selecionados: [...contatosAtuais] })
+    .update({ imobiliarias_selecionadas: [...imobsAtuais], contatos_externos_selecionados: [...contatosAtuais] })
     .eq("id", campanhaId);
-  redirect(`/campanhas/${campanhaId}`);
+  if (error) throw new Error(error.message);
 }
 
-export async function removerGrupoSelecao(formData: FormData) {
-  const campanhaId = String(formData.get("campanha_id") ?? "");
-  const grupoId = String(formData.get("grupo_id") ?? "");
-  const { supabase, campanha } = await exigirAcessoRascunho(campanhaId);
-  if (!grupoId) redirect(`/campanhas/${campanhaId}`);
+export async function removerContatoExternoCampanha(campanhaId: string, contatoId: string) {
+  const { supabase, campanha } = await exigirAcessoRascunhoRPC(campanhaId);
+  const atuais = ((campanha.contatos_externos_selecionados as string[] | null) ?? []).filter((i) => i !== contatoId);
 
-  const { data: grupo } = await supabase.from("campanhas_grupos").select("imobiliaria_ids").eq("id", grupoId).maybeSingle();
-  const { data: contatosGrupo } = await supabase.from("campanhas_grupos_contatos").select("id").eq("grupo_id", grupoId);
-
-  const idsGrupo = new Set<string>((grupo?.imobiliaria_ids as string[] | null) ?? []);
-  const idsContatosGrupo = new Set<string>((contatosGrupo ?? []).map((c) => c.id));
-
-  const imobiliariasRestantes = ((campanha.imobiliarias_selecionadas as string[] | null) ?? []).filter((i) => !idsGrupo.has(i));
-  const contatosRestantes = ((campanha.contatos_externos_selecionados as string[] | null) ?? []).filter((i) => !idsContatosGrupo.has(i));
-
-  await supabase
-    .from("campanhas")
-    .update({ imobiliarias_selecionadas: imobiliariasRestantes, contatos_externos_selecionados: contatosRestantes })
-    .eq("id", campanhaId);
-  redirect(`/campanhas/${campanhaId}`);
+  const { error } = await supabase.from("campanhas").update({ contatos_externos_selecionados: atuais }).eq("id", campanhaId);
+  if (error) throw new Error(error.message);
 }
 
 // Envio de teste não depende da seleção de destinatários -- só manda o
@@ -210,10 +128,9 @@ export async function enviarTesteCampanha(formData: FormData) {
 // contatos_externos_selecionados) em linhas individuais de campanhas_envios
 // (1 por endereço de e-mail) e marca a campanha como "enviando" -- o
 // processamento de fato acontece em src/lib/campanhas/processarLote.ts,
-// chamado pela tela de progresso. Não recebe mais a lista de ids via
-// formulário (pedido do Matheus, 15/09/2026): a tela principal da campanha
-// é a única fonte de verdade da seleção, então o botão de disparo só
-// precisa do campanha_id.
+// chamado pela tela de progresso. A tela principal da campanha é a única
+// fonte de verdade da seleção, então o botão de disparo só precisa do
+// campanha_id.
 export async function confirmarDisparoCampanha(formData: FormData) {
   const campanhaId = String(formData.get("campanha_id") ?? "");
   const supabase = await createClient();

@@ -7,6 +7,8 @@ import AppHeader from "@/components/AppHeader";
 import PageHeader from "@/components/PageHeader";
 import { IconMail } from "@/components/icons";
 import { ROTULO_STATUS_CAMPANHA, COR_STATUS_CAMPANHA } from "@/lib/campanhas/rotulos";
+import { duplicarCampanha, excluirCampanha } from "./actions";
+import { ExcluirCampanhaButton } from "./ExcluirCampanhaButton";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +22,12 @@ type CampanhaRow = {
   created_at: string;
 };
 
-export default async function CampanhasPage() {
+export default async function CampanhasPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ erro?: string }>;
+}) {
+  const { erro } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -66,6 +73,8 @@ export default async function CampanhasPage() {
           </div>
         </div>
 
+        {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
+
         {!campanhas.length ? (
           <p className="rounded-2xl border border-o2-navy/10 bg-quadro p-8 text-center text-sm text-gray-500 shadow-sm">
             Nenhuma campanha criada ainda.
@@ -73,13 +82,12 @@ export default async function CampanhasPage() {
         ) : (
           <div className="space-y-2">
             {campanhas.map((c) => (
-              <Link
+              <div
                 key={c.id}
-                href={`/campanhas/${c.id}`}
-                className="flex items-center justify-between gap-4 rounded-xl border border-o2-navy/10 bg-quadro p-4 shadow-sm transition hover:border-o2-navy/30"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-o2-navy/10 bg-quadro p-4 shadow-sm transition hover:border-o2-navy/30"
               >
-                <div>
-                  <p className="text-sm font-semibold text-o2-navy">{c.nome}</p>
+                <Link href={`/campanhas/${c.id}`} className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-o2-navy">{c.nome}</p>
                   <p className="text-xs text-gray-500">
                     {new Date(c.created_at).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                     {c.status !== "rascunho" && (
@@ -90,11 +98,31 @@ export default async function CampanhasPage() {
                       </>
                     )}
                   </p>
+                </Link>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${COR_STATUS_CAMPANHA[c.status] ?? "bg-gray-100 text-gray-600"}`}>
+                    {ROTULO_STATUS_CAMPANHA[c.status] ?? c.status}
+                  </span>
+                  <form action={duplicarCampanha}>
+                    <input type="hidden" name="campanha_id" value={c.id} />
+                    <input type="hidden" name="voltar_para" value="/campanhas" />
+                    <button
+                      type="submit"
+                      className="whitespace-nowrap rounded-full border border-o2-navy px-3 py-1 text-xs font-medium text-o2-navy transition hover:bg-o2-navy hover:text-white"
+                    >
+                      Duplicar
+                    </button>
+                  </form>
+                  <form action={excluirCampanha}>
+                    <input type="hidden" name="campanha_id" value={c.id} />
+                    <ExcluirCampanhaButton
+                      nomeCampanha={c.nome}
+                      jaEnviada={c.status !== "rascunho"}
+                      className="whitespace-nowrap rounded-full border border-red-300 px-3 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50"
+                    />
+                  </form>
                 </div>
-                <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${COR_STATUS_CAMPANHA[c.status] ?? "bg-gray-100 text-gray-600"}`}>
-                  {ROTULO_STATUS_CAMPANHA[c.status] ?? c.status}
-                </span>
-              </Link>
+              </div>
             ))}
           </div>
         )}
