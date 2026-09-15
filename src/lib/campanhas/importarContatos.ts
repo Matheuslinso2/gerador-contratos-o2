@@ -1,13 +1,16 @@
 import * as XLSX from "xlsx";
 
-// Planilha de prospecção (item 8 da reunião de 15/09/2026): imobiliárias
-// SEM cadastro no Workspace, então não segue o layout fixo de nenhuma
-// exportação de sistema conhecida -- provavelmente montada à mão pelo
-// comercial. Por isso o cabeçalho é reconhecido por nome (várias grafias
-// aceitas), não por posição fixa de coluna.
-export type ContatoImportado = { nome: string; email: string; cpf_cnpj: string | null };
+// Planilha de prospecção (item 8 da reunião de 15/09/2026, refinada pelo
+// Matheus em seguida): imobiliárias SEM cadastro no Workspace, então não
+// segue o layout fixo de nenhuma exportação de sistema conhecida --
+// provavelmente montada à mão pelo comercial. 4 campos: CNPJ/CPF, e-mail,
+// nome da imobiliária (a empresa) e nome do responsável (quem de fato
+// recebe o e-mail -- pessoa diferente do nome da imobiliária). Cabeçalho
+// reconhecido por nome (várias grafias aceitas), não por posição fixa.
+export type ContatoImportado = { nomeImobiliaria: string; nomeResponsavel: string | null; email: string; cpfCnpj: string | null };
 
-const CANDIDATOS_NOME = ["nome", "name", "imobiliaria", "imobiliária", "razao social", "razão social", "empresa"];
+const CANDIDATOS_NOME_IMOBILIARIA = ["nome", "nome da imobiliaria", "nome da imobiliária", "imobiliaria", "imobiliária", "razao social", "razão social", "empresa"];
+const CANDIDATOS_NOME_RESPONSAVEL = ["responsavel", "responsável", "nome do responsavel", "nome do responsável", "contato", "nome do contato"];
 const CANDIDATOS_EMAIL = ["email", "e-mail", "e mail"];
 const CANDIDATOS_CPF_CNPJ = ["cpf/cnpj", "cpf_cnpj", "cpf", "cnpj", "documento"];
 
@@ -30,7 +33,8 @@ export function importarContatosExcel(buffer: Buffer): ContatoImportado[] {
   if (!linhas.length) return [];
 
   const cabecalhos = (linhas[0] as unknown[]).map(normalizarCabecalho);
-  const idxNome = encontrarIndice(cabecalhos, CANDIDATOS_NOME);
+  const idxNomeImobiliaria = encontrarIndice(cabecalhos, CANDIDATOS_NOME_IMOBILIARIA);
+  const idxNomeResponsavel = encontrarIndice(cabecalhos, CANDIDATOS_NOME_RESPONSAVEL);
   const idxEmail = encontrarIndice(cabecalhos, CANDIDATOS_EMAIL);
   const idxCpfCnpj = encontrarIndice(cabecalhos, CANDIDATOS_CPF_CNPJ);
 
@@ -42,9 +46,15 @@ export function importarContatosExcel(buffer: Buffer): ContatoImportado[] {
     const email = (linha[idxEmail] ?? "").toString().trim().toLowerCase();
     if (!email || !email.includes("@") || vistos.has(email)) continue;
     vistos.add(email);
-    const nome = idxNome >= 0 ? (linha[idxNome] ?? "").toString().trim() : "";
+    const nomeImobiliaria = idxNomeImobiliaria >= 0 ? (linha[idxNomeImobiliaria] ?? "").toString().trim() : "";
+    const nomeResponsavel = idxNomeResponsavel >= 0 ? (linha[idxNomeResponsavel] ?? "").toString().trim() : "";
     const cpfCnpj = idxCpfCnpj >= 0 ? (linha[idxCpfCnpj] ?? "").toString().trim() : "";
-    contatos.push({ nome: nome || email, email, cpf_cnpj: cpfCnpj || null });
+    contatos.push({
+      nomeImobiliaria: nomeImobiliaria || email,
+      nomeResponsavel: nomeResponsavel || null,
+      email,
+      cpfCnpj: cpfCnpj || null,
+    });
   }
   return contatos;
 }

@@ -23,7 +23,7 @@ import {
 // primeiro); adicionar imobiliária avulsa é só complemento.
 
 type ImobLinha = { id: string; nome: string; emails: string[] };
-type ContatoLinha = { id: string; nome: string; email: string };
+type ContatoLinha = { id: string; nomeImobiliaria: string; nomeResponsavel: string | null; email: string };
 type GrupoLinha = { id: string; nome: string; imobiliariaIds: string[]; contatos: ContatoLinha[] };
 
 const botaoAdicionar = "rounded-full border border-o2-navy px-3 py-1 text-xs font-medium text-o2-navy transition hover:bg-o2-navy hover:text-white disabled:opacity-50";
@@ -159,7 +159,8 @@ export function GerenciarDestinatarios({
         {contatosSelecionados.map((c) => (
           <div key={c.id} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
             <span className="min-w-0 truncate">
-              <span className="font-medium text-o2-navy">{c.nome}</span>
+              <span className="font-medium text-o2-navy">{c.nomeImobiliaria}</span>
+              {c.nomeResponsavel && <span className="ml-1 text-xs text-gray-500">(A/C: {c.nomeResponsavel})</span>}
               <span className="ml-2 text-xs text-gray-400">(prospecção)</span>
             </span>
             <button type="button" disabled={idPendente === c.id} onClick={() => removerContato(c.id)} className={botaoRemover}>

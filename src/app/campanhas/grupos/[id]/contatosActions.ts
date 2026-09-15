@@ -39,7 +39,13 @@ export async function importarContatosGrupo(formData: FormData) {
   const { error } = await supabase
     .from("campanhas_grupos_contatos")
     .upsert(
-      contatos.map((c) => ({ grupo_id: grupoId, nome: c.nome, email: c.email, cpf_cnpj: c.cpf_cnpj })),
+      contatos.map((c) => ({
+        grupo_id: grupoId,
+        nome_imobiliaria: c.nomeImobiliaria,
+        nome_responsavel: c.nomeResponsavel,
+        email: c.email,
+        cpf_cnpj: c.cpfCnpj,
+      })),
       { onConflict: "grupo_id,email" }
     );
 

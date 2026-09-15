@@ -31,9 +31,13 @@ export default async function EditarGrupoPage({
   if (!isAdmin(user?.email) && !isColaboradorO2(user?.email)) redirect("/");
 
   const [{ data: grupo }, { data: imobiliariasData }, { data: contatosData }] = await Promise.all([
-    supabase.from("campanhas_grupos").select("id, nome, imobiliaria_ids").eq("id", id).single(),
+    supabase.from("campanhas_grupos").select("id, nome, tipo, imobiliaria_ids").eq("id", id).single(),
     supabase.from("imobiliarias").select("id, nome, cnpj").order("nome"),
-    supabase.from("campanhas_grupos_contatos").select("id, nome, email, cpf_cnpj").eq("grupo_id", id).order("nome"),
+    supabase
+      .from("campanhas_grupos_contatos")
+      .select("id, nome_imobiliaria, nome_responsavel, email, cpf_cnpj")
+      .eq("grupo_id", id)
+      .order("nome_imobiliaria"),
   ]);
   if (!grupo) redirect("/campanhas/grupos");
   const contatos = contatosData ?? [];
@@ -44,7 +48,15 @@ export default async function EditarGrupoPage({
     <>
       <AppHeader userEmail={user?.email} logoutAction={signOut} />
       <main className="mx-auto max-w-2xl flex-1 space-y-6 p-8">
-        <PageHeader icon={<IconFolder />} titulo={grupo.nome} subtitulo="Editar grupo — vale pra campanhas futuras também." />
+        <PageHeader
+          icon={<IconFolder />}
+          titulo={grupo.nome}
+          subtitulo={
+            grupo.tipo === "prospeccao"
+              ? "Grupo de prospecção — imobiliárias sem cadastro no Workspace."
+              : "Editar grupo — vale pra campanhas futuras também."
+          }
+        />
 
         {ok && <p className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-700">{ok}</p>}
         {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
@@ -80,8 +92,8 @@ export default async function EditarGrupoPage({
           <div>
             <h2 className="text-sm font-semibold text-o2-navy">Contatos de prospecção</h2>
             <p className="text-xs text-gray-500">
-              Imobiliárias sem cadastro no Workspace, pra campanha de prospecção de clientes novos. Planilha com colunas
-              de nome, e-mail e CPF/CNPJ.
+              Imobiliárias sem cadastro no Workspace, pra campanha de prospecção de clientes novos. Planilha com
+              colunas de nome da imobiliária, nome do responsável, e-mail e CPF/CNPJ.
             </p>
           </div>
 
@@ -110,7 +122,10 @@ export default async function EditarGrupoPage({
               {contatos.map((c) => (
                 <div key={c.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate font-medium text-o2-navy">{c.nome}</span>
+                    <span className="block truncate font-medium text-o2-navy">
+                      {c.nome_imobiliaria}
+                      {c.nome_responsavel && <span className="font-normal text-gray-500"> — A/C: {c.nome_responsavel}</span>}
+                    </span>
                     <span className="block truncate text-xs text-gray-400">
                       {c.email}
                       {c.cpf_cnpj && ` · ${c.cpf_cnpj}`}

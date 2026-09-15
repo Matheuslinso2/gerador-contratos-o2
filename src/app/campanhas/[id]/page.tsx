@@ -98,10 +98,12 @@ export default async function CampanhaDetalhePage({
       ? supabase.from("imobiliarias").select("id, nome, email, email_faturas, email_repasses, email_campanhas").order("nome")
       : Promise.resolve({ data: [] }),
     rascunho ? supabase.from("campanhas_grupos").select("id, nome, imobiliaria_ids").order("nome") : Promise.resolve({ data: [] }),
-    rascunho ? supabase.from("campanhas_grupos_contatos").select("id, grupo_id, nome, email") : Promise.resolve({ data: [] }),
+    rascunho
+      ? supabase.from("campanhas_grupos_contatos").select("id, grupo_id, nome_imobiliaria, nome_responsavel, email")
+      : Promise.resolve({ data: [] }),
     rascunho ? supabase.from("campanhas_descadastros").select("email") : Promise.resolve({ data: [] }),
     contatosExternosIdsSelecionados.length
-      ? supabase.from("campanhas_grupos_contatos").select("id, nome, email").in("id", contatosExternosIdsSelecionados)
+      ? supabase.from("campanhas_grupos_contatos").select("id, nome_imobiliaria, nome_responsavel, email").in("id", contatosExternosIdsSelecionados)
       : Promise.resolve({ data: [] }),
   ]);
 
@@ -111,11 +113,11 @@ export default async function CampanhaDetalhePage({
     nome: i.nome,
     emails: emailsElegiveisCampanha(i, descadastrados),
   }));
-  const contatosPorGrupo = new Map<string, { id: string; nome: string; email: string }[]>();
+  const contatosPorGrupo = new Map<string, { id: string; nomeImobiliaria: string; nomeResponsavel: string | null; email: string }[]>();
   for (const c of contatosGruposData ?? []) {
     if (descadastrados.has(c.email.trim().toLowerCase())) continue;
     const lista = contatosPorGrupo.get(c.grupo_id) ?? [];
-    lista.push({ id: c.id, nome: c.nome, email: c.email });
+    lista.push({ id: c.id, nomeImobiliaria: c.nome_imobiliaria, nomeResponsavel: c.nome_responsavel, email: c.email });
     contatosPorGrupo.set(c.grupo_id, lista);
   }
   const gruposParaCliente = (gruposData ?? []).map((g) => ({
@@ -134,11 +136,14 @@ export default async function CampanhaDetalhePage({
       ? supabase.from("imobiliarias").select("id, nome").in("id", idsSelecionadosAgendada)
       : Promise.resolve({ data: [] }),
     contatosIdsSelecionadosAgendada.length
-      ? supabase.from("campanhas_grupos_contatos").select("id, nome").in("id", contatosIdsSelecionadosAgendada)
+      ? supabase.from("campanhas_grupos_contatos").select("id, nome_imobiliaria").in("id", contatosIdsSelecionadosAgendada)
       : Promise.resolve({ data: [] }),
   ]);
   const totalSelecionadosAgendada = idsSelecionadosAgendada.length + contatosIdsSelecionadosAgendada.length;
-  const nomesSelecionadosAgendada = [...(nomesImobiliariasAgendada ?? []), ...(nomesContatosAgendada ?? [])].map((i) => i.nome);
+  const nomesSelecionadosAgendada = [
+    ...(nomesImobiliariasAgendada ?? []).map((i) => i.nome),
+    ...(nomesContatosAgendada ?? []).map((c) => c.nome_imobiliaria),
+  ];
 
   const percentualEnviado = campanha.total_destinatarios
     ? Math.round(((campanha.total_enviados + campanha.total_falhas) / campanha.total_destinatarios) * 100)
@@ -246,7 +251,12 @@ export default async function CampanhaDetalhePage({
               imobiliarias={imobiliariasParaCliente}
               idsSelecionadosIniciais={idsSelecionados}
               grupos={gruposParaCliente}
-              contatosSelecionadosIniciais={(contatosExternosSelecionadosData ?? []).map((c) => ({ id: c.id, nome: c.nome, email: c.email }))}
+              contatosSelecionadosIniciais={(contatosExternosSelecionadosData ?? []).map((c) => ({
+                id: c.id,
+                nomeImobiliaria: c.nome_imobiliaria,
+                nomeResponsavel: c.nome_responsavel,
+                email: c.email,
+              }))}
             />
           </section>
         )}
