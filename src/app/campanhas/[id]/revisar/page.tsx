@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../../../actions";
@@ -62,6 +63,10 @@ export default async function RevisarCampanhaPage({
     <>
       <AppHeader userEmail={user?.email} logoutAction={signOut} />
       <main className="mx-auto max-w-3xl flex-1 space-y-6 p-8">
+        <Link href={`/campanhas/${id}/destinatarios`} className="text-sm font-medium text-o2-navy hover:underline">
+          ← Voltar pra destinatários
+        </Link>
+
         <PageHeader icon={<IconMail />} titulo={campanha.nome} subtitulo="Passo 3 de 3 — revisar e disparar." />
 
         {ok && <p className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-700">{ok}</p>}

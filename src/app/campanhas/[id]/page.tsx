@@ -237,37 +237,56 @@ export default async function CampanhaDetalhePage({
               <tbody className="divide-y divide-gray-100">
                 {linhasQuadro.map((l) => {
                   const resultado = l.comissao_gerada - l.repasse_gerado;
+                  // form vazio (só campos ocultos), sem envolver as células --
+                  // <tr> só aceita <td> como filho direto, então os inputs de
+                  // cada coluna vivem em <td> normais (alinhados com o <th> da
+                  // tabela) e se associam a este form de fora, via atributo
+                  // `form`. É isso que evita a sobreposição que dava com um
+                  // grid interno num <td colSpan> só (não respeitava a largura
+                  // real de cada coluna do cabeçalho).
+                  const formId = `producao-${l.imobiliariaId}`;
                   return (
                     <tr key={l.imobiliariaId}>
-                      <td colSpan={8} className="p-0">
-                        <form action={salvarLinhaProducao} className="grid grid-cols-8 items-center gap-2 p-2.5">
+                      <td className="p-3">
+                        <form id={formId} action={salvarLinhaProducao}>
                           <input type="hidden" name="campanha_id" value={id} />
                           <input type="hidden" name="imobiliaria_id" value={l.imobiliariaId} />
                           {l.linhaId && <input type="hidden" name="linha_id" value={l.linhaId} />}
-                          <span className="truncate font-medium text-o2-navy" title={l.imobiliariaNome}>
-                            {l.imobiliariaNome}
-                          </span>
-                          <span className="text-xs text-gray-500">{rotuloProduto}</span>
-                          <input name="quantidade_apolices" type="number" min="0" step="1" defaultValue={l.quantidade_apolices} className={numInputClass} />
-                          <input name="premio_liquido" type="number" min="0" step="0.01" defaultValue={l.premio_liquido} className={numInputClass} />
-                          <input name="comissao_gerada" type="number" min="0" step="0.01" defaultValue={l.comissao_gerada} className={numInputClass} />
-                          <input name="repasse_gerado" type="number" min="0" step="0.01" defaultValue={l.repasse_gerado} className={numInputClass} />
-                          <span className={`text-right text-sm font-semibold ${resultado < 0 ? "text-red-600" : "text-o2-navy"}`}>{formatarMoeda(resultado)}</span>
-                          <span className="flex justify-end gap-2" data-export-ignore="true">
-                            <button type="submit" className="rounded-full border border-o2-navy px-3 py-1 text-xs font-medium text-o2-navy transition hover:bg-o2-navy hover:text-white">
-                              Salvar
-                            </button>
-                            {l.linhaId && (
-                              <button
-                                type="submit"
-                                formAction={removerLinhaProducao}
-                                className="rounded-full border border-red-300 px-3 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50"
-                              >
-                                Zerar
-                              </button>
-                            )}
-                          </span>
                         </form>
+                        <span className="block max-w-[220px] truncate font-medium text-o2-navy" title={l.imobiliariaNome}>
+                          {l.imobiliariaNome}
+                        </span>
+                      </td>
+                      <td className="p-3 text-xs text-gray-500">{rotuloProduto}</td>
+                      <td className="p-3">
+                        <input form={formId} name="quantidade_apolices" type="number" min="0" step="1" defaultValue={l.quantidade_apolices} className={numInputClass} />
+                      </td>
+                      <td className="p-3">
+                        <input form={formId} name="premio_liquido" type="number" min="0" step="0.01" defaultValue={l.premio_liquido} className={numInputClass} />
+                      </td>
+                      <td className="p-3">
+                        <input form={formId} name="comissao_gerada" type="number" min="0" step="0.01" defaultValue={l.comissao_gerada} className={numInputClass} />
+                      </td>
+                      <td className="p-3">
+                        <input form={formId} name="repasse_gerado" type="number" min="0" step="0.01" defaultValue={l.repasse_gerado} className={numInputClass} />
+                      </td>
+                      <td className={`p-3 text-right text-sm font-semibold ${resultado < 0 ? "text-red-600" : "text-o2-navy"}`}>{formatarMoeda(resultado)}</td>
+                      <td className="p-3">
+                        <div className="flex justify-end gap-2 whitespace-nowrap" data-export-ignore="true">
+                          <button form={formId} type="submit" className="rounded-full border border-o2-navy px-3 py-1 text-xs font-medium text-o2-navy transition hover:bg-o2-navy hover:text-white">
+                            Salvar
+                          </button>
+                          {l.linhaId && (
+                            <button
+                              form={formId}
+                              type="submit"
+                              formAction={removerLinhaProducao}
+                              className="rounded-full border border-red-300 px-3 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50"
+                            >
+                              Zerar
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );

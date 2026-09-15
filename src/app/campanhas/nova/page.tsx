@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../../actions";
@@ -28,6 +29,10 @@ export default async function NovaCampanhaPage({
     <>
       <AppHeader userEmail={user?.email} logoutAction={signOut} />
       <main className="mx-auto max-w-2xl flex-1 space-y-6 p-8">
+        <Link href="/campanhas" className="text-sm font-medium text-o2-navy hover:underline">
+          ← Voltar pra lista de campanhas
+        </Link>
+
         <PageHeader icon={<IconMail />} titulo="Nova campanha" subtitulo="Passo 1 de 3 — conteúdo do e-mail." />
 
         {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>}

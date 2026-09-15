@@ -37,6 +37,10 @@ export default async function CampanhasPage() {
     <>
       <AppHeader userEmail={user?.email} logoutAction={signOut} />
       <main className="mx-auto max-w-4xl flex-1 space-y-6 p-8">
+        <Link href="/" className="text-sm font-medium text-o2-navy hover:underline">
+          ← Voltar ao início
+        </Link>
+
         <div className="flex flex-wrap items-center justify-between gap-4">
           <PageHeader
             icon={<IconMail />}
