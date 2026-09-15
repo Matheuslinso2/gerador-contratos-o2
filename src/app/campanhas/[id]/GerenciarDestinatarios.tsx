@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import SubmitButton from "@/components/SubmitButton";
 import { ConfirmarDisparoButton } from "./ConfirmarDisparoButton";
 import {
@@ -42,6 +43,7 @@ export function GerenciarDestinatarios({
   grupos: GrupoLinha[];
   contatosSelecionadosIniciais: ContatoLinha[];
 }) {
+  const router = useRouter();
   const [idsSelecionados, setIdsSelecionados] = useState<Set<string>>(new Set(idsSelecionadosIniciais));
   const [contatosSelecionados, setContatosSelecionados] = useState<ContatoLinha[]>(contatosSelecionadosIniciais);
   const [filtro, setFiltro] = useState("");
@@ -82,6 +84,11 @@ export function GerenciarDestinatarios({
     setIdPendente(chave);
     try {
       await acao();
+      // Recarrega os dados dos Server Components da mesma página (sem
+      // navegar, sem perder o estado local daqui) -- é o que faz a
+      // "Produção gerada" logo abaixo já aparecer com a imobiliária/grupo
+      // recém-adicionado, na hora (pedido do Matheus, 15/09/2026).
+      router.refresh();
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao atualizar. Tente de novo.");
     } finally {

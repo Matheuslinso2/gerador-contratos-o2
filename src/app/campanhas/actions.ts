@@ -85,6 +85,41 @@ export async function excluirCampanha(formData: FormData) {
   redirect("/campanhas");
 }
 
+// Arquivamento (pedido do Matheus, 15/09/2026): tira a campanha do radar
+// do dia a dia sem apagar nada, diferente de excluirCampanha -- pode
+// desarquivar a qualquer momento. voltar_para junta a query string
+// ?arquivadas=1 quando a ação parte da lista de arquivadas, senão volta
+// pra lista de ativas.
+export async function arquivarCampanha(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+  if (!isAdmin(user.email) && !isColaboradorO2(user.email)) redirect("/");
+
+  const campanhaId = String(formData.get("campanha_id") ?? "");
+  const { error } = await supabase.from("campanhas").update({ arquivada_em: new Date().toISOString() }).eq("id", campanhaId);
+  if (error) redirect(`/campanhas?erro=${encodeURIComponent(error.message)}`);
+
+  redirect("/campanhas");
+}
+
+export async function desarquivarCampanha(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+  if (!isAdmin(user.email) && !isColaboradorO2(user.email)) redirect("/");
+
+  const campanhaId = String(formData.get("campanha_id") ?? "");
+  const { error } = await supabase.from("campanhas").update({ arquivada_em: null }).eq("id", campanhaId);
+  if (error) redirect(`/campanhas?arquivadas=1&erro=${encodeURIComponent(error.message)}`);
+
+  redirect("/campanhas?arquivadas=1");
+}
+
 // Chamada direto do editor de corpo do e-mail (client component) -- não é
 // form action com redirect, é invocada imperativamente e devolve a URL
 // pública da imagem pra inserir no contentEditable. Bucket "campanhas-imagens"

@@ -14,6 +14,7 @@ import { emailsElegiveisCampanha } from "@/lib/campanhas/elegibilidade";
 import SubmitButton from "@/components/SubmitButton";
 import { CampanhaProgresso } from "./CampanhaProgresso";
 import { salvarLinhaProducao, removerLinhaProducao } from "./producao/actions";
+import { CelulasComissaoRepasse } from "./producao/CelulasComissaoRepasse";
 import { GerenciarDestinatarios } from "./GerenciarDestinatarios";
 import { duplicarCampanha } from "../actions";
 import { cancelarAgendamentoCampanha } from "./actions";
@@ -158,7 +159,15 @@ export default async function CampanhaDetalhePage({
       supabase.from("campanhas_descadastros").select("id", { count: "exact", head: true }).eq("origem_campanha_id", id),
     ]);
 
-  const idsImpactados = [...new Set((enviosData ?? []).map((e) => e.imobiliaria_id as string))];
+  // Antes do disparo (rascunho/agendada), "quem impacta a Produção" é a
+  // seleção atual da campanha -- pedido do Matheus, 15/09/2026: adicionar
+  // uma imob ou grupo já deve aparecer em Produção na hora, não só depois
+  // de disparar. Depois do disparo, campanhas_envios é que manda (é o
+  // registro histórico de quem realmente recebeu, pode diferir da seleção
+  // se algum e-mail ficou inelegível entre a seleção e o envio).
+  const idsImpactados = jaEnviadaOuEnviando
+    ? [...new Set((enviosData ?? []).map((e) => e.imobiliaria_id as string))]
+    : ((campanha.imobiliarias_selecionadas as string[] | null) ?? []);
   const { data: imobiliariasImpactadas } = idsImpactados.length
     ? await supabase.from("imobiliarias").select("id, nome").in("id", idsImpactados).order("nome")
     : { data: [] };
@@ -397,7 +406,6 @@ export default async function CampanhaDetalhePage({
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {linhasQuadro.map((l) => {
-                  const resultado = l.comissao_gerada - l.repasse_gerado;
                   // form vazio (só campos ocultos), sem envolver as células --
                   // <tr> só aceita <td> como filho direto, então os inputs de
                   // cada coluna vivem em <td> normais (alinhados com o <th> da
@@ -425,13 +433,12 @@ export default async function CampanhaDetalhePage({
                       <td className="p-3">
                         <input form={formId} name="premio_liquido" type="number" min="0" step="0.01" defaultValue={l.premio_liquido} className={numInputClass} />
                       </td>
-                      <td className="p-3">
-                        <input form={formId} name="comissao_gerada" type="number" min="0" step="0.01" defaultValue={l.comissao_gerada} className={numInputClass} />
-                      </td>
-                      <td className="p-3">
-                        <input form={formId} name="repasse_gerado" type="number" min="0" step="0.01" defaultValue={l.repasse_gerado} className={numInputClass} />
-                      </td>
-                      <td className={`p-3 text-right text-sm font-semibold ${resultado < 0 ? "text-red-600" : "text-o2-navy"}`}>{formatarMoeda(resultado)}</td>
+                      <CelulasComissaoRepasse
+                        formId={formId}
+                        comissaoInicial={l.comissao_gerada}
+                        repasseInicial={l.repasse_gerado}
+                        className={numInputClass}
+                      />
                       <td className="p-3">
                         <div className="flex justify-end gap-2 whitespace-nowrap" data-export-ignore="true">
                           <button form={formId} type="submit" className="rounded-full border border-o2-navy px-3 py-1 text-xs font-medium text-o2-navy transition hover:bg-o2-navy hover:text-white">
