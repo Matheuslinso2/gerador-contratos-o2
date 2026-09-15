@@ -28,6 +28,8 @@ export async function enviarEmail({
   html,
   anexos,
   remetente = "Workspace O2",
+  enderecoRemetente = ENDERECO_REMETENTE,
+  headers,
   replyTo,
   throwSeFalhar = false,
 }: {
@@ -37,6 +39,15 @@ export async function enviarEmail({
   html: string;
   anexos?: AnexoEmail[];
   remetente?: string;
+  /** Endereço do remetente (parte depois do "<") -- default é o domínio
+   * transacional de sempre. Campanhas usam um endereço separado (ex:
+   * campanhas@notificacoes.o2seguros.com.br) pra não misturar reputação de
+   * marketing com as notificações internas (faturas/repasses). */
+  enderecoRemetente?: string;
+  /** Headers extras do Resend -- usado por campanhas pra List-Unsubscribe /
+   * List-Unsubscribe-Post (RFC 8058), o descadastro de 1 clique que os
+   * clientes de e-mail levam em conta pra não marcar como spam. */
+  headers?: Record<string, string>;
   replyTo?: string;
   throwSeFalhar?: boolean;
 }) {
@@ -52,12 +63,13 @@ export async function enviarEmail({
   try {
     const resend = new Resend(chave);
     const { error } = await resend.emails.send({
-      from: `${remetente} <${ENDERECO_REMETENTE}>`,
+      from: `${remetente} <${enderecoRemetente}>`,
       to: para,
       cc: cc?.length ? cc : undefined,
       replyTo,
       subject: assunto,
       html,
+      headers,
       attachments: anexos?.map((a) => ({
         filename: a.nome,
         content: a.conteudo,

@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/congelar-paineis",
       "schedule": "0 3 1 * *"
+    },
+    {
+      "path": "/api/cron/enviar-campanhas",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

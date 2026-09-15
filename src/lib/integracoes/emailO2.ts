@@ -5,13 +5,17 @@
 // Extraído pra cá porque o mesmo cabeçalho/rodapé/seção se repetiria em
 // cada arquivo de integração (rcObras.ts, seguroAuto.ts, ...).
 
-const O2_NAVY = "#01192e";
-const O2_LARANJA = "#F8540D";
-const O2_CINZA_CLARO = "#d9d9d9";
-const O2_CINZA_MEDIO = "#8d8683";
-const O2_CINZA_ESCURO = "#444440";
-const FONTE = "'Poppins', Arial, sans-serif";
-const LOGO_URL = "https://gerador-contratos-o2.vercel.app/marca-o2/o2-logo-horizontal.png";
+// Exportadas (não só locais) pra src/lib/integracoes/emailCampanha.ts poder
+// reusar os mesmos hex em vez de duplicá-los -- duas fontes de verdade pra
+// cor da marca é exatamente o risco que a skill o2-marca-visual existe pra
+// evitar.
+export const O2_NAVY = "#01192e";
+export const O2_LARANJA = "#F8540D";
+export const O2_CINZA_CLARO = "#d9d9d9";
+export const O2_CINZA_MEDIO = "#8d8683";
+export const O2_CINZA_ESCURO = "#444440";
+export const FONTE = "'Poppins', Arial, sans-serif";
+export const LOGO_URL = "https://gerador-contratos-o2.vercel.app/marca-o2/o2-logo-horizontal.png";
 
 // Toda notificação de landing page vai em cópia pro comercial, além do
 // e-mail específico do produto (incendio@, fianca@, cap@, auto@...).

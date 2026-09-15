@@ -79,6 +79,7 @@ export default function AppHeader({
                       { href: "/painel-comercial", label: "Comercial" },
                       { href: "/social-media", label: "Social Media" },
                       { href: "/assistente-fianca", label: "Assistente de Vendas — Fiança" },
+                      { href: "/campanhas", label: "Campanhas comerciais" },
                     ],
                   },
                 ]}

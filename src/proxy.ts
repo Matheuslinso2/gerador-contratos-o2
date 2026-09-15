@@ -63,6 +63,12 @@ const ROTAS_PUBLICAS = [
   // src/lib/bitrix/appAuth.ts. Ver
   // C:\Users\O2-Grupo\.claude\plans\frolicking-floating-frog.md.
   "/bitrix-app",
+  // Descadastro de Campanhas Comerciais -- quem clica não necessariamente
+  // tem login no Workspace (destinatário é a imobiliária, não a equipe O2).
+  // Cada rota valida o próprio token HMAC (ver src/lib/campanhas/
+  // unsubscribeToken.ts), não depende de sessão.
+  "/campanhas/descadastro",
+  "/api/campanhas/descadastro",
 ];
 const ROTAS_SO_DESLOGADO = ["/login", "/signup"];
 
