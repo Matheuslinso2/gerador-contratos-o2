@@ -32,7 +32,7 @@ export async function enviarTesteCampanha(formData: FormData) {
 
   const { data: campanha } = await supabase
     .from("campanhas")
-    .select("id, assunto, template, titulo, introducao, valido_ate, corpo_html, cta_texto, cta_href")
+    .select("id, assunto, template, titulo, introducao, valido_de, valido_ate, corpo_html, cta_texto, cta_href")
     .eq("id", campanhaId)
     .single<CampanhaRow>();
   if (!campanha) redirect(`/campanhas/${campanhaId}/revisar?erro=${encodeURIComponent("Campanha não encontrada.")}${qs}`);

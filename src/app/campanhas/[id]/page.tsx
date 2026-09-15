@@ -7,7 +7,12 @@ import AppHeader from "@/components/AppHeader";
 import PageHeader from "@/components/PageHeader";
 import { IconMail } from "@/components/icons";
 import { ROTULO_STATUS_CAMPANHA, COR_STATUS_CAMPANHA } from "@/lib/campanhas/rotulos";
+import { rotuloProdutoCampanha } from "@/lib/campanhas/produtos";
 import { CampanhaProgresso } from "./CampanhaProgresso";
+
+function formatarDataBr(data: string) {
+  return new Date(`${data}T00:00:00`).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+}
 
 export const dynamic = "force-dynamic";
 
@@ -34,14 +39,23 @@ export default async function CampanhaDetalhePage({ params }: { params: Promise<
       <main className="mx-auto max-w-3xl flex-1 space-y-6 p-8">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <PageHeader icon={<IconMail />} titulo={campanha.nome} subtitulo={campanha.assunto} />
-          <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${COR_STATUS_CAMPANHA[campanha.status] ?? "bg-gray-100 text-gray-600"}`}>
-            {ROTULO_STATUS_CAMPANHA[campanha.status] ?? campanha.status}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="whitespace-nowrap rounded-full bg-o2-navy/10 px-2.5 py-1 text-xs font-medium text-o2-navy">
+              {rotuloProdutoCampanha(campanha.produto)}
+            </span>
+            <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${COR_STATUS_CAMPANHA[campanha.status] ?? "bg-gray-100 text-gray-600"}`}>
+              {ROTULO_STATUS_CAMPANHA[campanha.status] ?? campanha.status}
+            </span>
+          </div>
         </div>
 
-        {campanha.valido_ate && (
+        {(campanha.valido_de || campanha.valido_ate) && (
           <p className="text-xs font-medium text-o2-coral">
-            Oferta válida até {new Date(`${campanha.valido_ate}T00:00:00`).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
+            {campanha.valido_de && campanha.valido_ate
+              ? `Válida de ${formatarDataBr(campanha.valido_de)} até ${formatarDataBr(campanha.valido_ate)}`
+              : campanha.valido_ate
+                ? `Válida até ${formatarDataBr(campanha.valido_ate)}`
+                : `Válida a partir de ${formatarDataBr(campanha.valido_de)}`}
           </p>
         )}
 
@@ -76,9 +90,17 @@ export default async function CampanhaDetalhePage({ params }: { params: Promise<
           </p>
         )}
 
-        <Link href="/campanhas" className="text-sm font-medium text-o2-navy hover:underline">
-          ← Voltar pra lista de campanhas
-        </Link>
+        <div className="flex items-center justify-between">
+          <Link href="/campanhas" className="text-sm font-medium text-o2-navy hover:underline">
+            ← Voltar pra lista de campanhas
+          </Link>
+          <Link
+            href={`/campanhas/${id}/producao`}
+            className="rounded-full border border-o2-navy px-4 py-1.5 text-sm font-medium text-o2-navy transition hover:bg-o2-navy hover:text-white"
+          >
+            Produção gerada →
+          </Link>
+        </div>
       </main>
     </>
   );

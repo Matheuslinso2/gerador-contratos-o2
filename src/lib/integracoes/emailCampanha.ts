@@ -17,11 +17,12 @@ function blocoDestaquePromocao(texto: string): string {
 }
 
 // Campo próprio (não embutido no texto do corpo), independente do template
-// -- validade pode importar num comunicado ou newsletter, não só promoção.
-function blocoValidoAte(dataBr: string): string {
+// -- período pode importar num comunicado ou newsletter, não só promoção.
+// Aceita só início, só fim, ou os dois (texto muda conforme o que veio).
+function blocoPeriodoValidade(texto: string): string {
   return `<tr>
     <td style="padding:4px 28px 0;" align="center">
-      <p style="margin:0;font-size:12px;font-weight:600;color:${O2_LARANJA};font-family:${FONTE};">Válido até ${dataBr}</p>
+      <p style="margin:0;font-size:12px;font-weight:600;color:${O2_LARANJA};font-family:${FONTE};">${texto}</p>
     </td>
   </tr>`;
 }
@@ -34,6 +35,7 @@ export function envolverEmailCampanha({
   ctaTexto,
   ctaHref,
   destaquePromocao,
+  validoDe,
   validoAte,
   unsubscribeHref,
 }: {
@@ -45,11 +47,20 @@ export function envolverEmailCampanha({
   ctaHref?: string;
   /** Só usado quando template === "promocao". */
   destaquePromocao?: string;
-  /** Data já formatada (dd/mm/aaaa) -- vale pra qualquer template. */
+  /** Datas já formatadas (dd/mm/aaaa) -- vale pra qualquer template. */
+  validoDe?: string;
   validoAte?: string;
   /** Link já com token válido -- ver src/lib/campanhas/unsubscribeToken.ts. */
   unsubscribeHref: string;
 }): string {
+  const textoPeriodo =
+    validoDe && validoAte
+      ? `Válido de ${validoDe} até ${validoAte}`
+      : validoAte
+        ? `Válido até ${validoAte}`
+        : validoDe
+          ? `Válido a partir de ${validoDe}`
+          : null;
   return `
     <style>@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');</style>
     <div style="background:#f4f4f4;padding:28px 12px;font-family:${FONTE};">
@@ -64,7 +75,7 @@ export function envolverEmailCampanha({
             <p style="margin:0;font-size:21px;font-weight:700;color:${O2_NAVY};font-family:${FONTE};">${titulo}</p>
           </td>
         </tr>
-        ${validoAte ? blocoValidoAte(validoAte) : ""}
+        ${textoPeriodo ? blocoPeriodoValidade(textoPeriodo) : ""}
         ${
           introducao
             ? `<tr>

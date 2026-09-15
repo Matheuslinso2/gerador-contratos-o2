@@ -34,13 +34,18 @@ export async function criarCampanha(formData: FormData) {
   const template = String(formData.get("template") ?? "comunicado");
   const titulo = String(formData.get("titulo") ?? "").trim();
   const introducao = String(formData.get("introducao") ?? "").trim();
+  const validoDe = String(formData.get("valido_de") ?? "").trim();
   const validoAte = String(formData.get("valido_ate") ?? "").trim();
+  const produto = String(formData.get("produto") ?? "").trim();
   const corpo = String(formData.get("corpo") ?? "").trim();
   const ctaTexto = String(formData.get("cta_texto") ?? "").trim();
   const ctaHref = String(formData.get("cta_href") ?? "").trim();
 
-  if (!nome || !assunto || !titulo || !corpo) {
-    redirect(`/campanhas/nova?erro=${encodeURIComponent("Preencha nome, assunto, título e corpo da campanha.")}`);
+  if (!nome || !assunto || !titulo || !corpo || !produto) {
+    redirect(`/campanhas/nova?erro=${encodeURIComponent("Preencha nome, produto, assunto, título e corpo da campanha.")}`);
+  }
+  if (validoDe && validoAte && validoDe > validoAte) {
+    redirect(`/campanhas/nova?erro=${encodeURIComponent("A data \"válido de\" não pode ser depois de \"válido até\".")}`);
   }
 
   const { data: campanha, error } = await supabase
@@ -51,7 +56,9 @@ export async function criarCampanha(formData: FormData) {
       template,
       titulo,
       introducao: introducao || null,
+      valido_de: validoDe || null,
       valido_ate: validoAte || null,
+      produto,
       corpo_html: textoParaHtmlParagrafos(corpo),
       cta_texto: ctaTexto || null,
       cta_href: ctaHref || null,

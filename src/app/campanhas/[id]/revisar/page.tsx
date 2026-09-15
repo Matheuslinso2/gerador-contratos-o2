@@ -37,7 +37,7 @@ export default async function RevisarCampanhaPage({
 
   const { data: campanha } = await supabase
     .from("campanhas")
-    .select("id, nome, assunto, template, titulo, introducao, valido_ate, corpo_html, cta_texto, cta_href, status")
+    .select("id, nome, assunto, template, titulo, introducao, valido_de, valido_ate, corpo_html, cta_texto, cta_href, status")
     .eq("id", id)
     .single();
   if (!campanha) redirect("/campanhas");

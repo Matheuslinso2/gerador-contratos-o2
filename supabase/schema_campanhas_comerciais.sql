@@ -15,9 +15,15 @@ create table if not exists campanhas (
   cta_texto text,
   cta_href text,
   status text not null default 'rascunho' check (status in ('rascunho', 'enviando', 'concluida', 'cancelada')),
-  -- Validade da oferta (ex: "promoção válida até X") -- campo próprio, não
-  -- embutido no texto corrido do corpo. Opcional, aparece destacado no
+  -- Produto ao qual a campanha se refere -- ver src/lib/campanhas/produtos.ts
+  -- pra lista/rótulos. Usado como rótulo fixo na 1ª coluna do quadro de
+  -- produção (campanhas_producao), não editável linha a linha.
+  produto text
+    check (produto in ('fianca', 'incendio', 'capitalizacao', 'automovel', 'rc_obras', 'seguro_celular', 'rcp', 'condominio', 'institucional')),
+  -- Período de validade da campanha ("válida de X até Y") -- campo próprio,
+  -- não embutido no texto corrido do corpo. Opcional, aparece destacado no
   -- e-mail quando preenchido (ver envolverEmailCampanha).
+  valido_de date,
   valido_ate date,
   total_destinatarios int not null default 0,
   total_enviados int not null default 0,
@@ -73,10 +79,31 @@ create table if not exists campanhas_grupos (
   updated_at timestamptz not null default now()
 );
 
+-- Quadro de produção gerada por imobiliária impactada pela campanha --
+-- preenchimento MANUAL pelo comercial, não puxa de nenhuma fonte
+-- automática (producao_erp e repasses não têm granularidade confiável pra
+-- isso hoje). "Resultado" é sempre comissao_gerada - repasse_gerado,
+-- calculado na hora de exibir/exportar, não guardado.
+create table if not exists campanhas_producao (
+  id uuid primary key default gen_random_uuid(),
+  campanha_id uuid not null references campanhas(id) on delete cascade,
+  imobiliaria_id uuid not null references imobiliarias(id),
+  quantidade_apolices integer not null default 0,
+  premio_liquido numeric not null default 0,
+  comissao_gerada numeric not null default 0,
+  repasse_gerado numeric not null default 0,
+  atualizado_por uuid references auth.users(id),
+  atualizado_por_email text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (campanha_id, imobiliaria_id)
+);
+
 alter table campanhas enable row level security;
 alter table campanhas_envios enable row level security;
 alter table campanhas_descadastros enable row level security;
 alter table campanhas_grupos enable row level security;
+alter table campanhas_producao enable row level security;
 
 -- Acesso interno O2 (mesmo padrão de schema_comercial.sql / schema_seguro_
 -- fianca.sql) -- a rota pública de descadastro grava via service role
@@ -105,6 +132,13 @@ with check (auth.jwt() ->> 'email' like '%@o2seguros.com.br');
 drop policy if exists "campanhas_grupos acesso o2" on campanhas_grupos;
 create policy "campanhas_grupos acesso o2"
 on campanhas_grupos for all
+to authenticated
+using (auth.jwt() ->> 'email' like '%@o2seguros.com.br')
+with check (auth.jwt() ->> 'email' like '%@o2seguros.com.br');
+
+drop policy if exists "campanhas_producao acesso o2" on campanhas_producao;
+create policy "campanhas_producao acesso o2"
+on campanhas_producao for all
 to authenticated
 using (auth.jwt() ->> 'email' like '%@o2seguros.com.br')
 with check (auth.jwt() ->> 'email' like '%@o2seguros.com.br');

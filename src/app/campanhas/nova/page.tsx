@@ -6,6 +6,7 @@ import AppHeader from "@/components/AppHeader";
 import PageHeader from "@/components/PageHeader";
 import SubmitButton from "@/components/SubmitButton";
 import { IconMail } from "@/components/icons";
+import { PRODUTOS_CAMPANHA } from "@/lib/campanhas/produtos";
 import { criarCampanha } from "./actions";
 
 const inputClass =
@@ -34,7 +35,33 @@ export default async function NovaCampanhaPage({
         <form action={criarCampanha} className="space-y-4 rounded-2xl border border-o2-navy/10 bg-quadro p-6 shadow-sm">
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">Nome interno da campanha</label>
-            <input name="nome" required placeholder="Ex: Divulgação Seguro Fiança — set/2026" className={inputClass} />
+            <input name="nome" required placeholder="Ex: Divulgação Seguro Fiança" className={inputClass} />
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-600">Válido de (opcional)</label>
+              <input name="valido_de" type="date" className={inputClass} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-600">Válido até (opcional)</label>
+              <input name="valido_ate" type="date" className={inputClass} />
+            </div>
+          </div>
+          <p className="-mt-2 text-xs text-gray-400">O período aparece destacado no e-mail, separado do texto do corpo.</p>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-600">Produto</label>
+            <select name="produto" required defaultValue="" className={inputClass}>
+              <option value="" disabled>
+                Selecione o produto desta campanha...
+              </option>
+              {PRODUTOS_CAMPANHA.map((p) => (
+                <option key={p.valor} value={p.valor}>
+                  {p.rotulo}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>
@@ -59,12 +86,6 @@ export default async function NovaCampanhaPage({
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">Introdução (opcional)</label>
             <input name="introducao" placeholder="Uma linha de contexto logo abaixo do título" className={inputClass} />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-600">Válido até (opcional)</label>
-            <input name="valido_ate" type="date" className={inputClass} />
-            <p className="mt-1 text-xs text-gray-400">Aparece destacado no e-mail, separado do texto do corpo.</p>
           </div>
 
           <div>

@@ -24,6 +24,7 @@ export type CampanhaRow = {
   template: TemplateCampanha;
   titulo: string;
   introducao: string | null;
+  valido_de: string | null;
   valido_ate: string | null;
   corpo_html: string;
   cta_texto: string | null;
@@ -53,6 +54,7 @@ export function montarHtmlCampanha(campanha: CampanhaRow, unsubscribeHref: strin
     ctaTexto: campanha.cta_texto ?? undefined,
     ctaHref: campanha.cta_href ?? undefined,
     destaquePromocao: campanha.template === "promocao" ? (campanha.introducao ?? undefined) : undefined,
+    validoDe: campanha.valido_de ? formatarDataBr(campanha.valido_de) : undefined,
     validoAte: campanha.valido_ate ? formatarDataBr(campanha.valido_ate) : undefined,
     unsubscribeHref,
   });
@@ -71,7 +73,7 @@ export async function processarLote(campanhaId: string, limite = TAMANHO_LOTE_PA
 
   const { data: campanha } = await supabase
     .from("campanhas")
-    .select("id, assunto, template, titulo, introducao, valido_ate, corpo_html, cta_texto, cta_href")
+    .select("id, assunto, template, titulo, introducao, valido_de, valido_ate, corpo_html, cta_texto, cta_href")
     .eq("id", campanhaId)
     .single<CampanhaRow>();
   if (!campanha) throw new Error("Campanha não encontrada");
