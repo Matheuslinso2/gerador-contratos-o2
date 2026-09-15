@@ -62,6 +62,12 @@ export default async function NovaCampanhaPage({
           </div>
 
           <div>
+            <label className="mb-1 block text-xs font-medium text-gray-600">Válido até (opcional)</label>
+            <input name="valido_ate" type="date" className={inputClass} />
+            <p className="mt-1 text-xs text-gray-400">Aparece destacado no e-mail, separado do texto do corpo.</p>
+          </div>
+
+          <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">Corpo do e-mail</label>
             <textarea
               name="corpo"

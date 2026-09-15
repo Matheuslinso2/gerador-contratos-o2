@@ -34,6 +34,7 @@ export async function criarCampanha(formData: FormData) {
   const template = String(formData.get("template") ?? "comunicado");
   const titulo = String(formData.get("titulo") ?? "").trim();
   const introducao = String(formData.get("introducao") ?? "").trim();
+  const validoAte = String(formData.get("valido_ate") ?? "").trim();
   const corpo = String(formData.get("corpo") ?? "").trim();
   const ctaTexto = String(formData.get("cta_texto") ?? "").trim();
   const ctaHref = String(formData.get("cta_href") ?? "").trim();
@@ -50,6 +51,7 @@ export async function criarCampanha(formData: FormData) {
       template,
       titulo,
       introducao: introducao || null,
+      valido_ate: validoAte || null,
       corpo_html: textoParaHtmlParagrafos(corpo),
       cta_texto: ctaTexto || null,
       cta_href: ctaHref || null,

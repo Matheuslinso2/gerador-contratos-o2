@@ -5,7 +5,7 @@ import { signOut } from "../../../actions";
 import AppHeader from "@/components/AppHeader";
 import PageHeader from "@/components/PageHeader";
 import { IconMail } from "@/components/icons";
-import { separarEmails } from "@/lib/email";
+import { emailsElegiveisCampanha } from "@/lib/campanhas/elegibilidade";
 import { SelecionarTodas } from "./Selecionar";
 
 export const dynamic = "force-dynamic";
@@ -14,32 +14,21 @@ type ImobiliariaRow = {
   id: string;
   nome: string;
   cnpj: string | null;
-  cadastro_incompleto: boolean | null;
   email: string | null;
   email_faturas: string[] | null;
+  email_repasses: string[] | null;
 };
-
-// Resolve os e-mails "utilizáveis" de uma imobiliária pra campanha: `email`
-// (contato geral) como principal, `email_faturas` só como reserva se aquele
-// estiver vazio (decisão confirmada com o Matheus) -- e sempre removendo
-// quem já está em campanhas_descadastros (opt-out global).
-function emailsElegiveis(i: ImobiliariaRow, descadastrados: Set<string>): string[] {
-  const principais = separarEmails(i.email);
-  const brutos = principais.length ? principais : separarEmails(i.email_faturas);
-  return brutos.filter((e) => !descadastrados.has(e.toLowerCase()));
-}
 
 export default async function DestinatariosPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ busca?: string; incompletos?: string }>;
+  searchParams: Promise<{ busca?: string; grupo?: string }>;
 }) {
   const { id } = await params;
-  const { busca: buscaParam, incompletos } = await searchParams;
+  const { busca: buscaParam, grupo: grupoId } = await searchParams;
   const busca = (buscaParam ?? "").trim();
-  const incluirIncompletos = incompletos === "1";
 
   const supabase = await createClient();
   const {
@@ -51,15 +40,15 @@ export default async function DestinatariosPage({
   if (!campanha) redirect("/campanhas");
   if (campanha.status !== "rascunho") redirect(`/campanhas/${id}`);
 
-  let query = supabase
-    .from("imobiliarias")
-    .select("id, nome, cnpj, cadastro_incompleto, email, email_faturas")
-    .order("nome");
-  if (!incluirIncompletos) query = query.eq("cadastro_incompleto", false);
-
-  const [{ data: imobiliariasData }, { data: descadastrosData }] = await Promise.all([
-    query,
+  // Base é o cadastro inteiro de imobiliárias, sem filtrar por
+  // cadastro_incompleto -- esse campo mede prontidão pra gerar contrato,
+  // não tem relação com poder receber e-mail de campanha (antes escondia
+  // 497 das 500 imobiliárias por padrão).
+  const [{ data: imobiliariasData }, { data: descadastrosData }, { data: gruposData }, { data: grupoAtual }] = await Promise.all([
+    supabase.from("imobiliarias").select("id, nome, cnpj, email, email_faturas, email_repasses").order("nome"),
     supabase.from("campanhas_descadastros").select("email"),
+    supabase.from("campanhas_grupos").select("id, nome").order("nome"),
+    grupoId ? supabase.from("campanhas_grupos").select("imobiliaria_ids").eq("id", grupoId).maybeSingle() : Promise.resolve({ data: null }),
   ]);
 
   const descadastrados = new Set((descadastrosData ?? []).map((d) => d.email.toLowerCase()));
@@ -70,8 +59,10 @@ export default async function DestinatariosPage({
     imobiliarias = imobiliarias.filter((i) => i.nome.toLowerCase().includes(termo) || (i.cnpj ?? "").includes(busca));
   }
 
+  const membrosGrupo = grupoAtual?.imobiliaria_ids ? new Set<string>(grupoAtual.imobiliaria_ids as string[]) : null;
+
   const elegiveis = imobiliarias
-    .map((imob) => ({ imob, emails: emailsElegiveis(imob, descadastrados) }))
+    .map((imob) => ({ imob, emails: emailsElegiveisCampanha(imob, descadastrados) }))
     .filter((x) => x.emails.length > 0);
 
   return (
@@ -93,28 +84,47 @@ export default async function DestinatariosPage({
               className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-o2-coral focus:outline-none"
             />
           </div>
-          <label className="flex items-center gap-1.5 pb-1.5 text-xs text-gray-600">
-            <input type="checkbox" name="incompletos" value="1" defaultChecked={incluirIncompletos} />
-            Incluir cadastros incompletos
-          </label>
+          {!!gruposData?.length && (
+            <div>
+              <label className="mb-0.5 block text-xs text-gray-500">Aplicar grupo salvo</label>
+              <select
+                name="grupo"
+                defaultValue={grupoId ?? ""}
+                className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-o2-coral focus:outline-none"
+              >
+                <option value="">Nenhum (todas elegíveis)</option>
+                {gruposData.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <button
             type="submit"
             className="rounded-full border border-o2-navy px-4 py-1.5 text-sm font-medium text-o2-navy transition hover:bg-o2-navy hover:text-white"
           >
             Filtrar
           </button>
+          <a href="/campanhas/grupos" className="pb-1.5 text-xs font-medium text-o2-navy hover:underline">
+            Gerenciar grupos
+          </a>
         </form>
 
         <form method="get" action={`/campanhas/${id}/revisar`} className="space-y-3">
           <div className="flex items-center justify-between">
-            <p className="text-xs text-gray-500">{elegiveis.length} imobiliária(s) com e-mail disponível.</p>
+            <p className="text-xs text-gray-500">
+              {elegiveis.length} imobiliária(s) com e-mail disponível
+              {membrosGrupo && ` · grupo aplicado pré-marca ${membrosGrupo.size} delas`}.
+            </p>
             {elegiveis.length > 1 && <SelecionarTodas />}
           </div>
 
           <div className="divide-y divide-gray-200 overflow-hidden rounded-xl border border-o2-navy/10 bg-white shadow-sm">
             {elegiveis.map(({ imob, emails }) => (
               <label key={imob.id} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-[#e8f0fe]">
-                <input type="checkbox" name="imob" value={imob.id} defaultChecked />
+                <input type="checkbox" name="imob" value={imob.id} defaultChecked={membrosGrupo ? membrosGrupo.has(imob.id) : true} />
                 <span className="flex-1">
                   <span className="font-medium text-o2-navy">{imob.nome}</span>
                   <span className="ml-2 text-xs text-gray-400">{emails.join(", ")}</span>

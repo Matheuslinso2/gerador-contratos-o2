@@ -6,7 +6,7 @@ import AppHeader from "@/components/AppHeader";
 import PageHeader from "@/components/PageHeader";
 import SubmitButton from "@/components/SubmitButton";
 import { IconMail } from "@/components/icons";
-import { separarEmails } from "@/lib/email";
+import { emailsElegiveisCampanha } from "@/lib/campanhas/elegibilidade";
 import { montarHtmlCampanha, type CampanhaRow } from "@/lib/campanhas/processarLote";
 import { enviarTesteCampanha, confirmarDisparoCampanha } from "./actions";
 import { ConfirmarDisparoButton } from "./ConfirmarDisparoButton";
@@ -37,24 +37,23 @@ export default async function RevisarCampanhaPage({
 
   const { data: campanha } = await supabase
     .from("campanhas")
-    .select("id, nome, assunto, template, titulo, introducao, corpo_html, cta_texto, cta_href, status")
+    .select("id, nome, assunto, template, titulo, introducao, valido_ate, corpo_html, cta_texto, cta_href, status")
     .eq("id", id)
     .single();
   if (!campanha) redirect("/campanhas");
   if (campanha.status !== "rascunho") redirect(`/campanhas/${id}`);
 
   const [{ data: imobiliariasData }, { data: descadastrosData }] = await Promise.all([
-    supabase.from("imobiliarias").select("id, nome, email, email_faturas").in("id", imobiliariaIds),
+    supabase.from("imobiliarias").select("id, nome, email, email_faturas, email_repasses").in("id", imobiliariaIds),
     supabase.from("campanhas_descadastros").select("email"),
   ]);
   const descadastrados = new Set((descadastrosData ?? []).map((d) => d.email.toLowerCase()));
 
-  const linhas = (imobiliariasData ?? []).map((i) => {
-    const principais = separarEmails(i.email);
-    const brutos = principais.length ? principais : separarEmails(i.email_faturas);
-    const emails = brutos.filter((e) => !descadastrados.has(e.trim().toLowerCase()));
-    return { id: i.id, nome: i.nome, emails };
-  });
+  const linhas = (imobiliariasData ?? []).map((i) => ({
+    id: i.id,
+    nome: i.nome,
+    emails: emailsElegiveisCampanha(i, descadastrados),
+  }));
   const totalEmails = new Set(linhas.flatMap((l) => l.emails.map((e) => e.trim().toLowerCase()))).size;
 
   const htmlPreview = montarHtmlCampanha(campanha as CampanhaRow, "#");

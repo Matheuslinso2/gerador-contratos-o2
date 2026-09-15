@@ -3,9 +3,10 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
-import { separarEmails, enviarEmail } from "@/lib/email";
+import { enviarEmail } from "@/lib/email";
 import { montarHtmlCampanha, ENDERECO_REMETENTE_CAMPANHAS, type CampanhaRow } from "@/lib/campanhas/processarLote";
 import { linkDescadastro } from "@/lib/campanhas/unsubscribeToken";
+import { emailsElegiveisCampanha } from "@/lib/campanhas/elegibilidade";
 
 // Mesmo endereço de modo teste usado em faturas/enviar (EMAIL_MODO_TESTE) --
 // deixa revisar layout/conteúdo real antes de disparar de verdade.
@@ -31,7 +32,7 @@ export async function enviarTesteCampanha(formData: FormData) {
 
   const { data: campanha } = await supabase
     .from("campanhas")
-    .select("id, assunto, template, titulo, introducao, corpo_html, cta_texto, cta_href")
+    .select("id, assunto, template, titulo, introducao, valido_ate, corpo_html, cta_texto, cta_href")
     .eq("id", campanhaId)
     .single<CampanhaRow>();
   if (!campanha) redirect(`/campanhas/${campanhaId}/revisar?erro=${encodeURIComponent("Campanha não encontrada.")}${qs}`);
@@ -82,7 +83,7 @@ export async function confirmarDisparoCampanha(formData: FormData) {
   }
 
   const [{ data: imobiliariasData }, { data: descadastrosData }] = await Promise.all([
-    supabase.from("imobiliarias").select("id, email, email_faturas").in("id", imobiliariaIds),
+    supabase.from("imobiliarias").select("id, email, email_faturas, email_repasses").in("id", imobiliariaIds),
     supabase.from("campanhas_descadastros").select("email"),
   ]);
   const descadastrados = new Set((descadastrosData ?? []).map((d) => d.email.toLowerCase()));
@@ -90,11 +91,9 @@ export async function confirmarDisparoCampanha(formData: FormData) {
   const linhas: { campanha_id: string; imobiliaria_id: string; email: string }[] = [];
   const vistos = new Set<string>();
   for (const i of imobiliariasData ?? []) {
-    const principais = separarEmails(i.email);
-    const brutos = principais.length ? principais : separarEmails(i.email_faturas);
-    for (const emailBruto of brutos) {
+    for (const emailBruto of emailsElegiveisCampanha(i, descadastrados)) {
       const email = emailBruto.trim().toLowerCase();
-      if (!email || descadastrados.has(email) || vistos.has(email)) continue;
+      if (!email || vistos.has(email)) continue;
       vistos.add(email);
       linhas.push({ campanha_id: campanhaId, imobiliaria_id: i.id, email });
     }

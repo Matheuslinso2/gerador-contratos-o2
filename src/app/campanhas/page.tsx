@@ -43,12 +43,17 @@ export default async function CampanhasPage() {
             titulo="Campanhas comerciais"
             subtitulo="E-mails de campanha para a base de imobiliárias parceiras, via Resend."
           />
-          <Link
-            href="/campanhas/nova"
-            className="whitespace-nowrap rounded-full bg-o2-coral px-4 py-1.5 text-sm font-medium text-white transition hover:opacity-90"
-          >
-            Nova campanha
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link href="/campanhas/grupos" className="text-sm font-medium text-o2-navy hover:underline">
+              Grupos de imobiliárias
+            </Link>
+            <Link
+              href="/campanhas/nova"
+              className="whitespace-nowrap rounded-full bg-o2-coral px-4 py-1.5 text-sm font-medium text-white transition hover:opacity-90"
+            >
+              Nova campanha
+            </Link>
+          </div>
         </div>
 
         {!campanhas.length ? (

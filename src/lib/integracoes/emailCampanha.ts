@@ -16,6 +16,16 @@ function blocoDestaquePromocao(texto: string): string {
   return blocoSecao("Oferta", `<tr><td style="padding:12px 14px;font-size:14px;color:${O2_CINZA_MEDIO};font-family:${FONTE};">${texto}</td></tr>`);
 }
 
+// Campo próprio (não embutido no texto do corpo), independente do template
+// -- validade pode importar num comunicado ou newsletter, não só promoção.
+function blocoValidoAte(dataBr: string): string {
+  return `<tr>
+    <td style="padding:4px 28px 0;" align="center">
+      <p style="margin:0;font-size:12px;font-weight:600;color:${O2_LARANJA};font-family:${FONTE};">Válido até ${dataBr}</p>
+    </td>
+  </tr>`;
+}
+
 export function envolverEmailCampanha({
   template = "comunicado",
   titulo,
@@ -24,6 +34,7 @@ export function envolverEmailCampanha({
   ctaTexto,
   ctaHref,
   destaquePromocao,
+  validoAte,
   unsubscribeHref,
 }: {
   template?: TemplateCampanha;
@@ -34,6 +45,8 @@ export function envolverEmailCampanha({
   ctaHref?: string;
   /** Só usado quando template === "promocao". */
   destaquePromocao?: string;
+  /** Data já formatada (dd/mm/aaaa) -- vale pra qualquer template. */
+  validoAte?: string;
   /** Link já com token válido -- ver src/lib/campanhas/unsubscribeToken.ts. */
   unsubscribeHref: string;
 }): string {
@@ -51,6 +64,7 @@ export function envolverEmailCampanha({
             <p style="margin:0;font-size:21px;font-weight:700;color:${O2_NAVY};font-family:${FONTE};">${titulo}</p>
           </td>
         </tr>
+        ${validoAte ? blocoValidoAte(validoAte) : ""}
         ${
           introducao
             ? `<tr>

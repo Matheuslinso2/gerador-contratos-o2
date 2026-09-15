@@ -39,6 +39,12 @@ export default async function CampanhaDetalhePage({ params }: { params: Promise<
           </span>
         </div>
 
+        {campanha.valido_ate && (
+          <p className="text-xs font-medium text-o2-coral">
+            Oferta válida até {new Date(`${campanha.valido_ate}T00:00:00`).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
+          </p>
+        )}
+
         <CampanhaProgresso campanhaId={id} status={campanha.status} />
 
         <div className="grid grid-cols-3 gap-1 overflow-hidden rounded-xl border border-o2-navy/10 bg-gray-200 shadow-sm">

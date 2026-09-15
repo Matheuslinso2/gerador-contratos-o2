@@ -24,6 +24,7 @@ export type CampanhaRow = {
   template: TemplateCampanha;
   titulo: string;
   introducao: string | null;
+  valido_ate: string | null;
   corpo_html: string;
   cta_texto: string | null;
   cta_href: string | null;
@@ -34,6 +35,15 @@ export type ResultadoLote = { processados: number; restantes: number; concluida:
 // Compartilhada entre o loop de envio real (abaixo) e o botão de "enviar
 // teste" da tela de revisão -- garante que o teste mostra exatamente o HTML
 // que vai sair de verdade, inclusive o rodapé de descadastro.
+// dd/mm/aaaa direto da string "aaaa-mm-dd" que o Postgres devolve pra uma
+// coluna `date` -- sem passar por Date/timezone, que já causou bug de "um
+// dia a menos" em outro lugar do projeto quando a data vinha só como
+// calendário (sem hora) e o navegador local não era UTC.
+function formatarDataBr(isoData: string): string {
+  const [ano, mes, dia] = isoData.split("-");
+  return `${dia}/${mes}/${ano}`;
+}
+
 export function montarHtmlCampanha(campanha: CampanhaRow, unsubscribeHref: string): string {
   return envolverEmailCampanha({
     template: campanha.template,
@@ -43,6 +53,7 @@ export function montarHtmlCampanha(campanha: CampanhaRow, unsubscribeHref: strin
     ctaTexto: campanha.cta_texto ?? undefined,
     ctaHref: campanha.cta_href ?? undefined,
     destaquePromocao: campanha.template === "promocao" ? (campanha.introducao ?? undefined) : undefined,
+    validoAte: campanha.valido_ate ? formatarDataBr(campanha.valido_ate) : undefined,
     unsubscribeHref,
   });
 }
@@ -60,7 +71,7 @@ export async function processarLote(campanhaId: string, limite = TAMANHO_LOTE_PA
 
   const { data: campanha } = await supabase
     .from("campanhas")
-    .select("id, assunto, template, titulo, introducao, corpo_html, cta_texto, cta_href")
+    .select("id, assunto, template, titulo, introducao, valido_ate, corpo_html, cta_texto, cta_href")
     .eq("id", campanhaId)
     .single<CampanhaRow>();
   if (!campanha) throw new Error("Campanha não encontrada");

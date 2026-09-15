@@ -15,6 +15,10 @@ create table if not exists campanhas (
   cta_texto text,
   cta_href text,
   status text not null default 'rascunho' check (status in ('rascunho', 'enviando', 'concluida', 'cancelada')),
+  -- Validade da oferta (ex: "promoção válida até X") -- campo próprio, não
+  -- embutido no texto corrido do corpo. Opcional, aparece destacado no
+  -- e-mail quando preenchido (ver envolverEmailCampanha).
+  valido_ate date,
   total_destinatarios int not null default 0,
   total_enviados int not null default 0,
   total_falhas int not null default 0,
@@ -56,9 +60,23 @@ create table if not exists campanhas_descadastros (
   descadastrado_em timestamptz not null default now()
 );
 
+-- Grupos de imobiliárias reutilizáveis entre campanhas -- nome próprio,
+-- lista editável de membros. Array simples (não tabela de junção) segue o
+-- mesmo padrão já usado em imobiliarias.email_faturas/email_repasses.
+create table if not exists campanhas_grupos (
+  id uuid primary key default gen_random_uuid(),
+  nome text not null unique,
+  imobiliaria_ids uuid[] not null default '{}',
+  criado_por uuid references auth.users(id),
+  criado_por_email text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 alter table campanhas enable row level security;
 alter table campanhas_envios enable row level security;
 alter table campanhas_descadastros enable row level security;
+alter table campanhas_grupos enable row level security;
 
 -- Acesso interno O2 (mesmo padrão de schema_comercial.sql / schema_seguro_
 -- fianca.sql) -- a rota pública de descadastro grava via service role
@@ -80,6 +98,13 @@ with check (auth.jwt() ->> 'email' like '%@o2seguros.com.br');
 drop policy if exists "campanhas_descadastros acesso o2" on campanhas_descadastros;
 create policy "campanhas_descadastros acesso o2"
 on campanhas_descadastros for all
+to authenticated
+using (auth.jwt() ->> 'email' like '%@o2seguros.com.br')
+with check (auth.jwt() ->> 'email' like '%@o2seguros.com.br');
+
+drop policy if exists "campanhas_grupos acesso o2" on campanhas_grupos;
+create policy "campanhas_grupos acesso o2"
+on campanhas_grupos for all
 to authenticated
 using (auth.jwt() ->> 'email' like '%@o2seguros.com.br')
 with check (auth.jwt() ->> 'email' like '%@o2seguros.com.br');
