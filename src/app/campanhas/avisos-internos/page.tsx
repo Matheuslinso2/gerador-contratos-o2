@@ -26,9 +26,14 @@ export default async function AvisosInternosPage({
     <>
       <AppHeader userEmail={user?.email} logoutAction={signOut} />
       <main className="mx-auto max-w-3xl flex-1 space-y-6 p-8">
-        <Link href="/campanhas" className="text-sm font-medium text-o2-navy hover:underline">
-          ← Voltar pra campanhas
-        </Link>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Link href="/campanhas" className="text-sm font-medium text-o2-navy hover:underline">
+            ← Voltar pra campanhas
+          </Link>
+          <Link href="/campanhas/avisos-internos/equipe" className="text-xs font-medium text-o2-navy hover:underline">
+            Gerenciar e-mails da equipe
+          </Link>
+        </div>
 
         <PageHeader icon={<IconMail />} titulo="Avisos internos" subtitulo="Comunicados pra equipe O2 — escolha um modelo pra começar." />
 
