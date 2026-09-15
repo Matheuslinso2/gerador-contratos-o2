@@ -52,6 +52,12 @@ export default async function CampanhasPage() {
               Grupos de imobiliárias
             </Link>
             <Link
+              href="/campanhas/avisos-internos"
+              className="whitespace-nowrap rounded-full border border-o2-navy px-4 py-1.5 text-sm font-medium text-o2-navy transition hover:bg-o2-navy hover:text-white"
+            >
+              Avisos internos
+            </Link>
+            <Link
               href="/campanhas/nova"
               className="whitespace-nowrap rounded-full bg-o2-coral px-4 py-1.5 text-sm font-medium text-white transition hover:opacity-90"
             >
