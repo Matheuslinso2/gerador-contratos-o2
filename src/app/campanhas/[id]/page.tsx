@@ -76,10 +76,14 @@ export default async function CampanhaDetalhePage({
     ? Math.round(((campanha.total_enviados + campanha.total_falhas) / campanha.total_destinatarios) * 100)
     : 0;
 
-  const [{ data: enviosData }, { data: producaoData }] = await Promise.all([
-    supabase.from("campanhas_envios").select("imobiliaria_id").eq("campanha_id", id).not("imobiliaria_id", "is", null),
-    supabase.from("campanhas_producao").select("id, imobiliaria_id, quantidade_apolices, premio_liquido, comissao_gerada, repasse_gerado").eq("campanha_id", id),
-  ]);
+  const [{ data: enviosData }, { data: producaoData }, { count: totalAbertos }, { count: totalCliques }, { count: totalDescadastros }] =
+    await Promise.all([
+      supabase.from("campanhas_envios").select("imobiliaria_id").eq("campanha_id", id).not("imobiliaria_id", "is", null),
+      supabase.from("campanhas_producao").select("id, imobiliaria_id, quantidade_apolices, premio_liquido, comissao_gerada, repasse_gerado").eq("campanha_id", id),
+      supabase.from("campanhas_envios").select("id", { count: "exact", head: true }).eq("campanha_id", id).not("aberto_em", "is", null),
+      supabase.from("campanhas_envios").select("id", { count: "exact", head: true }).eq("campanha_id", id).not("clicado_em", "is", null),
+      supabase.from("campanhas_descadastros").select("id", { count: "exact", head: true }).eq("origem_campanha_id", id),
+    ]);
 
   const idsImpactados = [...new Set((enviosData ?? []).map((e) => e.imobiliaria_id as string))];
   const { data: imobiliariasImpactadas } = idsImpactados.length
@@ -212,6 +216,23 @@ export default async function CampanhaDetalhePage({
             <div className="bg-quadro p-4 text-center">
               <p className="text-2xl font-bold text-red-600">{campanha.total_falhas}</p>
               <p className="text-xs text-gray-500">Falhas</p>
+            </div>
+          </div>
+
+          {/* Métricas de abertura/clique via webhook do Resend + descadastros
+              originados desta campanha (pedido da reunião de 15/09/2026). */}
+          <div className="grid grid-cols-3 gap-1 overflow-hidden rounded-xl border border-o2-navy/10 bg-gray-200 shadow-sm">
+            <div className="bg-quadro p-4 text-center">
+              <p className="text-2xl font-bold text-o2-navy">{totalAbertos ?? 0}</p>
+              <p className="text-xs text-gray-500">Abriram</p>
+            </div>
+            <div className="bg-quadro p-4 text-center">
+              <p className="text-2xl font-bold text-o2-navy">{totalCliques ?? 0}</p>
+              <p className="text-xs text-gray-500">Clicaram</p>
+            </div>
+            <div className="bg-quadro p-4 text-center">
+              <p className="text-2xl font-bold text-gray-600">{totalDescadastros ?? 0}</p>
+              <p className="text-xs text-gray-500">Descadastros</p>
             </div>
           </div>
 

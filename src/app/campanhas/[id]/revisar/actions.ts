@@ -42,7 +42,7 @@ export async function enviarTesteCampanha(formData: FormData) {
     redirect(`/campanhas/${campanhaId}/revisar?erro=${encodeURIComponent("NEXT_PUBLIC_SITE_URL não configurada.")}${qs}`);
   }
 
-  const unsubscribeHref = linkDescadastro(EMAIL_MODO_TESTE, siteUrl);
+  const unsubscribeHref = linkDescadastro(EMAIL_MODO_TESTE, siteUrl, campanhaId);
   const html = montarHtmlCampanha(campanha, unsubscribeHref);
 
   try {

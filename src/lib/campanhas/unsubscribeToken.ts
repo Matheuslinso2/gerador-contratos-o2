@@ -24,12 +24,19 @@ export function validarTokenDescadastro(email: string, token: string): boolean {
   return timingSafeEqual(bufEsperado, bufRecebido);
 }
 
+// campanha_id vai solto na URL (não faz parte do HMAC) -- não é dado
+// sensível, só metadado pra saber de qual campanha veio o descadastro
+// (campanhas_descadastros.origem_campanha_id, pedido da reunião de
+// 15/09/2026 pra mostrar esse número junto das métricas de abertura/
+// clique). Sem ele, o campo fica null (comportamento de antes).
+
 // Link mostrado no rodapé do e-mail -- página de confirmação manual (GET,
 // não processa o opt-out sozinha, evita descadastro acidental por prefetch
 // de scanners de antivírus/Outlook em links de e-mail).
-export function linkDescadastro(email: string, origem: string): string {
+export function linkDescadastro(email: string, origem: string, campanhaId?: string): string {
   const token = gerarTokenDescadastro(email);
   const params = new URLSearchParams({ email, token });
+  if (campanhaId) params.set("campanha_id", campanhaId);
   return `${origem}/campanhas/descadastro?${params.toString()}`;
 }
 
@@ -38,8 +45,9 @@ export function linkDescadastro(email: string, origem: string): string {
 // inscrição" na própria interface deles, sem abrir nenhuma página; o
 // próprio cliente já exige um clique explícito antes de disparar esse POST,
 // então não tem o mesmo risco de prefetch que o link de GET tem.
-export function linkDescadastroApi(email: string, origem: string): string {
+export function linkDescadastroApi(email: string, origem: string, campanhaId?: string): string {
   const token = gerarTokenDescadastro(email);
   const params = new URLSearchParams({ email, token });
+  if (campanhaId) params.set("campanha_id", campanhaId);
   return `${origem}/api/campanhas/descadastro?${params.toString()}`;
 }

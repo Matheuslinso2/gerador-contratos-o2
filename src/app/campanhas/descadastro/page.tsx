@@ -11,9 +11,9 @@ import { IconMail } from "@/components/icons";
 export default async function DescadastroPage({
   searchParams,
 }: {
-  searchParams: Promise<{ email?: string; token?: string; ok?: string; erro?: string }>;
+  searchParams: Promise<{ email?: string; token?: string; campanha_id?: string; ok?: string; erro?: string }>;
 }) {
-  const { email, token, ok, erro } = await searchParams;
+  const { email, token, campanha_id, ok, erro } = await searchParams;
   const valido = !!email && !!token && validarTokenDescadastro(email, token);
 
   return (
@@ -41,6 +41,7 @@ export default async function DescadastroPage({
             <form action={confirmarDescadastro}>
               <input type="hidden" name="email" value={email} />
               <input type="hidden" name="token" value={token} />
+              {campanha_id && <input type="hidden" name="campanha_id" value={campanha_id} />}
               <SubmitButton
                 className="rounded-full bg-o2-navy px-6 py-2.5 text-sm font-medium text-white transition hover:opacity-90"
                 textoCarregando="Confirmando..."

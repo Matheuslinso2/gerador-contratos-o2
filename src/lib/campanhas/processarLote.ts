@@ -103,11 +103,11 @@ export async function processarLote(campanhaId: string, limite = TAMANHO_LOTE_PA
     }
 
     try {
-      const unsubscribeHref = linkDescadastro(envio.email, siteUrl);
-      const unsubscribeHrefApi = linkDescadastroApi(envio.email, siteUrl);
+      const unsubscribeHref = linkDescadastro(envio.email, siteUrl, campanhaId);
+      const unsubscribeHrefApi = linkDescadastroApi(envio.email, siteUrl, campanhaId);
       const html = montarHtmlCampanha(campanha, unsubscribeHref);
 
-      await enviarEmail({
+      const { id: resendEmailId } = await enviarEmail({
         para: envio.email,
         assunto: campanha.assunto,
         html,
@@ -122,7 +122,7 @@ export async function processarLote(campanhaId: string, limite = TAMANHO_LOTE_PA
 
       await supabase
         .from("campanhas_envios")
-        .update({ status: "enviado", enviado_em: new Date().toISOString() })
+        .update({ status: "enviado", enviado_em: new Date().toISOString(), resend_email_id: resendEmailId })
         .eq("id", envio.id);
     } catch (erro) {
       const tentativas = (envio.tentativas ?? 0) + 1;

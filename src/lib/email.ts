@@ -57,12 +57,12 @@ export async function enviarEmail({
     const msg = "Envio de e-mail não configurado: falta RESEND_API_KEY.";
     console.error(msg);
     if (throwSeFalhar) throw new Error(msg);
-    return;
+    return { id: null };
   }
 
   try {
     const resend = new Resend(chave);
-    const { error } = await resend.emails.send({
+    const { data, error } = await resend.emails.send({
       from: `${remetente} <${enderecoRemetente}>`,
       to: para,
       cc: cc?.length ? cc : undefined,
@@ -78,9 +78,14 @@ export async function enviarEmail({
       })),
     });
     if (error) throw new Error(error.message);
+    // Id devolvido pelo Resend -- campanhas usa isso pra casar de volta com
+    // a linha de campanhas_envios quando o webhook de abertura/clique chega
+    // (ver src/app/api/campanhas/webhook-resend/route.ts).
+    return { id: data?.id ?? null };
   } catch (erro) {
     console.error("Falha ao enviar e-mail:", erro);
     if (throwSeFalhar) throw erro;
+    return { id: null };
   }
 }
 
