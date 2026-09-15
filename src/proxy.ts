@@ -69,6 +69,11 @@ const ROTAS_PUBLICAS = [
   // unsubscribeToken.ts), não depende de sessão.
   "/campanhas/descadastro",
   "/api/campanhas/descadastro",
+  // Webhook do Resend (abertura/clique de campanha) -- chamado direto pelo
+  // Resend, sem cookie de sessão. Valida a própria assinatura Svix/HMAC
+  // (ver src/app/api/campanhas/webhook-resend/route.ts), mesmo padrão dos
+  // outros webhooks acima.
+  "/api/campanhas/webhook-resend",
 ];
 const ROTAS_SO_DESLOGADO = ["/login", "/signup"];
 
