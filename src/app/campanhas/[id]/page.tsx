@@ -242,10 +242,14 @@ export default async function CampanhaDetalhePage({
 
         <CampanhaProgresso campanhaId={id} status={campanha.status} />
 
-        {rascunho && (
-          <section className="space-y-3">
-            <h2 className="text-sm font-semibold text-o2-navy">Destinatários</h2>
+        {/* Resumo do envio -- SEMPRE presente, na mesma posição, com o
+            mesmo cabeçalho (pedido do Matheus, 15/09/2026: só 2 telas no
+            fluxo, e a tela principal não pode trocar de cara conforme o
+            status -- só o conteúdo dentro desta seção muda). */}
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold text-o2-navy">Resumo do envio</h2>
 
+          {rascunho && (
             <GerenciarDestinatarios
               campanhaId={id}
               imobiliarias={imobiliariasParaCliente}
@@ -258,98 +262,95 @@ export default async function CampanhaDetalhePage({
                 email: c.email,
               }))}
             />
-          </section>
-        )}
-
-        {agendada && (
-          <section className="space-y-3">
-            <h2 className="text-sm font-semibold text-o2-navy">Agendamento</h2>
-            <p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
-              Disparo agendado pra{" "}
-              <strong>
-                {campanha.agendado_para &&
-                  new Date(campanha.agendado_para).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })}
-              </strong>
-              . <strong>{totalSelecionadosAgendada}</strong> destinatário(s): {nomesSelecionadosAgendada.join(", ")}
-            </p>
-            <form action={cancelarAgendamentoCampanha}>
-              <input type="hidden" name="campanha_id" value={id} />
-              <SubmitButton
-                className="rounded-full border border-red-300 px-5 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50"
-                textoCarregando="Cancelando..."
-              >
-                Cancelar agendamento
-              </SubmitButton>
-            </form>
-          </section>
-        )}
-
-        {/* Resumo geral do disparo */}
-        {jaEnviadaOuEnviando && (
-        <section className="space-y-3">
-          <h2 className="text-sm font-semibold text-o2-navy">Resumo do envio</h2>
-          <div className="grid grid-cols-3 gap-1 overflow-hidden rounded-xl border border-o2-navy/10 bg-gray-200 shadow-sm">
-            <div className="bg-quadro p-4 text-center">
-              <p className="text-2xl font-bold text-o2-navy">{campanha.total_destinatarios}</p>
-              <p className="text-xs text-gray-500">Destinatários</p>
-            </div>
-            <div className="bg-quadro p-4 text-center">
-              <p className="text-2xl font-bold text-green-700">{campanha.total_enviados}</p>
-              <p className="text-xs text-gray-500">Enviados</p>
-            </div>
-            <div className="bg-quadro p-4 text-center">
-              <p className="text-2xl font-bold text-red-600">{campanha.total_falhas}</p>
-              <p className="text-xs text-gray-500">Falhas</p>
-            </div>
-          </div>
-
-          {/* Métricas de abertura/clique via webhook do Resend + descadastros
-              originados desta campanha (pedido da reunião de 15/09/2026). */}
-          <div className="grid grid-cols-3 gap-1 overflow-hidden rounded-xl border border-o2-navy/10 bg-gray-200 shadow-sm">
-            <div className="bg-quadro p-4 text-center">
-              <p className="text-2xl font-bold text-o2-navy">{totalAbertos ?? 0}</p>
-              <p className="text-xs text-gray-500">Abriram</p>
-            </div>
-            <div className="bg-quadro p-4 text-center">
-              <p className="text-2xl font-bold text-o2-navy">{totalCliques ?? 0}</p>
-              <p className="text-xs text-gray-500">Clicaram</p>
-            </div>
-            <div className="bg-quadro p-4 text-center">
-              <p className="text-2xl font-bold text-gray-600">{totalDescadastros ?? 0}</p>
-              <p className="text-xs text-gray-500">Descadastros</p>
-            </div>
-          </div>
-
-          {campanha.status === "enviando" && (
-            <div className="h-2 overflow-hidden rounded-full bg-gray-200">
-              <div className="h-full rounded-full bg-o2-coral transition-all" style={{ width: `${percentualEnviado}%` }} />
-            </div>
           )}
 
-          <dl className="grid grid-cols-1 gap-x-6 gap-y-1 rounded-xl border border-o2-navy/10 bg-quadro p-4 text-xs sm:grid-cols-2">
-            <div className="flex justify-between gap-2">
-              <dt className="text-gray-500">Modelo</dt>
-              <dd className="font-medium text-o2-navy">{ROTULO_TEMPLATE[campanha.template] ?? campanha.template}</dd>
-            </div>
-            <div className="flex justify-between gap-2">
-              <dt className="text-gray-500">Produto</dt>
-              <dd className="font-medium text-o2-navy">{rotuloProduto}</dd>
-            </div>
-            {campanha.disparada_em && (
-              <div className="flex justify-between gap-2">
-                <dt className="text-gray-500">Disparada em</dt>
-                <dd className="font-medium text-o2-navy">{new Date(campanha.disparada_em).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</dd>
+          {agendada && (
+            <>
+              <p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+                Disparo agendado pra{" "}
+                <strong>
+                  {campanha.agendado_para &&
+                    new Date(campanha.agendado_para).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })}
+                </strong>
+                . <strong>{totalSelecionadosAgendada}</strong> destinatário(s): {nomesSelecionadosAgendada.join(", ")}
+              </p>
+              <form action={cancelarAgendamentoCampanha}>
+                <input type="hidden" name="campanha_id" value={id} />
+                <SubmitButton
+                  className="rounded-full border border-red-300 px-5 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50"
+                  textoCarregando="Cancelando..."
+                >
+                  Cancelar agendamento
+                </SubmitButton>
+              </form>
+            </>
+          )}
+
+          {jaEnviadaOuEnviando && (
+            <>
+              <div className="grid grid-cols-3 gap-1 overflow-hidden rounded-xl border border-o2-navy/10 bg-gray-200 shadow-sm">
+                <div className="bg-quadro p-4 text-center">
+                  <p className="text-2xl font-bold text-o2-navy">{campanha.total_destinatarios}</p>
+                  <p className="text-xs text-gray-500">Destinatários</p>
+                </div>
+                <div className="bg-quadro p-4 text-center">
+                  <p className="text-2xl font-bold text-green-700">{campanha.total_enviados}</p>
+                  <p className="text-xs text-gray-500">Enviados</p>
+                </div>
+                <div className="bg-quadro p-4 text-center">
+                  <p className="text-2xl font-bold text-red-600">{campanha.total_falhas}</p>
+                  <p className="text-xs text-gray-500">Falhas</p>
+                </div>
               </div>
-            )}
-            {campanha.concluida_em && (
-              <div className="flex justify-between gap-2">
-                <dt className="text-gray-500">Concluída em</dt>
-                <dd className="font-medium text-o2-navy">{new Date(campanha.concluida_em).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</dd>
+
+              {/* Métricas de abertura/clique via webhook do Resend + descadastros
+                  originados desta campanha (pedido da reunião de 15/09/2026). */}
+              <div className="grid grid-cols-3 gap-1 overflow-hidden rounded-xl border border-o2-navy/10 bg-gray-200 shadow-sm">
+                <div className="bg-quadro p-4 text-center">
+                  <p className="text-2xl font-bold text-o2-navy">{totalAbertos ?? 0}</p>
+                  <p className="text-xs text-gray-500">Abriram</p>
+                </div>
+                <div className="bg-quadro p-4 text-center">
+                  <p className="text-2xl font-bold text-o2-navy">{totalCliques ?? 0}</p>
+                  <p className="text-xs text-gray-500">Clicaram</p>
+                </div>
+                <div className="bg-quadro p-4 text-center">
+                  <p className="text-2xl font-bold text-gray-600">{totalDescadastros ?? 0}</p>
+                  <p className="text-xs text-gray-500">Descadastros</p>
+                </div>
               </div>
-            )}
-          </dl>
+
+              {campanha.status === "enviando" && (
+                <div className="h-2 overflow-hidden rounded-full bg-gray-200">
+                  <div className="h-full rounded-full bg-o2-coral transition-all" style={{ width: `${percentualEnviado}%` }} />
+                </div>
+              )}
+
+              <dl className="grid grid-cols-1 gap-x-6 gap-y-1 rounded-xl border border-o2-navy/10 bg-quadro p-4 text-xs sm:grid-cols-2">
+                <div className="flex justify-between gap-2">
+                  <dt className="text-gray-500">Modelo</dt>
+                  <dd className="font-medium text-o2-navy">{ROTULO_TEMPLATE[campanha.template] ?? campanha.template}</dd>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <dt className="text-gray-500">Produto</dt>
+                  <dd className="font-medium text-o2-navy">{rotuloProduto}</dd>
+                </div>
+                {campanha.disparada_em && (
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-gray-500">Disparada em</dt>
+                    <dd className="font-medium text-o2-navy">{new Date(campanha.disparada_em).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</dd>
+                  </div>
+                )}
+                {campanha.concluida_em && (
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-gray-500">Concluída em</dt>
+                    <dd className="font-medium text-o2-navy">{new Date(campanha.concluida_em).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</dd>
+                  </div>
+                )}
+              </dl>
+            </>
+          )}
         </section>
-        )}
 
         {/* Template do e-mail */}
         <section className="space-y-3">
@@ -360,8 +361,8 @@ export default async function CampanhaDetalhePage({
           </div>
         </section>
 
-        {/* Produção gerada */}
-        {jaEnviadaOuEnviando && (
+        {/* Produção gerada -- sempre presente (mesmo motivo do Resumo do
+            envio acima); vazia até existir disparo de verdade. */}
         <section className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-sm font-semibold text-o2-navy">Produção gerada</h2>
@@ -376,7 +377,7 @@ export default async function CampanhaDetalhePage({
 
           {idsImpactados.length === 0 && (
             <p className="rounded-lg border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800">
-              Essa campanha ainda não tem destinatários confirmados — volte em "Destinatários" ou dispare a campanha antes de lançar produção.
+              Essa campanha ainda não tem destinatários confirmados — selecione e dispare a campanha (em "Resumo do envio", acima) antes de lançar produção.
             </p>
           )}
 
@@ -477,7 +478,6 @@ export default async function CampanhaDetalhePage({
             </table>
           </div>
         </section>
-        )}
 
         <Link href="/campanhas" className="text-sm font-medium text-o2-navy hover:underline">
           ← Voltar pra lista de campanhas
