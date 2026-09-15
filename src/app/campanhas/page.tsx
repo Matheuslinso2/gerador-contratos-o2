@@ -151,7 +151,7 @@ export default async function CampanhasPage({
                     <input type="hidden" name="voltar_para" value="/campanhas" />
                     <button
                       type="submit"
-                      className="whitespace-nowrap rounded-full border border-o2-navy px-3 py-1 text-xs font-medium text-o2-navy transition hover:bg-o2-navy hover:text-white"
+                      className="whitespace-nowrap rounded-full border border-o2-navy bg-o2-navy/5 px-3 py-1 text-xs font-semibold text-o2-navy shadow-sm transition hover:bg-o2-navy hover:text-white"
                     >
                       Duplicar
                     </button>
@@ -160,7 +160,7 @@ export default async function CampanhasPage({
                     <input type="hidden" name="campanha_id" value={c.id} />
                     <button
                       type="submit"
-                      className="whitespace-nowrap rounded-full border border-gray-300 px-3 py-1 text-xs font-medium text-gray-600 transition hover:bg-gray-100"
+                      className="whitespace-nowrap rounded-full border border-gray-400 bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700 shadow-sm transition hover:bg-gray-700 hover:text-white"
                     >
                       {mostrarArquivadas ? "Desarquivar" : "Arquivar"}
                     </button>
@@ -170,7 +170,7 @@ export default async function CampanhasPage({
                     <ExcluirCampanhaButton
                       nomeCampanha={c.nome}
                       jaEnviada={c.status === "enviando" || c.status === "concluida"}
-                      className="whitespace-nowrap rounded-full border border-red-300 px-3 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50"
+                      className="whitespace-nowrap rounded-full border border-red-400 bg-red-50 px-3 py-1 text-xs font-semibold text-red-600 shadow-sm transition hover:bg-red-600 hover:text-white"
                     />
                   </form>
                 </div>

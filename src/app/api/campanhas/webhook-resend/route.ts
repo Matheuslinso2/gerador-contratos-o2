@@ -38,7 +38,7 @@ function verificarAssinatura(corpoCru: string, svixId: string, svixTimestamp: st
 
 type EventoResend = {
   type: string;
-  data: { email_id?: string };
+  data: { email_id?: string; click?: { link?: string } };
 };
 
 export async function POST(request: NextRequest) {
@@ -74,8 +74,19 @@ export async function POST(request: NextRequest) {
   // clicaram", não quantas vezes) -- filtro "is null" faz isso sem round
   // trip extra pra ler antes de escrever.
   await supabase.from("campanhas_envios").update({ aberto_em: agora }).eq("resend_email_id", emailId).is("aberto_em", null);
+
+  // O link de descadastro no rodapé não conta como "clique" pra métrica de
+  // engajamento (pedido do Matheus, 15/09/2026) -- sem isso, um
+  // descadastro inflava "Clicaram" junto com cliques de verdade no CTA/
+  // corpo do e-mail. O Resend não oferece essa exclusão por link (checado
+  // na documentação oficial), então filtra aqui pelo campo
+  // data.click.link do próprio evento.
   if (evento.type === "email.clicked") {
-    await supabase.from("campanhas_envios").update({ clicado_em: agora }).eq("resend_email_id", emailId).is("clicado_em", null);
+    const linkClicado = evento.data.click?.link ?? "";
+    const ehLinkDescadastro = linkClicado.includes("/campanhas/descadastro");
+    if (!ehLinkDescadastro) {
+      await supabase.from("campanhas_envios").update({ clicado_em: agora }).eq("resend_email_id", emailId).is("clicado_em", null);
+    }
   }
 
   return NextResponse.json({ ok: true });
