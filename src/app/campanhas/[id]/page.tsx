@@ -10,9 +10,21 @@ import ExportarQuadro from "@/components/ExportarQuadro";
 import { ROTULO_STATUS_CAMPANHA, COR_STATUS_CAMPANHA } from "@/lib/campanhas/rotulos";
 import { rotuloProdutoCampanha } from "@/lib/campanhas/produtos";
 import { montarHtmlCampanha, type CampanhaRow } from "@/lib/campanhas/processarLote";
+import { emailsElegiveisCampanha } from "@/lib/campanhas/elegibilidade";
 import { CampanhaProgresso } from "./CampanhaProgresso";
 import { salvarLinhaProducao, removerLinhaProducao } from "./producao/actions";
-import { duplicarCampanha } from "./actions";
+import { ConfirmarDisparoButton } from "./ConfirmarDisparoButton";
+import SubmitButton from "@/components/SubmitButton";
+import {
+  duplicarCampanha,
+  adicionarImobiliariaAvulsa,
+  removerImobiliariaSelecionada,
+  removerContatoExternoSelecionado,
+  adicionarGrupoSelecao,
+  removerGrupoSelecao,
+  enviarTesteCampanha,
+  confirmarDisparoCampanha,
+} from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -47,10 +59,10 @@ export default async function CampanhaDetalhePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ erro?: string }>;
+  searchParams: Promise<{ erro?: string; ok?: string }>;
 }) {
   const { id } = await params;
-  const { erro } = await searchParams;
+  const { erro, ok } = await searchParams;
 
   const supabase = await createClient();
   const {
@@ -67,10 +79,38 @@ export default async function CampanhaDetalhePage({
   // etapa salva aqui dentro, e o botão de disparo só aparece depois dela
   // existir. Antes, criar a campanha já jogava direto pro fluxo de envio.
   const idsSelecionados = rascunho ? ((campanha.imobiliarias_selecionadas as string[] | null) ?? []) : [];
-  const { data: imobiliariasSelecionadasData } = idsSelecionados.length
-    ? await supabase.from("imobiliarias").select("id, nome").in("id", idsSelecionados).order("nome")
-    : { data: [] };
-  const qsDisparo = idsSelecionados.map((i) => `imob=${encodeURIComponent(i)}`).join("&");
+  const contatosExternosIdsSelecionados = rascunho ? ((campanha.contatos_externos_selecionados as string[] | null) ?? []) : [];
+  const [
+    { data: imobiliariasSelecionadasData },
+    { data: contatosExternosSelecionadosData },
+    { data: todasImobiliariasData },
+    { data: gruposData },
+    { data: descadastrosData },
+  ] = await Promise.all([
+    idsSelecionados.length
+      ? supabase
+          .from("imobiliarias")
+          .select("id, nome, email, email_faturas, email_repasses, email_campanhas")
+          .in("id", idsSelecionados)
+          .order("nome")
+      : Promise.resolve({ data: [] }),
+    contatosExternosIdsSelecionados.length
+      ? supabase.from("campanhas_grupos_contatos").select("id, nome, email, cpf_cnpj").in("id", contatosExternosIdsSelecionados).order("nome")
+      : Promise.resolve({ data: [] }),
+    rascunho ? supabase.from("imobiliarias").select("id, nome").order("nome") : Promise.resolve({ data: [] }),
+    rascunho ? supabase.from("campanhas_grupos").select("id, nome").order("nome") : Promise.resolve({ data: [] }),
+    rascunho ? supabase.from("campanhas_descadastros").select("email") : Promise.resolve({ data: [] }),
+  ]);
+  const totalSelecionados = idsSelecionados.length + contatosExternosIdsSelecionados.length;
+  const descadastrados = new Set((descadastrosData ?? []).map((d) => d.email.toLowerCase()));
+  const totalEmailsSelecionados = new Set([
+    ...(imobiliariasSelecionadasData ?? []).flatMap((i) => emailsElegiveisCampanha(i, descadastrados).map((e) => e.trim().toLowerCase())),
+    ...(contatosExternosSelecionadosData ?? [])
+      .filter((c) => !descadastrados.has(c.email.trim().toLowerCase()))
+      .map((c) => c.email.trim().toLowerCase()),
+  ]).size;
+  const idsJaSelecionados = new Set(idsSelecionados);
+  const imobiliariasParaAdicionar = (todasImobiliariasData ?? []).filter((i) => !idsJaSelecionados.has(i.id));
 
   const percentualEnviado = campanha.total_destinatarios
     ? Math.round(((campanha.total_enviados + campanha.total_falhas) / campanha.total_destinatarios) * 100)
@@ -155,6 +195,7 @@ export default async function CampanhaDetalhePage({
         </div>
 
         {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
+        {ok && <p className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-700">{ok}</p>}
 
         {(campanha.valido_de || campanha.valido_ate) && (
           <p className="-mt-4 text-xs font-medium text-o2-coral">
@@ -170,32 +211,123 @@ export default async function CampanhaDetalhePage({
 
         {rascunho && (
           <section className="space-y-3">
-            <h2 className="text-sm font-semibold text-o2-navy">Destinatários</h2>
-            {idsSelecionados.length === 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-o2-navy">Destinatários</h2>
+              <Link href={`/campanhas/${id}/destinatarios`} className="text-xs font-medium text-o2-navy hover:underline">
+                Busca avançada / aplicar filtro
+              </Link>
+            </div>
+
+            {totalSelecionados === 0 ? (
               <p className="rounded-lg border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800">
-                Nenhum destinatário selecionado ainda. Escolha quem vai receber antes de disparar.
+                Nenhum destinatário selecionado ainda. Adicione imobiliárias, um grupo, ou use a busca avançada.
               </p>
             ) : (
-              <p className="text-sm text-gray-600">
-                <strong>{idsSelecionados.length}</strong> imobiliária(s) selecionada(s):{" "}
-                {(imobiliariasSelecionadasData ?? []).map((i) => i.nome).join(", ")}
+              <p className="text-xs text-gray-500">
+                <strong>{totalSelecionados}</strong> destinatário(s) selecionado(s) · <strong>{totalEmailsSelecionados}</strong> e-mail(s)
+                individuais vão receber esta campanha.
               </p>
             )}
-            <div className="flex flex-wrap gap-3">
-              <Link
-                href={`/campanhas/${id}/destinatarios`}
-                className="rounded-full border border-o2-navy px-5 py-2 text-sm font-medium text-o2-navy transition hover:bg-o2-navy hover:text-white"
-              >
-                {idsSelecionados.length ? "Editar destinatários" : "Selecionar destinatários"}
-              </Link>
-              {idsSelecionados.length > 0 && (
-                <Link
-                  href={`/campanhas/${id}/revisar?${qsDisparo}`}
-                  className="rounded-full bg-o2-coral px-6 py-2.5 text-sm font-medium text-white transition hover:opacity-90"
-                >
-                  Revisar e disparar
-                </Link>
+
+            <div className="divide-y divide-gray-200 overflow-hidden rounded-xl border border-o2-navy/10 bg-white shadow-sm">
+              {(imobiliariasSelecionadasData ?? []).map((i) => (
+                <div key={i.id} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
+                  <span className="truncate font-medium text-o2-navy">{i.nome}</span>
+                  <form action={removerImobiliariaSelecionada}>
+                    <input type="hidden" name="campanha_id" value={id} />
+                    <input type="hidden" name="imobiliaria_id" value={i.id} />
+                    <button type="submit" className="whitespace-nowrap rounded-full border border-red-300 px-3 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50">
+                      Remover
+                    </button>
+                  </form>
+                </div>
+              ))}
+              {(contatosExternosSelecionadosData ?? []).map((c) => (
+                <div key={c.id} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
+                  <span className="min-w-0 truncate">
+                    <span className="font-medium text-o2-navy">{c.nome}</span>
+                    <span className="ml-2 text-xs text-gray-400">(prospecção)</span>
+                  </span>
+                  <form action={removerContatoExternoSelecionado}>
+                    <input type="hidden" name="campanha_id" value={id} />
+                    <input type="hidden" name="contato_id" value={c.id} />
+                    <button type="submit" className="whitespace-nowrap rounded-full border border-red-300 px-3 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50">
+                      Remover
+                    </button>
+                  </form>
+                </div>
+              ))}
+              {!totalSelecionados && <p className="px-4 py-6 text-center text-xs text-gray-400">Ninguém selecionado ainda.</p>}
+            </div>
+
+            <div className="flex flex-wrap items-end gap-3 rounded-xl border border-o2-navy/10 bg-quadro p-3">
+              <form action={adicionarImobiliariaAvulsa} className="flex flex-wrap items-end gap-2">
+                <input type="hidden" name="campanha_id" value={id} />
+                <div>
+                  <label className="mb-0.5 block text-xs text-gray-500">Adicionar imobiliária avulsa</label>
+                  <select name="imobiliaria_id" required defaultValue="" className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-o2-coral focus:outline-none">
+                    <option value="" disabled>
+                      Selecione...
+                    </option>
+                    {imobiliariasParaAdicionar.map((i) => (
+                      <option key={i.id} value={i.id}>
+                        {i.nome}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button type="submit" className="rounded-full border border-o2-navy px-4 py-1.5 text-sm font-medium text-o2-navy transition hover:bg-o2-navy hover:text-white">
+                  Adicionar
+                </button>
+              </form>
+
+              {!!gruposData?.length && (
+                <form action={adicionarGrupoSelecao} className="flex flex-wrap items-end gap-2">
+                  <input type="hidden" name="campanha_id" value={id} />
+                  <div>
+                    <label className="mb-0.5 block text-xs text-gray-500">Grupo</label>
+                    <select name="grupo_id" defaultValue="" className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-o2-coral focus:outline-none">
+                      <option value="" disabled>
+                        Selecione...
+                      </option>
+                      {gruposData.map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.nome}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <button type="submit" className="rounded-full border border-o2-navy px-4 py-1.5 text-sm font-medium text-o2-navy transition hover:bg-o2-navy hover:text-white">
+                    Incluir grupo
+                  </button>
+                  <button type="submit" formAction={removerGrupoSelecao} className="rounded-full border border-red-300 px-4 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50">
+                    Excluir grupo
+                  </button>
+                </form>
               )}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
+              <form action={enviarTesteCampanha}>
+                <input type="hidden" name="campanha_id" value={id} />
+                <SubmitButton
+                  className="rounded-full border border-o2-navy px-5 py-2 text-sm font-medium text-o2-navy transition hover:bg-o2-navy hover:text-white"
+                  textoCarregando="Enviando teste..."
+                >
+                  Enviar e-mail de teste pra mim
+                </SubmitButton>
+              </form>
+
+              <form action={confirmarDisparoCampanha}>
+                <input type="hidden" name="campanha_id" value={id} />
+                <ConfirmarDisparoButton
+                  className="rounded-full bg-o2-coral px-6 py-2.5 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+                  textoCarregando="Disparando..."
+                  mensagemConfirmacao={`Confirmar disparo pra ${totalEmailsSelecionados} e-mail(s)? Não dá pra desfazer depois de iniciado.`}
+                >
+                  Confirmar e disparar
+                </ConfirmarDisparoButton>
+              </form>
             </div>
           </section>
         )}

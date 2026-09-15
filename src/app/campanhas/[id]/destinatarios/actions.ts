@@ -18,12 +18,16 @@ export async function salvarDestinatarios(formData: FormData) {
 
   const campanhaId = String(formData.get("campanha_id") ?? "");
   const imobiliariaIds = formData.getAll("imob").map(String).filter(Boolean);
+  const contatosExternosIds = formData.getAll("contato_externo").map(String).filter(Boolean);
 
   const { data: campanha } = await supabase.from("campanhas").select("id, status").eq("id", campanhaId).single();
   if (!campanha) redirect("/campanhas");
   if (campanha.status !== "rascunho") redirect(`/campanhas/${campanhaId}`);
 
-  await supabase.from("campanhas").update({ imobiliarias_selecionadas: imobiliariaIds }).eq("id", campanhaId);
+  await supabase
+    .from("campanhas")
+    .update({ imobiliarias_selecionadas: imobiliariaIds, contatos_externos_selecionados: contatosExternosIds })
+    .eq("id", campanhaId);
 
   redirect(`/campanhas/${campanhaId}`);
 }

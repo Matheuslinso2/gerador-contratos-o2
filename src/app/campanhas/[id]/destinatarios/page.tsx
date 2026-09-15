@@ -39,7 +39,11 @@ export default async function DestinatariosPage({
   } = await supabase.auth.getUser();
   if (!isAdmin(user?.email) && !isColaboradorO2(user?.email)) redirect("/");
 
-  const { data: campanha } = await supabase.from("campanhas").select("id, nome, status, imobiliarias_selecionadas").eq("id", id).single();
+  const { data: campanha } = await supabase
+    .from("campanhas")
+    .select("id, nome, status, imobiliarias_selecionadas, contatos_externos_selecionados")
+    .eq("id", id)
+    .single();
   if (!campanha) redirect("/campanhas");
   if (campanha.status !== "rascunho") redirect(`/campanhas/${id}`);
 
@@ -47,12 +51,20 @@ export default async function DestinatariosPage({
   // cadastro_incompleto -- esse campo mede prontidão pra gerar contrato,
   // não tem relação com poder receber e-mail de campanha (antes escondia
   // 497 das 500 imobiliárias por padrão).
-  const [{ data: imobiliariasData }, { data: descadastrosData }, { data: gruposData }, { data: grupoAtual }] = await Promise.all([
-    supabase.from("imobiliarias").select("id, nome, cnpj, email, email_faturas, email_repasses, email_campanhas").order("nome"),
-    supabase.from("campanhas_descadastros").select("email"),
-    supabase.from("campanhas_grupos").select("id, nome").order("nome"),
-    grupoId ? supabase.from("campanhas_grupos").select("imobiliaria_ids").eq("id", grupoId).maybeSingle() : Promise.resolve({ data: null }),
-  ]);
+  const [{ data: imobiliariasData }, { data: descadastrosData }, { data: gruposData }, { data: grupoAtual }, { data: contatosGrupoData }] =
+    await Promise.all([
+      supabase.from("imobiliarias").select("id, nome, cnpj, email, email_faturas, email_repasses, email_campanhas").order("nome"),
+      supabase.from("campanhas_descadastros").select("email"),
+      supabase.from("campanhas_grupos").select("id, nome").order("nome"),
+      grupoId ? supabase.from("campanhas_grupos").select("imobiliaria_ids").eq("id", grupoId).maybeSingle() : Promise.resolve({ data: null }),
+      // Contatos de prospecção (sem cadastro no Workspace) só entram na
+      // seleção quando um grupo específico é aplicado -- não fazem parte do
+      // pool geral de "todas elegíveis" (ver src/lib/campanhas/importarContatos.ts).
+      grupoId
+        ? supabase.from("campanhas_grupos_contatos").select("id, nome, email, cpf_cnpj").eq("grupo_id", grupoId).order("nome")
+        : Promise.resolve({ data: [] }),
+    ]);
+  const contatosGrupo = contatosGrupoData ?? [];
 
   const descadastrados = new Set((descadastrosData ?? []).map((d) => d.email.toLowerCase()));
   let imobiliarias = (imobiliariasData ?? []) as ImobiliariaRow[];
@@ -65,6 +77,7 @@ export default async function DestinatariosPage({
   const membrosGrupo = grupoAtual?.imobiliaria_ids ? new Set<string>(grupoAtual.imobiliaria_ids as string[]) : null;
   const selecaoSalva = (campanha.imobiliarias_selecionadas as string[] | null) ?? [];
   const jaTemSelecaoSalva = selecaoSalva.length > 0;
+  const contatosSelecionadosSalvos = new Set<string>((campanha.contatos_externos_selecionados as string[] | null) ?? []);
 
   const elegiveis = imobiliarias
     .map((imob) => ({ imob, emails: emailsElegiveisCampanha(imob, descadastrados) }))
@@ -158,7 +171,34 @@ export default async function DestinatariosPage({
             )}
           </div>
 
-          {elegiveis.length > 0 && (
+          {contatosGrupo.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs text-gray-500">
+                <strong>{contatosGrupo.length}</strong> contato(s) de prospecção do grupo aplicado (sem cadastro no Workspace):
+              </p>
+              <div className="divide-y divide-gray-200 overflow-hidden rounded-xl border border-o2-navy/10 bg-white shadow-sm">
+                {contatosGrupo.map((c) => (
+                  <label key={c.id} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-[#e8f0fe]">
+                    <input
+                      type="checkbox"
+                      name="contato_externo"
+                      value={c.id}
+                      defaultChecked={contatosSelecionadosSalvos.size ? contatosSelecionadosSalvos.has(c.id) : true}
+                    />
+                    <span className="flex-1">
+                      <span className="font-medium text-o2-navy">{c.nome}</span>
+                      <span className="ml-2 text-xs text-gray-400">
+                        {c.email}
+                        {c.cpf_cnpj && ` · ${c.cpf_cnpj}`}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {(elegiveis.length > 0 || contatosGrupo.length > 0) && (
             <div className="flex justify-end">
               <button
                 type="submit"

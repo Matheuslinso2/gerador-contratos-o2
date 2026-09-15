@@ -1,6 +1,6 @@
 "use client";
 
-// Mesmo padrão de src/app/campanhas/[id]/revisar/ConfirmarDisparoButton.tsx
+// Mesmo padrão de src/app/campanhas/[id]/ConfirmarDisparoButton.tsx
 // -- excluir grupo não desfaz campanhas já enviadas, mas perde o atalho de
 // reusar a lista, então pede confirmação antes de deixar o submit passar.
 export function ExcluirGrupoButton({ nomeGrupo }: { nomeGrupo: string }) {
