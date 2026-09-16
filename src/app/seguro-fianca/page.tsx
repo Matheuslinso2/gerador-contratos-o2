@@ -29,6 +29,12 @@ import {
   type QuadroDiario,
 } from "@/lib/bitrix/seguroFianca";
 import { montarClassificacaoImobiliarias } from "@/lib/bitrix/classificacaoImobiliarias";
+import {
+  classificarGrupoPrioridade,
+  ROTULO_GRUPO_PRIORIDADE,
+  ACAO_GRUPO_PRIORIDADE,
+  type GrupoPrioridade,
+} from "@/lib/bitrix/classificacaoImobiliariasRegras";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -2735,6 +2741,94 @@ export default async function SeguroFiancaPage({
                     />
                   </div>
                 </section>
+
+                {(() => {
+                  // Cruzamento Cotação × Contratação (estudo da Patricia,
+                  // 16/09/2026) -- agrupa pelo padrão combinado das 2
+                  // classificações vigentes (mesmo par de meses fechado do
+                  // quadro acima), com uma ação sugerida por grupo. Não
+                  // cobre todo mundo de propósito, só os 3 padrões que o
+                  // estudo destaca.
+                  const grupos: Record<GrupoPrioridade, string[]> = {
+                    lideranca: [],
+                    cotaMuitoFechaPouco: [],
+                    contratacaoDestaque: [],
+                  };
+                  for (const [nome, c] of Object.entries(classificacao.porImobiliaria)) {
+                    const grupo = classificarGrupoPrioridade(c.cotacoes, c.contratacoes);
+                    if (grupo) grupos[grupo].push(nome);
+                  }
+                  for (const lista of Object.values(grupos)) lista.sort((a, b) => a.localeCompare(b));
+
+                  const pendencias = gerencial.topImobiliarias
+                    .filter((im) => im.emAndamento > 0)
+                    .sort((a, b) => b.emAndamento - a.emAndamento)
+                    .slice(0, 10);
+
+                  return (
+                    <section id="quadro-fianca-cruzamento-prioridades" className={styles.section}>
+                      <div className={styles.sectionHead}>
+                        <h2>Prioridades — cruzamento Cotação × Contratação</h2>
+                        <div className={styles.note}>
+                          Baseado na classificação vigente ({nomeCompetencia(classificacao.par[0])} + {nomeCompetencia(classificacao.par[1])})
+                        </div>
+                        <ExportarQuadro
+                          quadroId="quadro-fianca-cruzamento-prioridades"
+                          corFundo="#f7f8fa"
+                          nomeArquivo={`seguro-fianca-prioridades-${competencia}`}
+                          dadosExcel={(Object.keys(grupos) as GrupoPrioridade[]).flatMap((grupo) =>
+                            grupos[grupo].map((nome) => ({
+                              grupo: ROTULO_GRUPO_PRIORIDADE[grupo],
+                              imobiliaria: nome,
+                              acao: ACAO_GRUPO_PRIORIDADE[grupo],
+                            }))
+                          )}
+                          nomeAbaExcel="Prioridades"
+                        />
+                      </div>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+                          gap: 14,
+                        }}
+                      >
+                        {(Object.keys(grupos) as GrupoPrioridade[]).map((grupo) => (
+                          <div key={grupo} className={styles.panel}>
+                            <h3>{ROTULO_GRUPO_PRIORIDADE[grupo]}</h3>
+                            <div className={styles.panelSub}>{ACAO_GRUPO_PRIORIDADE[grupo]}</div>
+                            {grupos[grupo].length ? (
+                              <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: 13 }}>
+                                {grupos[grupo].map((nome) => (
+                                  <li key={nome}>{nome}</li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p style={{ color: "var(--ink-faint)", fontSize: 12.5, marginTop: 8 }}>
+                                Nenhuma imobiliária nesse padrão agora.
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                        <div className={styles.panel}>
+                          <h3>Pendências a acompanhar</h3>
+                          <div className={styles.panelSub}>Cards em andamento agora, por imobiliária — priorizar retorno</div>
+                          {pendencias.length ? (
+                            <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: 13 }}>
+                              {pendencias.map((im) => (
+                                <li key={im.nome}>
+                                  {im.nome}: {im.emAndamento}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p style={{ color: "var(--ink-faint)", fontSize: 12.5, marginTop: 8 }}>Nenhum card em andamento agora.</p>
+                          )}
+                        </div>
+                      </div>
+                    </section>
+                  );
+                })()}
 
                 {(() => {
                   // Item 1 (09/09/2026): detalhamento por imobiliária, com %

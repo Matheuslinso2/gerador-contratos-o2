@@ -81,3 +81,41 @@ export function classificarEixo(
 
   return resultado;
 }
+
+// Cruzamento Cotação × Contratação (estudo da Patricia, slides "Prioridades
+// para a operação" / "Cruzamento entre cotações e contratações") -- agrupa
+// pelo padrão combinado das 2 classificações, cada um com uma ação sugerida.
+// Não cobre todo mundo de propósito: só os 3 padrões que o estudo destaca,
+// o resto da base não entra em nenhum grupo.
+export type GrupoPrioridade = "lideranca" | "cotaMuitoFechaPouco" | "contratacaoDestaque";
+
+export const ROTULO_GRUPO_PRIORIDADE: Record<GrupoPrioridade, string> = {
+  lideranca: "Liderança nos dois eixos",
+  cotaMuitoFechaPouco: "Cota muito, fecha pouco",
+  contratacaoDestaque: "Contratação em destaque",
+};
+
+export const ACAO_GRUPO_PRIORIDADE: Record<GrupoPrioridade, string> = {
+  lideranca: "Preservar nível de serviço e resolver pendências rapidamente",
+  cotaMuitoFechaPouco: "Investigar recusas, preço, documentação e perdas",
+  contratacaoDestaque: "Ampliar o envio de novas oportunidades de cotação",
+};
+
+const NIVEL_TOPO = new Set(["Pilar Central", "Consolidado"]);
+
+function posicaoHierarquiaOuFim(classe: ClasseImobiliaria | null): number {
+  if (!classe) return ORDEM_HIERARQUIA.length;
+  const indice = ORDEM_HIERARQUIA.indexOf(classe.classe);
+  return indice === -1 ? ORDEM_HIERARQUIA.length : indice;
+}
+
+export function classificarGrupoPrioridade(
+  cotacoes: ClasseImobiliaria | null,
+  contratacoes: ClasseImobiliaria | null
+): GrupoPrioridade | null {
+  if (cotacoes?.classe === "Pilar Central" && contratacoes?.classe === "Pilar Central") return "lideranca";
+  // Expansão (posição 2) em diante conta como "baixo" no outro eixo.
+  if (cotacoes && NIVEL_TOPO.has(cotacoes.classe) && posicaoHierarquiaOuFim(contratacoes) >= 2) return "cotaMuitoFechaPouco";
+  if (contratacoes && NIVEL_TOPO.has(contratacoes.classe) && posicaoHierarquiaOuFim(cotacoes) >= 2) return "contratacaoDestaque";
+  return null;
+}
