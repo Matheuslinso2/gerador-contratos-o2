@@ -11,6 +11,10 @@ import {
   aprovarEPublicar,
   enviarFotoManual,
   removerFotoManual,
+  agendarPublicacao,
+  cancelarAgendamento,
+  arquivarPost,
+  desarquivarPost,
 } from "./actions";
 import SubmitButton from "@/components/SubmitButton";
 import { obterStatusConexao } from "@/lib/instagram";
@@ -38,13 +42,25 @@ type Post = {
   erro: string | null;
   instagram_post_id: string | null;
   imagem_manual_url: string | null;
+  agendado_para: string | null;
+  arquivado_em: string | null;
 };
 
 const ROTULO_STATUS: Record<string, string> = {
   rascunho: "Rascunho",
+  agendado: "Agendado",
   publicado: "Publicado",
   erro: "Erro ao publicar",
 };
+
+// Piso do <input datetime-local> -- 5 min à frente (mesma granularidade do
+// cron que dispara agendamentos, ver vercel.json). Página é
+// force-dynamic, recalcula a cada request.
+function minAgendamento(): string {
+  const d = new Date(Date.now() + 5 * 60_000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 const ROTULO_CATEGORIA: Record<string, string> = {
   mercado_imobiliario: "Mercado imobiliário",
@@ -67,10 +83,21 @@ export default async function SocialMediaPage({
     instagram?: string;
     instagram_erro?: string;
     foto_erro?: string;
+    arquivadas?: string;
+    erro?: string;
   }>;
 }) {
-  const { fonte: fonteId, q, coleta, instagram: instagramOk, instagram_erro: instagramErro, foto_erro: fotoErro } =
-    await searchParams;
+  const {
+    fonte: fonteId,
+    q,
+    coleta,
+    instagram: instagramOk,
+    instagram_erro: instagramErro,
+    foto_erro: fotoErro,
+    arquivadas: verArquivadas,
+    erro,
+  } = await searchParams;
+  const mostrarArquivadas = verArquivadas === "1";
   const resultadoColeta = coleta ? coleta.split(";;") : null;
 
   const supabase = await createClient();
@@ -98,12 +125,17 @@ export default async function SocialMediaPage({
     .select("id, nome, categoria, ativo")
     .order("nome");
 
-  const { data: posts } = await supabase
+  let consultaPosts = supabase
     .from("social_media_posts")
-    .select("id, categoria, titulo_card, legenda, status, criado_em, erro, instagram_post_id, imagem_manual_url")
+    .select(
+      "id, categoria, titulo_card, legenda, status, criado_em, erro, instagram_post_id, imagem_manual_url, agendado_para, arquivado_em"
+    )
     .order("criado_em", { ascending: false })
-    .limit(30)
-    .returns<Post[]>();
+    .limit(30);
+  consultaPosts = mostrarArquivadas
+    ? consultaPosts.not("arquivado_em", "is", null)
+    : consultaPosts.is("arquivado_em", null);
+  const { data: posts } = await consultaPosts.returns<Post[]>();
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -112,25 +144,40 @@ export default async function SocialMediaPage({
       <main className="mx-auto max-w-4xl px-6 py-8">
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-semibold text-o2-navy">Social Media</h1>
+            <h1 className="text-xl font-semibold text-o2-navy">
+              {mostrarArquivadas ? "Social Media — Publicações arquivadas" : "Social Media"}
+            </h1>
             <p className="text-sm text-slate-500">
-              Notícias coletadas automaticamente + rascunhos gerados por IA. Nada vai pro Instagram sem você clicar em
-              &quot;Aprovar e publicar&quot;.
+              {mostrarArquivadas
+                ? "Posts tirados do radar do dia a dia — pode desarquivar quando quiser."
+                : <>Notícias coletadas automaticamente + rascunhos gerados por IA. Nada vai pro Instagram sem você clicar em &quot;Aprovar e publicar&quot;.</>}
             </p>
           </div>
-          <form action={coletarAgora}>
-            <SubmitButton
-              textoCarregando="Coletando…"
-              className="rounded-md bg-o2-navy px-4 py-2 text-sm font-medium text-white hover:opacity-90"
-            >
-              Coletar agora
-            </SubmitButton>
-          </form>
+          {mostrarArquivadas ? (
+            <a href="/social-media" className="text-sm font-medium text-o2-navy hover:underline">
+              ← Voltar
+            </a>
+          ) : (
+            <div className="flex items-center gap-4">
+              <a href="/social-media?arquivadas=1" className="text-sm font-medium text-o2-navy hover:underline">
+                Ver arquivadas
+              </a>
+              <form action={coletarAgora}>
+                <SubmitButton
+                  textoCarregando="Coletando…"
+                  className="rounded-md bg-o2-navy px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+                >
+                  Coletar agora
+                </SubmitButton>
+              </form>
+            </div>
+          )}
         </div>
 
         {fotoErro && <p className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">Erro ao enviar foto: {fotoErro}</p>}
+        {erro && <p className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{erro}</p>}
 
-        {statusInstagram && (
+        {!mostrarArquivadas && statusInstagram && (
           <section className="mb-6 rounded-lg border border-slate-200 bg-white p-4">
             <h2 className="mb-2 text-sm font-medium text-slate-700">Configuração do Instagram</h2>
             {instagramOk === "conectado" && (
@@ -163,7 +210,7 @@ export default async function SocialMediaPage({
           </section>
         )}
 
-        {resultadoColeta && (
+        {!mostrarArquivadas && resultadoColeta && (
           <section className="mb-6 rounded-lg border border-slate-200 bg-white p-4">
             <h2 className="mb-2 text-sm font-medium text-slate-700">Resultado da última coleta</h2>
             <ul className="space-y-1 text-sm">
@@ -181,10 +228,14 @@ export default async function SocialMediaPage({
         )}
 
         <section className="mb-6 rounded-lg border border-slate-200 bg-white p-4">
-          <h2 className="mb-2 text-sm font-medium text-slate-700">Rascunhos gerados</h2>
+          <h2 className="mb-2 text-sm font-medium text-slate-700">
+            {mostrarArquivadas ? "Publicações arquivadas" : "Rascunhos gerados"}
+          </h2>
           {!posts?.length && (
             <p className="py-4 text-center text-sm text-slate-400">
-              Nenhum rascunho ainda. Gere um a partir de uma notícia abaixo, ou crie um institucional.
+              {mostrarArquivadas
+                ? "Nenhuma publicação arquivada."
+                : "Nenhum rascunho ainda. Gere um a partir de uma notícia abaixo, ou crie um institucional."}
             </p>
           )}
           <div className="grid gap-4 sm:grid-cols-2">
@@ -202,7 +253,9 @@ export default async function SocialMediaPage({
                           ? "font-medium text-emerald-600"
                           : p.status === "erro"
                             ? "font-medium text-red-600"
-                            : ""
+                            : p.status === "agendado"
+                              ? "font-medium text-blue-600"
+                              : ""
                       }
                     >
                       {ROTULO_STATUS[p.status] ?? p.status}
@@ -222,7 +275,14 @@ export default async function SocialMediaPage({
                   {p.status === "erro" && p.erro && (
                     <p className="mt-1 text-xs text-red-600">Erro: {p.erro}</p>
                   )}
-                  {p.status !== "publicado" && (
+                  {p.status === "agendado" && p.agendado_para && (
+                    <p className="mt-1 rounded-md bg-blue-50 px-2 py-1 text-xs text-blue-700">
+                      Publicação agendada pra{" "}
+                      {new Date(p.agendado_para).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })}
+                    </p>
+                  )}
+
+                  {!mostrarArquivadas && p.status !== "publicado" && (
                     <>
                       <div className="mt-2 flex items-center gap-3">
                         <form action={aprovarEPublicar}>
@@ -241,6 +301,33 @@ export default async function SocialMediaPage({
                           </SubmitButton>
                         </form>
                       </div>
+
+                      <div className="mt-2 border-t border-slate-100 pt-2">
+                        {p.status === "agendado" ? (
+                          <form action={cancelarAgendamento}>
+                            <input type="hidden" name="post_id" value={p.id} />
+                            <SubmitButton textoCarregando="Cancelando…" className="text-xs text-slate-500 hover:underline">
+                              Cancelar agendamento
+                            </SubmitButton>
+                          </form>
+                        ) : (
+                          <form action={agendarPublicacao} className="flex flex-wrap items-center gap-2">
+                            <input type="hidden" name="post_id" value={p.id} />
+                            <label className="text-xs text-slate-500">Ou agende pra depois:</label>
+                            <input
+                              type="datetime-local"
+                              name="agendado_para"
+                              min={minAgendamento()}
+                              required
+                              className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+                            />
+                            <SubmitButton textoCarregando="Agendando…" className="whitespace-nowrap text-xs text-o2-navy hover:underline">
+                              Agendar publicação
+                            </SubmitButton>
+                          </form>
+                        )}
+                      </div>
+
                       <div className="mt-2 border-t border-slate-100 pt-2">
                         {p.imagem_manual_url ? (
                           <form action={removerFotoManual} className="flex items-center gap-2">
@@ -268,120 +355,135 @@ export default async function SocialMediaPage({
                       </div>
                     </>
                   )}
+
+                  <div className="mt-2 border-t border-slate-100 pt-2">
+                    <form action={mostrarArquivadas ? desarquivarPost : arquivarPost}>
+                      <input type="hidden" name="post_id" value={p.id} />
+                      <SubmitButton textoCarregando="Salvando…" className="text-xs text-slate-500 hover:underline">
+                        {mostrarArquivadas ? "Desarquivar" : "Arquivar"}
+                      </SubmitButton>
+                    </form>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
 
-          <form action={gerarRascunhoInstitucional} className="mt-4 flex gap-2 border-t border-slate-100 pt-4">
-            <input
-              type="text"
-              name="tema"
-              placeholder="Tema institucional (ex: por que seguro incêndio é obrigatório na locação)"
-              className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
-              required
-            />
-            <SubmitButton
-              textoCarregando="Gerando…"
-              className="rounded-md bg-o2-coral px-4 py-2 text-sm font-medium text-white hover:opacity-90"
-            >
-              Gerar institucional
-            </SubmitButton>
-          </form>
+          {!mostrarArquivadas && (
+            <form action={gerarRascunhoInstitucional} className="mt-4 flex gap-2 border-t border-slate-100 pt-4">
+              <input
+                type="text"
+                name="tema"
+                placeholder="Tema institucional (ex: por que seguro incêndio é obrigatório na locação)"
+                className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
+                required
+              />
+              <SubmitButton
+                textoCarregando="Gerando…"
+                className="rounded-md bg-o2-coral px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+              >
+                Gerar institucional
+              </SubmitButton>
+            </form>
+          )}
         </section>
 
-        <section className="mb-6 rounded-lg border border-slate-200 bg-white p-4">
-          <h2 className="mb-2 text-sm font-medium text-slate-700">Fontes cadastradas</h2>
-          <ul className="grid gap-1 text-sm text-slate-600 sm:grid-cols-2">
-            {(fontes ?? []).map((f) => (
-              <li key={f.id} className="flex items-center gap-2">
-                <span className={`h-1.5 w-1.5 rounded-full ${f.ativo ? "bg-emerald-500" : "bg-slate-300"}`} />
-                {f.nome}
-                <span className="text-xs text-slate-400">({ROTULO_CATEGORIA[f.categoria] ?? f.categoria})</span>
-              </li>
-            ))}
-            {!fontes?.length && <li className="text-slate-400">Nenhuma fonte cadastrada ainda.</li>}
-          </ul>
-        </section>
+        {!mostrarArquivadas && (
+          <>
+            <section className="mb-6 rounded-lg border border-slate-200 bg-white p-4">
+              <h2 className="mb-2 text-sm font-medium text-slate-700">Fontes cadastradas</h2>
+              <ul className="grid gap-1 text-sm text-slate-600 sm:grid-cols-2">
+                {(fontes ?? []).map((f) => (
+                  <li key={f.id} className="flex items-center gap-2">
+                    <span className={`h-1.5 w-1.5 rounded-full ${f.ativo ? "bg-emerald-500" : "bg-slate-300"}`} />
+                    {f.nome}
+                    <span className="text-xs text-slate-400">({ROTULO_CATEGORIA[f.categoria] ?? f.categoria})</span>
+                  </li>
+                ))}
+                {!fontes?.length && <li className="text-slate-400">Nenhuma fonte cadastrada ainda.</li>}
+              </ul>
+            </section>
 
-        <section className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white p-3">
-          <form action="/social-media" method="get" className="flex flex-wrap items-center gap-2">
-            <select
-              name="fonte"
-              defaultValue={fonteId ?? ""}
-              className="rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-700"
-            >
-              <option value="">Todas as fontes</option>
-              {(fontes ?? []).map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.nome}
-                </option>
-              ))}
-            </select>
-            <input
-              type="text"
-              name="q"
-              defaultValue={q ?? ""}
-              placeholder="Palavra-chave no título ou resumo"
-              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm"
-            />
-            <button
-              type="submit"
-              className="rounded-md bg-o2-navy px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
-            >
-              Filtrar
-            </button>
-            {(fonteId || q) && (
-              <a href="/social-media" className="text-sm text-slate-400 hover:underline">
-                Limpar filtro
-              </a>
-            )}
-          </form>
-        </section>
+            <section className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white p-3">
+              <form action="/social-media" method="get" className="flex flex-wrap items-center gap-2">
+                <select
+                  name="fonte"
+                  defaultValue={fonteId ?? ""}
+                  className="rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-700"
+                >
+                  <option value="">Todas as fontes</option>
+                  {(fontes ?? []).map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.nome}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  name="q"
+                  defaultValue={q ?? ""}
+                  placeholder="Palavra-chave no título ou resumo"
+                  className="rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+                />
+                <button
+                  type="submit"
+                  className="rounded-md bg-o2-navy px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
+                >
+                  Filtrar
+                </button>
+                {(fonteId || q) && (
+                  <a href="/social-media" className="text-sm text-slate-400 hover:underline">
+                    Limpar filtro
+                  </a>
+                )}
+              </form>
+            </section>
 
-        <section className="rounded-lg border border-slate-200 bg-white">
-          <div className="divide-y divide-slate-100">
-            {(noticias ?? []).map((n) => (
-              <div key={n.id} className="flex items-start justify-between gap-3 px-4 py-3 hover:bg-slate-50">
-                <a href={n.link} target="_blank" rel="noreferrer" className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 text-xs text-slate-400">
-                    <span>{n.social_media_fontes?.nome ?? "Fonte desconhecida"}</span>
-                    <span>·</span>
-                    <span>{ROTULO_CATEGORIA[n.social_media_fontes?.categoria ?? ""] ?? "—"}</span>
-                    <span>·</span>
-                    <span>{fmtData(n.publicado_em ?? n.coletado_em)}</span>
-                    {n.usado && (
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-500">usada</span>
+            <section className="rounded-lg border border-slate-200 bg-white">
+              <div className="divide-y divide-slate-100">
+                {(noticias ?? []).map((n) => (
+                  <div key={n.id} className="flex items-start justify-between gap-3 px-4 py-3 hover:bg-slate-50">
+                    <a href={n.link} target="_blank" rel="noreferrer" className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 text-xs text-slate-400">
+                        <span>{n.social_media_fontes?.nome ?? "Fonte desconhecida"}</span>
+                        <span>·</span>
+                        <span>{ROTULO_CATEGORIA[n.social_media_fontes?.categoria ?? ""] ?? "—"}</span>
+                        <span>·</span>
+                        <span>{fmtData(n.publicado_em ?? n.coletado_em)}</span>
+                        {n.usado && (
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-500">usada</span>
+                        )}
+                      </div>
+                      <p className="mt-1 text-sm font-medium text-slate-800">{n.titulo}</p>
+                      {n.resumo && <p className="mt-0.5 line-clamp-2 text-xs text-slate-500">{n.resumo}</p>}
+                    </a>
+                    {!n.usado && (
+                      <form action={gerarRascunho} className="shrink-0">
+                        <input type="hidden" name="noticia_id" value={n.id} />
+                        <SubmitButton
+                          textoCarregando="Gerando…"
+                          className="rounded-md border border-o2-navy px-3 py-1.5 text-xs font-medium text-o2-navy hover:bg-o2-navy hover:text-white"
+                        >
+                          Gerar post
+                        </SubmitButton>
+                      </form>
                     )}
                   </div>
-                  <p className="mt-1 text-sm font-medium text-slate-800">{n.titulo}</p>
-                  {n.resumo && <p className="mt-0.5 line-clamp-2 text-xs text-slate-500">{n.resumo}</p>}
-                </a>
-                {!n.usado && (
-                  <form action={gerarRascunho} className="shrink-0">
-                    <input type="hidden" name="noticia_id" value={n.id} />
-                    <SubmitButton
-                      textoCarregando="Gerando…"
-                      className="rounded-md border border-o2-navy px-3 py-1.5 text-xs font-medium text-o2-navy hover:bg-o2-navy hover:text-white"
-                    >
-                      Gerar post
-                    </SubmitButton>
-                  </form>
+                ))}
+                {!noticias?.length && (fonteId || q) && (
+                  <p className="px-4 py-8 text-center text-sm text-slate-400">
+                    Nenhuma notícia encontrada com esse filtro.
+                  </p>
+                )}
+                {!noticias?.length && !fonteId && !q && (
+                  <p className="px-4 py-8 text-center text-sm text-slate-400">
+                    Nenhuma notícia coletada ainda. Clique em &quot;Coletar agora&quot; pra testar.
+                  </p>
                 )}
               </div>
-            ))}
-            {!noticias?.length && (fonteId || q) && (
-              <p className="px-4 py-8 text-center text-sm text-slate-400">
-                Nenhuma notícia encontrada com esse filtro.
-              </p>
-            )}
-            {!noticias?.length && !fonteId && !q && (
-              <p className="px-4 py-8 text-center text-sm text-slate-400">
-                Nenhuma notícia coletada ainda. Clique em &quot;Coletar agora&quot; pra testar.
-              </p>
-            )}
-          </div>
-        </section>
+            </section>
+          </>
+        )}
       </main>
     </div>
   );

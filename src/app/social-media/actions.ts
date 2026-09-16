@@ -6,7 +6,13 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { coletarNoticias } from "@/lib/social/news";
 import { gerarConteudoDeNoticia, gerarConteudoInstitucional } from "@/lib/social/gerarConteudo";
-import { publicarPost } from "@/lib/instagram";
+import { publicarPostPorId } from "@/lib/social/publicar";
+
+// Fuso fixo -03:00 (Brasil não tem mais horário de verão desde 2019) --
+// <input type="datetime-local"> devolve "AAAA-MM-DDTHH:mm" sem fuso nenhum,
+// então trata direto como horário de Brasília (mesmo padrão de
+// src/app/campanhas/[id]/actions.ts).
+const OFFSET_BRASILIA = "-03:00";
 
 async function exigirAcessoInterno() {
   const supabase = await createClient();
@@ -96,33 +102,63 @@ export async function aprovarEPublicar(formData: FormData) {
   const postId = Number(formData.get("post_id"));
   if (!postId) return;
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
-  if (!siteUrl) {
-    await supabase
-      .from("social_media_posts")
-      .update({ status: "erro", erro: "NEXT_PUBLIC_SITE_URL não configurada no Vercel" })
-      .eq("id", postId);
-    revalidatePath("/social-media");
-    return;
+  await publicarPostPorId(supabase, postId);
+
+  revalidatePath("/social-media");
+}
+
+// Agenda a publicação pra mais tarde em vez de publicar agora -- não muda
+// nada na hora, só marca status "agendado" + agendado_para. Quem publica de
+// fato quando a hora chegar é o cron
+// (src/app/api/cron/publicar-social-media/route.ts), que roda a cada 5 min.
+export async function agendarPublicacao(formData: FormData) {
+  const supabase = await exigirAcessoInterno();
+  const postId = Number(formData.get("post_id"));
+  const dataHoraLocal = String(formData.get("agendado_para") ?? "").trim();
+  if (!postId) return;
+
+  if (!dataHoraLocal) {
+    redirect(`/social-media?erro=${encodeURIComponent("Escolha uma data e horário pro agendamento.")}`);
+  }
+  const agendadoPara = new Date(`${dataHoraLocal}:00${OFFSET_BRASILIA}`);
+  if (Number.isNaN(agendadoPara.getTime()) || agendadoPara.getTime() <= Date.now()) {
+    redirect(`/social-media?erro=${encodeURIComponent("A data do agendamento precisa ser no futuro.")}`);
   }
 
-  const { data: post } = await supabase.from("social_media_posts").select("legenda").eq("id", postId).single();
-  if (!post) return;
+  await supabase
+    .from("social_media_posts")
+    .update({ status: "agendado", agendado_para: agendadoPara.toISOString() })
+    .eq("id", postId);
 
-  try {
-    const imageUrl = `${siteUrl}/api/social/imagem/${postId}`;
-    const instagramPostId = await publicarPost(imageUrl, post.legenda);
-    await supabase
-      .from("social_media_posts")
-      .update({ status: "publicado", publicado_em: new Date().toISOString(), instagram_post_id: instagramPostId, erro: null })
-      .eq("id", postId);
-  } catch (erro) {
-    await supabase
-      .from("social_media_posts")
-      .update({ status: "erro", erro: erro instanceof Error ? erro.message : String(erro) })
-      .eq("id", postId);
-  }
+  revalidatePath("/social-media");
+}
 
+// Cancelar volta pro rascunho (editável/publicável de novo), não é estado
+// terminal -- o post continua existindo, só perde a data marcada.
+export async function cancelarAgendamento(formData: FormData) {
+  const supabase = await exigirAcessoInterno();
+  const postId = Number(formData.get("post_id"));
+  if (!postId) return;
+  await supabase.from("social_media_posts").update({ status: "rascunho", agendado_para: null }).eq("id", postId);
+  revalidatePath("/social-media");
+}
+
+// Arquivamento (pedido do Matheus, 16/09/2026): tira o post do radar do dia
+// a dia sem apagar nada -- diferente de descartarRascunho, que apaga de
+// verdade. Pode desarquivar a qualquer momento.
+export async function arquivarPost(formData: FormData) {
+  const supabase = await exigirAcessoInterno();
+  const postId = Number(formData.get("post_id"));
+  if (!postId) return;
+  await supabase.from("social_media_posts").update({ arquivado_em: new Date().toISOString() }).eq("id", postId);
+  revalidatePath("/social-media");
+}
+
+export async function desarquivarPost(formData: FormData) {
+  const supabase = await exigirAcessoInterno();
+  const postId = Number(formData.get("post_id"));
+  if (!postId) return;
+  await supabase.from("social_media_posts").update({ arquivado_em: null }).eq("id", postId);
   revalidatePath("/social-media");
 }
 
