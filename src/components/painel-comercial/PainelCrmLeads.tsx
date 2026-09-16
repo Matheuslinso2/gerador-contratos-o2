@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ORDEM_ETAPAS_LEAD_ABERTAS, ETAPAS_LEAD, CAMINHOS_LEAD, type LinhaLead } from "@/lib/bitrix/crmLeads";
+import { ORDEM_ETAPAS_LEAD_ABERTAS, ETAPAS_LEAD, CAMINHOS_LEAD, type LinhaLead } from "@/lib/bitrix/crmLeadsConstantes";
 import styles from "../../app/painel-comercial/painel-comercial.module.css";
 import tabStyles from "./painel-crm-leads.module.css";
 

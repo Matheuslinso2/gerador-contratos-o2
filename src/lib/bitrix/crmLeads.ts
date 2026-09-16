@@ -30,34 +30,13 @@
 import "server-only";
 import { buscarTodasPaginasFlat, buscarUsuarios, chamarBitrix, type BitrixDefinicaoCampo, type BitrixCampoEnum } from "./client";
 import { ENTITY_TYPE_ID_LEAD, gerarLinkCard } from "./entidadesCard";
+import { ETAPAS_LEAD, RESPONSAVEIS_LEAD, CAMINHOS_LEAD, type LinhaLead, type DadosLeadsAoVivo } from "./crmLeadsConstantes";
+
+export { ETAPAS_LEAD, ORDEM_ETAPAS_LEAD_ABERTAS, RESPONSAVEIS_LEAD, CAMINHOS_LEAD, type LinhaLead, type DadosLeadsAoVivo } from "./crmLeadsConstantes";
 
 // ---------------------------------------------------------------------------
-// Constantes
+// Constantes específicas de busca (não precisam ser client-safe)
 // ---------------------------------------------------------------------------
-
-// Confirmado ao vivo via crm.status.list?filter[ENTITY_ID]=STATUS (2026-09-16).
-export const ETAPAS_LEAD: Record<string, string> = {
-  NEW: "1. NOVO LEAD / ENRIQUECIMENTO | DAYANE",
-  UC_N8ETQN: "2. EMAIL INICIAL.+TOMAD. DE DECISÃO",
-  UC_KGCI58: "3. LIGAÇÃO (ATÉ 7 DIAS)",
-  UC_3UHNFO: "4. RETOMADA PROGRAMADA",
-  UC_QZ9OF8: "6. CALL OU VISITA AGENDADA",
-  UC_2XNYOR: "7. REUNIÃO REALIZADA / DIAGNÓSTICO",
-  UC_WJ48PO: "9. E-MAILS PADRÃO | PRODUTOS + COMISSÕES",
-  UC_9RFDW0: "10. ATIVIÇÃO EM ANDAM.",
-  UC_0DHSFN: "11. CADASTRO COMPLETO",
-  UC_Q5TX86: "12.PRIMEIRA EMISSÃO/APÓLICE",
-  CONVERTED: "PRODUÇÃO / PARCEIRO ATIVADO",
-  JUNK: "ENCERRADO SEM ATIVAÇÃO",
-};
-const ORDEM_ETAPAS_LEAD_ABERTAS = ["NEW", "UC_N8ETQN", "UC_KGCI58", "UC_3UHNFO", "UC_QZ9OF8", "UC_2XNYOR", "UC_WJ48PO", "UC_9RFDW0", "UC_0DHSFN", "UC_Q5TX86"];
-
-// IDs Bitrix confirmados ao vivo (user.get) -- ver nota de escopo no topo do arquivo.
-export const RESPONSAVEIS_LEAD: { id: number; nome: string }[] = [
-  { id: 11, nome: "Vanessa Fochi" },
-  { id: 35, nome: "Henrique Pereira Guterres" },
-  { id: 210, nome: "Dayane Lima" },
-];
 
 // Campos custom confirmados ao vivo via crm.lead.fields (2026-09-16, prefixo
 // UF_CRM_O2_* = criados especificamente pra esse painel).
@@ -65,8 +44,6 @@ const CAMPO_DECISOR = "UF_CRM_O2_NOME_DECISOR";
 const CAMPO_EMAIL_INICIAL_STATUS = "UF_CRM_O2_EMAIL_INICIAL_STATUS";
 const CAMPO_CAD_STATUS = "UF_CRM_O2_CAD_STATUS";
 const CAMPO_CAMINHO = "UF_CRM_O2_CAMINHO";
-
-export const CAMINHOS_LEAD = ["A — Cotação + cadastro", "B — Plataforma + cadastro", "C — Cotação sem cadastro", "Em definição", "Não informado"] as const;
 
 // ---------------------------------------------------------------------------
 // Chamadas cruas ao Bitrix
@@ -127,26 +104,6 @@ function enumLabel(defs: Record<string, BitrixDefinicaoCampo>, campo: string, va
   const item = defs[campo]?.items?.find((i: BitrixCampoEnum) => i.ID === String(valor));
   return item ? item.VALUE : String(valor);
 }
-
-export type LinhaLead = {
-  id: number;
-  nome: string;
-  link: string;
-  responsavelId: number;
-  responsavelNome: string;
-  stageId: string;
-  etapaNome: string;
-  // Prioridade 1 = tem atividade aberta com prazo vencido; 2 = sem vencida e
-  // sem atividade futura com prazo; 3 = sem vencida e com atividade futura
-  // agendada. Categorias exclusivas -- regra do documento.
-  prioridade: 1 | 2 | 3;
-  prazo: string | null; // ISO da atividade relevante (vencida ou futura), null se não há nenhuma com prazo
-  assunto: string; // SUBJECT da atividade relevante, ou nome da etapa como fallback
-  decisorRegistrado: boolean;
-  emailInicialEnviado: boolean;
-  cadastroConcluido: boolean;
-  caminho: (typeof CAMINHOS_LEAD)[number];
-};
 
 function classificarPrioridade(
   atividadesDoLead: BitrixAtividadeLeadRaw[],
@@ -212,12 +169,6 @@ export function montarLinhasLeads(
 // Busca ao vivo
 // ---------------------------------------------------------------------------
 
-export type DadosLeadsAoVivo = {
-  linhas: LinhaLead[];
-  responsaveis: { id: number; nome: string }[];
-  ultimaAtualizacao: string;
-};
-
 export async function buscarLeadsAoVivo(): Promise<DadosLeadsAoVivo> {
   const [leads, definicaoCampos] = await Promise.all([listarLeads(), buscarDefinicaoCamposLead()]);
   const idsLead = leads.map((l) => Number(l.ID));
@@ -227,5 +178,3 @@ export async function buscarLeadsAoVivo(): Promise<DadosLeadsAoVivo> {
   const linhas = montarLinhasLeads(leads, atividades, definicaoCampos, nomesUsuarios, agora);
   return { linhas, responsaveis: RESPONSAVEIS_LEAD, ultimaAtualizacao: agora.toISOString() };
 }
-
-export { ORDEM_ETAPAS_LEAD_ABERTAS };
