@@ -74,6 +74,13 @@ const ROTAS_PUBLICAS = [
   // (ver src/app/api/campanhas/webhook-resend/route.ts), mesmo padrão dos
   // outros webhooks acima.
   "/api/campanhas/webhook-resend",
+  // Ferramentas públicas do site da O2 (pedido do Matheus, 16/09/2026) --
+  // calculadora de multa rescisória (100% client-side, nada é salvo) e
+  // auditor de contrato (limitado a 5 análises por IP quando sem login, ver
+  // auditar-contrato/actions.ts:auditarPublico). Quem está logado continua
+  // vendo a experiência normal do Workspace nas duas telas.
+  "/multa-rescisoria",
+  "/auditar-contrato",
 ];
 const ROTAS_SO_DESLOGADO = ["/login", "/signup"];
 

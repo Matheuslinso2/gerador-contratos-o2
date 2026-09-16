@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
@@ -9,19 +9,30 @@ import CalculadoraMulta from "./CalculadoraMulta";
 
 export const dynamic = "force-dynamic";
 
+// Ferramenta pública (liberada em src/proxy.ts, ROTAS_PUBLICAS) -- pedido do
+// Matheus, 16/09/2026: disponível pro site da O2 sem exigir login, igual às
+// fichas públicas (/rc-obras, /cotacao etc). Calculadora 100% client-side
+// (CalculadoraMulta.tsx), nada é salvo, então liberar é só trocar o
+// cabeçalho: quem está logado continua vendo o AppHeader normal do
+// Workspace; visitante anônimo vê só a logo, sem nav interna.
 export default async function MultaRescisoriaPage() {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
 
   return (
     <>
-      <AppHeader userEmail={user.email} logoutAction={signOut} />
+      {user ? (
+        <AppHeader userEmail={user.email} logoutAction={signOut} />
+      ) : (
+        <div className="flex justify-center border-b border-gray-100 bg-white py-4">
+          <Image src="/marca-o2/o2-logo-horizontal.png" alt="O2 Seguros" width={140} height={33} priority />
+        </div>
+      )}
       <main className="mx-auto max-w-3xl flex-1 space-y-4 p-8">
         <div className="space-y-2">
-          <BackLink />
+          {user && <BackLink />}
           <PageHeader
             icon={<IconCalculator />}
             titulo="Cálculo de multa rescisória"
