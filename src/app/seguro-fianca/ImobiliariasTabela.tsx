@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import styles from "./seguro-fianca.module.css";
-import { ORDEM_HIERARQUIA, type ClasseImobiliaria } from "@/lib/bitrix/classificacaoImobiliarias";
+import { ORDEM_HIERARQUIA, type ClasseImobiliaria } from "@/lib/bitrix/classificacaoImobiliariasRegras";
 
 type LinhaImobiliaria = {
   nome: string;
