@@ -5,6 +5,7 @@ import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
 import PageHeader from "@/components/PageHeader";
 import { IconChart } from "@/components/icons";
+import Link from "next/link";
 import SeletorCompetencia from "./SeletorCompetencia";
 import AtualizarAgora from "../seguro-fianca/AtualizarAgora";
 import styles from "./painel-comercial.module.css";
@@ -486,6 +487,144 @@ export default async function PainelComercialPage({
                   <Kpi label="Nº de Apólices Geradas" value={String(kpis.sucesso.empresas.resultadoFinanceiro.numApolices)} sub="soma das empresas do estoque" tone="positive" />
                   <Kpi label="Comissão O2" value={fmtMoeda(kpis.sucesso.empresas.resultadoFinanceiro.comissaoO2)} sub="soma das empresas do estoque" tone="positive" />
                   <Kpi label="Prêmio Líquido" value={fmtMoeda(kpis.sucesso.empresas.resultadoFinanceiro.premioLiquido)} sub="soma das empresas do estoque" />
+                </div>
+              </section>
+
+              {/* ---------------------------------------------------------- */}
+              {/* Tempos entre etapas (Fase C)                               */}
+              {/* ---------------------------------------------------------- */}
+              <section className={styles.section}>
+                <div className={styles.sectionHead}>
+                  <h2>Tempos entre etapas</h2>
+                  <div className={styles.note}>dias corridos, só cards com as duas datas do par preenchidas (abertos e fechados)</div>
+                </div>
+                <div className={styles.kpis}>
+                  <Kpi
+                    label="Radar → Visita/Call"
+                    value={kpis.sucesso.tempos.radarAteVisitaCall.mediaDias !== null ? `${kpis.sucesso.tempos.radarAteVisitaCall.mediaDias} dias` : "—"}
+                    sub={`${kpis.sucesso.tempos.radarAteVisitaCall.amostra} cards com marcos completos`}
+                  />
+                  <Kpi
+                    label="Agendamento → Realização"
+                    value={kpis.sucesso.tempos.agendamentoAteRealizacao.mediaDias !== null ? `${kpis.sucesso.tempos.agendamentoAteRealizacao.mediaDias} dias` : "—"}
+                    sub={`${kpis.sucesso.tempos.agendamentoAteRealizacao.amostra} cards com datas completas`}
+                  />
+                  <Kpi
+                    label="Radar → Realização"
+                    value={kpis.sucesso.tempos.radarAteRealizacao.mediaDias !== null ? `${kpis.sucesso.tempos.radarAteRealizacao.mediaDias} dias` : "—"}
+                    sub={`${kpis.sucesso.tempos.radarAteRealizacao.amostra} cards com datas completas`}
+                  />
+                </div>
+              </section>
+
+              {/* ---------------------------------------------------------- */}
+              {/* Reciclagem (Fase C)                                        */}
+              {/* ---------------------------------------------------------- */}
+              <section className={styles.section}>
+                <div className={styles.sectionHead}>
+                  <h2>Reciclagem</h2>
+                  <div className={styles.note}>{kpis.sucesso.reciclagem.empresas.length} cards na etapa Reciclagem agora</div>
+                </div>
+                <div className={styles.grid2}>
+                  <div className={styles.panel}>
+                    <h3>Empresas em Reciclagem</h3>
+                    <div className={styles.tableWrap}>
+                      <table className={styles.data}>
+                        <thead>
+                          <tr>
+                            <th>Empresa</th>
+                            <th>Responsável</th>
+                            <th>Motivo</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {kpis.sucesso.reciclagem.empresas.map((e) => (
+                            <tr key={e.dealId}>
+                              <td>
+                                <Link href={`/painel-comercial/sucesso/${e.dealId}`} className={styles.num} style={{ color: "var(--accent-ink)", textDecoration: "none" }}>
+                                  {e.empresaNome}
+                                </Link>
+                              </td>
+                              <td>{e.responsavelNome}</td>
+                              <td>{e.motivo}</td>
+                            </tr>
+                          ))}
+                          {kpis.sucesso.reciclagem.empresas.length === 0 && (
+                            <tr>
+                              <td colSpan={3} style={{ color: "var(--ink-faint)" }}>
+                                Nenhum card em Reciclagem agora.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  <div className={styles.panel}>
+                    <h3>Motivos da reciclagem</h3>
+                    <div className={styles.panelSub}>campo real do Bitrix (&quot;Motivo do Desinteresse/Desqualificação&quot;) — texto não é idêntico ao do documento original</div>
+                    <ContagemBarras dados={kpis.sucesso.reciclagem.porMotivo} />
+                  </div>
+                </div>
+              </section>
+
+              {/* ---------------------------------------------------------- */}
+              {/* Negócio encerrado (Fase C)                                 */}
+              {/* ---------------------------------------------------------- */}
+              <section className={styles.section}>
+                <div className={styles.sectionHead}>
+                  <h2>Negócio encerrado no mês</h2>
+                  <div className={styles.note}>fora do total ativo — o documento pedia 4 categorias (Em Produção/Declinado/Contratou/Cancelado) que não existem no Bitrix; mostrando os 3 estados reais de fechamento</div>
+                </div>
+                <div className={styles.panel}>
+                  <div className={styles.kpi} style={{ padding: 0, marginBottom: 14 }}>
+                    <div className={`${styles.kpiValue} ${styles.num}`}>{kpis.sucesso.negocioEncerrado.totalNoMes}</div>
+                    <div className={styles.kpiSub}>cards encerrados nesta competência</div>
+                  </div>
+                  <ContagemBarras dados={kpis.sucesso.negocioEncerrado.porEstado} />
+                </div>
+              </section>
+
+              {/* ---------------------------------------------------------- */}
+              {/* Empresas nos cards ativos (Fase C)                         */}
+              {/* ---------------------------------------------------------- */}
+              <section className={styles.section}>
+                <div className={styles.sectionHead}>
+                  <h2>Empresas nos cards ativos</h2>
+                  <div className={styles.note}>clique numa empresa pra ver o card de detalhe (somente leitura)</div>
+                </div>
+                <div className={styles.panel}>
+                  <div className={styles.tableWrap}>
+                    <table className={styles.data}>
+                      <thead>
+                        <tr>
+                          <th>Empresa</th>
+                          <th>Responsável</th>
+                          <th>Etapa atual</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {kpis.sucesso.empresasAtivas.map((e) => (
+                          <tr key={e.dealId}>
+                            <td>
+                              <Link href={`/painel-comercial/sucesso/${e.dealId}`} style={{ color: "var(--accent-ink)", textDecoration: "none" }}>
+                                {e.empresaNome}
+                              </Link>
+                            </td>
+                            <td>{e.responsavelNome}</td>
+                            <td>{e.etapaNome}</td>
+                          </tr>
+                        ))}
+                        {kpis.sucesso.empresasAtivas.length === 0 && (
+                          <tr>
+                            <td colSpan={3} style={{ color: "var(--ink-faint)" }}>
+                              Nenhum card aberto neste funil.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </section>
 

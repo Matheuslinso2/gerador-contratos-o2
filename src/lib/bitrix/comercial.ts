@@ -211,6 +211,51 @@ const TIPOS_OPORTUNIDADE_EMPRESA = ["FIANÇA", "INCÊNDIO", "CAPITALIZAÇÃO", "
 const ETAPAS_EM_ANDAMENTO = new Set(["NEW", "UC_L6RJ2U", "UC_G2AEBP", "UC_QEBNPE"]);
 
 // ---------------------------------------------------------------------------
+// Campos de Deal usados nos indicadores de tempo, Reciclagem e no card de
+// detalhe do Sucesso do Cliente (Fase C, 2026-09-16) -- confirmados ao vivo
+// via crm.deal.fields. Os 5 "Data de entrada" foram criados no Bitrix depois
+// da Fase B (só Radar e Oportunidade existiam antes).
+// ---------------------------------------------------------------------------
+
+const CAMPO_DT_RADAR = "UF_CRM_O2_DT_RADAR";
+const CAMPO_DT_CONTATO = "UF_CRM_O2_DT_CONTATO";
+const CAMPO_DT_PREVISITA = "UF_CRM_O2_DT_PREVISITA";
+const CAMPO_DT_OPORTUNIDADE = "UF_CRM_O2_DT_OPORTUNIDADE";
+const CAMPO_DT_RESULTADO = "UF_CRM_O2_DT_RESULTADO";
+const CAMPO_DT_PRIMEIRO_AGENDAMENTO = "UF_CRM_O2_DT_PRIM_AGEND";
+const CAMPO_DT_REUNIAO_REALIZADA = "UF_CRM_6AA45191E7B9F";
+const CAMPO_DT_REUNIAO_ATUAL = "UF_CRM_6AA45191D48C1";
+const CAMPO_FORMATO_REUNIAO = "UF_CRM_6AA451914C752";
+const CAMPO_STATUS_REUNIAO = "UF_CRM_6AA4519187ECF";
+const CAMPO_MOTIVO_CANCELAMENTO = "UF_CRM_O2_MOT_CANCEL";
+const CAMPO_ENDERECO_IMOBILIARIA = "UF_CRM_6AA4518ED969D";
+const CAMPO_NOME_DECISOR_DEAL = "UF_CRM_6AA4518EEC984";
+const CAMPO_CARGO_DECISOR = "UF_CRM_6AA4518E6DC30";
+const CAMPO_PROXIMA_ACAO = "UF_CRM_6AA4518FA0FC9";
+const CAMPO_RESPONSAVEL_PROXIMA_ACAO = "UF_CRM_6AA4518FDBD85";
+const CAMPO_PRAZO_PROXIMA_ACAO = "UF_CRM_6AA4518FC8F34";
+const CAMPO_PENDENCIA_PRINCIPAL = "UF_CRM_6AA4518FEEC79";
+// "Motivo do Desinteresse/Desqualificação" -- campo real usado pra
+// Reciclagem, mas as 8 opções não batem 100% com as do documento (ex: tem
+// "Reciclagem (data da ação comercial programada)" em vez de "Impactar com
+// marketing/contato futuro"). Usado como está, sem forçar pro texto do doc.
+const CAMPO_MOTIVO_RECICLAGEM = "UF_CRM_1784731862";
+
+const STAGE_ID_VISITA_CALL = "UC_QEBNPE";
+const STAGE_ID_RECICLAGEM = "UC_SWMRPW";
+
+const MOTIVOS_RECICLAGEM = [
+  "Já possui parceiro/corretora de longa data/familiar ou amigo",
+  "Questão de repasse",
+  "Trabalha com (Loft, CredAluga, etc.)",
+  "Baixo volume de locações",
+  "Fora do perfil (vendas)",
+  "É corretor de seguros",
+  "Sem retorno/sem potencial",
+  "Reciclagem (data da ação comercial programada)",
+];
+
+// ---------------------------------------------------------------------------
 // Chamadas cruas ao Bitrix
 // ---------------------------------------------------------------------------
 
@@ -248,6 +293,10 @@ export async function listarDeals(categoryId: number): Promise<BitrixDealRaw[]> 
       "DATE_CREATE",
       "DATE_MODIFY",
       CAMPO_MOTIVO_ENTRADA,
+      CAMPO_MOTIVO_RECICLAGEM,
+      CAMPO_DT_RADAR,
+      CAMPO_DT_PRIMEIRO_AGENDAMENTO,
+      CAMPO_DT_REUNIAO_REALIZADA,
     ],
   });
 }
@@ -417,6 +466,10 @@ export type LinhaComercial = {
   dataTermino: string; // CLOSEDATE (YYYY-MM-DD), "" se vazio
   motivoEntradaId: string; // valor bruto do enum, "" se vazio
   motivoEntradaNome: string;
+  motivoReciclagemNome: string; // "" se vazio -- ver CAMPO_MOTIVO_RECICLAGEM
+  dtRadar: string; // datetime ISO cru do campo, "" se vazio -- início do ciclo atual (não a criação do card)
+  dtPrimeiroAgendamento: string;
+  dtReuniaoRealizada: string;
   dataCriacao: string;
   dataModificacao: string;
   eventosOrdenados: BitrixStageHistoryEvent[];
@@ -540,6 +593,10 @@ export function montarLinhasComerciais(
       dataTermino: apenasData(deal[CAMPO_DATA_TERMINO]),
       motivoEntradaId: deal[CAMPO_MOTIVO_ENTRADA] ? String(deal[CAMPO_MOTIVO_ENTRADA]) : "",
       motivoEntradaNome: enumLabel(definicaoCampos, CAMPO_MOTIVO_ENTRADA, deal[CAMPO_MOTIVO_ENTRADA]),
+      motivoReciclagemNome: enumLabel(definicaoCampos, CAMPO_MOTIVO_RECICLAGEM, deal[CAMPO_MOTIVO_RECICLAGEM]),
+      dtRadar: deal[CAMPO_DT_RADAR] ? String(deal[CAMPO_DT_RADAR]) : "",
+      dtPrimeiroAgendamento: deal[CAMPO_DT_PRIMEIRO_AGENDAMENTO] ? String(deal[CAMPO_DT_PRIMEIRO_AGENDAMENTO]) : "",
+      dtReuniaoRealizada: deal[CAMPO_DT_REUNIAO_REALIZADA] ? String(deal[CAMPO_DT_REUNIAO_REALIZADA]) : "",
       dataCriacao: apenasData(deal.DATE_CREATE),
       dataModificacao: apenasData(deal.DATE_MODIFY),
       eventosOrdenados,
@@ -600,6 +657,10 @@ export type KpisComercial = {
     s15_ganhosComValorPreenchidoPct: number;
     s16_carteiraEResultadoPorResponsavel: { responsavel: string; cardsAtuaisMaisGanhos: number; cardsAlterados: number; ganhos: number }[];
     empresas: ResumoEmpresasSucesso;
+    tempos: TemposEntreEtapas;
+    reciclagem: ReciclagemResumo;
+    negocioEncerrado: NegocioEncerradoResumo;
+    empresasAtivas: EmpresaAtiva[];
   };
   porResponsavel: RegistroResponsavel[];
   qualidade: {
@@ -771,6 +832,108 @@ export function montarResumoEmpresasSucesso(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Tempos entre etapas, Reciclagem e Negócio encerrado (Fase C) --
+// indicadores 8 (tempos), 9/9.1 (Reciclagem) e 10 (Negócio encerrado) do
+// documento novo.
+// ---------------------------------------------------------------------------
+
+export type MediaDias = { mediaDias: number | null; amostra: number };
+export type TemposEntreEtapas = {
+  radarAteVisitaCall: MediaDias;
+  agendamentoAteRealizacao: MediaDias;
+  radarAteRealizacao: MediaDias;
+};
+
+function diasEntre(inicioIso: string, fimIso: string): number | null {
+  const inicio = new Date(inicioIso).getTime();
+  const fim = new Date(fimIso).getTime();
+  if (!Number.isFinite(inicio) || !Number.isFinite(fim) || fim < inicio) return null;
+  return Math.round((fim - inicio) / 86400000);
+}
+
+function media(valores: number[]): number | null {
+  return valores.length ? Math.round((valores.reduce((a, b) => a + b, 0) / valores.length) * 10) / 10 : null;
+}
+
+// Escopo: TODOS os cards de Sucesso (abertos e fechados), não só o estoque
+// atual -- é um indicador de velocidade operacional, um card que já fechou
+// não deixou de ter passado por essas etapas. "Somente com datas completas"
+// (regra do documento): cards sem as duas datas do par simplesmente não
+// entram na média, sem contar como 0.
+function calcularTemposEntreEtapas(linhasSucesso: LinhaComercial[]): TemposEntreEtapas {
+  const radarVisita: number[] = [];
+  const agendRealiz: number[] = [];
+  const radarRealiz: number[] = [];
+  for (const l of linhasSucesso) {
+    const entradaVisitaCall = l.eventosOrdenados.find((e) => e.STAGE_ID === STAGE_ID_VISITA_CALL)?.CREATED_TIME;
+    if (l.dtRadar && entradaVisitaCall) {
+      const d = diasEntre(l.dtRadar, entradaVisitaCall);
+      if (d !== null) radarVisita.push(d);
+    }
+    if (l.dtPrimeiroAgendamento && l.dtReuniaoRealizada) {
+      const d = diasEntre(l.dtPrimeiroAgendamento, l.dtReuniaoRealizada);
+      if (d !== null) agendRealiz.push(d);
+    }
+    if (l.dtRadar && l.dtReuniaoRealizada) {
+      const d = diasEntre(l.dtRadar, l.dtReuniaoRealizada);
+      if (d !== null) radarRealiz.push(d);
+    }
+  }
+  return {
+    radarAteVisitaCall: { mediaDias: media(radarVisita), amostra: radarVisita.length },
+    agendamentoAteRealizacao: { mediaDias: media(agendRealiz), amostra: agendRealiz.length },
+    radarAteRealizacao: { mediaDias: media(radarRealiz), amostra: radarRealiz.length },
+  };
+}
+
+export type ReciclagemResumo = {
+  empresas: { dealId: number; empresaNome: string; responsavelNome: string; motivo: string }[];
+  porMotivo: Contagem[];
+};
+
+function montarResumoReciclagem(estoqueSucesso: LinhaComercial[]): ReciclagemResumo {
+  const emReciclagem = estoqueSucesso.filter((l) => l.stageId === STAGE_ID_RECICLAGEM);
+  return {
+    empresas: emReciclagem.map((l) => ({
+      dealId: l.id,
+      empresaNome: l.empresaNome,
+      responsavelNome: l.responsavelNome,
+      motivo: l.motivoReciclagemNome || "Não informado",
+    })),
+    porMotivo: contarPorEnum(
+      emReciclagem.map((l) => l.motivoReciclagemNome),
+      MOTIVOS_RECICLAGEM
+    ),
+  };
+}
+
+export type NegocioEncerradoResumo = { totalNoMes: number; porEstado: Contagem[] };
+
+// O documento pede 4 categorias (EM PRODUÇÃO/DECLINADO/CONTRATOU/CANCELADO)
+// -- não existe campo nenhum no Bitrix com essa classificação (procurado em
+// todos os campos de Deal, nenhuma opção bate). Usa os 3 estados REAIS de
+// fechamento do funil (Ganho Fechado/Perda Fechada/Analisar falha) em vez
+// de inventar um mapeamento pras 4 categorias do documento.
+function montarResumoNegocioEncerrado(linhasSucesso: LinhaComercial[]): NegocioEncerradoResumo {
+  const encerradosNoMes = linhasSucesso.filter(
+    (l) => (l.stageSemantica === "S" || l.stageSemantica === "F") && l.eventosNoMes.some((e) => e.STAGE_SEMANTIC_ID === "S" || e.STAGE_SEMANTIC_ID === "F")
+  );
+  const rotulos = ["Ganho Fechado", "Perda Fechada", "Analisar falha"];
+  return {
+    totalNoMes: encerradosNoMes.length,
+    porEstado: rotulos.map((rotulo) => ({ rotulo, quantidade: encerradosNoMes.filter((l) => ETAPAS_SUCESSO[l.stageId] === rotulo).length })),
+  };
+}
+
+export type EmpresaAtiva = { dealId: number; empresaNome: string; responsavelNome: string; etapaNome: string };
+
+function montarEmpresasAtivas(estoqueSucesso: LinhaComercial[]): EmpresaAtiva[] {
+  return [...estoqueSucesso]
+    .sort((a, b) => ORDEM_ETAPAS_SUCESSO.indexOf(a.stageId) - ORDEM_ETAPAS_SUCESSO.indexOf(b.stageId) || a.empresaNome.localeCompare(b.empresaNome))
+    .map((l) => ({ dealId: l.id, empresaNome: l.empresaNome, responsavelNome: l.responsavelNome, etapaNome: l.etapaNome }));
+}
+
 export function montarKpisComercial(
   linhas: LinhaComercial[],
   _historico: BitrixStageHistoryEvent[],
@@ -846,6 +1009,10 @@ export function montarKpisComercial(
       .sort((x, y) => y[1].cardsAtuaisMaisGanhos - x[1].cardsAtuaisMaisGanhos)
       .map(([responsavel, d]) => ({ responsavel, ...d })),
     empresas: montarResumoEmpresasSucesso(estoqueSucesso, empresasCompletas, definicaoCamposEmpresa),
+    tempos: calcularTemposEntreEtapas(linhas.filter((l) => l.categoriaId === CATEGORY_ID_SUCESSO)),
+    reciclagem: montarResumoReciclagem(estoqueSucesso),
+    negocioEncerrado: montarResumoNegocioEncerrado(linhas.filter((l) => l.categoriaId === CATEGORY_ID_SUCESSO)),
+    empresasAtivas: montarEmpresasAtivas(estoqueSucesso),
   };
 
   const porResponsavel = calcularRegistrosResponsavel(linhas, competencia, dataCorte);
@@ -888,4 +1055,123 @@ export async function buscarKpisComercialAoVivo(competencia: string): Promise<Kp
   const linhas = montarLinhasComerciais(deals, historico, atividades, tarefas, definicaoCampos, nomesUsuarios, nomesEmpresas, competencia);
   const kpis = montarKpisComercial(linhas, historico, competencia, empresasCompletas, definicaoCamposEmpresa);
   return { ...kpis, totalEventos: historico.length };
+}
+
+// ---------------------------------------------------------------------------
+// Card de detalhe da empresa (Fase C) -- tela "Card da empresa" do
+// documento, só leitura (decisão do usuário: não escreve de volta no
+// Bitrix nesta fase). Busca um único Deal + sua Empresa, com todos os
+// campos relevantes pra tela, não só os agregados do dashboard.
+// ---------------------------------------------------------------------------
+
+export type DetalheCardSucesso = {
+  deal: {
+    id: number;
+    titulo: string;
+    etapaNome: string;
+    responsavelNome: string;
+    enderecoImobiliaria: string;
+    nomeDecisor: string;
+    cargoDecisor: string;
+    formatoReuniao: string;
+    statusReuniao: string;
+    dataReuniaoAtual: string;
+    motivoCancelamento: string;
+    dataReuniaoRealizada: string;
+    dataPrimeiroAgendamento: string;
+    dtRadar: string;
+    dtContato: string;
+    dtPrevisita: string;
+    dtOportunidade: string;
+    dtResultado: string;
+    proximaAcao: string;
+    responsavelProximaAcao: string;
+    prazoProximaAcao: string;
+    pendenciaPrincipal: string;
+    valor: number;
+    dataTermino: string;
+    motivoEntradaNome: string;
+    motivoReciclagemNome: string;
+  };
+  empresa: {
+    id: number;
+    nome: string;
+    classificacao: string;
+    imoveisAdm: number | null;
+    ticketMedio: string;
+    statusContato: string;
+    tipoOportunidade: string;
+    numCotacoes: number | null;
+    numApolices: number | null;
+    comissaoO2: number;
+    premioLiquido: number;
+  } | null;
+};
+
+export async function buscarDetalheCardSucesso(dealId: number): Promise<DetalheCardSucesso | null> {
+  const [dealResp, definicaoCampos] = await Promise.all([
+    chamarBitrix<{ result: BitrixDealRaw }>("crm.deal.get", { id: dealId }),
+    buscarDefinicaoCamposDeal(),
+  ]);
+  const deal = dealResp.result;
+  if (!deal || Number(deal.CATEGORY_ID) !== CATEGORY_ID_SUCESSO) return null;
+
+  const empresaId = Number(deal.COMPANY_ID) || 0;
+  const responsavelId = Number(deal.ASSIGNED_BY_ID) || 0;
+  const responsavelProximaAcaoId = Number(deal[CAMPO_RESPONSAVEL_PROXIMA_ACAO]) || 0;
+  const idsUsuario = [responsavelId, responsavelProximaAcaoId].filter((id) => id > 0);
+
+  const [nomesUsuarios, empresasCompletas, nomesEmpresas, definicaoCamposEmpresa] = await Promise.all([
+    buscarUsuarios(idsUsuario),
+    buscarEmpresasCompletas([empresaId]),
+    buscarEmpresas([empresaId]),
+    buscarDefinicaoCamposEmpresa(),
+  ]);
+  const empresaRaw = empresasCompletas.get(empresaId);
+
+  return {
+    deal: {
+      id: Number(deal.ID),
+      titulo: deal.TITLE,
+      etapaNome: ETAPAS_SUCESSO[deal.STAGE_ID] ?? deal.STAGE_ID,
+      responsavelNome: nomeUsuario(nomesUsuarios, responsavelId),
+      enderecoImobiliaria: String(deal[CAMPO_ENDERECO_IMOBILIARIA] ?? ""),
+      nomeDecisor: String(deal[CAMPO_NOME_DECISOR_DEAL] ?? ""),
+      cargoDecisor: enumLabel(definicaoCampos, CAMPO_CARGO_DECISOR, deal[CAMPO_CARGO_DECISOR]),
+      formatoReuniao: enumLabel(definicaoCampos, CAMPO_FORMATO_REUNIAO, deal[CAMPO_FORMATO_REUNIAO]),
+      statusReuniao: enumLabel(definicaoCampos, CAMPO_STATUS_REUNIAO, deal[CAMPO_STATUS_REUNIAO]),
+      dataReuniaoAtual: String(deal[CAMPO_DT_REUNIAO_ATUAL] ?? ""),
+      motivoCancelamento: enumLabel(definicaoCampos, CAMPO_MOTIVO_CANCELAMENTO, deal[CAMPO_MOTIVO_CANCELAMENTO]),
+      dataReuniaoRealizada: String(deal[CAMPO_DT_REUNIAO_REALIZADA] ?? ""),
+      dataPrimeiroAgendamento: apenasData(deal[CAMPO_DT_PRIMEIRO_AGENDAMENTO]),
+      dtRadar: apenasData(deal[CAMPO_DT_RADAR]),
+      dtContato: apenasData(deal[CAMPO_DT_CONTATO]),
+      dtPrevisita: apenasData(deal[CAMPO_DT_PREVISITA]),
+      dtOportunidade: apenasData(deal[CAMPO_DT_OPORTUNIDADE]),
+      dtResultado: apenasData(deal[CAMPO_DT_RESULTADO]),
+      proximaAcao: enumLabel(definicaoCampos, CAMPO_PROXIMA_ACAO, deal[CAMPO_PROXIMA_ACAO]),
+      responsavelProximaAcao: nomeUsuario(nomesUsuarios, responsavelProximaAcaoId),
+      prazoProximaAcao: String(deal[CAMPO_PRAZO_PROXIMA_ACAO] ?? ""),
+      pendenciaPrincipal: String(deal[CAMPO_PENDENCIA_PRINCIPAL] ?? ""),
+      valor: valorNumero(deal[CAMPO_VALOR]),
+      dataTermino: apenasData(deal[CAMPO_DATA_TERMINO]),
+      motivoEntradaNome: enumLabel(definicaoCampos, CAMPO_MOTIVO_ENTRADA, deal[CAMPO_MOTIVO_ENTRADA]),
+      motivoReciclagemNome: enumLabel(definicaoCampos, CAMPO_MOTIVO_RECICLAGEM, deal[CAMPO_MOTIVO_RECICLAGEM]),
+    },
+    empresa: empresaRaw
+      ? {
+          id: empresaId,
+          nome: nomesEmpresas[empresaId] || `ID ${empresaId}`,
+          classificacao: enumLabel(definicaoCamposEmpresa, CAMPO_EMPRESA_CLASSIFICACAO, empresaRaw[CAMPO_EMPRESA_CLASSIFICACAO]),
+          imoveisAdm: inteiroOuNull(empresaRaw[CAMPO_EMPRESA_IMOVEIS_ADM]),
+          ticketMedio: enumLabel(definicaoCamposEmpresa, CAMPO_EMPRESA_TICKET_MEDIO, empresaRaw[CAMPO_EMPRESA_TICKET_MEDIO]),
+          statusContato: enumLabel(definicaoCamposEmpresa, CAMPO_EMPRESA_STATUS_CONTATO, empresaRaw[CAMPO_EMPRESA_STATUS_CONTATO]),
+          tipoOportunidade: enumLabel(definicaoCamposEmpresa, CAMPO_EMPRESA_TIPO_OPORTUNIDADE, empresaRaw[CAMPO_EMPRESA_TIPO_OPORTUNIDADE]),
+          numCotacoes: inteiroOuNull(empresaRaw[CAMPO_EMPRESA_NUM_COTACOES]),
+          numApolices: inteiroOuNull(empresaRaw[CAMPO_EMPRESA_NUM_APOLICES]),
+          comissaoO2: valorMonetarioEmpresa(empresaRaw[CAMPO_EMPRESA_COMISSAO_O2]),
+          premioLiquido: valorMonetarioEmpresa(empresaRaw[CAMPO_EMPRESA_PREMIO_LIQUIDO]),
+        }
+      : null,
+  };
 }
