@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/enviar-campanhas",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/renovar-token-instagram",
+      "schedule": "0 8 * * *"
     }
   ]
 }

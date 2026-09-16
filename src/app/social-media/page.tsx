@@ -5,6 +5,7 @@ import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
 import { coletarAgora, gerarRascunho, gerarRascunhoInstitucional, descartarRascunho, aprovarEPublicar } from "./actions";
 import SubmitButton from "@/components/SubmitButton";
+import { obterStatusConexao } from "@/lib/instagram";
 
 export const dynamic = "force-dynamic";
 
@@ -50,9 +51,9 @@ function fmtData(iso: string | null): string {
 export default async function SocialMediaPage({
   searchParams,
 }: {
-  searchParams: Promise<{ fonte?: string; q?: string; coleta?: string }>;
+  searchParams: Promise<{ fonte?: string; q?: string; coleta?: string; instagram?: string; instagram_erro?: string }>;
 }) {
-  const { fonte: fonteId, q, coleta } = await searchParams;
+  const { fonte: fonteId, q, coleta, instagram: instagramOk, instagram_erro: instagramErro } = await searchParams;
   const resultadoColeta = coleta ? coleta.split(";;") : null;
 
   const supabase = await createClient();
@@ -61,6 +62,8 @@ export default async function SocialMediaPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
   if (!(isAdmin(user.email) || isColaboradorO2(user.email))) redirect("/");
+
+  const statusInstagram = isAdmin(user.email) ? await obterStatusConexao() : null;
 
   let consultaNoticias = supabase
     .from("social_media_noticias")
@@ -107,6 +110,39 @@ export default async function SocialMediaPage({
             </SubmitButton>
           </form>
         </div>
+
+        {statusInstagram && (
+          <section className="mb-6 rounded-lg border border-slate-200 bg-white p-4">
+            <h2 className="mb-2 text-sm font-medium text-slate-700">Configuração do Instagram</h2>
+            {instagramOk === "conectado" && (
+              <p className="mb-2 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                Conta conectada com sucesso!
+              </p>
+            )}
+            {instagramErro && (
+              <p className="mb-2 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">Erro ao conectar: {instagramErro}</p>
+            )}
+            {statusInstagram.conectado ? (
+              <p className="text-sm text-slate-600">
+                Conectado como <span className="font-medium">@{statusInstagram.username ?? "?"}</span> — token válido até{" "}
+                {new Date(statusInstagram.expiraEm).toLocaleDateString("pt-BR")} (renovado automaticamente todo dia).{" "}
+                <a href="/api/instagram/conectar" className="text-o2-navy hover:underline">
+                  Reconectar
+                </a>
+              </p>
+            ) : (
+              <div className="flex items-center gap-3">
+                <p className="text-sm text-slate-500">Instagram ainda não conectado — publicação não vai funcionar até conectar.</p>
+                <a
+                  href="/api/instagram/conectar"
+                  className="whitespace-nowrap rounded-md bg-o2-navy px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
+                >
+                  Conectar Instagram
+                </a>
+              </div>
+            )}
+          </section>
+        )}
 
         {resultadoColeta && (
           <section className="mb-6 rounded-lg border border-slate-200 bg-white p-4">
