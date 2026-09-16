@@ -49,6 +49,7 @@ type DadosPost = {
   tipo_post: string | null;
   numero_destaque: string | null;
   criado_em: string;
+  imagem_manual_url: string | null;
 };
 
 type LayoutProps = { post: DadosPost; rotulo: string; data: string };
@@ -521,12 +522,22 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pos
 
   const { data: post } = await supabase
     .from("social_media_posts")
-    .select("titulo_card, categoria, tipo_post, numero_destaque, criado_em")
+    .select("titulo_card, categoria, tipo_post, numero_destaque, criado_em, imagem_manual_url")
     .eq("id", postId)
     .maybeSingle<DadosPost>();
 
   if (!post) {
     return new Response("Post não encontrado", { status: 404 });
+  }
+
+  // Foto pessoal enviada pelo Matheus em vez do card gerado (pedido de
+  // 15/09/2026) -- redireciona pra URL pública do Storage. Feito aqui (não
+  // em aprovarEPublicar/instagram.ts) porque esta rota é a ÚNICA fonte
+  // usada tanto pelo preview na tela (social-media/page.tsx) quanto pela
+  // publicação real no Instagram -- mudar só num dos dois lugares deixaria
+  // o preview mostrando uma coisa e o Instagram publicando outra.
+  if (post.imagem_manual_url) {
+    return Response.redirect(post.imagem_manual_url);
   }
 
   const rotulo = post.tipo_post ? ROTULO_TIPO[post.tipo_post] : (ROTULO_CATEGORIA[post.categoria] ?? "O2 Seguros");

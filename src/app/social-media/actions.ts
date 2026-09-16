@@ -126,6 +126,53 @@ export async function aprovarEPublicar(formData: FormData) {
   revalidatePath("/social-media");
 }
 
+const TAMANHO_MAXIMO_FOTO_BYTES = 5 * 1024 * 1024; // 5 MB, mesmo padrão de uploadImagemCampanha
+
+// Sobe uma foto pessoal (ex: do Matheus, em evento) pra usar no lugar do
+// card gerado por next/og -- pedido de 15/09/2026. Bucket público
+// "social-media-fotos" (URL de verdade, necessária pro Instagram buscar a
+// imagem direto). A troca de fato acontece em
+// src/app/api/social/imagem/[postId]/route.tsx, que redireciona pra essa
+// URL quando ela existir -- tanto o preview na tela quanto a publicação de
+// verdade usam essa mesma rota, então ficam sempre sincronizados.
+export async function enviarFotoManual(formData: FormData) {
+  const supabase = await exigirAcessoInterno();
+  const postId = Number(formData.get("post_id"));
+  if (!postId) return;
+
+  const foto = formData.get("foto");
+  if (!(foto instanceof File) || foto.size === 0) {
+    redirect(`/social-media?foto_erro=${encodeURIComponent("Nenhuma foto selecionada.")}`);
+  }
+  if (!foto.type.startsWith("image/")) {
+    redirect(`/social-media?foto_erro=${encodeURIComponent("Só é permitido enviar imagens.")}`);
+  }
+  if (foto.size > TAMANHO_MAXIMO_FOTO_BYTES) {
+    redirect(`/social-media?foto_erro=${encodeURIComponent("Foto maior que 5 MB.")}`);
+  }
+
+  const ext = foto.name.split(".").pop() || "jpg";
+  const path = `${postId}-${crypto.randomUUID()}.${ext}`;
+  const { error: erroUpload } = await supabase.storage.from("social-media-fotos").upload(path, foto, { contentType: foto.type });
+  if (erroUpload) {
+    redirect(`/social-media?foto_erro=${encodeURIComponent(erroUpload.message)}`);
+  }
+
+  const { data: publicUrlData } = supabase.storage.from("social-media-fotos").getPublicUrl(path);
+  await supabase.from("social_media_posts").update({ imagem_manual_url: publicUrlData.publicUrl }).eq("id", postId);
+
+  revalidatePath("/social-media");
+}
+
+// Volta a usar o card gerado automaticamente em vez da foto manual.
+export async function removerFotoManual(formData: FormData) {
+  const supabase = await exigirAcessoInterno();
+  const postId = Number(formData.get("post_id"));
+  if (!postId) return;
+  await supabase.from("social_media_posts").update({ imagem_manual_url: null }).eq("id", postId);
+  revalidatePath("/social-media");
+}
+
 // Descarta um rascunho que não ficou bom.
 export async function descartarRascunho(formData: FormData) {
   const supabase = await exigirAcessoInterno();

@@ -3,7 +3,15 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
-import { coletarAgora, gerarRascunho, gerarRascunhoInstitucional, descartarRascunho, aprovarEPublicar } from "./actions";
+import {
+  coletarAgora,
+  gerarRascunho,
+  gerarRascunhoInstitucional,
+  descartarRascunho,
+  aprovarEPublicar,
+  enviarFotoManual,
+  removerFotoManual,
+} from "./actions";
 import SubmitButton from "@/components/SubmitButton";
 import { obterStatusConexao } from "@/lib/instagram";
 
@@ -29,6 +37,7 @@ type Post = {
   criado_em: string;
   erro: string | null;
   instagram_post_id: string | null;
+  imagem_manual_url: string | null;
 };
 
 const ROTULO_STATUS: Record<string, string> = {
@@ -51,9 +60,17 @@ function fmtData(iso: string | null): string {
 export default async function SocialMediaPage({
   searchParams,
 }: {
-  searchParams: Promise<{ fonte?: string; q?: string; coleta?: string; instagram?: string; instagram_erro?: string }>;
+  searchParams: Promise<{
+    fonte?: string;
+    q?: string;
+    coleta?: string;
+    instagram?: string;
+    instagram_erro?: string;
+    foto_erro?: string;
+  }>;
 }) {
-  const { fonte: fonteId, q, coleta, instagram: instagramOk, instagram_erro: instagramErro } = await searchParams;
+  const { fonte: fonteId, q, coleta, instagram: instagramOk, instagram_erro: instagramErro, foto_erro: fotoErro } =
+    await searchParams;
   const resultadoColeta = coleta ? coleta.split(";;") : null;
 
   const supabase = await createClient();
@@ -83,7 +100,7 @@ export default async function SocialMediaPage({
 
   const { data: posts } = await supabase
     .from("social_media_posts")
-    .select("id, categoria, titulo_card, legenda, status, criado_em, erro, instagram_post_id")
+    .select("id, categoria, titulo_card, legenda, status, criado_em, erro, instagram_post_id, imagem_manual_url")
     .order("criado_em", { ascending: false })
     .limit(30)
     .returns<Post[]>();
@@ -110,6 +127,8 @@ export default async function SocialMediaPage({
             </SubmitButton>
           </form>
         </div>
+
+        {fotoErro && <p className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">Erro ao enviar foto: {fotoErro}</p>}
 
         {statusInstagram && (
           <section className="mb-6 rounded-lg border border-slate-200 bg-white p-4">
@@ -204,23 +223,50 @@ export default async function SocialMediaPage({
                     <p className="mt-1 text-xs text-red-600">Erro: {p.erro}</p>
                   )}
                   {p.status !== "publicado" && (
-                    <div className="mt-2 flex items-center gap-3">
-                      <form action={aprovarEPublicar}>
-                        <input type="hidden" name="post_id" value={p.id} />
-                        <SubmitButton
-                          textoCarregando="Publicando…"
-                          className="rounded-md bg-o2-navy px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
-                        >
-                          {p.status === "erro" ? "Tentar de novo" : "Aprovar e publicar"}
-                        </SubmitButton>
-                      </form>
-                      <form action={descartarRascunho}>
-                        <input type="hidden" name="post_id" value={p.id} />
-                        <SubmitButton textoCarregando="Descartando…" className="text-xs text-red-500 hover:underline">
-                          Descartar
-                        </SubmitButton>
-                      </form>
-                    </div>
+                    <>
+                      <div className="mt-2 flex items-center gap-3">
+                        <form action={aprovarEPublicar}>
+                          <input type="hidden" name="post_id" value={p.id} />
+                          <SubmitButton
+                            textoCarregando="Publicando…"
+                            className="rounded-md bg-o2-navy px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
+                          >
+                            {p.status === "erro" ? "Tentar de novo" : "Aprovar e publicar"}
+                          </SubmitButton>
+                        </form>
+                        <form action={descartarRascunho}>
+                          <input type="hidden" name="post_id" value={p.id} />
+                          <SubmitButton textoCarregando="Descartando…" className="text-xs text-red-500 hover:underline">
+                            Descartar
+                          </SubmitButton>
+                        </form>
+                      </div>
+                      <div className="mt-2 border-t border-slate-100 pt-2">
+                        {p.imagem_manual_url ? (
+                          <form action={removerFotoManual} className="flex items-center gap-2">
+                            <input type="hidden" name="post_id" value={p.id} />
+                            <span className="text-xs text-emerald-600">Sua foto está em uso ✓</span>
+                            <SubmitButton textoCarregando="Removendo…" className="text-xs text-slate-500 hover:underline">
+                              Usar card gerado
+                            </SubmitButton>
+                          </form>
+                        ) : (
+                          <form action={enviarFotoManual} className="flex items-center gap-2">
+                            <input type="hidden" name="post_id" value={p.id} />
+                            <input
+                              type="file"
+                              name="foto"
+                              accept="image/*"
+                              required
+                              className="max-w-[160px] text-xs text-slate-500 file:mr-2 file:rounded-md file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-xs"
+                            />
+                            <SubmitButton textoCarregando="Enviando…" className="whitespace-nowrap text-xs text-o2-navy hover:underline">
+                              Usar minha foto
+                            </SubmitButton>
+                          </form>
+                        )}
+                      </div>
+                    </>
                   )}
                 </div>
               </div>
