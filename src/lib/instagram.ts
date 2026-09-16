@@ -72,20 +72,52 @@ async function aguardar(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Conta oficial da O2 no Instagram -- sempre marcada nas publicações (pedido
+// do Matheus, 15/09/2026). A API não tem como enviar convite de COLABORAÇÃO
+// de verdade na hora de publicar (confirmado no changelog oficial da Meta:
+// só existe endpoint pra ACEITAR convite já recebido, não pra criar um) --
+// isso só dá pra fazer manualmente dentro do app, depois de publicado. Por
+// isso aqui é uma combinação das duas formas que a API realmente suporta:
+// menção no texto da legenda (sempre funciona) + marcação na foto via
+// user_tags (pode ficar pendente de aprovação do lado da conta @o2seguros,
+// dependendo da configuração de marcação dela).
+const CONTA_COLAB_USERNAME = "o2seguros";
+
 // Publica uma imagem com legenda no Instagram e devolve o link do post
 // publicado (permalink). imageUrl precisa ser uma URL pública (a Graph API
 // busca ela direto, não aceita localhost) -- ver src/app/api/social/imagem.
 export async function publicarPost(imageUrl: string, legenda: string): Promise<string> {
   const auth = await obterAuthValida();
   const contaId = auth.instagram_business_account_id;
+  const legendaComMarcacao = `${legenda}\n\n@${CONTA_COLAB_USERNAME}`;
 
   // Passo 1: cria o container de mídia (a Graph API baixa a imagem da URL e
   // processa em segundo plano, por isso o status_code pode vir "IN_PROGRESS").
-  const container = await chamarGraphApi<{ id: string }>(`${GRAPH_BASE}/${contaId}/media`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ image_url: imageUrl, caption: legenda, access_token: auth.access_token }),
-  });
+  // Tenta com user_tags (marcação na foto) primeiro; a documentação da Meta
+  // pra essa variante da API não deixa 100% claro o formato de coordenadas
+  // exigido, então se a marcação na foto for rejeitada, tenta de novo sem
+  // ela -- a publicação em si nunca deve falhar por causa disso, só perde a
+  // marcação na foto (a menção na legenda continua garantida de qualquer jeito).
+  let container: { id: string };
+  try {
+    container = await chamarGraphApi<{ id: string }>(`${GRAPH_BASE}/${contaId}/media`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        image_url: imageUrl,
+        caption: legendaComMarcacao,
+        user_tags: [{ username: CONTA_COLAB_USERNAME, x: 0.5, y: 0.9 }],
+        access_token: auth.access_token,
+      }),
+    });
+  } catch (erroComMarcacao) {
+    console.warn("Instagram: falha ao marcar @o2seguros na foto, publicando sem a marcação:", erroComMarcacao);
+    container = await chamarGraphApi<{ id: string }>(`${GRAPH_BASE}/${contaId}/media`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image_url: imageUrl, caption: legendaComMarcacao, access_token: auth.access_token }),
+    });
+  }
 
   // Passo 2: espera o container terminar de processar antes de publicar --
   // publicar um container ainda "IN_PROGRESS" dá erro na Graph API. 3
