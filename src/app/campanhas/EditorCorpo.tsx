@@ -47,8 +47,28 @@ export function EditorCorpo({ name, corpoInicialHtml }: { name: string; corpoIni
   const editorRef = useRef<HTMLDivElement>(null);
   const hiddenRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const ultimaSelecaoRef = useRef<Range | null>(null);
   const [enviandoImagem, setEnviandoImagem] = useState(false);
   const [erroImagem, setErroImagem] = useState<string | null>(null);
+
+  // Causa real de "não consigo inserir/trocar a imagem" (achado 17/09/2026,
+  // 2ª rodada): document.execCommand("insertHTML") insere na seleção ATUAL
+  // do navegador -- mas abrir o seletor de arquivo nativo (janela do
+  // sistema operacional) rouba o foco da página por tempo suficiente pra
+  // essa seleção não voltar de forma confiável quando o arquivo é
+  // escolhido e o foco retorna. Resultado: a imagem some ou nunca chega a
+  // aparecer, sem erro nenhum. Guarda a posição do cursor MANUALMENTE (no
+  // mousedown do botão, ainda com o editor focado) e restaura ela na hora
+  // de inserir, em vez de confiar que o navegador vai lembrar sozinho.
+  function capturarSelecaoAtual() {
+    const selecao = window.getSelection();
+    const editor = editorRef.current;
+    if (!selecao || !editor || selecao.rangeCount === 0) return;
+    const range = selecao.getRangeAt(0);
+    if (editor.contains(range.startContainer)) {
+      ultimaSelecaoRef.current = range.cloneRange();
+    }
+  }
 
   useEffect(() => {
     try {
@@ -111,6 +131,8 @@ export function EditorCorpo({ name, corpoInicialHtml }: { name: string; corpoIni
 
   // Upload de verdade + inserção no editor -- usado tanto pelo botão
   // "Inserir imagem" quanto por colar uma imagem de verdade (ver aoColar).
+  // Insere via Range explícito (não execCommand) -- ver capturarSelecaoAtual
+  // acima pro motivo.
   async function inserirImagemNoEditor(arquivo: File) {
     setErroImagem(null);
     setEnviandoImagem(true);
@@ -118,12 +140,31 @@ export function EditorCorpo({ name, corpoInicialHtml }: { name: string; corpoIni
       const formData = new FormData();
       formData.append("imagem", arquivo);
       const url = await uploadImagemCampanha(formData);
-      editorRef.current?.focus();
-      document.execCommand(
-        "insertHTML",
-        false,
-        `<img src="${url}" style="max-width:100%;display:block;margin:8px 0;border-radius:8px;" />`
-      );
+
+      const editor = editorRef.current;
+      if (!editor) return;
+      editor.focus();
+
+      const img = document.createElement("img");
+      img.src = url;
+      img.style.cssText = "max-width:100%;display:block;margin:8px 0;border-radius:8px;";
+
+      const range = ultimaSelecaoRef.current;
+      if (range && editor.contains(range.startContainer)) {
+        range.deleteContents();
+        range.insertNode(img);
+        range.setStartAfter(img);
+        range.collapse(true);
+        const selecao = window.getSelection();
+        selecao?.removeAllRanges();
+        selecao?.addRange(range);
+        ultimaSelecaoRef.current = range.cloneRange();
+      } else {
+        // Sem posição salva (editor vazio, nunca teve foco ainda) -- põe no
+        // final do conteúdo em vez de perder a imagem.
+        editor.appendChild(img);
+      }
+
       sincronizar();
     } catch (erro) {
       setErroImagem(erro instanceof Error ? erro.message : "Falha ao enviar imagem.");
@@ -154,6 +195,7 @@ export function EditorCorpo({ name, corpoInicialHtml }: { name: string; corpoIni
     const item = [...e.clipboardData.items].find((it) => it.type.startsWith("image/"));
     if (item) {
       e.preventDefault();
+      capturarSelecaoAtual();
       const arquivo = item.getAsFile();
       if (arquivo) await inserirImagemNoEditor(arquivo);
       return;
@@ -191,17 +233,20 @@ export function EditorCorpo({ name, corpoInicialHtml }: { name: string; corpoIni
           S
         </button>
         <span className="mx-1 h-4 w-px bg-gray-300" />
-        {/* onMouseDown com preventDefault (achado 17/09/2026): sem isso, o
-            clique no botão rouba o foco do editor e apaga a seleção atual
-            -- se o usuário tinha clicado numa imagem existente pra
-            substituí-la, essa seleção se perde antes do arquivo ser
-            escolhido, e o insertHTML (abaixo, em inserirImagemNoEditor) não
-            tem mais o que substituir. Mantendo a seleção viva, escolher uma
-            imagem nova troca a que estava selecionada em vez de só inserir
-            outra ao lado. */}
+        {/* onMouseDown com preventDefault + capturarSelecaoAtual (achado
+            17/09/2026): sem o preventDefault, o clique no botão rouba o
+            foco do editor antes de conseguirmos ler a seleção. Guarda a
+            posição do cursor (ou a imagem selecionada, se o usuário clicou
+            numa pra substituir) AQUI, com o editor ainda focado -- abrir o
+            seletor de arquivo do sistema operacional em seguida não deixa
+            garantido que essa posição volte sozinha, por isso ela é restaurada
+            manualmente em inserirImagemNoEditor. */}
         <button
           type="button"
-          onMouseDown={(e) => e.preventDefault()}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            capturarSelecaoAtual();
+          }}
           onClick={() => fileInputRef.current?.click()}
           disabled={enviandoImagem}
           className={botaoClass}
