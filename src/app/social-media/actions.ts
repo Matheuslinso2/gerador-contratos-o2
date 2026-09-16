@@ -131,6 +131,20 @@ export async function descartarRascunho(formData: FormData) {
   const supabase = await exigirAcessoInterno();
   const postId = Number(formData.get("post_id"));
   if (!postId) return;
+
+  // Achado real (relatado pelo Matheus, 15/09/2026): descartar um post
+  // apagava a linha, mas nunca desmarcava `usado` na notícia de origem --
+  // a notícia ficava travada pra sempre (marcada como usada, sem post
+  // nenhum pra mostrar, e sem aparecer de novo na lista de pendentes pra
+  // gerar outro rascunho). Busca o noticia_id ANTES de apagar o post pra
+  // poder reabrir a notícia.
+  const { data: post } = await supabase.from("social_media_posts").select("noticia_id").eq("id", postId).single();
+
   await supabase.from("social_media_posts").delete().eq("id", postId);
+
+  if (post?.noticia_id) {
+    await supabase.from("social_media_noticias").update({ usado: false }).eq("id", post.noticia_id);
+  }
+
   revalidatePath("/social-media");
 }

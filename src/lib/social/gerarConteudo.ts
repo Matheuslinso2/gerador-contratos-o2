@@ -65,6 +65,7 @@ const VOZ = `Você escreve como Matheus, sócio-diretor da O2 Seguros (corretora
 Tom: especialista comentando o assunto em primeira pessoa, direto, sem soar como anúncio publicitário ou nota de assessoria de imprensa. Pode citar a O2 naturalmente quando fizer sentido (ex: "na O2 a gente vê isso o tempo todo"), mas o post não é propaganda da empresa.
 
 Regras rígidas:
+- Seguro Incêndio NÃO é uma garantia locatícia — é uma cobertura obrigatória separada (Lei do Inquilinato), diferente das garantias locatícias em si (fiador, caução, seguro fiança, título de capitalização). Nunca chame Seguro Incêndio de "garantia" nem o agrupe como se fosse uma modalidade de garantia locatícia.
 - NUNCA invente dado, número ou fato que não esteja no material fornecido.
 - NUNCA copie frases inteiras da fonte — reescreva com as próprias palavras, no máximo uma citação curta entre aspas se necessário.
 - NUNCA dê recomendação de investimento personalizada nem aconselhamento jurídico específico — comente o cenário, não diga o que "você deveria fazer com seu dinheiro".
@@ -99,9 +100,18 @@ export async function gerarConteudoDeNoticia(noticia: {
   link: string;
   fonteNome: string;
 }): Promise<ConteudoGerado> {
-  return chamarClaude(
+  const conteudo = await chamarClaude(
     `Escreva um post comentando esta notícia:\n\nFonte: ${noticia.fonteNome}\nTítulo: ${noticia.titulo}\nResumo: ${noticia.resumo ?? "(sem resumo, use só o título)"}\nLink: ${noticia.link}\n\nComente o que essa notícia significa pra quem trabalha com locação/seguro imobiliário, na sua visão como especialista. Não repita o resumo literalmente, dê um ângulo.`
   );
+
+  // Referência da notícia original sempre anexada aqui por código (pedido
+  // do Matheus, 15/09/2026) -- não fica a cargo da IA lembrar de citar a
+  // fonte a cada geração, então garante que todo post feito a partir de
+  // notícia sempre traz de onde ela veio.
+  return {
+    ...conteudo,
+    legenda: `${conteudo.legenda}\n\nFonte: ${noticia.fonteNome} (${noticia.link})`,
+  };
 }
 
 export async function gerarConteudoInstitucional(tema: string): Promise<ConteudoGerado> {
