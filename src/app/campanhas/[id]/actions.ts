@@ -213,3 +213,63 @@ export async function cancelarAgendamentoCampanha(formData: FormData) {
   await supabase.from("campanhas").update({ status: "rascunho", agendado_para: null }).eq("id", campanhaId);
   redirect(`/campanhas/${campanhaId}?ok=${encodeURIComponent("Agendamento cancelado.")}`);
 }
+
+// Pedido do Matheus, 17/09/2026: antes do envio precisa dar pra corrigir
+// conteúdo/campos da campanha sem ter que recriar do zero -- espelha
+// criarCampanha (campanhas/nova/actions.ts) mas fazendo update em vez de
+// insert, e só funciona em rascunho (mesma trava de agendarDisparoCampanha
+// acima; depois de agendada/disparada o conteúdo já foi ou vai ser usado).
+export async function editarConteudoCampanha(formData: FormData) {
+  const campanhaId = String(formData.get("campanha_id") ?? "");
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+  if (!isAdmin(user.email) && !isColaboradorO2(user.email)) redirect("/");
+
+  const { data: campanha } = await supabase.from("campanhas").select("id, status").eq("id", campanhaId).single();
+  if (!campanha) redirect("/campanhas");
+  if (campanha.status !== "rascunho") redirect(`/campanhas/${campanhaId}`);
+
+  const nome = String(formData.get("nome") ?? "").trim();
+  const assunto = String(formData.get("assunto") ?? "").trim();
+  const template = String(formData.get("template") ?? "comunicado");
+  const titulo = String(formData.get("titulo") ?? "").trim();
+  const introducao = String(formData.get("introducao") ?? "").trim();
+  const validoDe = String(formData.get("valido_de") ?? "").trim();
+  const validoAte = String(formData.get("valido_ate") ?? "").trim();
+  const produto = String(formData.get("produto") ?? "").trim();
+  const corpoHtml = String(formData.get("corpo_html") ?? "").trim();
+  const ctaTexto = String(formData.get("cta_texto") ?? "").trim();
+  const ctaHref = String(formData.get("cta_href") ?? "").trim();
+
+  const temConteudo = corpoHtml.replace(/<[^>]+>/g, "").trim().length > 0 || /<img[\s>]/i.test(corpoHtml);
+  if (!nome || !assunto || !titulo || !temConteudo || !produto) {
+    redirect(`/campanhas/${campanhaId}?erro=${encodeURIComponent("Preencha nome, produto, assunto, título e corpo da campanha.")}`);
+  }
+  if (validoDe && validoAte && validoDe > validoAte) {
+    redirect(`/campanhas/${campanhaId}?erro=${encodeURIComponent("A data \"válido de\" não pode ser depois de \"válido até\".")}`);
+  }
+
+  const { error } = await supabase
+    .from("campanhas")
+    .update({
+      nome,
+      assunto,
+      template,
+      titulo,
+      introducao: introducao || null,
+      valido_de: validoDe || null,
+      valido_ate: validoAte || null,
+      produto,
+      corpo_html: corpoHtml,
+      cta_texto: ctaTexto || null,
+      cta_href: ctaHref || null,
+    })
+    .eq("id", campanhaId);
+
+  if (error) redirect(`/campanhas/${campanhaId}?erro=${encodeURIComponent(error.message)}`);
+
+  redirect(`/campanhas/${campanhaId}?ok=${encodeURIComponent("Conteúdo da campanha atualizado.")}`);
+}

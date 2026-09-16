@@ -16,6 +16,7 @@ import { CampanhaProgresso } from "./CampanhaProgresso";
 import { salvarLinhaProducao, removerLinhaProducao } from "./producao/actions";
 import { CelulasComissaoRepasse } from "./producao/CelulasComissaoRepasse";
 import { GerenciarDestinatarios } from "./GerenciarDestinatarios";
+import { EditarConteudoCampanha } from "./EditarConteudoCampanha";
 import { duplicarCampanha } from "../actions";
 import { cancelarAgendamentoCampanha } from "./actions";
 
@@ -361,14 +362,25 @@ export default async function CampanhaDetalhePage({
           )}
         </section>
 
-        {/* Template do e-mail */}
-        <section className="space-y-3">
-          <h2 className="text-sm font-semibold text-o2-navy">{jaEnviadaOuEnviando ? "Template do e-mail enviado" : "Prévia do e-mail"}</h2>
-          <div className="overflow-hidden rounded-2xl border border-o2-navy/10 bg-white shadow-sm">
-            <p className="border-b border-o2-navy/10 bg-quadro px-4 py-2 text-xs font-medium uppercase tracking-wide text-o2-navy">Assunto: {campanha.assunto}</p>
-            <div className="max-h-[480px] overflow-y-auto" dangerouslySetInnerHTML={{ __html: htmlEmail }} />
-          </div>
-        </section>
+        <EditarConteudoCampanha
+          campanha={{
+            id,
+            nome: campanha.nome,
+            assunto: campanha.assunto,
+            template: campanha.template,
+            titulo: campanha.titulo,
+            introducao: campanha.introducao,
+            valido_de: campanha.valido_de,
+            valido_ate: campanha.valido_ate,
+            produto: campanha.produto,
+            corpo_html: campanha.corpo_html,
+            cta_texto: campanha.cta_texto,
+            cta_href: campanha.cta_href,
+          }}
+          htmlEmail={htmlEmail}
+          rascunho={rascunho}
+          tituloSecao={jaEnviadaOuEnviando ? "Template do e-mail enviado" : "Prévia do e-mail"}
+        />
 
         {/* Produção gerada -- sempre presente (mesmo motivo do Resumo do
             envio acima); vazia até existir disparo de verdade. */}
