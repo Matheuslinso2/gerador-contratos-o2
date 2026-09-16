@@ -11,6 +11,7 @@ import {
   type BitrixItemRaw,
   type BitrixStageHistoryEvent,
 } from "@/lib/bitrix/client";
+import { diasUteisEquivalentesEntre } from "@/lib/bitrix/horarioComercial";
 import type { CelulaGoogle, FonteRamosBruta } from "./fonteGoogle";
 
 const ENTITY_TYPE_ID = 1046;
@@ -22,7 +23,17 @@ const CAMPOS = {
   tipoProcesso: "ufCrm12TipoProcesso",
   produto: "ufCrm12Produto",
   operacaoSusep: "ufCrm12OperacaoSusep",
+  // "Seguradora final" (texto livre) -- campo antigo, mantido só como
+  // fallback pra cards antigos que não têm o campo de seleção abaixo
+  // preenchido. Confirmado com o Matheus (15/09/2026): não dá pra excluir
+  // esse campo no Bitrix porque já tem histórico preenchido nele, mas a
+  // partir de agora a equipe só preenche o campo de seleção.
   seguradora: "ufCrm12Seguradora",
+  // "Seguradora final (seleção)" -- campo NOVO (lista fixa/enum,
+  // isMultiple no Bitrix mas usado como escolha única na prática), criado
+  // pra evitar erro de digitação do texto livre acima. É o campo principal
+  // a partir de 15/09/2026.
+  seguradoraSelecao: "ufCrm12SeguradoraFinalMulti",
   cotadorOrigem: "ufCrm12CotadorOrigem",
   origemProducao: "ufCrm12OrigemProducao",
   numeroOrcamento: "ufCrm12NumOrcamento",
@@ -153,7 +164,7 @@ function duracaoEmDias(
   const terminal = eventoTerminal(eventos);
   const fim = terminal ? dataValida(terminal.CREATED_TIME) : agora;
   if (!fim || fim < inicio) return null;
-  return (fim.getTime() - inicio.getTime()) / 86_400_000;
+  return diasUteisEquivalentesEntre(inicio, fim);
 }
 
 function dataTerminal(eventos: BitrixStageHistoryEvent[]): Date | null {
@@ -300,7 +311,8 @@ export async function lerFonteRamosElementaresBitrix(
     const competenciaItem = competenciaData(dataCompetencia);
     const origem = valorEnum(item, CAMPOS.origemProducao, definicoes) || texto(item[CAMPOS.cotadorOrigem]) || "NÃO INFORMADA";
     const produto = valorEnum(item, CAMPOS.produto, definicoes) || "NÃO INFORMADO";
-    const seguradora = texto(item[CAMPOS.seguradora]);
+    const seguradora =
+      valorEnum(item, CAMPOS.seguradoraSelecao, definicoes) || texto(item[CAMPOS.seguradora]);
     const imobiliaria = empresas[Number(item.companyId)] || "NÃO INFORMADA";
     const responsavel = usuarios[Number(item.assignedById)] || "NÃO INFORMADO";
     const tipoProcesso = normalizar(valorEnum(item, CAMPOS.tipoProcesso, definicoes));

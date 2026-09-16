@@ -120,7 +120,7 @@ export default function PainelCapitalizacao({ dados }: { dados: PainelCapitaliza
         <Kpi
           label="Cards com alerta"
           value={String(kpis.cardsComAlerta)}
-          sub="parados 3+ dias sem mudar de etapa"
+          sub="parados 3+ dias úteis sem mudar de etapa"
           tone={kpis.cardsComAlerta > 0 ? "warning" : "positive"}
         />
       </div>
@@ -178,7 +178,7 @@ export default function PainelCapitalizacao({ dados }: { dados: PainelCapitaliza
       <section id="quadro-cap-alerta" className={styles.section}>
         <div className={styles.sectionHead}>
           <h2>Cards que pedem atenção</h2>
-          <div className={styles.note}>parados 3+ dias sem mudar de etapa — todos os títulos ativos, sem filtro de mês</div>
+          <div className={styles.note}>parados 3+ dias úteis sem mudar de etapa — todos os títulos ativos, sem filtro de mês</div>
           <ExportarQuadro
             quadroId="quadro-cap-alerta"
             corFundo="#f7f8fa"

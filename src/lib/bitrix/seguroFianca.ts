@@ -45,6 +45,7 @@ import {
   type BitrixItemRaw,
   type BitrixStageHistoryEvent,
 } from "./client";
+import { minutosComerciaisEntre } from "./horarioComercial";
 
 export const ENTITY_TYPE_ID = 1042;
 export const CATEGORIA_ANALISE = 18;
@@ -407,7 +408,7 @@ function construirSegmentosEtapa(
 
   return pontos.map((p, i) => {
     const fim = i + 1 < pontos.length ? pontos[i + 1].inicio : fimCard;
-    const minutos = Math.max(0, Math.round((fim.getTime() - p.inicio.getTime()) / 60_000));
+    const minutos = minutosComerciaisEntre(p.inicio, fim);
     return { funil: p.funil, etapa: p.etapa, minutos };
   });
 }
@@ -427,12 +428,12 @@ function calcularTemposFunil(
   const primeiroFunil2 = ordenados.find((e) => nomeFunil(e.CATEGORY_ID) === "Negociação e Contrato");
 
   if (!primeiroFunil2) {
-    return { minutosFunil1: Math.max(0, Math.round((fimCard.getTime() - inicioCard.getTime()) / 60_000)), minutosFunil2: null };
+    return { minutosFunil1: minutosComerciaisEntre(inicioCard, fimCard), minutosFunil2: null };
   }
   const entradaFunil2 = new Date(primeiroFunil2.CREATED_TIME);
   return {
-    minutosFunil1: Math.max(0, Math.round((entradaFunil2.getTime() - inicioCard.getTime()) / 60_000)),
-    minutosFunil2: Math.max(0, Math.round((fimCard.getTime() - entradaFunil2.getTime()) / 60_000)),
+    minutosFunil1: minutosComerciaisEntre(inicioCard, entradaFunil2),
+    minutosFunil2: minutosComerciaisEntre(entradaFunil2, fimCard),
   };
 }
 
@@ -470,12 +471,24 @@ export function montarContagemMensal(
     // Gasto", campo calculado pelo próprio Bitrix, que sempre mostra a
     // duração real independente da ordem. Usamos valor absoluto pela mesma
     // razão, e marcamos o card pra aparecer na qualidade dos dados.
+    // O sinal do bruto (corrido) continua decidindo cotacaoCamposTrocados --
+    // é só um flag de qualidade de dado, não precisa de horário comercial.
+    // O valor final (minutosCotacao) já usa horário comercial, calculado
+    // sempre do timestamp mais cedo pro mais tarde (equivalente ao Math.abs
+    // de antes, mas não dá pra aplicar Math.abs em cima de horário
+    // comercial porque a função não é simplesmente simétrica por sinal).
     const minutosCotacaoBruto =
       inicioCotacaoRaw && fimCotacaoRaw
         ? Math.round((new Date(String(fimCotacaoRaw)).getTime() - new Date(String(inicioCotacaoRaw)).getTime()) / 60_000)
         : null;
-    const minutosCotacao = minutosCotacaoBruto !== null ? Math.abs(minutosCotacaoBruto) : null;
     const cotacaoCamposTrocados = minutosCotacaoBruto !== null && minutosCotacaoBruto < 0;
+    const minutosCotacao =
+      inicioCotacaoRaw && fimCotacaoRaw
+        ? minutosComerciaisEntre(
+            new Date(Math.min(new Date(String(inicioCotacaoRaw)).getTime(), new Date(String(fimCotacaoRaw)).getTime())),
+            new Date(Math.max(new Date(String(inicioCotacaoRaw)).getTime(), new Date(String(fimCotacaoRaw)).getTime()))
+          )
+        : null;
     const dataCotacao = fimCotacaoRaw ? apenasData(String(fimCotacaoRaw)) : "";
 
     // Datas de evento -- ver comentário no topo do arquivo. Fallback pra

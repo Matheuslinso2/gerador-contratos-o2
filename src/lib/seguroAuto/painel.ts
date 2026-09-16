@@ -8,6 +8,7 @@ import {
   type BitrixStageHistoryEvent,
   type BitrixDefinicaoCampo,
 } from "@/lib/bitrix/client";
+import { diasUteisEquivalentesEntre } from "@/lib/bitrix/horarioComercial";
 
 // Modelagem do painel Seguro Auto — fonte: SPA "Seguro Automóvel" no
 // Bitrix24, entityTypeId 1050, um único funil (categoria 30). Etapas
@@ -168,7 +169,7 @@ function mapearCard(
   if (!criadoEm) return null;
   const etapa = etapaPorStatusId.get(texto(item.stageId));
   const movidoEm = dataValida(item.movedTime);
-  const diasParadoEtapaAtual = movidoEm ? (agora.getTime() - movidoEm.getTime()) / 86_400_000 : null;
+  const diasParadoEtapaAtual = movidoEm ? diasUteisEquivalentesEntre(movidoEm, agora) : null;
   return {
     id: Number(item.id),
     titulo: texto(item.title),
@@ -222,7 +223,7 @@ function tempoMedioPorEtapa(itens: BitrixItemRaw[], historico: BitrixStageHistor
       if (quando) linha.push({ stageId: texto(evento.STAGE_ID), inicio: quando });
     }
     for (let i = 0; i < linha.length - 1; i++) {
-      const duracao = (linha[i + 1].inicio.getTime() - linha[i].inicio.getTime()) / 86_400_000;
+      const duracao = diasUteisEquivalentesEntre(linha[i].inicio, linha[i + 1].inicio);
       if (duracao < 0) continue;
       somaPorEtapa.set(linha[i].stageId, (somaPorEtapa.get(linha[i].stageId) || 0) + duracao);
       contagemPorEtapa.set(linha[i].stageId, (contagemPorEtapa.get(linha[i].stageId) || 0) + 1);

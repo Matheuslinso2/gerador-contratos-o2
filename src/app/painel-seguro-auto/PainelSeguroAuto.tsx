@@ -293,7 +293,7 @@ export default function PainelSeguroAuto({
         <Kpi
           label="Cards com alerta"
           value={String(kpis.cardsComAlerta)}
-          sub="parados 3+ dias sem mudar de etapa"
+          sub="parados 3+ dias úteis sem mudar de etapa"
           tone={kpis.cardsComAlerta > 0 ? "warning" : "positive"}
         />
       </div>
@@ -426,7 +426,7 @@ export default function PainelSeguroAuto({
         <div className={styles.sectionHead}>
           <h2>Cards que pedem atenção</h2>
           <div className={styles.note}>
-            parados 3+ dias sem mudar de etapa — todas as fichas ativas, sem
+            parados 3+ dias úteis sem mudar de etapa — todas as fichas ativas, sem
             filtro de mês
           </div>
           <ExportarQuadro
