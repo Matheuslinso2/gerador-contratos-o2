@@ -8,9 +8,9 @@ function getWebhookUrl(envVar: "BITRIX_WEBHOOK_URL" | "BITRIX_WEBHOOK_URL_USUARI
   return url.endsWith("/") ? url : `${url}/`;
 }
 
-type BitrixParamValue = string | number | Array<string | number>;
+export type BitrixParamValue = string | number | Array<string | number>;
 
-async function chamarBitrix<T>(
+export async function chamarBitrix<T>(
   metodo: string,
   params: Record<string, BitrixParamValue> = {},
   envVar: "BITRIX_WEBHOOK_URL" | "BITRIX_WEBHOOK_URL_USUARIOS" = "BITRIX_WEBHOOK_URL"
@@ -99,6 +99,30 @@ async function buscarTodasPaginas<X>(metodo: string, paramsBase: Record<string, 
     chamarBitrix<{ result: { items: X[] } }>(metodo, { ...paramsBase, start })
   );
   for (const pagina of paginas) itens.push(...pagina.result.items);
+  return itens;
+}
+
+// Paginação pro formato "flat array" que crm.deal.list, crm.activity.list e
+// crm.lead.list usam (`{result: [...], next, total}`) -- diferente do
+// formato `{result:{items:[...]}}` que buscarTodasPaginas espera (usado por
+// crm.item.list/crm.stagehistory.list). Extraída de comercial.ts (2026-09-16)
+// pro bloco de CRM Leads também poder usar, sem duplicar de novo.
+export async function buscarTodasPaginasFlat<X>(metodo: string, paramsBase: Record<string, BitrixParamValue>): Promise<X[]> {
+  const primeira = await chamarBitrix<{ result: X[]; next?: number; total?: number }>(metodo, {
+    ...paramsBase,
+    start: 0,
+  });
+  const itens = [...primeira.result];
+  const total = primeira.total ?? itens.length;
+  if (primeira.next === undefined || total <= itens.length) return itens;
+
+  const starts: number[] = [];
+  for (let start = TAMANHO_PAGINA_BITRIX; start < total; start += TAMANHO_PAGINA_BITRIX) starts.push(start);
+
+  const paginas = await comConcorrenciaLimitada(starts, CONCORRENCIA_PAGINACAO, (start) =>
+    chamarBitrix<{ result: X[] }>(metodo, { ...paramsBase, start })
+  );
+  for (const pagina of paginas) itens.push(...pagina.result);
   return itens;
 }
 

@@ -1,0 +1,75 @@
+/* Classes específicas do bloco CRM Leads (abas + seletor de responsável) --
+   reusa as variáveis CSS já definidas em .wrap de painel-comercial.module.css
+   (herdadas por estarem dentro dele no DOM), só acrescenta o que falta. */
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tab,
+.tabActive {
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.tabActive {
+  background: var(--kpi-bg);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+.ownerLabel {
+  font-size: 12.5px;
+  color: var(--ink-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ownerSelect {
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 7px 10px;
+}
+
+.link {
+  color: var(--accent-ink);
+  text-decoration: none;
+}
+.link:hover {
+  text-decoration: underline;
+}
+
+.verTodos {
+  margin-top: 12px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--accent-ink);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 7px 12px;
+  cursor: pointer;
+}

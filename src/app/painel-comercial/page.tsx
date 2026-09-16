@@ -15,6 +15,8 @@ import {
   type KpisComercial,
   type RegistroResponsavel,
 } from "@/lib/bitrix/comercial";
+import { buscarLeadsAoVivo, type DadosLeadsAoVivo } from "@/lib/bitrix/crmLeads";
+import PainelCrmLeads from "@/components/painel-comercial/PainelCrmLeads";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -159,6 +161,18 @@ export default async function PainelComercialPage({
   let semRegistroNoPeriodo = false;
   let usandoRetratoSalvo = false;
 
+  // CRM Leads não tem conceito de competência/mês (é sempre fotografia do
+  // estado atual, ver crmLeads.ts) -- busca ao vivo sempre, independente do
+  // mês selecionado pro bloco Sucesso do Cliente. Falha isolada (não derruba
+  // o resto da página se o Bitrix Leads estiver fora do ar).
+  let dadosLeads: DadosLeadsAoVivo | null = null;
+  let erroLeads: string | null = null;
+  try {
+    dadosLeads = await comLimiteDeTempo(buscarLeadsAoVivo(), LIMITE_TEMPO_AO_VIVO_MS);
+  } catch (e) {
+    erroLeads = e instanceof Error ? e.message : "Falha ao buscar Leads do Bitrix.";
+  }
+
   if (ehCompetenciaAtual) {
     try {
       kpis = await comLimiteDeTempo(buscarKpisComercialAoVivo(competencia), LIMITE_TEMPO_AO_VIVO_MS);
@@ -206,7 +220,7 @@ export default async function PainelComercialPage({
       <div className={styles.wrap}>
         <div className={styles.container}>
           <div className={styles.masthead}>
-            <PageHeader icon={<IconChart />} titulo="Comercial" subtitulo={`Ativação & Sucesso do Cliente — ${competencia}`} />
+            <PageHeader icon={<IconChart />} titulo="Comercial" subtitulo={`CRM Leads & Sucesso do Cliente — ${competencia}`} />
             <div className={styles.meta}>
               <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "flex-end" }}>
                 <SeletorCompetencia competencia={competencia} />
@@ -242,129 +256,27 @@ export default async function PainelComercialPage({
             </div>
           </div>
 
+          {/* ---------------------------------------------------------- */}
+          {/* CRM Leads                                                  */}
+          {/* ---------------------------------------------------------- */}
+          <h2 style={{ fontSize: 18, fontWeight: 700, margin: "0 0 12px", color: "var(--ink)" }}>CRM Leads</h2>
+
+          {erroLeads && (
+            <div className={styles.stampPanel + " " + styles.stampPanelWarning} style={{ marginBottom: 24 }}>
+              <div className={styles.stampBadge + " " + styles.stampBadgeWarning}>ERRO</div>
+              <div className={styles.stampList}>
+                <div>Não consegui buscar os Leads do Bitrix agora: {erroLeads}</div>
+              </div>
+            </div>
+          )}
+          {dadosLeads && (
+            <div style={{ marginBottom: 32 }}>
+              <PainelCrmLeads linhas={dadosLeads.linhas} responsaveis={dadosLeads.responsaveis} ultimaAtualizacao={dadosLeads.ultimaAtualizacao} />
+            </div>
+          )}
+
           {kpis && (
             <>
-              {/* ---------------------------------------------------------- */}
-              {/* Ativação Novos Clientes                                    */}
-              {/* ---------------------------------------------------------- */}
-              <h2 style={{ fontSize: 18, fontWeight: 700, margin: "0 0 12px", color: "var(--ink)" }}>Ativação Novos Clientes</h2>
-
-              <div className={styles.kpis}>
-                <Kpi label="Cards Trabalhados (A1)" value={String(kpis.ativacao.a1_cardsTrabalhados)} sub="com alteração efetiva no mês" tone="positive" />
-                <Kpi label="Estoque Atual (A2)" value={String(kpis.ativacao.a2_estoqueAtual)} sub="cards abertos agora, neste funil" />
-                <Kpi
-                  label="Sem Alteração (A3)"
-                  value={String(kpis.ativacao.a3_semAlteracaoEfetiva)}
-                  sub="do estoque atual, parados no mês"
-                  tone={kpis.ativacao.a3_semAlteracaoEfetiva / Math.max(kpis.ativacao.a2_estoqueAtual, 1) > 0.3 ? "warning" : undefined}
-                />
-                <Kpi label="Ativações Concluídas (A4)" value={String(kpis.ativacao.a4_ativacoesConcluidas)} sub="transferidas p/ Sucesso ou ganhas no mês" tone="positive" />
-                <Kpi label="Perdas Finais (A5)" value={String(kpis.ativacao.a5_perdasFinais)} sub="encerradas como perda no mês" tone="negative" />
-                <Kpi label="Aproveitamento Mensal (A6)" value={fmtPct(kpis.ativacao.a6_aproveitamentoMensalPct)} sub="concluídas ÷ cards trabalhados" />
-                <Kpi
-                  label="Taxa de Sucesso dos Desfechos (A7)"
-                  value={kpis.ativacao.a7_taxaSucessoDesfechosPct !== null ? fmtPct(kpis.ativacao.a7_taxaSucessoDesfechosPct) : "—"}
-                  sub={`${kpis.ativacao.a4_ativacoesConcluidas} de ${kpis.ativacao.a7_amostraDesfechos} desfechos (concluídas ÷ concluídas+perdas)`}
-                  tone="info"
-                />
-              </div>
-
-              <section className={styles.section}>
-                <div className={styles.sectionHead}>
-                  <h2>Distribuição por etapa (A8)</h2>
-                  <div className={styles.note}>só cards abertos agora, neste funil</div>
-                </div>
-                <div className={styles.panel}>
-                  <DistribuicaoEtapaBarras dados={kpis.ativacao.a8_distribuicaoPorEtapa} />
-                </div>
-              </section>
-
-              <section className={styles.section}>
-                <div className={styles.sectionHead}>
-                  <h2>Movimentos de etapa no mês (A9)</h2>
-                  <div className={styles.note}>avanços/retornos são aproximados pela ordem do Kanban documentada — ver nota no rodapé</div>
-                </div>
-                <div className={styles.kpis}>
-                  <Kpi label="Total de Movimentos" value={String(kpis.ativacao.a9_movimentosDeEtapa.total)} sub="eventos de mudança de etapa no mês" />
-                  <Kpi label="Avanços" value={String(kpis.ativacao.a9_movimentosDeEtapa.avancos)} sub="progressos no Kanban" tone="positive" />
-                  <Kpi label="Retornos" value={String(kpis.ativacao.a9_movimentosDeEtapa.retornos)} sub="regressos no Kanban" tone="warning" />
-                  <Kpi label="Transferências p/ Sucesso" value={String(kpis.ativacao.a9_movimentosDeEtapa.transferenciasParaSucesso)} sub="mudaram de funil no mês" tone="info" />
-                </div>
-              </section>
-
-              <section className={styles.section}>
-                <div className={styles.sectionHead}>
-                  <h2>Cards vencidos e cobertura de valor</h2>
-                </div>
-                <div className={styles.grid2}>
-                  <div className={styles.panel}>
-                    <h3>Cards com prazo vencido (A10)</h3>
-                    <div className={styles.panelSub}>CLOSEDATE no passado, entre os cards abertos agora</div>
-                    <div className={styles.kpi} style={{ padding: 0 }}>
-                      <div className={`${styles.kpiValue} ${styles.num} ${kpis.ativacao.a10_cardsComPrazoVencido > 0 ? styles.warning : ""}`}>
-                        {kpis.ativacao.a10_cardsComPrazoVencido}
-                      </div>
-                      <div className={styles.kpiSub}>{fmtPct(kpis.ativacao.a10_cardsComPrazoVencidoPct)} do estoque atual</div>
-                    </div>
-                  </div>
-                  <div className={styles.panel}>
-                    <h3>Cobertura de valor — OPPORTUNITY (A11)</h3>
-                    <div className={styles.panelSub}>preenchimento do campo de valor, nunca somado como produção — ver rodapé</div>
-                    <div className={styles.barlist}>
-                      <BarraProporcional
-                        label="Com valor preenchido"
-                        value={kpis.ativacao.a11_coberturaValor.comValor}
-                        max={kpis.ativacao.a2_estoqueAtual}
-                        formatted={`${kpis.ativacao.a11_coberturaValor.comValor} (${fmtPct(kpis.ativacao.a11_coberturaValor.comValorPct)})`}
-                      />
-                      <BarraProporcional
-                        label="Sem valor preenchido"
-                        value={kpis.ativacao.a11_coberturaValor.semValor}
-                        max={kpis.ativacao.a2_estoqueAtual}
-                        formatted={`${kpis.ativacao.a11_coberturaValor.semValor} (${fmtPct(kpis.ativacao.a11_coberturaValor.semValorPct)})`}
-                        warning
-                      />
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              <section className={styles.section}>
-                <div className={styles.sectionHead}>
-                  <h2>Carteira por responsável — Ativação (A12)</h2>
-                  <div className={styles.note}>responsável atual do card, não quem executou a ação</div>
-                </div>
-                <div className={styles.panel}>
-                  <div className={styles.tableWrap}>
-                    <table className={styles.data}>
-                      <thead>
-                        <tr>
-                          <th>Responsável</th>
-                          <th className={styles.numCol}>Carteira Atual</th>
-                          <th className={styles.numCol}>Cards Alterados no Mês</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {kpis.ativacao.a12_carteiraPorResponsavel.map((r) => (
-                          <tr key={r.responsavel}>
-                            <td>{r.responsavel}</td>
-                            <td className={`${styles.numCol} ${styles.num}`}>{r.carteiraAtual}</td>
-                            <td className={`${styles.numCol} ${styles.num}`}>{r.cardsAlteradosNoMes}</td>
-                          </tr>
-                        ))}
-                        {kpis.ativacao.a12_carteiraPorResponsavel.length === 0 && (
-                          <tr>
-                            <td colSpan={3} style={{ color: "var(--ink-faint)" }}>
-                              Nenhum card aberto neste funil.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </section>
-
               {/* ---------------------------------------------------------- */}
               {/* Sucesso do Cliente                                         */}
               {/* ---------------------------------------------------------- */}
@@ -503,19 +415,14 @@ export default async function PainelComercialPage({
               {/* ---------------------------------------------------------- */}
               <section className={styles.section}>
                 <div className={styles.sectionHead}>
-                  <h2>Por responsável — Ativação &amp; Sucesso (R1-R11)</h2>
+                  <h2>Por responsável — Sucesso do Cliente (R1-R11)</h2>
                   <div className={styles.note}>
                     R8 (ligações) usa um TYPE_ID de atividade ainda não confirmado contra dados reais — tratar como estimativa. R9 (tarefas) depende de
                     escopo do webhook ainda não liberado (tasks.task.list) — hoje sempre 0. Ver nota completa no rodapé.
                   </div>
                 </div>
-                <div className={styles.panel} style={{ marginBottom: 18 }}>
-                  <h3>Ativação Novos Clientes</h3>
-                  <PorResponsavelTabela dados={kpis.porResponsavel.ativacao} />
-                </div>
                 <div className={styles.panel}>
-                  <h3>Sucesso do Cliente</h3>
-                  <PorResponsavelTabela dados={kpis.porResponsavel.sucesso} />
+                  <PorResponsavelTabela dados={kpis.porResponsavel} />
                 </div>
               </section>
 
@@ -538,26 +445,22 @@ export default async function PainelComercialPage({
                     <table className={styles.data}>
                       <thead>
                         <tr>
-                          <th>Cobertura de preenchimento</th>
-                          <th className={styles.numCol}>Ativação</th>
-                          <th className={styles.numCol}>Sucesso</th>
+                          <th>Cobertura de preenchimento — Sucesso do Cliente</th>
+                          <th className={styles.numCol}>%</th>
                         </tr>
                       </thead>
                       <tbody>
                         <tr>
                           <td>Responsável atribuído (Q3)</td>
-                          <td className={`${styles.numCol} ${styles.num}`}>{fmtPct(kpis.qualidade.q3_coberturaResponsavel.ativacao)}</td>
-                          <td className={`${styles.numCol} ${styles.num}`}>{fmtPct(kpis.qualidade.q3_coberturaResponsavel.sucesso)}</td>
+                          <td className={`${styles.numCol} ${styles.num}`}>{fmtPct(kpis.qualidade.q3_coberturaResponsavelPct)}</td>
                         </tr>
                         <tr>
                           <td>Empresa vinculada (Q4)</td>
-                          <td className={`${styles.numCol} ${styles.num}`}>{fmtPct(kpis.qualidade.q4_coberturaEmpresa.ativacao)}</td>
-                          <td className={`${styles.numCol} ${styles.num}`}>{fmtPct(kpis.qualidade.q4_coberturaEmpresa.sucesso)}</td>
+                          <td className={`${styles.numCol} ${styles.num}`}>{fmtPct(kpis.qualidade.q4_coberturaEmpresaPct)}</td>
                         </tr>
                         <tr>
                           <td>Data de término preenchida (Q5)</td>
-                          <td className={`${styles.numCol} ${styles.num}`}>{fmtPct(kpis.qualidade.q5_coberturaDataTermino.ativacao)}</td>
-                          <td className={`${styles.numCol} ${styles.num}`}>{fmtPct(kpis.qualidade.q5_coberturaDataTermino.sucesso)}</td>
+                          <td className={`${styles.numCol} ${styles.num}`}>{fmtPct(kpis.qualidade.q5_coberturaDataTerminoPct)}</td>
                         </tr>
                       </tbody>
                     </table>
@@ -573,7 +476,7 @@ export default async function PainelComercialPage({
                 className={styles.footer}
                 title="Q1 sempre retorna 0: nenhuma das APIs usadas (crm.deal.list, crm.activity.list, crm.stagehistory.list, tasks.task.list) expõe um log de visualização de card no Bitrix. R9 (e parte de R8) dependem do escopo tasks.task.list, hoje sem acesso (insufficient_scope) no webhook configurado — pendência de infraestrutura, não bug deste painel."
               >
-                Fonte: Bitrix24, Deals (crm.deal.*), funis &quot;Ativação Novos Clientes&quot; (categoria 1) e &quot;Sucesso do Cliente&quot; (categoria 0), via webhook de leitura.
+                Fonte: Bitrix24 via webhook de leitura — CRM Leads usa Leads (crm.lead.*, filtrado pelos 3 responsáveis do time de prospecção) e Sucesso do Cliente usa Deals (crm.deal.*, categoria 0).
                 &quot;Por responsável&quot; usa sempre o responsável ATUAL do card (ASSIGNED_BY_ID) — o CRM não guarda histórico de troca de responsável via API, só de troca de etapa.
                 Valores de OPPORTUNITY nunca são somados como produção/receita, só usados pra medir cobertura de preenchimento (% com valor, % sem valor).
                 <br />

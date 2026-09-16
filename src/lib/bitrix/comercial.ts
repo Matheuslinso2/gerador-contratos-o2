@@ -1,22 +1,29 @@
-// Modelagem de dados do painel Comercial (funis "Ativação Novos Clientes" e
-// "Sucesso do Cliente"), Deals padrão do Bitrix (crm.deal.*), não SPA. Mesmo
-// espírito arquitetural de seguroFianca.ts (que lê um Smart Process via
-// crm.item.*), mas a API e o formato de resposta do Bitrix são diferentes
-// aqui: crm.deal.list e crm.activity.list devolvem `{result: [...array
-// direto...]}`, não `{result: {items: [...]}}` como crm.item.list — por isso
-// este arquivo tem sua própria função de paginação (buscarTodasPaginasFlat),
-// em vez de reusar buscarTodasPaginas de client.ts (que é privada, e cujo
-// formato de resposta esperado não bate com esses dois métodos). O histórico
-// de etapas (crm.stagehistory.list) usa o MESMO formato paginado de
-// `{items:[...]}` que a SPA, então ali sim reusamos listarHistoricoEtapas de
-// client.ts diretamente, só passando entityTypeId=2 (DEAL) em vez de 1042.
+// Modelagem de dados do painel Comercial, bloco "Sucesso do Cliente" --
+// Deals padrão do Bitrix (crm.deal.*), categoria 0, não SPA. Mesmo espírito
+// arquitetural de seguroFianca.ts (que lê um Smart Process via crm.item.*),
+// mas a API e o formato de resposta do Bitrix são diferentes aqui:
+// crm.deal.list e crm.activity.list devolvem `{result: [...array
+// direto...]}`, não `{result: {items: [...]}}` como crm.item.list -- por
+// isso usamos buscarTodasPaginasFlat (client.ts) em vez de
+// buscarTodasPaginas (que espera o formato aninhado). O histórico de etapas
+// (crm.stagehistory.list) usa o MESMO formato paginado de `{items:[...]}`
+// que a SPA, então ali sim reusamos listarHistoricoEtapas de client.ts
+// diretamente, só passando entityTypeId=2 (DEAL) em vez de 1042.
 //
 // O "cliente" da O2 aqui é a imobiliária parceira (COMPANY_ID), não o
-// inquilino/segurado -- os dois funis rastreiam o relacionamento comercial
-// com essas imobiliárias, não o processo de uma apólice individual.
+// inquilino/segurado -- o funil rastreia o relacionamento comercial com
+// essas imobiliárias, não o processo de uma apólice individual.
 //
-// Regras gerais (ver ESPECIFICACOES_KPIS_BITRIX_ATIVACAO_SUCESSO_AGOSTO_2026.md,
-// seção 1, fonte de verdade pra toda fórmula usada abaixo):
+// 2026-09-16: o bloco "Ativação Novos Clientes" (categoria 1, KPIs A1-A12)
+// foi REMOVIDO deste arquivo -- substituído pelo módulo "CRM Leads"
+// (src/lib/bitrix/crmLeads.ts), baseado em Bitrix Leads (crm.lead.*) em vez
+// de Deals, seguindo uma especificação nova trazida pelo usuário. Decisão
+// dele, não uma depreciação técnica: o funil de Ativação em Deals categoria
+// 1 continua existindo no Bitrix, só não é mais representado neste painel.
+//
+// Regras gerais pro bloco Sucesso (ver
+// ESPECIFICACOES_KPIS_BITRIX_ATIVACAO_SUCESSO_AGOSTO_2026.md, seção 1, fonte
+// de verdade pra toda fórmula usada abaixo):
 //
 // 1.1 População mensal / "alteração efetiva": um card entra na população do
 //     mês se teve pelo menos um destes eventos dentro do período: mudança de
@@ -33,11 +40,7 @@
 //     conta sozinho -- e como não temos acesso a um log de visualizações via
 //     essas 4 APIs, nunca entra na conta de "alteração efetiva" aqui (ver
 //     nota em Q1 mais abaixo sobre essa limitação específica).
-// 1.2 Contagem única: cada card conta 1x por KPI de quantidade. Transferência
-//     de funil é sempre Ativação (categoria 1) → Sucesso (categoria 0);
-//     nunca o inverso -- confirmado com o usuário, não tratamos o caso
-//     reverso. Mover de funil é o MESMO ID de deal, só muda CATEGORY_ID (não
-//     cria um deal novo) -- confirmado ao vivo.
+// 1.2 Contagem única: cada card conta 1x por KPI de quantidade.
 // 1.3 Data de corte = data/hora da última atualização bem-sucedida dos dados
 //     (ver kpis.qualidade.q6_ultimaAtualizacao), não fim do mês -- painel de
 //     acompanhamento diário dentro do mês corrente.
@@ -72,16 +75,13 @@
 //   de infraestrutura fora do controle deste código. A função tenta a
 //   chamada mesmo assim e cai num array vazio em caso de erro, pra não
 //   quebrar o resto do painel.
-// - A9 (movimentos de etapa: avanços/retornos/transferências/fechamentos):
-//   a classificação de avanço vs retorno usa a ORDEM_ETAPAS_ATIVACAO listada
-//   abaixo como proxy da ordem real do Kanban -- essa ordem não foi
-//   confirmada contra a configuração real de exibição do funil no Bitrix,
-//   só reflete a ordem em que as etapas foram documentadas.
 
 import "server-only";
 import {
   buscarEmpresas,
+  buscarTodasPaginasFlat,
   buscarUsuarios,
+  chamarBitrix,
   listarHistoricoEtapas,
   type BitrixCampoEnum,
   type BitrixDefinicaoCampo,
@@ -92,7 +92,6 @@ import {
 // Constantes
 // ---------------------------------------------------------------------------
 
-export const CATEGORY_ID_ATIVACAO = 1;
 export const CATEGORY_ID_SUCESSO = 0;
 export const ENTITY_TYPE_ID_DEAL = 2;
 
@@ -104,32 +103,11 @@ export const CAMPO_DATA_TERMINO = "CLOSEDATE";
 // enum até então, agora confirmado.
 export const CAMPO_MOTIVO_ENTRADA = "UF_CRM_1784138667";
 
-// Etapas confirmadas via crm.dealcategory.list / crm.status.list ao vivo
-// nesta sessão -- estável, não muda sem reconfigurar o funil no Bitrix.
-export const ETAPAS_ATIVACAO: Record<string, string> = {
-  "C1:UC_FWJUVD": "CLIEN FECHOU (MÊS ANTERIOR)",
-  "C1:UC_KSEOX6": "CLIEN FECHOU (MÊS ATUAL)",
-  "C1:UC_SQM1IK": "VISITA/CALL ATIVA/ENGAJAMENTO",
-  "C1:UC_1WXD0P": "ACOMP/AUM PRODUÇÃO",
-  "C1:UC_1MCFAJ": "REVISÃO DESEMPENHO",
-  "C1:NEW": "RECICLAGEM (ACIMA DE 30 DIAS COM POTENCIAL)",
-  "C1:WON": "Ganho (Ativação)",
-  "C1:LOSE": "Perda (Ativação)",
-};
-// Ordem de progressão do Kanban -- ver nota sobre A9 no topo do arquivo
-// (aproximação, não confirmada contra a ordem real de exibição).
-const ORDEM_ETAPAS_ATIVACAO = [
-  "C1:UC_FWJUVD",
-  "C1:UC_KSEOX6",
-  "C1:UC_SQM1IK",
-  "C1:UC_1WXD0P",
-  "C1:UC_1MCFAJ",
-  "C1:NEW",
-  "C1:WON",
-  "C1:LOSE",
-];
-const ETAPAS_ATIVACAO_ABERTAS = ORDEM_ETAPAS_ATIVACAO.filter((id) => id !== "C1:WON" && id !== "C1:LOSE");
-
+// Etapas confirmadas via crm.dealcategory.stage.list?id=0 ao vivo (última
+// checagem: 2026-09-16, sem mudança desde 2026-09-08) -- inclui as 9 etapas
+// do fluxo novo (Radar de Negócios...Reciclagem, confirmadas pelo usuário
+// como válidas e não-legado) + as 13 etapas anteriores (também confirmadas
+// como válidas, não legado) + os 3 estados de fechamento.
 export const ETAPAS_SUCESSO: Record<string, string> = {
   NEW: "RADAR DE NEGÓCIOS",
   UC_L6RJ2U: "CONTATO EM ANDAMENTO",
@@ -195,81 +173,12 @@ const ETAPAS_SUCESSO_ABERTAS = ORDEM_ETAPAS_SUCESSO.filter((id) => !["WON", "LOS
 const TYPE_ID_LIGACAO_NAO_CONFIRMADO = new Set(["1"]);
 
 // ---------------------------------------------------------------------------
-// Chamadas cruas ao Bitrix -- réplica local mínima do padrão de client.ts.
-// Não importamos chamarBitrix/buscarTodasPaginas de lá porque não são
-// exportados, e o formato de resposta de crm.deal.list / crm.activity.list
-// (array direto em `result`) é diferente do formato `{result:{items:[...]}}`
-// que buscarTodasPaginas espera.
+// Chamadas cruas ao Bitrix
 // ---------------------------------------------------------------------------
 
-function getWebhookUrlComercial(): string {
-  const url = process.env.BITRIX_WEBHOOK_URL;
-  if (!url) throw new Error("BITRIX_WEBHOOK_URL não configurada");
-  return url.endsWith("/") ? url : `${url}/`;
-}
-
-type ParamValorComercial = string | number | Array<string | number>;
-
-async function chamarBitrixComercial<T>(metodo: string, params: Record<string, ParamValorComercial> = {}): Promise<T> {
-  const base = getWebhookUrlComercial();
-  const busca = new URLSearchParams();
-  for (const [chave, valor] of Object.entries(params)) {
-    if (Array.isArray(valor)) {
-      for (const item of valor) busca.append(`${chave}[]`, String(item));
-    } else {
-      busca.append(chave, String(valor));
-    }
-  }
-  const url = `${base}${metodo}${busca.toString() ? `?${busca.toString()}` : ""}`;
-  const resposta = await fetch(url, { signal: AbortSignal.timeout(15000), cache: "no-store" });
-  if (!resposta.ok) throw new Error(`Bitrix ${metodo} falhou: HTTP ${resposta.status}`);
-  const dados = await resposta.json();
-  if (dados.error) throw new Error(`Bitrix ${metodo} erro: ${dados.error_description || dados.error}`);
-  return dados as T;
-}
-
-const TAMANHO_PAGINA_BITRIX_COMERCIAL = 50;
-const CONCORRENCIA_PAGINACAO_COMERCIAL = 6;
-
-async function comConcorrenciaLimitadaComercial<X, Y>(itens: X[], limite: number, tarefa: (item: X) => Promise<Y>): Promise<Y[]> {
-  const resultados: Y[] = new Array(itens.length);
-  let proximo = 0;
-  async function trabalhador() {
-    for (;;) {
-      const indice = proximo++;
-      if (indice >= itens.length) return;
-      resultados[indice] = await tarefa(itens[indice]);
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limite, itens.length) }, trabalhador));
-  return resultados;
-}
-
-// Paginação pro formato "flat array" que crm.deal.list e crm.activity.list
-// usam (`{result: [...], next, total}`) -- diferente do formato
-// `{result:{items:[...]}}` que buscarTodasPaginas (client.ts) espera.
-async function buscarTodasPaginasFlat<X>(metodo: string, paramsBase: Record<string, ParamValorComercial>): Promise<X[]> {
-  const primeira = await chamarBitrixComercial<{ result: X[]; next?: number; total?: number }>(metodo, {
-    ...paramsBase,
-    start: 0,
-  });
-  const itens = [...primeira.result];
-  const total = primeira.total ?? itens.length;
-  if (primeira.next === undefined || total <= itens.length) return itens;
-
-  const starts: number[] = [];
-  for (let start = TAMANHO_PAGINA_BITRIX_COMERCIAL; start < total; start += TAMANHO_PAGINA_BITRIX_COMERCIAL) starts.push(start);
-
-  const paginas = await comConcorrenciaLimitadaComercial(starts, CONCORRENCIA_PAGINACAO_COMERCIAL, (start) =>
-    chamarBitrixComercial<{ result: X[] }>(metodo, { ...paramsBase, start })
-  );
-  for (const pagina of paginas) itens.push(...pagina.result);
-  return itens;
-}
-
 // Deal bruto -- campos padrão usados pelo painel comercial + o UF de motivo
-// de entrada (só populado nos deals do funil Sucesso). Index signature pra
-// tolerar campos extras que o Bitrix sempre devolve mesmo sem pedir.
+// de entrada. Index signature pra tolerar campos extras que o Bitrix sempre
+// devolve mesmo sem pedir.
 export type BitrixDealRaw = {
   ID: string;
   TITLE: string;
@@ -310,7 +219,7 @@ export async function listarDeals(categoryId: number): Promise<BitrixDealRaw[]> 
 // tipo BitrixDefinicaoCampo de client.ts porque o formato de cada entrada
 // (`{items: [{ID, VALUE}]}`) é o mesmo.
 export async function buscarDefinicaoCamposDeal(): Promise<Record<string, BitrixDefinicaoCampo>> {
-  const resposta = await chamarBitrixComercial<{ result: Record<string, BitrixDefinicaoCampo> }>("crm.deal.fields", {});
+  const resposta = await chamarBitrix<{ result: Record<string, BitrixDefinicaoCampo> }>("crm.deal.fields", {});
   return resposta.result;
 }
 
@@ -331,7 +240,7 @@ export type BitrixAtividadeRaw = {
 };
 
 // crm.activity.list também devolve array flat (mesmo formato de
-// crm.deal.list) -- confirmado ao vivo nesta sessão.
+// crm.deal.list) -- confirmado ao vivo.
 export async function listarAtividades(): Promise<BitrixAtividadeRaw[]> {
   return buscarTodasPaginasFlat<BitrixAtividadeRaw>("crm.activity.list", {
     "filter[OWNER_TYPE_ID]": ENTITY_TYPE_ID_DEAL,
@@ -354,16 +263,15 @@ export type BitrixTarefaRaw = {
 // no futuro) e caímos num array vazio em caso de erro, sem quebrar o painel.
 export async function listarTarefas(): Promise<BitrixTarefaRaw[]> {
   try {
-    const resposta = await chamarBitrixComercial<{ result: { tasks?: BitrixTarefaRaw[] } | BitrixTarefaRaw[] }>(
-      "tasks.task.list",
-      { select: ["ID", "UF_CRM_TASK", "CREATED_DATE", "CHANGED_DATE", "CLOSED_DATE"] }
-    );
+    const resposta = await chamarBitrix<{ result: { tasks?: BitrixTarefaRaw[] } | BitrixTarefaRaw[] }>("tasks.task.list", {
+      select: ["ID", "UF_CRM_TASK", "CREATED_DATE", "CHANGED_DATE", "CLOSED_DATE"],
+    });
     const resultado = resposta.result;
     if (Array.isArray(resultado)) return resultado;
     return resultado?.tasks ?? [];
   } catch (erro) {
     console.warn(
-      "[bitrix/comercial] tasks.task.list indisponível (provável falta de escopo no webhook BITRIX_WEBHOOK_URL) -- seguindo sem dados de tarefas. KPIs R9 (por responsável) ficam zerados até essa pendência de infraestrutura ser resolvida.",
+      "[bitrix/comercial] tasks.task.list indisponível (provável falta de escopo no webhook BITRIX_WEBHOOK_URL) -- seguindo sem dados de tarefas. KPI R9 (por responsável) fica zerado até essa pendência de infraestrutura ser resolvida.",
       erro
     );
     return [];
@@ -394,8 +302,8 @@ function nomeEmpresa(empresas: Record<number, string>, id: number): string {
 // aos campos monetários da SPA). Tratamos ausente/vazio como 0 -- em
 // nenhuma amostra observada o campo veio null (Bitrix money field defaulta
 // pra "0.00"), então "sem valor" e "valor zero" são o mesmo bucket aqui,
-// batendo com a forma como o KPI A11/S14 é descrito no documento (2
-// buckets: >0 e =0, sem um terceiro bucket "não preenchido").
+// batendo com a forma como o KPI S14 é descrito no documento (2 buckets: >0
+// e =0, sem um terceiro bucket "não preenchido").
 function valorNumero(v: unknown): number {
   if (v === null || v === undefined || v === "") return 0;
   const [num] = String(v).split("|");
@@ -419,8 +327,7 @@ function ordenarPorData(eventos: BitrixStageHistoryEvent[]): BitrixStageHistoryE
 export type LinhaComercial = {
   id: number;
   titulo: string;
-  categoriaId: number; // categoria ATUAL (0 = Sucesso, 1 = Ativação)
-  funil: "Ativação Novos Clientes" | "Sucesso do Cliente";
+  categoriaId: number;
   stageId: string;
   etapaNome: string;
   stageSemantica: string; // "P" | "S" | "F" (campo já semantizado pelo Bitrix)
@@ -431,23 +338,17 @@ export type LinhaComercial = {
   empresaNome: string;
   valor: number; // OPPORTUNITY, nunca somado pra virar produção/receita -- ver regra 1.5
   dataTermino: string; // CLOSEDATE (YYYY-MM-DD), "" se vazio
-  motivoEntradaId: string; // valor bruto do enum, "" se vazio -- só relevante no funil Sucesso
+  motivoEntradaId: string; // valor bruto do enum, "" se vazio
   motivoEntradaNome: string;
   dataCriacao: string;
   dataModificacao: string;
-  eventosOrdenados: BitrixStageHistoryEvent[]; // histórico completo do card (todas as categorias por onde já passou)
+  eventosOrdenados: BitrixStageHistoryEvent[];
   eventosNoMes: BitrixStageHistoryEvent[];
   atividadesNoMes: BitrixAtividadeRaw[];
   tarefasNoMes: BitrixTarefaRaw[];
   fontesAlteracaoEfetiva: string[]; // motivos que explicam alteracaoEfetivaNoMes -- ver regra 1.1
   alteracaoEfetivaNoMes: boolean;
-  // Primeiro evento do histórico em que a categoria vira de Ativação (1) pra
-  // Sucesso (0) -- null se o card nunca esteve em Ativação, ou nunca saiu de
-  // lá. Transferência é sempre Ativação → Sucesso (regra 1.2), não tratamos
-  // o inverso.
-  transferenciaEvento: BitrixStageHistoryEvent | null;
-  transferiuNesteMes: boolean;
-  reabriuNesteMes: boolean; // fechamento (S/F) seguido de reabertura (P) dentro da MESMA categoria, com a reabertura neste mês
+  reabriuNesteMes: boolean; // fechamento (S/F) seguido de reabertura (P), com a reabertura neste mês
 };
 
 function indexarPorOwnerId<T extends { OWNER_ID: string | number }>(itens: T[]): Map<number, T[]> {
@@ -507,13 +408,11 @@ export function montarLinhasComerciais(
   return deals.map((deal): LinhaComercial => {
     const id = Number(deal.ID);
     const categoriaId = Number(deal.CATEGORY_ID);
-    const funil = categoriaId === CATEGORY_ID_ATIVACAO ? "Ativação Novos Clientes" : "Sucesso do Cliente";
     const stageSemantica = deal.STAGE_SEMANTIC_ID || "P";
     const aberto = stageSemantica === "P";
     const responsavelId = Number(deal.ASSIGNED_BY_ID) || 0;
     const empresaId = Number(deal.COMPANY_ID) || 0;
-    const etapaNome =
-      (categoriaId === CATEGORY_ID_ATIVACAO ? ETAPAS_ATIVACAO[deal.STAGE_ID] : ETAPAS_SUCESSO[deal.STAGE_ID]) ?? deal.STAGE_ID;
+    const etapaNome = ETAPAS_SUCESSO[deal.STAGE_ID] ?? deal.STAGE_ID;
 
     const eventosOrdenados = ordenarPorData(historicoPorCard.get(id) ?? []);
     const eventosNoMes = eventosOrdenados.filter((e) => noMes(e.CREATED_TIME, competencia));
@@ -524,31 +423,9 @@ export function montarLinhasComerciais(
     const todasTarefas = tarefasPorCard.get(id) ?? [];
     const tarefasNoMes = todasTarefas.filter((t) => tarefaEmMes(t, competencia));
 
-    // Transferência Ativação → Sucesso: primeiro par consecutivo de eventos
-    // em que a categoria vira de 1 pra 0 (nunca o inverso -- regra 1.2).
-    let transferenciaEvento: BitrixStageHistoryEvent | null = null;
-    for (let i = 1; i < eventosOrdenados.length; i++) {
-      if (
-        Number(eventosOrdenados[i - 1].CATEGORY_ID) === CATEGORY_ID_ATIVACAO &&
-        Number(eventosOrdenados[i].CATEGORY_ID) === CATEGORY_ID_SUCESSO
-      ) {
-        transferenciaEvento = eventosOrdenados[i];
-        break;
-      }
-    }
-    const transferiuNesteMes = !!transferenciaEvento && noMes(transferenciaEvento.CREATED_TIME, competencia);
-
-    // Reabertura: fechamento (S ou F) seguido de reabertura (P) DENTRO da
-    // mesma categoria (ignora o par na fronteira de uma transferência de
-    // funil, que naturalmente muda de categoria e semântica ao mesmo tempo
-    // sem ser uma "reabertura" no sentido do KPI S7). S7 é um KPI específico
-    // do funil Sucesso do Cliente (categoria 0) -- uma reabertura ocorrida
-    // dentro de Ativação (categoria 1) não é contada aqui, pois o documento
-    // de spec não define um KPI equivalente pra esse funil. Validado contra
-    // a amostra de agosto/2026: sem esse filtro de categoria, um card que
-    // reabriu dentro de Ativação (card 1544, C1:WON → C1:UC_1WXD0P) era
-    // contado incorretamente junto com a reabertura real do card 499 em
-    // Sucesso, dando 2 em vez do 1 esperado pelo doc.
+    // Reabertura: fechamento (S ou F) seguido de reabertura (P) na mesma
+    // categoria, com a reabertura neste mês. Validado contra a amostra de
+    // agosto/2026 (card 499 — Armênio).
     let reabriuNesteMes = false;
     for (let i = 1; i < eventosOrdenados.length; i++) {
       const anterior = eventosOrdenados[i - 1];
@@ -574,7 +451,6 @@ export function montarLinhasComerciais(
       id,
       titulo: deal.TITLE,
       categoriaId,
-      funil,
       stageId: deal.STAGE_ID,
       etapaNome,
       stageSemantica,
@@ -595,8 +471,6 @@ export function montarLinhasComerciais(
       tarefasNoMes,
       fontesAlteracaoEfetiva,
       alteracaoEfetivaNoMes: fontesAlteracaoEfetiva.length > 0,
-      transferenciaEvento,
-      transferiuNesteMes,
       reabriuNesteMes,
     };
   });
@@ -629,22 +503,6 @@ export type RegistroResponsavel = {
 
 export type KpisComercial = {
   competencia: string;
-  ativacao: {
-    a1_cardsTrabalhados: number;
-    a2_estoqueAtual: number;
-    a3_semAlteracaoEfetiva: number;
-    a4_ativacoesConcluidas: number;
-    a5_perdasFinais: number;
-    a6_aproveitamentoMensalPct: number;
-    a7_taxaSucessoDesfechosPct: number | null;
-    a7_amostraDesfechos: number;
-    a8_distribuicaoPorEtapa: DistribuicaoEtapa[];
-    a9_movimentosDeEtapa: { total: number; avancos: number; retornos: number; transferenciasParaSucesso: number; fechamentos: number };
-    a10_cardsComPrazoVencido: number;
-    a10_cardsComPrazoVencidoPct: number;
-    a11_coberturaValor: CoberturaValor;
-    a12_carteiraPorResponsavel: { responsavel: string; carteiraAtual: number; cardsAlteradosNoMes: number }[];
-  };
   sucesso: {
     s1_cardsTrabalhados: number;
     s2_estoqueAtual: number;
@@ -665,12 +523,12 @@ export type KpisComercial = {
     s15_ganhosComValorPreenchidoPct: number;
     s16_carteiraEResultadoPorResponsavel: { responsavel: string; cardsAtuaisMaisGanhos: number; cardsAlterados: number; ganhos: number }[];
   };
-  porResponsavel: { ativacao: RegistroResponsavel[]; sucesso: RegistroResponsavel[] };
+  porResponsavel: RegistroResponsavel[];
   qualidade: {
     q1_eventosDescartadosPorVisualizacao: number; // sempre 0 -- ver limitação documentada no topo do arquivo
-    q3_coberturaResponsavel: { ativacao: number; sucesso: number };
-    q4_coberturaEmpresa: { ativacao: number; sucesso: number };
-    q5_coberturaDataTermino: { ativacao: number; sucesso: number };
+    q3_coberturaResponsavelPct: number;
+    q4_coberturaEmpresaPct: number;
+    q5_coberturaDataTerminoPct: number;
     q6_ultimaAtualizacao: string;
   };
 };
@@ -691,49 +549,10 @@ function cardsComPrazoVencido(linhas: LinhaComercial[], dataCorte: Date): number
   return linhas.filter((l) => l.dataTermino && new Date(l.dataTermino).getTime() < dataCorte.getTime()).length;
 }
 
-// Movimentos de etapa dentro de uma categoria no mês -- avanços/retornos por
-// comparação de posição na ORDEM_ETAPAS_* (aproximação, ver nota no topo do
-// arquivo), fechamentos = evento com STAGE_SEMANTIC_ID S ou F na própria
-// categoria, transferências = card com transferiuNesteMes (só faz sentido
-// pra Ativação, já que a transferência sempre vai Ativação → Sucesso).
-function calcularMovimentosEtapaAtivacao(linhas: LinhaComercial[], competencia: string): KpisComercial["ativacao"]["a9_movimentosDeEtapa"] {
-  let avancos = 0;
-  let retornos = 0;
-  let fechamentos = 0;
-  let transferencias = 0;
-  for (const l of linhas) {
-    for (let i = 0; i < l.eventosOrdenados.length; i++) {
-      const e = l.eventosOrdenados[i];
-      if (Number(e.CATEGORY_ID) !== CATEGORY_ID_ATIVACAO) continue;
-      if (!noMes(e.CREATED_TIME, competencia)) continue;
-      if (e.STAGE_SEMANTIC_ID === "S" || e.STAGE_SEMANTIC_ID === "F") {
-        fechamentos++;
-        continue;
-      }
-      const anterior = i > 0 ? l.eventosOrdenados[i - 1] : null;
-      if (!anterior || Number(anterior.CATEGORY_ID) !== CATEGORY_ID_ATIVACAO) {
-        avancos++; // entrada na etapa sem uma etapa anterior conhecida na mesma categoria -- tratado como avanço
-        continue;
-      }
-      const posAtual = ORDEM_ETAPAS_ATIVACAO.indexOf(e.STAGE_ID);
-      const posAnterior = ORDEM_ETAPAS_ATIVACAO.indexOf(anterior.STAGE_ID);
-      if (posAtual === -1 || posAnterior === -1 || posAtual >= posAnterior) avancos++;
-      else retornos++;
-    }
-    if (l.transferiuNesteMes) transferencias++;
-  }
-  return { total: avancos + retornos + fechamentos, avancos, retornos, transferenciasParaSucesso: transferencias, fechamentos };
-}
-
-function calcularRegistrosResponsavel(
-  linhasFunil: LinhaComercial[],
-  categoryId: number,
-  competencia: string,
-  dataCorte: Date
-): RegistroResponsavel[] {
-  const estoque = linhasFunil.filter((l) => l.categoriaId === categoryId && l.aberto);
-  const ganhosMes = linhasFunil.filter((l) => l.eventosNoMes.some((e) => Number(e.CATEGORY_ID) === categoryId && e.STAGE_SEMANTIC_ID === "S"));
-  const perdasFinais = linhasFunil.filter((l) => l.categoriaId === categoryId && l.stageSemantica === "F");
+function calcularRegistrosResponsavel(linhasFunil: LinhaComercial[], competencia: string, dataCorte: Date): RegistroResponsavel[] {
+  const estoque = linhasFunil.filter((l) => l.categoriaId === CATEGORY_ID_SUCESSO && l.aberto);
+  const ganhosMes = linhasFunil.filter((l) => l.eventosNoMes.some((e) => Number(e.CATEGORY_ID) === CATEGORY_ID_SUCESSO && e.STAGE_SEMANTIC_ID === "S"));
+  const perdasFinais = linhasFunil.filter((l) => l.categoriaId === CATEGORY_ID_SUCESSO && l.stageSemantica === "F");
 
   const nomeOuVazio = (l: LinhaComercial) => l.responsavelNome || "(sem responsável)";
   const universo = new Set<string>();
@@ -746,7 +565,10 @@ function calcularRegistrosResponsavel(
     const trabalhados = carteira.filter((l) => l.alteracaoEfetivaNoMes);
     const ganhos = ganhosMes.filter((l) => nomeOuVazio(l) === nome).length;
     const perdas = perdasFinais.filter((l) => nomeOuVazio(l) === nome).length;
-    const mudancasEtapa = carteira.reduce((acc, l) => acc + l.eventosNoMes.filter((e) => Number(e.CATEGORY_ID) === categoryId).length, 0);
+    const mudancasEtapa = carteira.reduce(
+      (acc, l) => acc + l.eventosNoMes.filter((e) => Number(e.CATEGORY_ID) === CATEGORY_ID_SUCESSO).length,
+      0
+    );
     const atividades = carteira.reduce((acc, l) => acc + l.atividadesNoMes.length, 0);
     const ligacoes = carteira.reduce(
       (acc, l) => acc + l.atividadesNoMes.filter((a) => TYPE_ID_LIGACAO_NAO_CONFIRMADO.has(a.TYPE_ID)).length,
@@ -775,70 +597,6 @@ export function montarKpisComercial(linhas: LinhaComercial[], _historico: Bitrix
   void _historico; // mantido na assinatura por simetria com o padrão de seguroFianca.ts; os eventos já vêm embutidos em cada LinhaComercial
   const dataCorte = new Date();
 
-  // ---- Ativação ----
-  const estoqueAtivacao = linhas.filter((l) => l.categoriaId === CATEGORY_ID_ATIVACAO && l.aberto);
-  const estoqueAtivacaoComAlteracao = estoqueAtivacao.filter((l) => l.alteracaoEfetivaNoMes);
-  const transferidasEsteMes = linhas.filter((l) => l.transferiuNesteMes);
-  const a1Ids = new Set<number>([...estoqueAtivacaoComAlteracao.map((l) => l.id), ...transferidasEsteMes.map((l) => l.id)]);
-  const a2 = estoqueAtivacao.length;
-  const a3 = a2 - estoqueAtivacaoComAlteracao.length;
-
-  // A4 = transferência definitiva pra Sucesso (nunca desfeita, regra 1.2) OU
-  // encerramento como ganho AINDA vigente hoje dentro de Ativação. Exigimos
-  // que o card continue no estado de ganho atualmente (categoriaId=1 &&
-  // stageSemantica="S"), não só que o evento tenha ocorrido no mês --
-  // simetria com A5, que já exclui perdas temporárias reabertas ("Um
-  // movimento temporário para perda que foi reaberto não conta como perda
-  // final"). Validado contra a amostra de agosto/2026: sem essa checagem de
-  // estado atual, o card 1544 (ganho em C1:WON e reaberto 26s depois pra
-  // C1:UC_1WXD0P, no mesmo dia) era contado como ativação concluída junto
-  // com a transferência real do card 499, dando 2 em vez do 1 esperado.
-  const a4Ids = new Set<number>();
-  for (const l of linhas) {
-    if (l.transferiuNesteMes) a4Ids.add(l.id);
-    const ganhoDentroAtivacaoAindaVigente =
-      l.categoriaId === CATEGORY_ID_ATIVACAO &&
-      l.stageSemantica === "S" &&
-      l.eventosNoMes.some((e) => Number(e.CATEGORY_ID) === CATEGORY_ID_ATIVACAO && e.STAGE_SEMANTIC_ID === "S");
-    if (ganhoDentroAtivacaoAindaVigente) a4Ids.add(l.id);
-  }
-  const a4 = a4Ids.size;
-  const a5 = linhas.filter((l) => l.categoriaId === CATEGORY_ID_ATIVACAO && l.stageSemantica === "F").length;
-  const a6 = pct(a4, a1Ids.size);
-  const a7amostra = a4 + a5;
-  const a7 = a7amostra > 0 ? pct(a4, a7amostra) : null;
-
-  const a10 = cardsComPrazoVencido(estoqueAtivacao, dataCorte);
-
-  const a12Map = new Map<string, { carteiraAtual: number; cardsAlteradosNoMes: number }>();
-  for (const l of estoqueAtivacao) {
-    const nome = l.responsavelNome || "(sem responsável)";
-    const atual = a12Map.get(nome) ?? { carteiraAtual: 0, cardsAlteradosNoMes: 0 };
-    atual.carteiraAtual++;
-    if (l.alteracaoEfetivaNoMes) atual.cardsAlteradosNoMes++;
-    a12Map.set(nome, atual);
-  }
-
-  const ativacao: KpisComercial["ativacao"] = {
-    a1_cardsTrabalhados: a1Ids.size,
-    a2_estoqueAtual: a2,
-    a3_semAlteracaoEfetiva: a3,
-    a4_ativacoesConcluidas: a4,
-    a5_perdasFinais: a5,
-    a6_aproveitamentoMensalPct: a6,
-    a7_taxaSucessoDesfechosPct: a7,
-    a7_amostraDesfechos: a7amostra,
-    a8_distribuicaoPorEtapa: distribuicaoPorEtapa(estoqueAtivacao, ETAPAS_ATIVACAO_ABERTAS, ETAPAS_ATIVACAO),
-    a9_movimentosDeEtapa: calcularMovimentosEtapaAtivacao(linhas, competencia),
-    a10_cardsComPrazoVencido: a10,
-    a10_cardsComPrazoVencidoPct: pct(a10, a2),
-    a11_coberturaValor: coberturaValor(estoqueAtivacao),
-    a12_carteiraPorResponsavel: [...a12Map.entries()]
-      .sort((x, y) => y[1].carteiraAtual - x[1].carteiraAtual)
-      .map(([responsavel, d]) => ({ responsavel, ...d })),
-  };
-
-  // ---- Sucesso ----
   const estoqueSucesso = linhas.filter((l) => l.categoriaId === CATEGORY_ID_SUCESSO && l.aberto);
   const estoqueSucessoComAlteracao = estoqueSucesso.filter((l) => l.alteracaoEfetivaNoMes);
   const ganhosSucessoEsteMes = linhas.filter((l) => l.eventosNoMes.some((e) => Number(e.CATEGORY_ID) === CATEGORY_ID_SUCESSO && e.STAGE_SEMANTIC_ID === "S"));
@@ -905,41 +663,27 @@ export function montarKpisComercial(linhas: LinhaComercial[], _historico: Bitrix
       .map(([responsavel, d]) => ({ responsavel, ...d })),
   };
 
-  // ---- Por responsável (R1-R11), separado por funil ----
-  const porResponsavel = {
-    ativacao: calcularRegistrosResponsavel(linhas, CATEGORY_ID_ATIVACAO, competencia, dataCorte),
-    sucesso: calcularRegistrosResponsavel(linhas, CATEGORY_ID_SUCESSO, competencia, dataCorte),
-  };
+  const porResponsavel = calcularRegistrosResponsavel(linhas, competencia, dataCorte);
 
   // ---- Qualidade / auditoria (Q1, Q3-Q6 -- Q2 fora de escopo, ver topo do arquivo) ----
   const qualidade: KpisComercial["qualidade"] = {
     q1_eventosDescartadosPorVisualizacao: 0, // ver limitação documentada no topo do arquivo
-    q3_coberturaResponsavel: {
-      ativacao: pct(estoqueAtivacao.filter((l) => l.responsavelId > 0).length, a2),
-      sucesso: pct(estoqueSucesso.filter((l) => l.responsavelId > 0).length, s2),
-    },
-    q4_coberturaEmpresa: {
-      ativacao: pct(estoqueAtivacao.filter((l) => l.empresaId > 0).length, a2),
-      sucesso: pct(estoqueSucesso.filter((l) => l.empresaId > 0).length, s2),
-    },
-    q5_coberturaDataTermino: {
-      ativacao: pct(estoqueAtivacao.filter((l) => l.dataTermino).length, a2),
-      sucesso: pct(estoqueSucesso.filter((l) => l.dataTermino).length, s2),
-    },
+    q3_coberturaResponsavelPct: pct(estoqueSucesso.filter((l) => l.responsavelId > 0).length, s2),
+    q4_coberturaEmpresaPct: pct(estoqueSucesso.filter((l) => l.empresaId > 0).length, s2),
+    q5_coberturaDataTerminoPct: pct(estoqueSucesso.filter((l) => l.dataTermino).length, s2),
     q6_ultimaAtualizacao: dataCorte.toISOString(),
   };
 
-  return { competencia, ativacao, sucesso, porResponsavel, qualidade };
+  return { competencia, sucesso, porResponsavel, qualidade };
 }
 
-// Busca ao vivo no Bitrix + monta os KPIs comerciais pra uma competência --
-// paraleliza deals (2 funis), histórico, atividades, tarefas e definição de
-// campos, depois resolve responsáveis/empresas referenciados antes de montar
-// as linhas normalizadas. Mesmo padrão de buscarAnaliseGerencialAoVivo em
-// seguroFianca.ts.
+// Busca ao vivo no Bitrix + monta os KPIs comerciais (Sucesso do Cliente)
+// pra uma competência -- paraleliza deals, histórico, atividades, tarefas e
+// definição de campos, depois resolve responsáveis/empresas referenciados
+// antes de montar as linhas normalizadas. Mesmo padrão de
+// buscarAnaliseGerencialAoVivo em seguroFianca.ts.
 export async function buscarKpisComercialAoVivo(competencia: string): Promise<KpisComercial & { totalEventos: number }> {
-  const [dealsAtivacao, dealsSucesso, historico, atividades, tarefas, definicaoCampos] = await Promise.all([
-    listarDeals(CATEGORY_ID_ATIVACAO),
+  const [deals, historico, atividades, tarefas, definicaoCampos] = await Promise.all([
     listarDeals(CATEGORY_ID_SUCESSO),
     listarHistoricoEtapasDeal(),
     listarAtividades(),
@@ -947,7 +691,6 @@ export async function buscarKpisComercialAoVivo(competencia: string): Promise<Kp
     buscarDefinicaoCamposDeal(),
   ]);
 
-  const deals = [...dealsAtivacao, ...dealsSucesso];
   const idsUsuario = deals.map((d) => Number(d.ASSIGNED_BY_ID)).filter((id) => id > 0);
   const idsEmpresa = deals.map((d) => Number(d.COMPANY_ID)).filter((id) => id > 0);
   const [nomesUsuarios, nomesEmpresas] = await Promise.all([buscarUsuarios(idsUsuario), buscarEmpresas(idsEmpresa)]);
