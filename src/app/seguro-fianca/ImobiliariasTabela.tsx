@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import styles from "./seguro-fianca.module.css";
+import { ORDEM_HIERARQUIA, type ClasseImobiliaria } from "@/lib/bitrix/classificacaoImobiliarias";
 
 type LinhaImobiliaria = {
   nome: string;
@@ -18,10 +19,54 @@ type LinhaImobiliaria = {
   mediaPercentualPacote: number;
 };
 
-// "tendencia" não é um campo salvo em LinhaImobiliaria (é calculado na hora
-// comparando com o mês anterior), por isso entra como uma coluna ordenável
-// à parte, não uma chave do tipo acima.
-type ColunaOrdenavel = keyof LinhaImobiliaria | "tendencia";
+type ClassificacaoImobiliaria = { cotacoes: ClasseImobiliaria | null; contratacoes: ClasseImobiliaria | null };
+
+// Cores por classe operacional (estudo da Patricia, 16/09/2026) -- segue a
+// equivalência comercial que ela usou (platina/diamante/ouro/prata/cobre/
+// latão), não são cores decorativas soltas.
+const COR_CLASSE: Record<string, { bg: string; ink: string }> = {
+  "Pilar Central": { bg: "#E7EAF3", ink: "#3E4A66" }, // platina
+  Consolidado: { bg: "#E1EBFC", ink: "#2F6FED" }, // diamante
+  Expansão: { bg: "#FBF0DA", ink: "#9A6B08" }, // ouro
+  "Fiel da Balança": { bg: "#EEF0F2", ink: "#6B7280" }, // prata
+  Avulso: { bg: "#F6E7DA", ink: "#A15A22" }, // cobre
+  "Fora de Linha": { bg: "#F1EEE3", ink: "#8C7A3E" }, // latão
+};
+
+function BadgeClasse({ classe }: { classe: ClasseImobiliaria | null }) {
+  if (!classe) return <span style={{ color: "var(--ink-faint)" }}>—</span>;
+  const cor = COR_CLASSE[classe.classe] ?? { bg: "#EEEEEE", ink: "#555555" };
+  return (
+    <span
+      title={`Volume no par de meses: ${classe.volume}`}
+      style={{
+        display: "inline-block",
+        whiteSpace: "nowrap",
+        borderRadius: 999,
+        padding: "2px 9px",
+        fontSize: 11.5,
+        fontWeight: 600,
+        background: cor.bg,
+        color: cor.ink,
+      }}
+    >
+      {classe.classe}
+    </span>
+  );
+}
+
+// Posição na hierarquia pra ordenar por classe (maior classe primeiro);
+// quem não tem classe nenhuma (nunca teve atividade) fica sempre por último.
+function posicaoHierarquia(classe: ClasseImobiliaria | null): number {
+  if (!classe) return ORDEM_HIERARQUIA.length;
+  const indice = ORDEM_HIERARQUIA.indexOf(classe.classe);
+  return indice === -1 ? ORDEM_HIERARQUIA.length : indice;
+}
+
+// "tendencia" e as 2 colunas de classificação não são campos salvos em
+// LinhaImobiliaria (são calculados/vêm de outra fonte à parte), por isso
+// entram como colunas ordenáveis à parte, não chaves do tipo acima.
+type ColunaOrdenavel = keyof LinhaImobiliaria | "tendencia" | "classeCotacao" | "classeContratacao";
 
 function fmtBRL(v: number): string {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -56,7 +101,8 @@ function tendencia(atual: number, anterior: number): { pct: number; direcao: "up
 function valorOrdenacao(
   i: LinhaImobiliaria,
   coluna: ColunaOrdenavel,
-  totalMesAnteriorPorImobiliaria: Record<string, number>
+  totalMesAnteriorPorImobiliaria: Record<string, number>,
+  classificacaoPorImobiliaria: Record<string, ClassificacaoImobiliaria>
 ): number | string {
   if (coluna === "nome") return normalizar(i.nome);
   if (coluna === "tendencia") {
@@ -64,6 +110,8 @@ function valorOrdenacao(
     if (t.direcao === "flat") return 0;
     return t.direcao === "up" ? t.pct : -t.pct;
   }
+  if (coluna === "classeCotacao") return posicaoHierarquia(classificacaoPorImobiliaria[i.nome]?.cotacoes ?? null);
+  if (coluna === "classeContratacao") return posicaoHierarquia(classificacaoPorImobiliaria[i.nome]?.contratacoes ?? null);
   return i[coluna];
 }
 
@@ -112,9 +160,11 @@ function Th({
 export default function ImobiliariasTabela({
   imobiliarias,
   totalMesAnteriorPorImobiliaria = {},
+  classificacaoPorImobiliaria = {},
 }: {
   imobiliarias: LinhaImobiliaria[];
   totalMesAnteriorPorImobiliaria?: Record<string, number>;
+  classificacaoPorImobiliaria?: Record<string, ClassificacaoImobiliaria>;
 }) {
   const [expandido, setExpandido] = useState(false);
   const [busca, setBusca] = useState("");
@@ -143,13 +193,13 @@ export default function ImobiliariasTabela({
     const { coluna, direcao } = ordenacao;
     const copia = [...filtradas];
     copia.sort((a, b) => {
-      const va = valorOrdenacao(a, coluna, totalMesAnteriorPorImobiliaria);
-      const vb = valorOrdenacao(b, coluna, totalMesAnteriorPorImobiliaria);
+      const va = valorOrdenacao(a, coluna, totalMesAnteriorPorImobiliaria, classificacaoPorImobiliaria);
+      const vb = valorOrdenacao(b, coluna, totalMesAnteriorPorImobiliaria, classificacaoPorImobiliaria);
       const cmp = typeof va === "string" ? va.localeCompare(vb as string) : (va as number) - (vb as number);
       return direcao === "asc" ? cmp : -cmp;
     });
     return copia;
-  }, [filtradas, ordenacao, totalMesAnteriorPorImobiliaria]);
+  }, [filtradas, ordenacao, totalMesAnteriorPorImobiliaria, classificacaoPorImobiliaria]);
 
   const visiveis = expandido || busca ? ordenadas : ordenadas.slice(0, LIMITE);
   const restantes = filtradas.length - LIMITE;
@@ -181,6 +231,14 @@ export default function ImobiliariasTabela({
               Cotações
             </Th>
             <Th
+              coluna="classeCotacao"
+              ordenacao={ordenacao}
+              onClick={alternarOrdenacao}
+              title="Classificação operacional em Cotações — estudo da Patricia, atualiza a cada 2 meses"
+            >
+              Classe Cotação
+            </Th>
+            <Th
               coluna="tendencia"
               ordenacao={ordenacao}
               onClick={alternarOrdenacao}
@@ -200,6 +258,14 @@ export default function ImobiliariasTabela({
             </Th>
             <Th coluna="convertidos" ordenacao={ordenacao} onClick={alternarOrdenacao} numerica title="Convertidos">
               Conv.
+            </Th>
+            <Th
+              coluna="classeContratacao"
+              ordenacao={ordenacao}
+              onClick={alternarOrdenacao}
+              title="Classificação operacional em Contratações — estudo da Patricia, atualiza a cada 2 meses"
+            >
+              Classe Contratação
             </Th>
             <Th
               coluna="premioCotado"
@@ -252,6 +318,9 @@ export default function ImobiliariasTabela({
               <td className={`${styles.numCol} ${styles.num}`} style={{ fontWeight: 700 }}>
                 {i.total}
               </td>
+              <td className={styles.numCol}>
+                <BadgeClasse classe={classificacaoPorImobiliaria[i.nome]?.cotacoes ?? null} />
+              </td>
               <td className={`${styles.numCol} ${styles.num}`}>
                 <Tendencia atual={i.total} anterior={totalMesAnteriorPorImobiliaria[i.nome] ?? 0} />
               </td>
@@ -259,6 +328,9 @@ export default function ImobiliariasTabela({
               <td className={`${styles.numCol} ${styles.num}`}>{i.recusados}</td>
               <td className={`${styles.numCol} ${styles.num}`}>{i.perdidos}</td>
               <td className={`${styles.numCol} ${styles.num}`}>{i.convertidos}</td>
+              <td className={styles.numCol}>
+                <BadgeClasse classe={classificacaoPorImobiliaria[i.nome]?.contratacoes ?? null} />
+              </td>
               <td className={`${styles.numCol} ${styles.num}`}>{fmtBRL(i.premioCotado)}</td>
               <td className={`${styles.numCol} ${styles.num}`}>{fmtBRL(i.comissaoCotada)}</td>
               <td className={`${styles.numCol} ${styles.num}`}>{fmtBRL(i.ticketMedio)}</td>
@@ -273,7 +345,7 @@ export default function ImobiliariasTabela({
           ))}
           {filtradas.length === 0 && (
             <tr>
-              <td colSpan={13} style={{ color: "var(--ink-faint)" }}>
+              <td colSpan={15} style={{ color: "var(--ink-faint)" }}>
                 {busca ? "Nenhuma imobiliária encontrada com esse nome." : "Nenhuma imobiliária com cotação registrada neste período."}
               </td>
             </tr>

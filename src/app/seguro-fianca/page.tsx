@@ -28,6 +28,7 @@ import {
   type EstatisticaTempo as EstatisticaTempoTipo,
   type QuadroDiario,
 } from "@/lib/bitrix/seguroFianca";
+import { montarClassificacaoImobiliarias } from "@/lib/bitrix/classificacaoImobiliarias";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -43,6 +44,17 @@ function competenciaAnterior(competencia: string): string {
   const [ano, mes] = competencia.split("-").map(Number);
   const data = new Date(ano, mes - 2, 1);
   return `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, "0")}`;
+}
+
+const NOMES_MESES = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+];
+// Ex: "2026-07" -> "Julho de 2026" -- usado no par de meses da classificação
+// operacional de imobiliárias.
+function nomeCompetencia(competencia: string): string {
+  const [ano, mes] = competencia.split("-").map(Number);
+  return `${NOMES_MESES[mes - 1]} de ${ano}`;
 }
 
 function fmtBRL(v: number): string {
@@ -677,6 +689,11 @@ export default async function SeguroFiancaPage({
   const totalRelevantesMesAnterior =
     (snapshotAnterior?.payload as AnaliseGerencial | undefined)?.kpis
       .totalRelevantes ?? 0;
+
+  // Classificação operacional das imobiliárias (estudo da Patricia,
+  // 16/09/2026) -- status vigente do par de meses fechado mais recente, não
+  // uma métrica por competência selecionada (ver classificacaoImobiliarias.ts).
+  const classificacao = await montarClassificacaoImobiliarias(supabase);
 
   return (
     <>
@@ -2664,6 +2681,27 @@ export default async function SeguroFiancaPage({
                       {gerencial.kpis.imobiliariasAtivas} imobiliárias com
                       novidade ou card herdado em andamento
                     </div>
+                    <div className={styles.note}>
+                      {classificacao.incompleto ? (
+                        "Classificação operacional indisponível no momento — tente atualizar a página em instantes."
+                      ) : (
+                        <>
+                          Classificação operacional vigente:{" "}
+                          {nomeCompetencia(classificacao.par[0])} + {nomeCompetencia(classificacao.par[1])} (atualiza a cada 2 meses)
+                          {classificacao.mesesSemDadosNativos.length > 0 && (
+                            <>
+                              {" — "}
+                              <strong>
+                                sem cards no Bitrix em{" "}
+                                {classificacao.mesesSemDadosNativos.map(nomeCompetencia).join(" e ")}
+                              </strong>
+                              {" "}
+                              (Fiança ainda rodava no sistema anterior); a classe reflete só o volume real do outro mês
+                            </>
+                          )}
+                        </>
+                      )}
+                    </div>
                     <ExportarQuadro
                       quadroId="quadro-fianca-imobiliarias"
                       corFundo="#f7f8fa"
@@ -2690,6 +2728,9 @@ export default async function SeguroFiancaPage({
                       imobiliarias={gerencial.topImobiliarias}
                       totalMesAnteriorPorImobiliaria={
                         totalMesAnteriorPorImobiliaria
+                      }
+                      classificacaoPorImobiliaria={
+                        classificacao.porImobiliaria
                       }
                     />
                   </div>
