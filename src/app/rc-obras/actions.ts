@@ -3,7 +3,7 @@
 import { randomUUID } from "crypto";
 import { createServiceClient } from "@/lib/supabase/service";
 import { enviarEmail } from "@/lib/email";
-import { montarEmailRcObras, COBERTURAS_RC_OBRAS, type RcObrasPayload, type CoberturaRcObrasChave } from "@/lib/integracoes/rcObras";
+import { montarEmailRcObras, criarCardRcObras, COBERTURAS_RC_OBRAS, type RcObrasPayload, type CoberturaRcObrasChave } from "@/lib/integracoes/rcObras";
 import { registrarNaPlanilhaRcObras } from "@/lib/integracoes/planilhaRcObras";
 import { EMAIL_COMERCIAL_O2 } from "@/lib/integracoes/emailO2";
 
@@ -15,7 +15,7 @@ function campo(formData: FormData, name: string): string {
   return String(formData.get(name) ?? "").trim();
 }
 
-async function auditar(payload: RcObrasPayload, status: string, erro?: string) {
+async function auditar(payload: RcObrasPayload, status: string, itemId?: number, erro?: string) {
   try {
     const supabase = createServiceClient();
     await supabase.from("integracao_formularios_log").upsert(
@@ -24,8 +24,8 @@ async function auditar(payload: RcObrasPayload, status: string, erro?: string) {
         resposta_id: payload.responseId,
         payload,
         status,
-        bitrix_entity_type_id: null,
-        bitrix_item_id: null,
+        bitrix_entity_type_id: 1046,
+        bitrix_item_id: itemId ?? null,
         erro: erro ?? null,
         atualizado_em: new Date().toISOString(),
       },
@@ -98,9 +98,23 @@ export async function enviarFichaRcObras(_estadoAnterior: EstadoEnvioRcObras, fo
 
   await auditar(payload, "processando");
 
+  // Cria o card na SPA de Incêndio primeiro (mesmo pipeline de Seguro
+  // Celular/RCP/Condomínio) -- se falhar, não trava o e-mail nem a
+  // planilha (que sempre foram o canal principal aqui), só fica sem o link
+  // do card no e-mail e sem entrar na contagem do painel de produção.
+  let bitrixResultado: { created: boolean; item: { id: number } } | undefined;
+  try {
+    bitrixResultado = await criarCardRcObras(payload);
+    await auditar(payload, bitrixResultado.created ? "criado" : "duplicado", bitrixResultado.item.id);
+  } catch (error) {
+    const mensagem = error instanceof Error ? error.message : String(error);
+    console.error("RC Obras: card no Bitrix não criado, dado preservado no Supabase para backfill:", mensagem);
+    await auditar(payload, "erro", undefined, mensagem);
+  }
+
   let emailEnviado = true;
   try {
-    const { assunto, html } = montarEmailRcObras(payload);
+    const { assunto, html } = montarEmailRcObras(payload, bitrixResultado);
     await enviarEmail({
       para: EMAIL_DESTINO_RC_OBRAS,
       cc: [EMAIL_COMERCIAL_O2],
@@ -113,7 +127,7 @@ export async function enviarFichaRcObras(_estadoAnterior: EstadoEnvioRcObras, fo
     emailEnviado = false;
     const mensagem = error instanceof Error ? error.message : String(error);
     console.error("RC Obras: falha ao enviar e-mail pra incendio@o2seguros.com.br:", mensagem);
-    await auditar(payload, "erro", mensagem);
+    await auditar(payload, "erro", bitrixResultado?.item.id, mensagem);
   }
 
   try {
@@ -122,7 +136,7 @@ export async function enviarFichaRcObras(_estadoAnterior: EstadoEnvioRcObras, fo
     console.warn("RC Obras: falha ao registrar na planilha de conferência:", error);
   }
 
-  if (emailEnviado) await auditar(payload, "enviado");
+  if (emailEnviado) await auditar(payload, "enviado", bitrixResultado?.item.id);
 
   // Mesmo se o e-mail falhar, o payload já está preservado em
   // integracao_formularios_log (status "erro") pra reenvio manual — não

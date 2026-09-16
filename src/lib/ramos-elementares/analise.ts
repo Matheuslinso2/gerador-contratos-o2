@@ -246,6 +246,13 @@ function ramoCanonico(valor: string): string {
     "INCENDIO INDIVIDUAL EMPRESARIAL": "EMPRESARIAL",
     COND: "CONDOMÍNIO",
     CONDOMINIO: "CONDOMÍNIO",
+    // Produtos novos reaproveitando a SPA de Incêndio (decisão do Matheus,
+    // 14/09/2026 -- ver src/lib/integracoes/seguroCelular.ts). Entrada
+    // explícita por consistência, mesmo já vindo "limpo" de uma lista fixa
+    // do Bitrix (sem risco de digitação errada).
+    "SEGURO CELULAR": "SEGURO CELULAR",
+    RCP: "RCP",
+    "RC OBRAS": "RC OBRAS",
     EMPR: "EMPRESARIAL",
     EMPRESARIAL: "EMPRESARIAL",
     IMO: "IMOBILIÁRIO",
@@ -282,12 +289,25 @@ function seguradoraCanonica(valor: string): string {
     SUHAI: "SUHAI",
     TOKI: "TOKIO",
     TOKIO: "TOKIO",
-    YELU: "YELUM",
-    YELUM: "YELUM",
+    // Confirmado com o Matheus (15/09/2026): é a mesma seguradora -- o
+    // campo antigo (texto livre) normalizava pra "YELUM" (1 L), mas o
+    // campo novo de seleção (ufCrm12SeguradoraFinalMulti, ver
+    // src/lib/ramos-elementares/fonteBitrix.ts) usa "YELLUM" (2 L, grafia
+    // correta). Unificado em "YELLUM" pros dois campos não virarem
+    // seguradoras diferentes nos KPIs.
+    YELU: "YELLUM",
+    YELUM: "YELLUM",
+    YELLUM: "YELLUM",
     ZURI: "ZURICH",
     ZURICH: "ZURICH",
     "COTAR EM + DE 1": "MÚLTIPLAS SEGURADORAS",
     SEGIMOB: "SEGIMOB — SEGURADORA NÃO INFORMADA",
+    // "SEG/TOKIO" e "SEG/ZURICH" (opções do campo novo de seleção) são a
+    // mesma seguradora (Tokio/Zurich) com origem na Segimob -- confirmado
+    // com o Matheus que é pra manter como categoria PRÓPRIA nos KPIs, não
+    // unificar com "TOKIO"/"ZURICH" puro (a info de canal importa aqui).
+    // Sem entrada no mapa: passam direto por texto(valor).toUpperCase(),
+    // que já devolve "SEG/TOKIO"/"SEG/ZURICH" como vêm do campo.
   };
   return mapa[normal] || texto(valor).toUpperCase() || "NÃO INFORMADA";
 }
