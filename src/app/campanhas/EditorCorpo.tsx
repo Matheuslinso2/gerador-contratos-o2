@@ -28,6 +28,21 @@ function desembrulharParaEdicao(corpoHtml: string): string {
   return blocos.length ? blocos.join("") : corpoHtml;
 }
 
+// Causa real da imagem "quebrada" (achado completo em 17/09/2026, revendo
+// o caso de perto): não é só colar do WhatsApp Desktop (file:/blob:) --
+// pegou um caso real onde a imagem veio de dentro do Gmail (visualizando o
+// anexo do WhatsApp encaminhado por e-mail e colando dali), e o Gmail bota
+// no clipboard um <img src="https://mail.google.com/mail/...&view=fimg...">
+// -- um link de verdade, com https, mas preso à SESSÃO de quem colou (só
+// resolve se o navegador de quem vê tiver aquela conta do Gmail logada).
+// Passa batido em qualquer checagem de prefixo (file:/blob:) porque parece
+// uma URL normal. Por isso a regra virou "confia só no que a gente mesmo
+// subiu" em vez de tentar adivinhar todo formato de link que não presta.
+function referenciaDeImagemConfiavel(src: string): boolean {
+  const baseStorage = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/campanhas-imagens/`;
+  return src.startsWith(baseStorage);
+}
+
 export function EditorCorpo({ name, corpoInicialHtml }: { name: string; corpoInicialHtml?: string }) {
   const editorRef = useRef<HTMLDivElement>(null);
   const hiddenRef = useRef<HTMLInputElement>(null);
@@ -42,6 +57,13 @@ export function EditorCorpo({ name, corpoInicialHtml }: { name: string; corpoIni
       // Navegador sem suporte a execCommand (raro) -- segue sem forçar <p>,
       // o parser de blocos abaixo ainda lida com <div> solto.
     }
+    // Campanha existente reaberta pra editar (EditarConteudoCampanha) pode
+    // já trazer uma referência quebrada salva de ANTES desse fix existir --
+    // sincronizar()/aoColar só rodam em resposta a uma ação do usuário, não
+    // no carregamento inicial, então sem isso a imagem quebrada ficaria
+    // muda até o usuário mexer em alguma coisa.
+    removerImagensSemReferenciaValida();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function paddingBloco() {
@@ -145,14 +167,13 @@ export function EditorCorpo({ name, corpoInicialHtml }: { name: string; corpoIni
   function removerImagensSemReferenciaValida() {
     const editor = editorRef.current;
     if (!editor) return;
-    const imagensQuebradas = [...editor.querySelectorAll("img")].filter((img) => {
-      const src = img.getAttribute("src") ?? "";
-      return src.startsWith("file:") || src.startsWith("blob:");
-    });
+    const imagensQuebradas = [...editor.querySelectorAll("img")].filter(
+      (img) => !referenciaDeImagemConfiavel(img.getAttribute("src") ?? "")
+    );
     if (!imagensQuebradas.length) return;
     imagensQuebradas.forEach((img) => img.remove());
     setErroImagem(
-      'Uma imagem colada não pôde ser inserida (era só uma referência local, não a imagem de verdade) — use o botão "Inserir imagem" acima pra anexar.'
+      'Uma imagem foi removida por não ser uma referência confiável (era um link local, de blob ou preso à sessão de quem colou -- nunca chegaria certo pra outra pessoa) — use o botão "Inserir imagem" acima pra anexar de novo.'
     );
     sincronizar();
   }
