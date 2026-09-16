@@ -170,7 +170,21 @@ export function EditorCorpo({ name, corpoInicialHtml }: { name: string; corpoIni
           S
         </button>
         <span className="mx-1 h-4 w-px bg-gray-300" />
-        <button type="button" onClick={() => fileInputRef.current?.click()} disabled={enviandoImagem} className={botaoClass}>
+        {/* onMouseDown com preventDefault (achado 17/09/2026): sem isso, o
+            clique no botão rouba o foco do editor e apaga a seleção atual
+            -- se o usuário tinha clicado numa imagem existente pra
+            substituí-la, essa seleção se perde antes do arquivo ser
+            escolhido, e o insertHTML (abaixo, em inserirImagemNoEditor) não
+            tem mais o que substituir. Mantendo a seleção viva, escolher uma
+            imagem nova troca a que estava selecionada em vez de só inserir
+            outra ao lado. */}
+        <button
+          type="button"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => fileInputRef.current?.click()}
+          disabled={enviandoImagem}
+          className={botaoClass}
+        >
           {enviandoImagem ? "Enviando imagem..." : "Inserir imagem"}
         </button>
         <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={selecionarImagem} />
