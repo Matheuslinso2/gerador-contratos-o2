@@ -11,10 +11,14 @@ export type ImobiliariaAdminRow = {
   telefone: string | null;
   email: string | null;
   endereco: string | null;
+  responsavel: string | null;
   indice_reajuste: string | null;
   plataforma_assinatura: string | null;
   created_at: string;
   cadastro_incompleto: boolean | null;
+  user_id: string | null;
+  autorizado: boolean;
+  autorizado_em: string | null;
   contratos: number;
   auditorias: number;
   faturasEsperadas: number;

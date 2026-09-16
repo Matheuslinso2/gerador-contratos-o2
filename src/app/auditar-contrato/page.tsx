@@ -14,6 +14,7 @@ import { garantirImobiliariaColaborador } from "@/lib/imobiliariaColaborador";
 import { buscarImobiliariaDoUsuario } from "@/lib/imobiliariaDoUsuario";
 import { ipDoVisitante, contarAuditoriasPublicas } from "./actions";
 import { LIMITE_AUDITORIAS_PUBLICAS_POR_IP } from "./limitePublico";
+import AvisoAutorizacaoImobiliaria from "@/components/AvisoAutorizacaoImobiliaria";
 
 export const dynamic = "force-dynamic";
 // Analisar PDF escaneado/imagem (a IA lendo direto das páginas) já demora
@@ -75,8 +76,8 @@ export default async function AuditarContratoPage({
                   endereço.
                 </p>
                 <p>
-                  Para continuar usando o Auditor de Contrato sem limite, crie um login no Workspace da O2 Seguros ou
-                  fale com a gente.
+                  Crie um login gratuito no Workspace da O2 Seguros — leva menos de um minuto e você já volta a usar o
+                  Auditor de Contrato na hora, enquanto a gente analisa seu cadastro.
                 </p>
                 <Link
                   href="/signup"
@@ -143,7 +144,12 @@ export default async function AuditarContratoPage({
         )}
 
         <div className="rounded-xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
-          <AuditorForm userId={user!.id} ultimoId={ultimo} />
+          <AvisoAutorizacaoImobiliaria
+            imobiliaria={{ autorizado: imobiliaria.autorizado, created_at: imobiliaria.created_at }}
+            bypass={isAdmin(user?.email) || isColaboradorO2(user?.email)}
+          >
+            <AuditorForm userId={user!.id} ultimoId={ultimo} />
+          </AvisoAutorizacaoImobiliaria>
         </div>
 
         <section className="space-y-3">

@@ -5,10 +5,12 @@ import { isAdmin } from "@/lib/admin";
 import { signOut } from "../../actions";
 import AppHeader from "@/components/AppHeader";
 import BackLink from "@/components/BackLink";
+import SubmitButton from "@/components/SubmitButton";
 import { apenasDigitos } from "@/lib/pdfComSenha";
 import { type ImobiliariaAdminRow } from "./ImobiliariaCard";
 import MesclarDuplicidade, { type ImobiliariaDuplicadaLinha } from "./MesclarDuplicidade";
 import ListaImobiliarias from "./ListaImobiliarias";
+import { autorizarImobiliaria } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +39,7 @@ export default async function AdminImobiliariasPage({
       supabase
         .from("imobiliarias")
         .select(
-          "id, nome, cnpj, creci, telefone, email, endereco, indice_reajuste, plataforma_assinatura, created_at, cadastro_incompleto, user_id"
+          "id, nome, cnpj, creci, telefone, email, endereco, responsavel, indice_reajuste, plataforma_assinatura, created_at, cadastro_incompleto, user_id, autorizado, autorizado_em"
         )
         .order("created_at", { ascending: false }),
       supabase.from("contratos").select("imobiliaria_id"),
@@ -74,6 +76,14 @@ export default async function AdminImobiliariasPage({
     .filter(([, linhas]) => linhas.length > 1)
     .sort((a, b) => b[1].length - a[1].length);
 
+  // Autorização comercial (pedido do Matheus, 16/09/2026) -- quem criou
+  // login (user_id preenchido) mas ainda não foi autorizado, ordenado do
+  // mais antigo pro mais recente (quem está esperando há mais tempo primeiro).
+  // Ver src/lib/autorizacaoImobiliaria.ts pro período de graça de 3 dias.
+  const pendentesAutorizacao = imobiliarias
+    .filter((i) => i.user_id && !i.autorizado)
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
   return (
     <>
       <AppHeader userEmail={user?.email} logoutAction={signOut} />
@@ -99,6 +109,55 @@ export default async function AdminImobiliariasPage({
 
         {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
         {sucesso && <p className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-700">{sucesso}</p>}
+
+        {pendentesAutorizacao.length > 0 && (
+          <section className="space-y-3">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">
+              Pendentes de autorização ({pendentesAutorizacao.length})
+            </h2>
+            <p className="text-xs text-gray-500">
+              Login criado, usando o Workspace no período de graça de 3 dias — autorize pra liberar acesso ilimitado às
+              ferramentas de IA (Gerar Contrato, Auditor de Contrato), ou deixe como está até negociar.
+            </p>
+            <div className="space-y-2">
+              {pendentesAutorizacao.map((i) => {
+                const jaConhecida = i.contratos + i.auditorias + i.faturasEsperadas > 0;
+                return (
+                  <div key={i.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-yellow-300 bg-yellow-50 p-4">
+                    <div className="min-w-0">
+                      <Link href={`/admin/imobiliarias/${i.id}`} className="font-medium text-o2-navy hover:underline">
+                        {i.nome}
+                      </Link>
+                      {jaConhecida && (
+                        <span className="ml-2 rounded-full bg-o2-navy/10 px-2 py-0.5 text-xs text-o2-navy">
+                          já tinha cadastro/movimento no sistema
+                        </span>
+                      )}
+                      <p className="text-xs text-gray-600">
+                        {i.cnpj && <>CNPJ/CPF {i.cnpj} · </>}
+                        {i.email && <>{i.email} · </>}
+                        {i.responsavel && <>responsável: {i.responsavel} · </>}
+                        {i.endereco || "endereço não informado"}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        Cadastro criado em {new Date(i.created_at).toLocaleDateString("pt-BR")}
+                      </p>
+                    </div>
+                    <form action={autorizarImobiliaria}>
+                      <input type="hidden" name="id" value={i.id} />
+                      <SubmitButton
+                        textoCarregando="Autorizando…"
+                        className="whitespace-nowrap rounded-full bg-o2-coral px-4 py-1.5 text-sm font-medium text-white transition hover:opacity-90"
+                      >
+                        Autorizar
+                      </SubmitButton>
+                    </form>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         {duplicidades.length > 0 && (
           <section className="space-y-3">

@@ -44,6 +44,55 @@ export default async function SignupPage({
           minLength={6}
           autoComplete="new-password"
         />
+
+        <div className="border-t border-gray-100 pt-3">
+          <p className="mb-2 text-xs text-gray-500">Dados da imobiliária/administradora</p>
+          <div className="space-y-3">
+            <label htmlFor="nome_imobiliaria" className="sr-only">Nome da imobiliária</label>
+            <input
+              id="nome_imobiliaria"
+              name="nome_imobiliaria"
+              type="text"
+              placeholder="Nome da imobiliária"
+              required
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+            />
+            <label htmlFor="cnpj_cpf" className="sr-only">CPF ou CNPJ</label>
+            <input
+              id="cnpj_cpf"
+              name="cnpj_cpf"
+              type="text"
+              placeholder="CPF ou CNPJ"
+              required
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+            />
+            <label htmlFor="endereco" className="sr-only">Endereço</label>
+            <input
+              id="endereco"
+              name="endereco"
+              type="text"
+              placeholder="Endereço"
+              required
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+            />
+            <label htmlFor="responsavel" className="sr-only">Nome do responsável</label>
+            <input
+              id="responsavel"
+              name="responsavel"
+              type="text"
+              placeholder="Nome do responsável pela imobiliária"
+              required
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+            />
+          </div>
+        </div>
+
+        <p className="rounded-lg border border-o2-coral/30 bg-o2-coral/5 p-3 text-xs text-o2-navy">
+          Sua conta funciona livremente por 3 dias enquanto a O2 Seguros analisa o cadastro. Depois disso, ferramentas
+          que usam IA (Auditor de Contrato, Gerador de Contrato, Assistente Fiança) ficam limitadas até a autorização —
+          o resto do Workspace continua liberado normalmente.
+        </p>
+
         <label className="flex items-start gap-2 text-sm text-gray-600">
           <input type="checkbox" name="aceite_termos" required className="mt-0.5" />
           <span>

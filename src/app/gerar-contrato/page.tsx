@@ -10,6 +10,7 @@ import BackLink from "@/components/BackLink";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { garantirImobiliariaColaborador } from "@/lib/imobiliariaColaborador";
 import { buscarImobiliariaDoUsuario } from "@/lib/imobiliariaDoUsuario";
+import AvisoAutorizacaoImobiliaria from "@/components/AvisoAutorizacaoImobiliaria";
 
 export const dynamic = "force-dynamic";
 // Gerar contrato agora chama a IA (pra inserir a cláusula de garantia na
@@ -89,7 +90,12 @@ export default async function GerarContratoPage({
         )}
 
         <div className="rounded-xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
-          <FormularioContrato tiposGarantia={tiposGarantia ?? []} produtos={produtos ?? []} />
+          <AvisoAutorizacaoImobiliaria
+            imobiliaria={{ autorizado: imobiliaria.autorizado, created_at: imobiliaria.created_at }}
+            bypass={isAdmin(user?.email) || isColaboradorO2(user?.email)}
+          >
+            <FormularioContrato tiposGarantia={tiposGarantia ?? []} produtos={produtos ?? []} />
+          </AvisoAutorizacaoImobiliaria>
         </div>
 
         <section className="space-y-3">

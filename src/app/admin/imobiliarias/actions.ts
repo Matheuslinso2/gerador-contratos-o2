@@ -275,3 +275,22 @@ export async function removerEmailCampanha(formData: FormData) {
   revalidatePath(voltarPara);
   redirect(`${voltarPara}?sucesso=${encodeURIComponent("E-mail de campanhas removido.")}`);
 }
+
+// Autorização comercial (pedido do Matheus, 16/09/2026) -- libera acesso
+// ilimitado às ferramentas que chamam IA (gerar-contrato, auditar-contrato)
+// pra essa imobiliária, sem esperar o período de graça acabar. Ver
+// src/lib/autorizacaoImobiliaria.ts.
+export async function autorizarImobiliaria(formData: FormData) {
+  const supabase = await exigirAdmin();
+  const id = String(formData.get("id") ?? "");
+  if (!id) redirect("/admin/imobiliarias");
+
+  const { error } = await supabase
+    .from("imobiliarias")
+    .update({ autorizado: true, autorizado_em: new Date().toISOString() })
+    .eq("id", id);
+  if (error) redirect(`/admin/imobiliarias?erro=${encodeURIComponent(error.message)}`);
+
+  revalidatePath("/admin/imobiliarias");
+  redirect(`/admin/imobiliarias?sucesso=${encodeURIComponent("Imobiliária autorizada.")}`);
+}
