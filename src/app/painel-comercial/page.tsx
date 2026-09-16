@@ -11,6 +11,7 @@ import styles from "./painel-comercial.module.css";
 import {
   buscarKpisComercialAoVivo,
   montarKpisComercial,
+  type Contagem,
   type DistribuicaoEtapa,
   type KpisComercial,
   type RegistroResponsavel,
@@ -30,6 +31,10 @@ function mesAtualDefault(): string {
 
 function fmtPct(v: number): string {
   return v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "%";
+}
+
+function fmtMoeda(v: number): string {
+  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 }
 
 // Timeout do Vercel é 60s e MATA a função sem rodar catch nenhum -- não dá
@@ -78,6 +83,21 @@ function DistribuicaoEtapaBarras({ dados }: { dados: DistribuicaoEtapa[] }) {
         <BarraProporcional key={d.etapa} label={d.etapa} value={d.cards} max={max} />
       ))}
       {dados.every((d) => d.cards === 0) && <div style={{ color: "var(--ink-faint)", fontSize: 12.5 }}>Nenhum card aberto neste período.</div>}
+    </div>
+  );
+}
+
+// Mesma barra de DistribuicaoEtapaBarras, só que pra Contagem[] (rótulo
+// genérico em vez de etapa) -- usada pelos indicadores novos de Empresa do
+// Sucesso do Cliente (Classificação, Ticket médio, Status de contato, Tipo
+// de oportunidade).
+function ContagemBarras({ dados }: { dados: Contagem[] }) {
+  const max = Math.max(...dados.map((d) => d.quantidade), 1);
+  return (
+    <div className={styles.barlist}>
+      {dados.map((d) => (
+        <BarraProporcional key={d.rotulo} label={d.rotulo} value={d.quantidade} max={max} />
+      ))}
     </div>
   );
 }
@@ -286,6 +306,12 @@ export default async function PainelComercialPage({
                 <Kpi label="Cards Trabalhados (S1)" value={String(kpis.sucesso.s1_cardsTrabalhados)} sub="com alteração efetiva no mês" tone="positive" />
                 <Kpi label="Estoque Atual (S2)" value={String(kpis.sucesso.s2_estoqueAtual)} sub="cards abertos agora, neste funil" />
                 <Kpi
+                  label="Total de Card em Andamento"
+                  value={String(kpis.sucesso.empresas.totalCardsEmAndamento)}
+                  sub="Radar de Negócios até Visita/Call, inclusive"
+                  tone="info"
+                />
+                <Kpi
                   label="Sem Alteração (S3)"
                   value={String(kpis.sucesso.s3_semAlteracaoEfetiva)}
                   sub="do estoque atual, parados no mês"
@@ -407,6 +433,59 @@ export default async function PainelComercialPage({
                       </tbody>
                     </table>
                   </div>
+                </div>
+              </section>
+
+              {/* ---------------------------------------------------------- */}
+              {/* Empresas do Sucesso do Cliente (Fase B)                    */}
+              {/* ---------------------------------------------------------- */}
+              <section className={styles.section}>
+                <div className={styles.sectionHead}>
+                  <h2>Perfil das empresas — Sucesso do Cliente</h2>
+                  <div className={styles.note}>campos do card da EMPRESA (não do card/negócio) — uma vez por empresa com card ativo</div>
+                </div>
+                <div className={styles.grid3}>
+                  <div className={styles.panel}>
+                    <h3>Classificação da empresa</h3>
+                    <ContagemBarras dados={kpis.sucesso.empresas.classificacao} />
+                  </div>
+                  <div className={styles.panel}>
+                    <h3>Ticket médio</h3>
+                    <ContagemBarras dados={kpis.sucesso.empresas.ticketMedio} />
+                  </div>
+                  <div className={styles.panel}>
+                    <h3>Status de contato</h3>
+                    <ContagemBarras dados={kpis.sucesso.empresas.statusContato} />
+                  </div>
+                </div>
+                <div className={styles.grid2} style={{ marginTop: 18 }}>
+                  <div className={styles.panel}>
+                    <h3>Tipo de oportunidade</h3>
+                    <div className={styles.panelSub}>campo real do Bitrix é valor único por empresa (não múltiplo como chegou a ser cogitado) e não tem opção &quot;Outros&quot;</div>
+                    <ContagemBarras dados={kpis.sucesso.empresas.tipoOportunidade} />
+                  </div>
+                  <div className={styles.panel}>
+                    <h3>Média de imóveis administrados</h3>
+                    <div className={styles.kpi} style={{ padding: 0 }}>
+                      <div className={`${styles.kpiValue} ${styles.num}`}>
+                        {kpis.sucesso.empresas.mediaImoveisAdm !== null ? kpis.sucesso.empresas.mediaImoveisAdm.toLocaleString("pt-BR") : "—"}
+                      </div>
+                      <div className={styles.kpiSub}>{kpis.sucesso.empresas.imoveisAdmAmostra} empresas com o campo preenchido</div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section className={styles.section}>
+                <div className={styles.sectionHead}>
+                  <h2>Resultado financeiro do Sucesso</h2>
+                  <div className={styles.note}>soma por empresa com card ativo em Sucesso, uma vez cada — nunca por card duplicado</div>
+                </div>
+                <div className={styles.kpis}>
+                  <Kpi label="Nº de Cotações" value={String(kpis.sucesso.empresas.resultadoFinanceiro.numCotacoes)} sub="soma das empresas do estoque" />
+                  <Kpi label="Nº de Apólices Geradas" value={String(kpis.sucesso.empresas.resultadoFinanceiro.numApolices)} sub="soma das empresas do estoque" tone="positive" />
+                  <Kpi label="Comissão O2" value={fmtMoeda(kpis.sucesso.empresas.resultadoFinanceiro.comissaoO2)} sub="soma das empresas do estoque" tone="positive" />
+                  <Kpi label="Prêmio Líquido" value={fmtMoeda(kpis.sucesso.empresas.resultadoFinanceiro.premioLiquido)} sub="soma das empresas do estoque" />
                 </div>
               </section>
 

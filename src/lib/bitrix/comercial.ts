@@ -173,6 +173,44 @@ const ETAPAS_SUCESSO_ABERTAS = ORDEM_ETAPAS_SUCESSO.filter((id) => !["WON", "LOS
 const TYPE_ID_LIGACAO_NAO_CONFIRMADO = new Set(["1"]);
 
 // ---------------------------------------------------------------------------
+// Campos de Empresa usados nos indicadores novos do Sucesso do Cliente (Fase
+// B, 2026-09-16) -- fonte: documentos "Dashboard_Prospeccao_e_Sucesso_*"
+// trazidos pelo usuário. Confirmados ao vivo via crm.company.fields. Ficam
+// na Empresa (COMPANY_ID), não no Deal, porque descrevem a imobiliária em
+// si, não um card específico dela.
+// ---------------------------------------------------------------------------
+
+const CAMPO_EMPRESA_CLASSIFICACAO = "UF_CRM_1788465932551";
+const CAMPO_EMPRESA_IMOVEIS_ADM = "UF_CRM_1788466044080"; // tipo string no Bitrix -- precisa parse
+const CAMPO_EMPRESA_TICKET_MEDIO = "UF_CRM_1788466221752";
+const CAMPO_EMPRESA_STATUS_CONTATO = "UF_CRM_1788467418002";
+// O documento pede "Tipo(s) de oportunidade" como múltiplo (uma empresa em
+// mais de um produto) -- o campo real no Bitrix é enumeration de valor
+// único (isMultiple:false, confirmado ao vivo), sem opção "OUTROS" (só tem
+// FIANÇA/INCÊNDIO/CAPITALIZAÇÃO/RENOVAÇÕES). Tratado aqui como single-value.
+const CAMPO_EMPRESA_TIPO_OPORTUNIDADE = "UF_CRM_1788467738723";
+const CAMPO_EMPRESA_NUM_COTACOES = "UF_CRM_O2_NUM_COTACOES";
+const CAMPO_EMPRESA_NUM_APOLICES = "UF_CRM_1788467865683"; // tipo string no Bitrix -- precisa parse
+const CAMPO_EMPRESA_COMISSAO_O2 = "UF_CRM_1788467885830"; // money
+const CAMPO_EMPRESA_PREMIO_LIQUIDO = "UF_CRM_1788467919009"; // money
+
+const CLASSIFICACOES_EMPRESA = [
+  "COBRE (Menos de 10 imóveis - PF)",
+  "BRONZE (1 a 29 imóveis)",
+  "PRATA (30 A 60 imóveis)",
+  "OURO (61 a 199 imóveis)",
+  "DIAMANTE (200 a 499 imóveis)",
+  "PLATINA (500 imóveis ou mais)",
+];
+const TICKETS_MEDIO_EMPRESA = ["ATÉ R$1.000,00", "R$:1.000,01 ATÉ 5.000,00", "R$: 5.000,01 ATÉ 10.000,00", "ACIMA DE R$: 10.000,00"];
+const STATUS_CONTATO_EMPRESA = ["INICIAR CONTATO", "CONTATO EM ANDAMENTO", "SEM RETORNO", "TENTANDO CONTATO"];
+const TIPOS_OPORTUNIDADE_EMPRESA = ["FIANÇA", "INCÊNDIO", "CAPITALIZAÇÃO", "RENOVAÇÕES"];
+
+// "Radar de Negócios" até "Visita/Call", inclusive -- base do indicador
+// "Total de card em andamento" (documento novo, item 2).
+const ETAPAS_EM_ANDAMENTO = new Set(["NEW", "UC_L6RJ2U", "UC_G2AEBP", "UC_QEBNPE"]);
+
+// ---------------------------------------------------------------------------
 // Chamadas cruas ao Bitrix
 // ---------------------------------------------------------------------------
 
@@ -228,6 +266,45 @@ export async function buscarDefinicaoCamposDeal(): Promise<Record<string, Bitrix
 // entityTypeId, então reusamos direto em vez de duplicar a lógica.
 export async function listarHistoricoEtapasDeal(): Promise<BitrixStageHistoryEvent[]> {
   return listarHistoricoEtapas(ENTITY_TYPE_ID_DEAL);
+}
+
+export async function buscarDefinicaoCamposEmpresa(): Promise<Record<string, BitrixDefinicaoCampo>> {
+  const resposta = await chamarBitrix<{ result: Record<string, BitrixDefinicaoCampo> }>("crm.company.fields", {});
+  return resposta.result;
+}
+
+export type BitrixEmpresaCompletaRaw = { ID: string; [campo: string]: unknown };
+
+// buscarEmpresas (client.ts) só devolve id→nome -- aqui precisamos dos
+// campos UF_CRM_* da imobiliária pros indicadores novos do Sucesso (Fase B).
+// Mesmo padrão de lote de 50 (limite do crm.company.list por página).
+export async function buscarEmpresasCompletas(ids: number[]): Promise<Map<number, BitrixEmpresaCompletaRaw>> {
+  const mapa = new Map<number, BitrixEmpresaCompletaRaw>();
+  const idsUnicos = [...new Set(ids)].filter((id) => id > 0);
+  if (!idsUnicos.length) return mapa;
+
+  const campos = [
+    "ID",
+    CAMPO_EMPRESA_CLASSIFICACAO,
+    CAMPO_EMPRESA_IMOVEIS_ADM,
+    CAMPO_EMPRESA_TICKET_MEDIO,
+    CAMPO_EMPRESA_STATUS_CONTATO,
+    CAMPO_EMPRESA_TIPO_OPORTUNIDADE,
+    CAMPO_EMPRESA_NUM_COTACOES,
+    CAMPO_EMPRESA_NUM_APOLICES,
+    CAMPO_EMPRESA_COMISSAO_O2,
+    CAMPO_EMPRESA_PREMIO_LIQUIDO,
+  ];
+  const tamanhoLote = 50;
+  for (let i = 0; i < idsUnicos.length; i += tamanhoLote) {
+    const lote = idsUnicos.slice(i, i + tamanhoLote);
+    const registros = await buscarTodasPaginasFlat<BitrixEmpresaCompletaRaw>("crm.company.list", {
+      select: campos,
+      "filter[ID]": lote,
+    });
+    for (const r of registros) mapa.set(Number(r.ID), r);
+  }
+  return mapa;
 }
 
 export type BitrixAtividadeRaw = {
@@ -522,6 +599,7 @@ export type KpisComercial = {
     s14_coberturaValor: CoberturaValor;
     s15_ganhosComValorPreenchidoPct: number;
     s16_carteiraEResultadoPorResponsavel: { responsavel: string; cardsAtuaisMaisGanhos: number; cardsAlterados: number; ganhos: number }[];
+    empresas: ResumoEmpresasSucesso;
   };
   porResponsavel: RegistroResponsavel[];
   qualidade: {
@@ -593,7 +671,113 @@ function calcularRegistrosResponsavel(linhasFunil: LinhaComercial[], competencia
   });
 }
 
-export function montarKpisComercial(linhas: LinhaComercial[], _historico: BitrixStageHistoryEvent[], competencia: string): KpisComercial {
+// ---------------------------------------------------------------------------
+// Empresas do Sucesso do Cliente (Fase B) -- indicadores que vêm do card da
+// EMPRESA, não do Deal (o documento é explícito sobre isso: "Classificação,
+// Imóveis ADM, Ticket médio e Status de contatos vêm do card da empresa").
+// ---------------------------------------------------------------------------
+
+export type Contagem = { rotulo: string; quantidade: number };
+
+export type ResumoEmpresasSucesso = {
+  totalCardsEmAndamento: number; // Radar de Negócios..Visita/Call, inclusive
+  classificacao: Contagem[];
+  mediaImoveisAdm: number | null; // null se nenhuma empresa do estoque tem o campo preenchido
+  imoveisAdmAmostra: number;
+  ticketMedio: Contagem[];
+  statusContato: Contagem[];
+  tipoOportunidade: Contagem[]; // campo real é valor único, não múltiplo como o documento pede -- ver nota em CAMPO_EMPRESA_TIPO_OPORTUNIDADE
+  resultadoFinanceiro: { numCotacoes: number; numApolices: number; comissaoO2: number; premioLiquido: number };
+};
+
+// OPPORTUNITY e os campos "money" de Empresa usam o mesmo formato
+// "123.45|BRL" do Bitrix -- mesma lógica de valorNumero, duplicada aqui
+// porque semanticamente é sobre Empresa, não sobre o Deal.
+function valorMonetarioEmpresa(v: unknown): number {
+  if (v === null || v === undefined || v === "") return 0;
+  const [num] = String(v).split("|");
+  const n = Number(num);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function inteiroOuNull(v: unknown): number | null {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+// Sempre lista todas as opções conhecidas do campo (mesmo com contagem 0),
+// mais "Não informado" pro que está vazio -- mesmo espírito do documento
+// ("campos vazios não comprovam ausência de trabalho", nunca omitir a
+// opção, só mostrar 0 quando for o caso real).
+function contarPorEnum(valores: string[], opcoesConhecidas: string[]): Contagem[] {
+  const contagem = new Map<string, number>();
+  for (const v of valores) {
+    const rotulo = v || "Não informado";
+    contagem.set(rotulo, (contagem.get(rotulo) ?? 0) + 1);
+  }
+  return [...opcoesConhecidas, "Não informado"].map((rotulo) => ({ rotulo, quantidade: contagem.get(rotulo) ?? 0 }));
+}
+
+export function montarResumoEmpresasSucesso(
+  estoqueSucesso: LinhaComercial[],
+  empresasCompletas: Map<number, BitrixEmpresaCompletaRaw>,
+  definicaoCamposEmpresa: Record<string, BitrixDefinicaoCampo>
+): ResumoEmpresasSucesso {
+  const totalCardsEmAndamento = estoqueSucesso.filter((l) => ETAPAS_EM_ANDAMENTO.has(l.stageId)).length;
+
+  // Uma linha por EMPRESA, não por card -- "resultado gerado no sucesso
+  // considera somente empresas com card ativo... somar cada empresa uma
+  // vez" (regra do documento). Amostra ao vivo (2026-09-16): nenhuma
+  // empresa tem 2+ deals ativos em Sucesso hoje, mas se algum dia tiver, o
+  // documento não define critério de desempate -- usamos o primeiro card
+  // encontrado, sem tentar adivinhar qual é "o certo".
+  const empresaIdsUnicos = [...new Set(estoqueSucesso.map((l) => l.empresaId).filter((id) => id > 0))];
+
+  const classificacoes: string[] = [];
+  const ticketMedios: string[] = [];
+  const statusContatos: string[] = [];
+  const tiposOportunidade: string[] = [];
+  const imoveisAdm: number[] = [];
+  let numCotacoes = 0;
+  let numApolices = 0;
+  let comissaoO2 = 0;
+  let premioLiquido = 0;
+
+  for (const empresaId of empresaIdsUnicos) {
+    const e = empresasCompletas.get(empresaId);
+    if (!e) continue;
+    classificacoes.push(enumLabel(definicaoCamposEmpresa, CAMPO_EMPRESA_CLASSIFICACAO, e[CAMPO_EMPRESA_CLASSIFICACAO]));
+    ticketMedios.push(enumLabel(definicaoCamposEmpresa, CAMPO_EMPRESA_TICKET_MEDIO, e[CAMPO_EMPRESA_TICKET_MEDIO]));
+    statusContatos.push(enumLabel(definicaoCamposEmpresa, CAMPO_EMPRESA_STATUS_CONTATO, e[CAMPO_EMPRESA_STATUS_CONTATO]));
+    tiposOportunidade.push(enumLabel(definicaoCamposEmpresa, CAMPO_EMPRESA_TIPO_OPORTUNIDADE, e[CAMPO_EMPRESA_TIPO_OPORTUNIDADE]));
+    const imoveis = inteiroOuNull(e[CAMPO_EMPRESA_IMOVEIS_ADM]);
+    if (imoveis !== null) imoveisAdm.push(imoveis);
+    numCotacoes += inteiroOuNull(e[CAMPO_EMPRESA_NUM_COTACOES]) ?? 0;
+    numApolices += inteiroOuNull(e[CAMPO_EMPRESA_NUM_APOLICES]) ?? 0;
+    comissaoO2 += valorMonetarioEmpresa(e[CAMPO_EMPRESA_COMISSAO_O2]);
+    premioLiquido += valorMonetarioEmpresa(e[CAMPO_EMPRESA_PREMIO_LIQUIDO]);
+  }
+
+  return {
+    totalCardsEmAndamento,
+    classificacao: contarPorEnum(classificacoes, CLASSIFICACOES_EMPRESA),
+    mediaImoveisAdm: imoveisAdm.length ? Math.round((imoveisAdm.reduce((a, b) => a + b, 0) / imoveisAdm.length) * 10) / 10 : null,
+    imoveisAdmAmostra: imoveisAdm.length,
+    ticketMedio: contarPorEnum(ticketMedios, TICKETS_MEDIO_EMPRESA),
+    statusContato: contarPorEnum(statusContatos, STATUS_CONTATO_EMPRESA),
+    tipoOportunidade: contarPorEnum(tiposOportunidade, TIPOS_OPORTUNIDADE_EMPRESA),
+    resultadoFinanceiro: { numCotacoes, numApolices, comissaoO2, premioLiquido },
+  };
+}
+
+export function montarKpisComercial(
+  linhas: LinhaComercial[],
+  _historico: BitrixStageHistoryEvent[],
+  competencia: string,
+  empresasCompletas: Map<number, BitrixEmpresaCompletaRaw> = new Map(),
+  definicaoCamposEmpresa: Record<string, BitrixDefinicaoCampo> = {}
+): KpisComercial {
   void _historico; // mantido na assinatura por simetria com o padrão de seguroFianca.ts; os eventos já vêm embutidos em cada LinhaComercial
   const dataCorte = new Date();
 
@@ -661,6 +845,7 @@ export function montarKpisComercial(linhas: LinhaComercial[], _historico: Bitrix
     s16_carteiraEResultadoPorResponsavel: [...s16Map.entries()]
       .sort((x, y) => y[1].cardsAtuaisMaisGanhos - x[1].cardsAtuaisMaisGanhos)
       .map(([responsavel, d]) => ({ responsavel, ...d })),
+    empresas: montarResumoEmpresasSucesso(estoqueSucesso, empresasCompletas, definicaoCamposEmpresa),
   };
 
   const porResponsavel = calcularRegistrosResponsavel(linhas, competencia, dataCorte);
@@ -683,19 +868,24 @@ export function montarKpisComercial(linhas: LinhaComercial[], _historico: Bitrix
 // antes de montar as linhas normalizadas. Mesmo padrão de
 // buscarAnaliseGerencialAoVivo em seguroFianca.ts.
 export async function buscarKpisComercialAoVivo(competencia: string): Promise<KpisComercial & { totalEventos: number }> {
-  const [deals, historico, atividades, tarefas, definicaoCampos] = await Promise.all([
+  const [deals, historico, atividades, tarefas, definicaoCampos, definicaoCamposEmpresa] = await Promise.all([
     listarDeals(CATEGORY_ID_SUCESSO),
     listarHistoricoEtapasDeal(),
     listarAtividades(),
     listarTarefas(),
     buscarDefinicaoCamposDeal(),
+    buscarDefinicaoCamposEmpresa(),
   ]);
 
   const idsUsuario = deals.map((d) => Number(d.ASSIGNED_BY_ID)).filter((id) => id > 0);
   const idsEmpresa = deals.map((d) => Number(d.COMPANY_ID)).filter((id) => id > 0);
-  const [nomesUsuarios, nomesEmpresas] = await Promise.all([buscarUsuarios(idsUsuario), buscarEmpresas(idsEmpresa)]);
+  const [nomesUsuarios, nomesEmpresas, empresasCompletas] = await Promise.all([
+    buscarUsuarios(idsUsuario),
+    buscarEmpresas(idsEmpresa),
+    buscarEmpresasCompletas(idsEmpresa),
+  ]);
 
   const linhas = montarLinhasComerciais(deals, historico, atividades, tarefas, definicaoCampos, nomesUsuarios, nomesEmpresas, competencia);
-  const kpis = montarKpisComercial(linhas, historico, competencia);
+  const kpis = montarKpisComercial(linhas, historico, competencia, empresasCompletas, definicaoCamposEmpresa);
   return { ...kpis, totalEventos: historico.length };
 }
