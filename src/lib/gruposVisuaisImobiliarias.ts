@@ -28,4 +28,12 @@ export const GRUPOS_VISUAIS: Record<string, { chave: string; nomeGrupo: string }
   // vez de um 3º registro).
   "07930322000189": { chave: "RIBAS_HP", nomeGrupo: "Ribas-HP / Pintas / HC Consultoria" },
   "49915542000183": { chave: "RIBAS_HP", nomeGrupo: "Ribas-HP / Pintas / HC Consultoria" },
+  // Confirmados como a mesma empresa/pessoa durante a montagem do grupo de
+  // campanha "Capitalização" (2026-09-16): nome bateu com 1 cadastro, e-mail
+  // bateu com outro -- é o mesmo sinal de duplicidade real (2 CNPJs pra
+  // quem só devia ter 1 registro), não coincidência.
+  "09519990000143": { chave: "SINDMASTER", nomeGrupo: "SindMaster" },
+  "31892996000110": { chave: "SINDMASTER", nomeGrupo: "SindMaster" },
+  "07828286716": { chave: "RENATO_ACRJ", nomeGrupo: "Renato de Sousa Lopes (ACRJ)" },
+  "33611617000100": { chave: "RENATO_ACRJ", nomeGrupo: "Renato de Sousa Lopes (ACRJ)" },
 };
