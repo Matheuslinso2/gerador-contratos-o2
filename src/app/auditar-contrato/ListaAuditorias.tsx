@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import RelatorioView from "./RelatorioView";
 import type { RelatorioAuditoria } from "@/lib/auditorContrato";
 
+type ImobiliariaRef = { nome: string } | { nome: string }[] | null;
+
 type Auditoria = {
   id: string;
   nome_arquivo: string | null;
@@ -14,14 +16,22 @@ type Auditoria = {
   endereco_identificado: string | null;
   relatorio: RelatorioAuditoria;
   created_at: string;
+  imobiliarias?: ImobiliariaRef;
 };
+
+function nomeImobiliaria(ref: ImobiliariaRef | undefined): string | null {
+  const obj = Array.isArray(ref) ? ref[0] : ref;
+  return obj?.nome ?? null;
+}
 
 export default function ListaAuditorias({
   auditorias,
   destaque,
+  mostrarImobiliaria = false,
 }: {
   auditorias: Auditoria[];
   destaque?: string;
+  mostrarImobiliaria?: boolean;
 }) {
   const [busca, setBusca] = useState("");
 
@@ -53,6 +63,11 @@ export default function ListaAuditorias({
           className="rounded-xl border border-o2-navy/10 bg-quadro p-3"
         >
           <summary className="cursor-pointer font-medium text-o2-navy">
+            {mostrarImobiliaria && nomeImobiliaria(a.imobiliarias) && (
+              <span className="mr-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+                {nomeImobiliaria(a.imobiliarias)}
+              </span>
+            )}
             {a.locador_identificado || "Locador não identificado"} × {a.locatario_identificado || "Locatário não identificado"} — {a.endereco_identificado || "Endereço não identificado"}
           </summary>
           <div className="mt-3 space-y-3">

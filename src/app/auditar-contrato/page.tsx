@@ -93,9 +93,16 @@ export default async function AuditarContratoPage({
     );
   }
 
+  // Admin/colaborador O2 veem as auditorias de TODAS as imobiliárias aqui
+  // (achado 17/09/2026 -- o Matheus só via até 25/08 porque a lista ficava
+  // presa ao id da imobiliária-colaborador dele mesmo, sem o bypass que
+  // /contratos já tinha). Mesmo padrão já usado em
+  // src/app/contratos/page.tsx.
+  const vePermitidosDeTodos = isAdmin(user?.email) || isColaboradorO2(user?.email);
+
   let imobiliaria = await buscarImobiliariaDoUsuario(supabase, user);
 
-  if (!imobiliaria && (isAdmin(user?.email) || isColaboradorO2(user?.email))) {
+  if (!imobiliaria && vePermitidosDeTodos) {
     imobiliaria = await garantirImobiliariaColaborador(supabase, user!.id, user?.email);
   }
 
@@ -118,13 +125,14 @@ export default async function AuditarContratoPage({
     );
   }
 
-  const { data: auditorias } = await supabase
+  let consultaAuditorias = supabase
     .from("auditorias_contrato")
     .select(
-      "id, nome_arquivo, status_geral, tipo_garantia_identificada, locador_identificado, locatario_identificado, endereco_identificado, relatorio, created_at"
+      "id, nome_arquivo, status_geral, tipo_garantia_identificada, locador_identificado, locatario_identificado, endereco_identificado, relatorio, created_at, imobiliarias(nome)"
     )
-    .eq("imobiliaria_id", imobiliaria.id)
     .order("created_at", { ascending: false });
+  if (!vePermitidosDeTodos) consultaAuditorias = consultaAuditorias.eq("imobiliaria_id", imobiliaria.id);
+  const { data: auditorias } = await consultaAuditorias;
 
   return (
     <>
@@ -146,7 +154,7 @@ export default async function AuditarContratoPage({
         <div className="rounded-xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
           <AvisoAutorizacaoImobiliaria
             imobiliaria={{ autorizado: imobiliaria.autorizado, created_at: imobiliaria.created_at }}
-            bypass={isAdmin(user?.email) || isColaboradorO2(user?.email)}
+            bypass={vePermitidosDeTodos}
           >
             <AuditorForm userId={user!.id} ultimoId={ultimo} />
           </AvisoAutorizacaoImobiliaria>
@@ -154,7 +162,7 @@ export default async function AuditarContratoPage({
 
         <section className="space-y-3">
           <h2 className="text-lg font-semibold text-o2-navy">Auditorias realizadas</h2>
-          <ListaAuditorias auditorias={auditorias ?? []} destaque={ultimo} />
+          <ListaAuditorias auditorias={auditorias ?? []} destaque={ultimo} mostrarImobiliaria={vePermitidosDeTodos} />
         </section>
       </main>
     </>

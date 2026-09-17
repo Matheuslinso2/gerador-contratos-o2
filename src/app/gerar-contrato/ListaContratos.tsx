@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 
+type ImobiliariaRef = { nome: string } | { nome: string }[] | null;
+
 type Contrato = {
   id: string;
   locador: string;
@@ -12,14 +14,22 @@ type Contrato = {
   texto_gerado: string;
   laudo_modo: string | null;
   laudo_arquivo_nome: string | null;
+  imobiliarias?: ImobiliariaRef;
 };
+
+function nomeImobiliaria(ref: ImobiliariaRef | undefined): string | null {
+  const obj = Array.isArray(ref) ? ref[0] : ref;
+  return obj?.nome ?? null;
+}
 
 export default function ListaContratos({
   contratos,
   destaque,
+  mostrarImobiliaria = false,
 }: {
   contratos: Contrato[];
   destaque?: string;
+  mostrarImobiliaria?: boolean;
 }) {
   const [busca, setBusca] = useState("");
 
@@ -51,6 +61,11 @@ export default function ListaContratos({
           }`}
         >
           <summary className="cursor-pointer font-medium text-o2-navy">
+            {mostrarImobiliaria && nomeImobiliaria(c.imobiliarias) && (
+              <span className="mr-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+                {nomeImobiliaria(c.imobiliarias)}
+              </span>
+            )}
             {c.locador_nomes || c.locador} × {c.locatario_nomes || c.locatario} — {c.endereco_imovel}
           </summary>
           <div className="mt-2 flex flex-wrap gap-2">

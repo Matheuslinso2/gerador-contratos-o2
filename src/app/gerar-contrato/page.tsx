@@ -30,9 +30,16 @@ export default async function GerarContratoPage({
     data: { user },
   } = await supabase.auth.getUser();
 
+  // Admin/colaborador O2 veem os contratos gerados de TODAS as
+  // imobiliárias aqui (achado 17/09/2026 -- o Matheus só via até 25/08
+  // porque a lista ficava presa ao id da imobiliária-colaborador dele
+  // mesmo, sem o bypass que /contratos já tinha). Mesmo padrão já usado em
+  // src/app/contratos/page.tsx.
+  const vePermitidosDeTodos = isAdmin(user?.email) || isColaboradorO2(user?.email);
+
   let imobiliaria = await buscarImobiliariaDoUsuario(supabase, user);
 
-  if (!imobiliaria && (isAdmin(user?.email) || isColaboradorO2(user?.email))) {
+  if (!imobiliaria && vePermitidosDeTodos) {
     imobiliaria = await garantirImobiliariaColaborador(supabase, user!.id, user?.email);
   }
 
@@ -55,6 +62,14 @@ export default async function GerarContratoPage({
     );
   }
 
+  let consultaContratos = supabase
+    .from("contratos")
+    .select(
+      "id, locador, locador_nomes, locatario, locatario_nomes, endereco_imovel, texto_gerado, created_at, laudo_modo, laudo_arquivo_nome, imobiliarias(nome)"
+    )
+    .order("created_at", { ascending: false });
+  if (!vePermitidosDeTodos) consultaContratos = consultaContratos.eq("imobiliaria_id", imobiliaria.id);
+
   const [{ data: tiposGarantia }, { data: produtos }, { data: contratos }] =
     await Promise.all([
       supabase.from("tipos_garantia").select("id, nome").order("nome"),
@@ -62,13 +77,7 @@ export default async function GerarContratoPage({
         .from("produtos")
         .select("id, nome, tipo_garantia_id, seguradoras(nome)")
         .order("nome"),
-      supabase
-        .from("contratos")
-        .select(
-          "id, locador, locador_nomes, locatario, locatario_nomes, endereco_imovel, texto_gerado, created_at, laudo_modo, laudo_arquivo_nome"
-        )
-        .eq("imobiliaria_id", imobiliaria.id)
-        .order("created_at", { ascending: false }),
+      consultaContratos,
     ]);
 
   return (
@@ -92,7 +101,7 @@ export default async function GerarContratoPage({
         <div className="rounded-xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
           <AvisoAutorizacaoImobiliaria
             imobiliaria={{ autorizado: imobiliaria.autorizado, created_at: imobiliaria.created_at }}
-            bypass={isAdmin(user?.email) || isColaboradorO2(user?.email)}
+            bypass={vePermitidosDeTodos}
           >
             <FormularioContrato tiposGarantia={tiposGarantia ?? []} produtos={produtos ?? []} />
           </AvisoAutorizacaoImobiliaria>
@@ -100,7 +109,7 @@ export default async function GerarContratoPage({
 
         <section className="space-y-3">
           <h2 className="text-lg font-semibold text-o2-navy">Contratos gerados</h2>
-          <ListaContratos contratos={contratos ?? []} destaque={sucesso} />
+          <ListaContratos contratos={contratos ?? []} destaque={sucesso} mostrarImobiliaria={vePermitidosDeTodos} />
         </section>
       </main>
     </>
