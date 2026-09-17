@@ -45,11 +45,11 @@ function referenciaDeImagemConfiavel(src: string): boolean {
 
 export function EditorCorpo({ name, corpoInicialHtml }: { name: string; corpoInicialHtml?: string }) {
   const editorRef = useRef<HTMLDivElement>(null);
-  const hiddenRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const ultimaSelecaoRef = useRef<Range | null>(null);
   const [enviandoImagem, setEnviandoImagem] = useState(false);
   const [erroImagem, setErroImagem] = useState<string | null>(null);
+  const [corpoHtmlValue, setCorpoHtmlValue] = useState("");
 
   // Causa real de "não consigo inserir/trocar a imagem" (achado 17/09/2026,
   // 2ª rodada): document.execCommand("insertHTML") insere na seleção ATUAL
@@ -77,6 +77,19 @@ export function EditorCorpo({ name, corpoInicialHtml }: { name: string; corpoIni
       // Navegador sem suporte a execCommand (raro) -- segue sem forçar <p>,
       // o parser de blocos abaixo ainda lida com <div> solto.
     }
+    // Achado 17/09/2026 (3ª rodada): o conteúdo inicial NÃO pode vir de
+    // dangerouslySetInnerHTML no JSX -- toda vez que o componente
+    // re-renderiza (inclusive por causa do PRÓPRIO setEnviandoImagem
+    // true/false disparado por uma inserção de imagem), o React reaplica
+    // esse innerHTML e apaga qualquer imagem/edição inserida manualmente no
+    // DOM entre um render e outro (confirmado com um teste isolado
+    // forçando re-renders durante o upload -- a imagem sumia sempre que
+    // setEnviandoImagem(false) rodava logo depois de inserir). Por isso o
+    // HTML inicial só é aplicado UMA VEZ aqui, imperativamente, e o <div>
+    // do editor nunca mais recebe esse prop via JSX depois disso.
+    if (editorRef.current) {
+      editorRef.current.innerHTML = desembrulharParaEdicao(corpoInicialHtml ?? "");
+    }
     // Campanha existente reaberta pra editar (EditarConteudoCampanha) pode
     // já trazer uma referência quebrada salva de ANTES desse fix existir --
     // sincronizar()/aoColar só rodam em resposta a uma ação do usuário, não
@@ -92,8 +105,7 @@ export function EditorCorpo({ name, corpoInicialHtml }: { name: string; corpoIni
 
   function sincronizar() {
     const editor = editorRef.current;
-    const hidden = hiddenRef.current;
-    if (!editor || !hidden) return;
+    if (!editor) return;
 
     const linhas: string[] = [];
     let soltoAtual = "";
@@ -120,7 +132,12 @@ export function EditorCorpo({ name, corpoInicialHtml }: { name: string; corpoIni
     });
     fecharSolto();
 
-    hidden.value = linhas.map((conteudo) => `<tr><td style="${paddingBloco()}">${conteudo}</td></tr>`).join("");
+    // Estado controlado, não ref imperativa -- mesmo achado do
+    // dangerouslySetInnerHTML acima: um input não-controlado
+    // (defaultValue) também se mostrou reiniciando pra "" em
+    // re-renders disparados por setEnviandoImagem, perdendo o valor
+    // certo que sincronizar() tinha acabado de gravar.
+    setCorpoHtmlValue(linhas.map((conteudo) => `<tr><td style="${paddingBloco()}">${conteudo}</td></tr>`).join(""));
   }
 
   function aplicarFormatacao(comando: string) {
@@ -264,10 +281,9 @@ export function EditorCorpo({ name, corpoInicialHtml }: { name: string; corpoIni
         onBlur={sincronizar}
         onPaste={aoColar}
         className="min-h-[180px] rounded-b-lg border border-gray-300 px-3 py-2 text-sm focus:border-o2-coral focus:outline-none [&_img]:max-w-full [&_img]:rounded-lg"
-        dangerouslySetInnerHTML={{ __html: desembrulharParaEdicao(corpoInicialHtml ?? "") }}
       />
       <p className="mt-1 text-xs text-gray-400">Escreva normalmente, dá pra colar texto formatado, deixar em negrito/sublinhado e inserir imagem.</p>
-      <input ref={hiddenRef} type="hidden" name={name} defaultValue="" />
+      <input type="hidden" name={name} value={corpoHtmlValue} readOnly />
     </div>
   );
 }
