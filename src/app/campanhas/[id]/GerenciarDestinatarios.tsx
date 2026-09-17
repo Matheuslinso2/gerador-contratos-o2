@@ -8,6 +8,7 @@ import {
   alternarImobiliariaCampanha,
   alternarGrupoCampanha,
   removerContatoExternoCampanha,
+  alternarEquipeInternaCampanha,
   enviarTesteCampanha,
   confirmarDisparoCampanha,
   agendarDisparoCampanha,
@@ -36,16 +37,21 @@ export function GerenciarDestinatarios({
   idsSelecionadosIniciais,
   grupos,
   contatosSelecionadosIniciais,
+  incluirEquipeInternaInicial,
+  totalEmailsEquipeInterna,
 }: {
   campanhaId: string;
   imobiliarias: ImobLinha[];
   idsSelecionadosIniciais: string[];
   grupos: GrupoLinha[];
   contatosSelecionadosIniciais: ContatoLinha[];
+  incluirEquipeInternaInicial: boolean;
+  totalEmailsEquipeInterna: number;
 }) {
   const router = useRouter();
   const [idsSelecionados, setIdsSelecionados] = useState<Set<string>>(new Set(idsSelecionadosIniciais));
   const [contatosSelecionados, setContatosSelecionados] = useState<ContatoLinha[]>(contatosSelecionadosIniciais);
+  const [incluirEquipeInterna, setIncluirEquipeInterna] = useState(incluirEquipeInternaInicial);
   const [filtro, setFiltro] = useState("");
   const [idPendente, setIdPendente] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -65,13 +71,13 @@ export function GerenciarDestinatarios({
     [idsSelecionados, imobiliariasPorId]
   );
 
-  const totalSelecionados = idsSelecionados.size + contatosSelecionados.length;
+  const totalSelecionados = idsSelecionados.size + contatosSelecionados.length + (incluirEquipeInterna ? 1 : 0);
   const totalEmails = useMemo(() => {
     const set = new Set<string>();
     selecionadasLista.forEach((i) => i.emails.forEach((e) => set.add(e)));
     contatosSelecionados.forEach((c) => set.add(c.email.trim().toLowerCase()));
-    return set.size;
-  }, [selecionadasLista, contatosSelecionados]);
+    return set.size + (incluirEquipeInterna ? totalEmailsEquipeInterna : 0);
+  }, [selecionadasLista, contatosSelecionados, incluirEquipeInterna, totalEmailsEquipeInterna]);
 
   const resultadosFiltro = useMemo(() => {
     const termo = filtro.trim().toLowerCase();
@@ -136,6 +142,13 @@ export function GerenciarDestinatarios({
     executar(contatoId, async () => {
       await removerContatoExternoCampanha(campanhaId, contatoId);
       setContatosSelecionados((atual) => atual.filter((c) => c.id !== contatoId));
+    });
+  }
+
+  function alternarEquipeInterna(incluir: boolean) {
+    executar("equipe-interna", async () => {
+      await alternarEquipeInternaCampanha(campanhaId, incluir);
+      setIncluirEquipeInterna(incluir);
     });
   }
 
@@ -205,6 +218,27 @@ export function GerenciarDestinatarios({
           </div>
         </div>
       )}
+
+      {/* Pedido do Matheus, 17/09/2026 -- opção separada dos destinatários
+          externos acima, por campanha (não é automática). Reaproveita a
+          lista de e-mails de Avisos Internos + comercial@, ver
+          buscarEmailsEquipeInterna (src/lib/campanhas/equipeInterna.ts). */}
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-o2-navy/10 bg-white px-4 py-3 shadow-sm">
+        <label htmlFor="incluir-equipe-interna" className="min-w-0 text-sm">
+          <span className="font-medium text-o2-navy">Incluir equipe interna da O2</span>
+          <span className="ml-2 text-xs text-gray-400">
+            equipe (Avisos Internos) + comercial@o2seguros.com.br · {totalEmailsEquipeInterna} e-mail(s)
+          </span>
+        </label>
+        <input
+          id="incluir-equipe-interna"
+          type="checkbox"
+          checked={incluirEquipeInterna}
+          disabled={idPendente === "equipe-interna"}
+          onChange={(e) => alternarEquipeInterna(e.target.checked)}
+          className="h-4 w-4 shrink-0 accent-o2-coral"
+        />
+      </div>
 
       <div className="space-y-2">
         <label className="block text-xs font-medium text-gray-600">Adicionar imobiliária individual (complemento)</label>

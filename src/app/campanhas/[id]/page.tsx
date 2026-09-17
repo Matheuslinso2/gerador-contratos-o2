@@ -11,6 +11,7 @@ import { ROTULO_STATUS_CAMPANHA, COR_STATUS_CAMPANHA } from "@/lib/campanhas/rot
 import { rotuloProdutoCampanha } from "@/lib/campanhas/produtos";
 import { montarHtmlCampanha, type CampanhaRow } from "@/lib/campanhas/processarLote";
 import { emailsElegiveisCampanha } from "@/lib/campanhas/elegibilidade";
+import { buscarEmailsEquipeInterna } from "@/lib/campanhas/equipeInterna";
 import SubmitButton from "@/components/SubmitButton";
 import { CampanhaProgresso } from "./CampanhaProgresso";
 import { salvarLinhaProducao, removerLinhaProducao } from "./producao/actions";
@@ -108,6 +109,8 @@ export default async function CampanhaDetalhePage({
       ? supabase.from("campanhas_grupos_contatos").select("id, nome_imobiliaria, nome_responsavel, email").in("id", contatosExternosIdsSelecionados)
       : Promise.resolve({ data: [] }),
   ]);
+
+  const emailsEquipeInterna = rascunho ? await buscarEmailsEquipeInterna(supabase) : [];
 
   const descadastrados = new Set((descadastrosData ?? []).map((d) => d.email.toLowerCase()));
   const imobiliariasParaCliente = (todasImobiliariasData ?? []).map((i) => ({
@@ -271,6 +274,8 @@ export default async function CampanhaDetalhePage({
                 nomeResponsavel: c.nome_responsavel,
                 email: c.email,
               }))}
+              incluirEquipeInternaInicial={campanha.incluir_equipe_interna}
+              totalEmailsEquipeInterna={emailsEquipeInterna.length}
             />
           )}
 

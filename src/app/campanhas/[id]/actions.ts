@@ -80,6 +80,16 @@ export async function alternarGrupoCampanha(
   if (error) throw new Error(error.message);
 }
 
+// Pedido do Matheus, 17/09/2026: opção pra incluir a equipe interna da O2 +
+// comercial@o2seguros.com.br como destinatário da campanha, campanha por
+// campanha (não é automático em todas) -- ver buscarEmailsEquipeInterna,
+// usado de fato só na hora do disparo (dispararCampanha.ts).
+export async function alternarEquipeInternaCampanha(campanhaId: string, incluir: boolean) {
+  const { supabase } = await exigirAcessoRascunhoRPC(campanhaId);
+  const { error } = await supabase.from("campanhas").update({ incluir_equipe_interna: incluir }).eq("id", campanhaId);
+  if (error) throw new Error(error.message);
+}
+
 export async function removerContatoExternoCampanha(campanhaId: string, contatoId: string) {
   const { supabase, campanha } = await exigirAcessoRascunhoRPC(campanhaId);
   const atuais = ((campanha.contatos_externos_selecionados as string[] | null) ?? []).filter((i) => i !== contatoId);

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { emailsElegiveisCampanha } from "./elegibilidade";
+import { buscarEmailsEquipeInterna } from "./equipeInterna";
 
 // Compartilhada entre o disparo imediato (confirmarDisparoCampanha, sessão
 // de usuário) e o cron que dispara agendamentos vencidos
@@ -14,7 +15,7 @@ export async function dispararCampanha(
 ): Promise<{ ok: true; total: number } | { ok: false; erro: string }> {
   const { data: campanha } = await supabase
     .from("campanhas")
-    .select("id, status, imobiliarias_selecionadas, contatos_externos_selecionados")
+    .select("id, status, imobiliarias_selecionadas, contatos_externos_selecionados, incluir_equipe_interna")
     .eq("id", campanhaId)
     .single();
   if (!campanha) return { ok: false, erro: "Campanha não encontrada." };
@@ -24,7 +25,7 @@ export async function dispararCampanha(
 
   const imobiliariaIds = (campanha.imobiliarias_selecionadas as string[] | null) ?? [];
   const contatosExternosIds = (campanha.contatos_externos_selecionados as string[] | null) ?? [];
-  if (!imobiliariaIds.length && !contatosExternosIds.length) {
+  if (!imobiliariaIds.length && !contatosExternosIds.length && !campanha.incluir_equipe_interna) {
     return { ok: false, erro: "Selecione ao menos um destinatário antes de disparar." };
   }
 
@@ -56,6 +57,18 @@ export async function dispararCampanha(
     if (!email || vistos.has(email) || descadastrados.has(email)) continue;
     vistos.add(email);
     linhas.push({ campanha_id: campanhaId, imobiliaria_id: null, email });
+  }
+
+  // Equipe interna da O2 + comercial@ (pedido do Matheus, 17/09/2026) --
+  // opcional, marcado por campanha (ver alternarEquipeInternaCampanha).
+  // Também sem imobiliaria_id, mesmo tratamento dos contatos de prospecção.
+  if (campanha.incluir_equipe_interna) {
+    for (const emailBruto of await buscarEmailsEquipeInterna(supabase)) {
+      const email = emailBruto.trim().toLowerCase();
+      if (!email || vistos.has(email) || descadastrados.has(email)) continue;
+      vistos.add(email);
+      linhas.push({ campanha_id: campanhaId, imobiliaria_id: null, email });
+    }
   }
 
   if (!linhas.length) return { ok: false, erro: "Nenhum e-mail elegível entre os selecionados." };
