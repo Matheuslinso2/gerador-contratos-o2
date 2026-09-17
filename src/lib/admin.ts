@@ -1,6 +1,6 @@
 export const ADMIN_EMAILS = ["matheus@o2seguros.com.br", "misatorafael@nichoos.com", "lucas@nichoos.com"];
 const EMAIL_MATHEUS = "matheus@o2seguros.com.br";
-const DOMINIO_O2 = "@o2seguros.com.br";
+export const DOMINIO_O2 = "@o2seguros.com.br";
 
 export type Perfil = "admin" | "colaborador" | "imobiliaria";
 

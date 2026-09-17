@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { isAdmin, isColaboradorO2 } from "@/lib/admin";
+import { isAdmin, isColaboradorO2, DOMINIO_O2 } from "@/lib/admin";
 import { signOut } from "../../actions";
 import AppHeader from "@/components/AppHeader";
 import PageHeader from "@/components/PageHeader";
@@ -158,8 +158,21 @@ export default async function CampanhaDetalhePage({
     await Promise.all([
       supabase.from("campanhas_envios").select("imobiliaria_id").eq("campanha_id", id).not("imobiliaria_id", "is", null),
       supabase.from("campanhas_producao").select("id, imobiliaria_id, quantidade_apolices, premio_liquido, comissao_gerada, repasse_gerado").eq("campanha_id", id),
-      supabase.from("campanhas_envios").select("id", { count: "exact", head: true }).eq("campanha_id", id).not("aberto_em", "is", null),
-      supabase.from("campanhas_envios").select("id", { count: "exact", head: true }).eq("campanha_id", id).not("clicado_em", "is", null),
+      // Só fora do grupo O2 (pedido do Matheus, 17/09/2026) -- a métrica é
+      // pra medir o impacto da campanha no cliente, não abertura/clique da
+      // própria equipe interna que também recebeu (ver equipeInterna.ts).
+      supabase
+        .from("campanhas_envios")
+        .select("id", { count: "exact", head: true })
+        .eq("campanha_id", id)
+        .not("aberto_em", "is", null)
+        .not("email", "ilike", `%${DOMINIO_O2}`),
+      supabase
+        .from("campanhas_envios")
+        .select("id", { count: "exact", head: true })
+        .eq("campanha_id", id)
+        .not("clicado_em", "is", null)
+        .not("email", "ilike", `%${DOMINIO_O2}`),
       supabase.from("campanhas_descadastros").select("id", { count: "exact", head: true }).eq("origem_campanha_id", id),
     ]);
 
@@ -319,7 +332,11 @@ export default async function CampanhaDetalhePage({
               </div>
 
               {/* Métricas de abertura/clique via webhook do Resend + descadastros
-                  originados desta campanha (pedido da reunião de 15/09/2026). */}
+                  originados desta campanha (pedido da reunião de 15/09/2026).
+                  Abriram/Clicaram excluem @o2seguros.com.br (pedido do
+                  Matheus, 17/09/2026): mede impacto real no cliente, não a
+                  própria equipe interna que também recebeu a campanha. */}
+              <p className="text-xs text-gray-500">Abertura e clique contam só quem é de fora da O2</p>
               <div className="grid grid-cols-3 gap-1 overflow-hidden rounded-xl border border-o2-navy/10 bg-gray-200 shadow-sm">
                 <div className="bg-quadro p-4 text-center">
                   <p className="text-2xl font-bold text-o2-navy">{totalAbertos ?? 0}</p>
