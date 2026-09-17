@@ -7,7 +7,7 @@ export type FonteNoticia = {
   id: number;
   nome: string;
   url_rss: string;
-  categoria: "mercado_imobiliario" | "seguro_imobiliario";
+  categoria: "mercado_imobiliario" | "seguro_imobiliario" | "seguro_geral" | "economia";
   ativo: boolean;
 };
 

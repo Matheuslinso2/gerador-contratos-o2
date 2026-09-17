@@ -65,6 +65,8 @@ function minAgendamento(): string {
 const ROTULO_CATEGORIA: Record<string, string> = {
   mercado_imobiliario: "Mercado imobiliário",
   seguro_imobiliario: "Seguro imobiliário",
+  seguro_geral: "Seguros (geral)",
+  economia: "Economia",
   institucional: "Institucional",
 };
 

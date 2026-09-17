@@ -9,6 +9,8 @@ export const dynamic = "force-dynamic";
 const ROTULO_CATEGORIA: Record<string, string> = {
   mercado_imobiliario: "Mercado Imobiliário",
   seguro_imobiliario: "Seguro Imobiliário",
+  seguro_geral: "Seguros",
+  economia: "Economia",
   institucional: "O2 Seguros",
 };
 

@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 
-export type CategoriaPost = "mercado_imobiliario" | "seguro_imobiliario" | "institucional";
+export type CategoriaPost = "mercado_imobiliario" | "seguro_imobiliario" | "seguro_geral" | "economia" | "institucional";
 
 export type TipoPost =
   | "dica_mercado"
@@ -101,7 +101,7 @@ export async function gerarConteudoDeNoticia(noticia: {
   fonteNome: string;
 }): Promise<ConteudoGerado> {
   const conteudo = await chamarClaude(
-    `Escreva um post comentando esta notícia:\n\nFonte: ${noticia.fonteNome}\nTítulo: ${noticia.titulo}\nResumo: ${noticia.resumo ?? "(sem resumo, use só o título)"}\nLink: ${noticia.link}\n\nComente o que essa notícia significa pra quem trabalha com locação/seguro imobiliário, na sua visão como especialista. Não repita o resumo literalmente, dê um ângulo.`
+    `Escreva um post comentando esta notícia:\n\nFonte: ${noticia.fonteNome}\nTítulo: ${noticia.titulo}\nResumo: ${noticia.resumo ?? "(sem resumo, use só o título)"}\nLink: ${noticia.link}\n\nComente na sua visão de especialista em seguros e mercado imobiliário. Se a notícia for sobre locação/seguro imobiliário, conecte direto com quem trabalha nisso. Se for de outro tipo de seguro (auto, saúde) ou de economia em geral, comente com a autoridade de quem entende do mercado de seguros e economia como um todo — não force uma conexão artificial com locação se não fizer sentido. Não repita o resumo literalmente, dê um ângulo.`
   );
 
   // Referência da notícia original sempre anexada aqui por código (pedido
