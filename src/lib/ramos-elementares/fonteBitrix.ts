@@ -128,11 +128,24 @@ function serialGoogle(data: Date | null): number | null {
   return data.getTime() / 86_400_000 + 25_569;
 }
 
+// Achado real (17/09/2026, mesmo padrão do bug já corrigido no painel de
+// Seguro Fiança): esse mapa é fixo e não muda sozinho se o funil for
+// reconfigurado no Bitrix -- foi exatamente o que aconteceu aqui. Duas
+// etapas novas (DT1046_22:UC_JJMDWB "Liberado para Negociação" e
+// DT1046_22:UC_MZKZUF "Negociação Segimob") foram criadas na categoria 22
+// depois que esse mapa foi escrito e nunca entraram aqui -- qualquer card
+// nelas caía no fallback pro código bruto ("UC_JJMDWB"/"UC_MZKZUF") em vez
+// de um nome, exatamente o que apareceu no quadro "Novos negócios --
+// situação atual". Se esse bug voltar (código aparecendo em vez de nome),
+// reconfira com crm.status.list (filter ENTITY_ID=DYNAMIC_1046_STAGE_22)
+// antes de mexer em outra coisa.
 function etapaNovo(item: BitrixItemRaw): string {
   const etapa = texto(item.stageId).split(":").pop() || "";
   const mapa: Record<string, string> = {
     NEW: "PENDENTE",
     PREPARATION: "AG COTAÇÃO",
+    UC_JJMDWB: "LIBERADO P/ NEGOCIAÇÃO",
+    UC_MZKZUF: "NEGOCIAÇÃO SEGIMOB",
     CLIENT: "EM NEGOCIAÇÃO",
     EM_EMISSAO: "CONTRATAR",
     SUCCESS: "EFETIVADO",
