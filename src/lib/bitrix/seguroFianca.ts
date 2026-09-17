@@ -53,17 +53,29 @@ export const CATEGORIA_NEGOCIACAO = 20;
 
 type Etapa = { statusId: string; nome: string; semantica: "P" | "S" | "F" };
 
-// Lista completa e verificada via crm.status.list — estável, não muda sem
-// alguém reconfigurar o funil no Bitrix. Fixado aqui em vez de reconsultado
-// a cada carga de página.
+// Lista completa e verificada via crm.status.list — em tese estável, mas
+// NÃO é garantido: o funil pode ser reconfigurado no Bitrix sem avisar
+// aqui (foi o que causou o bug achado na reunião de 16/09/2026 -- Patricia
+// reparou que "tempo em aberto por etapa" mostrava o código bruto da etapa
+// em vez do nome em Negociação e Contrato. Reconferido via crm.status.list
+// nessa data: a etapa "Cotado com Pendência" tinha sido movida de Análise e
+// Cotação, DT1042_18:UC_VE1LYP, pra Negociação e Contrato,
+// DT1042_20:UC_PHJKU1 -- o código antigo não existe mais, o novo não
+// estava aqui, por isso caía no fallback pro código bruto. De quebra,
+// achamos também uma etapa nova sem nome (DT1042_18:UC_QAI50S, "URGENTE")
+// e que DT1042_18:FAIL foi renomeada de "PERDIDO" pra "RECUSADO" no
+// Bitrix). Se esse bug voltar (código aparecendo em vez de nome em
+// qualquer quadro por etapa), reconfira com crm.status.list antes de
+// mexer em outra coisa.
 export const ETAPAS: Etapa[] = [
   { statusId: "DT1042_18:NEW", nome: "Nova Solicitação", semantica: "P" },
   { statusId: "DT1042_18:PREPARATION", nome: "Pendente Informação", semantica: "P" },
+  { statusId: "DT1042_18:UC_QAI50S", nome: "URGENTE", semantica: "P" },
   { statusId: "DT1042_18:CLIENT", nome: "Aguardando Cotação", semantica: "P" },
   { statusId: "DT1042_18:UC_YW2LWF", nome: "Aguardando Seguradora", semantica: "P" },
-  { statusId: "DT1042_18:UC_VE1LYP", nome: "Cotado com Pendência", semantica: "P" },
   { statusId: "DT1042_18:SUCCESS", nome: "SUCESSO", semantica: "S" },
-  { statusId: "DT1042_18:FAIL", nome: "PERDIDO", semantica: "F" },
+  { statusId: "DT1042_18:FAIL", nome: "RECUSADO", semantica: "F" },
+  { statusId: "DT1042_20:UC_PHJKU1", nome: "Cotado com Pendência", semantica: "P" },
   { statusId: "DT1042_20:NEW", nome: "Liberado para Negociar", semantica: "P" },
   { statusId: "DT1042_20:UC_XWVPIX", nome: "Contato Pendente", semantica: "P" },
   { statusId: "DT1042_20:PREPARATION", nome: "Em Negociação", semantica: "P" },
@@ -716,8 +728,9 @@ export type AnaliseGerencial = {
   // negativados e contratados juntos -- null quando não há nenhum card com
   // taxa cotada nesse conjunto.
   aba2Taxas: { menor: number | null; media: number | null; n: number };
-  // Aba 3 (09/09/2026): até 3 imobiliárias com mais aprovação/pré-aprovação
-  // na Pottencial (qualquer um dos 2 planos), "novidades".
+  // Aba 3 (09/09/2026, expandido de 3 pra 10 em 16/09/2026): até 10
+  // imobiliárias com mais aprovação/pré-aprovação na Pottencial (qualquer
+  // um dos 2 planos), "novidades".
   top3AprovacaoPottencial: { nome: string; aprovados: number }[];
   motivosRecusaFunil1: { total: number; semMotivo: number }; // mês do evento
   motivosPerdaFunil2: { porMotivo: Record<string, number>; semMotivo: number; total: number }; // mês do evento
@@ -1007,10 +1020,15 @@ export function montarAnaliseGerencial(
     n: taxasNegativadosOuContratados.length,
   };
 
-  // Aba 3 (09/09/2026): Top 3 imobiliárias com mais aprovação/pré-aprovação
-  // na Pottencial -- os 2 planos (Taxa Fixa/Tradicional) contam pro mesmo
-  // total, card conta uma vez mesmo se os 2 planos vierem aprovados. Mesmo
-  // conjunto OK usado no quadro "Análise por seguradora e plano" da página.
+  // Aba 3 (09/09/2026, ranking expandido de top 3 pra top 10 em
+  // 16/09/2026 -- pedido do alinhamento Matheus/Patricia, pra embasar
+  // defesas perante as imobiliárias): imobiliárias com mais
+  // aprovação/pré-aprovação na Pottencial -- os 2 planos (Taxa
+  // Fixa/Tradicional) contam pro mesmo total, card conta uma vez mesmo se
+  // os 2 planos vierem aprovados. Mesmo conjunto OK usado no quadro
+  // "Análise por seguradora e plano" da página. Nome da variável/campo
+  // ficou "top3" por compatibilidade com retratos congelados antigos
+  // (comercial_kpis_snapshots) -- só a quantidade retornada mudou.
   const STATUS_OK_POTTENCIAL = new Set(["Aprov", "Aprov.", "Aprovado", "Pré-Aprov.", "Pré-Aprovado"]);
   const pottencialAprovadoPorImobiliaria: Record<string, number> = {};
   for (const l of novidades) {
@@ -1022,7 +1040,7 @@ export function montarAnaliseGerencial(
   }
   const top3AprovacaoPottencial = Object.entries(pottencialAprovadoPorImobiliaria)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 3)
+    .slice(0, 10)
     .map(([nome, aprovados]) => ({ nome, aprovados }));
 
   const motivosPerdaFunil2: Record<string, number> = {};

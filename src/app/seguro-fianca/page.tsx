@@ -79,13 +79,15 @@ function fmtPct(v: number | null): string {
     }) + "%"
   );
 }
-// A etapa de encerramento de "Análise e Cotação" se chama "PERDIDO" no
-// Bitrix (mesmo rótulo genérico usado nos dois funis) -- só no quadro
-// "Tempo em aberto por etapa" isso precisa aparecer como "Recusado", pra
-// bater com o termo usado no resto do painel pra esse funil. Não mexe em
-// "Negociação e Contrato | PERDIDO", que usa "Perdido" mesmo de propósito.
+// A etapa de encerramento de "Análise e Cotação" se chama "RECUSADO" no
+// Bitrix (renomeada de "PERDIDO" em algum momento -- achado na reunião de
+// 16/09/2026, ver comentário acima de ETAPAS em seguroFianca.ts) -- só no
+// quadro "Tempo em aberto por etapa" isso precisa aparecer como "Recusado"
+// (title case), pra bater com o termo usado no resto do painel pra esse
+// funil. Não mexe em "Negociação e Contrato | PERDIDO", que usa "Perdido"
+// mesmo de propósito (esse funil não foi renomeado).
 function rotuloEtapaTempoAberto(chave: string): string {
-  return chave === "Análise e Cotação | PERDIDO"
+  return chave === "Análise e Cotação | RECUSADO"
     ? "Análise e Cotação | Recusado"
     : chave;
 }
@@ -1359,66 +1361,74 @@ export default async function SeguroFiancaPage({
                 </section>
               </AbaSlot>
               <AbaSlot aba="fechamento">
-                <section
-                  id="quadro-fianca-analise-resumo-fechamento"
-                  className={styles.section}
-                >
-                  <div className={styles.sectionHead}>
-                    <h2>Negativação</h2>
-                    <div className={styles.note}>
-                      % sobre o total de análise (novidades + herdados ativos) —
-                      ver aba Cotações
-                    </div>
-                    <ExportarQuadro
-                      quadroId="quadro-fianca-analise-resumo-fechamento"
-                      corFundo="#f7f8fa"
-                      nomeArquivo={`seguro-fianca-analise-resumo-fechamento-${competencia}`}
-                      dadosExcel={[
-                        {
-                          indicador: "Negativados",
-                          valor: gerencial.kpis.perdidos.total,
-                        },
-                        {
-                          indicador: "% de Negativação",
-                          valor:
-                            gerencial.kpis.totalRelevantes > 0
-                              ? (gerencial.kpis.perdidos.total /
-                                  gerencial.kpis.totalRelevantes) *
-                                100
-                              : 0,
-                        },
-                      ]}
-                      nomeAbaExcel="Negativação"
-                    />
-                  </div>
-                  <div className={styles.kpis}>
-                    <Kpi
-                      label="Negativados"
-                      value={String(gerencial.kpis.perdidos.total)}
-                      sub="cliente não quis contratar, mês do evento"
-                      tone="negative"
-                    />
-                    <Kpi
-                      label="% de Negativação"
-                      value={fmtPct(
-                        gerencial.kpis.totalRelevantes > 0
-                          ? (gerencial.kpis.perdidos.total /
-                              gerencial.kpis.totalRelevantes) *
-                              100
-                          : 0,
-                      )}
-                      sub={`negativados ÷ ${gerencial.kpis.totalRelevantes} análises do mês`}
-                      tone={
-                        gerencial.kpis.totalRelevantes > 0 &&
-                        gerencial.kpis.perdidos.total /
-                          gerencial.kpis.totalRelevantes >
-                          0.2
-                          ? "warning"
-                          : undefined
-                      }
-                    />
-                  </div>
-                </section>
+                {(() => {
+                  // Reunião 16/09/2026 (Matheus + Patricia): o % de
+                  // Negativação único misturava o numerador (negativados
+                  // pelo MÊS DO EVENTO, de qualquer origem) com um
+                  // denominador de outra natureza (novidades + herdados
+                  // ativos) -- duas populações diferentes numa razão só.
+                  // Decisão: separar em duas frentes -- entradas exclusivas
+                  // deste mês (novidades) e respostas deste mês originadas
+                  // em mês anterior (herdados) -- cada uma com seu próprio
+                  // numerador E denominador da mesma origem.
+                  const herdadosRelevantes = gerencial.kpis.totalRelevantes - gerencial.kpis.total;
+                  const pctNovidades = gerencial.kpis.total > 0 ? (gerencial.kpis.perdidos.mesAtual / gerencial.kpis.total) * 100 : 0;
+                  const pctHerdados = herdadosRelevantes > 0 ? (gerencial.kpis.perdidos.herdado / herdadosRelevantes) * 100 : 0;
+                  return (
+                    <section
+                      id="quadro-fianca-analise-resumo-fechamento"
+                      className={styles.section}
+                    >
+                      <div className={styles.sectionHead}>
+                        <h2>Negativação</h2>
+                        <div className={styles.note}>
+                          separado por origem -- entradas deste mês vs.
+                          respostas deste mês de cards de mês anterior
+                        </div>
+                        <ExportarQuadro
+                          quadroId="quadro-fianca-analise-resumo-fechamento"
+                          corFundo="#f7f8fa"
+                          nomeArquivo={`seguro-fianca-analise-resumo-fechamento-${competencia}`}
+                          dadosExcel={[
+                            {
+                              indicador: "Negativados (total)",
+                              valor: gerencial.kpis.perdidos.total,
+                            },
+                            {
+                              indicador: "% Negativação — Entradas do Mês",
+                              valor: pctNovidades,
+                            },
+                            {
+                              indicador: "% Negativação — Herdados de Mês Anterior",
+                              valor: pctHerdados,
+                            },
+                          ]}
+                          nomeAbaExcel="Negativação"
+                        />
+                      </div>
+                      <div className={styles.kpis}>
+                        <Kpi
+                          label="Negativados"
+                          value={String(gerencial.kpis.perdidos.total)}
+                          sub="cliente não quis contratar, mês do evento"
+                          tone="negative"
+                        />
+                        <Kpi
+                          label="% Negativação — Entradas do Mês"
+                          value={fmtPct(pctNovidades)}
+                          sub={`${gerencial.kpis.perdidos.mesAtual} negativado(s) ÷ ${gerencial.kpis.total} novidade(s) do mês`}
+                          tone={gerencial.kpis.total > 0 && pctNovidades / 100 > 0.2 ? "warning" : undefined}
+                        />
+                        <Kpi
+                          label="% Negativação — Herdados de Mês Anterior"
+                          value={fmtPct(pctHerdados)}
+                          sub={`${gerencial.kpis.perdidos.herdado} negativado(s) ÷ ${herdadosRelevantes} herdado(s) relevante(s)`}
+                          tone={herdadosRelevantes > 0 && pctHerdados / 100 > 0.2 ? "warning" : undefined}
+                        />
+                      </div>
+                    </section>
+                  );
+                })()}
               </AbaSlot>
 
               <AbaSlot aba="seguradora">
@@ -1566,7 +1576,7 @@ export default async function SeguroFiancaPage({
                   className={styles.section}
                 >
                   <div className={styles.sectionHead}>
-                    <h2>Top 3 imobiliárias — aprovação na Pottencial</h2>
+                    <h2>Top 10 imobiliárias — aprovação na Pottencial</h2>
                     <div className={styles.note}>
                       aprovado/pré-aprovado em qualquer um dos 2 planos (Taxa
                       Fixa ou Tradicional), cards deste mês
