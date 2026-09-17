@@ -44,6 +44,7 @@ type Post = {
   imagem_manual_url: string | null;
   agendado_para: string | null;
   arquivado_em: string | null;
+  slides: string[] | null;
 };
 
 const ROTULO_STATUS: Record<string, string> = {
@@ -130,7 +131,7 @@ export default async function SocialMediaPage({
   let consultaPosts = supabase
     .from("social_media_posts")
     .select(
-      "id, categoria, titulo_card, legenda, status, criado_em, erro, instagram_post_id, imagem_manual_url, agendado_para, arquivado_em"
+      "id, categoria, titulo_card, legenda, status, criado_em, erro, instagram_post_id, imagem_manual_url, agendado_para, arquivado_em, slides"
     )
     .order("criado_em", { ascending: false })
     .limit(30);
@@ -243,12 +244,32 @@ export default async function SocialMediaPage({
           <div className="grid gap-4 sm:grid-cols-2">
             {(posts ?? []).map((p) => (
               <div key={p.id} className="overflow-hidden rounded-lg border border-slate-200">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={`/api/social/imagem/${p.id}`} alt={p.titulo_card} className="aspect-square w-full object-cover" />
+                {p.slides?.length ? (
+                  <div className="flex gap-1 overflow-x-auto bg-slate-100 p-1">
+                    {p.slides.map((_, i) => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        key={i}
+                        src={`/api/social/imagem/${p.id}?slide=${i}`}
+                        alt={`${p.titulo_card} — slide ${i + 1}`}
+                        className="aspect-square w-1/3 shrink-0 rounded object-cover"
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={`/api/social/imagem/${p.id}`} alt={p.titulo_card} className="aspect-square w-full object-cover" />
+                )}
                 <div className="p-3">
                   <div className="mb-1 flex items-center gap-2 text-xs text-slate-400">
                     <span>{ROTULO_CATEGORIA[p.categoria] ?? p.categoria}</span>
                     <span>·</span>
+                    {p.slides?.length ? (
+                      <>
+                        <span className="font-medium text-o2-navy">Carrossel · {p.slides.length} imagens</span>
+                        <span>·</span>
+                      </>
+                    ) : null}
                     <span
                       className={
                         p.status === "publicado"
@@ -330,6 +351,7 @@ export default async function SocialMediaPage({
                         )}
                       </div>
 
+                      {!p.slides?.length && (
                       <div className="mt-2 border-t border-slate-100 pt-2">
                         {p.imagem_manual_url ? (
                           <form action={removerFotoManual} className="flex items-center gap-2">
@@ -355,6 +377,7 @@ export default async function SocialMediaPage({
                           </form>
                         )}
                       </div>
+                      )}
                     </>
                   )}
 
@@ -372,14 +395,18 @@ export default async function SocialMediaPage({
           </div>
 
           {!mostrarArquivadas && (
-            <form action={gerarRascunhoInstitucional} className="mt-4 flex gap-2 border-t border-slate-100 pt-4">
+            <form action={gerarRascunhoInstitucional} className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
               <input
                 type="text"
                 name="tema"
                 placeholder="Tema institucional (ex: por que seguro incêndio é obrigatório na locação)"
-                className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
+                className="min-w-[240px] flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
                 required
               />
+              <label className="flex items-center gap-1.5 text-xs text-slate-500">
+                <input type="checkbox" name="carrossel" className="rounded" />
+                Carrossel (4-5 imagens)
+              </label>
               <SubmitButton
                 textoCarregando="Gerando…"
                 className="rounded-md bg-o2-coral px-4 py-2 text-sm font-medium text-white hover:opacity-90"
@@ -460,7 +487,7 @@ export default async function SocialMediaPage({
                       {n.resumo && <p className="mt-0.5 line-clamp-2 text-xs text-slate-500">{n.resumo}</p>}
                     </a>
                     {!n.usado && (
-                      <form action={gerarRascunho} className="shrink-0">
+                      <form action={gerarRascunho} className="flex shrink-0 flex-col items-end gap-1">
                         <input type="hidden" name="noticia_id" value={n.id} />
                         <SubmitButton
                           textoCarregando="Gerando…"
@@ -468,6 +495,10 @@ export default async function SocialMediaPage({
                         >
                           Gerar post
                         </SubmitButton>
+                        <label className="flex items-center gap-1 text-[11px] text-slate-400">
+                          <input type="checkbox" name="carrossel" className="rounded" />
+                          Carrossel
+                        </label>
                       </form>
                     )}
                   </div>

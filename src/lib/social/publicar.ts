@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { publicarPost } from "@/lib/instagram";
+import { publicarPost, publicarCarrossel } from "@/lib/instagram";
 
 // Compartilhada entre o clique manual de "Aprovar e publicar"
 // (src/app/social-media/actions.ts, sessão do usuário) e o cron que dispara
@@ -18,12 +18,17 @@ export async function publicarPostPorId(
     return { ok: false, erro };
   }
 
-  const { data: post } = await supabase.from("social_media_posts").select("legenda").eq("id", postId).single();
+  const { data: post } = await supabase.from("social_media_posts").select("legenda, slides").eq("id", postId).single();
   if (!post) return { ok: false, erro: "Post não encontrado." };
 
   try {
-    const imageUrl = `${siteUrl}/api/social/imagem/${postId}`;
-    const instagramPostId = await publicarPost(imageUrl, post.legenda);
+    const temCarrossel = Array.isArray(post.slides) && post.slides.length > 0;
+    const instagramPostId = temCarrossel
+      ? await publicarCarrossel(
+          (post.slides as string[]).map((_, i) => `${siteUrl}/api/social/imagem/${postId}?slide=${i}`),
+          post.legenda
+        )
+      : await publicarPost(`${siteUrl}/api/social/imagem/${postId}`, post.legenda);
     await supabase
       .from("social_media_posts")
       .update({ status: "publicado", publicado_em: new Date().toISOString(), instagram_post_id: instagramPostId, erro: null })

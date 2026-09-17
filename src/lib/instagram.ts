@@ -153,6 +153,72 @@ export async function publicarPost(imageUrl: string, legenda: string): Promise<s
   }
 }
 
+// Publica um carrossel (2 a 10 imagens conforme a Graph API, mas aqui sempre
+// 4-5, geradas por gerarConteudoCarrossel*) e devolve o link do post
+// publicado. Cada imagem primeiro vira um container "item" isolado
+// (is_carousel_item: true), só depois entram todos juntos num container pai
+// (media_type: CAROUSEL) que é o que de fato se publica.
+export async function publicarCarrossel(imageUrls: string[], legenda: string): Promise<string> {
+  const auth = await obterAuthValida();
+  const contaId = auth.instagram_business_account_id;
+  const legendaComMarcacao = `${legenda}\n\n@${CONTA_COLAB_USERNAME}`;
+
+  // Passo 1: cria um container por imagem, cada um marcado como item de
+  // carrossel (sem caption individual -- a legenda só vai no container pai).
+  const itens: { id: string }[] = [];
+  for (const imageUrl of imageUrls) {
+    const item = await chamarGraphApi<{ id: string }>(`${GRAPH_BASE}/${contaId}/media`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image_url: imageUrl, is_carousel_item: true, access_token: auth.access_token }),
+    });
+    itens.push(item);
+  }
+
+  // Passo 2: espera cada item terminar de processar antes de montar o
+  // container pai -- mesmo cuidado do publicarPost, aplicado item a item.
+  for (const item of itens) {
+    for (let tentativa = 0; tentativa < 3; tentativa++) {
+      const status = await chamarGraphApi<{ status_code: string }>(
+        `${GRAPH_BASE}/${item.id}?fields=status_code&access_token=${encodeURIComponent(auth.access_token)}`
+      );
+      if (status.status_code === "FINISHED") break;
+      if (status.status_code === "ERROR") throw new Error("Instagram: falha ao processar uma das imagens do carrossel (status_code ERROR).");
+      await aguardar(2000);
+    }
+  }
+
+  // Passo 3: cria o container pai do carrossel, com a legenda. A Graph API
+  // não aceita user_tags no container pai do carrossel (só em item avulso),
+  // então a marcação de @o2seguros aqui fica só na menção da legenda mesmo.
+  const containerPai = await chamarGraphApi<{ id: string }>(`${GRAPH_BASE}/${contaId}/media`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      media_type: "CAROUSEL",
+      children: itens.map((item) => item.id),
+      caption: legendaComMarcacao,
+      access_token: auth.access_token,
+    }),
+  });
+
+  // Passo 4: publica o container pai.
+  const publicado = await chamarGraphApi<{ id: string }>(`${GRAPH_BASE}/${contaId}/media_publish`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ creation_id: containerPai.id, access_token: auth.access_token }),
+  });
+
+  try {
+    const detalhe = await chamarGraphApi<{ permalink: string }>(
+      `${GRAPH_BASE}/${publicado.id}?fields=permalink&access_token=${encodeURIComponent(auth.access_token)}`
+    );
+    return detalhe.permalink;
+  } catch {
+    return publicado.id;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Troca/renovação de token -- usadas só pela rota de callback do OAuth
 // (troca inicial) e pelo cron de renovação (src/app/api/cron/

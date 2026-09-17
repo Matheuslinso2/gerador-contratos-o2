@@ -5,7 +5,12 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { coletarNoticias } from "@/lib/social/news";
-import { gerarConteudoDeNoticia, gerarConteudoInstitucional } from "@/lib/social/gerarConteudo";
+import {
+  gerarConteudoDeNoticia,
+  gerarConteudoInstitucional,
+  gerarConteudoCarrosselDeNoticia,
+  gerarConteudoCarrosselInstitucional,
+} from "@/lib/social/gerarConteudo";
 import { publicarPostPorId } from "@/lib/social/publicar";
 
 // Fuso fixo -03:00 (Brasil não tem mais horário de verão desde 2019) --
@@ -44,6 +49,7 @@ export async function gerarRascunho(formData: FormData) {
   const supabase = await exigirAcessoInterno();
   const noticiaId = Number(formData.get("noticia_id"));
   if (!noticiaId) return;
+  const carrossel = formData.get("carrossel") === "on";
 
   const { data: noticia, error } = await supabase
     .from("social_media_noticias")
@@ -53,22 +59,33 @@ export async function gerarRascunho(formData: FormData) {
   if (error || !noticia) return;
 
   const fonte = noticia.social_media_fontes as unknown as { nome: string; categoria: string } | null;
-
-  const conteudo = await gerarConteudoDeNoticia({
+  const dadosNoticia = {
     titulo: noticia.titulo,
     resumo: noticia.resumo,
     link: noticia.link,
     fonteNome: fonte?.nome ?? "fonte desconhecida",
-  });
+  };
 
-  await supabase.from("social_media_posts").insert({
-    noticia_id: noticiaId,
-    categoria: fonte?.categoria ?? "mercado_imobiliario",
-    titulo_card: conteudo.titulo_card,
-    legenda: conteudo.legenda,
-    tipo_post: conteudo.tipo_post,
-    numero_destaque: conteudo.numero_destaque,
-  });
+  if (carrossel) {
+    const conteudo = await gerarConteudoCarrosselDeNoticia(dadosNoticia);
+    await supabase.from("social_media_posts").insert({
+      noticia_id: noticiaId,
+      categoria: fonte?.categoria ?? "mercado_imobiliario",
+      titulo_card: conteudo.slides[0],
+      legenda: conteudo.legenda,
+      slides: conteudo.slides,
+    });
+  } else {
+    const conteudo = await gerarConteudoDeNoticia(dadosNoticia);
+    await supabase.from("social_media_posts").insert({
+      noticia_id: noticiaId,
+      categoria: fonte?.categoria ?? "mercado_imobiliario",
+      titulo_card: conteudo.titulo_card,
+      legenda: conteudo.legenda,
+      tipo_post: conteudo.tipo_post,
+      numero_destaque: conteudo.numero_destaque,
+    });
+  }
   await supabase.from("social_media_noticias").update({ usado: true }).eq("id", noticiaId);
 
   revalidatePath("/social-media");
@@ -79,17 +96,28 @@ export async function gerarRascunhoInstitucional(formData: FormData) {
   const supabase = await exigirAcessoInterno();
   const tema = String(formData.get("tema") ?? "").trim();
   if (!tema) return;
+  const carrossel = formData.get("carrossel") === "on";
 
-  const conteudo = await gerarConteudoInstitucional(tema);
-
-  await supabase.from("social_media_posts").insert({
-    tema_institucional: tema,
-    categoria: "institucional",
-    titulo_card: conteudo.titulo_card,
-    legenda: conteudo.legenda,
-    tipo_post: conteudo.tipo_post,
-    numero_destaque: conteudo.numero_destaque,
-  });
+  if (carrossel) {
+    const conteudo = await gerarConteudoCarrosselInstitucional(tema);
+    await supabase.from("social_media_posts").insert({
+      tema_institucional: tema,
+      categoria: "institucional",
+      titulo_card: conteudo.slides[0],
+      legenda: conteudo.legenda,
+      slides: conteudo.slides,
+    });
+  } else {
+    const conteudo = await gerarConteudoInstitucional(tema);
+    await supabase.from("social_media_posts").insert({
+      tema_institucional: tema,
+      categoria: "institucional",
+      titulo_card: conteudo.titulo_card,
+      legenda: conteudo.legenda,
+      tipo_post: conteudo.tipo_post,
+      numero_destaque: conteudo.numero_destaque,
+    });
+  }
 
   revalidatePath("/social-media");
 }

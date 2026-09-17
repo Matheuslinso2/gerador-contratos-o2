@@ -119,3 +119,74 @@ export async function gerarConteudoInstitucional(tema: string): Promise<Conteudo
     `Escreva um post sobre este tema, do ponto de vista de especialista em seguros imobiliários:\n\n${tema}\n\nNão é uma notícia específica — é conteúdo de autoridade/dica, mas ainda assim sem inventar dados ou números que não foram fornecidos aqui.`
   );
 }
+
+export type ConteudoCarrossel = {
+  legenda: string;
+  slides: string[];
+};
+
+const FERRAMENTA_CARROSSEL: Anthropic.Tool = {
+  name: "gerar_carrossel",
+  description: "Reporta o texto de um post em carrossel pronto pra publicar no Instagram: uma legenda e o texto de cada slide de imagem.",
+  input_schema: {
+    type: "object",
+    properties: {
+      legenda: {
+        type: "string",
+        description: "Legenda completa do post, pronta pra publicar, incluindo as hashtags no fim.",
+      },
+      slides: {
+        type: "array",
+        items: { type: "string" },
+        minItems: 4,
+        maxItems: 5,
+        description:
+          "Entre 4 e 5 slides que juntos resumem a ideia geral do post, em sequência lógica (ex: gancho no slide 1, desenvolvimento nos do meio, conclusão/chamada no último). Cada slide é uma frase curta (até 90 caracteres) pronta pra estampar numa imagem — não repita a mesma frase em slides diferentes.",
+      },
+    },
+    required: ["legenda", "slides"],
+  },
+};
+
+async function chamarClaudeCarrossel(mensagemUsuario: string): Promise<ConteudoCarrossel> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error("Geração de conteúdo não configurada: falta ANTHROPIC_API_KEY.");
+
+  const anthropic = new Anthropic({ apiKey });
+  const mensagem = await anthropic.messages.create({
+    model: "claude-sonnet-5",
+    max_tokens: 1200,
+    system: VOZ,
+    tools: [FERRAMENTA_CARROSSEL],
+    tool_choice: { type: "tool", name: "gerar_carrossel" },
+    messages: [{ role: "user", content: mensagemUsuario }],
+  });
+
+  const chamada = mensagem.content.find(
+    (bloco): bloco is Anthropic.ToolUseBlock => bloco.type === "tool_use"
+  );
+  if (!chamada) throw new Error("A IA não retornou o carrossel estruturado.");
+  return chamada.input as ConteudoCarrossel;
+}
+
+export async function gerarConteudoCarrosselDeNoticia(noticia: {
+  titulo: string;
+  resumo: string | null;
+  link: string;
+  fonteNome: string;
+}): Promise<ConteudoCarrossel> {
+  const conteudo = await chamarClaudeCarrossel(
+    `Escreva um post em CARROSSEL (4 a 5 slides) comentando esta notícia:\n\nFonte: ${noticia.fonteNome}\nTítulo: ${noticia.titulo}\nResumo: ${noticia.resumo ?? "(sem resumo, use só o título)"}\nLink: ${noticia.link}\n\nComente na sua visão de especialista em seguros e mercado imobiliário. Se a notícia for sobre locação/seguro imobiliário, conecte direto com quem trabalha nisso. Se for de outro tipo de seguro (auto, saúde) ou de economia em geral, comente com a autoridade de quem entende do mercado de seguros e economia como um todo — não force uma conexão artificial com locação se não fizer sentido. Os slides devem contar uma ideia só, em sequência (gancho → desenvolvimento → conclusão), não repetir o resumo literalmente.`
+  );
+
+  return {
+    ...conteudo,
+    legenda: `${conteudo.legenda}\n\nFonte: ${noticia.fonteNome} (${noticia.link})`,
+  };
+}
+
+export async function gerarConteudoCarrosselInstitucional(tema: string): Promise<ConteudoCarrossel> {
+  return chamarClaudeCarrossel(
+    `Escreva um post em CARROSSEL (4 a 5 slides) sobre este tema, do ponto de vista de especialista em seguros imobiliários:\n\n${tema}\n\nNão é uma notícia específica — é conteúdo de autoridade/dica, mas ainda assim sem inventar dados ou números que não foram fornecidos aqui. Os slides devem contar uma ideia só, em sequência (gancho → desenvolvimento → conclusão).`
+  );
+}

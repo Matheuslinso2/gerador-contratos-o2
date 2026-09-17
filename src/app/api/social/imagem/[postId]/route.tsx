@@ -37,6 +37,15 @@ const FONTE_INTER_800 = fs.readFileSync(
 const FONTE_INTER_600 = fs.readFileSync(
   path.join(process.cwd(), "src", "lib", "social", "fonts", "Inter-SemiBold.woff")
 );
+const FONTE_POPPINS_REGULAR = fs.readFileSync(
+  path.join(process.cwd(), "src", "lib", "social", "fonts", "Poppins-Regular.woff")
+);
+const FONTE_POPPINS_SEMIBOLD = fs.readFileSync(
+  path.join(process.cwd(), "src", "lib", "social", "fonts", "Poppins-SemiBold.woff")
+);
+const FONTE_POPPINS_BOLD = fs.readFileSync(
+  path.join(process.cwd(), "src", "lib", "social", "fonts", "Poppins-Bold.woff")
+);
 
 const NAVY = "#01192e";
 const CORAL = "#F8540D";
@@ -52,6 +61,7 @@ type DadosPost = {
   numero_destaque: string | null;
   criado_em: string;
   imagem_manual_url: string | null;
+  slides: string[] | null;
 };
 
 type LayoutProps = { post: DadosPost; rotulo: string; data: string };
@@ -515,16 +525,115 @@ function LayoutAutoridade({ post, rotulo, data }: LayoutProps) {
   );
 }
 
+// Indicadores de posição (bolinhas) no rodapé do carrossel — a bolinha do
+// slide atual fica cheia, as outras ficam translúcidas.
+function Indicadores({ total, atual }: { total: number; atual: number }) {
+  return (
+    <div style={{ display: "flex", gap: 10 }}>
+      {Array.from({ length: total }).map((_, i) => (
+        <div
+          key={i}
+          style={{
+            width: i === atual ? 28 : 10,
+            height: 10,
+            borderRadius: 999,
+            backgroundColor: i === atual ? CORAL : "rgba(255,255,255,0.3)",
+            display: "flex",
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+// Slide de carrossel — visual poster único (navy + diagonal laranja),
+// fonte oficial da marca (Poppins), reaproveitado igual pra todos os slides
+// do mesmo post pra manter o carrossel coeso; só o texto e a bolinha ativa
+// mudam de um slide pro outro.
+function LayoutCarrosselSlide({
+  texto,
+  indice,
+  total,
+  logo,
+}: {
+  texto: string;
+  indice: number;
+  total: number;
+  logo: string;
+}) {
+  return (
+    <div
+      style={{
+        position: "relative",
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        backgroundColor: NAVY,
+        padding: "76px",
+        fontFamily: "Poppins",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          bottom: -700,
+          left: -700,
+          width: 1400,
+          height: 1400,
+          backgroundColor: CORAL,
+          opacity: 0.14,
+          transform: "rotate(45deg)",
+          display: "flex",
+        }}
+      />
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={logo} width={96} height={53} alt="" style={{ objectFit: "contain" }} />
+        <span style={{ display: "flex", color: "rgba(255,255,255,0.55)", fontSize: 22, fontFamily: "Poppins", fontWeight: 600 }}>
+          {String(indice + 1).padStart(2, "0")}/{String(total).padStart(2, "0")}
+        </span>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: "center" }}>
+        <div
+          style={{
+            display: "flex",
+            color: "white",
+            fontSize: texto.length > 90 ? 48 : 58,
+            fontFamily: "Poppins",
+            fontWeight: 700,
+            lineHeight: 1.22,
+            letterSpacing: -0.5,
+            maxWidth: 860,
+          }}
+        >
+          {texto}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span style={{ display: "flex", color: "rgba(255,255,255,0.7)", fontSize: 20, fontFamily: "Poppins", fontWeight: 600 }}>
+          Matheus Lins · O2 Seguros
+        </span>
+        <Indicadores total={total} atual={indice} />
+      </div>
+    </div>
+  );
+}
+
 // Card gerado por post — precisa ser acessível sem login (o Instagram busca
 // essa URL direto pra publicar), por isso usa o cliente com service role em
 // vez do cliente de sessão normal.
-export async function GET(_request: Request, { params }: { params: Promise<{ postId: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ postId: string }> }) {
   const { postId } = await params;
   const supabase = createServiceClient();
 
   const { data: post } = await supabase
     .from("social_media_posts")
-    .select("titulo_card, categoria, tipo_post, numero_destaque, criado_em, imagem_manual_url")
+    .select("titulo_card, categoria, tipo_post, numero_destaque, criado_em, imagem_manual_url, slides")
     .eq("id", postId)
     .maybeSingle<DadosPost>();
 
@@ -542,27 +651,43 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pos
     return Response.redirect(post.imagem_manual_url);
   }
 
-  const rotulo = post.tipo_post ? ROTULO_TIPO[post.tipo_post] : (ROTULO_CATEGORIA[post.categoria] ?? "O2 Seguros");
-  const data = fmtData(post.criado_em);
-
-  const props = { post, rotulo, data };
-
   let layout: ReactNode;
-  switch (post.tipo_post) {
-    case "dica_mercado":
-      layout = <LayoutDica {...props} />;
-      break;
-    case "atualizacao_tecnologia":
-      layout = <LayoutTecnologia {...props} />;
-      break;
-    case "apresentacao_produto":
-      layout = <LayoutProduto {...props} />;
-      break;
-    case "dado_mercado":
-      layout = post.numero_destaque ? <LayoutDado {...props} /> : <LayoutAutoridade {...props} />;
-      break;
-    default:
-      layout = <LayoutAutoridade {...props} />;
+
+  if (post.slides && post.slides.length > 0) {
+    const { searchParams } = new URL(request.url);
+    const indice = Math.min(
+      Math.max(parseInt(searchParams.get("slide") ?? "0", 10) || 0, 0),
+      post.slides.length - 1
+    );
+    layout = (
+      <LayoutCarrosselSlide
+        texto={post.slides[indice]}
+        indice={indice}
+        total={post.slides.length}
+        logo={LOGO_BRANCA}
+      />
+    );
+  } else {
+    const rotulo = post.tipo_post ? ROTULO_TIPO[post.tipo_post] : (ROTULO_CATEGORIA[post.categoria] ?? "O2 Seguros");
+    const data = fmtData(post.criado_em);
+    const props = { post, rotulo, data };
+
+    switch (post.tipo_post) {
+      case "dica_mercado":
+        layout = <LayoutDica {...props} />;
+        break;
+      case "atualizacao_tecnologia":
+        layout = <LayoutTecnologia {...props} />;
+        break;
+      case "apresentacao_produto":
+        layout = <LayoutProduto {...props} />;
+        break;
+      case "dado_mercado":
+        layout = post.numero_destaque ? <LayoutDado {...props} /> : <LayoutAutoridade {...props} />;
+        break;
+      default:
+        layout = <LayoutAutoridade {...props} />;
+    }
   }
 
   try {
@@ -573,6 +698,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pos
         { name: "Archivo Black", data: FONTE_ARCHIVO_BLACK, weight: 400, style: "normal" },
         { name: "Inter", data: FONTE_INTER_800, weight: 800, style: "normal" },
         { name: "Inter", data: FONTE_INTER_600, weight: 600, style: "normal" },
+        { name: "Poppins", data: FONTE_POPPINS_REGULAR, weight: 400, style: "normal" },
+        { name: "Poppins", data: FONTE_POPPINS_SEMIBOLD, weight: 600, style: "normal" },
+        { name: "Poppins", data: FONTE_POPPINS_BOLD, weight: 700, style: "normal" },
       ],
     });
   } catch (erro) {
