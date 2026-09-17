@@ -78,13 +78,15 @@ export async function processarLote(campanhaId: string, limite = TAMANHO_LOTE_PA
     .single<CampanhaRow>();
   if (!campanha) throw new Error("Campanha não encontrada");
 
-  const { data: pendentes } = await supabase
-    .from("campanhas_envios")
-    .select("id, email, tentativas")
-    .eq("campanha_id", campanhaId)
-    .eq("status", "pendente")
-    .order("created_at", { ascending: true })
-    .limit(limite);
+  // Reivindica o lote de forma atômica (FOR UPDATE SKIP LOCKED, dentro da
+  // função) -- pendente -> processando numa única transação no banco, pra
+  // duas chamadas concorrentes (polling da tela + cron de rede de
+  // segurança) nunca pegarem a mesma linha e mandarem o e-mail em
+  // duplicidade. Ver migração fix_race_condition_disparo_campanhas.
+  const { data: pendentes } = await supabase.rpc("reivindicar_lote_campanha_envios", {
+    p_campanha_id: campanhaId,
+    p_limite: limite,
+  });
 
   let processados = 0;
   for (const envio of pendentes ?? []) {
