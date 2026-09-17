@@ -2436,9 +2436,9 @@ export default async function SeguroFiancaPage({
 
                 <section id="quadro-fianca-diarios" className={styles.section}>
                   <div className={styles.sectionHead}>
-                    <h2>Quadros diários por responsável de etapa</h2>
+                    <h2>Quantitativo de análises diárias</h2>
                     <div className={styles.note}>
-                      campos de responsável por etapa, adicionados em 17/08/2026
+                      campo de responsável por etapa, adicionado em 17/08/2026
                       — meses anteriores a essa data ficam vazios aqui
                     </div>
                     <ExportarQuadro
@@ -2447,21 +2447,42 @@ export default async function SeguroFiancaPage({
                       nomeArquivo={`seguro-fianca-diarios-${competencia}`}
                     />
                   </div>
-                  <div className={styles.grid3}>
-                    <div className={styles.panel}>
-                      <h3>Quantitativo de análises diárias</h3>
-                      <div className={styles.panelSub}>
-                        todas as análises que entraram por dia (independe de
-                        HORA FIM registrada), por Responsável(is) pela Cotação —
-                        card com mais de uma pessoa credita as duas, então a
-                        soma das colunas pode passar do Total; cards sem o campo
-                        preenchido não entram na quebra por pessoa, mas viram
-                        alerta em &quot;Qualidade dos dados&quot;
-                      </div>
-                      <QuadroDiarioTabela
-                        quadro={gerencial.analisesDiariasPorResponsavel}
-                      />
+                  <div className={styles.panel}>
+                    <div className={styles.panelSub}>
+                      todas as análises que entraram por dia (independe de
+                      HORA FIM registrada), por Responsável(is) pela Cotação —
+                      card com mais de uma pessoa credita as duas, então a
+                      soma das colunas pode passar do Total; cards sem o campo
+                      preenchido não entram na quebra por pessoa, mas viram
+                      alerta em &quot;Qualidade dos dados&quot;
                     </div>
+                    <QuadroDiarioTabela
+                      quadro={gerencial.analisesDiariasPorResponsavel}
+                    />
+                  </div>
+                </section>
+              </AbaSlot>
+
+              {/* Reunião 16/09/2026 (Matheus + Patricia): "Contratos
+                  recebidos por dia" e "Efetivações por dia" saíram da aba
+                  Equipe e foram pra Fechamento -- ficavam junto de
+                  "Quantitativo de análises diárias" (que é sobre a Equipe de
+                  cotação), mas são sobre o fluxo de fechamento em si. */}
+              <AbaSlot aba="fechamento">
+                <section id="quadro-fianca-diarios-fechamento" className={styles.section}>
+                  <div className={styles.sectionHead}>
+                    <h2>Contratos recebidos e efetivações por dia</h2>
+                    <div className={styles.note}>
+                      campo de responsável por etapa, adicionado em 17/08/2026
+                      — meses anteriores a essa data ficam vazios aqui
+                    </div>
+                    <ExportarQuadro
+                      quadroId="quadro-fianca-diarios-fechamento"
+                      corFundo="#f7f8fa"
+                      nomeArquivo={`seguro-fianca-diarios-fechamento-${competencia}`}
+                    />
+                  </div>
+                  <div className={styles.grid2}>
                     <div className={styles.panel}>
                       <h3>Contratos recebidos por dia</h3>
                       <div className={styles.panelSub}>
