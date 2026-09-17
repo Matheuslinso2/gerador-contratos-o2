@@ -223,7 +223,32 @@ function PainelVisao({
 
   return (
     <>
+      {/* Reunião Kamila/Matheus, 17/09/2026: a "Visão Geral" mostrava cada
+          número separado (novos de um lado, renovações de outro), sem
+          nenhum KPI somando os dois -- na prática lia como se fosse só a
+          visão de "novos". Os 2 primeiros cards abaixo são o SOMATÓRIO
+          (mesmos valores que já existiam separados logo em seguida, só
+          somados) -- "Comissão dos efetivados" já era consolidada
+          (novos+renovações, ver financeiro.comissaoEfetivada na lib), não
+          precisou mudar. */}
       <div className={styles.kpis}>
+        <Kpi
+          label="Total de entradas"
+          value={String(analise.visaoGeral.novasEntradas + analise.visaoGeral.renovacoesCompetencia)}
+          note="Novas entradas + renovações da competência"
+        />
+        <Kpi
+          label="Total efetivados"
+          value={String(analise.visaoGeral.novosEfetivados + analise.visaoGeral.renovacoesEfetivadas)}
+          note="Novos efetivados + renovações efetivadas"
+          tone="ok"
+        />
+        <Kpi
+          label="Comissão dos efetivados"
+          value={brl(analise.visaoGeral.comissaoEfetivada)}
+          note="Valor estimado — novos + renovações"
+          tone="ok"
+        />
         <Kpi
           label="Novas entradas"
           value={String(analise.visaoGeral.novasEntradas)}
@@ -249,12 +274,6 @@ function PainelVisao({
           label="Renovações efetivadas"
           value={String(analise.visaoGeral.renovacoesEfetivadas)}
           note={pct(analise.renovacoes.atual.conversao)}
-          tone="ok"
-        />
-        <Kpi
-          label="Comissão dos efetivados"
-          value={brl(analise.visaoGeral.comissaoEfetivada)}
-          note="Valor estimado"
           tone="ok"
         />
       </div>
