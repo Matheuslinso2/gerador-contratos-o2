@@ -1145,6 +1145,164 @@ export default async function SeguroFiancaPage({
                 );
               })()}
 
+              {/* Reunião 16/09/2026 (Matheus + Patricia): "Tempo em aberto
+                  por etapa" reposicionado pra ficar logo depois de
+                  "Distribuição por etapa" (mesmo assunto, cada aba lê os
+                  dois quadros em sequência em vez de separados por telas de
+                  distância um do outro). */}
+              {(() => {
+                // "Tempo em aberto por etapa" -- híbrido, split (09/09/2026):
+                // a chave já vem como "Análise e Cotação | Etapa" ou
+                // "Negociação e Contrato | Etapa" (ver porFunilEtapa/
+                // tempoPorEtapa na lib), então dá pra filtrar por prefixo.
+                const TabelaTempoAberto = ({
+                  entradas,
+                  tituloVazio,
+                }: {
+                  entradas: [string, EstatisticaTempoTipo][];
+                  tituloVazio: string;
+                }) => (
+                  <div className={styles.tableWrap}>
+                    <table className={styles.data}>
+                      <thead>
+                        <tr>
+                          <th>Etapa</th>
+                          <th className={styles.numCol}>Cards</th>
+                          <th className={styles.numCol}>Média</th>
+                          <th className={styles.numCol}>Máx.</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {entradas.map(([etapa, t]) => (
+                          <tr key={etapa}>
+                            <td>{rotuloEtapaTempoAberto(etapa)}</td>
+                            <td className={`${styles.numCol} ${styles.num}`}>
+                              {t.n}
+                            </td>
+                            <td className={`${styles.numCol} ${styles.num}`}>
+                              {fmtDuracao(t.media)}
+                            </td>
+                            <td className={`${styles.numCol} ${styles.num}`}>
+                              {fmtDuracao(t.max)}
+                            </td>
+                          </tr>
+                        ))}
+                        {entradas.length === 0 && (
+                          <tr>
+                            <td
+                              colSpan={4}
+                              style={{ color: "var(--ink-faint)" }}
+                            >
+                              {tituloVazio}
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+                const entradasCotacoes = Object.entries(
+                  gerencial.tempoPorEtapa,
+                ).filter(([etapa]) => etapa.startsWith("Análise e Cotação"));
+                const entradasFechamento = Object.entries(
+                  gerencial.tempoPorEtapa,
+                ).filter(([etapa]) =>
+                  etapa.startsWith("Negociação e Contrato"),
+                );
+                return (
+                  <>
+                    <AbaSlot aba="cotacoes">
+                      <section
+                        id="quadro-fianca-tempo-aberto-cotacoes"
+                        className={styles.section}
+                      >
+                        <div className={styles.panel}>
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "baseline",
+                              gap: 12,
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            <h3>
+                              Tempo em aberto por etapa — Análise e Cotação
+                            </h3>
+                            <ExportarQuadro
+                              quadroId="quadro-fianca-tempo-aberto-cotacoes"
+                              corFundo="#f7f8fa"
+                              nomeArquivo={`seguro-fianca-tempo-aberto-cotacoes-${competencia}`}
+                              dadosExcel={entradasCotacoes.map(
+                                ([etapa, t]) => ({
+                                  etapa: rotuloEtapaTempoAberto(etapa),
+                                  cards: t.n,
+                                  media_min: t.media,
+                                  maximo_min: t.max,
+                                }),
+                              )}
+                              nomeAbaExcel="Tempo em aberto"
+                            />
+                          </div>
+                          <div className={styles.panelSub}>
+                            só os cards que estão na etapa agora, cada card
+                            contando uma vez, pelo tempo da passagem atual
+                          </div>
+                          <TabelaTempoAberto
+                            entradas={entradasCotacoes}
+                            tituloVazio="Nenhum card em aberto neste período."
+                          />
+                        </div>
+                      </section>
+                    </AbaSlot>
+                    <AbaSlot aba="fechamento">
+                      <section
+                        id="quadro-fianca-tempo-aberto-fechamento"
+                        className={styles.section}
+                      >
+                        <div className={styles.panel}>
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "baseline",
+                              gap: 12,
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            <h3>
+                              Tempo em aberto por etapa — Negociação e Contrato
+                            </h3>
+                            <ExportarQuadro
+                              quadroId="quadro-fianca-tempo-aberto-fechamento"
+                              corFundo="#f7f8fa"
+                              nomeArquivo={`seguro-fianca-tempo-aberto-fechamento-${competencia}`}
+                              dadosExcel={entradasFechamento.map(
+                                ([etapa, t]) => ({
+                                  etapa: rotuloEtapaTempoAberto(etapa),
+                                  cards: t.n,
+                                  media_min: t.media,
+                                  maximo_min: t.max,
+                                }),
+                              )}
+                              nomeAbaExcel="Tempo em aberto"
+                            />
+                          </div>
+                          <div className={styles.panelSub}>
+                            só os cards que estão na etapa agora, cada card
+                            contando uma vez, pelo tempo da passagem atual
+                          </div>
+                          <TabelaTempoAberto
+                            entradas={entradasFechamento}
+                            tituloVazio="Nenhum card em aberto neste período."
+                          />
+                        </div>
+                      </section>
+                    </AbaSlot>
+                  </>
+                );
+              })()}
+
               {/* Quadro híbrido (09/09/2026): "Análise, recusa e negativação" split -- Total/Aprovados/Recusados são desfecho do
                   funil 1 (Cotações); Negativados/% de Negativação são desfecho do funil 2 (Fechamento). */}
               <AbaSlot aba="cotacoes">
@@ -1783,7 +1941,12 @@ export default async function SeguroFiancaPage({
                 </section>
               </AbaSlot>
 
-              <AbaSlot aba="cotacoes">
+              {/* Reunião 16/09/2026 (Matheus + Patricia): "Valores
+                  trabalhados no mês" saiu da aba Cotações e foi pra
+                  Imobiliária -- é uma leitura por faixa de pacote de
+                  locação/imobiliária, não sobre o andamento das cotações
+                  em si. */}
+              <AbaSlot aba="imobiliaria">
                 <section id="quadro-fianca-valores" className={styles.section}>
                   <div className={styles.sectionHead}>
                     <h2>Valores trabalhados no mês</h2>
@@ -1850,7 +2013,9 @@ export default async function SeguroFiancaPage({
                     </div>
                   </div>
                 </section>
+              </AbaSlot>
 
+              <AbaSlot aba="cotacoes">
                 {/* "Tempo de ciclo por funil" -- híbrido, split (09/09/2026): cada linha na sua aba. */}
                 <section
                   id="quadro-fianca-tempo-ciclo-cotacoes"
@@ -2423,159 +2588,6 @@ export default async function SeguroFiancaPage({
                   </div>
                 </section>
               </AbaSlot>
-
-              {(() => {
-                // "Tempo em aberto por etapa" -- híbrido, split (09/09/2026):
-                // a chave já vem como "Análise e Cotação | Etapa" ou
-                // "Negociação e Contrato | Etapa" (ver porFunilEtapa/
-                // tempoPorEtapa na lib), então dá pra filtrar por prefixo.
-                const TabelaTempoAberto = ({
-                  entradas,
-                  tituloVazio,
-                }: {
-                  entradas: [string, EstatisticaTempoTipo][];
-                  tituloVazio: string;
-                }) => (
-                  <div className={styles.tableWrap}>
-                    <table className={styles.data}>
-                      <thead>
-                        <tr>
-                          <th>Etapa</th>
-                          <th className={styles.numCol}>Cards</th>
-                          <th className={styles.numCol}>Média</th>
-                          <th className={styles.numCol}>Máx.</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {entradas.map(([etapa, t]) => (
-                          <tr key={etapa}>
-                            <td>{rotuloEtapaTempoAberto(etapa)}</td>
-                            <td className={`${styles.numCol} ${styles.num}`}>
-                              {t.n}
-                            </td>
-                            <td className={`${styles.numCol} ${styles.num}`}>
-                              {fmtDuracao(t.media)}
-                            </td>
-                            <td className={`${styles.numCol} ${styles.num}`}>
-                              {fmtDuracao(t.max)}
-                            </td>
-                          </tr>
-                        ))}
-                        {entradas.length === 0 && (
-                          <tr>
-                            <td
-                              colSpan={4}
-                              style={{ color: "var(--ink-faint)" }}
-                            >
-                              {tituloVazio}
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                );
-                const entradasCotacoes = Object.entries(
-                  gerencial.tempoPorEtapa,
-                ).filter(([etapa]) => etapa.startsWith("Análise e Cotação"));
-                const entradasFechamento = Object.entries(
-                  gerencial.tempoPorEtapa,
-                ).filter(([etapa]) =>
-                  etapa.startsWith("Negociação e Contrato"),
-                );
-                return (
-                  <>
-                    <AbaSlot aba="cotacoes">
-                      <section
-                        id="quadro-fianca-tempo-aberto-cotacoes"
-                        className={styles.section}
-                      >
-                        <div className={styles.panel}>
-                          <div
-                            style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "baseline",
-                              gap: 12,
-                              flexWrap: "wrap",
-                            }}
-                          >
-                            <h3>
-                              Tempo em aberto por etapa — Análise e Cotação
-                            </h3>
-                            <ExportarQuadro
-                              quadroId="quadro-fianca-tempo-aberto-cotacoes"
-                              corFundo="#f7f8fa"
-                              nomeArquivo={`seguro-fianca-tempo-aberto-cotacoes-${competencia}`}
-                              dadosExcel={entradasCotacoes.map(
-                                ([etapa, t]) => ({
-                                  etapa: rotuloEtapaTempoAberto(etapa),
-                                  cards: t.n,
-                                  media_min: t.media,
-                                  maximo_min: t.max,
-                                }),
-                              )}
-                              nomeAbaExcel="Tempo em aberto"
-                            />
-                          </div>
-                          <div className={styles.panelSub}>
-                            só os cards que estão na etapa agora, cada card
-                            contando uma vez, pelo tempo da passagem atual
-                          </div>
-                          <TabelaTempoAberto
-                            entradas={entradasCotacoes}
-                            tituloVazio="Nenhum card em aberto neste período."
-                          />
-                        </div>
-                      </section>
-                    </AbaSlot>
-                    <AbaSlot aba="fechamento">
-                      <section
-                        id="quadro-fianca-tempo-aberto-fechamento"
-                        className={styles.section}
-                      >
-                        <div className={styles.panel}>
-                          <div
-                            style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "baseline",
-                              gap: 12,
-                              flexWrap: "wrap",
-                            }}
-                          >
-                            <h3>
-                              Tempo em aberto por etapa — Negociação e Contrato
-                            </h3>
-                            <ExportarQuadro
-                              quadroId="quadro-fianca-tempo-aberto-fechamento"
-                              corFundo="#f7f8fa"
-                              nomeArquivo={`seguro-fianca-tempo-aberto-fechamento-${competencia}`}
-                              dadosExcel={entradasFechamento.map(
-                                ([etapa, t]) => ({
-                                  etapa: rotuloEtapaTempoAberto(etapa),
-                                  cards: t.n,
-                                  media_min: t.media,
-                                  maximo_min: t.max,
-                                }),
-                              )}
-                              nomeAbaExcel="Tempo em aberto"
-                            />
-                          </div>
-                          <div className={styles.panelSub}>
-                            só os cards que estão na etapa agora, cada card
-                            contando uma vez, pelo tempo da passagem atual
-                          </div>
-                          <TabelaTempoAberto
-                            entradas={entradasFechamento}
-                            tituloVazio="Nenhum card em aberto neste período."
-                          />
-                        </div>
-                      </section>
-                    </AbaSlot>
-                  </>
-                );
-              })()}
 
               <AbaSlot aba="cotacoes">
                 <section
