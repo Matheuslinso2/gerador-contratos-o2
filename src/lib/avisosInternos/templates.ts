@@ -130,6 +130,28 @@ export const TEMPLATES_AVISO_INTERNO: TemplateAvisoInterno[] = [
     ],
   },
   {
+    // Pedido do alinhamento Matheus/Patricia, 16/09/2026.
+    id: "ferias",
+    nome: "Aviso de férias",
+    descricao: "Comunicado de período de férias de um(a) colaborador(a).",
+    badge: "FÉRIAS",
+    campos: [
+      { key: "nome_pessoa", label: "Nome da pessoa", tipo: "text", obrigatorio: true },
+      { key: "data_inicio", label: "Data de início", tipo: "date", obrigatorio: true },
+      { key: "data_retorno", label: "Data de retorno", tipo: "date", obrigatorio: true },
+      { key: "cobertura", label: "Quem cobre durante o período (opcional)", tipo: "text", obrigatorio: false },
+    ],
+    montarAssunto: (v) => `Férias — ${v.nome_pessoa}`,
+    montarTitulo: (v) => `${v.nome_pessoa} entra de férias`,
+    introducao: "Aviso de período de férias na equipe O2 Seguros.",
+    montarDestaques: (v) => [
+      { label: "Nome", valor: v.nome_pessoa },
+      { label: "Início", valor: formatarData(v.data_inicio) },
+      { label: "Retorno", valor: formatarData(v.data_retorno) },
+      { label: "Cobertura durante o período", valor: v.cobertura },
+    ],
+  },
+  {
     id: "reuniao_geral",
     nome: "Reunião geral",
     descricao: "Convocação pra reunião com toda a equipe.",
