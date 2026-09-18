@@ -53,6 +53,7 @@ export function GerenciarDestinatarios({
   const [contatosSelecionados, setContatosSelecionados] = useState<ContatoLinha[]>(contatosSelecionadosIniciais);
   const [incluirEquipeInterna, setIncluirEquipeInterna] = useState(incluirEquipeInternaInicial);
   const [filtro, setFiltro] = useState("");
+  const [filtroGrupo, setFiltroGrupo] = useState("");
   const [idPendente, setIdPendente] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -85,6 +86,21 @@ export function GerenciarDestinatarios({
     if (!termo) return [];
     return imobiliarias.filter((i) => i.emails.length > 0 && i.nome.toLowerCase().includes(termo)).slice(0, 30);
   }, [filtro, imobiliarias]);
+
+  const grupoEstaIncluido = (g: GrupoLinha) => {
+    const totalMembros = g.imobiliariaIds.length + g.contatos.length;
+    return (
+      totalMembros > 0 &&
+      g.imobiliariaIds.every((id) => idsSelecionados.has(id)) &&
+      g.contatos.every((c) => contatosSelecionadosIds.has(c.id))
+    );
+  };
+
+  const resultadosFiltroGrupos = useMemo(() => {
+    const termo = filtroGrupo.trim().toLowerCase();
+    if (!termo) return [];
+    return grupos.filter((g) => g.nome.toLowerCase().includes(termo)).slice(0, 30);
+  }, [filtroGrupo, grupos]);
 
   async function executar(chave: string, acao: () => Promise<void>) {
     setErro(null);
@@ -192,35 +208,35 @@ export function GerenciarDestinatarios({
         {!totalSelecionados && <p className="px-4 py-6 text-center text-xs text-gray-400">Ninguém selecionado ainda.</p>}
       </div>
 
+      {/* Pedido do Matheus, 18/09/2026: grupo não fica mais listado sempre
+          na tela (dava a entender que já estava incluído, e ficava lá
+          mesmo sem nenhuma campanha usar) -- agora busca por nome igual à
+          imobiliária avulsa abaixo, e só aparece na hora de procurar. */}
       {grupos.length > 0 && (
         <div className="space-y-2">
-          <p className="text-xs font-medium text-gray-600">Grupos</p>
-          <div className="divide-y divide-gray-200 overflow-hidden rounded-xl border border-o2-navy/10 bg-white shadow-sm">
-            {grupos.map((g) => {
-              const chave = `grupo-${g.id}`;
-              const totalMembros = g.imobiliariaIds.length + g.contatos.length;
-              // Bug real (relatado pelo Matheus, 18/09/2026): os 2 botões
-              // apareciam sempre juntos, pra QUALQUER grupo -- inclusive um
-              // nunca adicionado nesta campanha. Dava a impressão de que o
-              // grupo já estava incluído (por isso "Excluir grupo" existir),
-              // e clicar nele não mudava nada na tela porque não havia nada
-              // pra remover -- parecia bug, mas o grupo nunca tinha sido
-              // adicionado de fato. Agora só mostra o botão que faz sentido
-              // pro estado atual.
-              const estaIncluido =
-                totalMembros > 0 &&
-                g.imobiliariaIds.every((id) => idsSelecionados.has(id)) &&
-                g.contatos.every((c) => contatosSelecionadosIds.has(c.id));
-              return (
-                <div key={g.id} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
-                  <span className="min-w-0 truncate">
-                    <span className="font-medium text-o2-navy">{g.nome}</span>
-                    <span className="ml-2 text-xs text-gray-400">{totalMembros} contato(s)</span>
-                    {estaIncluido && (
-                      <span className="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-medium text-green-700">Incluído</span>
-                    )}
-                  </span>
-                  <div className="flex shrink-0 gap-2">
+          <label className="block text-xs font-medium text-gray-600">Adicionar grupo</label>
+          <input
+            type="text"
+            value={filtroGrupo}
+            onChange={(e) => setFiltroGrupo(e.target.value)}
+            placeholder="Buscar grupo por nome..."
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-o2-coral focus:outline-none"
+          />
+          {filtroGrupo.trim() && (
+            <div className="divide-y divide-gray-200 overflow-hidden rounded-xl border border-o2-navy/10 bg-white shadow-sm">
+              {resultadosFiltroGrupos.map((g) => {
+                const chave = `grupo-${g.id}`;
+                const totalMembros = g.imobiliariaIds.length + g.contatos.length;
+                const estaIncluido = grupoEstaIncluido(g);
+                return (
+                  <div key={g.id} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
+                    <span className="min-w-0 truncate">
+                      <span className="font-medium text-o2-navy">{g.nome}</span>
+                      <span className="ml-2 text-xs text-gray-400">{totalMembros} contato(s)</span>
+                      {estaIncluido && (
+                        <span className="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-medium text-green-700">Incluído</span>
+                      )}
+                    </span>
                     {estaIncluido ? (
                       <button type="button" disabled={idPendente === chave} onClick={() => alternarGrupo(g, false)} className={botaoRemover}>
                         {idPendente === chave ? "..." : "Excluir grupo"}
@@ -231,10 +247,11 @@ export function GerenciarDestinatarios({
                       </button>
                     )}
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+              {!resultadosFiltroGrupos.length && <p className="px-4 py-6 text-center text-xs text-gray-400">Nenhum grupo encontrado.</p>}
+            </div>
+          )}
         </div>
       )}
 
