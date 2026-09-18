@@ -72,6 +72,25 @@ async function aguardar(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Espera um container de mídia terminar de processar antes de usá-lo (como
+// filho de um carrossel ou pra publicar). A Meta documenta o erro 9007/
+// 2207027 ("media is not ready for publishing") como resultado direto de
+// prosseguir cedo demais, e recomenda tolerância de vários minutos -- por
+// isso 20 tentativas de 3s (até 1 min), bem mais folgado que o "normalmente
+// processa em menos de 1s" que bastava pra imagem única, mas que na prática
+// se mostrou curto demais pros containers de carrossel.
+async function aguardarContainerPronto(containerId: string, accessToken: string): Promise<void> {
+  for (let tentativa = 0; tentativa < 20; tentativa++) {
+    const status = await chamarGraphApi<{ status_code: string }>(
+      `${GRAPH_BASE}/${containerId}?fields=status_code&access_token=${encodeURIComponent(accessToken)}`
+    );
+    if (status.status_code === "FINISHED") return;
+    if (status.status_code === "ERROR") throw new Error("Instagram: falha ao processar uma imagem do post (status_code ERROR).");
+    await aguardar(3000);
+  }
+  throw new Error("Instagram: a imagem não ficou pronta a tempo (status_code nunca chegou a FINISHED).");
+}
+
 // Conta oficial da O2 no Instagram -- sempre marcada nas publicações (pedido
 // do Matheus, 15/09/2026). A API não tem como enviar convite de COLABORAÇÃO
 // de verdade na hora de publicar (confirmado no changelog oficial da Meta:
@@ -120,17 +139,8 @@ export async function publicarPost(imageUrl: string, legenda: string): Promise<s
   }
 
   // Passo 2: espera o container terminar de processar antes de publicar --
-  // publicar um container ainda "IN_PROGRESS" dá erro na Graph API. 3
-  // tentativas com 2s de intervalo é folga generosa pra uma imagem 1080x1080
-  // (normalmente processa em menos de 1s).
-  for (let tentativa = 0; tentativa < 3; tentativa++) {
-    const status = await chamarGraphApi<{ status_code: string }>(
-      `${GRAPH_BASE}/${container.id}?fields=status_code&access_token=${encodeURIComponent(auth.access_token)}`
-    );
-    if (status.status_code === "FINISHED") break;
-    if (status.status_code === "ERROR") throw new Error("Instagram: falha ao processar a imagem do post (status_code ERROR).");
-    await aguardar(2000);
-  }
+  // publicar um container ainda "IN_PROGRESS" dá erro na Graph API.
+  await aguardarContainerPronto(container.id, auth.access_token);
 
   // Passo 3: publica o container.
   const publicado = await chamarGraphApi<{ id: string }>(`${GRAPH_BASE}/${contaId}/media_publish`, {
@@ -176,16 +186,12 @@ export async function publicarCarrossel(imageUrls: string[], legenda: string): P
   }
 
   // Passo 2: espera cada item terminar de processar antes de montar o
-  // container pai -- mesmo cuidado do publicarPost, aplicado item a item.
+  // container pai -- se qualquer filho ainda estiver "IN_PROGRESS" nesse
+  // momento, a Graph API rejeita o container pai com o erro 9007 ("Media ID
+  // is not available"), que foi exatamente o que aconteceu com a versão
+  // anterior (só 3 tentativas de 2s, curto demais pra carrossel).
   for (const item of itens) {
-    for (let tentativa = 0; tentativa < 3; tentativa++) {
-      const status = await chamarGraphApi<{ status_code: string }>(
-        `${GRAPH_BASE}/${item.id}?fields=status_code&access_token=${encodeURIComponent(auth.access_token)}`
-      );
-      if (status.status_code === "FINISHED") break;
-      if (status.status_code === "ERROR") throw new Error("Instagram: falha ao processar uma das imagens do carrossel (status_code ERROR).");
-      await aguardar(2000);
-    }
+    await aguardarContainerPronto(item.id, auth.access_token);
   }
 
   // Passo 3: cria o container pai do carrossel, com a legenda. A Graph API
@@ -201,6 +207,11 @@ export async function publicarCarrossel(imageUrls: string[], legenda: string): P
       access_token: auth.access_token,
     }),
   });
+
+  // Passo 3b: o container PAI também processa de forma assíncrona (ele
+  // precisa "montar" o carrossel a partir dos filhos) -- publicar direto sem
+  // esperar aqui também dava o mesmo erro 9007, só que na etapa seguinte.
+  await aguardarContainerPronto(containerPai.id, auth.access_token);
 
   // Passo 4: publica o container pai.
   const publicado = await chamarGraphApi<{ id: string }>(`${GRAPH_BASE}/${contaId}/media_publish`, {
