@@ -69,11 +69,9 @@ export default async function AuditarContratoPage({
           {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
 
           <p className="text-xs text-gray-500">
-            Também precisa calcular uma multa rescisória?{" "}
-            <Link href="/multa-rescisoria" className="font-medium text-o2-coral hover:underline">
-              Use a calculadora aqui
+            <Link href="/ferramentas" className="font-medium text-o2-coral hover:underline">
+              ← Voltar ao início
             </Link>
-            .
           </p>
 
           <div className="rounded-xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">

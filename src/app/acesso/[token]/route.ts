@@ -17,7 +17,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   const { data } = await supabase.from("acesso_publico_tokens").select("id").eq("token", token).maybeSingle();
 
-  const destino = data ? "/auditar-contrato" : "/";
+  const destino = data ? "/ferramentas" : "/";
   const resposta = NextResponse.redirect(new URL(destino, request.url));
 
   if (data) {

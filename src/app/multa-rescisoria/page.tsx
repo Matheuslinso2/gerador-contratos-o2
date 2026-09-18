@@ -46,11 +46,9 @@ export default async function MultaRescisoriaPage() {
 
         {!user && (
           <p className="text-xs text-gray-500">
-            Também precisa auditar um contrato pronto?{" "}
-            <Link href="/auditar-contrato" className="font-medium text-o2-coral hover:underline">
-              Use o Auditor de Contrato aqui
+            <Link href="/ferramentas" className="font-medium text-o2-coral hover:underline">
+              ← Voltar ao início
             </Link>
-            .
           </p>
         )}
       </main>

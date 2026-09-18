@@ -6,5 +6,6 @@ export const NOME_COOKIE_ACESSO_PUBLICO = "o2_acesso_publico";
 
 // Rotas que só ficam públicas (sem login) pra quem já tem o cookie --
 // qualquer outra pessoa sem login cai no /login normal, igual o resto do
-// Workspace. Ver src/proxy.ts.
-export const ROTAS_PUBLICAS_COM_COOKIE = ["/auditar-contrato", "/multa-rescisoria"];
+// Workspace. Ver src/proxy.ts. "/ferramentas" é a página inicial de quem
+// chega pelo link (escolhe qual das duas usar).
+export const ROTAS_PUBLICAS_COM_COOKIE = ["/ferramentas", "/auditar-contrato", "/multa-rescisoria"];
