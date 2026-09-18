@@ -277,6 +277,16 @@ export default async function CampanhaDetalhePage({
 
           {rascunho && (
             <GerenciarDestinatarios
+              // key={id} força remount ao navegar de uma campanha pra outra
+              // (ex: "Duplicar campanha", ou entre rascunhos pela lista) --
+              // sem isso, o useState de idsSelecionados/contatosSelecionados
+              // carregava o estado da campanha ANTERIOR, fazendo um grupo já
+              // aparecer "selecionado" numa campanha nova que nunca teve
+              // esse grupo de verdade (bug real relatado pelo Matheus,
+              // 18/09/2026: grupo de cliente aparecia pré-marcado num aviso
+              // interno recém-criado, e "Excluir grupo" não resolvia porque
+              // o problema era estado de tela obsoleto, não o banco).
+              key={id}
               campanhaId={id}
               imobiliarias={imobiliariasParaCliente}
               idsSelecionadosIniciais={idsSelecionados}

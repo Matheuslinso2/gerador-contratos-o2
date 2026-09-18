@@ -66,6 +66,7 @@ export function GerenciarDestinatarios({
   }, []);
 
   const imobiliariasPorId = useMemo(() => new Map(imobiliarias.map((i) => [i.id, i])), [imobiliarias]);
+  const contatosSelecionadosIds = useMemo(() => new Set(contatosSelecionados.map((c) => c.id)), [contatosSelecionados]);
   const selecionadasLista = useMemo(
     () => [...idsSelecionados].map((id) => imobiliariasPorId.get(id)).filter((i): i is ImobLinha => !!i),
     [idsSelecionados, imobiliariasPorId]
@@ -198,19 +199,37 @@ export function GerenciarDestinatarios({
             {grupos.map((g) => {
               const chave = `grupo-${g.id}`;
               const totalMembros = g.imobiliariaIds.length + g.contatos.length;
+              // Bug real (relatado pelo Matheus, 18/09/2026): os 2 botões
+              // apareciam sempre juntos, pra QUALQUER grupo -- inclusive um
+              // nunca adicionado nesta campanha. Dava a impressão de que o
+              // grupo já estava incluído (por isso "Excluir grupo" existir),
+              // e clicar nele não mudava nada na tela porque não havia nada
+              // pra remover -- parecia bug, mas o grupo nunca tinha sido
+              // adicionado de fato. Agora só mostra o botão que faz sentido
+              // pro estado atual.
+              const estaIncluido =
+                totalMembros > 0 &&
+                g.imobiliariaIds.every((id) => idsSelecionados.has(id)) &&
+                g.contatos.every((c) => contatosSelecionadosIds.has(c.id));
               return (
                 <div key={g.id} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
                   <span className="min-w-0 truncate">
                     <span className="font-medium text-o2-navy">{g.nome}</span>
                     <span className="ml-2 text-xs text-gray-400">{totalMembros} contato(s)</span>
+                    {estaIncluido && (
+                      <span className="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-medium text-green-700">Incluído</span>
+                    )}
                   </span>
                   <div className="flex shrink-0 gap-2">
-                    <button type="button" disabled={idPendente === chave} onClick={() => alternarGrupo(g, true)} className={botaoAdicionar}>
-                      {idPendente === chave ? "..." : "Adicionar grupo"}
-                    </button>
-                    <button type="button" disabled={idPendente === chave} onClick={() => alternarGrupo(g, false)} className={botaoRemover}>
-                      {idPendente === chave ? "..." : "Excluir grupo"}
-                    </button>
+                    {estaIncluido ? (
+                      <button type="button" disabled={idPendente === chave} onClick={() => alternarGrupo(g, false)} className={botaoRemover}>
+                        {idPendente === chave ? "..." : "Excluir grupo"}
+                      </button>
+                    ) : (
+                      <button type="button" disabled={idPendente === chave} onClick={() => alternarGrupo(g, true)} className={botaoAdicionar}>
+                        {idPendente === chave ? "..." : "Adicionar grupo"}
+                      </button>
+                    )}
                   </div>
                 </div>
               );
