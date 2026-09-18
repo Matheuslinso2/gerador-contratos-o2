@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { NOME_COOKIE_ACESSO_PUBLICO, ROTAS_PUBLICAS_COM_COOKIE } from "@/lib/acessoPublico";
 
 const ROTAS_PUBLICAS = [
   "/login",
@@ -74,13 +75,13 @@ const ROTAS_PUBLICAS = [
   // (ver src/app/api/campanhas/webhook-resend/route.ts), mesmo padrão dos
   // outros webhooks acima.
   "/api/campanhas/webhook-resend",
-  // Ferramentas públicas do site da O2 (pedido do Matheus, 16/09/2026) --
-  // calculadora de multa rescisória (100% client-side, nada é salvo) e
-  // auditor de contrato (limitado a 5 análises por IP quando sem login, ver
-  // auditar-contrato/actions.ts:auditarPublico). Quem está logado continua
-  // vendo a experiência normal do Workspace nas duas telas.
-  "/multa-rescisoria",
-  "/auditar-contrato",
+  // Verificação do link de acesso público (pedido do Matheus, 18/09/2026) --
+  // só confere o token e libera o cookie (ver src/app/acesso/[token]/
+  // route.ts); não expõe nada além disso, então pode ser público de
+  // verdade. As duas ferramentas que esse link libera (Auditor de Contrato
+  // e Multa Rescisória) NÃO entram aqui -- ver ROTAS_PUBLICAS_COM_COOKIE
+  // abaixo, só ficam públicas pra quem já tem o cookie.
+  "/acesso",
 ];
 const ROTAS_SO_DESLOGADO = ["/login", "/signup"];
 
@@ -111,8 +112,14 @@ export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const isPublica = ROTAS_PUBLICAS.some((r) => path.startsWith(r));
   const isSoDeslogado = ROTAS_SO_DESLOGADO.some((r) => path.startsWith(r));
+  // Auditor de Contrato e Multa Rescisória (pedido do Matheus, 18/09/2026):
+  // só ficam abertas sem login pra quem já tem o cookie liberado por
+  // /acesso/<token> -- quem digitar a URL direto sem esse cookie cai no
+  // /login normal, igual o resto do Workspace.
+  const temCookieAcessoPublico = request.cookies.get(NOME_COOKIE_ACESSO_PUBLICO)?.value === "1";
+  const isPublicaComCookie = ROTAS_PUBLICAS_COM_COOKIE.some((r) => path.startsWith(r)) && temCookieAcessoPublico;
 
-  if (!user && !isPublica && path !== "/") {
+  if (!user && !isPublica && !isPublicaComCookie && path !== "/") {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);

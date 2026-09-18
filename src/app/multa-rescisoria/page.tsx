@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
@@ -9,12 +10,13 @@ import CalculadoraMulta from "./CalculadoraMulta";
 
 export const dynamic = "force-dynamic";
 
-// Ferramenta pública (liberada em src/proxy.ts, ROTAS_PUBLICAS) -- pedido do
-// Matheus, 16/09/2026: disponível pro site da O2 sem exigir login, igual às
-// fichas públicas (/rc-obras, /cotacao etc). Calculadora 100% client-side
-// (CalculadoraMulta.tsx), nada é salvo, então liberar é só trocar o
-// cabeçalho: quem está logado continua vendo o AppHeader normal do
-// Workspace; visitante anônimo vê só a logo, sem nav interna.
+// Ferramenta pública só pra quem chega com o cookie de /acesso/<token>
+// (pedido do Matheus, 16 e 18/09/2026 -- ver src/proxy.ts e
+// src/lib/acessoPublico.ts; sem o cookie, o middleware já manda pro /login
+// antes de chegar aqui). Calculadora 100% client-side (CalculadoraMulta.tsx),
+// nada é salvo, então liberar é só trocar o cabeçalho: quem está logado
+// continua vendo o AppHeader normal do Workspace; visitante anônimo vê só a
+// logo, sem nav interna.
 export default async function MultaRescisoriaPage() {
   const supabase = await createClient();
   const {
@@ -41,6 +43,16 @@ export default async function MultaRescisoriaPage() {
         </div>
 
         <CalculadoraMulta />
+
+        {!user && (
+          <p className="text-xs text-gray-500">
+            Também precisa auditar um contrato pronto?{" "}
+            <Link href="/auditar-contrato" className="font-medium text-o2-coral hover:underline">
+              Use o Auditor de Contrato aqui
+            </Link>
+            .
+          </p>
+        )}
       </main>
     </>
   );

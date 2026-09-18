@@ -36,9 +36,11 @@ export default async function AuditarContratoPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Ferramenta pública (liberada em src/proxy.ts, ROTAS_PUBLICAS) -- pedido
-  // do Matheus, 16/09/2026. Visitante sem login nunca chega na lógica de
-  // imobiliária/histórico abaixo (que é exclusiva de conta real); usa
+  // Ferramenta pública só pra quem chega com o cookie de /acesso/<token>
+  // (pedido do Matheus, 16 e 18/09/2026 -- ver src/proxy.ts e
+  // src/lib/acessoPublico.ts; sem o cookie, o middleware já manda pro
+  // /login antes de chegar aqui). Visitante sem login nunca chega na lógica
+  // de imobiliária/histórico abaixo (exclusiva de conta real); usa
   // auditarPublico() (actions.ts), limitado por IP, sem nada salvo.
   if (!user) {
     const ip = await ipDoVisitante();
@@ -65,6 +67,14 @@ export default async function AuditarContratoPage({
           </p>
 
           {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
+
+          <p className="text-xs text-gray-500">
+            Também precisa calcular uma multa rescisória?{" "}
+            <Link href="/multa-rescisoria" className="font-medium text-o2-coral hover:underline">
+              Use a calculadora aqui
+            </Link>
+            .
+          </p>
 
           <div className="rounded-xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
             {restantes > 0 ? (
