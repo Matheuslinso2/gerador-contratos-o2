@@ -13,8 +13,10 @@ import { dispararCampanha } from "@/lib/campanhas/dispararCampanha";
 // nenhum, então trata direto como horário de Brasília.
 const OFFSET_BRASILIA = "-03:00";
 
-// Mesmo endereço de modo teste usado em faturas/enviar.
-const EMAIL_MODO_TESTE = "matheus@o2seguros.com.br";
+// Pedido do Matheus, 21/09/2026: teste de campanha comercial vai pra caixa
+// do marketing (não mais pro Matheus) -- faturas/enviar segue com o seu
+// próprio endereço de modo teste.
+const EMAIL_MODO_TESTE = "marketing@o2seguros.com.br";
 
 async function exigirAcessoRascunhoRPC(campanhaId: string) {
   const supabase = await createClient();
@@ -99,7 +101,7 @@ export async function removerContatoExternoCampanha(campanhaId: string, contatoI
 }
 
 // Envio de teste não depende da seleção de destinatários -- só manda o
-// template renderizado pro próprio remetente, pra revisar layout/conteúdo
+// template renderizado pra caixa de marketing, pra revisar layout/conteúdo
 // antes de disparar de verdade.
 export async function enviarTesteCampanha(formData: FormData) {
   const campanhaId = String(formData.get("campanha_id") ?? "");

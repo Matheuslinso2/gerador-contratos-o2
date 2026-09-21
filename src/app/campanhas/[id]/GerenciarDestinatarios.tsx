@@ -339,7 +339,7 @@ export function GerenciarDestinatarios({
             className="rounded-full border border-o2-navy px-5 py-2 text-sm font-medium text-o2-navy transition hover:bg-o2-navy hover:text-white"
             textoCarregando="Enviando teste..."
           >
-            Enviar e-mail de teste pra mim
+            Enviar e-mail de teste (marketing@)
           </SubmitButton>
         </form>
 
