@@ -198,7 +198,7 @@ function CamposImovel() {
   const [cep, setCep] = useState("");
   const [buscando, setBuscando] = useState(false);
   const [erroCep, setErroCep] = useState(false);
-  const [endereco, setEndereco] = useState("");
+  const [logradouro, setLogradouro] = useState("");
   const [bairro, setBairro] = useState("");
   const [cidade, setCidade] = useState("");
   const [uf, setUf] = useState("");
@@ -220,7 +220,7 @@ function CamposImovel() {
     setBairro(resultado.bairro);
     setCidade(resultado.localidade);
     setUf(resultado.uf);
-    setEndereco(resultado.logradouro);
+    setLogradouro(resultado.logradouro);
   }
 
   return (
@@ -240,19 +240,25 @@ function CamposImovel() {
         {erroCep && <p className="mt-0.5 text-xs text-red-600">CEP não encontrado — preencha o endereço manualmente.</p>}
       </div>
       <div>
-        <label className={labelClass}>Endereço completo do imóvel (rua, número, complemento) *</label>
-        <input value={endereco} onChange={(e) => setEndereco(e.target.value)} required className={inputClass} />
+        <label className={labelClass}>Endereço do imóvel *</label>
+        <div className="mt-1 grid grid-cols-3 gap-2">
+          <input
+            name="imovel_logradouro"
+            value={logradouro}
+            onChange={(e) => setLogradouro(e.target.value)}
+            placeholder="Logradouro (rua, av.)"
+            required
+            className={`col-span-2 ${inputClass}`}
+          />
+          <input name="imovel_numero" placeholder="Número" required className={inputClass} />
+        </div>
+        <input name="imovel_complemento" placeholder="Complemento (apto, bloco, sala — opcional)" className={`mt-2 ${inputClass}`} />
       </div>
       <div className="grid grid-cols-3 gap-2">
-        <input value={bairro} onChange={(e) => setBairro(e.target.value)} placeholder="Bairro" className={inputClass} />
-        <input value={cidade} onChange={(e) => setCidade(e.target.value)} placeholder="Cidade" className={inputClass} />
-        <input value={uf} maxLength={2} onChange={(e) => setUf(e.target.value.toUpperCase())} placeholder="UF" className={inputClass} />
+        <input name="imovel_bairro" value={bairro} onChange={(e) => setBairro(e.target.value)} placeholder="Bairro" className={inputClass} />
+        <input name="imovel_cidade" value={cidade} onChange={(e) => setCidade(e.target.value)} placeholder="Cidade" className={inputClass} />
+        <input name="imovel_uf" value={uf} maxLength={2} onChange={(e) => setUf(e.target.value.toUpperCase())} placeholder="UF" className={inputClass} />
       </div>
-      <input
-        type="hidden"
-        name="imovel_endereco"
-        value={[endereco, bairro && cidade && uf ? `${bairro}, ${cidade}/${uf}` : ""].filter(Boolean).join(" – ")}
-      />
     </div>
   );
 }

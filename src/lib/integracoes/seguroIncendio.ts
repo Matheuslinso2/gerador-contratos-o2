@@ -7,11 +7,18 @@
 // Campos confirmados via crm.item.fields em 21/08/2026. Essa SPA é
 // compartilhada com o painel interno de Ramos Elementares (ver
 // src/lib/ramos-elementares/fonteBitrix.ts) e não tem campo de observações
-// estruturado pros dados brutos do proprietário/imóvel (CPF, endereço,
-// aluguel...) -- só campos de produção (seguradora, prêmio, comissão,
-// preenchidos depois pela equipe). Por isso os dados brutos da ficha
-// individual vão formatados em texto dentro de "Observações operacionais"
+// estruturado pros dados brutos do proprietário/imóvel (CPF, aluguel...) --
+// só campos de produção (seguradora, prêmio, comissão, preenchidos depois
+// pela equipe). Por isso os dados brutos da ficha individual continuam indo
+// também formatados em texto dentro de "Observações operacionais"
 // (ufCrm12Observacoes), igual um atendente digitaria ao criar o card na mão.
+//
+// Endereço do imóvel: pedido do Matheus, 22/09/2026 -- a equipe criou campos
+// próprios pra CEP/Logradouro/Número/Complemento/Bairro-Cidade (e um campo
+// de Aluguel) na SPA, confirmados via crm.item.fields em 22/09/2026. Os
+// campos de endereço só existem pro fluxo individual (Residencial/
+// Empresarial) -- Imobiliário é uma planilha com vários endereços, sem
+// campo estruturado por item.
 //
 // O campo "Planilha de itens" (ufCrm12PlanilhaItens) é MÚLTIPLO
 // (isMultiple: true) -- diferente dos campos de arquivo único do Seguro
@@ -32,6 +39,14 @@ const FIELD = {
   qtdEnderecos: "ufCrm12QtdEnderecos",
   referenciaPlanilha: "ufCrm12ReferenciaPlanilha",
   planilhaItens: "ufCrm12PlanilhaItens",
+  // Endereço do imóvel (só fluxo individual) -- códigos confirmados via
+  // crm.item.fields em 22/09/2026.
+  imovelLogradouro: "ufCrm12_1790085424526",
+  imovelNumero: "ufCrm12_1790085444491",
+  imovelComplemento: "ufCrm12_1790085448344",
+  imovelBairroCidade: "ufCrm12_1790085451655",
+  imovelCep: "ufCrm12_1790085456047",
+  imovelAluguel: "ufCrm12_1790085479280",
 } as const;
 
 export type ModalidadeIncendio = "Residencial" | "Empresarial" | "Imobiliario";
@@ -53,7 +68,12 @@ export type SeguroIncendioPayload = {
   cpfProprietario: string;
   atividadeComercial: string; // só Empresarial
   imovelCep: string;
-  imovelEndereco: string;
+  imovelLogradouro: string;
+  imovelNumero: string;
+  imovelComplemento: string;
+  imovelBairro: string;
+  imovelCidade: string;
+  imovelUf: string;
   metragem: string;
   valorAluguel: string;
   administradoPorImobiliaria: string; // "Sim" | "Não"
@@ -132,6 +152,22 @@ async function arquivoParaCampoBitrix(
   return [`${nomeExibicao}.${extensao}`, buffer.toString("base64")];
 }
 
+// Combina bairro+cidade+UF no mesmo texto que vai pro campo único
+// "BAIRRO/CIDADE" do Bitrix (a SPA não separa cidade de UF).
+function bairroCidadeTexto(p: SeguroIncendioPayload): string {
+  return [p.imovelBairro, [p.imovelCidade, p.imovelUf].filter(Boolean).join("/")].filter(Boolean).join(", ");
+}
+
+// Mesma lógica de paraNumero em actions.ts (o valor já chega mascarado em
+// pt-BR, ex: "2.000,00"), mas aqui devolve undefined em vez de 0 pra "set"
+// poder pular o campo quando não há aluguel aplicável.
+function paraNumeroAluguel(valor: string): number | undefined {
+  if (!valor) return undefined;
+  const limpo = valor.replace(/\./g, "").replace(",", ".").replace(/[^0-9.-]/g, "");
+  const numero = Number(limpo);
+  return Number.isFinite(numero) ? numero : undefined;
+}
+
 function montarObservacoes(p: SeguroIncendioPayload): string {
   if (p.modalidade === "Imobiliario") {
     return [
@@ -153,7 +189,10 @@ function montarObservacoes(p: SeguroIncendioPayload): string {
     `Finalidade do imóvel: ${p.modalidade === "Empresarial" ? "Comercial" : "Residencial"}`,
     p.atividadeComercial ? `Atividade comercial: ${p.atividadeComercial}` : "",
     `CEP do imóvel: ${p.imovelCep}`,
-    `Endereço do imóvel: ${p.imovelEndereco}`,
+    `Logradouro: ${p.imovelLogradouro}`,
+    p.imovelNumero ? `Número: ${p.imovelNumero}` : "",
+    p.imovelComplemento ? `Complemento: ${p.imovelComplemento}` : "",
+    bairroCidadeTexto(p) ? `Bairro/Cidade: ${bairroCidadeTexto(p)}` : "",
     p.metragem ? `Metragem: ${p.metragem} m²` : "",
     p.valorAluguel ? `Valor do aluguel: R$ ${p.valorAluguel}` : "",
     `Administrado por imobiliária: ${p.administradoPorImobiliaria}${
@@ -193,7 +232,7 @@ export async function criarCardSeguroIncendio(payload: SeguroIncendioPayload, su
 
   set(fields, FIELD.tipoProcesso, enumId(defs, FIELD.tipoProcesso, "Novo"));
   set(fields, FIELD.produto, enumId(defs, FIELD.produto, PRODUTO_POR_MODALIDADE[payload.modalidade]));
-  set(fields, FIELD.origemProducao, enumId(defs, FIELD.origemProducao, "Formulário Incêndio"));
+  set(fields, FIELD.origemProducao, enumId(defs, FIELD.origemProducao, "Ficha"));
   if (payload.modalidade === "Imobiliario") set(fields, FIELD.cotadorOrigem, payload.nomeImobiliaria);
   else if (payload.administradoPorImobiliaria === "Sim") set(fields, FIELD.cotadorOrigem, payload.nomeImobiliaria);
   set(fields, FIELD.observacoes, montarObservacoes(payload));
@@ -203,6 +242,14 @@ export async function criarCardSeguroIncendio(payload: SeguroIncendioPayload, su
     set(fields, FIELD.referenciaPlanilha, payload.anexoPlanilhaNome);
     const planilha = await arquivoParaCampoBitrix(supabase, payload.anexoPlanilha, "planilha-incendio-imobiliario");
     if (planilha) fields[FIELD.planilhaItens] = [planilha];
+  } else {
+    set(fields, FIELD.imovelCep, payload.imovelCep);
+    set(fields, FIELD.imovelLogradouro, payload.imovelLogradouro);
+    set(fields, FIELD.imovelNumero, payload.imovelNumero);
+    set(fields, FIELD.imovelComplemento, payload.imovelComplemento);
+    set(fields, FIELD.imovelBairroCidade, bairroCidadeTexto(payload));
+    const aluguel = paraNumeroAluguel(payload.valorAluguel);
+    if (aluguel !== undefined) fields[FIELD.imovelAluguel] = `${aluguel}|BRL`;
   }
 
   const added = await bitrix<BitrixAddResponse>("crm.item.add", { entityTypeId: ENTITY_TYPE_ID, fields });
@@ -260,7 +307,10 @@ export function montarEmailSeguroIncendio(p: SeguroIncendioPayload, resultado: {
               linhaCampo("Finalidade", p.modalidade === "Empresarial" ? "Comercial" : "Residencial"),
               linhaCampo("Atividade comercial", p.atividadeComercial),
               linhaCampo("CEP", p.imovelCep),
-              linhaCampo("Endereço", p.imovelEndereco),
+              linhaCampo("Logradouro", p.imovelLogradouro),
+              linhaCampo("Número", p.imovelNumero),
+              linhaCampo("Complemento", p.imovelComplemento),
+              linhaCampo("Bairro/Cidade", bairroCidadeTexto(p)),
               linhaCampo("Metragem", p.metragem ? `${p.metragem} m²` : ""),
               linhaCampo("Valor do aluguel", p.valorAluguel ? `R$ ${p.valorAluguel}` : ""),
             ].join("")
