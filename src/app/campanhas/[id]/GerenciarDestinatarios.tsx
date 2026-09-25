@@ -57,14 +57,28 @@ export function GerenciarDestinatarios({
   const [idPendente, setIdPendente] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
-  // Piso do <input datetime-local> -- 5 min à frente (mesma granularidade
-  // do cron que dispara agendamentos, ver vercel.json). Calculado uma vez
-  // só, não precisa ser exato ao segundo.
+  // Piso do agendamento -- 5 min à frente (mesma granularidade do cron que
+  // dispara agendamentos, ver vercel.json). Calculado uma vez só, não
+  // precisa ser exato ao segundo.
   const minAgendamento = useMemo(() => {
     const d = new Date(Date.now() + 5 * 60_000);
     const pad = (n: number) => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }, []);
+  const minDataAgendamento = minAgendamento.slice(0, 10);
+
+  // Achado 25/09/2026: o <input type="datetime-local"> nativo tem um bug
+  // conhecido no Chrome onde digitar rápido nos segmentos de hora/minuto
+  // gruda o mesmo dígito nos dois (ex: tentar "14:30" virava "10:10" ou
+  // "11:11"). Troca por data + 2 <select> de hora/minuto -- sem segmento
+  // digitado, sem essa ambiguidade.
+  const [dataAgendamento, setDataAgendamento] = useState("");
+  const [horaAgendamento, setHoraAgendamento] = useState("");
+  const [minutoAgendamento, setMinutoAgendamento] = useState("");
+  const agendadoParaValor =
+    dataAgendamento && horaAgendamento && minutoAgendamento ? `${dataAgendamento}T${horaAgendamento}:${minutoAgendamento}` : "";
+  const horasDoDia = useMemo(() => Array.from({ length: 24 }, (_, h) => String(h).padStart(2, "0")), []);
+  const minutosDaHora = useMemo(() => Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0")), []);
 
   const imobiliariasPorId = useMemo(() => new Map(imobiliarias.map((i) => [i.id, i])), [imobiliarias]);
   const contatosSelecionadosIds = useMemo(() => new Set(contatosSelecionados.map((c) => c.id)), [contatosSelecionados]);
@@ -314,15 +328,49 @@ export function GerenciarDestinatarios({
           "agendada"). */}
       <form action={agendarDisparoCampanha} className="flex flex-wrap items-end gap-2 rounded-xl border border-o2-navy/10 bg-quadro p-3">
         <input type="hidden" name="campanha_id" value={campanhaId} />
+        <input type="hidden" name="agendado_para" value={agendadoParaValor} />
         <div>
           <label className="mb-0.5 block text-xs text-gray-500">Ou agende o disparo pra depois</label>
-          <input
-            type="datetime-local"
-            name="agendado_para"
-            min={minAgendamento}
-            required
-            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-o2-coral focus:outline-none"
-          />
+          <div className="flex gap-1.5">
+            <input
+              type="date"
+              value={dataAgendamento}
+              onChange={(e) => setDataAgendamento(e.target.value)}
+              min={minDataAgendamento}
+              required
+              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-o2-coral focus:outline-none"
+            />
+            <select
+              value={horaAgendamento}
+              onChange={(e) => setHoraAgendamento(e.target.value)}
+              required
+              className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-o2-coral focus:outline-none"
+            >
+              <option value="" disabled>
+                Hora
+              </option>
+              {horasDoDia.map((h) => (
+                <option key={h} value={h}>
+                  {h}h
+                </option>
+              ))}
+            </select>
+            <select
+              value={minutoAgendamento}
+              onChange={(e) => setMinutoAgendamento(e.target.value)}
+              required
+              className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-o2-coral focus:outline-none"
+            >
+              <option value="" disabled>
+                Min
+              </option>
+              {minutosDaHora.map((m) => (
+                <option key={m} value={m}>
+                  {m}min
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         <SubmitButton
           className="rounded-full border border-o2-navy px-4 py-1.5 text-sm font-medium text-o2-navy transition hover:bg-o2-navy hover:text-white"
