@@ -2105,6 +2105,38 @@ export default async function SeguroFiancaPage({
                     </div>
                   </div>
                 </section>
+
+                {/* Pedido do Matheus (sessão anterior, não executado até
+                    28/09/2026): transferida da aba Equipe pra Cotações --
+                    é sobre o volume diário do funil de cotação, não sobre
+                    produtividade por pessoa. */}
+                <section id="quadro-fianca-diarios" className={styles.section}>
+                  <div className={styles.sectionHead}>
+                    <h2>Quantitativo de análises diárias</h2>
+                    <div className={styles.note}>
+                      campo de responsável por etapa, adicionado em 17/08/2026
+                      — meses anteriores a essa data ficam vazios aqui
+                    </div>
+                    <ExportarQuadro
+                      quadroId="quadro-fianca-diarios"
+                      corFundo="#f7f8fa"
+                      nomeArquivo={`seguro-fianca-diarios-${competencia}`}
+                    />
+                  </div>
+                  <div className={styles.panel}>
+                    <div className={styles.panelSub}>
+                      todas as análises que entraram por dia (independe de
+                      HORA FIM registrada), por Responsável(is) pela Cotação —
+                      card com mais de uma pessoa credita as duas, então a
+                      soma das colunas pode passar do Total; cards sem o campo
+                      preenchido não entram na quebra por pessoa, mas viram
+                      alerta em &quot;Qualidade dos dados&quot;
+                    </div>
+                    <QuadroDiarioTabela
+                      quadro={gerencial.analisesDiariasPorResponsavel}
+                    />
+                  </div>
+                </section>
               </AbaSlot>
 
               <AbaSlot aba="fechamento">
@@ -2443,34 +2475,6 @@ export default async function SeguroFiancaPage({
                     </section>
                   );
                 })()}
-
-                <section id="quadro-fianca-diarios" className={styles.section}>
-                  <div className={styles.sectionHead}>
-                    <h2>Quantitativo de análises diárias</h2>
-                    <div className={styles.note}>
-                      campo de responsável por etapa, adicionado em 17/08/2026
-                      — meses anteriores a essa data ficam vazios aqui
-                    </div>
-                    <ExportarQuadro
-                      quadroId="quadro-fianca-diarios"
-                      corFundo="#f7f8fa"
-                      nomeArquivo={`seguro-fianca-diarios-${competencia}`}
-                    />
-                  </div>
-                  <div className={styles.panel}>
-                    <div className={styles.panelSub}>
-                      todas as análises que entraram por dia (independe de
-                      HORA FIM registrada), por Responsável(is) pela Cotação —
-                      card com mais de uma pessoa credita as duas, então a
-                      soma das colunas pode passar do Total; cards sem o campo
-                      preenchido não entram na quebra por pessoa, mas viram
-                      alerta em &quot;Qualidade dos dados&quot;
-                    </div>
-                    <QuadroDiarioTabela
-                      quadro={gerencial.analisesDiariasPorResponsavel}
-                    />
-                  </div>
-                </section>
               </AbaSlot>
 
               {/* Reunião 16/09/2026 (Matheus + Patricia): "Contratos
