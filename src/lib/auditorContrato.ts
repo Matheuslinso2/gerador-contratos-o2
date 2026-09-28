@@ -19,6 +19,9 @@ export type RelatorioAuditoria = {
   assinaturas_status: StatusChecklist;
   assinaturas_resumo: string;
   pontos_criticos: string[];
+  prazo_declarado_meses?: number;
+  vigencia_inicio?: string;
+  vigencia_fim?: string;
 };
 
 export type ClausulaReferencia = {
@@ -64,7 +67,7 @@ Você precisa preencher TODOS OS 10 CAMPOS de status/resumo abaixo, um de cada v
 
 2. dados_locacao_status / dados_locacao_resumo — endereço completo do imóvel (incluindo CEP), finalidade do imóvel classificada explicitamente como "Residencial" ou "Comercial" (não aceite resposta vaga tipo "uso normal" — se o contrato não deixar claro qual das duas, isso já é "atencao"), valor do aluguel, prazo da locação (datas de início/término coerentes). "problema" se algum desses dados estiver ausente, ambíguo ou incoerente; "problema" também se o CEP estiver ausente do endereço.
 
-   CONFIRA A MATEMÁTICA DO PRAZO, SEMPRE QUE O CONTRATO INFORMAR OS DOIS: quando houver um prazo declarado em meses/anos (ex: "prazo de 30 meses") E também as datas de início e fim de vigência (ex: "01/09/2026 a 28/02/2028"), CALCULE você mesmo, com contagem de calendário real, quantos meses existem entre a data de início e a data de fim — não confie no número que o contrato escreveu, ele pode estar errado. Achado real (caso do Matheus): contrato dizia "prazo de 30 meses" com vigência 01/09/2026 a 28/02/2028, mas essa janela é só ~17-18 meses — divergência grande, não erro de arredondamento. Compare o prazo declarado no texto com a sua conta: se não baterem (tolerância de só alguns dias, nunca meses, por causa de convenção de "até o último dia do mês"), isso é ERRO GRAVE — marque "problema" neste pilar, cite as duas datas, o prazo declarado no texto E o número de meses que você calculou, no resumo. Este é um GATILHO CRÍTICO do checklist, igual à dupla garantia (ver acima) — inclua em pontos_criticos e force REPROVADO mesmo que todos os outros pilares estejam "ok"; não deixe passar batido só porque o resto do contrato está bem preenchido.
+   PRAZO x VIGÊNCIA — NÃO faça essa conta você mesmo: o sistema calcula automaticamente, por código, se o prazo declarado bate com as datas de vigência e acrescenta o alerta ao relatório quando não bate. Sua tarefa é só EXTRAIR os três valores nos campos prazo_declarado_meses, vigencia_inicio e vigencia_fim (ver descrição de cada campo), copiando exatamente o que o contrato diz. Por isso, NÃO marque este pilar como "problema" por causa do prazo, NÃO escreva "ERRO GRAVE" sobre o prazo e NÃO coloque o prazo em pontos_criticos nem o use para decidir status_geral — julgue este pilar só pelos demais dados (endereço/CEP, finalidade, valor, datas ausentes ou ilegíveis).
 
 3. conferencia_cotacao_status / conferencia_cotacao_resumo — o resumo deste pilar SEMPRE precisa trazer, de forma explícita, o nome do locador, o nome de TODOS os locatários e o endereço (com CEP) do imóvel identificados no contrato — em todo relatório, tenha cotação anexada ou não. Isso é pra quem está lendo poder comparar na hora com a cotação que tem em mãos, sem precisar procurar essa informação em outro lugar do relatório.
 
@@ -109,7 +112,7 @@ Você precisa preencher TODOS OS 10 CAMPOS de status/resumo abaixo, um de cada v
 
 pontos_criticos: lista curta (pode ficar vazia) só com os problemas mais sérios que merecem destaque além do resumo de uma frase — cada item também deve ser curto (uma frase, cite a cláusula/seção quando possível). Não repita aqui o que já foi dito nos resumos acima, a menos que seja crítico o suficiente para reforçar.
 
-status_geral: "APROVADO" se todos os pilares avaliados estão "ok" (os "nao_avaliado" não contam contra); "APROVADO_RESSALVAS" se houver "atencao" ou "problema" leve/pontual; "REPROVADO" se houver "problema" grave (ex: dupla garantia, prazo declarado incompatível com a diferença real entre as datas de vigência, cláusula da seguradora com modalidade ou inciso do art. 37 divergente do texto oficial, dado essencial ausente, assinatura de parte faltando).
+status_geral: "APROVADO" se todos os pilares avaliados estão "ok" (os "nao_avaliado" não contam contra); "APROVADO_RESSALVAS" se houver "atencao" ou "problema" leve/pontual; "REPROVADO" se houver "problema" grave (ex: dupla garantia, cláusula da seguradora com modalidade ou inciso do art. 37 divergente do texto oficial, dado essencial ausente, assinatura de parte faltando).
 
 Responda SEMPRE chamando a ferramenta "reportar_auditoria", preenchendo TODOS os campos do schema. Nunca responda em texto livre.`;
 
@@ -145,6 +148,18 @@ const FERRAMENTA_RELATORIO: Anthropic.Tool = {
         type: "string",
         description: 'Ex: "Fiador", "Caução", "Seguro Fiança", "Título de Capitalização", "Sem garantia identificada", ou "DUPLA GARANTIA (ERRO)" se houver mais de uma.',
       },
+      prazo_declarado_meses: {
+        type: "integer",
+        description: 'Prazo da locação declarado no texto do contrato, convertido em meses (ex: "30 meses" = 30, "2 anos" = 24). Use 0 se o contrato não declarar um prazo em meses/anos.',
+      },
+      vigencia_inicio: {
+        type: "string",
+        description: 'Data de início da vigência da locação, exatamente como no contrato, no formato DD/MM/AAAA. String vazia se não constar.',
+      },
+      vigencia_fim: {
+        type: "string",
+        description: 'Data de término da vigência da locação, exatamente como no contrato, no formato DD/MM/AAAA. String vazia se não constar.',
+      },
       dados_cadastrais_status: { type: "string", enum: STATUS_ENUM, description: "Status do pilar 1 (dados cadastrais)." },
       dados_cadastrais_resumo: { type: "string", minLength: 1, description: "Resumo de uma frase do pilar 1 (dados cadastrais)." },
       dados_locacao_status: { type: "string", enum: STATUS_ENUM, description: "Status do pilar 2 (dados da locação)." },
@@ -177,6 +192,9 @@ const FERRAMENTA_RELATORIO: Anthropic.Tool = {
       "endereco_identificado",
       "status_geral",
       "tipo_garantia_identificada",
+      "prazo_declarado_meses",
+      "vigencia_inicio",
+      "vigencia_fim",
       "dados_cadastrais_status",
       "dados_cadastrais_resumo",
       "dados_locacao_status",
@@ -313,5 +331,41 @@ export async function auditarContrato(
     Object.keys(chamada.input as object).join(", ")
   );
 
-  return chamada.input as RelatorioAuditoria;
+  return aplicarConferenciaPrazo(chamada.input as RelatorioAuditoria);
+}
+
+function lerData(texto: string | undefined): { d: number; m: number; a: number } | null {
+  const achado = texto?.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (!achado) return null;
+  return { d: Number(achado[1]), m: Number(achado[2]), a: Number(achado[3]) };
+}
+
+// Meses entre as datas pela convenção de locação (02/10/2026 a 01/04/2029 ou
+// 02/04/2029 = 30 meses): meses de calendário + fração pelos dias, contando o
+// dia final como incluído.
+export function mesesEntre(inicio: string, fim: string): number | null {
+  const i = lerData(inicio);
+  const f = lerData(fim);
+  if (!i || !f) return null;
+  return (f.a - i.a) * 12 + (f.m - i.m) + (f.d - i.d + 1) / 30;
+}
+
+// A conta do prazo era feita pela IA e dava falso positivo (escrevia "ERRO
+// GRAVE" e depois admitia que batia, reprovando o contrato mesmo assim).
+// Agora a IA só extrai prazo e datas; a conferência é feita aqui.
+function aplicarConferenciaPrazo(relatorio: RelatorioAuditoria): RelatorioAuditoria {
+  const prazo = relatorio.prazo_declarado_meses ?? 0;
+  if (!prazo || !relatorio.vigencia_inicio || !relatorio.vigencia_fim) return relatorio;
+  const calculado = mesesEntre(relatorio.vigencia_inicio, relatorio.vigencia_fim);
+  if (calculado === null || Math.abs(calculado - prazo) <= 0.5) return relatorio;
+
+  const meses = Math.round(calculado * 10) / 10;
+  const alerta = `Prazo declarado de ${prazo} meses não bate com a vigência informada (${relatorio.vigencia_inicio} a ${relatorio.vigencia_fim}), que corresponde a cerca de ${meses.toString().replace(".", ",")} meses.`;
+  return {
+    ...relatorio,
+    dados_locacao_status: "problema",
+    dados_locacao_resumo: `ERRO GRAVE: ${alerta} ${relatorio.dados_locacao_resumo}`,
+    pontos_criticos: [alerta, ...(relatorio.pontos_criticos ?? [])],
+    status_geral: "REPROVADO",
+  };
 }
