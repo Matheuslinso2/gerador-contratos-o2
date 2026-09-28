@@ -2,6 +2,8 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { enviarEmail } from "@/lib/email";
 import { envolverEmailCampanha, type TemplateCampanha } from "@/lib/integracoes/emailCampanha";
 import { linkDescadastro, linkDescadastroApi } from "./unsubscribeToken";
+import { aplicarApelido, type ModoPersonalizacao } from "./personalizacao";
+import { nomeParaComunicacao } from "@/lib/nomeParaComunicacao";
 
 // Endereço separado do transacional (avisos@...) -- rejeições/denúncias de
 // marketing não podem contaminar a reputação do domínio usado hoje por
@@ -29,7 +31,24 @@ export type CampanhaRow = {
   corpo_html: string;
   cta_texto: string | null;
   cta_href: string | null;
+  personalizacao: ModoPersonalizacao;
 };
+
+export const COLUNAS_CAMPANHA_ENVIO =
+  "id, assunto, template, titulo, introducao, valido_de, valido_ate, corpo_html, cta_texto, cta_href, personalizacao";
+
+// Troca {{apelido}} pelo nome do destinatário em todos os textos da campanha
+// (assunto é texto puro; o resto vai pro HTML). `nome` null = sem imobiliária.
+export function personalizarCampanha(campanha: CampanhaRow, nome: string | null): CampanhaRow {
+  if (campanha.personalizacao !== "apelido") return campanha;
+  return {
+    ...campanha,
+    assunto: aplicarApelido(campanha.assunto, nome, { html: false }),
+    titulo: aplicarApelido(campanha.titulo, nome),
+    introducao: campanha.introducao ? aplicarApelido(campanha.introducao, nome) : campanha.introducao,
+    corpo_html: aplicarApelido(campanha.corpo_html, nome),
+  };
+}
 
 export type ResultadoLote = { processados: number; restantes: number; concluida: boolean };
 
@@ -73,7 +92,7 @@ export async function processarLote(campanhaId: string, limite = TAMANHO_LOTE_PA
 
   const { data: campanha } = await supabase
     .from("campanhas")
-    .select("id, assunto, template, titulo, introducao, valido_de, valido_ate, corpo_html, cta_texto, cta_href")
+    .select(COLUNAS_CAMPANHA_ENVIO)
     .eq("id", campanhaId)
     .single<CampanhaRow>();
   if (!campanha) throw new Error("Campanha não encontrada");
@@ -87,6 +106,26 @@ export async function processarLote(campanhaId: string, limite = TAMANHO_LOTE_PA
     p_campanha_id: campanhaId,
     p_limite: limite,
   });
+
+  // Nome de cada destinatário do lote (só quando a campanha personaliza) --
+  // a RPC de reivindicar devolve só id/email/tentativas, então o
+  // imobiliaria_id vem de campanhas_envios.
+  const nomePorEnvio = new Map<string, string>();
+  if (campanha.personalizacao === "apelido" && pendentes?.length) {
+    const { data: vinculos } = await supabase
+      .from("campanhas_envios")
+      .select("id, imobiliaria_id")
+      .in("id", pendentes.map((p: { id: string }) => p.id));
+    const imobiliariaIds = [...new Set((vinculos ?? []).map((v) => v.imobiliaria_id).filter(Boolean))] as string[];
+    const { data: imobiliarias } = imobiliariaIds.length
+      ? await supabase.from("imobiliarias").select("id, nome, apelido").in("id", imobiliariaIds)
+      : { data: [] };
+    const imobPorId = new Map((imobiliarias ?? []).map((i) => [i.id, i]));
+    for (const v of vinculos ?? []) {
+      const imob = v.imobiliaria_id ? imobPorId.get(v.imobiliaria_id) : undefined;
+      if (imob) nomePorEnvio.set(v.id, nomeParaComunicacao(imob));
+    }
+  }
 
   let processados = 0;
   for (const envio of pendentes ?? []) {
@@ -107,11 +146,12 @@ export async function processarLote(campanhaId: string, limite = TAMANHO_LOTE_PA
     try {
       const unsubscribeHref = linkDescadastro(envio.email, siteUrl, campanhaId);
       const unsubscribeHrefApi = linkDescadastroApi(envio.email, siteUrl, campanhaId);
-      const html = montarHtmlCampanha(campanha, unsubscribeHref);
+      const campanhaDoEnvio = personalizarCampanha(campanha, nomePorEnvio.get(envio.id) ?? null);
+      const html = montarHtmlCampanha(campanhaDoEnvio, unsubscribeHref);
 
       const { id: resendEmailId } = await enviarEmail({
         para: envio.email,
-        assunto: campanha.assunto,
+        assunto: campanhaDoEnvio.assunto,
         html,
         remetente: "O2 Seguros",
         enderecoRemetente: ENDERECO_REMETENTE_CAMPANHAS,

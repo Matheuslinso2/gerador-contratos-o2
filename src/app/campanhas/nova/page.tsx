@@ -80,6 +80,17 @@ export default async function NovaCampanhaPage({
           </div>
 
           <div>
+            <label className="mb-1 block text-xs font-medium text-gray-600">Personalização</label>
+            <select name="personalizacao" defaultValue="nenhuma" className={inputClass}>
+              <option value="nenhuma">Sem personalização</option>
+              <option value="apelido">Usar apelido da imobiliária</option>
+            </select>
+            <p className="mt-1 text-xs text-gray-400">
+              Com apelido, use o botão "Inserir apelido" no editor do corpo: cada imobiliária recebe o e-mail com o próprio nome.
+            </p>
+          </div>
+
+          <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">Assunto do e-mail</label>
             <input name="assunto" required placeholder="O que a imobiliária vai ver na caixa de entrada" className={inputClass} />
           </div>

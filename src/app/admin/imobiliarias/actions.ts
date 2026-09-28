@@ -50,6 +50,7 @@ export async function atualizarImobiliariaAdmin(formData: FormData) {
 
   const dados: Record<string, unknown> = {
     nome,
+    apelido: String(formData.get("apelido") ?? "").trim() || null,
     cnpj,
     creci: String(formData.get("creci") ?? "").trim() || null,
     telefone: String(formData.get("telefone") ?? "").trim() || null,

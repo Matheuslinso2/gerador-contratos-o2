@@ -4,7 +4,14 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { enviarEmail } from "@/lib/email";
-import { montarHtmlCampanha, ENDERECO_REMETENTE_CAMPANHAS, type CampanhaRow } from "@/lib/campanhas/processarLote";
+import {
+  montarHtmlCampanha,
+  personalizarCampanha,
+  COLUNAS_CAMPANHA_ENVIO,
+  ENDERECO_REMETENTE_CAMPANHAS,
+  type CampanhaRow,
+} from "@/lib/campanhas/processarLote";
+import { contemApelido, NOME_EXEMPLO_PREVIA } from "@/lib/campanhas/personalizacao";
 import { linkDescadastro } from "@/lib/campanhas/unsubscribeToken";
 import { dispararCampanha } from "@/lib/campanhas/dispararCampanha";
 
@@ -114,21 +121,22 @@ export async function enviarTesteCampanha(formData: FormData) {
 
   const { data: campanha } = await supabase
     .from("campanhas")
-    .select("id, assunto, template, titulo, introducao, valido_de, valido_ate, corpo_html, cta_texto, cta_href")
+    .select(COLUNAS_CAMPANHA_ENVIO)
     .eq("id", campanhaId)
     .single<CampanhaRow>();
   if (!campanha) redirect(`/campanhas/${campanhaId}?erro=${encodeURIComponent("Campanha não encontrada.")}`);
+  const campanhaTeste = personalizarCampanha(campanha, NOME_EXEMPLO_PREVIA);
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
   if (!siteUrl) redirect(`/campanhas/${campanhaId}?erro=${encodeURIComponent("NEXT_PUBLIC_SITE_URL não configurada.")}`);
 
   const unsubscribeHref = linkDescadastro(EMAIL_MODO_TESTE, siteUrl, campanhaId);
-  const html = montarHtmlCampanha(campanha, unsubscribeHref);
+  const html = montarHtmlCampanha(campanhaTeste, unsubscribeHref);
 
   try {
     await enviarEmail({
       para: EMAIL_MODO_TESTE,
-      assunto: `[TESTE] ${campanha.assunto}`,
+      assunto: `[TESTE] ${campanhaTeste.assunto}`,
       html,
       remetente: "O2 Seguros",
       enderecoRemetente: ENDERECO_REMETENTE_CAMPANHAS,
@@ -247,6 +255,7 @@ export async function editarConteudoCampanha(formData: FormData) {
   const nome = String(formData.get("nome") ?? "").trim();
   const assunto = String(formData.get("assunto") ?? "").trim();
   const template = String(formData.get("template") ?? "comunicado");
+  const personalizacao = String(formData.get("personalizacao") ?? "nenhuma") === "apelido" ? "apelido" : "nenhuma";
   const titulo = String(formData.get("titulo") ?? "").trim();
   const introducao = String(formData.get("introducao") ?? "").trim();
   const validoDe = String(formData.get("valido_de") ?? "").trim();
@@ -263,6 +272,11 @@ export async function editarConteudoCampanha(formData: FormData) {
   if (validoDe && validoAte && validoDe > validoAte) {
     redirect(`/campanhas/${campanhaId}?erro=${encodeURIComponent("A data \"válido de\" não pode ser depois de \"válido até\".")}`);
   }
+  if (personalizacao !== "apelido" && [assunto, titulo, introducao, corpoHtml].some(contemApelido)) {
+    redirect(
+      `/campanhas/${campanhaId}?erro=${encodeURIComponent('O texto usa o apelido da imobiliária, mas a personalização está em "Sem personalização". Escolha "Usar apelido da imobiliária" ou remova o apelido do texto.')}`
+    );
+  }
 
   const { error } = await supabase
     .from("campanhas")
@@ -270,6 +284,7 @@ export async function editarConteudoCampanha(formData: FormData) {
       nome,
       assunto,
       template,
+      personalizacao,
       titulo,
       introducao: introducao || null,
       valido_de: validoDe || null,

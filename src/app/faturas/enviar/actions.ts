@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { enviarEmail, separarEmails, type AnexoEmail } from "@/lib/email";
 import { montarEmailFatura, type FaturaParaEmail } from "@/lib/faturasEmail";
+import { nomeParaComunicacao } from "@/lib/nomeParaComunicacao";
 
 const BUCKET_FINAL = "faturas";
 const STATUS_PRONTO_PARA_ENVIO = ["fatura_carregada", "pronta_para_envio"];
@@ -68,7 +69,7 @@ export async function confirmarEnvio(formData: FormData) {
     try {
       const { data: imobiliaria } = await supabase
         .from("imobiliarias")
-        .select("nome, email_faturas")
+        .select("nome, apelido, email_faturas")
         .eq("id", imobiliariaId)
         .single();
       if (!imobiliaria) {
@@ -115,7 +116,7 @@ export async function confirmarEnvio(formData: FormData) {
       }
 
       const { assunto, html } = montarEmailFatura({
-        nomeImobiliaria: imobiliaria.nome,
+        nomeImobiliaria: nomeParaComunicacao(imobiliaria),
         seguradora,
         competencia,
         faturas: faturas as FaturaParaEmail[],

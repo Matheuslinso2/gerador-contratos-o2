@@ -9,7 +9,8 @@ import { IconMail } from "@/components/icons";
 import ExportarQuadro from "@/components/ExportarQuadro";
 import { ROTULO_STATUS_CAMPANHA, COR_STATUS_CAMPANHA } from "@/lib/campanhas/rotulos";
 import { rotuloProdutoCampanha } from "@/lib/campanhas/produtos";
-import { montarHtmlCampanha, type CampanhaRow } from "@/lib/campanhas/processarLote";
+import { montarHtmlCampanha, personalizarCampanha, type CampanhaRow } from "@/lib/campanhas/processarLote";
+import { NOME_EXEMPLO_PREVIA } from "@/lib/campanhas/personalizacao";
 import { emailsElegiveisCampanha } from "@/lib/campanhas/elegibilidade";
 import { buscarEmailsEquipeInterna } from "@/lib/campanhas/equipeInterna";
 import SubmitButton from "@/components/SubmitButton";
@@ -228,7 +229,7 @@ export default async function CampanhaDetalhePage({
     Resultado: l.comissao_gerada - l.repasse_gerado,
   }));
 
-  const htmlEmail = montarHtmlCampanha(campanha as CampanhaRow, "#");
+  const htmlEmail = montarHtmlCampanha(personalizarCampanha(campanha as CampanhaRow, NOME_EXEMPLO_PREVIA), "#");
 
   return (
     <>
@@ -400,6 +401,7 @@ export default async function CampanhaDetalhePage({
             nome: campanha.nome,
             assunto: campanha.assunto,
             template: campanha.template,
+            personalizacao: campanha.personalizacao,
             titulo: campanha.titulo,
             introducao: campanha.introducao,
             valido_de: campanha.valido_de,

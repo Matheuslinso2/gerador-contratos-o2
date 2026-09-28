@@ -72,6 +72,15 @@ export default async function ImobiliariaPage({
               <CampoCnpj defaultValue={imobiliaria?.cnpj} />
             </div>
           </div>
+          <div>
+            <label className="text-sm text-gray-600">Apelido (como você quer ser chamada nos e-mails da O2)</label>
+            <input
+              name="apelido"
+              placeholder="Ex: Expan Rio"
+              defaultValue={imobiliaria?.apelido ?? ""}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
+            />
+          </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div>
               <label className="text-sm text-gray-600">CRECI</label>

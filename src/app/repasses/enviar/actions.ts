@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { enviarEmail, separarEmails, type AnexoEmail } from "@/lib/email";
 import { montarEmailRepasse, type RepasseParaEmail } from "@/lib/repassesEmail";
+import { nomeParaComunicacao } from "@/lib/nomeParaComunicacao";
 import { valoresBatem } from "@/lib/repassesIdentificacao";
 
 const BUCKET_FINAL = "repasses";
@@ -47,7 +48,7 @@ export async function confirmarEnvioRepasse(formData: FormData) {
     try {
       const { data: imobiliaria } = await supabase
         .from("imobiliarias")
-        .select("nome, email_repasses")
+        .select("nome, apelido, email_repasses")
         .eq("id", imobiliariaId)
         .single();
       if (!imobiliaria) {
@@ -87,7 +88,7 @@ export async function confirmarEnvioRepasse(formData: FormData) {
       }
 
       const { assunto, html } = montarEmailRepasse({
-        nomeImobiliaria: imobiliaria.nome,
+        nomeImobiliaria: nomeParaComunicacao(imobiliaria),
         competencia,
         valorLiquido: relatorio.valor,
         repasses: par as RepasseParaEmail[],

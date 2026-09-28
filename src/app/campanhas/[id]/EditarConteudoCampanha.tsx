@@ -14,6 +14,7 @@ export type CampanhaParaEditar = {
   nome: string;
   assunto: string;
   template: string;
+  personalizacao: string;
   titulo: string;
   introducao: string | null;
   valido_de: string | null;
@@ -115,6 +116,14 @@ export function EditarConteudoCampanha({
             <option value="comunicado">Comunicado geral</option>
             <option value="promocao">Promoção / oferta</option>
             <option value="newsletter">Newsletter</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="mb-1 block text-xs font-medium text-gray-600">Personalização</label>
+          <select name="personalizacao" defaultValue={campanha.personalizacao} className={inputClass}>
+            <option value="nenhuma">Sem personalização</option>
+            <option value="apelido">Usar apelido da imobiliária</option>
           </select>
         </div>
 

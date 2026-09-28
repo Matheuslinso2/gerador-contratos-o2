@@ -84,6 +84,10 @@ export default async function AdminImobiliariaDetalhePage({
                 <input name="cnpj" defaultValue={imobiliaria.cnpj ?? ""} className={inputClass} />
               </div>
             </div>
+            <div>
+              <label className={labelClass}>Apelido — usado em e-mails e comunicados (Campanhas, Faturas, Repasse)</label>
+              <input name="apelido" defaultValue={imobiliaria.apelido ?? ""} placeholder="Ex: Expan Rio" className={inputClass} />
+            </div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <div>
                 <label className={labelClass}>CRECI</label>

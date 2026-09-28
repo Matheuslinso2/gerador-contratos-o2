@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { O2_CINZA_ESCURO, FONTE } from "@/lib/integracoes/emailO2";
 import { uploadImagemCampanha } from "./actions";
+import { TOKEN_APELIDO } from "@/lib/campanhas/personalizacao";
 
 // Editor de corpo do e-mail com negrito/sublinhado/colar formatado e
 // inserção de imagem (pedido da reunião de 15/09/2026). O corpo final
@@ -190,6 +191,38 @@ export function EditorCorpo({ name, corpoInicialHtml }: { name: string; corpoIni
     }
   }
 
+  // Espaço reservado atômico (contenteditable=false) pra ninguém editar o
+  // meio do {{apelido}} sem querer; processarLote troca pelo nome de cada
+  // imobiliária na hora do envio (ver src/lib/campanhas/personalizacao.ts).
+  function inserirApelidoNoEditor() {
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.focus();
+
+    const marcador = document.createElement("span");
+    marcador.className = "merge-apelido";
+    marcador.contentEditable = "false";
+    marcador.textContent = TOKEN_APELIDO;
+    const espaco = document.createTextNode(" ");
+
+    const range = ultimaSelecaoRef.current;
+    if (range && editor.contains(range.startContainer)) {
+      range.deleteContents();
+      range.insertNode(espaco);
+      range.insertNode(marcador);
+      range.setStartAfter(espaco);
+      range.collapse(true);
+      const selecao = window.getSelection();
+      selecao?.removeAllRanges();
+      selecao?.addRange(range);
+      ultimaSelecaoRef.current = range.cloneRange();
+    } else {
+      editor.appendChild(marcador);
+      editor.appendChild(espaco);
+    }
+    sincronizar();
+  }
+
   async function selecionarImagem(e: React.ChangeEvent<HTMLInputElement>) {
     const arquivo = e.target.files?.[0];
     e.target.value = "";
@@ -271,6 +304,18 @@ export function EditorCorpo({ name, corpoInicialHtml }: { name: string; corpoIni
           {enviandoImagem ? "Enviando imagem..." : "Inserir imagem"}
         </button>
         <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={selecionarImagem} />
+        <button
+          type="button"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            capturarSelecaoAtual();
+          }}
+          onClick={inserirApelidoNoEditor}
+          className={botaoClass}
+          title="Cada imobiliária vê o próprio nome aqui (só funciona com Personalização = Usar apelido)"
+        >
+          Inserir apelido
+        </button>
       </div>
       {erroImagem && <p className="border border-t-0 border-red-200 bg-red-50 px-3 py-1.5 text-xs text-red-700">{erroImagem}</p>}
       <div
@@ -280,7 +325,7 @@ export function EditorCorpo({ name, corpoInicialHtml }: { name: string; corpoIni
         onInput={sincronizar}
         onBlur={sincronizar}
         onPaste={aoColar}
-        className="min-h-[180px] rounded-b-lg border border-gray-300 px-3 py-2 text-sm focus:border-o2-coral focus:outline-none [&_img]:max-w-full [&_img]:rounded-lg"
+        className="min-h-[180px] rounded-b-lg border border-gray-300 px-3 py-2 text-sm focus:border-o2-coral focus:outline-none [&_img]:max-w-full [&_img]:rounded-lg [&_.merge-apelido]:rounded [&_.merge-apelido]:bg-orange-100 [&_.merge-apelido]:px-1 [&_.merge-apelido]:font-medium [&_.merge-apelido]:text-o2-coral"
       />
       <p className="mt-1 text-xs text-gray-400">Escreva normalmente, dá pra colar texto formatado, deixar em negrito/sublinhado e inserir imagem.</p>
       <input type="hidden" name={name} value={corpoHtmlValue} readOnly />

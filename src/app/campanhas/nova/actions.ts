@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
+import { contemApelido } from "@/lib/campanhas/personalizacao";
 
 export async function criarCampanha(formData: FormData) {
   const supabase = await createClient();
@@ -15,6 +16,7 @@ export async function criarCampanha(formData: FormData) {
   const nome = String(formData.get("nome") ?? "").trim();
   const assunto = String(formData.get("assunto") ?? "").trim();
   const template = String(formData.get("template") ?? "comunicado");
+  const personalizacao = String(formData.get("personalizacao") ?? "nenhuma") === "apelido" ? "apelido" : "nenhuma";
   const titulo = String(formData.get("titulo") ?? "").trim();
   const introducao = String(formData.get("introducao") ?? "").trim();
   const validoDe = String(formData.get("valido_de") ?? "").trim();
@@ -35,6 +37,11 @@ export async function criarCampanha(formData: FormData) {
   if (validoDe && validoAte && validoDe > validoAte) {
     redirect(`/campanhas/nova?erro=${encodeURIComponent("A data \"válido de\" não pode ser depois de \"válido até\".")}`);
   }
+  if (personalizacao !== "apelido" && [assunto, titulo, introducao, corpoHtml].some(contemApelido)) {
+    redirect(
+      `/campanhas/nova?erro=${encodeURIComponent('O texto usa o apelido da imobiliária, mas a personalização está em "Sem personalização". Escolha "Usar apelido da imobiliária" ou remova o apelido do texto.')}`
+    );
+  }
 
   const { data: campanha, error } = await supabase
     .from("campanhas")
@@ -42,6 +49,7 @@ export async function criarCampanha(formData: FormData) {
       nome,
       assunto,
       template,
+      personalizacao,
       titulo,
       introducao: introducao || null,
       valido_de: validoDe || null,

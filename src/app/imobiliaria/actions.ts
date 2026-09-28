@@ -20,6 +20,7 @@ export async function salvarImobiliaria(formData: FormData) {
   if (!user) redirect("/login");
 
   const nome = String(formData.get("nome") ?? "").trim();
+  const apelido = String(formData.get("apelido") ?? "").trim();
   const cnpj = String(formData.get("cnpj") ?? "").trim();
   // O front-end já bloqueia isso com setCustomValidity, mas nunca dá pra
   // confiar só no navegador (JS desabilitado, requisição direta etc.) --
@@ -165,6 +166,7 @@ export async function salvarImobiliaria(formData: FormData) {
 
   const dados: Record<string, unknown> = {
     nome,
+    apelido: apelido || null,
     cnpj,
     creci: creci || null,
     telefone: telefone || null,
