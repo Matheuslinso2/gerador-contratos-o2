@@ -45,11 +45,22 @@ const CAMPOS = {
   // nessa SPA -- o card só guarda o PERCENTUAL de cada um ("Comissão (%)" /
   // "Repasse (%)", campos type:"double"), confirmado via crm.item.fields. O
   // valor em R$ precisa ser calculado (ver valorComissao/valorRepasse
-  // abaixo) -- ler esses dois nomes antigos direto sempre dava undefined,
-  // então toda comissão/repasse do lado Bitrix (Novos, desde a migração de
-  // 01/09) saía zerada, mesmo com prêmio preenchido certo.
-  comissaoPercentual: "ufCrm12ComissaoPercentual",
-  repassePercentual: "ufCrm12RepassePercentual",
+  // abaixo).
+  //
+  // 2º achado real (29/09/2026, mesmo padrão de bug, de novo): em algum
+  // momento depois de 10/09 a equipe passou a preencher dois campos NOVOS
+  // ("Comissão (%) - decimal" / "Repasse (%) - decimal", ufCrm12_1788368973918
+  // / ufCrm12_1788368984463) em vez dos de cima -- confirmado via
+  // crm.item.list: nos 112 cards EFETIVADOS (categoria 22) só 2 ainda têm só
+  // o campo antigo preenchido (cards bem antigos), o resto usa só o novo (ou
+  // os dois, sempre com o mesmo valor). "Comissão dos efetivados" saía quase
+  // zerada em setembro porque comissaoPercentual (antigo) não tinha mais
+  // dado nenhum. Usa o novo com fallback pro antigo, mesma ideia já usada em
+  // seguradora/seguradoraSelecao acima.
+  comissaoPercentual: "ufCrm12_1788368973918",
+  comissaoPercentualAntigo: "ufCrm12ComissaoPercentual",
+  repassePercentual: "ufCrm12_1788368984463",
+  repassePercentualAntigo: "ufCrm12RepassePercentual",
   comissaoAnterior: "ufCrm12ComissaoAnterior",
   restituicao: "ufCrm12Restituicao",
   tipoMovimentacao: "ufCrm12TipoMovimentacao",
@@ -96,13 +107,21 @@ function dinheiro(valor: unknown): number {
 // CAMPOS) -- os dois incidem sobre o PRÊMIO TOTAL, não um sobre o outro
 // (confirmado com o Matheus: repasse não é uma fatia da comissão, é o mesmo
 // tipo de cálculo dela, só que com o percentual de repasse).
+// Prefere o campo novo; cai pro antigo só quando o novo está vazio de
+// verdade (card de antes da migração) -- nunca os dois juntos.
+function campoComFallback(item: BitrixItemRaw, principal: string, antigo: string): unknown {
+  const valor = item[principal];
+  if (valor !== null && valor !== undefined && valor !== "") return valor;
+  return item[antigo];
+}
+
 function valorComissao(item: BitrixItemRaw, premioTotal: number): number {
-  const percentual = dinheiro(item[CAMPOS.comissaoPercentual]);
+  const percentual = dinheiro(campoComFallback(item, CAMPOS.comissaoPercentual, CAMPOS.comissaoPercentualAntigo));
   return premioTotal * (percentual / 100);
 }
 
 function valorRepasse(item: BitrixItemRaw, premioTotal: number): number {
-  const percentual = dinheiro(item[CAMPOS.repassePercentual]);
+  const percentual = dinheiro(campoComFallback(item, CAMPOS.repassePercentual, CAMPOS.repassePercentualAntigo));
   return premioTotal * (percentual / 100);
 }
 
