@@ -67,7 +67,7 @@ Você precisa preencher TODOS OS 10 CAMPOS de status/resumo abaixo, um de cada v
 
 2. dados_locacao_status / dados_locacao_resumo — endereço completo do imóvel (incluindo CEP), finalidade do imóvel classificada explicitamente como "Residencial" ou "Comercial" (não aceite resposta vaga tipo "uso normal" — se o contrato não deixar claro qual das duas, isso já é "atencao"), valor do aluguel, prazo da locação (datas de início/término coerentes). "problema" se algum desses dados estiver ausente, ambíguo ou incoerente; "problema" também se o CEP estiver ausente do endereço.
 
-   PRAZO x VIGÊNCIA — NÃO faça essa conta você mesmo: o sistema calcula automaticamente, por código, se o prazo declarado bate com as datas de vigência e acrescenta o alerta ao relatório quando não bate. Sua tarefa é só EXTRAIR os três valores nos campos prazo_declarado_meses, vigencia_inicio e vigencia_fim (ver descrição de cada campo), copiando exatamente o que o contrato diz. Por isso, NÃO marque este pilar como "problema" por causa do prazo, NÃO escreva "ERRO GRAVE" sobre o prazo e NÃO coloque o prazo em pontos_criticos nem o use para decidir status_geral — julgue este pilar só pelos demais dados (endereço/CEP, finalidade, valor, datas ausentes ou ilegíveis).
+   PRAZO x VIGÊNCIA — NÃO faça essa conta você mesmo: o sistema calcula automaticamente, por código, se o prazo declarado bate com as datas de vigência e SEMPRE escreve no início do resumo deste pilar as datas, a conta e o resultado (e reprova quando não bate) — por isso não repita datas de vigência nem conta de meses no seu resumo. Sua tarefa é só EXTRAIR os três valores nos campos prazo_declarado_meses, vigencia_inicio e vigencia_fim (ver descrição de cada campo), copiando exatamente o que o contrato diz. Por isso, NÃO marque este pilar como "problema" por causa do prazo, NÃO escreva "ERRO GRAVE" sobre o prazo e NÃO coloque o prazo em pontos_criticos nem o use para decidir status_geral — julgue este pilar só pelos demais dados (endereço/CEP, finalidade, valor, datas ausentes ou ilegíveis).
 
 3. conferencia_cotacao_status / conferencia_cotacao_resumo — o resumo deste pilar SEMPRE precisa trazer, de forma explícita, o nome do locador, o nome de TODOS os locatários e o endereço (com CEP) do imóvel identificados no contrato — em todo relatório, tenha cotação anexada ou não. Isso é pra quem está lendo poder comparar na hora com a cotação que tem em mãos, sem precisar procurar essa informação em outro lugar do relatório.
 
@@ -357,22 +357,52 @@ export function mesesEntre(inicio: string, fim: string): number | null {
   return (f.a - i.a) * 12 + (f.m - i.m) + (f.d - i.d + 1) / 30;
 }
 
+function formatarMeses(meses: number): string {
+  const inteiro = Math.round(meses);
+  if (Math.abs(meses - inteiro) <= 0.1) return `${inteiro} ${inteiro === 1 ? "mês" : "meses"}`;
+  return `cerca de ${(Math.round(meses * 10) / 10).toString().replace(".", ",")} meses`;
+}
+
 // A conta do prazo era feita pela IA e dava falso positivo (escrevia "ERRO
 // GRAVE" e depois admitia que batia, reprovando o contrato mesmo assim).
-// Agora a IA só extrai prazo e datas; a conferência é feita aqui.
-function aplicarConferenciaPrazo(relatorio: RelatorioAuditoria): RelatorioAuditoria {
+// Agora a IA só extrai prazo e datas; a conferência é feita aqui e SEMPRE
+// aparece no parecer (datas + conta), batendo ou não.
+export function aplicarConferenciaPrazo(relatorio: RelatorioAuditoria): RelatorioAuditoria {
   const prazo = relatorio.prazo_declarado_meses ?? 0;
-  if (!prazo || !relatorio.vigencia_inicio || !relatorio.vigencia_fim) return relatorio;
-  const calculado = mesesEntre(relatorio.vigencia_inicio, relatorio.vigencia_fim);
-  if (calculado === null || Math.abs(calculado - prazo) <= 0.5) return relatorio;
+  const inicio = relatorio.vigencia_inicio?.trim() ?? "";
+  const fim = relatorio.vigencia_fim?.trim() ?? "";
+  const calculado = inicio && fim ? mesesEntre(inicio, fim) : null;
 
-  const meses = Math.round(calculado * 10) / 10;
-  const alerta = `Prazo declarado de ${prazo} meses não bate com a vigência informada (${relatorio.vigencia_inicio} a ${relatorio.vigencia_fim}), que corresponde a cerca de ${meses.toString().replace(".", ",")} meses.`;
-  return {
+  const comLinha = (linha: string, extra: Partial<RelatorioAuditoria> = {}): RelatorioAuditoria => ({
     ...relatorio,
+    ...extra,
+    dados_locacao_resumo: `${linha} ${relatorio.dados_locacao_resumo}`,
+  });
+  // Falta de dado para conferir rebaixa "ok" para "atencao", sem mexer num
+  // "problema" que a IA já tenha apontado por outro motivo.
+  const statusSemConferencia = relatorio.dados_locacao_status === "ok" ? "atencao" : relatorio.dados_locacao_status;
+
+  if (calculado === null) {
+    const datas = inicio || fim ? `vigência informada: ${inicio || "início não identificado"} a ${fim || "fim não identificado"}` : "datas de início e fim da vigência não identificadas";
+    const declarado = prazo ? `prazo declarado de ${prazo} meses` : "prazo em meses não declarado";
+    return comLinha(`Prazo não conferido: ${declarado}; ${datas}.`, {
+      dados_locacao_status: statusSemConferencia,
+      status_geral: relatorio.status_geral === "APROVADO" ? "APROVADO_RESSALVAS" : relatorio.status_geral,
+    });
+  }
+
+  const conta = `vigência de ${inicio} a ${fim} = ${formatarMeses(calculado)} pela contagem de calendário`;
+  if (!prazo) {
+    return comLinha(`Prazo: o contrato não declara o prazo em meses; ${conta}.`);
+  }
+  if (Math.abs(calculado - prazo) <= 0.5) {
+    return comLinha(`Prazo conferido: ${prazo} meses declarados; ${conta}. Confere.`);
+  }
+
+  const alerta = `Prazo declarado de ${prazo} meses não bate com a vigência informada: ${conta}.`;
+  return comLinha(`ERRO GRAVE: ${alerta}`, {
     dados_locacao_status: "problema",
-    dados_locacao_resumo: `ERRO GRAVE: ${alerta} ${relatorio.dados_locacao_resumo}`,
     pontos_criticos: [alerta, ...(relatorio.pontos_criticos ?? [])],
     status_geral: "REPROVADO",
-  };
+  });
 }
