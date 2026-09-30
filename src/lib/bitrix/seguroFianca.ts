@@ -50,6 +50,8 @@ import { minutosComerciaisEntre } from "./horarioComercial";
 export const ENTITY_TYPE_ID = 1042;
 export const CATEGORIA_ANALISE = 18;
 export const CATEGORIA_NEGOCIACAO = 20;
+export const CATEGORIA_RENOVACAO = 32;
+const CATEGORIAS_CONTRATACAO_NOVA = new Set([CATEGORIA_ANALISE, CATEGORIA_NEGOCIACAO]);
 
 type Etapa = { statusId: string; nome: string; semantica: "P" | "S" | "F" };
 
@@ -1508,11 +1510,22 @@ export function montarAnaliseGerencial(
 // mensal (ver /api/cron/congelar-paineis), pra não duplicar a lógica de
 // resolver empresas/usuários referenciados.
 export async function buscarAnaliseGerencialAoVivo(competencia: string): Promise<AnaliseGerencial & { totalMovimentacoes: number }> {
-  const [items, historico, defs] = await Promise.all([
+  const [todosItems, todoHistorico, defs] = await Promise.all([
     listarItensSpa(ENTITY_TYPE_ID),
     listarHistoricoEtapas(ENTITY_TYPE_ID),
     buscarDefinicaoCampos(ENTITY_TYPE_ID),
   ]);
+
+  // A SPA 1042 também tem o funil de Renovação (categoria 32, criado em
+  // 30/09/2026) -- este painel é só de contratação nova. Sem este filtro,
+  // nomeFunil() classificaria qualquer categoria != 18 como "Negociação e
+  // Contrato" e as renovações contaminariam totais, tempos e qualidade.
+  // Filtra na origem (antes de qualquer cálculo), não na tela.
+  const items = todosItems.filter((it) => CATEGORIAS_CONTRATACAO_NOVA.has(Number(it.categoryId)));
+  const idsItems = new Set(items.map((it) => Number(it.id)));
+  const historico = todoHistorico.filter(
+    (h) => idsItems.has(Number(h.OWNER_ID)) && CATEGORIAS_CONTRATACAO_NOVA.has(Number(h.CATEGORY_ID))
+  );
 
   const idsEmpresa = items.map((it) => it.companyId).filter((id): id is number => !!id);
   const idsUsuario = items
