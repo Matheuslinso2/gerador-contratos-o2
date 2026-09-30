@@ -3,11 +3,11 @@
 import { randomUUID } from "crypto";
 import { createServiceClient } from "@/lib/supabase/service";
 import { enviarEmail } from "@/lib/email";
-import { montarEmailRcp, type RcpPayload } from "@/lib/integracoes/rcp";
+import { criarCardRcp, montarEmailRcp, type RcpPayload } from "@/lib/integracoes/rcp";
 import { registrarNaPlanilhaRcp } from "@/lib/integracoes/planilhaRcp";
 import { EMAIL_COMERCIAL_O2 } from "@/lib/integracoes/emailO2";
 
-export type EstadoEnvioRcp = { ok: boolean; erro?: string } | null;
+export type EstadoEnvioRcp = { ok: boolean; erro?: string; pendente?: boolean } | null;
 
 // Produto novo, ainda sem caixa própria (ex: incendio@, fianca@) -- vai
 // direto pro comercial@ até o Matheus decidir se cria uma dedicada.
@@ -17,7 +17,7 @@ function campo(formData: FormData, name: string): string {
   return String(formData.get(name) ?? "").trim();
 }
 
-async function auditar(payload: RcpPayload, status: string, erro?: string) {
+async function auditar(payload: RcpPayload, status: string, itemId?: number, erro?: string) {
   try {
     const supabase = createServiceClient();
     await supabase.from("integracao_formularios_log").upsert(
@@ -26,8 +26,8 @@ async function auditar(payload: RcpPayload, status: string, erro?: string) {
         resposta_id: payload.responseId,
         payload,
         status,
-        bitrix_entity_type_id: null,
-        bitrix_item_id: null,
+        bitrix_entity_type_id: 1046,
+        bitrix_item_id: itemId ?? null,
         erro: erro ?? null,
         atualizado_em: new Date().toISOString(),
       },
@@ -59,35 +59,37 @@ export async function enviarFichaRcp(_estadoAnterior: EstadoEnvioRcp, formData: 
     return { ok: false, erro: "Preencha a atividade da empresa e o endereço." };
   }
 
-  await auditar(payload, "processando");
-
-  let emailEnviado = true;
   try {
-    const { assunto, html } = montarEmailRcp(payload);
-    await enviarEmail({
-      para: EMAIL_DESTINO_RCP,
-      assunto,
-      html,
-      remetente: "Plataforma O2 — RCP",
-      throwSeFalhar: true,
-    });
+    await auditar(payload, "processando");
+    const supabase = createServiceClient();
+    const resultado = await criarCardRcp(payload, supabase);
+    await auditar(payload, resultado.created ? "criado" : "duplicado", resultado.item.id);
+
+    // Best-effort: o card já foi criado, uma falha aqui não deve derrubar o
+    // envio nem confundir quem preencheu a ficha.
+    try {
+      const { assunto, html } = montarEmailRcp(payload, resultado);
+      await enviarEmail({ para: EMAIL_DESTINO_RCP, assunto, html, remetente: "Plataforma O2 — RCP" });
+    } catch (erroEmail) {
+      console.warn("RCP: falha ao enviar e-mail:", erroEmail);
+    }
+
+    try {
+      await registrarNaPlanilhaRcp({ ...payload, submittedAt: new Date().toISOString(), emailEnviado: true });
+    } catch (erroPlanilha) {
+      console.warn("RCP: falha ao registrar na planilha de conferência:", erroPlanilha);
+    }
+
+    return { ok: true };
   } catch (error) {
-    emailEnviado = false;
+    // Mesmo espírito de seguro-incendio/actions.ts: o card no Bitrix não
+    // foi criado, mas o payload já está preservado em
+    // integracao_formularios_log (status "processando" logo acima) --
+    // devolve sucesso pro visitante e deixa o backfill manual pra quando o
+    // Bitrix voltar (buscar status "erro").
     const mensagem = error instanceof Error ? error.message : String(error);
-    console.error("RCP: falha ao enviar e-mail:", mensagem);
-    await auditar(payload, "erro", mensagem);
+    await auditar(payload, "erro", undefined, mensagem);
+    console.error("RCP: card no Bitrix não criado, dado preservado no Supabase para backfill:", mensagem);
+    return { ok: true, pendente: true };
   }
-
-  try {
-    await registrarNaPlanilhaRcp({ ...payload, submittedAt: new Date().toISOString(), emailEnviado });
-  } catch (error) {
-    console.warn("RCP: falha ao registrar na planilha de conferência:", error);
-  }
-
-  if (emailEnviado) await auditar(payload, "enviado");
-
-  // Mesmo se o e-mail falhar, o payload já está preservado em
-  // integracao_formularios_log (status "erro") pra reenvio manual — não
-  // trava a experiência de quem preencheu.
-  return { ok: true };
 }
