@@ -10,6 +10,11 @@ import { nomeProdutoPorEntidade, gerarLinkCard } from "./entidadesCard";
 
 const DOMINIO_PORTAL = "o2seguros.bitrix24.com.br";
 
+// Fase 4 (anexos) -- bucket privado, sem política pública: escrita só via
+// signed upload URL (anexo-upload-url/route.ts), leitura só via service
+// role aqui mesmo na hora de montar o e-mail (enviar-email/route.ts).
+export const BUCKET_ANEXOS = "bitrix-email-anexos";
+
 // Valida que quem chamou realmente tem uma sessão válida do Bitrix pra esse
 // portal -- ambas as rotas rodam sem cookie de sessão da Plataforma O2
 // (dentro do iframe do placement), então sem isso qualquer um poderia ler

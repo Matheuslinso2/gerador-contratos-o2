@@ -120,6 +120,7 @@ export async function POST(request: NextRequest) {
   <meta charset="utf-8" />
   <title>E-mail do card — O2 Seguros</title>
   <script src="https://api.bitrix24.com/api/v1/"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <style>
     body { font-family: 'Poppins', system-ui, sans-serif; margin: 0; padding: 20px; color: #01192e; background: #fff; }
     #status { font-size: 13px; color: #8d8683; margin-bottom: 12px; }
@@ -143,6 +144,12 @@ export async function POST(request: NextRequest) {
     #preview-card .rotulo { color: #8d8683; width: 90px; flex-shrink: 0; }
     #preview-card .valor { color: #01192e; font-weight: 600; }
     #preview-card .aviso { color: #8d8683; font-style: italic; }
+    #lista-anexos { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+    .anexo-item { display: flex; align-items: center; justify-content: space-between; background: #f8f8f7; border-radius: 6px; padding: 6px 10px; font-size: 12px; color: #01192e; }
+    .anexo-item .remover { color: #c0392b; cursor: pointer; font-weight: 700; margin-left: 10px; }
+    .anexo-item.enviando { color: #8d8683; font-style: italic; }
+    #btn-anexar { background: #fff; color: #01192e; border: 1px solid #d9d9d9; border-radius: 999px; padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer; margin-top: 8px; }
+    #btn-anexar:disabled { opacity: 0.6; cursor: default; }
   </style>
 </head>
 <body>
@@ -166,6 +173,10 @@ export async function POST(request: NextRequest) {
     </div>
     <div id="corpo" contenteditable="true" role="textbox" aria-multiline="true"></div>
 
+    <div id="lista-anexos"></div>
+    <button id="btn-anexar" type="button">📎 Anexar arquivo (até 15 MB)</button>
+    <input id="input-anexo" type="file" style="display:none;" />
+
     <button class="enviar" id="botao-enviar" type="submit">Enviar</button>
     <div id="mensagem"></div>
   </form>
@@ -173,6 +184,18 @@ export async function POST(request: NextRequest) {
   <script>
     var itemId = ${JSON.stringify(itemIdDoPost)};
     var entityTypeId = ${JSON.stringify(entityTypeIdDoPost)};
+
+    // Anexos sobem direto pro Supabase Storage a partir daqui (ver
+    // anexo-upload-url/route.ts) -- contorna o limite de 4,5MB de corpo de
+    // requisição do Vercel, que travaria um PDF/foto um pouco maior se
+    // fosse mandado embutido no POST pra nossa própria função.
+    var TAMANHO_MAXIMO_ANEXO = 15 * 1024 * 1024;
+    var BUCKET_ANEXOS = "bitrix-email-anexos";
+    var supabaseClient = window.supabase.createClient(
+      ${JSON.stringify(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "")},
+      ${JSON.stringify(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "")}
+    );
+    var anexosConcluidos = [];
 
     function mostrarStatus(texto) {
       document.getElementById("status").textContent = texto;
@@ -231,6 +254,93 @@ export async function POST(request: NextRequest) {
       });
     });
 
+    function renderizarAnexos() {
+      var lista = document.getElementById("lista-anexos");
+      lista.innerHTML = "";
+      anexosConcluidos.forEach(function (anexo, indice) {
+        var item = document.createElement("div");
+        item.className = "anexo-item";
+        var nomeSpan = document.createElement("span");
+        nomeSpan.textContent = "📄 " + anexo.nome;
+        var remover = document.createElement("span");
+        remover.className = "remover";
+        remover.textContent = "remover";
+        remover.addEventListener("click", function () {
+          anexosConcluidos.splice(indice, 1);
+          renderizarAnexos();
+        });
+        item.appendChild(nomeSpan);
+        item.appendChild(remover);
+        lista.appendChild(item);
+      });
+    }
+
+    function mostrarAnexoEnviando(nome) {
+      var lista = document.getElementById("lista-anexos");
+      var item = document.createElement("div");
+      item.className = "anexo-item enviando";
+      item.textContent = "Enviando " + nome + "…";
+      lista.appendChild(item);
+      return item;
+    }
+
+    document.getElementById("btn-anexar").addEventListener("click", function () {
+      document.getElementById("input-anexo").click();
+    });
+
+    document.getElementById("input-anexo").addEventListener("change", function (evento) {
+      var arquivo = evento.target.files && evento.target.files[0];
+      evento.target.value = "";
+      if (!arquivo) return;
+
+      var mensagem = document.getElementById("mensagem");
+      mensagem.className = "";
+      mensagem.textContent = "";
+
+      if (arquivo.size > TAMANHO_MAXIMO_ANEXO) {
+        mensagem.className = "erro";
+        mensagem.textContent = "Arquivo maior que 15 MB.";
+        return;
+      }
+
+      var itemEnviando = mostrarAnexoEnviando(arquivo.name);
+      var botaoAnexar = document.getElementById("btn-anexar");
+      botaoAnexar.disabled = true;
+
+      var auth = BX24.getAuth();
+      fetch("/bitrix-app/anexo-upload-url", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          authId: auth && auth.access_token,
+          entityTypeId: entityTypeId,
+          itemId: Number(itemId),
+          nomeArquivo: arquivo.name,
+          tamanho: arquivo.size,
+        }),
+      })
+        .then(function (resp) { return resp.json(); })
+        .then(function (resultado) {
+          if (!resultado.ok) throw new Error(resultado.erro || "Falha ao preparar envio do anexo.");
+          return supabaseClient.storage.from(BUCKET_ANEXOS).uploadToSignedUrl(resultado.caminho, resultado.token, arquivo).then(function (up) {
+            if (up.error) throw up.error;
+            anexosConcluidos.push({ caminho: resultado.caminho, nome: arquivo.name });
+          });
+        })
+        .then(function () {
+          itemEnviando.remove();
+          renderizarAnexos();
+        })
+        .catch(function (erro) {
+          itemEnviando.remove();
+          mensagem.className = "erro";
+          mensagem.textContent = "Falha ao anexar \\"" + arquivo.name + "\\": " + (erro && erro.message ? erro.message : "tente de novo.");
+        })
+        .finally(function () {
+          botaoAnexar.disabled = false;
+        });
+    });
+
     try {
       BX24.init(function () {
         var info = BX24.placement.info();
@@ -268,6 +378,7 @@ export async function POST(request: NextRequest) {
               para: document.getElementById("para").value,
               assunto: document.getElementById("assunto").value,
               corpo: corpoEl.innerHTML,
+              anexos: anexosConcluidos,
             }),
           })
             .then(function (resp) { return resp.json().then(function (dados) { return { ok: resp.ok, dados: dados }; }); })
@@ -278,6 +389,8 @@ export async function POST(request: NextRequest) {
                 mensagem.textContent = "E-mail enviado.";
                 document.getElementById("form-email").reset();
                 corpoEl.innerHTML = "";
+                anexosConcluidos = [];
+                renderizarAnexos();
               } else {
                 mensagem.className = "erro";
                 mensagem.textContent = (resultado.dados && resultado.dados.erro) || "Falha ao enviar.";

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { enviarEmail } from "@/lib/email";
+import { enviarEmail, type AnexoEmail } from "@/lib/email";
 import { ccPorEntidade, gerarEnderecoRespostaCard } from "@/lib/bitrix/entidadesCard";
 import { registrarAtividadeEmail } from "@/lib/bitrix/atividades";
-import { tokenBitrixValido, buscarInfoCardParaEmail } from "@/lib/bitrix/emailNoCard";
+import { tokenBitrixValido, buscarInfoCardParaEmail, BUCKET_ANEXOS } from "@/lib/bitrix/emailNoCard";
+import { createServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
 
@@ -110,6 +111,7 @@ export async function POST(request: NextRequest) {
     para?: string;
     assunto?: string;
     corpo?: string;
+    anexos?: { caminho: string; nome: string }[];
   };
 
   try {
@@ -118,7 +120,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, erro: "Corpo da requisição inválido." }, { status: 400 });
   }
 
-  const { authId, entityTypeId, itemId, para, assunto, corpo } = body;
+  const { authId, entityTypeId, itemId, para, assunto, corpo, anexos: anexosRecebidos } = body;
 
   if (!authId || !(await tokenBitrixValido(authId))) {
     return NextResponse.json({ ok: false, erro: "Sessão do Bitrix inválida ou expirada. Recarregue a aba e tente de novo." }, { status: 401 });
@@ -154,12 +156,35 @@ export async function POST(request: NextRequest) {
 
   const html = montarHtmlEmailCard({ corpoHtml: sanitizarHtmlSimples(corpo), badge, blocoInfo });
 
+  // Anexos sobem direto pro Storage a partir do navegador (ver
+  // anexo-upload-url/route.ts) -- aqui só baixamos de volta (chamada de
+  // servidor pro Storage, não passa pelo limite de 4,5MB do Vercel) pra
+  // montar o e-mail de verdade. Ao contrário do bloco de contexto do card
+  // (best-effort), uma falha aqui bloqueia o envio: o colaborador escolheu
+  // esse anexo de propósito, mandar sem ele silenciosamente seria enganoso.
+  const caminhosAnexos: string[] = [];
+  let anexos: AnexoEmail[] | undefined;
+  if (anexosRecebidos?.length) {
+    const supabase = createServiceClient();
+    anexos = [];
+    for (const anexo of anexosRecebidos) {
+      const { data, error } = await supabase.storage.from(BUCKET_ANEXOS).download(anexo.caminho);
+      if (error || !data) {
+        console.error("Falha ao baixar anexo do Storage pro envio:", anexo.caminho, error);
+        return NextResponse.json({ ok: false, erro: `Falha ao processar o anexo "${anexo.nome}". Tente anexar de novo.` }, { status: 502 });
+      }
+      anexos.push({ nome: anexo.nome, conteudo: Buffer.from(await data.arrayBuffer()), tipo: data.type || undefined });
+      caminhosAnexos.push(anexo.caminho);
+    }
+  }
+
   try {
     await enviarEmail({
       para: para.trim(),
       cc: [cc],
       assunto: assunto.trim(),
       html,
+      anexos,
       replyTo,
       remetente: "O2 Seguros",
       throwSeFalhar: true,
@@ -167,6 +192,19 @@ export async function POST(request: NextRequest) {
   } catch (erro) {
     console.error("Falha ao enviar e-mail pelo card:", erro);
     return NextResponse.json({ ok: false, erro: "Falha ao enviar o e-mail. Tente de novo em instantes." }, { status: 502 });
+  }
+
+  // Arquivo temporário só existia pra sustentar este envio -- limpeza
+  // best-effort (aguarda terminar antes da função serverless encerrar, mas
+  // não afeta a resposta se falhar: o e-mail já saiu de qualquer forma, e
+  // um arquivo órfão no Storage não é crítico o bastante pra travar a
+  // resposta de sucesso por causa disso).
+  if (caminhosAnexos.length) {
+    try {
+      await createServiceClient().storage.from(BUCKET_ANEXOS).remove(caminhosAnexos);
+    } catch (erro) {
+      console.warn("Falha ao limpar anexo temporário do Storage:", erro);
+    }
   }
 
   try {
