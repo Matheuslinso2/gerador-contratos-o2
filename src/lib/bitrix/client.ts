@@ -130,6 +130,17 @@ export async function listarItensSpa(entityTypeId: number): Promise<BitrixItemRa
   return buscarTodasPaginas<BitrixItemRaw>("crm.item.list", { entityTypeId, select: ["*", "UF_*"] });
 }
 
+// Só os cards de um funil (categoria) da SPA -- usado por painéis que
+// cobrem um único funil (ex: Renovação do Seguro Fiança), pra não baixar
+// a SPA inteira à toa.
+export async function listarItensSpaCategoria(entityTypeId: number, categoryId: number): Promise<BitrixItemRaw[]> {
+  return buscarTodasPaginas<BitrixItemRaw>("crm.item.list", {
+    entityTypeId,
+    select: ["*", "UF_*"],
+    "filter[categoryId]": categoryId,
+  });
+}
+
 // crm.item.get é universal (Lead/Deal/qualquer SPA, mesmo entityTypeId
 // numérico já usado em todo o "E-mail no card") -- usado aqui pra montar o
 // bloco de contexto ("sobre este card") dentro do e-mail, sem precisar de
@@ -143,6 +154,17 @@ export async function buscarItem(entityTypeId: number, id: number): Promise<Bitr
 
 export async function listarHistoricoEtapas(entityTypeId: number): Promise<BitrixStageHistoryEvent[]> {
   return buscarTodasPaginas<BitrixStageHistoryEvent>("crm.stagehistory.list", { entityTypeId, "order[id]": "asc" });
+}
+
+export async function listarHistoricoEtapasCategoria(
+  entityTypeId: number,
+  categoryId: number
+): Promise<BitrixStageHistoryEvent[]> {
+  return buscarTodasPaginas<BitrixStageHistoryEvent>("crm.stagehistory.list", {
+    entityTypeId,
+    "order[id]": "asc",
+    "filter[CATEGORY_ID]": categoryId,
+  });
 }
 
 export async function buscarEmpresas(ids: number[]): Promise<Record<number, string>> {

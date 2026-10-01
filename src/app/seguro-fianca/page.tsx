@@ -30,6 +30,12 @@ import {
 } from "@/lib/bitrix/seguroFianca";
 import { montarClassificacaoImobiliarias } from "@/lib/bitrix/classificacaoImobiliarias";
 import {
+  buscarPainelRenovacaoAoVivo,
+  painelRenovacaoVazio,
+  type PainelRenovacao,
+} from "@/lib/bitrix/renovacaoFianca";
+import RenovacaoAba from "./RenovacaoAba";
+import {
   classificarGrupoPrioridade,
   ROTULO_GRUPO_PRIORIDADE,
   ACAO_GRUPO_PRIORIDADE,
@@ -128,6 +134,9 @@ const ABAS: DefinicaoAba[] = [
   { id: "seguradora", label: "Seguradora" },
   { id: "imobiliaria", label: "Imobiliária" },
   { id: "equipe", label: "Equipe" },
+  // Funil de Renovação (categoria 32, 01/10/2026) -- só renovação; as
+  // outras abas continuam só com contratação nova.
+  { id: "renovacao", label: "Renovação" },
 ];
 
 function fmtDuracao(minutosTotais: number): string {
@@ -231,6 +240,46 @@ function normalizarSnapshot(
       naoAdministrados: payload.qualidade.naoAdministrados ?? 0,
     },
   };
+}
+
+// Aba "Renovação" -- mesma lógica mensal do resto da página: mês atual ao
+// vivo + upsert do retrato; mês fechado lê o retrato congelado (ou zera se
+// nunca houve). Falha aqui não derruba as outras abas.
+async function carregarRenovacao(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  competencia: string,
+  ehCompetenciaAtual: boolean,
+): Promise<{ dados: PainelRenovacao; erro: string | null }> {
+  const lerRetrato = async () => {
+    const { data } = await supabase
+      .from("seguro_fianca_renovacao_snapshots")
+      .select("payload")
+      .eq("competencia", competencia)
+      .maybeSingle();
+    return (data?.payload as PainelRenovacao | undefined) ?? null;
+  };
+  if (!ehCompetenciaAtual) {
+    return { dados: (await lerRetrato()) ?? painelRenovacaoVazio(competencia), erro: null };
+  }
+  try {
+    const dados = await comLimiteDeTempo(
+      buscarPainelRenovacaoAoVivo(competencia),
+      LIMITE_TEMPO_AO_VIVO_MS,
+    );
+    const { error } = await supabase
+      .from("seguro_fianca_renovacao_snapshots")
+      .upsert(
+        { competencia, atualizado_em: new Date().toISOString(), payload: dados },
+        { onConflict: "competencia" },
+      );
+    if (error) console.error("Falha ao salvar snapshot da Renovação:", error);
+    return { dados, erro: null };
+  } catch (e) {
+    return {
+      dados: (await lerRetrato()) ?? painelRenovacaoVazio(competencia),
+      erro: e instanceof Error ? e.message : "Falha ao buscar a Renovação no Bitrix.",
+    };
+  }
 }
 
 function construirSegmentosFunil(
@@ -596,6 +645,13 @@ export default async function SeguroFiancaPage({
   } = await supabase.auth.getUser();
   if (!isAdmin(user?.email) && !isColaboradorO2(user?.email)) redirect("/");
 
+  // Começa já, em paralelo com a busca principal (não soma tempo de página).
+  const renovacaoPromessa = carregarRenovacao(
+    supabase,
+    competencia,
+    ehCompetenciaAtual,
+  );
+
   let gerencial: (AnaliseGerencial & { totalMovimentacoes: number }) | null =
     null;
   let atualizadoEm: string | null = null;
@@ -702,6 +758,7 @@ export default async function SeguroFiancaPage({
   // 16/09/2026) -- status vigente do par de meses fechado mais recente, não
   // uma métrica por competência selecionada (ver classificacaoImobiliarias.ts).
   const classificacao = await montarClassificacaoImobiliarias(supabase);
+  const renovacao = await renovacaoPromessa;
 
   return (
     <>
@@ -3758,6 +3815,36 @@ export default async function SeguroFiancaPage({
                     );
                   })()}
                 </section>
+              </AbaSlot>
+
+              <AbaSlot aba="renovacao">
+                {renovacao.erro && (
+                  <div
+                    className={
+                      styles.stampPanel + " " + styles.stampPanelWarning
+                    }
+                    style={{ marginBottom: 24 }}
+                  >
+                    <div
+                      className={
+                        styles.stampBadge + " " + styles.stampBadgeWarning
+                      }
+                    >
+                      ERRO
+                    </div>
+                    <div className={styles.stampList}>
+                      <div>
+                        Não consegui buscar a Renovação no Bitrix agora:{" "}
+                        {renovacao.erro} — mostrando o último retrato salvo, se
+                        existir.
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <RenovacaoAba
+                  dados={renovacao.dados}
+                  competencia={competencia}
+                />
               </AbaSlot>
 
               <footer className={styles.footer}>

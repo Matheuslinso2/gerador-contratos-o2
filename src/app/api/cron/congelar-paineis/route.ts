@@ -4,6 +4,7 @@ import { buscarAnaliseGerencialAoVivo } from "@/lib/bitrix/seguroFianca";
 import { buscarKpisComercialAoVivo } from "@/lib/bitrix/comercial";
 import { montarPainelCapitalizacao } from "@/lib/capitalizacao/painel";
 import { montarPainelSeguroAuto } from "@/lib/seguroAuto/painel";
+import { buscarPainelRenovacaoAoVivo } from "@/lib/bitrix/renovacaoFianca";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -44,7 +45,7 @@ export async function GET(request: NextRequest) {
   // pode impedir o congelamento do Seguro Fiança (e vice-versa). Ambos usam
   // o mesmo CRON_SECRET e a mesma janela de execução (dia 1º às 00h de
   // Brasília, ver vercel.json).
-  const [fianca, comercial, capitalizacao, seguroAuto] = await Promise.all([
+  const [fianca, comercial, capitalizacao, seguroAuto, renovacao] = await Promise.all([
     (async () => {
       try {
         const gerencial = await buscarAnaliseGerencialAoVivo(competencia);
@@ -95,11 +96,24 @@ export async function GET(request: NextRequest) {
         return { ok: false, erro: erro instanceof Error ? erro.message : String(erro) };
       }
     })(),
+    // Aba "Renovação" do painel Seguro Fiança (funil categoria 32).
+    (async () => {
+      try {
+        const dados = await buscarPainelRenovacaoAoVivo(competencia);
+        const { error } = await supabase
+          .from("seguro_fianca_renovacao_snapshots")
+          .upsert({ competencia, atualizado_em: new Date().toISOString(), payload: dados }, { onConflict: "competencia" });
+        if (error) return { ok: false, erro: error.message };
+        return { ok: true, total: dados.kpis.total };
+      } catch (erro) {
+        return { ok: false, erro: erro instanceof Error ? erro.message : String(erro) };
+      }
+    })(),
   ]);
 
-  const ok = fianca.ok && comercial.ok && capitalizacao.ok && seguroAuto.ok;
+  const ok = fianca.ok && comercial.ok && capitalizacao.ok && seguroAuto.ok && renovacao.ok;
   return NextResponse.json(
-    { ok, competencia, seguroFianca: fianca, comercial, capitalizacao, seguroAuto },
+    { ok, competencia, seguroFianca: fianca, comercial, capitalizacao, seguroAuto, renovacao },
     { status: ok ? 200 : 500 }
   );
 }
