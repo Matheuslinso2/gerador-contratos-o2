@@ -8,7 +8,6 @@ import { IconShield } from "@/components/icons";
 import SeletorCompetencia from "./SeletorCompetencia";
 import AtualizarAgora from "./AtualizarAgora";
 import ImobiliariasTabela from "./ImobiliariasTabela";
-import DetalheImobiliariaTabela from "./DetalheImobiliariaTabela";
 import { AbasProvider, AbaSlot, type DefinicaoAba } from "./AbasPainel";
 import styles from "./seguro-fianca.module.css";
 import ExportarQuadro, {
@@ -2821,8 +2820,11 @@ export default async function SeguroFiancaPage({
                         total: im.total,
                         em_andamento: im.emAndamento,
                         recusados: im.recusados,
+                        pct_recusados: im.total > 0 ? (im.recusados / im.total) * 100 : 0,
                         negativados: im.perdidos,
+                        pct_negativados: im.total > 0 ? (im.perdidos / im.total) * 100 : 0,
                         convertidos: im.convertidos,
+                        pct_convertidos: im.total > 0 ? (im.convertidos / im.total) * 100 : 0,
                         ticket_medio_premio: im.premioCotado,
                         comissao_media_cotada: im.comissaoCotada,
                         premio_efetivado: im.premioEfetivado,
@@ -2934,185 +2936,53 @@ export default async function SeguroFiancaPage({
                   );
                 })()}
 
-                {(() => {
-                  // Item 1 (09/09/2026): detalhamento por imobiliária, com %
-                  // sobre o total de cotações DAQUELA imobiliária (base =
-                  // im.total, novidades -- leitura mais direta de "cotações
-                  // realizadas"; diferente da base "todo o ativo do mês" usada
-                  // no quadro geral "Análise, recusa e negativação" acima).
-                  const linhas = gerencial.topImobiliarias
-                    .filter((im) => im.total > 0)
-                    .sort((a, b) => b.total - a.total);
-                  return (
-                    <section
-                      id="quadro-fianca-detalhe-imobiliaria"
-                      className={styles.section}
-                    >
-                      <div className={styles.sectionHead}>
-                        <h2>Detalhamento por imobiliária</h2>
-                        <div className={styles.note}>
-                          % sobre o total de cotações de cada imobiliária no mês
-                        </div>
-                        <ExportarQuadro
-                          quadroId="quadro-fianca-detalhe-imobiliaria"
-                          corFundo="#f7f8fa"
-                          nomeArquivo={`seguro-fianca-detalhe-imobiliaria-${competencia}`}
-                          dadosExcel={linhas.map((im) => ({
-                            imobiliaria: im.nome,
-                            cotacoes: im.total,
-                            recusados: im.recusados,
-                            pct_recusados:
-                              im.total > 0
-                                ? (im.recusados / im.total) * 100
-                                : 0,
-                            negativados: im.perdidos,
-                            pct_negativados:
-                              im.total > 0 ? (im.perdidos / im.total) * 100 : 0,
-                            contratados: im.convertidos,
-                            pct_contratados:
-                              im.total > 0
-                                ? (im.convertidos / im.total) * 100
-                                : 0,
-                            em_andamento: im.emAndamento,
-                          }))}
-                          nomeAbaExcel="Detalhe imobiliária"
-                        />
-                      </div>
-                      <div className={styles.panel}>
-                        <DetalheImobiliariaTabela linhas={linhas} />
-                      </div>
-                    </section>
-                  );
-                })()}
-
-                {(() => {
-                  // Itens 2/3 (09/09/2026): taxa média (menor entre
-                  // seguradoras cotadas POR CARD, depois média entre os
-                  // cards), por imobiliária -- geral e só negativados.
-                  const linhas = gerencial.topImobiliarias.filter(
-                    (im) =>
-                      im.menorTaxaMediaGeral !== null ||
-                      im.menorTaxaMediaNegativados !== null ||
-                      im.taxaMediaConvertidos !== null,
-                  );
-                  return (
-                    <section
-                      id="quadro-fianca-taxa-imobiliaria"
-                      className={styles.section}
-                    >
-                      <div className={styles.sectionHead}>
-                        <h2>
-                          Taxa de locação por imobiliária (menor entre
-                          seguradoras)
-                        </h2>
-                        <div className={styles.note}>
-                          por card, pega a menor taxa entre as seguradoras que
-                          cotaram; depois tira a média entre os cards
-                        </div>
-                        <ExportarQuadro
-                          quadroId="quadro-fianca-taxa-imobiliaria"
-                          corFundo="#f7f8fa"
-                          nomeArquivo={`seguro-fianca-taxa-imobiliaria-${competencia}`}
-                          dadosExcel={[
-                            {
-                              indicador:
-                                "Menor Taxa do Mês (negativados + contratados)",
-                              valor: gerencial.aba2Taxas.menor ?? "",
-                            },
-                            {
-                              indicador:
-                                "Taxa Média do Mês (negativados + contratados)",
-                              valor: gerencial.aba2Taxas.media ?? "",
-                            },
-                            ...linhas.map((im) => ({
-                              imobiliaria: im.nome,
-                              menor_taxa: im.menorTaxaGeral ?? "",
-                              taxa_media_geral: im.menorTaxaMediaGeral ?? "",
-                              taxa_media_negativados:
-                                im.menorTaxaMediaNegativados ?? "",
-                              taxa_media_convertidos:
-                                im.taxaMediaConvertidos ?? "",
-                            })),
-                          ]}
-                          nomeAbaExcel="Taxa por imobiliária"
-                        />
-                      </div>
-                      <div className={styles.kpis} style={{ marginBottom: 16 }}>
-                        <Kpi
-                          label="Menor Taxa do Mês"
-                          value={fmtPct(gerencial.aba2Taxas.menor)}
-                          sub="mínimo absoluto — negativados + contratados"
-                        />
-                        <Kpi
-                          label="Taxa Média do Mês"
-                          value={fmtPct(gerencial.aba2Taxas.media)}
-                          sub={`média entre ${gerencial.aba2Taxas.n} card(s) — negativados + contratados`}
-                        />
-                      </div>
-                      <div className={styles.panel}>
-                        <div className={styles.tableWrap}>
-                          <table
-                            className={`${styles.data} ${styles.compacta}`}
-                          >
-                            <thead>
-                              <tr>
-                                <th>Imobiliária</th>
-                                <th className={styles.numCol}>Menor Taxa</th>
-                                <th className={styles.numCol}>
-                                  Taxa Média (geral)
-                                </th>
-                                <th className={styles.numCol}>
-                                  Taxa Média (negativados)
-                                </th>
-                                <th className={styles.numCol}>
-                                  Taxa Média (convertidos)
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {linhas.map((im) => (
-                                <tr key={im.nome}>
-                                  <td>{im.nome}</td>
-                                  <td
-                                    className={`${styles.numCol} ${styles.num}`}
-                                    style={{ fontWeight: 700 }}
-                                  >
-                                    {fmtPct(im.menorTaxaGeral)}
-                                  </td>
-                                  <td
-                                    className={`${styles.numCol} ${styles.num}`}
-                                  >
-                                    {fmtPct(im.menorTaxaMediaGeral)}
-                                  </td>
-                                  <td
-                                    className={`${styles.numCol} ${styles.num}`}
-                                  >
-                                    {fmtPct(im.menorTaxaMediaNegativados)}
-                                  </td>
-                                  <td
-                                    className={`${styles.numCol} ${styles.num}`}
-                                  >
-                                    {fmtPct(im.taxaMediaConvertidos)}
-                                  </td>
-                                </tr>
-                              ))}
-                              {linhas.length === 0 && (
-                                <tr>
-                                  <td
-                                    colSpan={5}
-                                    style={{ color: "var(--ink-faint)" }}
-                                  >
-                                    Nenhuma taxa cotada neste período.
-                                  </td>
-                                </tr>
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    </section>
-                  );
-                })()}
+                {/* Taxa de locação do mês (Itens 2/3, 09/09/2026). Revisão de
+                    duplicidade da aba Imobiliária (Matheus, 01/10/2026):
+                    ficaram só os 2 indicadores do mês -- a tabela por
+                    imobiliária (menor taxa / média geral / negativados /
+                    convertidos) saiu. */}
+                <section
+                  id="quadro-fianca-taxa-imobiliaria"
+                  className={styles.section}
+                >
+                  <div className={styles.sectionHead}>
+                    <h2>Taxa de locação do mês (menor entre seguradoras)</h2>
+                    <div className={styles.note}>
+                      por card, pega a menor taxa entre as seguradoras que
+                      cotaram — só negativados + contratados
+                    </div>
+                    <ExportarQuadro
+                      quadroId="quadro-fianca-taxa-imobiliaria"
+                      corFundo="#f7f8fa"
+                      nomeArquivo={`seguro-fianca-taxa-mes-${competencia}`}
+                      dadosExcel={[
+                        {
+                          indicador:
+                            "Menor Taxa do Mês (negativados + contratados)",
+                          valor: gerencial.aba2Taxas.menor ?? "",
+                        },
+                        {
+                          indicador:
+                            "Taxa Média do Mês (negativados + contratados)",
+                          valor: gerencial.aba2Taxas.media ?? "",
+                        },
+                      ]}
+                      nomeAbaExcel="Taxa do mês"
+                    />
+                  </div>
+                  <div className={styles.kpis}>
+                    <Kpi
+                      label="Menor Taxa do Mês"
+                      value={fmtPct(gerencial.aba2Taxas.menor)}
+                      sub="mínimo absoluto — negativados + contratados"
+                    />
+                    <Kpi
+                      label="Taxa Média do Mês"
+                      value={fmtPct(gerencial.aba2Taxas.media)}
+                      sub={`média entre ${gerencial.aba2Taxas.n} card(s) — negativados + contratados`}
+                    />
+                  </div>
+                </section>
 
                 {(() => {
                   // Item 4 (09/09/2026): clientes novos = imobiliária cuja 1ª
@@ -3494,65 +3364,6 @@ export default async function SeguroFiancaPage({
                                 <li key={nome}>{nome}</li>
                               ))}
                             </ul>
-                          )}
-                        </div>
-                      </div>
-                    </section>
-                  );
-                })()}
-
-                {(() => {
-                  // Aba 3 (09/09/2026): ranking de quem mais contratou no mês.
-                  // "Não Administrada" não compete em rankings/comparativos
-                  // (não é uma imobiliária de verdade) -- só entra como linha
-                  // própria nas tabelas informativas (pedido do Matheus).
-                  const linhas = gerencial.topImobiliarias
-                    .filter(
-                      (im) =>
-                        im.convertidos > 0 && im.nome !== NOME_NAO_ADMINISTRADA,
-                    )
-                    .sort((a, b) => b.convertidos - a.convertidos);
-                  return (
-                    <section
-                      id="quadro-fianca-ranking-contratacoes"
-                      className={styles.section}
-                    >
-                      <div className={styles.sectionHead}>
-                        <h2>Ranking de contratações no mês</h2>
-                        <div className={styles.note}>
-                          imobiliárias que fecharam contrato, da que mais fechou
-                          pra que menos fechou
-                        </div>
-                        <ExportarQuadro
-                          quadroId="quadro-fianca-ranking-contratacoes"
-                          corFundo="#f7f8fa"
-                          nomeArquivo={`seguro-fianca-ranking-contratacoes-${competencia}`}
-                          dadosExcel={linhas.map((im) => ({
-                            imobiliaria: im.nome,
-                            contratos_fechados: im.convertidos,
-                          }))}
-                          nomeAbaExcel="Ranking contratações"
-                        />
-                      </div>
-                      <div className={styles.panel}>
-                        <div className={styles.barlist}>
-                          {linhas.map((im) => (
-                            <BarraProporcional
-                              key={im.nome}
-                              label={im.nome}
-                              value={im.convertidos}
-                              max={linhas[0]?.convertidos ?? 1}
-                            />
-                          ))}
-                          {linhas.length === 0 && (
-                            <div
-                              style={{
-                                color: "var(--ink-faint)",
-                                fontSize: 12.5,
-                              }}
-                            >
-                              Nenhum contrato fechado neste período.
-                            </div>
                           )}
                         </div>
                       </div>

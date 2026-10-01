@@ -127,6 +127,24 @@ function Tendencia({ atual, anterior }: { atual: number; anterior: number }) {
   );
 }
 
+// Contagem + % sobre as cotações da própria imobiliária na mesma célula
+// (`12 · 30%`) -- substituiu o quadro "Detalhamento por imobiliária"
+// (revisão de duplicidade da aba Imobiliária, Matheus 01/10/2026), sem
+// coluna nova. Mesma base do quadro antigo: total (novidades do mês).
+function ContagemComPct({ valor, total }: { valor: number; total: number }) {
+  return (
+    <>
+      {valor}
+      {total > 0 && (
+        <span style={{ color: "var(--ink-faint)", fontSize: 11, fontWeight: 400 }}>
+          {" · "}
+          {((valor / total) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}%
+        </span>
+      )}
+    </>
+  );
+}
+
 function Th({
   coluna,
   ordenacao,
@@ -250,13 +268,13 @@ export default function ImobiliariasTabela({
             <Th coluna="emAndamento" ordenacao={ordenacao} onClick={alternarOrdenacao} numerica title="Em Andamento">
               Andamento
             </Th>
-            <Th coluna="recusados" ordenacao={ordenacao} onClick={alternarOrdenacao} numerica title="Recusados">
+            <Th coluna="recusados" ordenacao={ordenacao} onClick={alternarOrdenacao} numerica title="Recusados — quantidade · % sobre as cotações da imobiliária no mês">
               Recus.
             </Th>
-            <Th coluna="perdidos" ordenacao={ordenacao} onClick={alternarOrdenacao} numerica title="Negativados">
+            <Th coluna="perdidos" ordenacao={ordenacao} onClick={alternarOrdenacao} numerica title="Negativados — quantidade · % sobre as cotações da imobiliária no mês">
               Neg.
             </Th>
-            <Th coluna="convertidos" ordenacao={ordenacao} onClick={alternarOrdenacao} numerica title="Convertidos">
+            <Th coluna="convertidos" ordenacao={ordenacao} onClick={alternarOrdenacao} numerica title="Convertidos — quantidade · % sobre as cotações da imobiliária no mês">
               Conv.
             </Th>
             <Th
@@ -325,9 +343,15 @@ export default function ImobiliariasTabela({
                 <Tendencia atual={i.total} anterior={totalMesAnteriorPorImobiliaria[i.nome] ?? 0} />
               </td>
               <td className={`${styles.numCol} ${styles.num}`}>{i.emAndamento}</td>
-              <td className={`${styles.numCol} ${styles.num}`}>{i.recusados}</td>
-              <td className={`${styles.numCol} ${styles.num}`}>{i.perdidos}</td>
-              <td className={`${styles.numCol} ${styles.num}`}>{i.convertidos}</td>
+              <td className={`${styles.numCol} ${styles.num}`} style={{ whiteSpace: "nowrap" }}>
+                <ContagemComPct valor={i.recusados} total={i.total} />
+              </td>
+              <td className={`${styles.numCol} ${styles.num}`} style={{ whiteSpace: "nowrap" }}>
+                <ContagemComPct valor={i.perdidos} total={i.total} />
+              </td>
+              <td className={`${styles.numCol} ${styles.num}`} style={{ whiteSpace: "nowrap" }}>
+                <ContagemComPct valor={i.convertidos} total={i.total} />
+              </td>
               <td className={styles.numCol}>
                 <BadgeClasse classe={classificacaoPorImobiliaria[i.nome]?.contratacoes ?? null} />
               </td>
