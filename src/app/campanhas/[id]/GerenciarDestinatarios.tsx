@@ -101,6 +101,24 @@ export function GerenciarDestinatarios({
     return imobiliarias.filter((i) => i.emails.length > 0 && i.nome.toLowerCase().includes(termo)).slice(0, 30);
   }, [filtro, imobiliarias]);
 
+  // Pedido do Matheus, 01/10/2026: um jeito de marcar todas as imobiliárias
+  // de uma vez em vez de uma por uma -- reaproveita alternarGrupoCampanha
+  // (ela só mexe nos ids passados, não precisa ser um grupo de verdade).
+  const imobiliariasComEmail = useMemo(() => imobiliarias.filter((i) => i.emails.length > 0), [imobiliarias]);
+  const todasSelecionadas = imobiliariasComEmail.length > 0 && imobiliariasComEmail.every((i) => idsSelecionados.has(i.id));
+
+  function alternarTodasImobiliarias(incluir: boolean) {
+    executar("todas-imobiliarias", async () => {
+      const ids = imobiliariasComEmail.map((i) => i.id);
+      await alternarGrupoCampanha(campanhaId, ids, [], incluir);
+      setIdsSelecionados((atual) => {
+        const novo = new Set(atual);
+        ids.forEach((id) => (incluir ? novo.add(id) : novo.delete(id)));
+        return novo;
+      });
+    });
+  }
+
   const grupoEstaIncluido = (g: GrupoLinha) => {
     const totalMembros = g.imobiliariaIds.length + g.contatos.length;
     return (
@@ -291,7 +309,21 @@ export function GerenciarDestinatarios({
       </div>
 
       <div className="space-y-2">
-        <label className="block text-xs font-medium text-gray-600">Adicionar imobiliária individual (complemento)</label>
+        <div className="flex items-center justify-between gap-3">
+          <label className="block text-xs font-medium text-gray-600">Adicionar imobiliária individual (complemento)</label>
+          <button
+            type="button"
+            disabled={idPendente === "todas-imobiliarias"}
+            onClick={() => alternarTodasImobiliarias(!todasSelecionadas)}
+            className={todasSelecionadas ? botaoRemover : botaoAdicionar}
+          >
+            {idPendente === "todas-imobiliarias"
+              ? "..."
+              : todasSelecionadas
+                ? "Remover todas"
+                : `Selecionar todas (${imobiliariasComEmail.length})`}
+          </button>
+        </div>
         <input
           type="text"
           value={filtro}
@@ -387,7 +419,7 @@ export function GerenciarDestinatarios({
             className="rounded-full border border-o2-navy px-5 py-2 text-sm font-medium text-o2-navy transition hover:bg-o2-navy hover:text-white"
             textoCarregando="Enviando teste..."
           >
-            Enviar e-mail de teste (marketing@)
+            Enviar e-mail de teste (marketing@ e vanessa@)
           </SubmitButton>
         </form>
 

@@ -22,8 +22,9 @@ const OFFSET_BRASILIA = "-03:00";
 
 // Pedido do Matheus, 21/09/2026: teste de campanha comercial vai pra caixa
 // do marketing (não mais pro Matheus) -- faturas/enviar segue com o seu
-// próprio endereço de modo teste.
-const EMAIL_MODO_TESTE = "marketing@o2seguros.com.br";
+// próprio endereço de modo teste. Pedido do Matheus, 01/10/2026: Vanessa
+// também recebe, pra revisar junto antes do disparo de verdade.
+const EMAILS_MODO_TESTE = ["marketing@o2seguros.com.br", "vanessa@o2seguros.com.br"];
 
 async function exigirAcessoRascunhoRPC(campanhaId: string) {
   const supabase = await createClient();
@@ -130,12 +131,12 @@ export async function enviarTesteCampanha(formData: FormData) {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
   if (!siteUrl) redirect(`/campanhas/${campanhaId}?erro=${encodeURIComponent("NEXT_PUBLIC_SITE_URL não configurada.")}`);
 
-  const unsubscribeHref = linkDescadastro(EMAIL_MODO_TESTE, siteUrl, campanhaId);
+  const unsubscribeHref = linkDescadastro(EMAILS_MODO_TESTE[0], siteUrl, campanhaId);
   const html = montarHtmlCampanha(campanhaTeste, unsubscribeHref);
 
   try {
     await enviarEmail({
-      para: EMAIL_MODO_TESTE,
+      para: EMAILS_MODO_TESTE,
       assunto: `[TESTE] ${campanhaTeste.assunto}`,
       html,
       remetente: "O2 Seguros",
@@ -146,7 +147,7 @@ export async function enviarTesteCampanha(formData: FormData) {
     redirect(`/campanhas/${campanhaId}?erro=${encodeURIComponent(erro instanceof Error ? erro.message : String(erro))}`);
   }
 
-  redirect(`/campanhas/${campanhaId}?ok=${encodeURIComponent(`E-mail de teste enviado para ${EMAIL_MODO_TESTE}.`)}`);
+  redirect(`/campanhas/${campanhaId}?ok=${encodeURIComponent(`E-mail de teste enviado para ${EMAILS_MODO_TESTE.join(" e ")}.`)}`);
 }
 
 // Dispara AGORA a seleção já salva na campanha (imobiliarias_selecionadas +

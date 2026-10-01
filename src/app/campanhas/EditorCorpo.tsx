@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { O2_CINZA_ESCURO, FONTE } from "@/lib/integracoes/emailO2";
+import { O2_NAVY, O2_LARANJA, O2_CINZA_ESCURO, O2_CINZA_MEDIO, FONTE } from "@/lib/integracoes/emailO2";
 import { uploadImagemCampanha } from "./actions";
 import { TOKEN_APELIDO } from "@/lib/campanhas/personalizacao";
 
@@ -147,6 +147,16 @@ export function EditorCorpo({ name, corpoInicialHtml }: { name: string; corpoIni
     sincronizar();
   }
 
+  // Botão comum (sem diálogo do sistema no meio, diferente do seletor de
+  // imagem/cor nativo) -- foco + seleção do navegador permanecem intactos
+  // entre o mousedown e o click, então não precisa do mesmo cuidado de
+  // capturar/restaurar Range usado em inserirImagemNoEditor.
+  function aplicarCor(cor: string) {
+    editorRef.current?.focus();
+    document.execCommand("foreColor", false, cor);
+    sincronizar();
+  }
+
   // Upload de verdade + inserção no editor -- usado tanto pelo botão
   // "Inserir imagem" quanto por colar uma imagem de verdade (ver aoColar).
   // Insere via Range explícito (não execCommand) -- ver capturarSelecaoAtual
@@ -189,6 +199,47 @@ export function EditorCorpo({ name, corpoInicialHtml }: { name: string; corpoIni
     } finally {
       setEnviandoImagem(false);
     }
+  }
+
+  // Pedido da reunião de 01/10/2026: o botão de CTA (ctaTexto/ctaHref do
+  // formulário da campanha) só aparece fixo no rodapé do e-mail, depois de
+  // todo o corpo -- não dá pra encaixar ele no meio do texto, perto do que
+  // ele se refere. Este aqui é um botão de verdade DENTRO do corpo, no
+  // lugar que o usuário escolher (não substitui o CTA do rodapé, que
+  // continua existindo como opção à parte). contentEditable=false mesmo
+  // motivo do apelido logo abaixo: evita que alguém edite só um pedaço do
+  // botão sem querer e quebre o estilo/link -- pra mudar o texto ou o
+  // link, apaga e insere de novo.
+  function inserirBotaoNoEditor() {
+    const texto = window.prompt("Texto do botão (ex: Fale com a gente):")?.trim();
+    if (!texto) return;
+    const href = window.prompt("Link do botão (ex: https://wa.me/5521999999999):")?.trim();
+    if (!href) return;
+
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.focus();
+
+    const link = document.createElement("a");
+    link.href = href;
+    link.textContent = texto;
+    link.contentEditable = "false";
+    link.style.cssText = `display:inline-block;background:${O2_LARANJA};color:#ffffff;font-family:${FONTE};font-weight:700;font-size:14px;text-decoration:none;padding:12px 28px;border-radius:999px;margin:8px 0;`;
+
+    const range = ultimaSelecaoRef.current;
+    if (range && editor.contains(range.startContainer)) {
+      range.deleteContents();
+      range.insertNode(link);
+      range.setStartAfter(link);
+      range.collapse(true);
+      const selecao = window.getSelection();
+      selecao?.removeAllRanges();
+      selecao?.addRange(range);
+      ultimaSelecaoRef.current = range.cloneRange();
+    } else {
+      editor.appendChild(link);
+    }
+    sincronizar();
   }
 
   // Espaço reservado atômico (contenteditable=false) pra ninguém editar o
@@ -283,6 +334,26 @@ export function EditorCorpo({ name, corpoInicialHtml }: { name: string; corpoIni
           S
         </button>
         <span className="mx-1 h-4 w-px bg-gray-300" />
+        {/* Pedido da reunião de 01/10/2026: cor de fonte -- cores da marca
+            O2 como presets em vez de um seletor livre (mais simples de usar
+            e já garante que fica dentro da identidade visual). */}
+        {[
+          { nome: "Padrão", cor: O2_CINZA_ESCURO },
+          { nome: "Laranja O2", cor: O2_LARANJA },
+          { nome: "Azul-marinho O2", cor: O2_NAVY },
+          { nome: "Cinza", cor: O2_CINZA_MEDIO },
+        ].map(({ nome, cor }) => (
+          <button
+            key={cor}
+            type="button"
+            title={nome}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => aplicarCor(cor)}
+            className="h-6 w-6 shrink-0 rounded-full border border-gray-300 transition hover:scale-110"
+            style={{ backgroundColor: cor }}
+          />
+        ))}
+        <span className="mx-1 h-4 w-px bg-gray-300" />
         {/* onMouseDown com preventDefault + capturarSelecaoAtual (achado
             17/09/2026): sem o preventDefault, o clique no botão rouba o
             foco do editor antes de conseguirmos ler a seleção. Guarda a
@@ -310,6 +381,18 @@ export function EditorCorpo({ name, corpoInicialHtml }: { name: string; corpoIni
             e.preventDefault();
             capturarSelecaoAtual();
           }}
+          onClick={inserirBotaoNoEditor}
+          className={botaoClass}
+          title="Insere um botão de verdade no lugar do cursor (diferente do CTA do rodapé, que é fixo)"
+        >
+          Inserir botão
+        </button>
+        <button
+          type="button"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            capturarSelecaoAtual();
+          }}
           onClick={inserirApelidoNoEditor}
           className={botaoClass}
           title="Cada imobiliária vê o próprio nome aqui (só funciona com Personalização = Usar apelido)"
@@ -327,7 +410,9 @@ export function EditorCorpo({ name, corpoInicialHtml }: { name: string; corpoIni
         onPaste={aoColar}
         className="min-h-[180px] rounded-b-lg border border-gray-300 px-3 py-2 text-sm focus:border-o2-coral focus:outline-none [&_img]:max-w-full [&_img]:rounded-lg [&_.merge-apelido]:rounded [&_.merge-apelido]:bg-orange-100 [&_.merge-apelido]:px-1 [&_.merge-apelido]:font-medium [&_.merge-apelido]:text-o2-coral"
       />
-      <p className="mt-1 text-xs text-gray-400">Escreva normalmente, dá pra colar texto formatado, deixar em negrito/sublinhado e inserir imagem.</p>
+      <p className="mt-1 text-xs text-gray-400">
+        Escreva normalmente, dá pra colar texto formatado, deixar em negrito/sublinhado, mudar a cor da fonte e inserir imagem.
+      </p>
       <input type="hidden" name={name} value={corpoHtmlValue} readOnly />
     </div>
   );
