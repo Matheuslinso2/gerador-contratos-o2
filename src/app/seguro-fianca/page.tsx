@@ -759,6 +759,18 @@ export default async function SeguroFiancaPage({
   const classificacao = await montarClassificacaoImobiliarias(supabase);
   const renovacao = await renovacaoPromessa;
 
+  // Tendência do quadro de status da aba Renovação -- mesmo raciocínio da
+  // Tendência acima, lendo o retrato de Renovação do mês anterior.
+  const { data: renovacaoAnterior } = await supabase
+    .from("seguro_fianca_renovacao_snapshots")
+    .select("payload")
+    .eq("competencia", competenciaAnterior(competencia))
+    .maybeSingle();
+  const totalRenovacaoMesAnteriorPorImobiliaria: Record<string, number> = {};
+  for (const im of (renovacaoAnterior?.payload as PainelRenovacao | undefined)?.imobiliarias ?? []) {
+    totalRenovacaoMesAnteriorPorImobiliaria[im.nome] = im.total;
+  }
+
   return (
     <>
       <AppHeader userEmail={user?.email} logoutAction={signOut} />
@@ -3655,6 +3667,10 @@ export default async function SeguroFiancaPage({
                 <RenovacaoAba
                   dados={renovacao.dados}
                   competencia={competencia}
+                  totalMesAnteriorPorImobiliaria={
+                    totalRenovacaoMesAnteriorPorImobiliaria
+                  }
+                  classificacaoPorImobiliaria={classificacao.porImobiliaria}
                 />
               </AbaSlot>
 

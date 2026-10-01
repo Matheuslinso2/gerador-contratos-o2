@@ -19,7 +19,7 @@ type LinhaImobiliaria = {
   mediaPercentualPacote: number;
 };
 
-type ClassificacaoImobiliaria = { cotacoes: ClasseImobiliaria | null; contratacoes: ClasseImobiliaria | null };
+export type ClassificacaoImobiliaria = { cotacoes: ClasseImobiliaria | null; contratacoes: ClasseImobiliaria | null };
 
 // Cores por classe operacional (estudo da Patricia, 16/09/2026) -- segue a
 // equivalência comercial que ela usou (platina/diamante/ouro/prata/cobre/
@@ -33,7 +33,7 @@ const COR_CLASSE: Record<string, { bg: string; ink: string }> = {
   "Fora de Linha": { bg: "#F1EEE3", ink: "#8C7A3E" }, // latão
 };
 
-function BadgeClasse({ classe }: { classe: ClasseImobiliaria | null }) {
+export function BadgeClasse({ classe }: { classe: ClasseImobiliaria | null }) {
   if (!classe) return <span style={{ color: "var(--ink-faint)" }}>—</span>;
   const cor = COR_CLASSE[classe.classe] ?? { bg: "#EEEEEE", ink: "#555555" };
   return (
@@ -57,7 +57,7 @@ function BadgeClasse({ classe }: { classe: ClasseImobiliaria | null }) {
 
 // Posição na hierarquia pra ordenar por classe (maior classe primeiro);
 // quem não tem classe nenhuma (nunca teve atividade) fica sempre por último.
-function posicaoHierarquia(classe: ClasseImobiliaria | null): number {
+export function posicaoHierarquia(classe: ClasseImobiliaria | null): number {
   if (!classe) return ORDEM_HIERARQUIA.length;
   const indice = ORDEM_HIERARQUIA.indexOf(classe.classe);
   return indice === -1 ? ORDEM_HIERARQUIA.length : indice;
@@ -76,7 +76,7 @@ function fmtPct(v: number): string {
   return v ? `${v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%` : "—";
 }
 
-function normalizar(s: string): string {
+export function normalizar(s: string): string {
   return s
     .trim()
     .toLowerCase()
@@ -88,7 +88,7 @@ function normalizar(s: string): string {
 // anterior ainda, entra como "alta" (mesma leitura de quem tinha 0 e passou
 // a ter cotação) -- é o comportamento esperado enquanto o painel não tem
 // mais de um mês de histórico salvo.
-function tendencia(atual: number, anterior: number): { pct: number; direcao: "up" | "down" | "flat" } {
+export function tendencia(atual: number, anterior: number): { pct: number; direcao: "up" | "down" | "flat" } {
   if (atual === anterior) return { pct: 0, direcao: "flat" };
   if (anterior === 0) return { pct: 100, direcao: "up" };
   const variacao = ((atual - anterior) / anterior) * 100;
@@ -115,7 +115,7 @@ function valorOrdenacao(
   return i[coluna];
 }
 
-function Tendencia({ atual, anterior }: { atual: number; anterior: number }) {
+export function Tendencia({ atual, anterior }: { atual: number; anterior: number }) {
   const t = tendencia(atual, anterior);
   if (t.direcao === "flat") return <span style={{ color: "var(--ink-faint)" }}>—</span>;
   const seta = t.direcao === "up" ? "▲" : "▼";
@@ -131,7 +131,7 @@ function Tendencia({ atual, anterior }: { atual: number; anterior: number }) {
 // (`12 · 30%`) -- substituiu o quadro "Detalhamento por imobiliária"
 // (revisão de duplicidade da aba Imobiliária, Matheus 01/10/2026), sem
 // coluna nova. Mesma base do quadro antigo: total (novidades do mês).
-function ContagemComPct({ valor, total }: { valor: number; total: number }) {
+export function ContagemComPct({ valor, total }: { valor: number; total: number }) {
   return (
     <>
       {valor}
@@ -145,7 +145,8 @@ function ContagemComPct({ valor, total }: { valor: number; total: number }) {
   );
 }
 
-function Th({
+// Genérico na coluna: também usado pelo quadro de status da aba Renovação.
+export function Th<C extends string>({
   coluna,
   ordenacao,
   onClick,
@@ -153,9 +154,9 @@ function Th({
   title,
   children,
 }: {
-  coluna: ColunaOrdenavel;
-  ordenacao: { coluna: ColunaOrdenavel; direcao: "asc" | "desc" } | null;
-  onClick: (coluna: ColunaOrdenavel) => void;
+  coluna: C;
+  ordenacao: { coluna: C; direcao: "asc" | "desc" } | null;
+  onClick: (coluna: C) => void;
   numerica?: boolean;
   title?: string;
   children: React.ReactNode;

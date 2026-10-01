@@ -1,6 +1,8 @@
 import styles from "./seguro-fianca.module.css";
 import ExportarQuadro from "@/components/ExportarQuadro";
 import type { EstatisticaTempoRenovacao, PainelRenovacao } from "@/lib/bitrix/renovacaoFianca";
+import RenovacaoImobiliariasTabela from "./RenovacaoImobiliariasTabela";
+import type { ClassificacaoImobiliaria } from "./ImobiliariasTabela";
 
 // Conteúdo da aba "Renovação" do painel /seguro-fianca -- só o funil de
 // Renovação (categoria 32). Os números vêm prontos de
@@ -93,7 +95,17 @@ function TabelaTempos({ titulo, sub, dados }: { titulo: string; sub: string; dad
   );
 }
 
-export default function RenovacaoAba({ dados, competencia }: { dados: PainelRenovacao; competencia: string }) {
+export default function RenovacaoAba({
+  dados,
+  competencia,
+  totalMesAnteriorPorImobiliaria,
+  classificacaoPorImobiliaria,
+}: {
+  dados: PainelRenovacao;
+  competencia: string;
+  totalMesAnteriorPorImobiliaria: Record<string, number>;
+  classificacaoPorImobiliaria: Record<string, ClassificacaoImobiliaria>;
+}) {
   const { kpis } = dados;
   const maxEtapa = Math.max(...dados.porEtapa.map((e) => e.quantidade), 1);
   const maxMotivo = Math.max(...dados.perdasPorMotivo.map((m) => m.quantidade), 1);
@@ -227,9 +239,8 @@ export default function RenovacaoAba({ dados, competencia }: { dados: PainelReno
               { indicador: "Reajuste médio — renovados (%)", valor: dados.reajuste.mediaRenovados ?? "" },
               { indicador: "Prêmio líquido renovado (R$)", valor: dados.financeiro.premioLiquidoRenovado },
               { indicador: "Comissão renovada (R$)", valor: dados.financeiro.comissaoRenovada },
-              { indicador: "Renovou na mesma seguradora", valor: dados.seguradoras.mesmaSeguradora },
-              { indicador: "Trocou de seguradora", valor: dados.seguradoras.trocouSeguradora },
-              { indicador: "Sem seguradora informada", valor: dados.seguradoras.semInformacao },
+              ...dados.seguradoras.porSeguradoraNova.map((s) => ({ indicador: `Renovados — ${s.seguradora}`, valor: s.renovados })),
+              { indicador: "Renovados sem seguradora informada", valor: dados.seguradoras.semInformacao },
             ]}
             nomeAbaExcel="Perdas e reajuste"
           />
@@ -258,19 +269,17 @@ export default function RenovacaoAba({ dados, competencia }: { dados: PainelReno
             ))}
           </div>
           <div className={styles.panel}>
-            <h3>Seguradora na renovação</h3>
-            <div className={styles.panelSub}>Seguradora anterior × Seguradora Escolhida, só renovados no mês</div>
-            <Barra label="Mesma seguradora" value={dados.seguradoras.mesmaSeguradora} max={Math.max(kpis.renovados, 1)} />
-            <Barra label="Trocou de seguradora" value={dados.seguradoras.trocouSeguradora} max={Math.max(kpis.renovados, 1)} />
-            {dados.seguradoras.semInformacao > 0 && (
-              <Barra label="Sem informação" value={dados.seguradoras.semInformacao} max={Math.max(kpis.renovados, 1)} />
-            )}
-            <div className={styles.panelSub} style={{ marginTop: 12 }}>
-              Renovados por seguradora nova
-            </div>
+            {/* A renovação é sempre na mesma seguradora da apólice: o card
+                tem uma lista só (Seguradora Escolhida) desde 01/10/2026 --
+                saiu a comparação "mesma × trocou" com Seguradora anterior. */}
+            <h3>Renovados por seguradora</h3>
+            <div className={styles.panelSub}>Seguradora Escolhida, só renovados no mês</div>
             {dados.seguradoras.porSeguradoraNova.map((s) => (
               <Barra key={s.seguradora} label={s.seguradora} value={s.renovados} max={Math.max(kpis.renovados, 1)} />
             ))}
+            {dados.seguradoras.semInformacao > 0 && (
+              <Barra label="Sem seguradora informada" value={dados.seguradoras.semInformacao} max={Math.max(kpis.renovados, 1)} />
+            )}
             {dados.seguradoras.porSeguradoraNova.length === 0 && (
               <div className={styles.panelSub}>Nenhuma renovação no mês.</div>
             )}
@@ -279,10 +288,16 @@ export default function RenovacaoAba({ dados, competencia }: { dados: PainelReno
       </section>
 
       {/* ---------- Imobiliárias ---------- */}
+      {/* Mesmo modelo do quadro "Imobiliárias — status de todos os cards" da
+          aba Imobiliária, só com o funil de Renovação (Matheus, 01/10/2026) --
+          substituiu a tabela simples "Renovações por imobiliária". */}
       <section id="quadro-renovacao-imobiliarias" className={styles.section}>
         <div className={styles.sectionHead}>
-          <h2>Renovações por imobiliária</h2>
-          <div className={styles.note}>cards do mês (novos + herdados) agrupados pela imobiliária do card</div>
+          <h2>Imobiliárias — status de todos os cards</h2>
+          <div className={styles.note}>
+            {dados.imobiliarias.length} imobiliária(s) com card de renovação no mês (novos + herdados)
+          </div>
+          <div className={styles.note}>classes = classificação da imobiliária no Fiança (estudo da Patricia)</div>
           <ExportarQuadro
             quadroId="quadro-renovacao-imobiliarias"
             corFundo="#f7f8fa"
@@ -292,51 +307,27 @@ export default function RenovacaoAba({ dados, competencia }: { dados: PainelReno
               total: im.total,
               novos: im.novos,
               em_andamento: im.emAndamento,
-              renovados: im.renovados,
               perdidos: im.perdidos,
+              pct_perdidos: im.total > 0 ? (im.perdidos / im.total) * 100 : 0,
+              renovados: im.renovados,
+              pct_renovados: im.total > 0 ? (im.renovados / im.total) * 100 : 0,
               taxa_renovacao: im.taxaRenovacao ?? "",
+              premio_medio: im.premioMedio ?? "",
+              comissao_media: im.comissaoMedia ?? "",
+              reajuste_medio: im.reajusteMedio ?? "",
+              pct_pacote_medio: im.taxaPacoteMedia ?? "",
+              premio_renovado: im.premioRenovado ?? "",
+              comissao_renovada: im.comissaoRenovada ?? "",
             }))}
             nomeAbaExcel="Imobiliárias"
           />
         </div>
-        <div className={styles.tableWrap}>
-          <table className={styles.data}>
-            <thead>
-              <tr>
-                <th>Imobiliária</th>
-                <th className={styles.numCol}>Total</th>
-                <th className={styles.numCol}>Novos</th>
-                <th className={styles.numCol}>Em andamento</th>
-                <th className={styles.numCol}>Renovados</th>
-                <th className={styles.numCol}>Perdidos</th>
-                <th className={styles.numCol}>Taxa de renovação</th>
-              </tr>
-            </thead>
-            <tbody>
-              {dados.imobiliarias.map((im) => (
-                <tr key={im.nome}>
-                  <td>{im.nome}</td>
-                  <td className={`${styles.numCol} ${styles.num}`}>{im.total}</td>
-                  <td className={`${styles.numCol} ${styles.num}`}>{im.novos}</td>
-                  <td className={`${styles.numCol} ${styles.num}`}>{im.emAndamento}</td>
-                  <td className={styles.numCol}>
-                    <span className={`${styles.pill} ${styles.pillPositive}`}>{im.renovados}</span>
-                  </td>
-                  <td className={styles.numCol}>
-                    <span className={`${styles.pill} ${styles.pillNegative}`}>{im.perdidos}</span>
-                  </td>
-                  <td className={`${styles.numCol} ${styles.num}`}>{fmtPct(im.taxaRenovacao)}</td>
-                </tr>
-              ))}
-              {dados.imobiliarias.length === 0 && (
-                <tr>
-                  <td colSpan={7} style={{ color: "var(--ink-faint)" }}>
-                    Nenhum card de renovação neste período.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+        <div className={styles.panel}>
+          <RenovacaoImobiliariasTabela
+            imobiliarias={dados.imobiliarias}
+            totalMesAnteriorPorImobiliaria={totalMesAnteriorPorImobiliaria}
+            classificacaoPorImobiliaria={classificacaoPorImobiliaria}
+          />
         </div>
       </section>
 

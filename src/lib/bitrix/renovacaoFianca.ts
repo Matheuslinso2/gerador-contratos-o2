@@ -47,10 +47,13 @@ const ETAPAS_EFETIVACAO = new Set(["DT1042_32:UC_RNLIB", "DT1042_32:UC_RNCON", "
 const CAMPO_REAJUSTE_PCT = "ufCrm10_1778259647";
 const CAMPO_PREMIO_LIQUIDO = "ufCrm10_1781029986152";
 const CAMPO_COMISSAO_PCT = "ufCrm10_1779820737";
-const CAMPO_SEGURADORA_ANTERIOR = "ufCrm10_1790800679";
+// "Seguradora anterior" (ufCrm10_1790800679) saiu do card em 01/10/2026 -- não é mais lida.
 const CAMPO_SEGURADORA_ESCOLHIDA = "ufCrm10_1776352200";
 const CAMPO_MOTIVO_PERDA = "ufCrm10_1790800692";
 const CAMPO_FIM_VIGENCIA_ANTERIOR = "ufCrm10_1790800678";
+// "Taxa do pacote de locação (%)" da renovação (nova) -- campo criado junto
+// com o funil (30/09/2026), equivalente ao % Pacote do quadro de status.
+const CAMPO_TAXA_PACOTE = "ufCrm10_1790800688";
 const CAMPO_RESPONSAVEL_CADASTRO = "ufCrm10_1786644365";
 const CAMPO_RESPONSAVEIS_COTACAO = "ufCrm10_1786644429";
 const CAMPO_RESPONSAVEIS_NEGOCIACAO = "ufCrm10_1786644450";
@@ -146,6 +149,18 @@ function estatisticas(minutos: number[]): EstatisticaTempoRenovacao {
 
 export type ContagemStatus = { total: number; renovados: number; perdidos: number; emAndamento: number };
 
+// Valores por imobiliária do quadro "status de todos os cards" da Renovação
+// (mesmo modelo do quadro de status da aba Imobiliária, Matheus 01/10/2026).
+// Médias sobre os cards do mês com o campo preenchido; null = nenhum.
+export type ValoresImobiliariaRenovacao = {
+  premioMedio: number | null; // prêmio líquido
+  comissaoMedia: number | null; // prêmio líquido × % comissão
+  reajusteMedio: number | null; // %
+  taxaPacoteMedia: number | null; // %
+  premioRenovado: number; // soma dos renovados no mês
+  comissaoRenovada: number;
+};
+
 export type PainelRenovacao = {
   competencia: string;
   totalCardsFunil: number;
@@ -169,7 +184,9 @@ export type PainelRenovacao = {
     semInformacao: number;
     porSeguradoraNova: { seguradora: string; renovados: number }[];
   };
-  imobiliarias: ({ nome: string; novos: number; taxaRenovacao: number | null } & ContagemStatus)[];
+  // Partial: retratos salvos antes de 01/10/2026 não têm os valores.
+  imobiliarias: ({ nome: string; novos: number; taxaRenovacao: number | null } & ContagemStatus &
+    Partial<ValoresImobiliariaRenovacao>)[];
   equipe: {
     conferencia: Record<string, EstatisticaTempoRenovacao>; // Responsável pelo Cadastro
     cotacao: Record<string, EstatisticaTempoRenovacao>; // Responsáveis pela Cotação
@@ -298,33 +315,65 @@ export function montarPainelRenovacao(
   }
 
   // --- seguradoras ---
-  let mesmaSeguradora = 0;
-  let trocouSeguradora = 0;
+  // Renovação é sempre na mesma seguradora da apólice: desde 01/10/2026 o
+  // card tem uma lista só (Seguradora Escolhida) -- "Seguradora anterior" e
+  // os blocos de cotação por seguradora saíram do formulário da categoria 32.
+  // mesma/trocou ficam só por compatibilidade do payload (sempre 0).
   let semInformacao = 0;
   const porNova: Record<string, number> = {};
   for (const c of renovadosMes) {
-    const anterior = SEGURADORA_POR_ID[String(c.it[CAMPO_SEGURADORA_ANTERIOR] ?? "")];
     const nova = SEGURADORA_POR_ID[String(c.it[CAMPO_SEGURADORA_ESCOLHIDA] ?? "")];
     if (nova) porNova[nova] = (porNova[nova] ?? 0) + 1;
-    if (!anterior || !nova) semInformacao++;
-    else if (anterior === nova) mesmaSeguradora++;
-    else trocouSeguradora++;
+    else semInformacao++;
   }
 
   // --- imobiliárias ---
-  const porImob = new Map<string, { nome: string; novos: number } & ContagemStatus>();
+  type LinhaImob = { nome: string; novos: number } & ContagemStatus & {
+    premios: number[];
+    comissoes: number[];
+    reajustes: number[];
+    taxasPacote: number[];
+    premioRenovado: number;
+    comissaoRenovada: number;
+  };
+  const porImob = new Map<string, LinhaImob>();
   for (const c of relevantes) {
     const nomeImob = c.it.companyId ? empresas[c.it.companyId] || `ID ${c.it.companyId}` : SEM_IMOBILIARIA;
-    const linha = porImob.get(nomeImob) ?? { nome: nomeImob, novos: 0, total: 0, renovados: 0, perdidos: 0, emAndamento: 0 };
+    const linha = porImob.get(nomeImob) ?? {
+      nome: nomeImob, novos: 0, total: 0, renovados: 0, perdidos: 0, emAndamento: 0,
+      premios: [], comissoes: [], reajustes: [], taxasPacote: [], premioRenovado: 0, comissaoRenovada: 0,
+    };
     linha.total++;
     if (c.mesEntrada === competencia) linha.novos++;
     if (c.resultado === "Em andamento") linha.emAndamento++;
-    if (c.resultado === "Renovado" && c.mesResolucao === competencia) linha.renovados++;
+    const renovadoNoMes = c.resultado === "Renovado" && c.mesResolucao === competencia;
+    if (renovadoNoMes) linha.renovados++;
     if (c.resultado === "Perdido" && c.mesResolucao === competencia) linha.perdidos++;
+    const premio = numero(c.it[CAMPO_PREMIO_LIQUIDO]);
+    const pctComissao = numero(c.it[CAMPO_COMISSAO_PCT]); // percentual, mesma convenção do Fiança
+    const reajuste = numero(c.it[CAMPO_REAJUSTE_PCT]);
+    const taxaPacote = numero(c.it[CAMPO_TAXA_PACOTE]);
+    if (premio) {
+      linha.premios.push(premio);
+      if (pctComissao !== null) linha.comissoes.push(premio * (pctComissao / 100));
+      if (renovadoNoMes) {
+        linha.premioRenovado += premio;
+        linha.comissaoRenovada += premio * ((pctComissao ?? 0) / 100);
+      }
+    }
+    if (reajuste !== null) linha.reajustes.push(reajuste);
+    if (taxaPacote) linha.taxasPacote.push(taxaPacote);
     porImob.set(nomeImob, linha);
   }
   const imobiliarias = [...porImob.values()]
-    .map((l) => ({ ...l, taxaRenovacao: taxa(l.renovados, l.perdidos) }))
+    .map(({ premios, comissoes, reajustes, taxasPacote, ...l }) => ({
+      ...l,
+      taxaRenovacao: taxa(l.renovados, l.perdidos),
+      premioMedio: mediaDe(premios),
+      comissaoMedia: mediaDe(comissoes),
+      reajusteMedio: mediaDe(reajustes),
+      taxaPacoteMedia: mediaDe(taxasPacote),
+    }))
     .sort((a, b) => b.total - a.total || a.nome.localeCompare(b.nome));
 
   // --- equipe (tempos manuais, horário comercial, pelo mês do FIM) ---
@@ -418,8 +467,8 @@ export function montarPainelRenovacao(
     },
     financeiro: { premioLiquidoRenovado, comissaoRenovada },
     seguradoras: {
-      mesmaSeguradora,
-      trocouSeguradora,
+      mesmaSeguradora: 0,
+      trocouSeguradora: 0,
       semInformacao,
       porSeguradoraNova: Object.entries(porNova)
         .map(([seguradora, renovados]) => ({ seguradora, renovados }))
