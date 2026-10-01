@@ -279,6 +279,21 @@ function apenasData(v: unknown): string {
   return String(v).slice(0, 10);
 }
 
+// Campos datetime preenchidos à mão (HORA INICIO/HORA FIM, USE_TIMEZONE=N)
+// guardam a hora de parede de Brasília, mas o Bitrix devolve com o rótulo
+// +03:00 do servidor (ex: digitado 14:00 -> "…T14:00:00+03:00"). Lê a hora
+// como Brasília, ignorando o rótulo -- senão o horário comercial sai
+// deslocado 6h (confirmado 30/09-01/10/2026). Mesma leitura de
+// renovacaoFianca.ts. O dia desses campos sai certo com apenasData.
+// NÃO usar em timestamps de evento (createdTime, histórico) -- esses têm
+// offset real, ver dataBrasiliaDeInstante abaixo.
+function horaManual(v: unknown): Date | null {
+  const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/.exec(String(v ?? ""));
+  if (!m) return null;
+  const d = new Date(`${m[1]}T${m[2]}:${m[3]}:${m[4] ?? "00"}-03:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 // O Bitrix devolve timestamps de EVENTO REAL (createdTime, movedTime,
 // updatedTime, CREATED_TIME do histórico de etapa) no fuso do servidor
 // (+03:00, Moscou) -- um card recebido às 21h-23h59 em Brasília já vira
@@ -491,16 +506,17 @@ export function montarContagemMensal(
     // sempre do timestamp mais cedo pro mais tarde (equivalente ao Math.abs
     // de antes, mas não dá pra aplicar Math.abs em cima de horário
     // comercial porque a função não é simplesmente simétrica por sinal).
+    // Hora manual: ver horaManual() -- lida como Brasília, não pelo rótulo.
+    const inicioCotacao = horaManual(inicioCotacaoRaw);
+    const fimCotacao = horaManual(fimCotacaoRaw);
     const minutosCotacaoBruto =
-      inicioCotacaoRaw && fimCotacaoRaw
-        ? Math.round((new Date(String(fimCotacaoRaw)).getTime() - new Date(String(inicioCotacaoRaw)).getTime()) / 60_000)
-        : null;
+      inicioCotacao && fimCotacao ? Math.round((fimCotacao.getTime() - inicioCotacao.getTime()) / 60_000) : null;
     const cotacaoCamposTrocados = minutosCotacaoBruto !== null && minutosCotacaoBruto < 0;
     const minutosCotacao =
-      inicioCotacaoRaw && fimCotacaoRaw
+      inicioCotacao && fimCotacao
         ? minutosComerciaisEntre(
-            new Date(Math.min(new Date(String(inicioCotacaoRaw)).getTime(), new Date(String(fimCotacaoRaw)).getTime())),
-            new Date(Math.max(new Date(String(inicioCotacaoRaw)).getTime(), new Date(String(fimCotacaoRaw)).getTime()))
+            inicioCotacao <= fimCotacao ? inicioCotacao : fimCotacao,
+            inicioCotacao <= fimCotacao ? fimCotacao : inicioCotacao
           )
         : null;
     const dataCotacao = fimCotacaoRaw ? apenasData(String(fimCotacaoRaw)) : "";
