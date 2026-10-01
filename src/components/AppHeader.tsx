@@ -80,6 +80,7 @@ export default function AppHeader({
                       { href: "/social-media", label: "Social Media" },
                       { href: "/assistente-fianca", label: "Assistente de Vendas — Fiança" },
                       { href: "/campanhas", label: "Campanhas comerciais" },
+                      { href: "/leads-site", label: "Leads do site" },
                     ],
                   },
                 ]}
