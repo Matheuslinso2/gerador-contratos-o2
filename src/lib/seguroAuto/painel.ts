@@ -9,6 +9,7 @@ import {
   type BitrixDefinicaoCampo,
 } from "@/lib/bitrix/client";
 import { diasUteisEquivalentesEntre } from "@/lib/bitrix/horarioComercial";
+import { contarPorDia, type ContagemDia } from "@/lib/contagemPorDia";
 
 // Modelagem do painel Seguro Auto — fonte: SPA "Seguro Automóvel" no
 // Bitrix24, entityTypeId 1050, um único funil (categoria 30). Etapas
@@ -157,6 +158,10 @@ export type PainelSeguroAuto = {
     temCrlv: boolean;
     criadoEm: Date;
   }[];
+  // Pro relatório diário do WhatsApp: novos = cards criados no dia;
+  // concluidos = cards que chegaram em Convertido no dia (movedTime).
+  // Opcional porque retratos salvos antes de 01/10/2026 não têm.
+  porDia?: ContagemDia[];
   atualizadoEm: string;
 };
 
@@ -393,6 +398,11 @@ export async function montarPainelSeguroAuto(competencia: string, agora = new Da
     cardsAlerta: cardsAlertaLista,
     convertidasFinanceiro,
     fichas,
+    porDia: contarPorDia(
+      competencia,
+      cards.map((c) => c.criadoEm),
+      cards.filter((c) => c.etapaId === "DT1050_30:SUCCESS" && c.movidoEm).map((c) => c.movidoEm!)
+    ),
     atualizadoEm: agora.toISOString(),
   };
 }

@@ -7,6 +7,7 @@ import {
   type BitrixStageHistoryEvent,
 } from "@/lib/bitrix/client";
 import { diasUteisEquivalentesEntre } from "@/lib/bitrix/horarioComercial";
+import { contarPorDia, type ContagemDia } from "@/lib/contagemPorDia";
 
 // Modelagem do painel Capitalização — fonte: SPA "Título de Capitalização" no
 // Bitrix24, entityTypeId 1048, um único funil (categoria 28). Etapas
@@ -121,6 +122,10 @@ export type PainelCapitalizacao = {
     valorTitulo: number;
     comissao: number;
   }[];
+  // Pro relatório diário do WhatsApp: novos = cards criados no dia;
+  // concluidos = cards que chegaram em Emitido no dia (movedTime). Opcional
+  // porque retratos salvos antes de 01/10/2026 não têm.
+  porDia?: ContagemDia[];
   atualizadoEm: string;
 };
 
@@ -312,6 +317,11 @@ export async function montarPainelCapitalizacao(competencia: string, agora = new
     funil,
     cardsAlerta: cardsAlertaLista,
     titulos,
+    porDia: contarPorDia(
+      competencia,
+      cards.map((c) => c.criadoEm),
+      cards.filter((c) => c.etapaId === "DT1048_28:SUCCESS" && c.movidoEm).map((c) => c.movidoEm!)
+    ),
     atualizadoEm: agora.toISOString(),
   };
 }

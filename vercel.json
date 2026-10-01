@@ -19,6 +19,22 @@
     {
       "path": "/api/cron/publicar-social-media",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/atualizar-paineis?painel=fianca",
+      "schedule": "0 9 * * 1-5"
+    },
+    {
+      "path": "/api/cron/atualizar-paineis?painel=capitalizacao",
+      "schedule": "5 9 * * 1-5"
+    },
+    {
+      "path": "/api/cron/atualizar-paineis?painel=seguro-auto",
+      "schedule": "10 9 * * 1-5"
+    },
+    {
+      "path": "/api/cron/atualizar-paineis?painel=ramos-elementares",
+      "schedule": "15 9 * * 1-5"
     }
   ]
 }
