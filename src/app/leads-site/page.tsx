@@ -6,8 +6,11 @@ import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
 import PageHeader from "@/components/PageHeader";
 import { IconReport } from "@/components/icons";
+import { buscarTrafegoSite } from "@/lib/cloudflareAnalytics";
 
 export const dynamic = "force-dynamic";
+
+const DIAS_TRAFEGO = 7;
 
 type LeadRow = {
   id: string;
@@ -44,14 +47,14 @@ export default async function LeadsSitePage({
     query = query.or(`nome.ilike.${termo},email.ilike.${termo},telefone.ilike.${termo}`);
   }
 
-  const { data: leadsData } = await query;
+  const [{ data: leadsData }, { data: formulariosData }, trafego] = await Promise.all([
+    query,
+    supabase.from("leads_site_o2seguros").select("formulario").not("formulario", "is", null),
+    buscarTrafegoSite(DIAS_TRAFEGO),
+  ]);
   const leads = (leadsData ?? []) as LeadRow[];
-
-  const { data: formulariosData } = await supabase
-    .from("leads_site_o2seguros")
-    .select("formulario")
-    .not("formulario", "is", null);
   const formularios = Array.from(new Set((formulariosData ?? []).map((f) => f.formulario as string))).sort();
+  const picoVisitasDia = Math.max(1, ...(trafego?.diario.map((d) => d.visitas) ?? [0]));
 
   return (
     <>
@@ -66,6 +69,56 @@ export default async function LeadsSitePage({
           titulo="Leads do site"
           subtitulo="Todo mundo que preencheu um formulário em o2seguros.com.br, num só lugar."
         />
+
+        {trafego && (
+          <div className="rounded-2xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="text-sm font-semibold text-o2-navy">Tráfego do site (últimos {DIAS_TRAFEGO} dias)</h2>
+              <p className="text-xs text-gray-500">Fonte: Cloudflare Web Analytics</p>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-8">
+              <div>
+                <p className="text-2xl font-semibold text-o2-navy">{trafego.totalVisitas.toLocaleString("pt-BR")}</p>
+                <p className="text-xs text-gray-500">visitas</p>
+              </div>
+              <div>
+                <p className="text-2xl font-semibold text-o2-navy">{trafego.totalPageviews.toLocaleString("pt-BR")}</p>
+                <p className="text-xs text-gray-500">pageviews</p>
+              </div>
+            </div>
+
+            {trafego.diario.length > 0 && (
+              <div className="mt-4 flex h-24 items-end gap-2">
+                {trafego.diario.map((dia) => (
+                  <div key={dia.data} className="flex flex-1 flex-col items-center gap-1">
+                    <div
+                      className="w-full rounded-t bg-o2-coral/70"
+                      style={{ height: `${Math.max(4, (dia.visitas / picoVisitasDia) * 100)}%` }}
+                      title={`${dia.visitas} visitas em ${dia.data}`}
+                    />
+                    <span className="text-[10px] text-gray-400">
+                      {new Date(dia.data + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {trafego.porPagina.length > 0 && (
+              <div className="mt-5 border-t border-o2-navy/10 pt-3">
+                <p className="mb-2 text-xs font-medium text-gray-500">Páginas mais visitadas</p>
+                <div className="space-y-1">
+                  {trafego.porPagina.map((pagina) => (
+                    <div key={pagina.caminho} className="flex items-center justify-between gap-3 text-sm">
+                      <span className="truncate text-o2-navy">{pagina.caminho || "/"}</span>
+                      <span className="shrink-0 text-xs text-gray-500">{pagina.visitas.toLocaleString("pt-BR")}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <form className="flex flex-wrap items-end gap-3 rounded-2xl border border-o2-navy/10 bg-quadro p-4 shadow-sm">
           <div className="flex-1 min-w-[200px]">
