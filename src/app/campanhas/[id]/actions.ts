@@ -14,6 +14,7 @@ import {
 import { contemApelido, NOME_EXEMPLO_PREVIA } from "@/lib/campanhas/personalizacao";
 import { linkDescadastro } from "@/lib/campanhas/unsubscribeToken";
 import { dispararCampanha } from "@/lib/campanhas/dispararCampanha";
+import { listarDestinatariosReenvio, type PublicoReenvio } from "@/lib/campanhas/reenvio";
 
 // Fuso fixo -03:00 (Brasil não tem mais horário de verão desde 2019) --
 // <input type="datetime-local"> devolve "AAAA-MM-DDTHH:mm" sem fuso
@@ -168,6 +169,83 @@ export async function confirmarDisparoCampanha(formData: FormData) {
   if (!resultado.ok) redirect(`/campanhas/${campanhaId}?erro=${encodeURIComponent(resultado.erro)}`);
 
   redirect(`/campanhas/${campanhaId}`);
+}
+
+// Pedido do Matheus, 02/10/2026: reenviar uma campanha já concluída. Cria
+// uma campanha NOVA (cópia do conteúdo) em vez de reabrir a original --
+// campanhas_envios é único por (campanha, e-mail) e as métricas de
+// abertura/clique são por campanha, então reaproveitar a mesma linha
+// misturaria os dois disparos. Público: todos os que receberam, ou só quem
+// não abriu (abertura via pixel é aproximada -- clientes que bloqueiam
+// imagem não aparecem como "abriu", ver texto na tela).
+export async function reenviarCampanha(formData: FormData) {
+  const campanhaId = String(formData.get("campanha_id") ?? "");
+  const publico: PublicoReenvio = formData.get("publico") === "nao_abriram" ? "nao_abriram" : "todos";
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+  if (!isAdmin(user.email) && !isColaboradorO2(user.email)) redirect("/");
+
+  const voltar = (erro: string): never => redirect(`/campanhas/${campanhaId}?erro=${encodeURIComponent(erro)}`);
+
+  const { data: original } = await supabase
+    .from("campanhas")
+    .select(
+      "nome, assunto, template, personalizacao, titulo, introducao, valido_de, valido_ate, produto, corpo_html, cta_texto, cta_href, imobiliarias_selecionadas, contatos_externos_selecionados, incluir_equipe_interna, status"
+    )
+    .eq("id", campanhaId)
+    .single();
+  if (!original) return voltar("Campanha não encontrada.");
+  if (original.status !== "concluida") return voltar("Só dá pra reenviar uma campanha já concluída.");
+
+  const destinatarios = (await listarDestinatariosReenvio(supabase, campanhaId))[publico];
+  if (!destinatarios.length) return voltar("Nenhum destinatário elegível pro reenvio.");
+
+  // Nasce como rascunho e só vira "enviando" depois das linhas de envio
+  // existirem: o cron de segurança processa qualquer campanha "enviando",
+  // e uma sem linhas pendentes seria marcada como concluída na hora.
+  const { data: copia, error } = await supabase
+    .from("campanhas")
+    .insert({
+      nome: `${original.nome} (reenvio)`,
+      assunto: original.assunto,
+      template: original.template,
+      personalizacao: original.personalizacao,
+      titulo: original.titulo,
+      introducao: original.introducao,
+      valido_de: original.valido_de,
+      valido_ate: original.valido_ate,
+      produto: original.produto,
+      corpo_html: original.corpo_html,
+      cta_texto: original.cta_texto,
+      cta_href: original.cta_href,
+      imobiliarias_selecionadas: original.imobiliarias_selecionadas,
+      contatos_externos_selecionados: original.contatos_externos_selecionados,
+      incluir_equipe_interna: original.incluir_equipe_interna,
+      status: "rascunho",
+      criado_por: user.id,
+      criado_por_email: user.email,
+    })
+    .select("id")
+    .single();
+  if (error || !copia) return voltar(error?.message ?? "Falha ao criar o reenvio.");
+
+  const { error: erroEnvios } = await supabase
+    .from("campanhas_envios")
+    .insert(destinatarios.map((d) => ({ campanha_id: copia.id, imobiliaria_id: d.imobiliaria_id, email: d.email })));
+  if (erroEnvios) {
+    await supabase.from("campanhas").delete().eq("id", copia.id);
+    return voltar(erroEnvios.message);
+  }
+
+  await supabase
+    .from("campanhas")
+    .update({ status: "enviando", total_destinatarios: destinatarios.length, disparada_em: new Date().toISOString() })
+    .eq("id", copia.id);
+
+  redirect(`/campanhas/${copia.id}`);
 }
 
 // Item 9 da reunião de 15/09/2026: agenda o disparo pra mais tarde em vez

@@ -19,6 +19,8 @@ import { salvarLinhaProducao, removerLinhaProducao } from "./producao/actions";
 import { CelulasComissaoRepasse } from "./producao/CelulasComissaoRepasse";
 import { GerenciarDestinatarios } from "./GerenciarDestinatarios";
 import { EditarConteudoCampanha } from "./EditarConteudoCampanha";
+import { ReenviarCampanha } from "./ReenviarCampanha";
+import { listarDestinatariosReenvio, hojeSaoPauloISO } from "@/lib/campanhas/reenvio";
 import { duplicarCampanha } from "../actions";
 import { cancelarAgendamentoCampanha } from "./actions";
 
@@ -209,6 +211,11 @@ export default async function CampanhaDetalhePage({
 
   const rotuloProduto = rotuloProdutoCampanha(campanha.produto);
 
+  // Reenvio (pedido do Matheus, 02/10/2026) só faz sentido depois do disparo
+  // terminar -- enquanto "enviando", ainda tem gente na fila.
+  const reenvio = campanha.status === "concluida" ? await listarDestinatariosReenvio(supabase, id) : null;
+  const validadeExpirada = !!campanha.valido_ate && campanha.valido_ate < hojeSaoPauloISO();
+
   const totaisProducao = linhasQuadro.reduce(
     (acc, l) => ({
       apolices: acc.apolices + l.quantidade_apolices,
@@ -391,6 +398,15 @@ export default async function CampanhaDetalhePage({
                   </div>
                 )}
               </dl>
+
+              {reenvio && (
+                <ReenviarCampanha
+                  campanhaId={id}
+                  totalTodos={reenvio.todos.length}
+                  totalNaoAbriram={reenvio.nao_abriram.length}
+                  validadeExpirada={validadeExpirada}
+                />
+              )}
             </>
           )}
         </section>
