@@ -24,6 +24,10 @@ const ROTAS_PUBLICAS = [
   // e-mail no card), via Cloudflare Email Worker -- mesmo padrão de token
   // secreto próprio dos outros webhooks acima.
   "/api/integracoes/bitrix-email-resposta",
+  // Recebe o envio de qualquer formulário Elementor do site institucional
+  // (o2seguros.com.br), sem cookie de usuário. Valida um token secreto
+  // próprio (mesmo padrão dos outros webhooks acima).
+  "/api/integracoes/wordpress-leads",
   // Formulário público de Capitalização — preenchido por imobiliárias,
   // corretores e proprietários que não têm (nem precisam ter) conta na
   // Plataforma O2.
