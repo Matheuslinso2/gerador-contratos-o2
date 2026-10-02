@@ -7,6 +7,8 @@ import AppHeader from "@/components/AppHeader";
 import PageHeader from "@/components/PageHeader";
 import { IconMail } from "@/components/icons";
 import { buscarTemplateAviso } from "@/lib/avisosInternos/templates";
+import { EditorCorpo } from "../../EditorCorpo";
+import { prepararRevisaoAviso } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +41,7 @@ export default async function NovoAvisoInternoPage({
 
         {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
 
-        <form method="get" action="/campanhas/avisos-internos/revisar" className="space-y-4 rounded-2xl border border-o2-navy/10 bg-quadro p-6 shadow-sm">
+        <form action={prepararRevisaoAviso} className="space-y-4 rounded-2xl border border-o2-navy/10 bg-quadro p-6 shadow-sm">
           <input type="hidden" name="template" value={template.id} />
 
           {template.campos.map((campo) => (
@@ -57,7 +59,7 @@ export default async function NovoAvisoInternoPage({
 
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">Recado adicional (opcional)</label>
-            <textarea name="mensagem" rows={4} placeholder="Um texto livre, se quiser complementar o aviso." className={inputClass} />
+            <EditorCorpo name="mensagem_html" />
           </div>
 
           <div className="flex justify-end">

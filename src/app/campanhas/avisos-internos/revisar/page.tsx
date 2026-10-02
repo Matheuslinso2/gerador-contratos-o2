@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
@@ -9,6 +10,7 @@ import SubmitButton from "@/components/SubmitButton";
 import { IconMail } from "@/components/icons";
 import { buscarTemplateAviso } from "@/lib/avisosInternos/templates";
 import { montarHtmlAvisoInterno } from "@/lib/avisosInternos/email";
+import { COOKIE_MENSAGEM_AVISO } from "@/lib/avisosInternos/cookie";
 import { enviarAvisoInterno } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +21,10 @@ export default async function RevisarAvisoInternoPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const params = await searchParams;
-  const { template: templateId, mensagem, erro, ...valores } = params;
+  const { template: templateId, erro, ...valores } = params;
+
+  const cookieStore = await cookies();
+  const mensagemHtml = cookieStore.get(COOKIE_MENSAGEM_AVISO)?.value ?? "";
 
   const supabase = await createClient();
   const {
@@ -36,7 +41,6 @@ export default async function RevisarAvisoInternoPage({
   }
 
   const valoresLimpos: Record<string, string> = Object.fromEntries(template.campos.map((c) => [c.key, (valores[c.key] ?? "").trim()]));
-  const mensagemLimpa = (mensagem ?? "").trim();
 
   const { data: grupo } = await supabase
     .from("avisos_internos_grupos")
@@ -47,7 +51,7 @@ export default async function RevisarAvisoInternoPage({
   const emails = (grupo?.emails as string[] | null) ?? [];
 
   const assunto = template.montarAssunto(valoresLimpos);
-  const htmlPreview = montarHtmlAvisoInterno(template, valoresLimpos, mensagemLimpa);
+  const htmlPreview = montarHtmlAvisoInterno(template, valoresLimpos, mensagemHtml);
 
   return (
     <>
@@ -73,7 +77,7 @@ export default async function RevisarAvisoInternoPage({
         <div className="flex justify-end rounded-2xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
           <form action={enviarAvisoInterno}>
             <input type="hidden" name="template" value={template.id} />
-            <input type="hidden" name="mensagem" value={mensagemLimpa} />
+            <input type="hidden" name="mensagem_html" value={mensagemHtml} />
             {template.campos.map((c) => (
               <input key={c.key} type="hidden" name={c.key} value={valoresLimpos[c.key]} />
             ))}
