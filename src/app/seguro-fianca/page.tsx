@@ -2808,7 +2808,7 @@ export default async function SeguroFiancaPage({
                       ) : (
                         <>
                           Classificação operacional vigente:{" "}
-                          {nomeCompetencia(classificacao.par[0])} + {nomeCompetencia(classificacao.par[1])} (atualiza a cada 2 meses)
+                          {nomeCompetencia(classificacao.par[0])} + {nomeCompetencia(classificacao.par[1])} (últimos 2 meses fechados — atualiza todo mês)
                           {classificacao.mesesSemDadosNativos.length > 0 && (
                             <>
                               {" — "}

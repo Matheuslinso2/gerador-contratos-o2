@@ -253,7 +253,7 @@ export default function ImobiliariasTabela({
               coluna="classeCotacao"
               ordenacao={ordenacao}
               onClick={alternarOrdenacao}
-              title="Classificação operacional em Cotações — estudo da Patricia, atualiza a cada 2 meses"
+              title="Classificação operacional em Cotações — estudo da Patricia, últimos 2 meses fechados (atualiza todo mês)"
             >
               Classe Cotação
             </Th>
@@ -282,7 +282,7 @@ export default function ImobiliariasTabela({
               coluna="classeContratacao"
               ordenacao={ordenacao}
               onClick={alternarOrdenacao}
-              title="Classificação operacional em Contratações — estudo da Patricia, atualiza a cada 2 meses"
+              title="Classificação operacional em Contratações — estudo da Patricia, últimos 2 meses fechados (atualiza todo mês)"
             >
               Classe Contratação
             </Th>

@@ -21,24 +21,21 @@ export const ORDEM_HIERARQUIA = [...CLASSES_ATIVAS.map((c) => c.nome), NOME_FORA
 
 export type ClasseImobiliaria = { classe: string; volume: number };
 
-// Pares fixos de calendário ancorados em mês ímpar (Jan-Fev, Mar-Abr, ...,
-// Nov-Dez). O par que contém "hoje" nunca está fechado (hoje sempre cai
-// dentro dele, não depois) -- o par fechado é sempre os 2 meses anteriores
-// a esse. Confere com o exemplo do estudo: em setembro, o par fechado é
-// julho-agosto; setembro só "acompanha" até outubro fechar o próximo par.
+// Janela móvel: os 2 últimos meses FECHADOS antes do mês atual (Brasília).
+// Ex: em outubro/2026 -> agosto + setembro; em novembro -> setembro + outubro.
+// Decisão do Matheus (02/10/2026): atualizar todo mês. Antes eram pares
+// fixos de calendário (jan-fev, mar-abr...), que só trocavam de 2 em 2
+// meses -- em outubro o painel ainda mostrava julho + agosto.
 export function parFechado(hoje: Date = new Date()): [string, string] {
-  const ano = hoje.getFullYear();
-  const mes = hoje.getMonth() + 1;
-  const inicioParCorrente = mes % 2 === 1 ? mes : mes - 1;
-  let inicioFechado = inicioParCorrente - 2;
-  let anoFechado = ano;
-  if (inicioFechado < 1) {
-    inicioFechado += 12;
-    anoFechado -= 1;
-  }
-  const mesA = String(inicioFechado).padStart(2, "0");
-  const mesB = String(inicioFechado + 1).padStart(2, "0");
-  return [`${anoFechado}-${mesA}`, `${anoFechado}-${mesB}`];
+  const [ano, mes] = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit" })
+    .format(hoje)
+    .split("-")
+    .map(Number);
+  const mesAntes = (n: number) => {
+    const d = new Date(Date.UTC(ano, mes - 1 - n, 1));
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+  };
+  return [mesAntes(2), mesAntes(1)];
 }
 
 // Ranking por posição, respeitando empate (regra explícita do estudo:

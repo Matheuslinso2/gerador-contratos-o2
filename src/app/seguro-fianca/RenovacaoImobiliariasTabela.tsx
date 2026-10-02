@@ -135,7 +135,7 @@ export default function RenovacaoImobiliariasTabela({
             <Th coluna="total" {...th} numerica title="Cards de renovação do mês (novos + herdados)">
               Renovações
             </Th>
-            <Th coluna="classeCotacao" {...th} title="Classificação operacional em Cotações da imobiliária no Fiança — estudo da Patricia, atualiza a cada 2 meses">
+            <Th coluna="classeCotacao" {...th} title="Classificação operacional em Cotações da imobiliária no Fiança — estudo da Patricia, últimos 2 meses fechados (atualiza todo mês)">
               Classe Cotação
             </Th>
             <Th coluna="tendencia" {...th} numerica title="Tendência — comparado ao total de renovações do mês anterior">
@@ -150,7 +150,7 @@ export default function RenovacaoImobiliariasTabela({
             <Th coluna="renovados" {...th} numerica title="Renovados — quantidade · % sobre as renovações da imobiliária no mês">
               Renov.
             </Th>
-            <Th coluna="classeContratacao" {...th} title="Classificação operacional em Contratações da imobiliária no Fiança — estudo da Patricia, atualiza a cada 2 meses">
+            <Th coluna="classeContratacao" {...th} title="Classificação operacional em Contratações da imobiliária no Fiança — estudo da Patricia, últimos 2 meses fechados (atualiza todo mês)">
               Classe Contratação
             </Th>
             <Th coluna="premioMedio" {...th} numerica title="Prêmio líquido médio dos cards de renovação da imobiliária no mês">
