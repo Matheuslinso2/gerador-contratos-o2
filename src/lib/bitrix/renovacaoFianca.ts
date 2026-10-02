@@ -161,6 +161,9 @@ export type ValoresImobiliariaRenovacao = {
   comissaoRenovada: number;
 };
 
+export type LinhaImobiliariaRenovacao = { nome: string; novos: number; taxaRenovacao: number | null } & ContagemStatus &
+  ValoresImobiliariaRenovacao;
+
 export type PainelRenovacao = {
   competencia: string;
   totalCardsFunil: number;
@@ -187,15 +190,42 @@ export type PainelRenovacao = {
   // Partial: retratos salvos antes de 01/10/2026 não têm os valores.
   imobiliarias: ({ nome: string; novos: number; taxaRenovacao: number | null } & ContagemStatus &
     Partial<ValoresImobiliariaRenovacao>)[];
+  // Quadro "status de todos os cards" em 3 blocos pelo vencimento
+  // (02/10/2026). Opcional: retratos anteriores não têm.
+  imobiliariasPorVencimento?: {
+    mesSeguinte: string; // "YYYY-MM"
+    mesAtual: LinhaImobiliariaRenovacao[];
+    heranca: LinhaImobiliariaRenovacao[];
+    proximoMes: LinhaImobiliariaRenovacao[];
+    semVencimento: number; // cards sem Fim da vigência anterior (fora dos 3 blocos)
+  };
   equipe: {
     conferencia: Record<string, EstatisticaTempoRenovacao>; // Responsável pelo Cadastro
     cotacao: Record<string, EstatisticaTempoRenovacao>; // Responsáveis pela Cotação
     negociacao: Record<string, EstatisticaTempoRenovacao>; // Responsáveis pela Negociação
     efetivacao: Record<string, EstatisticaTempoRenovacao>; // Responsável pela Efetivação
+    // Quadro "Renovação por cotador" (modelo da planilha antiga, 02/10/2026)
+    // -- equipe fixa sempre listada, mesmo com zero. Opcional: retratos
+    // salvos antes dessa data não têm.
+    cotacaoPorCotador?: { cotador: string; cards: number; mediaMinutos: number }[];
   };
   tempoPorEtapa: { etapa: string; estatistica: EstatisticaTempoRenovacao }[]; // minutos comerciais
   porVencimento: ({ mes: string } & ContagemStatus)[]; // mês do Fim da vigência anterior (carteira inteira)
 };
+
+// Equipe do quadro "Renovação por cotador", na ordem e com o rótulo da
+// planilha que o Matheus usava (IDs conferidos via user.get, 02/10/2026).
+// Quem cotar renovação fora desta lista entra no fim, pelo primeiro nome.
+const COTADORES_RENOVACAO: { id: number; rotulo: string }[] = [
+  { id: 206, rotulo: "BEATRIZ" },
+  { id: 184, rotulo: "BRENDA" },
+  { id: 214, rotulo: "CARLOS" },
+  { id: 3296, rotulo: "CASSIA" },
+  { id: 222, rotulo: "KELLY" },
+  { id: 57, rotulo: "PATRICIA" },
+  { id: 3814, rotulo: "RAYANE" },
+  { id: 204, rotulo: "VICTORIA" },
+];
 
 // ---------- montagem ----------
 
@@ -336,8 +366,13 @@ export function montarPainelRenovacao(
     premioRenovado: number;
     comissaoRenovada: number;
   };
+  // `resolvidoConta` decide se um card resolvido entra como renovado/perdido
+  // na linha: no quadro por competência, só se resolveu NESTE mês; nos
+  // blocos por vencimento, pelo status atual do card (o lote é o lote).
+  type CardMontado = (typeof cards)[number];
+  const agregarImobiliarias = (lista: CardMontado[], resolvidoConta: (c: CardMontado) => boolean) => {
   const porImob = new Map<string, LinhaImob>();
-  for (const c of relevantes) {
+  for (const c of lista) {
     const nomeImob = c.it.companyId ? empresas[c.it.companyId] || `ID ${c.it.companyId}` : SEM_IMOBILIARIA;
     const linha = porImob.get(nomeImob) ?? {
       nome: nomeImob, novos: 0, total: 0, renovados: 0, perdidos: 0, emAndamento: 0,
@@ -346,9 +381,9 @@ export function montarPainelRenovacao(
     linha.total++;
     if (c.mesEntrada === competencia) linha.novos++;
     if (c.resultado === "Em andamento") linha.emAndamento++;
-    const renovadoNoMes = c.resultado === "Renovado" && c.mesResolucao === competencia;
+    const renovadoNoMes = c.resultado === "Renovado" && resolvidoConta(c);
     if (renovadoNoMes) linha.renovados++;
-    if (c.resultado === "Perdido" && c.mesResolucao === competencia) linha.perdidos++;
+    if (c.resultado === "Perdido" && resolvidoConta(c)) linha.perdidos++;
     const premio = numero(c.it[CAMPO_PREMIO_LIQUIDO]);
     const pctComissao = numero(c.it[CAMPO_COMISSAO_PCT]); // percentual, mesma convenção do Fiança
     const reajuste = numero(c.it[CAMPO_REAJUSTE_PCT]);
@@ -365,7 +400,7 @@ export function montarPainelRenovacao(
     if (taxaPacote) linha.taxasPacote.push(taxaPacote);
     porImob.set(nomeImob, linha);
   }
-  const imobiliarias = [...porImob.values()]
+  return [...porImob.values()]
     .map(({ premios, comissoes, reajustes, taxasPacote, ...l }) => ({
       ...l,
       taxaRenovacao: taxa(l.renovados, l.perdidos),
@@ -375,6 +410,33 @@ export function montarPainelRenovacao(
       taxaPacoteMedia: mediaDe(taxasPacote),
     }))
     .sort((a, b) => b.total - a.total || a.nome.localeCompare(b.nome));
+  };
+  const imobiliarias = agregarImobiliarias(relevantes, (c) => c.mesResolucao === competencia);
+
+  // Os 3 blocos do quadro "status de todos os cards" (Matheus, 02/10/2026),
+  // separados pelo VENCIMENTO da apólice anterior (Fim da vigência anterior):
+  // lote do mês, herança (venceu antes e segue aberta ou resolveu neste mês)
+  // e lote do mês seguinte já em trabalho.
+  const [anoC, mesC] = competencia.split("-").map(Number);
+  const proxima = new Date(Date.UTC(anoC, mesC, 1));
+  const mesSeguinte = `${proxima.getUTCFullYear()}-${String(proxima.getUTCMonth() + 1).padStart(2, "0")}`;
+  const mesVenc = (c: CardMontado) => diaManual(c.it[CAMPO_FIM_VIGENCIA_ANTERIOR]).slice(0, 7);
+  const statusAtual = () => true;
+  const imobiliariasPorVencimento = {
+    mesSeguinte,
+    mesAtual: agregarImobiliarias(cards.filter((c) => mesVenc(c) === competencia), statusAtual),
+    heranca: agregarImobiliarias(
+      cards.filter(
+        (c) =>
+          mesVenc(c) !== "" &&
+          mesVenc(c) < competencia &&
+          (c.resultado === "Em andamento" || c.mesResolucao === competencia)
+      ),
+      statusAtual
+    ),
+    proximoMes: agregarImobiliarias(cards.filter((c) => mesVenc(c) === mesSeguinte), statusAtual),
+    semVencimento: cards.filter((c) => mesVenc(c) === "").length,
+  };
 
   // --- equipe (tempos manuais, horário comercial, pelo mês do FIM) ---
   const acumula = (alvo: Record<string, number[]>, nomes: string[], minutos: number) => {
@@ -384,6 +446,7 @@ export function montarPainelRenovacao(
   const cot: Record<string, number[]> = {};
   const neg: Record<string, number[]> = {};
   const efe: Record<string, number[]> = {};
+  const cotPorId: Record<number, number[]> = {};
   const fases: [string, string, string, Record<string, number[]>][] = [
     [CAMPO_INICIO_PREENCHIMENTO, CAMPO_FIM_PREENCHIMENTO, CAMPO_RESPONSAVEL_CADASTRO, conf],
     [CAMPO_INICIO_COTACAO, CAMPO_FIM_COTACAO, CAMPO_RESPONSAVEIS_COTACAO, cot],
@@ -395,10 +458,30 @@ export function montarPainelRenovacao(
       const fim = horaManual(c.it[campoFim]);
       if (!ini || !fim || !diaManual(c.it[campoFim]).startsWith(competencia)) continue;
       const [a, b] = ini <= fim ? [ini, fim] : [fim, ini];
-      const nomes = idsUsuarios(c.it[campoResp]).map(nome);
-      acumula(alvo, nomes.length ? nomes : ["Sem responsável"], minutosComerciaisEntre(a, b));
+      const ids = idsUsuarios(c.it[campoResp]);
+      // Horário comercial trabalha em minutos inteiros; quando o trecho cai
+      // todo dentro do expediente, usa a duração exata (com segundos), como
+      // a planilha antiga mostrava ("0:07:35").
+      const comercial = minutosComerciaisEntre(a, b);
+      const exato = (b.getTime() - a.getTime()) / 60_000;
+      const minutos = Math.abs(exato - comercial) < 1 ? exato : comercial;
+      const nomes = ids.map(nome);
+      acumula(alvo, nomes.length ? nomes : ["Sem responsável"], minutos);
+      if (alvo === cot) for (const id of ids) (cotPorId[id] ??= []).push(minutos);
     }
   }
+  const cotadoresExtras = Object.keys(cotPorId)
+    .map(Number)
+    .filter((id) => !COTADORES_RENOVACAO.some((c) => c.id === id))
+    .map((id) => ({ id, rotulo: nome(id).split(" ")[0].toUpperCase() }));
+  const cotacaoPorCotador = [...COTADORES_RENOVACAO, ...cotadoresExtras].map(({ id, rotulo }) => {
+    const minutos = cotPorId[id] ?? [];
+    return {
+      cotador: rotulo,
+      cards: minutos.length,
+      mediaMinutos: minutos.length ? minutos.reduce((s, x) => s + x, 0) / minutos.length : 0,
+    };
+  });
 
   // --- tempo por etapa (histórico) e efetivação ---
   const porEtapaMin: Record<string, number[]> = {};
@@ -475,7 +558,14 @@ export function montarPainelRenovacao(
         .sort((a, b) => b.renovados - a.renovados),
     },
     imobiliarias,
-    equipe: { conferencia: stats(conf), cotacao: stats(cot), negociacao: stats(neg), efetivacao: stats(efe) },
+    imobiliariasPorVencimento,
+    equipe: {
+      conferencia: stats(conf),
+      cotacao: stats(cot),
+      negociacao: stats(neg),
+      efetivacao: stats(efe),
+      cotacaoPorCotador,
+    },
     tempoPorEtapa,
     porVencimento,
   };

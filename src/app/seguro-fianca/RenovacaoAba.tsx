@@ -16,6 +16,12 @@ function fmtPct(v: number | null): string {
   if (v === null) return "—";
   return v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%";
 }
+// Formato da planilha antiga ("0:07:35") -- horas:minutos:segundos.
+function fmtHMS(minutos: number): string {
+  const s = Math.round(minutos * 60);
+  return `${Math.floor(s / 3600)}:${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+}
+
 function fmtDuracao(minutosTotais: number): string {
   const min = Math.round(minutosTotais);
   const horas = Math.floor(min / 60);
@@ -117,6 +123,16 @@ export default function RenovacaoAba({
     }),
     { valores: 0, contratos: 0, efetivacoes: 0 }
   );
+  const porVenc = dados.imobiliariasPorVencimento;
+  // Retratos salvos antes de 02/10/2026 não têm cotacaoPorCotador -- monta
+  // a partir das estatísticas por nome que já existiam.
+  const porCotador =
+    dados.equipe.cotacaoPorCotador ??
+    Object.entries(dados.equipe.cotacao).map(([nome, e]) => ({
+      cotador: nome.split(" ")[0].toUpperCase(),
+      cards: e.n,
+      mediaMinutos: e.media,
+    }));
 
   return (
     <>
@@ -295,14 +311,24 @@ export default function RenovacaoAba({
         <div className={styles.sectionHead}>
           <h2>Imobiliárias — status de todos os cards</h2>
           <div className={styles.note}>
-            {dados.imobiliarias.length} imobiliária(s) com card de renovação no mês (novos + herdados)
+            {porVenc
+              ? "separado pelo vencimento da apólice anterior (Fim da vigência anterior): mês atual, herança e mês seguinte"
+              : `${dados.imobiliarias.length} imobiliária(s) com card de renovação no mês (novos + herdados)`}
           </div>
           <div className={styles.note}>classes = classificação da imobiliária no Fiança (estudo da Patricia)</div>
           <ExportarQuadro
             quadroId="quadro-renovacao-imobiliarias"
             corFundo="#f7f8fa"
             nomeArquivo={`seguro-fianca-renovacao-imobiliarias-${competencia}`}
-            dadosExcel={dados.imobiliarias.map((im) => ({
+            dadosExcel={(porVenc
+              ? [
+                  ...porVenc.mesAtual.map((im) => ({ ...im, grupo: "Mês atual" })),
+                  ...porVenc.heranca.map((im) => ({ ...im, grupo: "Herança em andamento" })),
+                  ...porVenc.proximoMes.map((im) => ({ ...im, grupo: "Mês seguinte" })),
+                ]
+              : dados.imobiliarias.map((im) => ({ ...im, grupo: "Mês (entrada)" }))
+            ).map((im) => ({
+              grupo: im.grupo,
               imobiliaria: im.nome,
               total: im.total,
               novos: im.novos,
@@ -322,16 +348,99 @@ export default function RenovacaoAba({
             nomeAbaExcel="Imobiliárias"
           />
         </div>
-        <div className={styles.panel}>
-          <RenovacaoImobiliariasTabela
-            imobiliarias={dados.imobiliarias}
-            totalMesAnteriorPorImobiliaria={totalMesAnteriorPorImobiliaria}
-            classificacaoPorImobiliaria={classificacaoPorImobiliaria}
-          />
-        </div>
+        {porVenc ? (
+          <>
+            {[
+              {
+                titulo: `Renovações do mês — vencimento em ${fmtMes(competencia)}`,
+                sub: "lote do mês: todas as apólices que vencem neste mês, com o status atual de cada card",
+                linhas: porVenc.mesAtual,
+                tendencia: true,
+              },
+              {
+                titulo: `Herança em andamento — vencidas antes de ${fmtMes(competencia)}`,
+                sub: "lotes de meses anteriores ainda em andamento (ou resolvidos neste mês)",
+                linhas: porVenc.heranca,
+                tendencia: false,
+              },
+              {
+                titulo: `Mês seguinte — vencimento em ${fmtMes(porVenc.mesSeguinte)}`,
+                sub: "lote do próximo mês já no funil",
+                linhas: porVenc.proximoMes,
+                tendencia: false,
+              },
+            ].map((b) => (
+              <div key={b.titulo} className={styles.panel} style={{ marginBottom: 16 }}>
+                <h3>{b.titulo}</h3>
+                <div className={styles.panelSub}>
+                  {b.sub} · {b.linhas.reduce((s, l) => s + l.total, 0)} card(s) em {b.linhas.length} imobiliária(s)
+                </div>
+                <RenovacaoImobiliariasTabela
+                  imobiliarias={b.linhas}
+                  totalMesAnteriorPorImobiliaria={b.tendencia ? totalMesAnteriorPorImobiliaria : {}}
+                  classificacaoPorImobiliaria={classificacaoPorImobiliaria}
+                />
+              </div>
+            ))}
+            {porVenc.semVencimento > 0 && (
+              <div className={styles.note}>
+                {porVenc.semVencimento} card(s) sem &quot;Fim da vigência anterior&quot; preenchido não entram nos 3 blocos.
+              </div>
+            )}
+          </>
+        ) : (
+          <div className={styles.panel}>
+            <RenovacaoImobiliariasTabela
+              imobiliarias={dados.imobiliarias}
+              totalMesAnteriorPorImobiliaria={totalMesAnteriorPorImobiliaria}
+              classificacaoPorImobiliaria={classificacaoPorImobiliaria}
+            />
+          </div>
+        )}
       </section>
 
       {/* ---------- Equipe e tempos ---------- */}
+      <section id="quadro-renovacao-por-cotador" className={styles.section}>
+        <div className={styles.sectionHead}>
+          <h2>Renovação por cotador</h2>
+          <div className={styles.note}>
+            cards de renovação cotados no mês (pela HORA FIM) · média de tempo gasto entre HORA INICIO e HORA FIM, em
+            horário comercial
+          </div>
+          <ExportarQuadro
+            quadroId="quadro-renovacao-por-cotador"
+            corFundo="#f7f8fa"
+            nomeArquivo={`seguro-fianca-renovacao-por-cotador-${competencia}`}
+            dadosExcel={porCotador.map((c) => ({
+              cotador: c.cotador,
+              cards: c.cards,
+              media_tempo_gasto: fmtHMS(c.mediaMinutos),
+            }))}
+            nomeAbaExcel="Renovação por cotador"
+          />
+        </div>
+        <div className={styles.tableWrap} style={{ maxWidth: 520 }}>
+          <table className={styles.data}>
+            <thead>
+              <tr>
+                <th>Renovação por cotador</th>
+                <th className={styles.numCol}>Cards</th>
+                <th className={styles.numCol}>Média de tempo gasto</th>
+              </tr>
+            </thead>
+            <tbody>
+              {porCotador.map((c) => (
+                <tr key={c.cotador}>
+                  <td>{c.cotador}</td>
+                  <td className={`${styles.numCol} ${styles.num}`}>{c.cards}</td>
+                  <td className={`${styles.numCol} ${styles.num}`}>{fmtHMS(c.mediaMinutos)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       <section id="quadro-renovacao-equipe" className={styles.section}>
         <div className={styles.sectionHead}>
           <h2>Equipe e tempos</h2>
@@ -373,7 +482,6 @@ export default function RenovacaoAba({
         </div>
         <div className={styles.grid2}>
           <TabelaTempos titulo="Conferência (entrada)" sub="Responsável pelo Cadastro · início → fim do preenchimento" dados={dados.equipe.conferencia} />
-          <TabelaTempos titulo="Cotação" sub="Responsáveis pela Cotação · HORA INICIO → HORA FIM" dados={dados.equipe.cotacao} />
           <TabelaTempos titulo="Negociação" sub="Responsáveis pela Negociação · início → fim da negociação" dados={dados.equipe.negociacao} />
           <TabelaTempos titulo="Efetivação" sub="Responsável pela Efetivação · renovados no mês" dados={dados.equipe.efetivacao} />
         </div>
