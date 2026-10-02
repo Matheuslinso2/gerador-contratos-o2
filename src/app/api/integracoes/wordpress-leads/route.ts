@@ -50,11 +50,9 @@ export async function POST(request: NextRequest) {
     const payload = await request.json().catch(() => ({}));
     const campos = extrairCampos(payload);
     const formulario = request.nextUrl.searchParams.get("formulario") || null;
-    const paginaUrl =
-      primeiraChaveComValor(campos, ["page_url", "pagina_url", "url"]) ||
-      (typeof (payload as Record<string, unknown>)?.page_url === "string"
-        ? ((payload as Record<string, unknown>).page_url as string)
-        : null);
+    // "_post_url" é o campo que o Advanced Form Integration manda de fato
+    // pra formulários Elementor (confirmado no teste real, 02/10/2026).
+    const paginaUrl = primeiraChaveComValor(campos, ["page_url", "pagina_url", "url", "_post_url"]);
 
     const supabase = createServiceClient();
     const { error } = await supabase.from("leads_site_o2seguros").insert({
