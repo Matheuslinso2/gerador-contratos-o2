@@ -74,12 +74,12 @@ export default async function LeadsSitePage({
           <div className="rounded-2xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h2 className="text-sm font-semibold text-o2-navy">Tráfego do site (últimos {DIAS_TRAFEGO} dias)</h2>
-              <p className="text-xs text-gray-500">Fonte: Cloudflare Web Analytics</p>
+              <p className="text-xs text-gray-500">Fonte: Cloudflare (mede no servidor, então inclui robôs)</p>
             </div>
             <div className="mt-3 flex flex-wrap gap-8">
               <div>
                 <p className="text-2xl font-semibold text-o2-navy">{trafego.totalVisitas.toLocaleString("pt-BR")}</p>
-                <p className="text-xs text-gray-500">visitas</p>
+                <p className="text-xs text-gray-500">visitantes únicos (soma dos dias)</p>
               </div>
               <div>
                 <p className="text-2xl font-semibold text-o2-navy">{trafego.totalPageviews.toLocaleString("pt-BR")}</p>

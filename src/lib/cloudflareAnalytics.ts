@@ -10,86 +10,85 @@ export type ResultadoTrafego = {
   totalPageviews: number;
 };
 
-// Lê o Web Analytics (RUM) do Cloudflare via GraphQL -- mesmo dado que
-// aparece no painel do Cloudflare em Analytics > Web Analytics, sem
-// precisar do token de Zone Analytics completo (só "Zone > Analytics >
-// Read" escopado pra o2seguros.com.br). Pedido do Matheus, 02/10/2026: ver
-// no Workspace O2 o que já está rodando no Cloudflare, junto dos leads.
-export async function buscarTrafegoSite(dias: number): Promise<ResultadoTrafego | null> {
+type RespostaGraphql = { data?: { viewer?: { zones?: Record<string, unknown>[] } }; errors?: unknown[] } | null;
+
+async function consultarCloudflare(query: string, variables: Record<string, unknown>): Promise<RespostaGraphql> {
   const token = process.env.CLOUDFLARE_API_TOKEN;
-  const zoneId = process.env.CLOUDFLARE_ZONE_ID;
-  if (!token || !zoneId) return null;
-
-  const until = new Date();
-  const since = new Date(until.getTime() - dias * 24 * 60 * 60 * 1000);
-
-  const query = `
-    query Trafego($zoneTag: String!, $since: Time!, $until: Time!) {
-      viewer {
-        zones(filter: { zoneTag: $zoneTag }) {
-          porDia: rumPageloadEventsAdaptiveGroups(
-            limit: 1000
-            filter: { datetime_geq: $since, datetime_leq: $until }
-            orderBy: [date_ASC]
-          ) {
-            count
-            sum { visits }
-            dimensions { date }
-          }
-          porPagina: rumPageloadEventsAdaptiveGroups(
-            limit: 8
-            filter: { datetime_geq: $since, datetime_leq: $until }
-            orderBy: [sum_visits_DESC]
-          ) {
-            sum { visits }
-            dimensions { requestPath }
-          }
-        }
-      }
-    }
-  `;
-
-  let resposta: Response;
   try {
-    resposta = await fetch("https://api.cloudflare.com/client/v4/graphql", {
+    const resposta = await fetch("https://api.cloudflare.com/client/v4/graphql", {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query,
-        variables: { zoneTag: zoneId, since: since.toISOString(), until: until.toISOString() },
-      }),
+      body: JSON.stringify({ query, variables }),
       next: { revalidate: 900 },
     });
+    return (await resposta.json().catch(() => null)) as RespostaGraphql;
   } catch (error) {
     console.error("Falha de rede ao buscar tráfego do Cloudflare:", error);
     return null;
   }
+}
 
-  const json = await resposta.json().catch(() => null);
-  if (!json || json.errors?.length) {
-    console.error("Erro da API do Cloudflare (tráfego do site):", JSON.stringify(json?.errors ?? resposta.status));
+// Lista os campos de zona que a API expõe pra esse token -- só roda quando uma
+// consulta falha, pra eu acertar o nome do dataset olhando o log do Vercel
+// (o token nunca passa por mim).
+async function logarCamposDisponiveis() {
+  const resposta = await consultarCloudflare(
+    `query { __type(name: "zone") { fields { name } } }`,
+    {}
+  );
+  const campos = (resposta as { data?: { __type?: { fields?: { name: string }[] } } } | null)?.data?.__type?.fields;
+  const relevantes = (campos ?? []).map((c) => c.name).filter((n) => /http|rum|firewall|dns/i.test(n));
+  console.error("Campos de zona do Cloudflare disponíveis:", relevantes.join(", "));
+}
+
+// Lê o tráfego da zona o2seguros.com.br pela API GraphQL do Cloudflare
+// (token escopado só pra leitura de Analytics). Pedido do Matheus,
+// 02/10/2026: ver no Workspace O2 o tráfego do site junto dos leads.
+export async function buscarTrafegoSite(dias: number): Promise<ResultadoTrafego | null> {
+  const zoneId = process.env.CLOUDFLARE_ZONE_ID;
+  if (!process.env.CLOUDFLARE_API_TOKEN || !zoneId) return null;
+
+  const hoje = new Date();
+  const inicio = new Date(hoje.getTime() - (dias - 1) * 24 * 60 * 60 * 1000);
+  const dia = (d: Date) => d.toISOString().slice(0, 10);
+
+  const resposta = await consultarCloudflare(
+    `query Trafego($zoneTag: String!, $desde: Date!, $ate: Date!) {
+      viewer {
+        zones(filter: { zoneTag: $zoneTag }) {
+          porDia: httpRequests1dGroups(
+            limit: 100
+            filter: { date_geq: $desde, date_leq: $ate }
+            orderBy: [date_ASC]
+          ) {
+            dimensions { date }
+            sum { pageViews }
+            uniq { uniques }
+          }
+        }
+      }
+    }`,
+    { zoneTag: zoneId, desde: dia(inicio), ate: dia(hoje) }
+  );
+
+  if (!resposta || resposta.errors?.length) {
+    console.error("Erro da API do Cloudflare (tráfego do site):", JSON.stringify(resposta?.errors ?? "sem resposta"));
+    await logarCamposDisponiveis();
     return null;
   }
 
-  const zona = json.data?.viewer?.zones?.[0];
-  if (!zona) return null;
+  type ItemDia = { dimensions: { date: string }; sum: { pageViews: number }; uniq: { uniques: number } };
+  const itens = (resposta.data?.viewer?.zones?.[0]?.porDia ?? []) as ItemDia[];
 
-  type ItemDia = { count: number; sum: { visits: number }; dimensions: { date: string } };
-  type ItemPagina = { sum: { visits: number }; dimensions: { requestPath: string } };
-
-  const diario: TrafegoDiario[] = ((zona.porDia ?? []) as ItemDia[]).map((item) => ({
+  const diario: TrafegoDiario[] = itens.map((item) => ({
     data: item.dimensions.date,
-    visitas: item.sum.visits,
-    pageviews: item.count,
-  }));
-  const porPagina: TrafegoPorPagina[] = ((zona.porPagina ?? []) as ItemPagina[]).map((item) => ({
-    caminho: item.dimensions.requestPath,
-    visitas: item.sum.visits,
+    visitas: item.uniq.uniques,
+    pageviews: item.sum.pageViews,
   }));
 
   return {
     diario,
-    porPagina,
+    porPagina: [],
     totalVisitas: diario.reduce((acc, d) => acc + d.visitas, 0),
     totalPageviews: diario.reduce((acc, d) => acc + d.pageviews, 0),
   };
