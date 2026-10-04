@@ -36,6 +36,56 @@ async function consultarCloudflare(query: string, variables: Record<string, unkn
   }
 }
 
+const NOMES_SITE: Record<string, string> = {
+  "/": "Home",
+  "/contato": "Contato",
+  "/seguro-fianca-taxa-fixa": "Seguro Fiança Locatícia",
+  "/titulo-de-capitalizacao-o2-seguros": "Título de Capitalização",
+  "/seguro-incendio-imobiliario-o2": "Seguro Incêndio Obrigatório",
+  "/seguro-para-condominios": "Seguro para Condomínios",
+  "/seguro-protecao-aluguel": "Seguro Proteção Aluguel",
+  "/analise-cadastral": "Análise Cadastral",
+  "/seguro-automovel": "Seguro Automóvel",
+  "/seguro-saude": "Seguro Saúde",
+  "/seguro-de-vida": "Seguro de Vida",
+  "/bate-papo-o2": "Bate Papo O2",
+  "/blog": "Blog",
+};
+
+const NOMES_WORKSPACE: Record<string, string> = {
+  "/": "Início",
+  "/login": "Login",
+  "/ferramentas": "Ferramentas (Auditor e Multa)",
+  "/multa-rescisoria": "Calculadora de Multa",
+  "/auditar-contrato": "Auditor de Contrato",
+  "/cotacao": "Vitrine de cotação",
+  "/ficha-fianca": "Ficha Seguro Fiança",
+  "/capitalizacao": "Ficha Capitalização",
+  "/seguro-incendio": "Ficha Seguro Incêndio",
+  "/seguro-auto": "Ficha Seguro Auto",
+  "/rc-obras": "Ficha RC Obras",
+  "/rcp": "Ficha RCP",
+  "/condominio": "Ficha Condomínio",
+  "/seguro-celular": "Ficha Seguro Celular",
+  "/termos": "Termos de uso",
+};
+
+// Traduz host + caminho num nome legível ("Site · Contato"). Cai no caminho
+// "humanizado" quando não conhece a página (ex.: posts do blog).
+function nomearPagina(host: string, caminho: string): string {
+  const limpo = (caminho.length > 1 ? caminho.replace(/\/+$/, "") : caminho).toLowerCase() || "/";
+  const workspace = host.startsWith("contratos.");
+  const conhecido = (workspace ? NOMES_WORKSPACE : NOMES_SITE)[limpo];
+  const nome =
+    conhecido ??
+    limpo
+      .split("/")
+      .filter(Boolean)
+      .map((parte) => parte.replace(/-/g, " "))
+      .join(" › ");
+  return `${workspace ? "Workspace" : "Site"} · ${nome ? nome.charAt(0).toUpperCase() + nome.slice(1) : "Home"}`;
+}
+
 function somarPorNome<T>(grupos: T[][], nome: (item: T) => string, valor: (item: T) => number): ItemRanking[] {
   const mapa = new Map<string, number>();
   for (const lista of grupos) {
@@ -87,7 +137,7 @@ export async function buscarTrafegoSite(dias: number): Promise<ResultadoTrafego 
         viewer {
           zones(filter: { zoneTag: $zoneTag }) {
             paginas: httpRequestsAdaptiveGroups(
-              limit: 10
+              limit: 40
               filter: {
                 datetime_geq: $desde
                 datetime_leq: $ate
@@ -98,7 +148,7 @@ export async function buscarTrafegoSite(dias: number): Promise<ResultadoTrafego 
               orderBy: [count_DESC]
             ) {
               count
-              dimensions { clientRequestPath }
+              dimensions { clientRequestHTTPHost clientRequestPath }
             }
           }
         }
@@ -140,11 +190,13 @@ export async function buscarTrafegoSite(dias: number): Promise<ResultadoTrafego 
   if (!paginas || paginas.errors?.length) {
     console.error("Erro da API do Cloudflare (páginas mais acessadas):", JSON.stringify(paginas?.errors ?? "sem resposta"));
   } else {
-    type ItemPagina = { count: number; dimensions: { clientRequestPath: string } };
-    paginas24h = ((paginas.data?.viewer?.zones?.[0]?.paginas ?? []) as ItemPagina[]).map((p) => ({
-      nome: p.dimensions.clientRequestPath || "/",
-      valor: p.count,
-    }));
+    type ItemPagina = { count: number; dimensions: { clientRequestHTTPHost: string; clientRequestPath: string } };
+    const itensPagina = (paginas.data?.viewer?.zones?.[0]?.paginas ?? []) as ItemPagina[];
+    paginas24h = somarPorNome(
+      [itensPagina],
+      (p) => nomearPagina(p.dimensions.clientRequestHTTPHost ?? "", p.dimensions.clientRequestPath ?? "/"),
+      (p) => p.count
+    ).slice(0, 8);
   }
 
   return {
