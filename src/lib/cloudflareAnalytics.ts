@@ -1,23 +1,31 @@
 import "server-only";
 
 export type TrafegoDiario = { data: string; visitas: number; pageviews: number };
-export type TrafegoPorPagina = { caminho: string; visitas: number };
+export type ItemRanking = { nome: string; valor: number };
 
 export type ResultadoTrafego = {
   diario: TrafegoDiario[];
-  porPagina: TrafegoPorPagina[];
   totalVisitas: number;
   totalPageviews: number;
+  totalRequisicoes: number;
+  ameacasBloqueadas: number;
+  paises: ItemRanking[];
+  navegadores: ItemRanking[];
+  statusHttp: ItemRanking[];
+  // Últimas 24h (a API de páginas do plano grátis só olha 1 dia pra trás).
+  paginas24h: ItemRanking[];
 };
 
-type RespostaGraphql = { data?: { viewer?: { zones?: Record<string, unknown>[] } }; errors?: unknown[] } | null;
+type RespostaGraphql = {
+  data?: { viewer?: { zones?: Record<string, unknown>[] } };
+  errors?: unknown[];
+} | null;
 
 async function consultarCloudflare(query: string, variables: Record<string, unknown>): Promise<RespostaGraphql> {
-  const token = process.env.CLOUDFLARE_API_TOKEN;
   try {
     const resposta = await fetch("https://api.cloudflare.com/client/v4/graphql", {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`, "Content-Type": "application/json" },
       body: JSON.stringify({ query, variables }),
       next: { revalidate: 900 },
     });
@@ -28,57 +36,99 @@ async function consultarCloudflare(query: string, variables: Record<string, unkn
   }
 }
 
-// Lista os campos de zona que a API expõe pra esse token -- só roda quando uma
-// consulta falha, pra eu acertar o nome do dataset olhando o log do Vercel
-// (o token nunca passa por mim).
-async function logarCamposDisponiveis() {
-  const resposta = await consultarCloudflare(
-    `query { __type(name: "zone") { fields { name } } }`,
-    {}
-  );
-  const campos = (resposta as { data?: { __type?: { fields?: { name: string }[] } } } | null)?.data?.__type?.fields;
-  const relevantes = (campos ?? []).map((c) => c.name).filter((n) => /http|rum|firewall|dns/i.test(n));
-  console.error("Campos de zona do Cloudflare disponíveis:", relevantes.join(", "));
+function somarPorNome<T>(grupos: T[][], nome: (item: T) => string, valor: (item: T) => number): ItemRanking[] {
+  const mapa = new Map<string, number>();
+  for (const lista of grupos) {
+    for (const item of lista) mapa.set(nome(item), (mapa.get(nome(item)) ?? 0) + valor(item));
+  }
+  return Array.from(mapa, ([n, v]) => ({ nome: n, valor: v })).sort((a, b) => b.valor - a.valor);
 }
 
 // Lê o tráfego da zona o2seguros.com.br pela API GraphQL do Cloudflare
 // (token escopado só pra leitura de Analytics). Pedido do Matheus,
-// 02/10/2026: ver no Workspace O2 o tráfego do site junto dos leads.
+// 02/10/2026 e 04/10/2026: ver no Workspace O2 o tráfego do site junto dos
+// leads. Mede no servidor do Cloudflare, então inclui robôs.
 export async function buscarTrafegoSite(dias: number): Promise<ResultadoTrafego | null> {
   const zoneId = process.env.CLOUDFLARE_ZONE_ID;
   if (!process.env.CLOUDFLARE_API_TOKEN || !zoneId) return null;
 
-  const hoje = new Date();
-  const inicio = new Date(hoje.getTime() - (dias - 1) * 24 * 60 * 60 * 1000);
+  const agora = new Date();
+  const inicio = new Date(agora.getTime() - (dias - 1) * 24 * 60 * 60 * 1000);
   const dia = (d: Date) => d.toISOString().slice(0, 10);
 
-  const resposta = await consultarCloudflare(
-    `query Trafego($zoneTag: String!, $desde: Date!, $ate: Date!) {
-      viewer {
-        zones(filter: { zoneTag: $zoneTag }) {
-          porDia: httpRequests1dGroups(
-            limit: 100
-            filter: { date_geq: $desde, date_leq: $ate }
-            orderBy: [date_ASC]
-          ) {
-            dimensions { date }
-            sum { pageViews }
-            uniq { uniques }
+  const [principal, paginas] = await Promise.all([
+    consultarCloudflare(
+      `query Trafego($zoneTag: String!, $desde: Date!, $ate: Date!) {
+        viewer {
+          zones(filter: { zoneTag: $zoneTag }) {
+            porDia: httpRequests1dGroups(
+              limit: 100
+              filter: { date_geq: $desde, date_leq: $ate }
+              orderBy: [date_ASC]
+            ) {
+              dimensions { date }
+              sum {
+                pageViews
+                requests
+                threats
+                countryMap { clientCountryName requests }
+                browserMap { uaBrowserFamily pageViews }
+                responseStatusMap { edgeResponseStatus requests }
+              }
+              uniq { uniques }
+            }
           }
         }
+      }`,
+      { zoneTag: zoneId, desde: dia(inicio), ate: dia(agora) }
+    ),
+    consultarCloudflare(
+      `query Paginas($zoneTag: String!, $desde: Time!, $ate: Time!) {
+        viewer {
+          zones(filter: { zoneTag: $zoneTag }) {
+            paginas: httpRequestsAdaptiveGroups(
+              limit: 10
+              filter: {
+                datetime_geq: $desde
+                datetime_leq: $ate
+                requestSource: "eyeball"
+                edgeResponseContentTypeName: "html"
+                edgeResponseStatus: 200
+              }
+              orderBy: [count_DESC]
+            ) {
+              count
+              dimensions { clientRequestPath }
+            }
+          }
+        }
+      }`,
+      {
+        zoneTag: zoneId,
+        desde: new Date(agora.getTime() - 24 * 60 * 60 * 1000).toISOString(),
+        ate: agora.toISOString(),
       }
-    }`,
-    { zoneTag: zoneId, desde: dia(inicio), ate: dia(hoje) }
-  );
+    ),
+  ]);
 
-  if (!resposta || resposta.errors?.length) {
-    console.error("Erro da API do Cloudflare (tráfego do site):", JSON.stringify(resposta?.errors ?? "sem resposta"));
-    await logarCamposDisponiveis();
+  if (!principal || principal.errors?.length) {
+    console.error("Erro da API do Cloudflare (tráfego do site):", JSON.stringify(principal?.errors ?? "sem resposta"));
     return null;
   }
 
-  type ItemDia = { dimensions: { date: string }; sum: { pageViews: number }; uniq: { uniques: number } };
-  const itens = (resposta.data?.viewer?.zones?.[0]?.porDia ?? []) as ItemDia[];
+  type ItemDia = {
+    dimensions: { date: string };
+    sum: {
+      pageViews: number;
+      requests: number;
+      threats: number;
+      countryMap: { clientCountryName: string; requests: number }[];
+      browserMap: { uaBrowserFamily: string; pageViews: number }[];
+      responseStatusMap: { edgeResponseStatus: number; requests: number }[];
+    };
+    uniq: { uniques: number };
+  };
+  const itens = (principal.data?.viewer?.zones?.[0]?.porDia ?? []) as ItemDia[];
 
   const diario: TrafegoDiario[] = itens.map((item) => ({
     data: item.dimensions.date,
@@ -86,10 +136,26 @@ export async function buscarTrafegoSite(dias: number): Promise<ResultadoTrafego 
     pageviews: item.sum.pageViews,
   }));
 
+  let paginas24h: ItemRanking[] = [];
+  if (!paginas || paginas.errors?.length) {
+    console.error("Erro da API do Cloudflare (páginas mais acessadas):", JSON.stringify(paginas?.errors ?? "sem resposta"));
+  } else {
+    type ItemPagina = { count: number; dimensions: { clientRequestPath: string } };
+    paginas24h = ((paginas.data?.viewer?.zones?.[0]?.paginas ?? []) as ItemPagina[]).map((p) => ({
+      nome: p.dimensions.clientRequestPath || "/",
+      valor: p.count,
+    }));
+  }
+
   return {
     diario,
-    porPagina: [],
     totalVisitas: diario.reduce((acc, d) => acc + d.visitas, 0),
     totalPageviews: diario.reduce((acc, d) => acc + d.pageviews, 0),
+    totalRequisicoes: itens.reduce((acc, i) => acc + i.sum.requests, 0),
+    ameacasBloqueadas: itens.reduce((acc, i) => acc + i.sum.threats, 0),
+    paises: somarPorNome(itens.map((i) => i.sum.countryMap), (c) => c.clientCountryName, (c) => c.requests).slice(0, 6),
+    navegadores: somarPorNome(itens.map((i) => i.sum.browserMap), (b) => b.uaBrowserFamily, (b) => b.pageViews).slice(0, 6),
+    statusHttp: somarPorNome(itens.map((i) => i.sum.responseStatusMap), (s) => String(s.edgeResponseStatus), (s) => s.requests).slice(0, 6),
+    paginas24h,
   };
 }

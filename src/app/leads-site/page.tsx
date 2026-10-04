@@ -23,6 +23,35 @@ type LeadRow = {
   criado_em: string;
 };
 
+function Indicador({ valor, rotulo, destaque }: { valor: number; rotulo: string; destaque?: boolean }) {
+  return (
+    <div>
+      <p className={`text-2xl font-semibold ${destaque ? "text-o2-coral" : "text-o2-navy"}`}>{valor.toLocaleString("pt-BR")}</p>
+      <p className="text-xs text-gray-500">{rotulo}</p>
+    </div>
+  );
+}
+
+function Ranking({ titulo, itens }: { titulo: string; itens: { nome: string; valor: number }[] }) {
+  return (
+    <div>
+      <p className="mb-2 text-xs font-medium text-gray-500">{titulo}</p>
+      {itens.length === 0 ? (
+        <p className="text-xs text-gray-400">Sem dados.</p>
+      ) : (
+        <div className="space-y-1">
+          {itens.map((item) => (
+            <div key={item.nome} className="flex items-center justify-between gap-3 text-sm">
+              <span className="truncate text-o2-navy">{item.nome}</span>
+              <span className="shrink-0 text-xs text-gray-500">{item.valor.toLocaleString("pt-BR")}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default async function LeadsSitePage({
   searchParams,
 }: {
@@ -47,11 +76,14 @@ export default async function LeadsSitePage({
     query = query.or(`nome.ilike.${termo},email.ilike.${termo},telefone.ilike.${termo}`);
   }
 
-  const [{ data: leadsData }, { data: formulariosData }, trafego] = await Promise.all([
+  const desdeTrafego = new Date(Date.now() - DIAS_TRAFEGO * 24 * 60 * 60 * 1000).toISOString();
+  const [{ data: leadsData }, { data: formulariosData }, { count: leadsNoPeriodo }, trafego] = await Promise.all([
     query,
     supabase.from("leads_site_o2seguros").select("formulario").not("formulario", "is", null),
+    supabase.from("leads_site_o2seguros").select("id", { count: "exact", head: true }).gte("criado_em", desdeTrafego),
     buscarTrafegoSite(DIAS_TRAFEGO),
   ]);
+  const leads7dias = leadsNoPeriodo ?? 0;
   const leads = (leadsData ?? []) as LeadRow[];
   const formularios = Array.from(new Set((formulariosData ?? []).map((f) => f.formulario as string))).sort();
   const picoVisitasDia = Math.max(1, ...(trafego?.diario.map((d) => d.visitas) ?? [0]));
@@ -71,52 +103,49 @@ export default async function LeadsSitePage({
         />
 
         {trafego && (
-          <div className="rounded-2xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
+          <div className="space-y-4 rounded-2xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h2 className="text-sm font-semibold text-o2-navy">Tráfego do site (últimos {DIAS_TRAFEGO} dias)</h2>
               <p className="text-xs text-gray-500">Fonte: Cloudflare (mede no servidor, então inclui robôs)</p>
             </div>
-            <div className="mt-3 flex flex-wrap gap-8">
-              <div>
-                <p className="text-2xl font-semibold text-o2-navy">{trafego.totalVisitas.toLocaleString("pt-BR")}</p>
-                <p className="text-xs text-gray-500">visitantes únicos (soma dos dias)</p>
-              </div>
-              <div>
-                <p className="text-2xl font-semibold text-o2-navy">{trafego.totalPageviews.toLocaleString("pt-BR")}</p>
-                <p className="text-xs text-gray-500">pageviews</p>
-              </div>
+
+            <div className="flex flex-wrap gap-x-10 gap-y-3">
+              <Indicador valor={trafego.totalVisitas} rotulo="visitantes únicos (soma dos dias)" />
+              <Indicador valor={trafego.totalPageviews} rotulo="pageviews" />
+              <Indicador valor={trafego.totalRequisicoes} rotulo="requisições ao servidor" />
+              <Indicador valor={trafego.ameacasBloqueadas} rotulo="ameaças bloqueadas" />
+              <Indicador valor={leads7dias} rotulo="leads captados no período" destaque />
             </div>
 
             {trafego.diario.length > 0 && (
-              <div className="mt-4 flex h-24 items-end gap-2">
-                {trafego.diario.map((dia) => (
-                  <div key={dia.data} className="flex flex-1 flex-col items-center gap-1">
-                    <div
-                      className="w-full rounded-t bg-o2-coral/70"
-                      style={{ height: `${Math.max(4, (dia.visitas / picoVisitasDia) * 100)}%` }}
-                      title={`${dia.visitas} visitas em ${dia.data}`}
-                    />
-                    <span className="text-[10px] text-gray-400">
+              <div>
+                <div className="flex h-24 items-end gap-2">
+                  {trafego.diario.map((dia) => (
+                    <div key={dia.data} className="flex h-full flex-1 items-end">
+                      <div
+                        className="w-full rounded-t bg-o2-coral/70"
+                        style={{ height: `${Math.max(4, (dia.visitas / picoVisitasDia) * 100)}%` }}
+                        title={`${dia.visitas} visitantes únicos em ${dia.data}`}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-1 flex gap-2">
+                  {trafego.diario.map((dia) => (
+                    <span key={dia.data} className="flex-1 text-center text-[10px] text-gray-400">
                       {new Date(dia.data + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
                     </span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {trafego.porPagina.length > 0 && (
-              <div className="mt-5 border-t border-o2-navy/10 pt-3">
-                <p className="mb-2 text-xs font-medium text-gray-500">Páginas mais visitadas</p>
-                <div className="space-y-1">
-                  {trafego.porPagina.map((pagina) => (
-                    <div key={pagina.caminho} className="flex items-center justify-between gap-3 text-sm">
-                      <span className="truncate text-o2-navy">{pagina.caminho || "/"}</span>
-                      <span className="shrink-0 text-xs text-gray-500">{pagina.visitas.toLocaleString("pt-BR")}</span>
-                    </div>
                   ))}
                 </div>
               </div>
             )}
+
+            <div className="grid gap-5 border-t border-o2-navy/10 pt-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Ranking titulo="Páginas mais acessadas (24h)" itens={trafego.paginas24h} />
+              <Ranking titulo="Países (requisições)" itens={trafego.paises} />
+              <Ranking titulo="Navegadores (pageviews)" itens={trafego.navegadores} />
+              <Ranking titulo="Respostas do servidor" itens={trafego.statusHttp} />
+            </div>
           </div>
         )}
 
