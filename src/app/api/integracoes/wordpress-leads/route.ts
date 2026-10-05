@@ -4,6 +4,10 @@ import { enviarEmail } from "@/lib/email";
 import { EMAIL_COMERCIAL_O2, blocoSecao, botaoPill, envolverEmailO2, linhaCampo } from "@/lib/integracoes/emailO2";
 
 export const dynamic = "force-dynamic";
+
+// Quem recebe o aviso de lead novo do site (comercial + marketing, pedido do
+// Matheus em 05/10/2026).
+const DESTINOS_AVISO = [EMAIL_COMERCIAL_O2, "marketing@o2seguros.com.br"];
 export const maxDuration = 30;
 
 // Recebe o envio de QUALQUER formulário Elementor do site o2seguros.com.br,
@@ -113,7 +117,7 @@ export async function POST(request: NextRequest) {
       origem: formulario ?? "site",
     });
     const envio = await enviarEmail({
-      para: EMAIL_COMERCIAL_O2,
+      para: DESTINOS_AVISO,
       assunto: `Novo lead no site — ${nome ?? email ?? "sem nome"}`,
       html,
       remetente: "Plataforma O2 — Site",
