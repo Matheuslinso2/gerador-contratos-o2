@@ -2617,6 +2617,10 @@ export default async function SeguroFiancaPage({
                           valor: gerencial.contratosTardios.tardios,
                         },
                         {
+                          indicador: "Tardios Efetivados",
+                          valor: gerencial.contratosTardios.tardiosEfetivados ?? "",
+                        },
+                        {
                           indicador: "Contratação Tardia",
                           valor: gerencial.contratosTardios.contratacaoTardia,
                         },
@@ -2649,6 +2653,15 @@ export default async function SeguroFiancaPage({
                       label="Contratos Tardios"
                       value={String(gerencial.contratosTardios.tardios)}
                       sub="criados antes, receberam contrato este mês"
+                    />
+                    <Kpi
+                      label="Tardios Efetivados"
+                      value={
+                        gerencial.contratosTardios.tardiosEfetivados === undefined
+                          ? "—"
+                          : String(gerencial.contratosTardios.tardiosEfetivados)
+                      }
+                      sub="desses contratos tardios, convertidos este mês"
                     />
                     <Kpi
                       label="Contratação Tardia"

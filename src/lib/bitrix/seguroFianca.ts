@@ -789,6 +789,10 @@ export type AnaliseGerencial = {
   // calculado, em montarAnaliseGerencial.
   contratosTardios: {
     tardios: number;
+    // Dos contratos tardios (entraram em Contrato Recebido neste mês), quantos
+    // já converteram neste mês. Opcional: retratos congelados antes de
+    // 05/10/2026 não têm esse campo.
+    tardiosEfetivados?: number;
     contratacaoTardia: number;
     pctContratacaoTardiaSobreFechamentos: number;
     premioLiquidoContratacaoTardia: number;
@@ -1419,6 +1423,7 @@ export function montarAnaliseGerencial(
   const herdadosEmAberto = relevantes.filter((l) => l.competencia !== competencia && l.resultado === "Em andamento");
   const contratosTardios = {
     tardios: cardsContratoTardio.length,
+    tardiosEfetivados: cardsContratoTardio.filter((l) => !!l.dataConversao && l.dataConversao.startsWith(competencia)).length,
     contratacaoTardia: cardsContratacaoTardia.length,
     pctContratacaoTardiaSobreFechamentos: convertidosEsteMes.length
       ? Math.round((cardsContratacaoTardia.length / convertidosEsteMes.length) * 1000) / 10
