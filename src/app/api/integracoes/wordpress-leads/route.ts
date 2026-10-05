@@ -61,6 +61,9 @@ export async function POST(request: NextRequest) {
       nome: primeiraChaveComValor(campos, ["nome", "name", "seu_nome", "Nome", "full_name"]),
       email: primeiraChaveComValor(campos, ["email", "e-mail", "seu_email", "Email"]),
       telefone: primeiraChaveComValor(campos, ["telefone", "phone", "whatsapp", "celular", "Telefone"]),
+      utm_source: primeiraChaveComValor(campos, ["utm_source", "UTM_source"]),
+      utm_medium: primeiraChaveComValor(campos, ["utm_medium", "UTM_medium"]),
+      utm_campaign: primeiraChaveComValor(campos, ["utm_campaign", "UTM_campaign"]),
       campos: payload,
     });
 

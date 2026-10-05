@@ -12,6 +12,14 @@ export const dynamic = "force-dynamic";
 
 const DIAS_TRAFEGO = 7;
 
+// Página do site onde cada formulário fica -- usado pra calcular a conversão
+// (leads do formulário / visitas da página, na mesma janela de 24h).
+const PAGINA_DO_FORMULARIO: Record<string, string> = {
+  home_cotacao: "Site · Home",
+  home_auditoria_calculadora: "Site · Home",
+  contato: "Site · Contato",
+};
+
 type LeadRow = {
   id: string;
   formulario: string | null;
@@ -77,13 +85,33 @@ export default async function LeadsSitePage({
   }
 
   const desdeTrafego = new Date(Date.now() - DIAS_TRAFEGO * 24 * 60 * 60 * 1000).toISOString();
-  const [{ data: leadsData }, { data: formulariosData }, { count: leadsNoPeriodo }, trafego] = await Promise.all([
+  const [{ data: leadsData }, { data: formulariosData }, { data: leadsPeriodoData }, trafego] = await Promise.all([
     query,
     supabase.from("leads_site_o2seguros").select("formulario").not("formulario", "is", null),
-    supabase.from("leads_site_o2seguros").select("id", { count: "exact", head: true }).gte("criado_em", desdeTrafego),
+    supabase
+      .from("leads_site_o2seguros")
+      .select("formulario, utm_source, criado_em")
+      .gte("criado_em", desdeTrafego)
+      .limit(5000),
     buscarTrafegoSite(DIAS_TRAFEGO),
   ]);
-  const leads7dias = leadsNoPeriodo ?? 0;
+  const leadsPeriodo = (leadsPeriodoData ?? []) as { formulario: string | null; utm_source: string | null; criado_em: string }[];
+  const leads7dias = leadsPeriodo.length;
+  const corte24h = Date.now() - 24 * 60 * 60 * 1000;
+  const porOrigem = Array.from(
+    leadsPeriodo.reduce((mapa, l) => {
+      const origem = l.utm_source || "Sem origem identificada";
+      return mapa.set(origem, (mapa.get(origem) ?? 0) + 1);
+    }, new Map<string, number>()),
+    ([nome, valor]) => ({ nome, valor })
+  ).sort((a, b) => b.valor - a.valor);
+  const conversao = Array.from(new Set(Object.values(PAGINA_DO_FORMULARIO))).map((pagina) => {
+    const visitas = trafego?.paginas24h.find((p) => p.nome === pagina)?.valor ?? 0;
+    const leadsPagina = leadsPeriodo.filter(
+      (l) => l.formulario && PAGINA_DO_FORMULARIO[l.formulario] === pagina && new Date(l.criado_em).getTime() >= corte24h
+    ).length;
+    return { pagina, visitas, leads: leadsPagina, taxa: visitas > 0 ? (leadsPagina / visitas) * 100 : 0 };
+  });
   const leads = (leadsData ?? []) as LeadRow[];
   const formularios = Array.from(new Set((formulariosData ?? []).map((f) => f.formulario as string))).sort();
   const picoVisitasDia = Math.max(1, ...(trafego?.diario.map((d) => d.visitas) ?? [0]));
@@ -145,6 +173,25 @@ export default async function LeadsSitePage({
               <Ranking titulo="Países (requisições)" itens={trafego.paises} />
               <Ranking titulo="Navegadores (pageviews)" itens={trafego.navegadores} />
               <Ranking titulo="Respostas do servidor" itens={trafego.statusHttp} />
+            </div>
+
+            <div className="grid gap-5 border-t border-o2-navy/10 pt-4 sm:grid-cols-2">
+              <div>
+                <p className="mb-2 text-xs font-medium text-gray-500">Conversão por página (24h)</p>
+                <div className="space-y-1">
+                  {conversao.map((c) => (
+                    <div key={c.pagina} className="flex items-center justify-between gap-3 text-sm">
+                      <span className="truncate text-o2-navy">{c.pagina}</span>
+                      <span className="shrink-0 text-xs text-gray-500">
+                        {c.leads} lead{c.leads === 1 ? "" : "s"} / {c.visitas.toLocaleString("pt-BR")} visitas ·{" "}
+                        <strong className="text-o2-coral">{c.taxa.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%</strong>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-1 text-[11px] text-gray-400">Visitas incluem robôs, então a taxa real é maior.</p>
+              </div>
+              <Ranking titulo={`Leads por origem (${DIAS_TRAFEGO} dias)`} itens={porOrigem} />
             </div>
           </div>
         )}
