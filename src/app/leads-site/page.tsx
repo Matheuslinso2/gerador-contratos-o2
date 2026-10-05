@@ -7,6 +7,7 @@ import AppHeader from "@/components/AppHeader";
 import PageHeader from "@/components/PageHeader";
 import { IconReport } from "@/components/icons";
 import { buscarTrafegoSite } from "@/lib/cloudflareAnalytics";
+import { cruzarLeadsComBitrix, mapaEtapasLead } from "@/lib/leadsSiteBitrix";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,9 @@ type LeadRow = {
   telefone: string | null;
   campos: Record<string, unknown>;
   criado_em: string;
+  bitrix_status: string | null;
+  bitrix_conhecido: boolean | null;
+  bitrix_checado_em: string | null;
 };
 
 function Indicador({ valor, rotulo, destaque }: { valor: number; rotulo: string; destaque?: boolean }) {
@@ -74,7 +78,7 @@ export default async function LeadsSitePage({
 
   let query = supabase
     .from("leads_site_o2seguros")
-    .select("id, formulario, pagina_url, nome, email, telefone, campos, criado_em")
+    .select("id, formulario, pagina_url, nome, email, telefone, campos, criado_em, bitrix_status, bitrix_conhecido, bitrix_checado_em")
     .order("criado_em", { ascending: false })
     .limit(500);
 
@@ -84,18 +88,46 @@ export default async function LeadsSitePage({
     query = query.or(`nome.ilike.${termo},email.ilike.${termo},telefone.ilike.${termo}`);
   }
 
+  // Cruza os leads recentes com o Bitrix antes de listar (até 20 por carga).
+  // Falha do Bitrix não derruba a tela.
+  let etapasBitrix: Record<string, string> = {};
+  try {
+    const { data: recentes } = await supabase
+      .from("leads_site_o2seguros")
+      .select("id, email, telefone, bitrix_status, bitrix_checado_em")
+      .gte("criado_em", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+      .order("criado_em", { ascending: false })
+      .limit(200);
+    await cruzarLeadsComBitrix(supabase, recentes ?? []);
+    etapasBitrix = await mapaEtapasLead();
+  } catch (erro) {
+    console.error("Cruzamento de leads do site com o Bitrix falhou:", erro);
+  }
+
   const desdeTrafego = new Date(Date.now() - DIAS_TRAFEGO * 24 * 60 * 60 * 1000).toISOString();
   const [{ data: leadsData }, { data: formulariosData }, { data: leadsPeriodoData }, trafego] = await Promise.all([
     query,
     supabase.from("leads_site_o2seguros").select("formulario").not("formulario", "is", null),
     supabase
       .from("leads_site_o2seguros")
-      .select("formulario, utm_source, criado_em")
+      .select("formulario, utm_source, criado_em, bitrix_status, bitrix_conhecido, bitrix_checado_em")
       .gte("criado_em", desdeTrafego)
       .limit(5000),
     buscarTrafegoSite(DIAS_TRAFEGO),
   ]);
-  const leadsPeriodo = (leadsPeriodoData ?? []) as { formulario: string | null; utm_source: string | null; criado_em: string }[];
+  const leadsPeriodo = (leadsPeriodoData ?? []) as {
+    formulario: string | null;
+    utm_source: string | null;
+    criado_em: string;
+    bitrix_status: string | null;
+    bitrix_conhecido: boolean | null;
+    bitrix_checado_em: string | null;
+  }[];
+  const noBitrix = leadsPeriodo.filter((l) => l.bitrix_status || l.bitrix_conhecido).length;
+  const convertidos = leadsPeriodo.filter((l) => l.bitrix_status === "CONVERTED").length;
+  const encerrados = leadsPeriodo.filter((l) => l.bitrix_status === "JUNK").length;
+  const emAtendimento = leadsPeriodo.filter((l) => l.bitrix_status && !["CONVERTED", "JUNK"].includes(l.bitrix_status)).length;
+  const naoChecados = leadsPeriodo.filter((l) => !l.bitrix_checado_em).length;
   const leads7dias = leadsPeriodo.length;
   const corte24h = Date.now() - 24 * 60 * 60 * 1000;
   const porOrigem = Array.from(
@@ -196,6 +228,26 @@ export default async function LeadsSitePage({
           </div>
         )}
 
+        {leads7dias > 0 && (
+          <div className="space-y-3 rounded-2xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="text-sm font-semibold text-o2-navy">Qualidade dos leads (últimos {DIAS_TRAFEGO} dias)</h2>
+              <p className="text-xs text-gray-500">Cruzamento por e-mail/telefone com o Bitrix</p>
+            </div>
+            <div className="flex flex-wrap gap-x-10 gap-y-3">
+              <Indicador valor={leads7dias} rotulo="leads do site" />
+              <Indicador valor={noBitrix} rotulo="já aparecem no Bitrix" />
+              <Indicador valor={emAtendimento} rotulo="em atendimento no funil" />
+              <Indicador valor={convertidos} rotulo="convertidos (parceiro ativado)" destaque />
+              <Indicador valor={encerrados} rotulo="encerrados sem ativação" />
+            </div>
+            <p className="text-[11px] text-gray-400">
+              Os formulários do site ainda não criam lead no Bitrix; "aparece no Bitrix" depende de o time cadastrar o contato.
+              {naoChecados > 0 && ` ${naoChecados} lead(s) ainda serão checados na próxima abertura da tela.`}
+            </p>
+          </div>
+        )}
+
         <form className="flex flex-wrap items-end gap-3 rounded-2xl border border-o2-navy/10 bg-quadro p-4 shadow-sm">
           <div className="flex-1 min-w-[200px]">
             <label className="mb-1 block text-xs font-medium text-gray-500">Buscar por nome, e-mail ou telefone</label>
@@ -259,6 +311,25 @@ export default async function LeadsSitePage({
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
+                    {(lead.bitrix_status || lead.bitrix_conhecido || lead.bitrix_checado_em) && (
+                      <span
+                        className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${
+                          lead.bitrix_status === "CONVERTED"
+                            ? "bg-green-100 text-green-700"
+                            : lead.bitrix_status === "JUNK"
+                              ? "bg-gray-100 text-gray-600"
+                              : lead.bitrix_status || lead.bitrix_conhecido
+                                ? "bg-blue-100 text-blue-700"
+                                : "bg-amber-100 text-amber-700"
+                        }`}
+                      >
+                        {lead.bitrix_status
+                          ? `Bitrix: ${etapasBitrix[lead.bitrix_status] ?? lead.bitrix_status}`
+                          : lead.bitrix_conhecido
+                            ? "Já é contato no Bitrix"
+                            : "Não está no Bitrix"}
+                      </span>
+                    )}
                     {lead.formulario && (
                       <span className="whitespace-nowrap rounded-full bg-o2-navy/5 px-2.5 py-1 text-xs font-medium text-o2-navy">
                         {lead.formulario}
