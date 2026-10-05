@@ -1,6 +1,6 @@
 import "server-only";
 
-import { lerFonteRamosElementares, type FonteRamosBruta } from "./fonteGoogle";
+import { lerFonteRamosElementares, PlanilhaDaCompetenciaNaoEncontradaError, type FonteRamosBruta } from "./fonteGoogle";
 import { lerFonteRamosElementaresBitrix } from "./fonteBitrix";
 
 // A partir de COMPETENCIA_INICIO_HIBRIDO (ver page.tsx), Novos Negócios e
@@ -17,11 +17,34 @@ import { lerFonteRamosElementaresBitrix } from "./fonteBitrix";
 // aqui. Agora soma as duas fontes. Endossos segue só na planilha por
 // enquanto -- mesmo achado existe lá (bitrix.abas.endossos também fica sem
 // uso), mas não afeta comissão/efetivados e fica pra uma correção à parte.
+//
+// Achado real (05/10/2026): em outubro a equipe deixou de criar a planilha
+// mensal (migração completa pro Bitrix, como o Matheus avisou em 01/09) --
+// sem a "10 OUTUBRO /2026- COTAÇÃO DIÁRIA RE" na pasta, a leitura do Google
+// lançava erro, o Promise.all derrubava a busca INTEIRA (inclusive o Bitrix,
+// que tinha os dados) e o painel caía no fallback "vazio" -- tudo zerado.
+// Agora, se o único problema é a planilha do mês não existir, segue só com o
+// Bitrix, que já traz novos, renovações E endossos. Qualquer outro erro do
+// Google (autenticação, duplicidade de planilha) continua falhando alto, pra
+// não mostrar número parcial sem avisar.
 export async function lerFonteRamosElementaresHibrida(competencia: string): Promise<FonteRamosBruta> {
   const [google, bitrix] = await Promise.all([
-    lerFonteRamosElementares(competencia),
+    lerFonteRamosElementares(competencia).catch((erro) => {
+      if (erro instanceof PlanilhaDaCompetenciaNaoEncontradaError) return null;
+      throw erro;
+    }),
     lerFonteRamosElementaresBitrix(competencia),
   ]);
+
+  if (!google) {
+    return {
+      ...bitrix,
+      avisos: [
+        `Planilha mensal de ${competencia} não encontrada na pasta — painel montado só com o Bitrix24 (novos, renovações e endossos).`,
+        ...bitrix.avisos,
+      ],
+    };
+  }
 
   return {
     competencia,

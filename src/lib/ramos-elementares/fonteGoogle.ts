@@ -111,6 +111,11 @@ async function lerTituloPlanilha(id: string): Promise<{ titulo: string; url: str
   };
 }
 
+// Erro específico de "não existe planilha deste mês" -- diferente de falha
+// de autenticação/rede/duplicidade, que continuam sendo erros comuns. A
+// fonte híbrida (fonteHibrida.ts) só tolera esta, e segue só com o Bitrix.
+export class PlanilhaDaCompetenciaNaoEncontradaError extends Error {}
+
 export async function resolverPlanilhaDaCompetencia(competencia: string): Promise<{
   id: string;
   titulo: string;
@@ -165,14 +170,16 @@ export async function resolverPlanilhaDaCompetencia(competencia: string): Promis
       );
     }
     if (!planilhaFixaId) {
-      throw new Error(`Nenhuma planilha original de COTAÇÃO DIÁRIA RE foi encontrada na pasta para ${competencia}.`);
+      throw new PlanilhaDaCompetenciaNaoEncontradaError(
+        `Nenhuma planilha original de COTAÇÃO DIÁRIA RE foi encontrada na pasta para ${competencia}.`
+      );
     }
   }
 
   if (planilhaFixaId) {
     const planilha = await lerTituloPlanilha(planilhaFixaId);
     if (!tituloCompativel(planilha.titulo, competencia)) {
-      throw new Error(
+      throw new PlanilhaDaCompetenciaNaoEncontradaError(
         `A planilha configurada (${planilha.titulo}) não corresponde à competência ${competencia}. Configure a pasta mensal no Vercel.`
       );
     }
