@@ -7,6 +7,7 @@ import AppHeader from "@/components/AppHeader";
 import PageHeader from "@/components/PageHeader";
 import { IconReport } from "@/components/icons";
 import { buscarTrafegoSite } from "@/lib/cloudflareAnalytics";
+import { atualizarAcompanhamentoLead } from "./actions";
 import { cruzarLeadsComBitrix, mapaEtapasLead } from "@/lib/leadsSiteBitrix";
 
 export const dynamic = "force-dynamic";
@@ -33,12 +34,29 @@ type LeadRow = {
   bitrix_status: string | null;
   bitrix_conhecido: boolean | null;
   bitrix_checado_em: string | null;
+  status_interno: string;
+  observacoes: string | null;
+  atualizado_por: string | null;
+  atualizado_em: string | null;
 };
 
-function Indicador({ valor, rotulo, destaque }: { valor: number; rotulo: string; destaque?: boolean }) {
+const ROTULO_STATUS: Record<string, string> = {
+  novo: "Novo",
+  contatado: "Contatado",
+  qualificado: "Qualificado",
+  descartado: "Descartado",
+};
+const COR_STATUS: Record<string, string> = {
+  novo: "bg-o2-coral/15 text-o2-coral",
+  contatado: "bg-blue-100 text-blue-700",
+  qualificado: "bg-green-100 text-green-700",
+  descartado: "bg-gray-100 text-gray-600",
+};
+
+function Indicador({ valor, rotulo, destaque }: { valor: number | string; rotulo: string; destaque?: boolean }) {
   return (
     <div>
-      <p className={`text-2xl font-semibold ${destaque ? "text-o2-coral" : "text-o2-navy"}`}>{valor.toLocaleString("pt-BR")}</p>
+      <p className={`text-2xl font-semibold ${destaque ? "text-o2-coral" : "text-o2-navy"}`}>{typeof valor === "number" ? valor.toLocaleString("pt-BR") : valor}</p>
       <p className="text-xs text-gray-500">{rotulo}</p>
     </div>
   );
@@ -67,9 +85,9 @@ function Ranking({ titulo, itens }: { titulo: string; itens: { nome: string; val
 export default async function LeadsSitePage({
   searchParams,
 }: {
-  searchParams: Promise<{ busca?: string; formulario?: string }>;
+  searchParams: Promise<{ busca?: string; formulario?: string; status?: string }>;
 }) {
-  const { busca, formulario } = await searchParams;
+  const { busca, formulario, status } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -78,11 +96,12 @@ export default async function LeadsSitePage({
 
   let query = supabase
     .from("leads_site_o2seguros")
-    .select("id, formulario, pagina_url, nome, email, telefone, campos, criado_em, bitrix_status, bitrix_conhecido, bitrix_checado_em")
+    .select("id, formulario, pagina_url, nome, email, telefone, campos, criado_em, bitrix_status, bitrix_conhecido, bitrix_checado_em, status_interno, observacoes, atualizado_por, atualizado_em")
     .order("criado_em", { ascending: false })
     .limit(500);
 
   if (formulario) query = query.eq("formulario", formulario);
+  if (status && ROTULO_STATUS[status]) query = query.eq("status_interno", status);
   if (busca?.trim()) {
     const termo = `%${busca.trim()}%`;
     query = query.or(`nome.ilike.${termo},email.ilike.${termo},telefone.ilike.${termo}`);
@@ -110,7 +129,7 @@ export default async function LeadsSitePage({
     supabase.from("leads_site_o2seguros").select("formulario").not("formulario", "is", null),
     supabase
       .from("leads_site_o2seguros")
-      .select("formulario, utm_source, criado_em, bitrix_status, bitrix_conhecido, bitrix_checado_em")
+      .select("formulario, utm_source, criado_em, bitrix_status, bitrix_conhecido, bitrix_checado_em, status_interno, primeiro_contato_em")
       .gte("criado_em", desdeTrafego)
       .limit(5000),
     buscarTrafegoSite(DIAS_TRAFEGO),
@@ -122,7 +141,16 @@ export default async function LeadsSitePage({
     bitrix_status: string | null;
     bitrix_conhecido: boolean | null;
     bitrix_checado_em: string | null;
+    status_interno: string;
+    primeiro_contato_em: string | null;
   }[];
+  const semContato = leadsPeriodo.filter((l) => l.status_interno === "novo").length;
+  const temposContato = leadsPeriodo
+    .filter((l) => l.primeiro_contato_em)
+    .map((l) => new Date(l.primeiro_contato_em as string).getTime() - new Date(l.criado_em).getTime());
+  const horasAteContato = temposContato.length
+    ? temposContato.reduce((a, b) => a + b, 0) / temposContato.length / 3600000
+    : null;
   const noBitrix = leadsPeriodo.filter((l) => l.bitrix_status || l.bitrix_conhecido).length;
   const convertidos = leadsPeriodo.filter((l) => l.bitrix_status === "CONVERTED").length;
   const encerrados = leadsPeriodo.filter((l) => l.bitrix_status === "JUNK").length;
@@ -236,6 +264,11 @@ export default async function LeadsSitePage({
             </div>
             <div className="flex flex-wrap gap-x-10 gap-y-3">
               <Indicador valor={leads7dias} rotulo="leads do site" />
+              <Indicador valor={semContato} rotulo="ainda sem contato (status Novo)" />
+              <Indicador
+                valor={horasAteContato === null ? "—" : `${horasAteContato.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} h`}
+                rotulo="tempo médio até o 1º contato"
+              />
               <Indicador valor={noBitrix} rotulo="já aparecem no Bitrix" />
               <Indicador valor={emAtendimento} rotulo="em atendimento no funil" />
               <Indicador valor={convertidos} rotulo="convertidos (parceiro ativado)" destaque />
@@ -274,13 +307,28 @@ export default async function LeadsSitePage({
               ))}
             </select>
           </div>
+          <div className="min-w-[150px]">
+            <label className="mb-1 block text-xs font-medium text-gray-500">Status</label>
+            <select
+              name="status"
+              defaultValue={status ?? ""}
+              className="w-full rounded-lg border border-o2-navy/20 px-3 py-2 text-sm focus:border-o2-navy focus:outline-none"
+            >
+              <option value="">Todos</option>
+              {Object.entries(ROTULO_STATUS).map(([valor, rotulo]) => (
+                <option key={valor} value={valor}>
+                  {rotulo}
+                </option>
+              ))}
+            </select>
+          </div>
           <button
             type="submit"
             className="whitespace-nowrap rounded-full bg-o2-coral px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
           >
             Filtrar
           </button>
-          {(busca || formulario) && (
+          {(busca || formulario || status) && (
             <Link href="/leads-site" className="text-sm font-medium text-o2-navy hover:underline">
               Limpar filtros
             </Link>
@@ -288,7 +336,7 @@ export default async function LeadsSitePage({
         </form>
 
         <p className="text-xs text-gray-500">
-          {leads.length} lead{leads.length === 1 ? "" : "s"} {busca || formulario ? "encontrado(s)" : "no total (últimos 500)"}
+          {leads.length} lead{leads.length === 1 ? "" : "s"} {busca || formulario || status ? "encontrado(s)" : "no total (últimos 500)"}
         </p>
 
         {!leads.length ? (
@@ -311,6 +359,9 @@ export default async function LeadsSitePage({
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
+                    <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${COR_STATUS[lead.status_interno] ?? COR_STATUS.novo}`}>
+                      {ROTULO_STATUS[lead.status_interno] ?? lead.status_interno}
+                    </span>
                     {(lead.bitrix_status || lead.bitrix_conhecido || lead.bitrix_checado_em) && (
                       <span
                         className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${
@@ -353,6 +404,47 @@ export default async function LeadsSitePage({
                       </a>
                     </p>
                   )}
+                  <form action={atualizarAcompanhamentoLead} className="space-y-2 rounded-lg border border-o2-navy/10 bg-white p-3">
+                    <input type="hidden" name="lead_id" value={lead.id} />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="text-xs font-medium text-gray-500">Status</label>
+                      <select
+                        name="status_interno"
+                        defaultValue={lead.status_interno}
+                        className="rounded-lg border border-o2-navy/20 px-2 py-1 text-sm focus:border-o2-navy focus:outline-none"
+                      >
+                        {Object.entries(ROTULO_STATUS).map(([valor, rotulo]) => (
+                          <option key={valor} value={valor}>
+                            {rotulo}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="submit"
+                        className="rounded-full bg-o2-coral px-3 py-1 text-xs font-medium text-white transition hover:opacity-90"
+                      >
+                        Salvar
+                      </button>
+                      {lead.atualizado_em && (
+                        <span className="text-[11px] text-gray-400">
+                          Atualizado por {lead.atualizado_por ?? "—"} em{" "}
+                          {new Date(lead.atualizado_em).toLocaleString("pt-BR", {
+                            timeZone: "America/Sao_Paulo",
+                            dateStyle: "short",
+                            timeStyle: "short",
+                          })}
+                        </span>
+                      )}
+                    </div>
+                    <textarea
+                      name="observacoes"
+                      defaultValue={lead.observacoes ?? ""}
+                      rows={2}
+                      maxLength={2000}
+                      placeholder="Observações (ex: liguei, pediu retorno amanhã)"
+                      className="w-full rounded-lg border border-o2-navy/20 px-3 py-2 text-sm focus:border-o2-navy focus:outline-none"
+                    />
+                  </form>
                   <pre className="overflow-x-auto rounded-lg bg-o2-navy/5 p-3 text-xs text-gray-700">
                     {JSON.stringify(lead.campos, null, 2)}
                   </pre>
