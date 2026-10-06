@@ -150,7 +150,44 @@ export async function montarRelatorioDiario(agora = new Date()): Promise<Relator
   return { periodo, fianca, capitalizacao, auto, ramos };
 }
 
-// --- Texto (prévia e, depois, parâmetros do modelo aprovado na Meta) ---
+// --- Texto: modelo cadastrado na Meta + os parâmetros que preenchem ele ---
+//
+// Mensagem que a plataforma INICIA no WhatsApp precisa ser um modelo
+// aprovado pela Meta, com texto fixo e {{n}} no lugar do que muda. Regras
+// da Meta: parâmetro não pode ter quebra de linha, e o corpo não pode
+// começar nem terminar com parâmetro. Por isso cada LINHA que varia é um
+// parâmetro inteiro (plural, "indisponível" etc. continuam funcionando), e
+// a prévia (/admin/relatorio-diario) usa este mesmo modelo -- o que se vê
+// lá é exatamente o que chega no celular.
+//
+// Se mudar este texto, precisa cadastrar o modelo de novo na Meta (com o
+// MESMO texto) e esperar aprovação -- senão o envio falha.
+
+export const MODELO_WHATSAPP = {
+  nome: "relatorio_diario_o2",
+  idioma: "pt_BR",
+  corpo: [
+    "📊 *Relatório O2 — {{1}}*",
+    "",
+    "🛡️ *SEGURO FIANÇA*",
+    "{{2}}",
+    "{{3}}",
+    "",
+    "💰 *CAPITALIZAÇÃO*",
+    "{{4}}",
+    "{{5}}",
+    "",
+    "🚗 *SEGURO AUTO*",
+    "{{6}}",
+    "{{7}}",
+    "",
+    "🏠 *RAMOS ELEMENTARES*",
+    "{{8}}",
+    "",
+    "{{9}}",
+    "_Enviado automaticamente pelo Workspace O2._",
+  ].join("\n"),
+};
 
 const fmtReais = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 const fmtHora = new Intl.DateTimeFormat("pt-BR", {
@@ -165,37 +202,52 @@ function plural(n: number, singular: string, pluralTexto: string): string {
   return `${n} ${n === 1 ? singular : pluralTexto}`;
 }
 
-export function textoRelatorio(r: RelatorioDiario): string {
-  const rotuloOntem = r.periodo.dias.length === 1 ? "Ontem" : "Sex a dom";
-  const linhas: string[] = [`📊 *Relatório O2 — ${r.periodo.rotulo}*`, ""];
+const INDISPONIVEL = "⚠️ indisponível agora";
 
-  function bloco<T>(titulo: string, s: Secao<T>, corpo: (dados: T) => string[]) {
-    linhas.push(titulo);
-    if (!s.ok) linhas.push("⚠️ indisponível agora");
-    else {
-      linhas.push(...corpo(s.dados));
-      if (s.parcial) linhas.push(`_(painel aberto pela última vez em ${fmtHora.format(new Date(s.atualizadoEm))} — pode faltar algo)_`);
+// Os 9 parâmetros do modelo, em ordem ({{1}} = índice 0).
+export function parametrosModelo(r: RelatorioDiario): string[] {
+  const rotuloOntem = r.periodo.dias.length === 1 ? "Ontem" : "Sex a dom";
+  const avisos: string[] = [];
+
+  function linhas<T>(nome: string, s: Secao<T>, corpo: (dados: T) => string[]): string[] {
+    if (!s.ok) {
+      avisos.push(`${nome} indisponível`);
+      return [INDISPONIVEL, "—"];
     }
-    linhas.push("");
+    if (s.parcial) avisos.push(`${nome} (foto de ${fmtHora.format(new Date(s.atualizadoEm))})`);
+    return corpo(s.dados);
   }
 
-  bloco("🛡️ *SEGURO FIANÇA*", r.fianca, ({ ontem: o, mes: m }) => [
+  const fianca = linhas("Fiança", r.fianca, ({ ontem: o, mes: m }) => [
     o
       ? `${rotuloOntem}: ${plural(o.analises, "análise", "análises")} · ${plural(o.contratosRecebidos, "contrato recebido", "contratos recebidos")} · ${plural(o.efetivados, "efetivado", "efetivados")}`
       : `${rotuloOntem}: —`,
     `No mês: ${plural(m.analises, "análise", "análises")} · ${plural(m.convertidos, "convertido", "convertidos")} · ${m.emAndamento} em andamento`,
   ]);
-  bloco("💰 *CAPITALIZAÇÃO*", r.capitalizacao, ({ ontem: o, mes: m }) => [
+  const capitalizacao = linhas("Capitalização", r.capitalizacao, ({ ontem: o, mes: m }) => [
     o ? `${rotuloOntem}: ${plural(o.novos, "novo título", "novos títulos")} · ${plural(o.emitidos, "emitido", "emitidos")}` : `${rotuloOntem}: —`,
     `No mês: ${plural(m.titulos, "título", "títulos")} · ${plural(m.emitidos, "emitido", "emitidos")} · ${fmtReais.format(m.comissao)} de comissão`,
   ]);
-  bloco("🚗 *SEGURO AUTO*", r.auto, ({ ontem: o, mes: m }) => [
+  const auto = linhas("Auto", r.auto, ({ ontem: o, mes: m }) => [
     o ? `${rotuloOntem}: ${plural(o.novas, "nova ficha", "novas fichas")} · ${plural(o.convertidas, "convertida", "convertidas")}` : `${rotuloOntem}: —`,
     `No mês: ${plural(m.fichas, "ficha", "fichas")} · ${plural(m.convertidas, "convertida", "convertidas")} · ${fmtReais.format(m.comissao)} de comissão`,
   ]);
-  bloco("🏠 *RAMOS ELEMENTARES*", r.ramos, ({ mes: m }) => [
-    `No mês: ${plural(m.novos, "novo", "novos")} · ${plural(m.efetivados, "efetivado", "efetivados")} · ${plural(m.renovacoesEfetivadas, "renovação efetivada", "renovações efetivadas")} · ${fmtReais.format(m.comissao)} de comissão`,
-  ]);
+  const ramos = r.ramos.ok
+    ? (() => {
+        const { mes: m } = r.ramos.dados;
+        if (r.ramos.parcial) avisos.push(`Ramos (foto de ${fmtHora.format(new Date(r.ramos.atualizadoEm))})`);
+        return `No mês: ${plural(m.novos, "novo", "novos")} · ${plural(m.efetivados, "efetivado", "efetivados")} · ${plural(m.renovacoesEfetivadas, "renovação efetivada", "renovações efetivadas")} · ${fmtReais.format(m.comissao)} de comissão`;
+      })()
+    : (avisos.push("Ramos indisponível"), INDISPONIVEL);
 
-  return linhas.join("\n").trimEnd();
+  const rodape = avisos.length
+    ? `⚠️ Pode faltar algo: ${avisos.join(", ")}.`
+    : "✅ Todos os painéis atualizados de madrugada.";
+
+  return [r.periodo.rotulo, fianca[0], fianca[1], capitalizacao[0], capitalizacao[1], auto[0], auto[1], ramos, rodape];
+}
+
+export function textoRelatorio(r: RelatorioDiario): string {
+  const params = parametrosModelo(r);
+  return MODELO_WHATSAPP.corpo.replace(/\{\{(\d+)\}\}/g, (_, n) => params[Number(n) - 1] ?? "");
 }
