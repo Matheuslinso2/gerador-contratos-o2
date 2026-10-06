@@ -4,40 +4,42 @@ import { createServiceClient } from "@/lib/supabase/service";
 import type { AnaliseGerencial, QuadroDiario } from "@/lib/bitrix/seguroFianca";
 import type { PainelCapitalizacao } from "@/lib/capitalizacao/painel";
 import type { PainelSeguroAuto } from "@/lib/seguroAuto/painel";
-import type { AnaliseRamosElementares } from "@/lib/ramos-elementares/analise";
+import { STATUS_TERMINAIS, type AnaliseRamosElementares, type ResumoPopulacao } from "@/lib/ramos-elementares/analise";
 import type { ContagemDia } from "@/lib/contagemPorDia";
 import { calcularPeriodoRelatorio, type PeriodoRelatorio } from "./periodo";
 
-// Relatório diário do WhatsApp -- formato aprovado pelo Matheus em
-// 01/10/2026. É uma CÓPIA do que o Workspace já mostra: lê só os retratos
-// que cada painel salva no Supabase toda vez que é aberto (e que o cron
-// congelar-paineis grava na virada do mês) -- NUNCA consulta o Bitrix
-// (pedido explícito do Matheus; testar ao vivo estourou o limite de taxa do
-// Bitrix). Consequência: se ninguém abriu um painel depois do fim do
-// período, os números daquele painel podem estar incompletos -- a seção
-// avisa a hora do retrato nesse caso.
+// Relatório diário do WhatsApp. É uma CÓPIA do que o Workspace já mostra:
+// lê só os retratos que cada painel salva no Supabase toda vez que é aberto
+// (e que os crons atualizar-paineis/congelar-paineis gravam) -- NUNCA
+// consulta o Bitrix (pedido explícito do Matheus; testar ao vivo estourou o
+// limite de taxa do Bitrix). Se ninguém abriu um painel depois do fim do
+// período, os números daquele painel podem estar incompletos -- o rodapé
+// avisa nesse caso.
+//
+// Conteúdo -- "visão de dono", definido com o Matheus em 06/10/2026: por
+// produto, só documentos EFETIVADOS (ontem e no mês), TAXA DE CONVERSÃO e
+// COMISSÃO EFETIVADA, mais a comissão total do mês. Conversão é sempre
+// efetivados ÷ concluídos (efetivados + perdidos/recusados), só quem já
+// teve desfecho -- mesma conta que Capitalização e Auto já mostravam.
 
 type Secao<T> =
   | { ok: true; dados: T; atualizadoEm: string; parcial: boolean }
   | { ok: false; erro: string };
 
+export type ResumoProduto = {
+  ontemEfetivados: number | null; // null = retrato antigo, sem contagem por dia
+  efetivados: number;
+  conversao: number | null; // 0..1; null = nenhum card concluído no mês
+  comissao: number;
+};
+
 export type RelatorioDiario = {
   periodo: PeriodoRelatorio;
-  fianca: Secao<{
-    ontem: { analises: number; contratosRecebidos: number; efetivados: number } | null;
-    mes: { analises: number; convertidos: number; emAndamento: number };
-  }>;
-  capitalizacao: Secao<{
-    ontem: { novos: number; emitidos: number } | null;
-    mes: { titulos: number; emitidos: number; comissao: number };
-  }>;
-  auto: Secao<{
-    ontem: { novas: number; convertidas: number } | null;
-    mes: { fichas: number; convertidas: number; comissao: number };
-  }>;
-  ramos: Secao<{
-    mes: { novos: number; efetivados: number; renovacoesEfetivadas: number; comissao: number };
-  }>;
+  fianca: Secao<ResumoProduto>;
+  capitalizacao: Secao<ResumoProduto>;
+  auto: Secao<ResumoProduto>;
+  // Sem "ontem": renovações vêm da planilha, sem data confiável por dia.
+  ramos: Secao<ResumoProduto & { novosEfetivados: number; renovacoesEfetivadas: number }>;
 };
 
 type Tabela = "seguro_fianca_snapshots" | "capitalizacao_snapshots" | "seguro_auto_snapshots" | "ramos_elementares_snapshots";
@@ -77,74 +79,67 @@ function somarQuadro(quadro: QuadroDiario | undefined, dias: string[]): number {
   return (quadro?.dias ?? []).filter((d) => dias.includes(d.data)).reduce((soma, d) => soma + d.total, 0);
 }
 
-// null = algum retrato do período é anterior a 01/10/2026 e não tem porDia.
-function somarPorDia(payloads: { porDia?: ContagemDia[] }[], dias: string[]): { novos: number; concluidos: number } | null {
+// Concluídos (efetivados ou não) no mês -- null = retrato antigo, sem porDia.
+function efetivadosNoPeriodo(payloads: { porDia?: ContagemDia[] }[], dias: string[]): number | null {
   if (payloads.some((p) => !p.porDia)) return null;
-  const linhas = payloads.flatMap((p) => p.porDia!).filter((l) => dias.includes(l.data));
-  return { novos: linhas.reduce((s, l) => s + l.novos, 0), concluidos: linhas.reduce((s, l) => s + l.concluidos, 0) };
+  return payloads
+    .flatMap((p) => p.porDia!)
+    .filter((l) => dias.includes(l.data))
+    .reduce((s, l) => s + l.concluidos, 0);
+}
+
+function taxa(efetivados: number, concluidos: number): number | null {
+  return concluidos > 0 ? efetivados / concluidos : null;
+}
+
+// Ramos: um registro "concluído" é o que está num status terminal (ver
+// STATUS_TERMINAIS em ramos-elementares/analise.ts).
+function concluidosRamos(resumo: ResumoPopulacao): number {
+  return resumo.porStatus
+    .filter((s) => STATUS_TERMINAIS.has(s.nome.trim().toUpperCase()))
+    .reduce((soma, s) => soma + s.total, 0);
 }
 
 export async function montarRelatorioDiario(agora = new Date()): Promise<RelatorioDiario> {
   const periodo = calcularPeriodoRelatorio(agora);
   const [fianca, capitalizacao, auto, ramos] = await Promise.all([
-    secao<AnaliseGerencial, Extract<RelatorioDiario["fianca"], { ok: true }>["dados"]>(
-      "seguro_fianca_snapshots",
-      periodo,
-      (doMes, todos) => {
-        const lista = [...todos.values()];
-        return {
-          ontem: {
-            analises: lista.reduce((s, a) => s + somarQuadro(a.analisesDiariasPorResponsavel, periodo.dias), 0),
-            contratosRecebidos: lista.reduce(
-              (s, a) =>
-                s +
-                somarQuadro(a.contratosRecebidosPorDia?.mesAtual, periodo.dias) +
-                somarQuadro(a.contratosRecebidosPorDia?.herdado, periodo.dias),
-              0
-            ),
-            efetivados: lista.reduce((s, a) => s + somarQuadro(a.efetivacoesPorDia, periodo.dias), 0),
-          },
-          mes: {
-            analises: doMes.kpis.total,
-            convertidos: doMes.kpis.convertidos.total,
-            emAndamento: doMes.kpis.emAndamento.total,
-          },
-        };
-      }
-    ),
-    secao<PainelCapitalizacao, Extract<RelatorioDiario["capitalizacao"], { ok: true }>["dados"]>(
-      "capitalizacao_snapshots",
-      periodo,
-      (doMes, todos) => {
-        const dia = somarPorDia([...todos.values()], periodo.dias);
-        return {
-          ontem: dia && { novos: dia.novos, emitidos: dia.concluidos },
-          mes: { titulos: doMes.kpis.total, emitidos: doMes.kpis.emitidos, comissao: doMes.kpis.comissaoEfetivada },
-        };
-      }
-    ),
-    secao<PainelSeguroAuto, Extract<RelatorioDiario["auto"], { ok: true }>["dados"]>(
-      "seguro_auto_snapshots",
-      periodo,
-      (doMes, todos) => {
-        const dia = somarPorDia([...todos.values()], periodo.dias);
-        return {
-          ontem: dia && { novas: dia.novos, convertidas: dia.concluidos },
-          mes: { fichas: doMes.kpis.total, convertidas: doMes.kpis.convertidos, comissao: doMes.kpis.comissaoGerada },
-        };
-      }
-    ),
+    secao<AnaliseGerencial, ResumoProduto>("seguro_fianca_snapshots", periodo, (doMes, todos) => {
+      const { convertidos, recusados, perdidos } = doMes.kpis;
+      return {
+        ontemEfetivados: [...todos.values()].reduce((s, a) => s + somarQuadro(a.efetivacoesPorDia, periodo.dias), 0),
+        efetivados: convertidos.total,
+        conversao: taxa(convertidos.total, convertidos.total + recusados.total + perdidos.total),
+        // Mesma soma do quadro "Convertido" do painel (mês do evento).
+        comissao: Object.values(doMes.convertidoPorSeguradora ?? {}).reduce((s, c) => s + c.comissao, 0),
+      };
+    }),
+    secao<PainelCapitalizacao, ResumoProduto>("capitalizacao_snapshots", periodo, (doMes, todos) => ({
+      ontemEfetivados: efetivadosNoPeriodo([...todos.values()], periodo.dias),
+      efetivados: doMes.kpis.emitidos,
+      conversao: doMes.kpis.taxaConversao,
+      comissao: doMes.kpis.comissaoEfetivada,
+    })),
+    secao<PainelSeguroAuto, ResumoProduto>("seguro_auto_snapshots", periodo, (doMes, todos) => ({
+      ontemEfetivados: efetivadosNoPeriodo([...todos.values()], periodo.dias),
+      efetivados: doMes.kpis.convertidos,
+      conversao: doMes.kpis.taxaConversao,
+      comissao: doMes.kpis.comissaoGerada,
+    })),
     secao<AnaliseRamosElementares, Extract<RelatorioDiario["ramos"], { ok: true }>["dados"]>(
       "ramos_elementares_snapshots",
       periodo,
-      (doMes) => ({
-        mes: {
-          novos: doMes.visaoGeral.novasEntradas,
-          efetivados: doMes.visaoGeral.novosEfetivados,
-          renovacoesEfetivadas: doMes.visaoGeral.renovacoesEfetivadas,
-          comissao: doMes.visaoGeral.comissaoEfetivada,
-        },
-      })
+      (doMes) => {
+        const { novosEfetivados, renovacoesEfetivadas, comissaoEfetivada } = doMes.visaoGeral;
+        const efetivados = novosEfetivados + renovacoesEfetivadas;
+        return {
+          ontemEfetivados: null,
+          novosEfetivados,
+          renovacoesEfetivadas,
+          efetivados,
+          conversao: taxa(efetivados, concluidosRamos(doMes.novos.consolidado) + concluidosRamos(doMes.renovacoes.atual)),
+          comissao: comissaoEfetivada,
+        };
+      }
     ),
   ]);
   return { periodo, fianca, capitalizacao, auto, ramos };
@@ -156,15 +151,15 @@ export async function montarRelatorioDiario(agora = new Date()): Promise<Relator
 // aprovado pela Meta, com texto fixo e {{n}} no lugar do que muda. Regras
 // da Meta: parâmetro não pode ter quebra de linha, e o corpo não pode
 // começar nem terminar com parâmetro. Por isso cada LINHA que varia é um
-// parâmetro inteiro (plural, "indisponível" etc. continuam funcionando), e
-// a prévia (/admin/relatorio-diario) usa este mesmo modelo -- o que se vê
-// lá é exatamente o que chega no celular.
+// parâmetro inteiro, e a prévia (/admin/relatorio-diario) usa este mesmo
+// modelo -- o que se vê lá é exatamente o que chega no celular.
 //
-// Se mudar este texto, precisa cadastrar o modelo de novo na Meta (com o
-// MESMO texto) e esperar aprovação -- senão o envio falha.
+// Se mudar este texto, precisa cadastrar um modelo NOVO na Meta (com o
+// mesmo texto, nome novo) e esperar aprovação -- senão o envio falha.
+// Histórico: relatorio_diario_o2 (01/10, volume) -> _v2 (06/10, visão de dono).
 
 export const MODELO_WHATSAPP = {
-  nome: "relatorio_diario_o2",
+  nome: "relatorio_diario_o2_v2",
   idioma: "pt_BR",
   corpo: [
     "📊 *Relatório O2 — {{1}}*",
@@ -184,7 +179,9 @@ export const MODELO_WHATSAPP = {
     "🏠 *RAMOS ELEMENTARES*",
     "{{8}}",
     "",
-    "{{9}}",
+    "💵 *COMISSÃO TOTAL NO MÊS: {{9}}*",
+    "",
+    "{{10}}",
     "_Enviado automaticamente pelo Workspace O2._",
   ].join("\n"),
 };
@@ -202,49 +199,57 @@ function plural(n: number, singular: string, pluralTexto: string): string {
   return `${n} ${n === 1 ? singular : pluralTexto}`;
 }
 
+function fmtConversao(c: number | null): string {
+  return c === null ? "conversão —" : `conversão ${Math.round(c * 100)}%`;
+}
+
 const INDISPONIVEL = "⚠️ indisponível agora";
 
-// Os 9 parâmetros do modelo, em ordem ({{1}} = índice 0).
+// Os 10 parâmetros do modelo, em ordem ({{1}} = índice 0).
 export function parametrosModelo(r: RelatorioDiario): string[] {
   const rotuloOntem = r.periodo.dias.length === 1 ? "Ontem" : "Sex a dom";
   const avisos: string[] = [];
+  let comissaoTotal = 0;
+  const faltando: string[] = [];
 
-  function linhas<T>(nome: string, s: Secao<T>, corpo: (dados: T) => string[]): string[] {
+  function linhas<T extends ResumoProduto>(
+    nome: string,
+    s: Secao<T>,
+    doc: [string, string], // singular, plural -- ex: ["contrato efetivado", "contratos efetivados"]
+    docMes: [string, string],
+    mesEfetivados: (d: T) => string = (d) => plural(d.efetivados, docMes[0], docMes[1])
+  ): [string, string] {
     if (!s.ok) {
       avisos.push(`${nome} indisponível`);
+      faltando.push(nome);
       return [INDISPONIVEL, "—"];
     }
     if (s.parcial) avisos.push(`${nome} (foto de ${fmtHora.format(new Date(s.atualizadoEm))})`);
-    return corpo(s.dados);
+    const d = s.dados;
+    comissaoTotal += d.comissao;
+    return [
+      d.ontemEfetivados === null ? `${rotuloOntem}: —` : `${rotuloOntem}: ${plural(d.ontemEfetivados, doc[0], doc[1])}`,
+      `No mês: ${mesEfetivados(d)} · ${fmtConversao(d.conversao)} · ${fmtReais.format(d.comissao)} de comissão`,
+    ];
   }
 
-  const fianca = linhas("Fiança", r.fianca, ({ ontem: o, mes: m }) => [
-    o
-      ? `${rotuloOntem}: ${plural(o.analises, "análise", "análises")} · ${plural(o.contratosRecebidos, "contrato recebido", "contratos recebidos")} · ${plural(o.efetivados, "efetivado", "efetivados")}`
-      : `${rotuloOntem}: —`,
-    `No mês: ${plural(m.analises, "análise", "análises")} · ${plural(m.convertidos, "convertido", "convertidos")} · ${m.emAndamento} em andamento`,
-  ]);
-  const capitalizacao = linhas("Capitalização", r.capitalizacao, ({ ontem: o, mes: m }) => [
-    o ? `${rotuloOntem}: ${plural(o.novos, "novo título", "novos títulos")} · ${plural(o.emitidos, "emitido", "emitidos")}` : `${rotuloOntem}: —`,
-    `No mês: ${plural(m.titulos, "título", "títulos")} · ${plural(m.emitidos, "emitido", "emitidos")} · ${fmtReais.format(m.comissao)} de comissão`,
-  ]);
-  const auto = linhas("Auto", r.auto, ({ ontem: o, mes: m }) => [
-    o ? `${rotuloOntem}: ${plural(o.novas, "nova ficha", "novas fichas")} · ${plural(o.convertidas, "convertida", "convertidas")}` : `${rotuloOntem}: —`,
-    `No mês: ${plural(m.fichas, "ficha", "fichas")} · ${plural(m.convertidas, "convertida", "convertidas")} · ${fmtReais.format(m.comissao)} de comissão`,
-  ]);
-  const ramos = r.ramos.ok
-    ? (() => {
-        const { mes: m } = r.ramos.dados;
-        if (r.ramos.parcial) avisos.push(`Ramos (foto de ${fmtHora.format(new Date(r.ramos.atualizadoEm))})`);
-        return `No mês: ${plural(m.novos, "novo", "novos")} · ${plural(m.efetivados, "efetivado", "efetivados")} · ${plural(m.renovacoesEfetivadas, "renovação efetivada", "renovações efetivadas")} · ${fmtReais.format(m.comissao)} de comissão`;
-      })()
-    : (avisos.push("Ramos indisponível"), INDISPONIVEL);
+  const fianca = linhas("Fiança", r.fianca, ["contrato efetivado", "contratos efetivados"], ["efetivado", "efetivados"]);
+  const capitalizacao = linhas("Capitalização", r.capitalizacao, ["título emitido", "títulos emitidos"], ["emitido", "emitidos"]);
+  const auto = linhas("Auto", r.auto, ["apólice convertida", "apólices convertidas"], ["convertida", "convertidas"]);
+  const [, ramos] = linhas(
+    "Ramos",
+    r.ramos,
+    ["", ""],
+    ["", ""],
+    (d) => `${d.novosEfetivados} ${d.novosEfetivados === 1 ? "novo" : "novos"} + ${plural(d.renovacoesEfetivadas, "renovação", "renovações")} ${d.efetivados === 1 ? "efetivado" : "efetivados"}`
+  );
 
+  const total = fmtReais.format(comissaoTotal) + (faltando.length ? ` (sem ${faltando.join(", ")})` : "");
   const rodape = avisos.length
     ? `⚠️ Pode faltar algo: ${avisos.join(", ")}.`
     : "✅ Todos os painéis atualizados de madrugada.";
 
-  return [r.periodo.rotulo, fianca[0], fianca[1], capitalizacao[0], capitalizacao[1], auto[0], auto[1], ramos, rodape];
+  return [r.periodo.rotulo, fianca[0], fianca[1], capitalizacao[0], capitalizacao[1], auto[0], auto[1], ramos, total, rodape];
 }
 
 export function textoRelatorio(r: RelatorioDiario): string {
