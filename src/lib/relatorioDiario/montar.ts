@@ -156,10 +156,11 @@ export async function montarRelatorioDiario(agora = new Date()): Promise<Relator
 //
 // Se mudar este texto, precisa cadastrar um modelo NOVO na Meta (com o
 // mesmo texto, nome novo) e esperar aprovação -- senão o envio falha.
-// Histórico: relatorio_diario_o2 (01/10, volume) -> _v2 (06/10, visão de dono).
+// Histórico: relatorio_diario_o2 (01/10, volume) -> workspace_o2_modelo2
+// (06/10, visão de dono -- nome escolhido na Meta pelo Matheus).
 
 export const MODELO_WHATSAPP = {
-  nome: "relatorio_diario_o2_v2",
+  nome: "workspace_o2_modelo2",
   idioma: "pt_BR",
   corpo: [
     "📊 *Relatório O2 — {{1}}*",
