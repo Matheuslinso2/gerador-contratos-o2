@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { isAdmin, isColaboradorO2 } from "@/lib/admin";
+import { isEquipe } from "@/lib/admin";
 import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
 import PageHeader from "@/components/PageHeader";
@@ -35,7 +35,7 @@ export default async function HistoricoAnalisesFiancaPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!isAdmin(user?.email) && !isColaboradorO2(user?.email)) redirect("/");
+  if (!isEquipe(user?.email)) redirect("/");
 
   const { data } = await supabase
     .from("assistente_fianca_analises")

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { isAdmin } from "@/lib/admin";
+import { isEquipe } from "@/lib/admin";
 import { validarCnpjOuCpf } from "@/lib/validacoesBr";
 import { prepararTextoBase } from "@/lib/limparTextoBase";
 
@@ -12,7 +12,7 @@ async function exigirAdmin() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!isAdmin(user?.email)) redirect("/");
+  if (!isEquipe(user?.email)) redirect("/");
   return supabase;
 }
 

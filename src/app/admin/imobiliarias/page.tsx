@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { isAdmin } from "@/lib/admin";
+import { isEquipe } from "@/lib/admin";
 import { signOut } from "../../actions";
 import AppHeader from "@/components/AppHeader";
 import BackLink from "@/components/BackLink";
@@ -32,7 +32,7 @@ export default async function AdminImobiliariasPage({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!isAdmin(user?.email)) redirect("/");
+  if (!isEquipe(user?.email)) redirect("/");
 
   const [{ data: imobiliariasData }, { data: contratosData }, { data: auditoriasData }, { data: faturasData }, { data: membrosData }] =
     await Promise.all([

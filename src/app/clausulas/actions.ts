@@ -2,14 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { isAdmin } from "@/lib/admin";
+import { isEquipe } from "@/lib/admin";
 
 async function clienteAdmin() {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!isAdmin(user?.email)) throw new Error("Acesso restrito ao administrador.");
+  if (!isEquipe(user?.email)) throw new Error("Acesso restrito ao administrador.");
   return supabase;
 }
 

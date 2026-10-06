@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { isAdmin, isColaboradorO2, isMatheus } from "@/lib/admin";
+import { isAdmin, isColaboradorO2, isEquipe, isMatheus } from "@/lib/admin";
 import { PRODUTOS_LANDING_PAGE } from "@/lib/produtosLandingPage";
 import NavLink from "./NavLink";
 import NavDropdown from "./NavDropdown";
@@ -90,16 +90,16 @@ export default function AppHeader({
               label="Configurações"
               items={[
                 { href: "/imobiliaria", label: "Imobiliária" },
-                ...(isAdmin(userEmail) || isColaboradorO2(userEmail)
-                  ? [{ href: "/historico-analises-fianca", label: "Histórico de análises (Fiança)" }]
-                  : []),
-                ...(isAdmin(userEmail) ? [{ href: "/clausulas", label: "Cláusulas (admin)" }] : []),
-                ...(isAdmin(userEmail)
-                  ? [{ href: "/admin/imobiliarias", label: "Imobiliárias cadastradas (admin)" }]
+                ...(isEquipe(userEmail)
+                  ? [
+                      { href: "/historico-analises-fianca", label: "Histórico de análises (Fiança)" },
+                      { href: "/clausulas", label: "Cláusulas" },
+                      { href: "/admin/imobiliarias", label: "Imobiliárias cadastradas" },
+                    ]
                   : []),
                 ...(isMatheus(userEmail) ? [{ href: "/gestao-emails", label: "Gestão de E-mails" }] : []),
                 ...(isMatheus(userEmail) ? [{ href: "/admin/acessos", label: "Uso diário do Workspace" }] : []),
-                ...(isMatheus(userEmail) ? [{ href: "/admin/relatorio-diario", label: "Relatório diário (WhatsApp)" }] : []),
+                ...(isEquipe(userEmail) ? [{ href: "/admin/relatorio-diario", label: "Relatório diário (WhatsApp)" }] : []),
                 ...(isMatheus(userEmail) ? [{ href: "/admin/usuarios", label: "Logins do Workspace (admin)" }] : []),
               ]}
             />

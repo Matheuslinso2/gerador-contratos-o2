@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { isMatheus } from "@/lib/admin";
+import { isEquipe } from "@/lib/admin";
 import { signOut } from "../../actions";
 import AppHeader from "@/components/AppHeader";
 import BackLink from "@/components/BackLink";
@@ -17,7 +17,7 @@ export default async function RelatorioDiarioPage({ searchParams }: { searchPara
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!isMatheus(user?.email)) redirect("/");
+  if (!isEquipe(user?.email)) redirect("/");
 
   const { data } = await searchParams;
   const agora = data && /^\d{4}-\d{2}-\d{2}$/.test(data) ? new Date(`${data}T08:00:00-03:00`) : new Date();

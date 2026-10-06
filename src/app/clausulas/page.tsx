@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { isAdmin } from "@/lib/admin";
+import { isEquipe } from "@/lib/admin";
 import { addSeguradora, addProduto, addCobertura } from "./actions";
 import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
@@ -15,7 +15,7 @@ export default async function ClausulasPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!isAdmin(user?.email)) redirect("/");
+  if (!isEquipe(user?.email)) redirect("/");
 
   const [{ data: tiposGarantia }, { data: seguradoras }, { data: produtos }, { data: coberturas }] =
     await Promise.all([

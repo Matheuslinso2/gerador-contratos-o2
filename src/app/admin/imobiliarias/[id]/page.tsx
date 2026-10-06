@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { isAdmin } from "@/lib/admin";
+import { isEquipe } from "@/lib/admin";
 import { signOut } from "../../../actions";
 import AppHeader from "@/components/AppHeader";
 import VinculosFaturas, { type Vinculo } from "../../../faturas/VinculosFaturas";
@@ -27,7 +27,7 @@ export default async function AdminImobiliariaDetalhePage({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!isAdmin(user?.email)) redirect("/");
+  if (!isEquipe(user?.email)) redirect("/");
 
   const [{ data: imobiliaria }, { data: vinculosData }, { data: membros }, { count: contratos }, { count: auditorias }] =
     await Promise.all([
