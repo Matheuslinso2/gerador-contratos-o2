@@ -1081,6 +1081,129 @@ export default async function SeguroFiancaPage({
                     conta={contaPorOrigem(gerencial.kpis.convertidos)}
                   />
                 </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "baseline",
+                    gap: 12,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <h2
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 700,
+                      margin: "20px 0 8px",
+                      color: "var(--ink)",
+                    }}
+                  >
+                    Renovação
+                  </h2>
+                  <ExportarQuadro
+                    quadroId="quadro-fianca-renovacao-resumo"
+                    corFundo="#f7f8fa"
+                    nomeArquivo={`seguro-fianca-renovacao-resumo-${competencia}`}
+                    dadosExcel={[
+                      {
+                        indicador: "Total do mês",
+                        valor: renovacao.dados.kpis.total,
+                      },
+                      {
+                        indicador: "Novos",
+                        valor: renovacao.dados.kpis.novos,
+                      },
+                      {
+                        indicador: "Herdados",
+                        valor: renovacao.dados.kpis.herdados,
+                      },
+                      {
+                        indicador: "Em andamento",
+                        valor: renovacao.dados.kpis.emAndamento,
+                      },
+                      {
+                        indicador: "Renovados",
+                        valor: renovacao.dados.kpis.renovados,
+                      },
+                      {
+                        indicador: "Perdidos",
+                        valor: renovacao.dados.kpis.perdidos,
+                      },
+                      {
+                        indicador: "Taxa de renovação (%)",
+                        valor: renovacao.dados.kpis.taxaRenovacao ?? "",
+                      },
+                      {
+                        indicador: "Reajuste médio dos renovados (%)",
+                        valor: renovacao.dados.reajuste?.mediaRenovados ?? "",
+                      },
+                      {
+                        indicador: "Prêmio líquido renovado (R$)",
+                        valor: renovacao.dados.financeiro?.premioLiquidoRenovado ?? 0,
+                      },
+                      {
+                        indicador: "Comissão renovada (R$)",
+                        valor: renovacao.dados.financeiro?.comissaoRenovada ?? 0,
+                      },
+                    ]}
+                    nomeAbaExcel="Renovação"
+                  />
+                </div>
+                <div id="quadro-fianca-renovacao-resumo" className={styles.kpis}>
+                  <Kpi
+                    label="Total do mês"
+                    value={String(renovacao.dados.kpis.total)}
+                    sub="renovações do funil, novas + herdadas"
+                    conta={`${renovacao.dados.kpis.novos} novos + ${renovacao.dados.kpis.herdados} herdados = ${renovacao.dados.kpis.total}`}
+                    tone="info"
+                  />
+                  <Kpi
+                    label="Em Andamento"
+                    value={String(renovacao.dados.kpis.emAndamento)}
+                    sub="ainda sem resultado"
+                    tone="positive"
+                  />
+                  <Kpi
+                    label="Renovados"
+                    value={String(renovacao.dados.kpis.renovados)}
+                    sub="entraram em Sucesso neste mês"
+                    tone="positive"
+                  />
+                  <Kpi
+                    label="Perdidos"
+                    value={String(renovacao.dados.kpis.perdidos)}
+                    sub="entraram em Perdido neste mês"
+                    tone="negative"
+                  />
+                  <Kpi
+                    label="Taxa de renovação"
+                    value={fmtPct(renovacao.dados.kpis.taxaRenovacao)}
+                    sub={
+                      renovacao.dados.kpis.taxaRenovacao === null
+                        ? "sem renovados nem perdidos ainda"
+                        : "renovados ÷ (renovados + perdidos)"
+                    }
+                    tone="info"
+                  />
+                  <Kpi
+                    label="Reajuste médio (renovados)"
+                    value={fmtPct(renovacao.dados.reajuste?.mediaRenovados ?? null)}
+                    sub={`${renovacao.dados.reajuste?.nRenovados ?? 0} renovado(s) no mês`}
+                  />
+                  <Kpi
+                    label="Prêmio líquido renovado"
+                    value={fmtBRL(renovacao.dados.financeiro?.premioLiquidoRenovado ?? 0)}
+                    sub="soma dos renovados no mês"
+                    tone="positive"
+                  />
+                  <Kpi
+                    label="Comissão renovada"
+                    value={fmtBRL(renovacao.dados.financeiro?.comissaoRenovada ?? 0)}
+                    sub="prêmio × comissão trabalhada (%) — detalhes na aba Renovação"
+                    tone="positive"
+                  />
+                </div>
               </AbaSlot>
 
               {(() => {
