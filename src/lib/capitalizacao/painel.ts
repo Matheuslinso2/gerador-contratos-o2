@@ -96,8 +96,27 @@ export type FunilEtapa = {
   tempoMedioDiasFechado: number | null;
 };
 
+// Indicadores de "novidades" (só cards criados na competência) -- os mesmos
+// 10 do quadro "Novidades do mês", reaproveitados pro comparativo com o mês
+// anterior.
+export type KpisNovidades = {
+  total: number;
+  emitidos: number;
+  perdidos: number;
+  taxaConversao: number | null;
+  valorTotalEmitido: number;
+  comissaoEfetivada: number;
+  comissaoPotencial: number;
+  premioPotencial: number;
+  numeroImobiliarias: number;
+  ticketMedioPremio: number;
+};
+
 export type PainelCapitalizacao = {
   competencia: string;
+  // Mês anterior completo, calculado dos mesmos cards (sem chamada extra ao
+  // Bitrix). Opcional: retratos salvos antes de 05/10/2026 não têm.
+  kpisAnterior?: KpisNovidades & { competencia: string };
   kpis: {
     total: number; // "novidades" -- só cards criados nesta competência
     emitidos: number; // "novidades" -- só cards criados nesta competência
@@ -208,6 +227,31 @@ export function competenciaValida(valor: string | undefined): valor is string {
   return !!valor && /^\d{4}-(0[1-9]|1[0-2])$/.test(valor);
 }
 
+export function competenciaAnterior(competencia: string): string {
+  const [ano, mes] = competencia.split("-").map(Number);
+  const data = new Date(Date.UTC(ano, mes - 2, 1));
+  return `${data.getUTCFullYear()}-${String(data.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function kpisDeNovidades(novidades: CardCapitalizacao[]): KpisNovidades {
+  const emitidosLista = novidades.filter((c) => c.etapaId === "DT1048_28:SUCCESS");
+  const emitidos = emitidosLista.length;
+  const perdidos = novidades.filter((c) => c.semantica === "F").length;
+  const premioPotencial = novidades.reduce((soma, c) => soma + c.valorTitulo, 0);
+  return {
+    total: novidades.length,
+    emitidos,
+    perdidos,
+    taxaConversao: emitidos + perdidos > 0 ? emitidos / (emitidos + perdidos) : null,
+    valorTotalEmitido: emitidosLista.reduce((soma, c) => soma + c.valorTitulo, 0),
+    comissaoEfetivada: emitidosLista.reduce((soma, c) => soma + c.comissao, 0),
+    comissaoPotencial: novidades.reduce((soma, c) => soma + c.comissao, 0),
+    premioPotencial,
+    numeroImobiliarias: new Set(novidades.filter((c) => c.imobiliaria !== "—").map((c) => c.imobiliaria)).size,
+    ticketMedioPremio: novidades.length > 0 ? premioPotencial / novidades.length : 0,
+  };
+}
+
 function contagemPorOrigem(itens: CardCapitalizacao[], competencia: string): ContagemPorOrigem {
   let mesAtual = 0;
   let herdado = 0;
@@ -240,17 +284,22 @@ export async function montarPainelCapitalizacao(competencia: string, agora = new
   const emAndamentoTodos = cards.filter((c) => c.semantica === "P");
   const emAndamento = contagemPorOrigem(emAndamentoTodos, competencia);
 
-  const emitidosNovidades = novidades.filter((c) => c.etapaId === "DT1048_28:SUCCESS");
-  const perdidosNovidades = novidades.filter((c) => c.semantica === "F");
-  const emitidos = emitidosNovidades.length;
-  const perdidos = perdidosNovidades.length;
-  const taxaConversao = emitidos + perdidos > 0 ? emitidos / (emitidos + perdidos) : null;
-  const valorTotalEmitido = emitidosNovidades.reduce((soma, c) => soma + c.valorTitulo, 0);
-  const comissaoEfetivada = emitidosNovidades.reduce((soma, c) => soma + c.comissao, 0);
-  const comissaoPotencial = novidades.reduce((soma, c) => soma + c.comissao, 0);
-  const premioPotencial = novidades.reduce((soma, c) => soma + c.valorTitulo, 0);
-  const numeroImobiliarias = new Set(novidades.filter((c) => c.imobiliaria !== "—").map((c) => c.imobiliaria)).size;
-  const ticketMedioPremio = novidades.length > 0 ? premioPotencial / novidades.length : 0;
+  const {
+    emitidos,
+    perdidos,
+    taxaConversao,
+    valorTotalEmitido,
+    comissaoEfetivada,
+    comissaoPotencial,
+    premioPotencial,
+    numeroImobiliarias,
+    ticketMedioPremio,
+  } = kpisDeNovidades(novidades);
+  const competenciaAnt = competenciaAnterior(competencia);
+  const kpisAnterior = {
+    competencia: competenciaAnt,
+    ...kpisDeNovidades(cards.filter((c) => competenciaData(c.criadoEm) === competenciaAnt)),
+  };
 
   // Alerta de card parado é operacional (agora), não fica preso à
   // competência selecionada — um card antigo esquecido continua alertando.
@@ -300,6 +349,7 @@ export async function montarPainelCapitalizacao(competencia: string, agora = new
 
   return {
     competencia,
+    kpisAnterior,
     kpis: {
       total: novidades.length,
       emitidos,
