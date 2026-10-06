@@ -5,7 +5,7 @@ import { signOut } from "../../actions";
 import AppHeader from "@/components/AppHeader";
 import BackLink from "@/components/BackLink";
 import { montarRelatorioDiario, textoRelatorio, MODELO_WHATSAPP } from "@/lib/relatorioDiario/montar";
-import { enviarTesteWhatsApp } from "./actions";
+import { enviarTesteWhatsApp, enviarParaTodosWhatsApp } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -61,7 +61,23 @@ export default async function RelatorioDiarioPage({ searchParams }: { searchPara
               </button>
             </form>
             {envio === "ok" && <p className="text-green-700">Enviado! Confira o WhatsApp (vem do número +1 555 180-0364).</p>}
+            {envio === "todos" && <p className="text-green-700">Enviado para os {msg} números da lista!</p>}
             {envio === "erro" && <p className="text-red-700">Falhou: {msg}</p>}
+            {/* Escondido atrás de um clique a mais pra não disparar pros sócios sem querer. */}
+            <details>
+              <summary className="cursor-pointer font-medium text-o2-navy">Enviar agora para todos os destinatários…</summary>
+              <div className="mt-2 space-y-2">
+                <p className="text-gray-600">
+                  Manda este relatório agora para TODOS os números da lista (sócios e diretores), igual ao envio das 8h.
+                  Confira o teste no seu WhatsApp antes.
+                </p>
+                <form action={enviarParaTodosWhatsApp}>
+                  <button type="submit" className="rounded-lg bg-red-700 px-4 py-2 font-medium text-white hover:opacity-90">
+                    Confirmar: enviar para todos agora
+                  </button>
+                </form>
+              </div>
+            </details>
             <details>
               <summary className="cursor-pointer text-gray-600">
                 Texto do modelo pra cadastrar na Meta (nome: <code>{MODELO_WHATSAPP.nome}</code>, idioma Português (BR))

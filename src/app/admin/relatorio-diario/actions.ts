@@ -25,3 +25,30 @@ export async function enviarTesteWhatsApp() {
   }
   redirect(destino);
 }
+
+// Mesmo envio do cron das 8h, disparado à mão (pedido do Matheus em
+// 06/10/2026, pra mandar o primeiro relatório aos sócios no mesmo dia).
+export async function enviarParaTodosWhatsApp() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!isMatheus(user?.email)) redirect("/");
+
+  const destinatarios = destinatariosRelatorio();
+  if (destinatarios.length === 0) {
+    redirect(`/admin/relatorio-diario?envio=erro&msg=${encodeURIComponent("WHATSAPP_RELATORIO_DESTINATARIOS vazia no Vercel")}`);
+  }
+  const parametros = parametrosModelo(await montarRelatorioDiario());
+  const falhas: string[] = [];
+  for (const numero of destinatarios) {
+    const r = await enviarModeloWhatsApp(numero, MODELO_WHATSAPP, parametros);
+    if (!r.ok) falhas.push(`…${numero.slice(-4)}: ${r.erro}`);
+  }
+  const enviados = destinatarios.length - falhas.length;
+  redirect(
+    falhas.length
+      ? `/admin/relatorio-diario?envio=erro&msg=${encodeURIComponent(`${enviados} de ${destinatarios.length} enviados. Falharam: ${falhas.join(" | ")}`)}`
+      : `/admin/relatorio-diario?envio=todos&msg=${destinatarios.length}`
+  );
+}
