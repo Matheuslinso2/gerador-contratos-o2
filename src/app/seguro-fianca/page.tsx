@@ -346,11 +346,14 @@ function Kpi({
   value,
   sub,
   tone,
+  conta,
 }: {
   label: string;
   value: string;
   sub: string;
   tone?: "positive" | "negative" | "warning" | "info";
+  // Linha com a origem do número (ex: "20 novos + 12 herdados = 32").
+  conta?: string;
 }) {
   return (
     <div className={styles.kpi}>
@@ -361,8 +364,18 @@ function Kpi({
         {value}
       </div>
       <div className={styles.kpiSub}>{sub}</div>
+      {conta && (
+        <div className={styles.kpiSub} style={{ fontWeight: 600 }}>
+          {conta}
+        </div>
+      )}
     </div>
   );
+}
+
+// Origem do número nos quadros da visão geral: novos + herdados = total.
+function contaPorOrigem(c: { mesAtual: number; herdado: number }): string {
+  return `${c.mesAtual} novos + ${c.herdado} herdados = ${c.mesAtual + c.herdado}`;
 }
 
 function BarraProporcional({
@@ -849,6 +862,7 @@ export default async function SeguroFiancaPage({
                     label="Total de Análises do Mês"
                     value={String(gerencial.kpis.totalRelevantes)}
                     sub={`${fmtTendencia(gerencial.kpis.totalRelevantes, totalRelevantesMesAnterior)} — novidades + herdados ativos`}
+                    conta={`${gerencial.kpis.total} novidades + ${gerencial.kpis.totalRelevantes - gerencial.kpis.total} herdados = ${gerencial.kpis.totalRelevantes}`}
                     tone="info"
                   />
                 </div>
@@ -923,35 +937,41 @@ export default async function SeguroFiancaPage({
                     label="Imobiliárias"
                     value={String(gerencial.kpis.imobiliarias)}
                     sub="enviaram cotação no período"
+                    conta={`${gerencial.kpis.imobiliarias} com cards novos + ${gerencial.kpis.imobiliariasHerdado} com herdados − ${Math.max(0, gerencial.kpis.imobiliarias + gerencial.kpis.imobiliariasHerdado - gerencial.kpis.imobiliariasAtivas)} nas duas listas = ${gerencial.kpis.imobiliariasAtivas} distintas`}
                   />
                   <Kpi
                     label="Em Andamento"
                     value={String(gerencial.kpis.emAndamento.mesAtual)}
                     sub="deste mês, ainda sendo trabalhados"
+                    conta={contaPorOrigem(gerencial.kpis.emAndamento)}
                     tone="positive"
                   />
                   <Kpi
                     label="Recusados"
                     value={String(gerencial.kpis.recusados.mesAtual)}
                     sub="deste mês, não avançaram em Análise e Cotação"
+                    conta={contaPorOrigem(gerencial.kpis.recusados)}
                     tone="negative"
                   />
                   <Kpi
                     label="Aprovados"
                     value={String(gerencial.kpis.aprovados.mesAtual)}
                     sub="deste mês, saíram p/ Negociação"
+                    conta={contaPorOrigem(gerencial.kpis.aprovados)}
                     tone="info"
                   />
                   <Kpi
                     label="Negativados"
                     value={String(gerencial.kpis.perdidos.mesAtual)}
                     sub="deste mês, cliente não quis contratar"
+                    conta={contaPorOrigem(gerencial.kpis.perdidos)}
                     tone="negative"
                   />
                   <Kpi
                     label="Convertidos"
                     value={String(gerencial.kpis.convertidos.mesAtual)}
                     sub="deste mês, contrato fechado"
+                    conta={contaPorOrigem(gerencial.kpis.convertidos)}
                   />
                   <Kpi
                     label="Cards com Alerta"
@@ -1024,35 +1044,41 @@ export default async function SeguroFiancaPage({
                     label="Imobiliárias"
                     value={String(gerencial.kpis.imobiliariasHerdado)}
                     sub="com card herdado ainda relevante este mês"
+                    conta={`${gerencial.kpis.imobiliarias} com cards novos + ${gerencial.kpis.imobiliariasHerdado} com herdados − ${Math.max(0, gerencial.kpis.imobiliarias + gerencial.kpis.imobiliariasHerdado - gerencial.kpis.imobiliariasAtivas)} nas duas listas = ${gerencial.kpis.imobiliariasAtivas} distintas`}
                   />
                   <Kpi
                     label="Em Andamento"
                     value={String(gerencial.kpis.emAndamento.herdado)}
                     sub="ainda em aberto, de outros meses"
+                    conta={contaPorOrigem(gerencial.kpis.emAndamento)}
                     tone="positive"
                   />
                   <Kpi
                     label="Recusados"
                     value={String(gerencial.kpis.recusados.herdado)}
                     sub="recusados este mês, criados antes"
+                    conta={contaPorOrigem(gerencial.kpis.recusados)}
                     tone="negative"
                   />
                   <Kpi
                     label="Aprovados"
                     value={String(gerencial.kpis.aprovados.herdado)}
                     sub="aprovados este mês, criados antes"
+                    conta={contaPorOrigem(gerencial.kpis.aprovados)}
                     tone="info"
                   />
                   <Kpi
                     label="Negativados"
                     value={String(gerencial.kpis.perdidos.herdado)}
                     sub="negativados este mês, criados antes"
+                    conta={contaPorOrigem(gerencial.kpis.perdidos)}
                     tone="negative"
                   />
                   <Kpi
                     label="Convertidos"
                     value={String(gerencial.kpis.convertidos.herdado)}
                     sub="convertidos este mês, criados antes"
+                    conta={contaPorOrigem(gerencial.kpis.convertidos)}
                   />
                 </div>
               </AbaSlot>
