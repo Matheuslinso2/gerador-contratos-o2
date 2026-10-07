@@ -8,7 +8,6 @@ import PageHeader from "@/components/PageHeader";
 import SubmitButton from "@/components/SubmitButton";
 import { IconMail } from "@/components/icons";
 import { FiltroProducao } from "@/app/campanhas/[id]/FiltroProducao";
-import { EmailsEnviados } from "@/app/campanhas/EmailsEnviados";
 import {
   statusDoEnvio,
   normalizarBusca,
@@ -159,8 +158,8 @@ export default async function AvisoEnviadoPage({
               {linhas.map((l) => (
                 <tr key={l.email} data-filtro-nome={normalizarBusca(l.email)} data-filtro-status={l.chave}>
                   <td className="p-3 align-top">
-                    <span className="block break-all font-medium text-o2-navy">{l.email}</span>
-                    <EmailsEnviados emails={[l]} rotulo="Ver e-mail enviado" />
+                    <span className="block break-all font-semibold text-o2-navy">{l.email}</span>
+                    {l.erro && <span className="block text-[11px] text-red-500">Erro: {l.erro}</span>}
                   </td>
                   <td className="p-3 align-top">
                     <div className="flex flex-wrap items-center gap-1">

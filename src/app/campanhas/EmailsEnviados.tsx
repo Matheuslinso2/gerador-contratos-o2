@@ -1,39 +1,48 @@
-import { ROTULO_STATUS_ENVIO, COR_STATUS_ENVIO, type DetalheEmail } from "@/lib/campanhas/producaoStatus";
+import type { DetalheEmail, ChaveStatusEnvio } from "@/lib/campanhas/producaoStatus";
 
-function formatarDataHora(iso: string): string {
-  return new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" });
+// "08/10 09:31" -- sem ano e sem segundos, pra caber compacto embaixo do
+// nome da imobiliária.
+function dataCurta(iso: string): string {
+  return new Date(iso)
+    .toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
+    .replace(",", "");
 }
 
-// Pedido do Matheus, 07/10/2026: dropdown, em cada imobiliária (campanhas)
-// ou pessoa (avisos internos), com os endereços de e-mail pra onde o envio
-// foi e o que aconteceu com cada um (enviado, aberto, clicado). Usa <details>
-// nativo -- abre/fecha sem JavaScript, serve nos dois lugares.
-export function EmailsEnviados({ emails, rotulo }: { emails: DetalheEmail[]; rotulo?: string }) {
+const COR_PONTO: Record<ChaveStatusEnvio, string> = {
+  aguardando: "bg-gray-300",
+  na_fila: "bg-yellow-400",
+  abriu: "bg-green-500",
+  nao_abriu: "bg-orange-400",
+  falhou: "bg-red-500",
+  descadastrado: "bg-gray-400",
+};
+
+// Pedido do Matheus, 07/10/2026: em vez de dropdown, os e-mails de cada
+// imobiliária ficam fixos abaixo do nome, em bloco compacto: 1 linha com o
+// endereço (ponto colorido = status) e 1 linha com envio/abertura/clique.
+export function EmailsEnviados({ emails }: { emails: DetalheEmail[] }) {
   if (!emails.length) return null;
-  const titulo = rotulo ?? `${emails.length} e-mail${emails.length > 1 ? "s" : ""} enviado${emails.length > 1 ? "s" : ""}`;
 
   return (
-    <details className="mt-1 text-[11px]">
-      <summary className="cursor-pointer select-none font-medium text-o2-navy hover:underline">{titulo}</summary>
-      <ul className="mt-1 space-y-1.5 rounded-lg border border-o2-navy/10 bg-white p-2">
-        {emails.map((e) => (
-          <li key={e.email} className="space-y-0.5">
-            <p className="flex flex-wrap items-center gap-1">
-              <span className="break-all font-medium text-o2-navy">{e.email}</span>
-              <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-medium ${COR_STATUS_ENVIO[e.chave]}`}>
-                {ROTULO_STATUS_ENVIO[e.chave]}
-              </span>
-              {e.clicadoEm && <span className="whitespace-nowrap rounded-full bg-o2-navy/10 px-2 py-0.5 text-[10px] font-medium text-o2-navy">Clicou</span>}
-            </p>
-            <p className="text-gray-400">
-              {e.enviadoEm ? `Enviado em ${formatarDataHora(e.enviadoEm)}` : "Ainda não enviado"}
-              {e.abertoEm && ` · Abriu em ${formatarDataHora(e.abertoEm)}`}
-              {e.clicadoEm && ` · Clicou em ${formatarDataHora(e.clicadoEm)}`}
-            </p>
-            {e.erro && <p className="text-red-500">Erro: {e.erro}</p>}
-          </li>
-        ))}
-      </ul>
-    </details>
+    <ul className="mt-1.5 space-y-1.5 border-l-2 border-o2-navy/10 pl-2.5">
+      {emails.map((e) => (
+        <li key={e.email} className="text-[11px] leading-snug">
+          <p className="flex items-start gap-1.5">
+            <span className={`mt-[5px] h-1.5 w-1.5 shrink-0 rounded-full ${COR_PONTO[e.chave]}`} aria-hidden="true" />
+            <span className="break-all font-medium text-o2-navy">{e.email}</span>
+          </p>
+          <p className="pl-3 text-gray-500">
+            {e.enviadoEm ? `Enviado ${dataCurta(e.enviadoEm)}` : e.chave === "falhou" ? "Falhou" : "Na fila"}
+            {e.abertoEm ? (
+              <span className="font-medium text-green-700"> · Abriu {dataCurta(e.abertoEm)}</span>
+            ) : e.enviadoEm ? (
+              <span className="text-orange-600"> · Não abriu</span>
+            ) : null}
+            {e.clicadoEm && <span className="font-medium text-o2-navy"> · Clicou</span>}
+          </p>
+          {e.erro && <p className="pl-3 text-red-500">Erro: {e.erro}</p>}
+        </li>
+      ))}
+    </ul>
   );
 }

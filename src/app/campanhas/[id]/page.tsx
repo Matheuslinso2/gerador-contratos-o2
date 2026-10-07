@@ -535,8 +535,8 @@ export default async function CampanhaDetalhePage({
             <table className="w-full min-w-[960px] text-sm [&_td]:px-2 [&_th]:px-2">
               <thead>
                 <tr className="border-b border-o2-navy/10 bg-quadro text-xs uppercase tracking-wide text-o2-navy">
-                  <th className="p-3 text-left">Imobiliária</th>
-                  <th className="p-3 text-left">Status do e-mail</th>
+                  <th className="min-w-[340px] p-3 text-left">Imobiliária</th>
+                  <th className="whitespace-nowrap p-3 text-left">Status</th>
                   <th className="p-3 text-left">Produto</th>
                   <th className="p-3 text-right">Apólices</th>
                   <th className="p-3 text-right">Prêmio líquido</th>
@@ -546,7 +546,7 @@ export default async function CampanhaDetalhePage({
                   <th className="p-3"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-300">
                 {linhasQuadro.map((l) => {
                   // form vazio (só campos ocultos), sem envolver as células --
                   // <tr> só aceita <td> como filho direto, então os inputs de
@@ -557,16 +557,22 @@ export default async function CampanhaDetalhePage({
                   // real de cada coluna do cabeçalho).
                   const formId = `producao-${l.imobiliariaId}`;
                   return (
-                    <tr key={l.imobiliariaId} data-filtro-nome={normalizarBusca(l.imobiliariaNome)} data-filtro-status={l.statusEnvio.chave}>
+                    <tr
+                      key={l.imobiliariaId}
+                      data-filtro-nome={normalizarBusca(l.imobiliariaNome)}
+                      data-filtro-status={l.statusEnvio.chave}
+                      className="transition-colors hover:bg-quadro/60 [&>td]:align-top"
+                    >
                       <td className="p-3">
                         <form id={formId} action={salvarLinhaProducao}>
                           <input type="hidden" name="campanha_id" value={id} />
                           <input type="hidden" name="imobiliaria_id" value={l.imobiliariaId} />
                           {l.linhaId && <input type="hidden" name="linha_id" value={l.linhaId} />}
                         </form>
-                        <span className="block max-w-[260px] truncate font-medium text-o2-navy" title={l.imobiliariaNome}>
+                        <span className="block max-w-[300px] truncate font-semibold text-o2-navy" title={l.imobiliariaNome}>
                           {l.imobiliariaNome}
                         </span>
+                        <EmailsEnviados emails={l.statusEnvio.emails} />
                       </td>
                       <td className="p-3">
                         <div className="flex flex-wrap items-center gap-1">
@@ -584,9 +590,6 @@ export default async function CampanhaDetalhePage({
                             {l.statusEnvio.emailsAbertos} de {l.statusEnvio.totalEmails} e-mails abertos
                           </span>
                         )}
-                        <div data-export-ignore="true">
-                          <EmailsEnviados emails={l.statusEnvio.emails} />
-                        </div>
                       </td>
                       <td className="p-3 text-xs text-gray-500">{rotuloProduto}</td>
                       <td className="p-3">
@@ -681,8 +684,8 @@ export default async function CampanhaDetalhePage({
                       data-filtro-status={detalhe.chave}
                     >
                       <td className="p-3 align-top">
-                        <span className="block font-medium text-o2-navy">{rotulo}</span>
-                        <EmailsEnviados emails={[detalhe]} rotulo="Ver e-mail enviado" />
+                        <span className="block break-all font-semibold text-o2-navy">{rotulo}</span>
+                        {rotulo !== detalhe.email && <span className="block break-all text-[11px] text-gray-500">{detalhe.email}</span>}
                       </td>
                       <td className="p-3 align-top">
                         <div className="flex flex-wrap items-center gap-1">
