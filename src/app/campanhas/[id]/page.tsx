@@ -8,7 +8,7 @@ import PageHeader from "@/components/PageHeader";
 import { IconMail } from "@/components/icons";
 import ExportarQuadro from "@/components/ExportarQuadro";
 import { ROTULO_STATUS_CAMPANHA, COR_STATUS_CAMPANHA } from "@/lib/campanhas/rotulos";
-import { rotuloProdutoCampanha } from "@/lib/campanhas/produtos";
+import { produtosDaCampanha, rotuloProdutoCampanha, rotulosProdutosCampanha } from "@/lib/campanhas/produtos";
 import { montarHtmlCampanha, personalizarCampanha, type CampanhaRow } from "@/lib/campanhas/processarLote";
 import { NOME_EXEMPLO_PREVIA } from "@/lib/campanhas/personalizacao";
 import { emailsElegiveisCampanha } from "@/lib/campanhas/elegibilidade";
@@ -267,7 +267,9 @@ export default async function CampanhaDetalhePage({
     };
   });
 
-  const rotuloProduto = rotuloProdutoCampanha(campanha.produto);
+  // Campanha pode ter vários produtos (pedido do Matheus, 07/10/2026).
+  const produtosCampanha = produtosDaCampanha(campanha);
+  const rotuloProduto = rotulosProdutosCampanha(produtosCampanha);
 
   // Reenvio (pedido do Matheus, 02/10/2026) só faz sentido depois do disparo
   // terminar -- enquanto "enviando", ainda tem gente na fila.
@@ -313,7 +315,11 @@ export default async function CampanhaDetalhePage({
         <div className="flex flex-wrap items-center justify-between gap-4">
           <PageHeader icon={<IconMail />} titulo={campanha.nome} subtitulo={campanha.assunto} />
           <div className="flex items-center gap-2">
-            <span className="whitespace-nowrap rounded-full bg-o2-navy/10 px-2.5 py-1 text-xs font-medium text-o2-navy">{rotuloProduto}</span>
+            {produtosCampanha.map((p) => (
+              <span key={p} className="whitespace-nowrap rounded-full bg-o2-navy/10 px-2.5 py-1 text-xs font-medium text-o2-navy">
+                {rotuloProdutoCampanha(p)}
+              </span>
+            ))}
             <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${COR_STATUS_CAMPANHA[campanha.status] ?? "bg-gray-100 text-gray-600"}`}>
               {ROTULO_STATUS_CAMPANHA[campanha.status] ?? campanha.status}
             </span>
@@ -497,7 +503,7 @@ export default async function CampanhaDetalhePage({
             introducao: campanha.introducao,
             valido_de: campanha.valido_de,
             valido_ate: campanha.valido_ate,
-            produto: campanha.produto,
+            produtos: produtosCampanha,
             corpo_html: campanha.corpo_html,
             cta_texto: campanha.cta_texto,
             cta_href: campanha.cta_href,

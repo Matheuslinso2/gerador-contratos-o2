@@ -7,7 +7,7 @@ import AppHeader from "@/components/AppHeader";
 import PageHeader from "@/components/PageHeader";
 import SubmitButton from "@/components/SubmitButton";
 import { IconMail } from "@/components/icons";
-import { PRODUTOS_CAMPANHA } from "@/lib/campanhas/produtos";
+import { SeletorProdutos } from "../SeletorProdutos";
 import { EditorCorpo } from "../EditorCorpo";
 import { criarCampanha } from "./actions";
 
@@ -56,19 +56,7 @@ export default async function NovaCampanhaPage({
           </div>
           <p className="-mt-2 text-xs text-gray-400">O período aparece destacado no e-mail, separado do texto do corpo.</p>
 
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-600">Produto</label>
-            <select name="produto" required defaultValue="" className={inputClass}>
-              <option value="" disabled>
-                Selecione o produto desta campanha...
-              </option>
-              {PRODUTOS_CAMPANHA.map((p) => (
-                <option key={p.valor} value={p.valor}>
-                  {p.rotulo}
-                </option>
-              ))}
-            </select>
-          </div>
+          <SeletorProdutos />
 
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">Modelo</label>
@@ -86,7 +74,7 @@ export default async function NovaCampanhaPage({
               <option value="apelido">Usar apelido da imobiliária</option>
             </select>
             <p className="mt-1 text-xs text-gray-400">
-              Com apelido, use o botão "Inserir apelido" no editor do corpo: cada imobiliária recebe o e-mail com o próprio nome.
+              Com apelido, use o botão &quot;Inserir apelido&quot; no editor do corpo: cada imobiliária recebe o e-mail com o próprio nome.
             </p>
           </div>
 

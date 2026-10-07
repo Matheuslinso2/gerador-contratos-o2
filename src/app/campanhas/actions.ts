@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
+import { produtosDaCampanha } from "@/lib/campanhas/produtos";
 
 const TAMANHO_MAXIMO_BYTES = 5 * 1024 * 1024;
 
@@ -28,7 +29,7 @@ export async function duplicarCampanha(formData: FormData) {
   const { data: original } = await supabase
     .from("campanhas")
     .select(
-      "nome, assunto, template, personalizacao, titulo, introducao, valido_de, valido_ate, produto, corpo_html, cta_texto, cta_href, imobiliarias_selecionadas, contatos_externos_selecionados"
+      "nome, assunto, template, personalizacao, titulo, introducao, valido_de, valido_ate, produto, produtos, corpo_html, cta_texto, cta_href, imobiliarias_selecionadas, contatos_externos_selecionados"
     )
     .eq("id", campanhaId)
     .single();
@@ -46,6 +47,7 @@ export async function duplicarCampanha(formData: FormData) {
       valido_de: original.valido_de,
       valido_ate: original.valido_ate,
       produto: original.produto,
+      produtos: produtosDaCampanha(original),
       corpo_html: original.corpo_html,
       cta_texto: original.cta_texto,
       cta_href: original.cta_href,

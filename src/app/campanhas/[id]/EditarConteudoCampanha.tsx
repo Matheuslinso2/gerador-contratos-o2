@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import SubmitButton from "@/components/SubmitButton";
-import { PRODUTOS_CAMPANHA } from "@/lib/campanhas/produtos";
+import { SeletorProdutos } from "../SeletorProdutos";
 import { EditorCorpo } from "../EditorCorpo";
 import { editarConteudoCampanha } from "./actions";
 
@@ -19,7 +19,7 @@ export type CampanhaParaEditar = {
   introducao: string | null;
   valido_de: string | null;
   valido_ate: string | null;
-  produto: string;
+  produtos: string[];
   corpo_html: string;
   cta_texto: string | null;
   cta_href: string | null;
@@ -99,16 +99,7 @@ export function EditarConteudoCampanha({
           </div>
         </div>
 
-        <div>
-          <label className="mb-1 block text-xs font-medium text-gray-600">Produto</label>
-          <select name="produto" required defaultValue={campanha.produto} className={inputClass}>
-            {PRODUTOS_CAMPANHA.map((p) => (
-              <option key={p.valor} value={p.valor}>
-                {p.rotulo}
-              </option>
-            ))}
-          </select>
-        </div>
+        <SeletorProdutos selecionados={campanha.produtos} />
 
         <div>
           <label className="mb-1 block text-xs font-medium text-gray-600">Modelo</label>

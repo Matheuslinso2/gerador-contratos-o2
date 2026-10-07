@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
+import { lerProdutosDoFormulario } from "@/lib/campanhas/produtos";
 import { contemApelido } from "@/lib/campanhas/personalizacao";
 
 export async function criarCampanha(formData: FormData) {
@@ -21,7 +22,7 @@ export async function criarCampanha(formData: FormData) {
   const introducao = String(formData.get("introducao") ?? "").trim();
   const validoDe = String(formData.get("valido_de") ?? "").trim();
   const validoAte = String(formData.get("valido_ate") ?? "").trim();
-  const produto = String(formData.get("produto") ?? "").trim();
+  const produtos = lerProdutosDoFormulario(formData.getAll("produtos"));
   const corpoHtml = String(formData.get("corpo_html") ?? "").trim();
   const ctaTexto = String(formData.get("cta_texto") ?? "").trim();
   const ctaHref = String(formData.get("cta_href") ?? "").trim();
@@ -31,8 +32,8 @@ export async function criarCampanha(formData: FormData) {
   // validar (uma imagem sozinha sem nenhum texto também conta como corpo
   // preenchido).
   const temConteudo = corpoHtml.replace(/<[^>]+>/g, "").trim().length > 0 || /<img[\s>]/i.test(corpoHtml);
-  if (!nome || !assunto || !titulo || !temConteudo || !produto) {
-    redirect(`/campanhas/nova?erro=${encodeURIComponent("Preencha nome, produto, assunto, título e corpo da campanha.")}`);
+  if (!nome || !assunto || !titulo || !temConteudo || !produtos.length) {
+    redirect(`/campanhas/nova?erro=${encodeURIComponent("Preencha nome, assunto, título e corpo da campanha e marque ao menos um produto.")}`);
   }
   if (validoDe && validoAte && validoDe > validoAte) {
     redirect(`/campanhas/nova?erro=${encodeURIComponent("A data \"válido de\" não pode ser depois de \"válido até\".")}`);
@@ -54,7 +55,8 @@ export async function criarCampanha(formData: FormData) {
       introducao: introducao || null,
       valido_de: validoDe || null,
       valido_ate: validoAte || null,
-      produto,
+      produto: produtos[0],
+      produtos,
       corpo_html: corpoHtml,
       cta_texto: ctaTexto || null,
       cta_href: ctaHref || null,

@@ -15,6 +15,7 @@ import { contemApelido, NOME_EXEMPLO_PREVIA } from "@/lib/campanhas/personalizac
 import { linkDescadastro } from "@/lib/campanhas/unsubscribeToken";
 import { dispararCampanha } from "@/lib/campanhas/dispararCampanha";
 import { listarDestinatariosReenvio, type PublicoReenvio } from "@/lib/campanhas/reenvio";
+import { lerProdutosDoFormulario, produtosDaCampanha } from "@/lib/campanhas/produtos";
 
 // Fuso fixo -03:00 (Brasil não tem mais horário de verão desde 2019) --
 // <input type="datetime-local"> devolve "AAAA-MM-DDTHH:mm" sem fuso
@@ -193,7 +194,7 @@ export async function reenviarCampanha(formData: FormData) {
   const { data: original } = await supabase
     .from("campanhas")
     .select(
-      "nome, assunto, template, personalizacao, titulo, introducao, valido_de, valido_ate, produto, corpo_html, cta_texto, cta_href, imobiliarias_selecionadas, contatos_externos_selecionados, incluir_equipe_interna, status"
+      "nome, assunto, template, personalizacao, titulo, introducao, valido_de, valido_ate, produto, produtos, corpo_html, cta_texto, cta_href, imobiliarias_selecionadas, contatos_externos_selecionados, incluir_equipe_interna, status"
     )
     .eq("id", campanhaId)
     .single();
@@ -218,6 +219,7 @@ export async function reenviarCampanha(formData: FormData) {
       valido_de: original.valido_de,
       valido_ate: original.valido_ate,
       produto: original.produto,
+      produtos: produtosDaCampanha(original),
       corpo_html: original.corpo_html,
       cta_texto: original.cta_texto,
       cta_href: original.cta_href,
@@ -339,14 +341,14 @@ export async function editarConteudoCampanha(formData: FormData) {
   const introducao = String(formData.get("introducao") ?? "").trim();
   const validoDe = String(formData.get("valido_de") ?? "").trim();
   const validoAte = String(formData.get("valido_ate") ?? "").trim();
-  const produto = String(formData.get("produto") ?? "").trim();
+  const produtos = lerProdutosDoFormulario(formData.getAll("produtos"));
   const corpoHtml = String(formData.get("corpo_html") ?? "").trim();
   const ctaTexto = String(formData.get("cta_texto") ?? "").trim();
   const ctaHref = String(formData.get("cta_href") ?? "").trim();
 
   const temConteudo = corpoHtml.replace(/<[^>]+>/g, "").trim().length > 0 || /<img[\s>]/i.test(corpoHtml);
-  if (!nome || !assunto || !titulo || !temConteudo || !produto) {
-    redirect(`/campanhas/${campanhaId}?erro=${encodeURIComponent("Preencha nome, produto, assunto, título e corpo da campanha.")}`);
+  if (!nome || !assunto || !titulo || !temConteudo || !produtos.length) {
+    redirect(`/campanhas/${campanhaId}?erro=${encodeURIComponent("Preencha nome, assunto, título e corpo da campanha e marque ao menos um produto.")}`);
   }
   if (validoDe && validoAte && validoDe > validoAte) {
     redirect(`/campanhas/${campanhaId}?erro=${encodeURIComponent("A data \"válido de\" não pode ser depois de \"válido até\".")}`);
@@ -368,7 +370,8 @@ export async function editarConteudoCampanha(formData: FormData) {
       introducao: introducao || null,
       valido_de: validoDe || null,
       valido_ate: validoAte || null,
-      produto,
+      produto: produtos[0],
+      produtos,
       corpo_html: corpoHtml,
       cta_texto: ctaTexto || null,
       cta_href: ctaHref || null,

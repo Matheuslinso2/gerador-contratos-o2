@@ -7,7 +7,7 @@ import AppHeader from "@/components/AppHeader";
 import PageHeader from "@/components/PageHeader";
 import { IconMail } from "@/components/icons";
 import { ROTULO_STATUS_CAMPANHA, COR_STATUS_CAMPANHA } from "@/lib/campanhas/rotulos";
-import { PRODUTOS_CAMPANHA, rotuloProdutoCampanha } from "@/lib/campanhas/produtos";
+import { PRODUTOS_CAMPANHA, produtosDaCampanha, rotuloProdutoCampanha } from "@/lib/campanhas/produtos";
 import { duplicarCampanha, excluirCampanha, arquivarCampanha, desarquivarCampanha } from "./actions";
 import { ExcluirCampanhaButton } from "./ExcluirCampanhaButton";
 
@@ -18,6 +18,7 @@ type CampanhaRow = {
   nome: string;
   status: string;
   produto: string | null;
+  produtos: string[] | null;
   total_destinatarios: number;
   total_enviados: number;
   total_falhas: number;
@@ -45,13 +46,13 @@ export default async function CampanhasPage({
   // excluirCampanha faz.
   let query = supabase
     .from("campanhas")
-    .select("id, nome, status, produto, total_destinatarios, total_enviados, total_falhas, created_at, agendado_para, criado_por_email")
+    .select("id, nome, status, produto, produtos, total_destinatarios, total_enviados, total_falhas, created_at, agendado_para, criado_por_email")
     .order("created_at", { ascending: false });
   query = mostrarArquivadas ? query.not("arquivada_em", "is", null) : query.is("arquivada_em", null);
   // Pedido do Matheus, 01/10/2026: filtro por status/produto/nome na
   // listagem -- os mesmos campos já usados em todo o resto da tela.
   if (filtroStatus) query = query.eq("status", filtroStatus);
-  if (filtroProduto) query = query.eq("produto", filtroProduto);
+  if (filtroProduto) query = query.contains("produtos", [filtroProduto]);
   if (filtroBusca?.trim()) query = query.ilike("nome", `%${filtroBusca.trim()}%`);
   const { data: campanhasData } = await query;
   const todasCampanhas = (campanhasData ?? []) as CampanhaRow[];
@@ -263,9 +264,19 @@ export default async function CampanhasPage({
                   )}
                 </Link>
                 <div className="flex shrink-0 items-center gap-2">
-                  {c.produto && (
-                    <span className="whitespace-nowrap rounded-full bg-o2-navy/10 px-2.5 py-1 text-xs font-medium text-o2-navy">
-                      {rotuloProdutoCampanha(c.produto)}
+                  {produtosDaCampanha(c)
+                    .slice(0, 2)
+                    .map((p) => (
+                      <span key={p} className="whitespace-nowrap rounded-full bg-o2-navy/10 px-2.5 py-1 text-xs font-medium text-o2-navy">
+                        {rotuloProdutoCampanha(p)}
+                      </span>
+                    ))}
+                  {produtosDaCampanha(c).length > 2 && (
+                    <span
+                      className="whitespace-nowrap rounded-full bg-o2-navy/10 px-2 py-1 text-xs font-medium text-o2-navy"
+                      title={produtosDaCampanha(c).map((p) => rotuloProdutoCampanha(p)).join(", ")}
+                    >
+                      +{produtosDaCampanha(c).length - 2}
                     </span>
                   )}
                   <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${COR_STATUS_CAMPANHA[c.status] ?? "bg-gray-100 text-gray-600"}`}>
