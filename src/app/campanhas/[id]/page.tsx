@@ -24,10 +24,12 @@ import { FiltroProducao } from "./FiltroProducao";
 import { EmailsEnviados } from "../EmailsEnviados";
 import {
   resumirStatusPorImobiliaria,
+  statusDoEnvio,
   normalizarBusca,
   ROTULO_STATUS_ENVIO,
   COR_STATUS_ENVIO,
   type ChaveStatusEnvio,
+  type DetalheEmail,
   type EnvioParaStatus,
   type ResumoStatusEnvio,
 } from "@/lib/campanhas/producaoStatus";
@@ -174,8 +176,7 @@ export default async function CampanhaDetalhePage({
       supabase
         .from("campanhas_envios")
         .select("imobiliaria_id, email, status, enviado_em, aberto_em, clicado_em, erro_detalhe")
-        .eq("campanha_id", id)
-        .not("imobiliaria_id", "is", null),
+        .eq("campanha_id", id),
       supabase.from("campanhas_producao").select("id, imobiliaria_id, quantidade_apolices, premio_liquido, comissao_gerada, repasse_gerado").eq("campanha_id", id),
       // Só fora do grupo O2 (pedido do Matheus, 17/09/2026) -- a métrica é
       // pra medir o impacto da campanha no cliente, não abertura/clique da
@@ -202,7 +203,7 @@ export default async function CampanhaDetalhePage({
   // registro histórico de quem realmente recebeu, pode diferir da seleção
   // se algum e-mail ficou inelegível entre a seleção e o envio).
   const idsImpactados = jaEnviadaOuEnviando
-    ? [...new Set((enviosData ?? []).map((e) => e.imobiliaria_id as string))]
+    ? [...new Set((enviosData ?? []).filter((e) => e.imobiliaria_id).map((e) => e.imobiliaria_id as string))]
     : ((campanha.imobiliarias_selecionadas as string[] | null) ?? []);
   const { data: imobiliariasImpactadas } = idsImpactados.length
     ? await supabase.from("imobiliarias").select("id, nome").in("id", idsImpactados).order("nome")
@@ -214,6 +215,40 @@ export default async function CampanhaDetalhePage({
   // 07/10/2026). Antes do disparo não há linhas em campanhas_envios, então
   // todo mundo fica "Aguardando envio".
   const statusPorImobiliaria = resumirStatusPorImobiliaria((enviosData ?? []) as EnvioParaStatus[]);
+
+  // Destinatários SEM cadastro de imobiliária -- contatos de prospecção e
+  // equipe da O2. Campanhas só pra equipe (tipo as de meta) ficavam com o
+  // quadro de produção vazio e sem jeito de ver quem abriu.
+  const enviosSemImobiliaria = (enviosData ?? []).filter((e) => !e.imobiliaria_id);
+  const idsContatosSelecionados = (campanha.contatos_externos_selecionados as string[] | null) ?? [];
+  const { data: contatosOutros } =
+    enviosSemImobiliaria.length && idsContatosSelecionados.length
+      ? await supabase.from("campanhas_grupos_contatos").select("email, nome_imobiliaria, nome_responsavel").in("id", idsContatosSelecionados)
+      : { data: [] };
+  const rotuloPorEmail = new Map(
+    (contatosOutros ?? []).map((c) => [
+      String(c.email).trim().toLowerCase(),
+      `${c.nome_imobiliaria}${c.nome_responsavel ? ` (A/C: ${c.nome_responsavel})` : ""}`,
+    ])
+  );
+  const outrosDestinatarios = enviosSemImobiliaria
+    .map((e) => {
+      const email = String(e.email);
+      const detalhe: DetalheEmail = {
+        email,
+        chave: statusDoEnvio(e),
+        enviadoEm: e.enviado_em,
+        abertoEm: e.aberto_em,
+        clicadoEm: e.clicado_em,
+        erro: e.erro_detalhe,
+      };
+      const rotulo = rotuloPorEmail.get(email.trim().toLowerCase()) ?? email;
+      return { rotulo, detalhe };
+    })
+    .sort((a, b) => a.rotulo.localeCompare(b.rotulo, "pt-BR") || a.detalhe.email.localeCompare(b.detalhe.email));
+  const opcoesStatusOutros = (Object.keys(ROTULO_STATUS_ENVIO) as ChaveStatusEnvio[])
+    .map((chave) => ({ valor: chave, rotulo: ROTULO_STATUS_ENVIO[chave], total: outrosDestinatarios.filter((o) => o.detalhe.chave === chave).length }))
+    .filter((o) => o.total > 0);
   const semEnvio: ResumoStatusEnvio = { chave: "aguardando", totalEmails: 0, emailsAbertos: 0, clicou: false, emails: [] };
 
   // A tela já traz toda imobiliária impactada como linha -- tenha ou não
@@ -274,7 +309,7 @@ export default async function CampanhaDetalhePage({
   return (
     <>
       <AppHeader userEmail={user?.email} logoutAction={signOut} />
-      <main className="mx-auto max-w-5xl flex-1 space-y-8 p-8">
+      <main className="mx-auto max-w-7xl flex-1 space-y-8 p-8">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <PageHeader icon={<IconMail />} titulo={campanha.nome} subtitulo={campanha.assunto} />
           <div className="flex items-center gap-2">
@@ -497,7 +532,7 @@ export default async function CampanhaDetalhePage({
           )}
 
           <div id="quadro-producao-campanha" className="overflow-x-auto rounded-2xl border border-o2-navy/10 bg-white shadow-sm">
-            <table className="w-full min-w-[1000px] text-sm">
+            <table className="w-full min-w-[960px] text-sm [&_td]:px-2 [&_th]:px-2">
               <thead>
                 <tr className="border-b border-o2-navy/10 bg-quadro text-xs uppercase tracking-wide text-o2-navy">
                   <th className="p-3 text-left">Imobiliária</th>
@@ -529,7 +564,7 @@ export default async function CampanhaDetalhePage({
                           <input type="hidden" name="imobiliaria_id" value={l.imobiliariaId} />
                           {l.linhaId && <input type="hidden" name="linha_id" value={l.linhaId} />}
                         </form>
-                        <span className="block max-w-[220px] truncate font-medium text-o2-navy" title={l.imobiliariaNome}>
+                        <span className="block max-w-[260px] truncate font-medium text-o2-navy" title={l.imobiliariaNome}>
                           {l.imobiliariaNome}
                         </span>
                       </td>
@@ -612,6 +647,70 @@ export default async function CampanhaDetalhePage({
             </table>
           </div>
         </section>
+
+        {outrosDestinatarios.length > 0 && (
+          <section className="space-y-3">
+            <h2 className="text-sm font-semibold text-o2-navy">Outros destinatários</h2>
+            <p className="text-xs text-gray-500">
+              Contatos de prospecção e equipe da O2 — não têm cadastro de imobiliária, então ficam fora do quadro de produção. As aberturas da equipe
+              O2 não entram no painel &quot;Abriram&quot; acima, só aqui.
+            </p>
+            <FiltroProducao
+              quadroId="quadro-outros-destinatarios"
+              linhas={outrosDestinatarios.map((o) => ({ nomeNormalizado: normalizarBusca(`${o.rotulo} ${o.detalhe.email}`), status: o.detalhe.chave }))}
+              opcoesStatus={opcoesStatusOutros}
+              rotuloBusca="Buscar destinatário"
+              placeholderBusca="Nome ou e-mail..."
+              textoVazio="Ninguém encontrado com esse filtro."
+            />
+            <div id="quadro-outros-destinatarios" className="overflow-x-auto rounded-2xl border border-o2-navy/10 bg-white shadow-sm">
+              <table className="w-full text-sm [&_td]:px-3 [&_th]:px-3">
+                <thead>
+                  <tr className="border-b border-o2-navy/10 bg-quadro text-xs uppercase tracking-wide text-o2-navy">
+                    <th className="p-3 text-left">Destinatário</th>
+                    <th className="p-3 text-left">Status do e-mail</th>
+                    <th className="p-3 text-left">Enviado em</th>
+                    <th className="p-3 text-left">Abriu em</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {outrosDestinatarios.map(({ rotulo, detalhe }) => (
+                    <tr
+                      key={detalhe.email}
+                      data-filtro-nome={normalizarBusca(`${rotulo} ${detalhe.email}`)}
+                      data-filtro-status={detalhe.chave}
+                    >
+                      <td className="p-3 align-top">
+                        <span className="block font-medium text-o2-navy">{rotulo}</span>
+                        <EmailsEnviados emails={[detalhe]} rotulo="Ver e-mail enviado" />
+                      </td>
+                      <td className="p-3 align-top">
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span className={`whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ${COR_STATUS_ENVIO[detalhe.chave]}`}>
+                            {ROTULO_STATUS_ENVIO[detalhe.chave]}
+                          </span>
+                          {detalhe.clicadoEm && (
+                            <span className="whitespace-nowrap rounded-full bg-o2-navy/10 px-2 py-0.5 text-xs font-medium text-o2-navy">Clicou</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="p-3 align-top text-xs text-gray-500">
+                        {detalhe.enviadoEm
+                          ? new Date(detalhe.enviadoEm).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })
+                          : "—"}
+                      </td>
+                      <td className="p-3 align-top text-xs text-gray-500">
+                        {detalhe.abertoEm
+                          ? new Date(detalhe.abertoEm).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })
+                          : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
 
         <Link href="/campanhas" className="text-sm font-medium text-o2-navy hover:underline">
           ← Voltar pra lista de campanhas
