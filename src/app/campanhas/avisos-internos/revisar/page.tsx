@@ -14,6 +14,9 @@ import { COOKIE_MENSAGEM_AVISO } from "@/lib/avisosInternos/cookie";
 import { enviarAvisoInterno } from "./actions";
 
 export const dynamic = "force-dynamic";
+// A server action de envio (enviarAvisoInterno) roda sob o limite desta
+// página -- manda um e-mail por pessoa da equipe, então precisa de folga.
+export const maxDuration = 60;
 
 export default async function RevisarAvisoInternoPage({
   searchParams,

@@ -8,9 +8,24 @@ export type ChaveStatusEnvio = "aguardando" | "na_fila" | "abriu" | "nao_abriu" 
 
 export type EnvioParaStatus = {
   imobiliaria_id: string | null;
+  email?: string;
   status: string;
+  enviado_em?: string | null;
   aberto_em: string | null;
   clicado_em: string | null;
+  erro_detalhe?: string | null;
+};
+
+// Um e-mail (endereço) individual dentro do resumo -- é o que o dropdown
+// "E-mails enviados" de cada imobiliária/pessoa lista (pedido do Matheus,
+// 07/10/2026).
+export type DetalheEmail = {
+  email: string;
+  chave: ChaveStatusEnvio;
+  enviadoEm: string | null;
+  abertoEm: string | null;
+  clicadoEm: string | null;
+  erro: string | null;
 };
 
 export type ResumoStatusEnvio = {
@@ -18,7 +33,17 @@ export type ResumoStatusEnvio = {
   totalEmails: number;
   emailsAbertos: number;
   clicou: boolean;
+  emails: DetalheEmail[];
 };
+
+// Status de UM e-mail só (sem agregar).
+export function statusDoEnvio(e: Pick<EnvioParaStatus, "status" | "aberto_em">): ChaveStatusEnvio {
+  if (e.aberto_em) return "abriu";
+  if (e.status === "enviado") return "nao_abriu";
+  if (e.status === "pendente" || e.status === "processando") return "na_fila";
+  if (e.status === "falhou") return "falhou";
+  return "descadastrado";
+}
 
 export const ROTULO_STATUS_ENVIO: Record<ChaveStatusEnvio, string> = {
   aguardando: "Aguardando envio",
@@ -44,18 +69,26 @@ export const COR_STATUS_ENVIO: Record<ChaveStatusEnvio, string> = {
 export function resumirStatusPorImobiliaria(envios: EnvioParaStatus[]): Map<string, ResumoStatusEnvio> {
   const acumulado = new Map<
     string,
-    { total: number; enviados: number; abertos: number; pendentes: number; falhas: number; clicou: boolean }
+    { total: number; enviados: number; abertos: number; pendentes: number; falhas: number; clicou: boolean; emails: DetalheEmail[] }
   >();
 
   for (const e of envios) {
     if (!e.imobiliaria_id) continue;
-    const a = acumulado.get(e.imobiliaria_id) ?? { total: 0, enviados: 0, abertos: 0, pendentes: 0, falhas: 0, clicou: false };
+    const a = acumulado.get(e.imobiliaria_id) ?? { total: 0, enviados: 0, abertos: 0, pendentes: 0, falhas: 0, clicou: false, emails: [] };
     a.total++;
     if (e.status === "enviado") a.enviados++;
     else if (e.status === "pendente" || e.status === "processando") a.pendentes++;
     else if (e.status === "falhou") a.falhas++;
     if (e.aberto_em) a.abertos++;
     if (e.clicado_em) a.clicou = true;
+    a.emails.push({
+      email: e.email ?? '',
+      chave: statusDoEnvio(e),
+      enviadoEm: e.enviado_em ?? null,
+      abertoEm: e.aberto_em,
+      clicadoEm: e.clicado_em,
+      erro: e.erro_detalhe ?? null,
+    });
     acumulado.set(e.imobiliaria_id, a);
   }
 
@@ -63,7 +96,7 @@ export function resumirStatusPorImobiliaria(envios: EnvioParaStatus[]): Map<stri
   for (const [id, a] of acumulado) {
     const chave: ChaveStatusEnvio =
       a.abertos > 0 ? "abriu" : a.enviados > 0 ? "nao_abriu" : a.pendentes > 0 ? "na_fila" : a.falhas > 0 ? "falhou" : "descadastrado";
-    resultado.set(id, { chave, totalEmails: a.total, emailsAbertos: a.abertos, clicou: a.clicou });
+    resultado.set(id, { chave, totalEmails: a.total, emailsAbertos: a.abertos, clicou: a.clicou, emails: a.emails });
   }
   return resultado;
 }

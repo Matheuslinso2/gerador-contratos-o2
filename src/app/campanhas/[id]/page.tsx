@@ -21,6 +21,7 @@ import { GerenciarDestinatarios } from "./GerenciarDestinatarios";
 import { EditarConteudoCampanha } from "./EditarConteudoCampanha";
 import { ReenviarCampanha } from "./ReenviarCampanha";
 import { FiltroProducao } from "./FiltroProducao";
+import { EmailsEnviados } from "../EmailsEnviados";
 import {
   resumirStatusPorImobiliaria,
   normalizarBusca,
@@ -172,7 +173,7 @@ export default async function CampanhaDetalhePage({
     await Promise.all([
       supabase
         .from("campanhas_envios")
-        .select("imobiliaria_id, status, aberto_em, clicado_em")
+        .select("imobiliaria_id, email, status, enviado_em, aberto_em, clicado_em, erro_detalhe")
         .eq("campanha_id", id)
         .not("imobiliaria_id", "is", null),
       supabase.from("campanhas_producao").select("id, imobiliaria_id, quantidade_apolices, premio_liquido, comissao_gerada, repasse_gerado").eq("campanha_id", id),
@@ -213,7 +214,7 @@ export default async function CampanhaDetalhePage({
   // 07/10/2026). Antes do disparo não há linhas em campanhas_envios, então
   // todo mundo fica "Aguardando envio".
   const statusPorImobiliaria = resumirStatusPorImobiliaria((enviosData ?? []) as EnvioParaStatus[]);
-  const semEnvio: ResumoStatusEnvio = { chave: "aguardando", totalEmails: 0, emailsAbertos: 0, clicou: false };
+  const semEnvio: ResumoStatusEnvio = { chave: "aguardando", totalEmails: 0, emailsAbertos: 0, clicou: false, emails: [] };
 
   // A tela já traz toda imobiliária impactada como linha -- tenha ou não
   // produção lançada ainda (zerada até o comercial preencher e salvar).
@@ -548,6 +549,9 @@ export default async function CampanhaDetalhePage({
                             {l.statusEnvio.emailsAbertos} de {l.statusEnvio.totalEmails} e-mails abertos
                           </span>
                         )}
+                        <div data-export-ignore="true">
+                          <EmailsEnviados emails={l.statusEnvio.emails} />
+                        </div>
                       </td>
                       <td className="p-3 text-xs text-gray-500">{rotuloProduto}</td>
                       <td className="p-3">

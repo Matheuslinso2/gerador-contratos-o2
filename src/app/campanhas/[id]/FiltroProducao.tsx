@@ -15,10 +15,16 @@ export function FiltroProducao({
   quadroId,
   linhas,
   opcoesStatus,
+  rotuloBusca = "Buscar imobiliária",
+  placeholderBusca = "Nome da imobiliária...",
+  textoVazio = "Nenhuma imobiliária encontrada com esse filtro.",
 }: {
   quadroId: string;
   linhas: LinhaFiltro[];
   opcoesStatus: OpcaoStatus[];
+  rotuloBusca?: string;
+  placeholderBusca?: string;
+  textoVazio?: string;
 }) {
   const [busca, setBusca] = useState("");
   const [status, setStatus] = useState("");
@@ -43,12 +49,12 @@ export function FiltroProducao({
     <div className="space-y-1.5">
       <div className="flex flex-wrap items-end gap-2 rounded-xl border border-o2-navy/10 bg-quadro p-3">
         <div className="min-w-[200px] flex-1">
-          <label className="mb-0.5 block text-xs text-gray-500">Buscar imobiliária</label>
+          <label className="mb-0.5 block text-xs text-gray-500">{rotuloBusca}</label>
           <input
             type="text"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
-            placeholder="Nome da imobiliária..."
+            placeholder={placeholderBusca}
             className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-o2-coral focus:outline-none"
           />
         </div>
@@ -84,7 +90,7 @@ export function FiltroProducao({
         </span>
       </div>
       {linhas.length > 0 && visiveis === 0 && (
-        <p className="rounded-lg border border-yellow-300 bg-yellow-50 p-2 text-xs text-yellow-800">Nenhuma imobiliária encontrada com esse filtro.</p>
+        <p className="rounded-lg border border-yellow-300 bg-yellow-50 p-2 text-xs text-yellow-800">{textoVazio}</p>
       )}
     </div>
   );
