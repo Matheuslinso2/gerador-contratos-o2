@@ -20,6 +20,16 @@ import { CelulasComissaoRepasse } from "./producao/CelulasComissaoRepasse";
 import { GerenciarDestinatarios } from "./GerenciarDestinatarios";
 import { EditarConteudoCampanha } from "./EditarConteudoCampanha";
 import { ReenviarCampanha } from "./ReenviarCampanha";
+import { FiltroProducao } from "./FiltroProducao";
+import {
+  resumirStatusPorImobiliaria,
+  normalizarBusca,
+  ROTULO_STATUS_ENVIO,
+  COR_STATUS_ENVIO,
+  type ChaveStatusEnvio,
+  type EnvioParaStatus,
+  type ResumoStatusEnvio,
+} from "@/lib/campanhas/producaoStatus";
 import { listarDestinatariosReenvio, hojeSaoPauloISO } from "@/lib/campanhas/reenvio";
 import { duplicarCampanha } from "../actions";
 import { cancelarAgendamentoCampanha } from "./actions";
@@ -50,6 +60,7 @@ type LinhaQuadro = {
   premio_liquido: number;
   comissao_gerada: number;
   repasse_gerado: number;
+  statusEnvio: ResumoStatusEnvio;
 };
 
 export default async function CampanhaDetalhePage({
@@ -159,7 +170,11 @@ export default async function CampanhaDetalhePage({
 
   const [{ data: enviosData }, { data: producaoData }, { count: totalAbertos }, { count: totalCliques }, { count: totalDescadastros }] =
     await Promise.all([
-      supabase.from("campanhas_envios").select("imobiliaria_id").eq("campanha_id", id).not("imobiliaria_id", "is", null),
+      supabase
+        .from("campanhas_envios")
+        .select("imobiliaria_id, status, aberto_em, clicado_em")
+        .eq("campanha_id", id)
+        .not("imobiliaria_id", "is", null),
       supabase.from("campanhas_producao").select("id, imobiliaria_id, quantidade_apolices, premio_liquido, comissao_gerada, repasse_gerado").eq("campanha_id", id),
       // Só fora do grupo O2 (pedido do Matheus, 17/09/2026) -- a métrica é
       // pra medir o impacto da campanha no cliente, não abertura/clique da
@@ -194,11 +209,18 @@ export default async function CampanhaDetalhePage({
 
   const producaoPorImobiliaria = new Map((producaoData ?? []).map((p) => [p.imobiliaria_id as string, p]));
 
+  // Status de envio/abertura por imobiliária (pedido do Matheus,
+  // 07/10/2026). Antes do disparo não há linhas em campanhas_envios, então
+  // todo mundo fica "Aguardando envio".
+  const statusPorImobiliaria = resumirStatusPorImobiliaria((enviosData ?? []) as EnvioParaStatus[]);
+  const semEnvio: ResumoStatusEnvio = { chave: "aguardando", totalEmails: 0, emailsAbertos: 0, clicou: false };
+
   // A tela já traz toda imobiliária impactada como linha -- tenha ou não
   // produção lançada ainda (zerada até o comercial preencher e salvar).
   const linhasQuadro: LinhaQuadro[] = (imobiliariasImpactadas ?? []).map((imob) => {
     const p = producaoPorImobiliaria.get(imob.id);
     return {
+      statusEnvio: statusPorImobiliaria.get(imob.id) ?? semEnvio,
       linhaId: p?.id ?? null,
       imobiliariaId: imob.id,
       imobiliariaNome: imob.nome,
@@ -226,8 +248,18 @@ export default async function CampanhaDetalhePage({
     { apolices: 0, premio: 0, comissao: 0, repasse: 0 }
   );
 
+  const opcoesStatusFiltro = (Object.keys(ROTULO_STATUS_ENVIO) as ChaveStatusEnvio[])
+    .map((chave) => ({
+      valor: chave,
+      rotulo: ROTULO_STATUS_ENVIO[chave],
+      total: linhasQuadro.filter((l) => l.statusEnvio.chave === chave).length,
+    }))
+    .filter((o) => o.total > 0);
+
   const dadosExcelProducao = linhasQuadro.map((l) => ({
     Imobiliária: l.imobiliariaNome,
+    "Status do e-mail": ROTULO_STATUS_ENVIO[l.statusEnvio.chave],
+    "Clicou no e-mail": l.statusEnvio.totalEmails ? (l.statusEnvio.clicou ? "Sim" : "Não") : "—",
     Produto: rotuloProduto,
     "Qtde. apólices": l.quantidade_apolices,
     "Prêmio líquido": l.premio_liquido,
@@ -444,19 +476,31 @@ export default async function CampanhaDetalhePage({
               nomeAbaExcel="Produção"
             />
           </div>
-          <p className="text-xs text-gray-500">Preenchimento manual, por imobiliária impactada pela campanha.</p>
+          <p className="text-xs text-gray-500">
+            Preenchimento manual, por imobiliária impactada pela campanha. A coluna de status mostra quem abriu o e-mail (abertura é medida por
+            imagem — quem bloqueia imagens pode ter lido e aparecer como &quot;Não abriu&quot;).
+          </p>
+
+          {linhasQuadro.length > 0 && (
+            <FiltroProducao
+              quadroId="quadro-producao-campanha"
+              linhas={linhasQuadro.map((l) => ({ nomeNormalizado: normalizarBusca(l.imobiliariaNome), status: l.statusEnvio.chave }))}
+              opcoesStatus={opcoesStatusFiltro}
+            />
+          )}
 
           {idsImpactados.length === 0 && (
             <p className="rounded-lg border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800">
-              Essa campanha ainda não tem destinatários confirmados — selecione e dispare a campanha (em "Resumo do envio", acima) antes de lançar produção.
+              Essa campanha ainda não tem destinatários confirmados — selecione e dispare a campanha (em &quot;Resumo do envio&quot;, acima) antes de lançar produção.
             </p>
           )}
 
           <div id="quadro-producao-campanha" className="overflow-x-auto rounded-2xl border border-o2-navy/10 bg-white shadow-sm">
-            <table className="w-full min-w-[880px] text-sm">
+            <table className="w-full min-w-[1000px] text-sm">
               <thead>
                 <tr className="border-b border-o2-navy/10 bg-quadro text-xs uppercase tracking-wide text-o2-navy">
                   <th className="p-3 text-left">Imobiliária</th>
+                  <th className="p-3 text-left">Status do e-mail</th>
                   <th className="p-3 text-left">Produto</th>
                   <th className="p-3 text-right">Apólices</th>
                   <th className="p-3 text-right">Prêmio líquido</th>
@@ -477,7 +521,7 @@ export default async function CampanhaDetalhePage({
                   // real de cada coluna do cabeçalho).
                   const formId = `producao-${l.imobiliariaId}`;
                   return (
-                    <tr key={l.imobiliariaId}>
+                    <tr key={l.imobiliariaId} data-filtro-nome={normalizarBusca(l.imobiliariaNome)} data-filtro-status={l.statusEnvio.chave}>
                       <td className="p-3">
                         <form id={formId} action={salvarLinhaProducao}>
                           <input type="hidden" name="campanha_id" value={id} />
@@ -487,6 +531,23 @@ export default async function CampanhaDetalhePage({
                         <span className="block max-w-[220px] truncate font-medium text-o2-navy" title={l.imobiliariaNome}>
                           {l.imobiliariaNome}
                         </span>
+                      </td>
+                      <td className="p-3">
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span
+                            className={`whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ${COR_STATUS_ENVIO[l.statusEnvio.chave]}`}
+                          >
+                            {ROTULO_STATUS_ENVIO[l.statusEnvio.chave]}
+                          </span>
+                          {l.statusEnvio.clicou && (
+                            <span className="whitespace-nowrap rounded-full bg-o2-navy/10 px-2 py-0.5 text-xs font-medium text-o2-navy">Clicou</span>
+                          )}
+                        </div>
+                        {l.statusEnvio.totalEmails > 1 && (
+                          <span className="mt-0.5 block text-[11px] text-gray-400">
+                            {l.statusEnvio.emailsAbertos} de {l.statusEnvio.totalEmails} e-mails abertos
+                          </span>
+                        )}
                       </td>
                       <td className="p-3 text-xs text-gray-500">{rotuloProduto}</td>
                       <td className="p-3">
@@ -523,7 +584,7 @@ export default async function CampanhaDetalhePage({
                 })}
                 {!linhasQuadro.length && (
                   <tr>
-                    <td colSpan={8} className="p-8 text-center text-sm text-gray-500">
+                    <td colSpan={9} className="p-8 text-center text-sm text-gray-500">
                       Nenhuma imobiliária impactada por essa campanha ainda.
                     </td>
                   </tr>
@@ -532,8 +593,8 @@ export default async function CampanhaDetalhePage({
               {linhasQuadro.length > 0 && (
                 <tfoot>
                   <tr className="border-t border-o2-navy/10 bg-quadro text-sm font-semibold text-o2-navy">
-                    <td className="p-3" colSpan={2}>
-                      Total ({linhasQuadro.length} imobiliária{linhasQuadro.length > 1 ? "s" : ""})
+                    <td className="p-3" colSpan={3}>
+                      Total geral ({linhasQuadro.length} imobiliária{linhasQuadro.length > 1 ? "s" : ""})
                     </td>
                     <td className="p-3 text-right">{totaisProducao.apolices}</td>
                     <td className="p-3 text-right">{formatarMoeda(totaisProducao.premio)}</td>
