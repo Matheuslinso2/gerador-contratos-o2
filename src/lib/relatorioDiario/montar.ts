@@ -101,7 +101,25 @@ function concluidosRamos(resumo: ResumoPopulacao): number {
 }
 
 export async function montarRelatorioDiario(agora = new Date()): Promise<RelatorioDiario> {
-  const periodo = calcularPeriodoRelatorio(agora);
+  return montarParaPeriodo(calcularPeriodoRelatorio(agora));
+}
+
+// Só o "No mês" de uma competência qualquer (sem "ontem") -- usado pela IA
+// que responde perguntas pelo WhatsApp (lib/whatsappAssistente.ts) pra
+// comparar meses. Mesmas contas do relatório.
+export async function montarResumoCompetencia(competencia: string): Promise<RelatorioDiario> {
+  const [ano, mes] = competencia.split("-").map(Number);
+  const proximo = new Date(Date.UTC(ano, mes, 1)).toISOString().slice(0, 7);
+  return montarParaPeriodo({
+    dias: [],
+    inicio: new Date(`${competencia}-01T00:00:00-03:00`),
+    fim: new Date(`${proximo}-01T00:00:00-03:00`),
+    competenciaMes: competencia,
+    rotulo: competencia,
+  });
+}
+
+async function montarParaPeriodo(periodo: PeriodoRelatorio): Promise<RelatorioDiario> {
   const [fianca, capitalizacao, auto, ramos] = await Promise.all([
     secao<AnaliseGerencial, ResumoProduto>("seguro_fianca_snapshots", periodo, (doMes, todos) => {
       const { convertidos, recusados, perdidos } = doMes.kpis;

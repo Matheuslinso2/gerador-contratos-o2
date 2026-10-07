@@ -79,6 +79,10 @@ const ROTAS_PUBLICAS = [
   // (ver src/app/api/campanhas/webhook-resend/route.ts), mesmo padrão dos
   // outros webhooks acima.
   "/api/campanhas/webhook-resend",
+  // Webhook do WhatsApp (perguntas ao Workspace pelo WhatsApp) -- chamado
+  // direto pela Meta, sem cookie. Valida a assinatura X-Hub-Signature-256
+  // com WHATSAPP_APP_SECRET (ver src/app/api/whatsapp/webhook/route.ts).
+  "/api/whatsapp/webhook",
   // Verificação do link de acesso público (pedido do Matheus, 18/09/2026) --
   // só confere o token e libera o cookie (ver src/app/acesso/[token]/
   // route.ts); não expõe nada além disso, então pode ser público de
