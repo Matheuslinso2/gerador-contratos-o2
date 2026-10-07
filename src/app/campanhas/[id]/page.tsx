@@ -332,15 +332,22 @@ export default async function CampanhaDetalhePage({
         {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
         {ok && <p className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-700">{ok}</p>}
 
-        {(campanha.valido_de || campanha.valido_ate) && (
-          <p className="-mt-4 text-xs font-medium text-o2-coral">
-            {campanha.valido_de && campanha.valido_ate
-              ? `Válida de ${formatarDataBr(campanha.valido_de)} até ${formatarDataBr(campanha.valido_ate)}`
-              : campanha.valido_ate
-                ? `Válida até ${formatarDataBr(campanha.valido_ate)}`
-                : `Válida a partir de ${formatarDataBr(campanha.valido_de)}`}
+        <div className="-mt-4 space-y-0.5">
+          {/* Pedido do Matheus, 07/10/2026: login de quem criou a campanha. */}
+          <p className="text-xs text-gray-500">
+            Criada por <strong className="font-semibold text-o2-navy">{campanha.criado_por_email ?? "—"}</strong> em{" "}
+            {new Date(campanha.created_at).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })}
           </p>
-        )}
+          {(campanha.valido_de || campanha.valido_ate) && (
+            <p className="text-xs font-medium text-o2-coral">
+              {campanha.valido_de && campanha.valido_ate
+                ? `Válida de ${formatarDataBr(campanha.valido_de)} até ${formatarDataBr(campanha.valido_ate)}`
+                : campanha.valido_ate
+                  ? `Válida até ${formatarDataBr(campanha.valido_ate)}`
+                  : `Válida a partir de ${formatarDataBr(campanha.valido_de)}`}
+            </p>
+          )}
+        </div>
 
         <CampanhaProgresso campanhaId={id} status={campanha.status} />
 

@@ -23,6 +23,7 @@ type CampanhaRow = {
   total_falhas: number;
   created_at: string;
   agendado_para: string | null;
+  criado_por_email: string | null;
 };
 
 export default async function CampanhasPage({
@@ -44,7 +45,7 @@ export default async function CampanhasPage({
   // excluirCampanha faz.
   let query = supabase
     .from("campanhas")
-    .select("id, nome, status, produto, total_destinatarios, total_enviados, total_falhas, created_at, agendado_para")
+    .select("id, nome, status, produto, total_destinatarios, total_enviados, total_falhas, created_at, agendado_para, criado_por_email")
     .order("created_at", { ascending: false });
   query = mostrarArquivadas ? query.not("arquivada_em", "is", null) : query.is("arquivada_em", null);
   // Pedido do Matheus, 01/10/2026: filtro por status/produto/nome na
@@ -250,6 +251,7 @@ export default async function CampanhasPage({
                   ) : (
                     <p className="text-xs text-gray-500">
                       {new Date(c.created_at).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
+                      {c.criado_por_email && ` · por ${c.criado_por_email}`}
                       {(c.status === "enviando" || c.status === "concluida") && (
                         <>
                           {" · "}
