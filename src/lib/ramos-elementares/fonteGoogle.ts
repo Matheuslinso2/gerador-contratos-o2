@@ -116,6 +116,66 @@ async function lerTituloPlanilha(id: string): Promise<{ titulo: string; url: str
 // fonte híbrida (fonteHibrida.ts) só tolera esta, e segue só com o Bitrix.
 export class PlanilhaDaCompetenciaNaoEncontradaError extends Error {}
 
+// Layout "canônico" das abas de renovação (RN <mês>) -- as posições que
+// analise.ts e fonteBitrix.ts usam. Cada mês a equipe mexe nas colunas da
+// planilha (set/2026 tinha SPA e CORP no meio; a RN OUTUBRO da planilha nova
+// não tem; a RN NOVEMBRO da mesma planilha tem de novo, mais ENDEREÇO) e
+// ler por posição fazia a coluna errada virar imobiliária/prêmio/data. Por
+// isso a aba é remontada pelos NOMES das colunas do cabeçalho, nesta ordem.
+const COLUNAS_RENOVACAO = [
+  "STATUS",
+  "OPERACAO",
+  "APOLICE",
+  "FIM. VIG",
+  "IMOBILIARIA",
+  "SEGURADO",
+  "CPF",
+  "RAMO",
+  "SEGURADORA",
+  "ORCAMENTO",
+  "PREM LIQ 2025",
+  "PREM TOTAL - 2025",
+  "2025 %COMISSAO",
+  "COMISSAO RECEBIDA",
+  "PREM. LIQ.",
+  "PREM. TOTAL",
+  "%COMISSAO",
+  "COMISSAO",
+  "% DE REPASSE",
+  "REPASSE",
+  "COTADOR",
+  "DATA DE ENVIO DA COTACAO",
+  "PRAZO DO COMUNICADO DE RENOVACAO",
+  "ULTIMO CONTATO",
+  "OBSERVACOES",
+  "DATA EFETIVACAO", // posição 25: onde analise.ts lê a data de efetivação
+  "EFETIVADOR",
+  "DESCONTO",
+] as const;
+
+// "OBSEERVAÇÕES" (com o erro de digitação da planilha) e "OBSERVAÇÕES"
+// viram a mesma coluna.
+function chaveCabecalho(valor: CelulaGoogle): string {
+  const base = normalizar(String(valor ?? "")).replace(/OBSEERVACOES/, "OBSERVACOES");
+  return base.replace(/\s+/g, " ").trim();
+}
+
+// Devolve as linhas (sem o cabeçalho) reordenadas pro layout canônico. Se o
+// cabeçalho não for reconhecível (sem STATUS/IMOBILIÁRIA/PRÊM. TOTAL), cai no
+// comportamento antigo (só tira o cabeçalho), pra nunca perder dado.
+function linhasRenovacaoPeloCabecalho(linhas: CelulaGoogle[][]): CelulaGoogle[][] {
+  if (linhas.length === 0) return [];
+  const cabecalho = linhas[0].map(chaveCabecalho);
+  const posicaoNaPlanilha = new Map<string, number>();
+  cabecalho.forEach((nome, indice) => {
+    if (nome && !posicaoNaPlanilha.has(nome)) posicaoNaPlanilha.set(nome, indice);
+  });
+  const obrigatorias = ["STATUS", "IMOBILIARIA", "PREM. TOTAL"];
+  if (!obrigatorias.every((nome) => posicaoNaPlanilha.has(nome))) return linhas.slice(1);
+  const origem = COLUNAS_RENOVACAO.map((nome) => posicaoNaPlanilha.get(nome));
+  return linhas.slice(1).map((linha) => origem.map((indice) => (indice === undefined ? null : (linha[indice] ?? null))));
+}
+
 export async function resolverPlanilhaDaCompetencia(competencia: string): Promise<{
   id: string;
   titulo: string;
@@ -211,8 +271,8 @@ export async function lerFonteRamosElementares(competencia: string): Promise<Fon
   const especificacoes = [
     { chave: "novosPendentes" as const, nome: "NOVOS PENDENTES", ultimaColuna: "AR" },
     { chave: "novosMes" as const, nome: "NOVOS MÊS", ultimaColuna: "AR" },
-    { chave: "renovacoesAtual" as const, nome: nomeAbaRenovacao(competencia, 0), ultimaColuna: "AA" },
-    { chave: "renovacoesFutura" as const, nome: nomeAbaRenovacao(competencia, 1), ultimaColuna: "AA" },
+    { chave: "renovacoesAtual" as const, nome: nomeAbaRenovacao(competencia, 0), ultimaColuna: "AD" },
+    { chave: "renovacoesFutura" as const, nome: nomeAbaRenovacao(competencia, 1), ultimaColuna: "AD" },
     { chave: "endossos" as const, nome: "ENDOSSOS", ultimaColuna: "U" },
   ];
 
@@ -255,7 +315,12 @@ export async function lerFonteRamosElementares(competencia: string): Promise<Fon
 
   comAba.forEach((item, indice) => {
     const linhas = (valores?.data.valueRanges?.[indice]?.values || []) as CelulaGoogle[][];
-    abas[item.chave] = linhas.length > 0 ? linhas.slice(1) : [];
+    abas[item.chave] =
+      item.chave === "renovacoesAtual" || item.chave === "renovacoesFutura"
+        ? linhasRenovacaoPeloCabecalho(linhas)
+        : linhas.length > 0
+          ? linhas.slice(1)
+          : [];
     nomesAbas[item.chave] = item.aba?.title || null;
   });
 

@@ -62,15 +62,25 @@ export async function lerFonteRamosElementaresHibrida(competencia: string): Prom
       novosMes: bitrix.abas.novosMes,
       renovacoesAtual: [...bitrix.abas.renovacoesAtual, ...google.abas.renovacoesAtual],
       renovacoesFutura: [...bitrix.abas.renovacoesFutura, ...google.abas.renovacoesFutura],
-      endossos: google.abas.endossos,
+      endossos: google.nomesAbas.endossos ? google.abas.endossos : bitrix.abas.endossos,
     },
     nomesAbas: {
       novosPendentes: bitrix.nomesAbas.novosPendentes,
       novosMes: bitrix.nomesAbas.novosMes,
       renovacoesAtual: google.nomesAbas.renovacoesAtual,
       renovacoesFutura: google.nomesAbas.renovacoesFutura,
-      endossos: google.nomesAbas.endossos,
+      endossos: google.nomesAbas.endossos ?? bitrix.nomesAbas.endossos,
     },
-    avisos: [...bitrix.avisos, ...google.avisos],
+    // Novos vêm do Bitrix (as abas NOVOS da planilha não são usadas aqui) e
+    // endossos caem no Bitrix quando a planilha não tem a aba -- então o aviso
+    // "aba não encontrada" dessas abas seria só ruído.
+    avisos: [
+      ...bitrix.avisos,
+      ...google.avisos.filter(
+        (aviso) =>
+          !/Aba não encontrada: NOVOS (PENDENTES|MÊS)/i.test(aviso) &&
+          !(!google.nomesAbas.endossos && /Aba não encontrada: ENDOSSOS/i.test(aviso))
+      ),
+    ],
   };
 }
