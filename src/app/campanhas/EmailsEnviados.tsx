@@ -20,8 +20,34 @@ const COR_PONTO: Record<ChaveStatusEnvio, string> = {
 // Pedido do Matheus, 07/10/2026: em vez de dropdown, os e-mails de cada
 // imobiliária ficam fixos abaixo do nome, em bloco compacto: 1 linha com o
 // endereço (ponto colorido = status) e 1 linha com envio/abertura/clique.
-export function EmailsEnviados({ emails }: { emails: DetalheEmail[] }) {
+export function EmailsEnviados({ emails, compacto = false }: { emails: DetalheEmail[]; compacto?: boolean }) {
   if (!emails.length) return null;
+
+  // Versão de UMA linha por e-mail -- usada no resumo de cada campanha na
+  // lista (/campanhas), pra campanhas individuais com poucos e-mails
+  // (pedido do Matheus, 08/10/2026): ver se abriram sem entrar na campanha.
+  if (compacto) {
+    return (
+      <ul className="mt-1 space-y-0.5">
+        {emails.map((e) => (
+          <li key={e.email} className="flex flex-wrap items-center gap-x-1.5 text-[11px] leading-snug">
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${COR_PONTO[e.chave]}`} aria-hidden="true" />
+            <span className="break-all font-medium text-o2-navy">{e.email}</span>
+            {e.abertoEm ? (
+              <span className="font-medium text-green-700">· Abriu {dataCurta(e.abertoEm)}</span>
+            ) : e.enviadoEm ? (
+              <span className="text-orange-600">· Não abriu</span>
+            ) : e.chave === "falhou" ? (
+              <span className="text-red-500">· Falhou</span>
+            ) : (
+              <span className="text-gray-400">· Na fila</span>
+            )}
+            {e.clicadoEm && <span className="font-medium text-o2-navy">· Clicou</span>}
+          </li>
+        ))}
+      </ul>
+    );
+  }
 
   return (
     <ul className="mt-1.5 space-y-1.5 border-l-2 border-o2-navy/10 pl-2.5">

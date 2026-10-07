@@ -10,6 +10,8 @@ import { ROTULO_STATUS_CAMPANHA, COR_STATUS_CAMPANHA } from "@/lib/campanhas/rot
 import { PRODUTOS_CAMPANHA, produtosDaCampanha, rotuloProdutoCampanha } from "@/lib/campanhas/produtos";
 import { duplicarCampanha, excluirCampanha, arquivarCampanha, desarquivarCampanha } from "./actions";
 import { ExcluirCampanhaButton } from "./ExcluirCampanhaButton";
+import { EmailsEnviados } from "./EmailsEnviados";
+import { statusDoEnvio, type DetalheEmail } from "@/lib/campanhas/producaoStatus";
 
 export const dynamic = "force-dynamic";
 
@@ -67,6 +69,39 @@ export default async function CampanhasPage({
   });
   const outras = todasCampanhas.filter((c) => c.status !== "agendada");
   const campanhas = [...agendadas, ...outras];
+
+  // Campanhas individuais (metas por cliente, até 3 e-mails): mostra direto
+  // na linha se cada e-mail foi aberto, sem precisar entrar campanha por
+  // campanha (pedido do Matheus, 08/10/2026).
+  const LIMITE_EMAILS_NO_RESUMO = 3;
+  const idsIndividuais = campanhas
+    .filter(
+      (c) =>
+        (c.status === "enviando" || c.status === "concluida") &&
+        c.total_destinatarios >= 1 &&
+        c.total_destinatarios <= LIMITE_EMAILS_NO_RESUMO
+    )
+    .map((c) => c.id);
+  const { data: enviosIndividuais } = idsIndividuais.length
+    ? await supabase
+        .from("campanhas_envios")
+        .select("campanha_id, email, status, enviado_em, aberto_em, clicado_em, erro_detalhe")
+        .in("campanha_id", idsIndividuais)
+        .order("email", { ascending: true })
+    : { data: [] };
+  const emailsPorCampanha = new Map<string, DetalheEmail[]>();
+  for (const e of enviosIndividuais ?? []) {
+    const lista = emailsPorCampanha.get(e.campanha_id) ?? [];
+    lista.push({
+      email: e.email,
+      chave: statusDoEnvio(e),
+      enviadoEm: e.enviado_em,
+      abertoEm: e.aberto_em,
+      clicadoEm: e.clicado_em,
+      erro: e.erro_detalhe,
+    });
+    emailsPorCampanha.set(e.campanha_id, lista);
+  }
 
   // Painel de resumo (pedido do Matheus, 01/10/2026) -- reflete a lista
   // filtrada acima, não o total geral, pra bater com o que a tela mostra.
@@ -262,6 +297,7 @@ export default async function CampanhasPage({
                       )}
                     </p>
                   )}
+                  {emailsPorCampanha.has(c.id) && <EmailsEnviados compacto emails={emailsPorCampanha.get(c.id) ?? []} />}
                 </Link>
                 <div className="flex shrink-0 items-center gap-2">
                   {produtosDaCampanha(c)
