@@ -708,7 +708,7 @@ export default async function FaturasPage({
                       const pronta = algumaProntaParaEnvio;
                       const duplicata = linhaM.imobiliaria_id ? duplicatasPorImobiliaria.get(linhaM.imobiliaria_id) : undefined;
                       const editarHref = linhaM.imobiliaria_id
-                        ? `/faturas/imobiliaria/${linhaM.imobiliaria_id}`
+                        ? `/admin/imobiliarias/${linhaM.imobiliaria_id}`
                         : `/faturas/imobiliaria/novo?nome=${encodeURIComponent(linhaM.nome_provisorio ?? "")}`;
                       return (
                         <details key={esperada.id} className="group/linha">

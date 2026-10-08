@@ -295,3 +295,58 @@ export async function autorizarImobiliaria(formData: FormData) {
   revalidatePath("/admin/imobiliarias");
   redirect(`/admin/imobiliarias?sucesso=${encodeURIComponent("Imobiliária autorizada.")}`);
 }
+
+// WhatsApp da imobiliária (08/10/2026) -- pedido do Matheus: o número da
+// imobiliária fica SÓ no cadastro dela (não em /admin/whatsapp, que é só da
+// equipe). Grava em whatsapp_contatos com tipo 'imobiliaria' -- quem estiver
+// aqui só vai poder consultar os dados desta imobiliária pelo WhatsApp (ver
+// lib/whatsappContatos.ts).
+export async function adicionarWhatsappImobiliaria(formData: FormData) {
+  const supabase = await exigirAdmin();
+  const imobiliariaId = String(formData.get("imobiliaria_id") ?? "");
+  const voltarPara = String(formData.get("voltar_para") ?? "").trim() || `/admin/imobiliarias/${imobiliariaId}`;
+  const nome = String(formData.get("nome") ?? "").trim();
+  const numero = String(formData.get("numero") ?? "").replace(/\D/g, "");
+  if (!imobiliariaId) redirect("/admin/imobiliarias");
+  // DDI 55 + DDD + número: 12 (fixo) ou 13 (celular) dígitos.
+  if (!/^55\d{10,11}$/.test(numero)) {
+    redirect(`${voltarPara}?erro=${encodeURIComponent("WhatsApp inválido: use 55 + DDD + número, ex: 5521999990000.")}`);
+  }
+  if (!nome) redirect(`${voltarPara}?erro=${encodeURIComponent("Informe o nome do contato de WhatsApp.")}`);
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const { error } = await supabase.from("whatsapp_contatos").insert({
+    numero,
+    nome,
+    tipo: "imobiliaria",
+    imobiliaria_id: imobiliariaId,
+    recebe_relatorio: false,
+    criado_por_email: user?.email ?? null,
+  });
+  if (error) {
+    const msg = error.code === "23505" ? "Esse WhatsApp já está cadastrado (em outra imobiliária ou na equipe O2)." : error.message;
+    redirect(`${voltarPara}?erro=${encodeURIComponent(msg)}`);
+  }
+  revalidatePath(voltarPara);
+  redirect(`${voltarPara}?sucesso=${encodeURIComponent("WhatsApp adicionado.")}`);
+}
+
+export async function alterarWhatsappImobiliaria(formData: FormData) {
+  const supabase = await exigirAdmin();
+  const id = String(formData.get("id") ?? "");
+  const imobiliariaId = String(formData.get("imobiliaria_id") ?? "");
+  const acao = String(formData.get("acao") ?? "");
+  const voltarPara = String(formData.get("voltar_para") ?? "").trim() || `/admin/imobiliarias/${imobiliariaId}`;
+  // Filtra também pela imobiliária -- não deixa mexer em contato da equipe
+  // ou de outra imobiliária por esta tela.
+  const alvo = supabase.from("whatsapp_contatos");
+  const { error } =
+    acao === "remover"
+      ? await alvo.delete().eq("id", id).eq("imobiliaria_id", imobiliariaId)
+      : await alvo.update({ ativo: acao === "ativar" }).eq("id", id).eq("imobiliaria_id", imobiliariaId);
+  if (error) redirect(`${voltarPara}?erro=${encodeURIComponent(error.message)}`);
+  revalidatePath(voltarPara);
+  redirect(`${voltarPara}?sucesso=${encodeURIComponent(acao === "remover" ? "WhatsApp removido." : "WhatsApp atualizado.")}`);
+}

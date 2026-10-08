@@ -7,6 +7,7 @@ import AppHeader from "@/components/AppHeader";
 import VinculosFaturas, { type Vinculo } from "../../../faturas/VinculosFaturas";
 import VinculosRepasse from "../../../faturas/VinculosRepasse";
 import VinculosCampanhas from "../../../campanhas/VinculosCampanhas";
+import VinculosWhatsapp, { type ContatoWhatsappImobiliaria } from "../VinculosWhatsapp";
 import { atualizarImobiliariaAdmin, adicionarMembroImobiliariaAdmin, removerMembroImobiliariaAdmin } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -29,13 +30,14 @@ export default async function AdminImobiliariaDetalhePage({
   } = await supabase.auth.getUser();
   if (!isEquipe(user?.email)) redirect("/");
 
-  const [{ data: imobiliaria }, { data: vinculosData }, { data: membros }, { count: contratos }, { count: auditorias }] =
+  const [{ data: imobiliaria }, { data: vinculosData }, { data: membros }, { count: contratos }, { count: auditorias }, { data: whatsapps }] =
     await Promise.all([
       supabase.from("imobiliarias").select("*").eq("id", id).maybeSingle(),
       supabase.from("faturas_esperadas").select("seguradora, ativo, dia_vencimento, cnpj_o2, observacao").eq("imobiliaria_id", id),
       supabase.from("imobiliaria_membros").select("id, email, criado_em").eq("imobiliaria_id", id).order("criado_em"),
       supabase.from("contratos").select("id", { count: "exact", head: true }).eq("imobiliaria_id", id),
       supabase.from("auditorias_contrato").select("id", { count: "exact", head: true }).eq("imobiliaria_id", id),
+      supabase.from("whatsapp_contatos").select("id, nome, numero, ativo").eq("imobiliaria_id", id).order("criado_em"),
     ]);
   if (!imobiliaria) redirect("/admin/imobiliarias");
 
@@ -68,7 +70,12 @@ export default async function AdminImobiliariaDetalhePage({
           </p>
         )}
 
-        <form action={atualizarImobiliariaAdmin} className="space-y-6">
+        {/* Um único formulário (o salvar grava todos os campos de uma vez --
+            ver atualizarImobiliariaAdmin): os campos de contrato/financeiro/
+            interno ficam mais abaixo, depois dos canais, ligados a ele pelo
+            atributo form="form-imobiliaria" (pedido do Matheus, 08/10/2026:
+            canais em sequência, sem ficar procurando pela página). */}
+        <form id="form-imobiliaria" action={atualizarImobiliariaAdmin} className="space-y-6">
           <input type="hidden" name="id" value={imobiliaria.id} />
           <input type="hidden" name="voltar_para" value={voltarPara} />
 
@@ -128,131 +135,16 @@ export default async function AdminImobiliariaDetalhePage({
             </div>
           </section>
 
-          <section className="space-y-3 border-t border-gray-200 pt-6">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">
-              Contrato-base <span className="font-normal normal-case text-gray-400">— usado em Gerar Contrato</span>
-            </h2>
-            <textarea
-              name="texto_base_contrato"
-              rows={6}
-              defaultValue={imobiliaria.texto_base_contrato ?? ""}
-              className={inputClass}
-            />
-            <div>
-              <label className={labelClass}>Cláusula de Fiador</label>
-              <textarea name="clausula_fiador" rows={3} defaultValue={imobiliaria.clausula_fiador ?? ""} className={inputClass} />
-            </div>
-            <div>
-              <label className={labelClass}>Cláusula de Caução</label>
-              <textarea name="clausula_caucao" rows={3} defaultValue={imobiliaria.clausula_caucao ?? ""} className={inputClass} />
-            </div>
-          </section>
-
-          <section className="space-y-3 border-t border-gray-200 pt-6">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">
-              Financeiro e assinatura <span className="font-normal normal-case text-gray-400">— usado em Gerar Contrato</span>
-            </h2>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <div>
-                <label className={labelClass}>Índice de reajuste</label>
-                <select name="indice_reajuste" defaultValue={imobiliaria.indice_reajuste ?? ""} className={inputClass}>
-                  <option value="">Selecione...</option>
-                  <option value="IGPM">IGPM</option>
-                  <option value="IPCA">IPCA</option>
-                  <option value="IGP-DI">IGP-DI</option>
-                  <option value="O maior entre IGPM e IPCA">O maior entre IGPM e IPCA</option>
-                  <option value="Outro">Outro (ajustar depois)</option>
-                </select>
-              </div>
-              <div>
-                <label className={labelClass}>Plataforma de assinatura</label>
-                <select name="plataforma_assinatura" defaultValue={imobiliaria.plataforma_assinatura ?? ""} className={inputClass}>
-                  <option value="">Selecione...</option>
-                  <option value="Clicksign">Clicksign</option>
-                  <option value="D4Sign">D4Sign</option>
-                  <option value="IntelliSign">IntelliSign</option>
-                  <option value="Outro">Outra</option>
-                </select>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-              <div>
-                <label className={labelClass}>% multa por atraso</label>
-                <input
-                  name="percentual_multa_atraso"
-                  type="number"
-                  step="0.01"
-                  defaultValue={imobiliaria.percentual_multa_atraso ?? ""}
-                  className={inputClass}
-                />
-              </div>
-              <div>
-                <label className={labelClass}>% juros de mora (ao mês)</label>
-                <input
-                  name="percentual_juros_mora"
-                  type="number"
-                  step="0.01"
-                  defaultValue={imobiliaria.percentual_juros_mora ?? ""}
-                  className={inputClass}
-                />
-              </div>
-              <div>
-                <label className={labelClass}>% honorários advocatícios</label>
-                <input
-                  name="percentual_honorarios_advocaticios"
-                  type="number"
-                  step="0.01"
-                  defaultValue={imobiliaria.percentual_honorarios_advocaticios ?? ""}
-                  className={inputClass}
-                />
-              </div>
-            </div>
-          </section>
-
-          <section className="space-y-3 rounded-xl border border-yellow-300 bg-yellow-50 p-4">
-            <h2 className="flex items-center gap-1.5 text-sm font-semibold text-yellow-900">
-              🔒 Uso interno O2
-              <span className="font-normal normal-case text-yellow-700">— nunca aparece pra imobiliária</span>
-            </h2>
-            <p className="text-xs text-yellow-800">
-              Nunca é enviado por e-mail nem aparece pro lado de quem loga como a própria imobiliária, mesmo com
-              login próprio ou funcionário com acesso.
-            </p>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <div>
-                <label className={labelClass}>Classificação (CRM)</label>
-                <input
-                  name="classificacao_crm"
-                  defaultValue={imobiliaria.classificacao_crm ?? ""}
-                  className="w-full rounded-lg border border-yellow-300 bg-white px-3 py-2 text-sm focus:border-o2-coral focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className={labelClass}>Responsável (CRM)</label>
-                <input
-                  name="responsavel_crm"
-                  defaultValue={imobiliaria.responsavel_crm ?? ""}
-                  className="w-full rounded-lg border border-yellow-300 bg-white px-3 py-2 text-sm focus:border-o2-coral focus:outline-none"
-                />
-              </div>
-            </div>
-            <div>
-              <label className={labelClass}>Observação interna</label>
-              <textarea
-                name="observacao_interna"
-                rows={3}
-                defaultValue={imobiliaria.observacao_interna ?? ""}
-                placeholder="Ex: histórico de atraso, ponto de atenção, combinado verbal..."
-                className="w-full rounded-lg border border-yellow-300 bg-white px-3 py-2 text-sm focus:border-o2-coral focus:outline-none"
-              />
-            </div>
-          </section>
-
           <button type="submit" className="rounded-full bg-o2-coral px-6 py-2.5 font-medium text-white transition hover:opacity-90">
             Salvar
           </button>
         </form>
 
+        <div className="space-y-4 border-t border-gray-200 pt-6">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Canais de contato e envio</h2>
+            <p className="text-xs text-gray-500">Faturas, repasse, campanhas, WhatsApp e acesso — tudo da imobiliária num lugar só.</p>
+          </div>
         <section className="space-y-3 border-t border-gray-200 pt-6">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">
             Faturas <span className="font-normal normal-case text-gray-400">— e-mail de envio e vínculos por seguradora</span>
@@ -282,6 +174,17 @@ export default async function AdminImobiliariaDetalhePage({
             Campanhas <span className="font-normal normal-case text-gray-400">— e-mail de envio pra campanhas comerciais</span>
           </h2>
           <VinculosCampanhas imobiliariaId={imobiliaria.id} emailsCampanhas={imobiliaria.email_campanhas ?? []} voltarPara={voltarPara} />
+        </section>
+
+        <section className="space-y-3 border-t border-gray-200 pt-6">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">
+            WhatsApp <span className="font-normal normal-case text-gray-400">— quem conversa com o Workspace por esta imobiliária</span>
+          </h2>
+          <VinculosWhatsapp
+            imobiliariaId={imobiliaria.id}
+            contatos={(whatsapps ?? []) as ContatoWhatsappImobiliaria[]}
+            voltarPara={voltarPara}
+          />
         </section>
 
         <section className="space-y-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
@@ -322,6 +225,139 @@ export default async function AdminImobiliariaDetalhePage({
             </button>
           </form>
         </section>
+
+        </div>
+
+        <div className="space-y-6 border-t border-gray-200 pt-6">
+          <section className="space-y-3 border-t border-gray-200 pt-6">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">
+              Contrato-base <span className="font-normal normal-case text-gray-400">— usado em Gerar Contrato</span>
+            </h2>
+            <textarea form="form-imobiliaria"
+              name="texto_base_contrato"
+              rows={6}
+              defaultValue={imobiliaria.texto_base_contrato ?? ""}
+              className={inputClass}
+            />
+            <div>
+              <label className={labelClass}>Cláusula de Fiador</label>
+              <textarea form="form-imobiliaria" name="clausula_fiador" rows={3} defaultValue={imobiliaria.clausula_fiador ?? ""} className={inputClass} />
+            </div>
+            <div>
+              <label className={labelClass}>Cláusula de Caução</label>
+              <textarea form="form-imobiliaria" name="clausula_caucao" rows={3} defaultValue={imobiliaria.clausula_caucao ?? ""} className={inputClass} />
+            </div>
+          </section>
+
+          <section className="space-y-3 border-t border-gray-200 pt-6">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">
+              Financeiro e assinatura <span className="font-normal normal-case text-gray-400">— usado em Gerar Contrato</span>
+            </h2>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div>
+                <label className={labelClass}>Índice de reajuste</label>
+                <select form="form-imobiliaria" name="indice_reajuste" defaultValue={imobiliaria.indice_reajuste ?? ""} className={inputClass}>
+                  <option value="">Selecione...</option>
+                  <option value="IGPM">IGPM</option>
+                  <option value="IPCA">IPCA</option>
+                  <option value="IGP-DI">IGP-DI</option>
+                  <option value="O maior entre IGPM e IPCA">O maior entre IGPM e IPCA</option>
+                  <option value="Outro">Outro (ajustar depois)</option>
+                </select>
+              </div>
+              <div>
+                <label className={labelClass}>Plataforma de assinatura</label>
+                <select form="form-imobiliaria" name="plataforma_assinatura" defaultValue={imobiliaria.plataforma_assinatura ?? ""} className={inputClass}>
+                  <option value="">Selecione...</option>
+                  <option value="Clicksign">Clicksign</option>
+                  <option value="D4Sign">D4Sign</option>
+                  <option value="IntelliSign">IntelliSign</option>
+                  <option value="Outro">Outra</option>
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <div>
+                <label className={labelClass}>% multa por atraso</label>
+                <input form="form-imobiliaria"
+                  name="percentual_multa_atraso"
+                  type="number"
+                  step="0.01"
+                  defaultValue={imobiliaria.percentual_multa_atraso ?? ""}
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>% juros de mora (ao mês)</label>
+                <input form="form-imobiliaria"
+                  name="percentual_juros_mora"
+                  type="number"
+                  step="0.01"
+                  defaultValue={imobiliaria.percentual_juros_mora ?? ""}
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>% honorários advocatícios</label>
+                <input form="form-imobiliaria"
+                  name="percentual_honorarios_advocaticios"
+                  type="number"
+                  step="0.01"
+                  defaultValue={imobiliaria.percentual_honorarios_advocaticios ?? ""}
+                  className={inputClass}
+                />
+              </div>
+            </div>
+          </section>
+
+          <section className="space-y-3 rounded-xl border border-yellow-300 bg-yellow-50 p-4">
+            <h2 className="flex items-center gap-1.5 text-sm font-semibold text-yellow-900">
+              🔒 Uso interno O2
+              <span className="font-normal normal-case text-yellow-700">— nunca aparece pra imobiliária</span>
+            </h2>
+            <p className="text-xs text-yellow-800">
+              Nunca é enviado por e-mail nem aparece pro lado de quem loga como a própria imobiliária, mesmo com
+              login próprio ou funcionário com acesso.
+            </p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div>
+                <label className={labelClass}>Classificação (CRM)</label>
+                <input form="form-imobiliaria"
+                  name="classificacao_crm"
+                  defaultValue={imobiliaria.classificacao_crm ?? ""}
+                  className="w-full rounded-lg border border-yellow-300 bg-white px-3 py-2 text-sm focus:border-o2-coral focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Responsável (CRM)</label>
+                <input form="form-imobiliaria"
+                  name="responsavel_crm"
+                  defaultValue={imobiliaria.responsavel_crm ?? ""}
+                  className="w-full rounded-lg border border-yellow-300 bg-white px-3 py-2 text-sm focus:border-o2-coral focus:outline-none"
+                />
+              </div>
+            </div>
+            <div>
+              <label className={labelClass}>Observação interna</label>
+              <textarea form="form-imobiliaria"
+                name="observacao_interna"
+                rows={3}
+                defaultValue={imobiliaria.observacao_interna ?? ""}
+                placeholder="Ex: histórico de atraso, ponto de atenção, combinado verbal..."
+                className="w-full rounded-lg border border-yellow-300 bg-white px-3 py-2 text-sm focus:border-o2-coral focus:outline-none"
+              />
+            </div>
+          </section>
+
+          <button
+            type="submit"
+            form="form-imobiliaria"
+            className="rounded-full bg-o2-coral px-6 py-2.5 font-medium text-white transition hover:opacity-90"
+          >
+            Salvar
+          </button>
+        </div>
+
 
         <Link href="/admin/imobiliarias" className="block text-sm text-gray-500 hover:underline">
           ← Voltar pra lista

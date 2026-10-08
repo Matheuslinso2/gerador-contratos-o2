@@ -7,9 +7,11 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { isMatheus } from "@/lib/admin";
 import { somenteDigitos } from "@/lib/whatsappContatos";
 
-// Cadastro de contatos do WhatsApp (ver lib/whatsappContatos.ts). Só o
-// Matheus edita: quem entra aqui como "equipe" passa a ver o Workspace
-// inteiro pelo WhatsApp.
+// Cadastro dos contatos da EQUIPE O2 no WhatsApp (ver
+// lib/whatsappContatos.ts). Só o Matheus edita: quem entra aqui passa a ver
+// o Workspace inteiro pelo WhatsApp. Contato de imobiliária NÃO é cadastrado
+// aqui -- fica só no cadastro da própria imobiliária (pedido do Matheus,
+// 08/10/2026; ver adicionarWhatsappImobiliaria em admin/imobiliarias).
 
 async function exigirMatheus(): Promise<string> {
   const supabase = await createClient();
@@ -28,25 +30,22 @@ export async function adicionarContato(formData: FormData) {
   const email = await exigirMatheus();
   const numero = somenteDigitos(String(formData.get("numero") ?? ""));
   const nome = String(formData.get("nome") ?? "").trim();
-  const imobiliariaId = String(formData.get("imobiliaria_id") ?? "") || null;
   const recebeRelatorio = formData.get("recebe_relatorio") === "on";
 
   // DDI 55 + DDD + número: 12 (fixo) ou 13 (celular) dígitos.
   if (!/^55\d{10,11}$/.test(numero)) voltar("erro", "Número inválido: use 55 + DDD + número, ex: 5521999990000.");
   if (!nome) voltar("erro", "Informe o nome.");
-  if (imobiliariaId && recebeRelatorio) voltar("erro", "O relatório das 8h tem números internos da O2 -- só a equipe pode recebê-lo.");
 
   const { error } = await createServiceClient()
     .from("whatsapp_contatos")
     .insert({
       numero,
       nome,
-      tipo: imobiliariaId ? "imobiliaria" : "equipe",
-      imobiliaria_id: imobiliariaId,
+      tipo: "equipe",
       recebe_relatorio: recebeRelatorio,
       criado_por_email: email,
     });
-  if (error) voltar("erro", error.code === "23505" ? "Esse número já está cadastrado." : error.message);
+  if (error) voltar("erro", error.code === "23505" ? "Esse número já está cadastrado (na equipe ou em alguma imobiliária)." : error.message);
   revalidatePath("/admin/whatsapp");
   voltar("sucesso", `${nome} cadastrado.`);
 }
@@ -63,7 +62,7 @@ export async function alternarCampo(formData: FormData) {
     const { data } = await service.from("whatsapp_contatos").select("tipo").eq("id", id).maybeSingle();
     if (data?.tipo === "imobiliaria") voltar("erro", "Só a equipe pode receber o relatório das 8h.");
   }
-  const { error } = await service.from("whatsapp_contatos").update({ [campo]: valor }).eq("id", id);
+  const { error } = await service.from("whatsapp_contatos").update({ [campo]: valor }).eq("id", id).eq("tipo", "equipe");
   if (error) voltar("erro", error.message);
   revalidatePath("/admin/whatsapp");
   voltar("sucesso", "Atualizado.");
@@ -72,7 +71,7 @@ export async function alternarCampo(formData: FormData) {
 export async function excluirContato(formData: FormData) {
   await exigirMatheus();
   const id = String(formData.get("id") ?? "");
-  const { error } = await createServiceClient().from("whatsapp_contatos").delete().eq("id", id);
+  const { error } = await createServiceClient().from("whatsapp_contatos").delete().eq("id", id).eq("tipo", "equipe");
   if (error) voltar("erro", error.message);
   revalidatePath("/admin/whatsapp");
   voltar("sucesso", "Contato removido.");
