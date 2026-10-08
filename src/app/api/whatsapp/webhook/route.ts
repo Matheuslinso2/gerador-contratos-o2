@@ -83,6 +83,8 @@ export async function POST(request: NextRequest) {
 
   const corpoCru = await request.text();
   if (!assinaturaValida(corpoCru, request.headers.get("x-hub-signature-256"), segredo)) {
+    // Mais provável: WHATSAPP_APP_SECRET de outro app (há 2 "Workspace O2").
+    console.warn("WhatsApp webhook: assinatura inválida -- conferir WHATSAPP_APP_SECRET");
     return NextResponse.json({ erro: "assinatura inválida" }, { status: 401 });
   }
 
@@ -96,10 +98,12 @@ export async function POST(request: NextRequest) {
   // Também chegam eventos de status (entregue/lido) do relatório -- sem
   // "messages", são ignorados. Número fora da lista: ignora em silêncio
   // (dados internos da O2).
-  const mensagens = (evento.entry ?? [])
-    .flatMap((e) => e.changes ?? [])
-    .flatMap((c) => c.value?.messages ?? [])
-    .filter((m) => numeroAutorizado(m.from));
+  const recebidas = (evento.entry ?? []).flatMap((e) => e.changes ?? []).flatMap((c) => c.value?.messages ?? []);
+  const mensagens = recebidas.filter((m) => numeroAutorizado(m.from));
+  for (const m of recebidas) {
+    if (!mensagens.includes(m)) console.warn(`WhatsApp webhook: número fora da lista (…${m.from.slice(-4)}, ${m.from.length} dígitos) -- ignorado`);
+  }
+  if (mensagens.length) console.info(`WhatsApp webhook: ${mensagens.length} mensagem(ns) autorizada(s)`);
 
   // Responde 200 na hora (a Meta espera resposta rápida) e gera a resposta
   // da IA depois.
