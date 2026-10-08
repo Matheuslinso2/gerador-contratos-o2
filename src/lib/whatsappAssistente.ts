@@ -7,22 +7,34 @@ import {
   montarResumoCompetencia,
   type RelatorioDiario,
 } from "@/lib/relatorioDiario/montar";
+import { FERRAMENTAS, executarFerramenta } from "@/lib/whatsappFerramentas";
 
 // "Pergunte ao Workspace pelo WhatsApp" -- Fase 1 (07/10/2026): sócios e
 // diretores autorizados mandam uma pergunta pro número do relatório e a IA
 // responde com os MESMOS números do relatório diário (por produto e mês:
 // efetivados, conversão, comissão efetivada), lidos só dos retratos salvos
-// dos painéis -- nunca do Bitrix (regra do Matheus). Detalhe por
-// imobiliária/seguradora fica pra Fase 2.
+// dos painéis -- nunca do Bitrix (regra do Matheus).
+// Fase 2 (07/10/2026, "praticamente todo o Workspace"): a IA ganhou
+// ferramentas (lib/whatsappFerramentas.ts) pra consultar os retratos
+// completos dos painéis e as tabelas do Workspace conforme a pergunta. O
+// resumo do relatório continua indo junto, pra pergunta simples não
+// precisar de ferramenta.
 
 const MESES_ANTERIORES = 2;
 const HISTORICO_MAX = 6; // pares pergunta/resposta das últimas 24h
+const MAX_RODADAS = 8; // chamadas de ferramenta por pergunta
+// A resposta roda dentro do limite de 60s da rota do webhook: passou
+// disso, a IA responde com o que já consultou, sem novas ferramentas.
+const PRAZO_FERRAMENTAS_MS = 35_000;
 
 const SYSTEM_PROMPT = `Você é o assistente do Workspace O2, o sistema interno da O2 Seguros (corretora de seguros imobiliários do Rio de Janeiro). Você responde pelo WhatsApp perguntas dos sócios e diretores da O2 sobre os números da empresa.
 
 FONTE DOS DADOS — REGRA MAIS IMPORTANTE
-- Responda SOMENTE com os dados do bloco <dados> da mensagem. Eles são cópias dos painéis do Workspace (Seguro Fiança, Capitalização, Seguro Auto, Ramos Elementares).
-- Nunca invente, estime ou arredonde um número que não está nos dados. Se a pergunta pede algo que não está lá (ex.: uma imobiliária ou seguradora específica, um cliente, um card, metas, previsões), diga com franqueza que essa informação ainda não está disponível pelo WhatsApp e que dá pra ver no painel correspondente do Workspace.
+- Responda SOMENTE com dados do Workspace: o bloco <dados> da mensagem (resumo de efetivados, conversão e comissão por produto e mês) e o que as ferramentas devolverem.
+- Use as ferramentas sempre que o resumo não bastar: consultar_painel (painéis de Seguro Fiança, Renovação de Fiança, Capitalização, Seguro Auto, Ramos Elementares e comercial — por imobiliária, seguradora, responsável, cards parados, motivos de perda, tempos, renovações) e consultar_tabela (cadastro de imobiliárias, produção do Corp, faturas, repasses, campanhas, leads do site, auditorias de contrato, prospecção etc.). Pode chamar mais de uma, em paralelo quando forem independentes.
+- Competências são "YYYY-MM". Para nome de imobiliária, use o filtro "contem" com um pedaço do nome.
+- Nunca invente, estime ou arredonde um número que não veio dos dados. Se nada no Workspace responde a pergunta (ex.: o detalhe de um card específico do Bitrix, metas, previsões), diga com franqueza que essa informação não está disponível pelo WhatsApp.
+- Diga de onde veio o número quando não for óbvio (ex.: "pelo painel de Fiança, foto de 07/10 21h").
 - "efetivados" = documentos efetivados (Fiança: contratos convertidos; Capitalização: títulos emitidos; Auto: apólices convertidas; Ramos Elementares: novos + renovações efetivados). "conversao" = efetivados ÷ concluídos no mês (só quem já teve desfecho), entre 0 e 1 — mostre em %. "comissao" = comissão efetivada em reais. null = sem dado.
 - Os números do mês em andamento são parciais (o mês não acabou). Se comparar com um mês fechado, avise isso.
 - Quando o dado pode estar desatualizado (campo "parcial": true), avise de quando é a foto (campo "atualizadoEm").
@@ -79,7 +91,7 @@ async function montarDados(): Promise<string> {
   });
 }
 
-async function historicoRecente(numero: string, idAtual: string): Promise<Anthropic.MessageParam[]> {
+async function historicoRecente(numero: string, idAtual: string): Promise<Anthropic.Beta.BetaMessageParam[]> {
   const desde = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const { data } = await createServiceClient()
     .from("whatsapp_mensagens")
@@ -104,14 +116,51 @@ export async function responderPerguntaWhatsApp(numero: string, idMensagem: stri
 
   const [dados, historico] = await Promise.all([montarDados(), historicoRecente(numero, idMensagem)]);
   const anthropic = new Anthropic({ apiKey });
-  const mensagem = await anthropic.messages.create({
-    model: "claude-sonnet-5",
-    max_tokens: 1000,
-    system: SYSTEM_PROMPT,
-    messages: [...historico, { role: "user", content: `<dados>\n${dados}\n</dados>\n\nPergunta: ${pergunta}` }],
-  });
-  const texto = mensagem.content
-    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+  const mensagens: Anthropic.Beta.BetaMessageParam[] = [
+    ...historico,
+    { role: "user", content: `<dados>
+${dados}
+</dados>
+
+Pergunta: ${pergunta}` },
+  ];
+  const inicio = Date.now();
+
+  let resposta: Anthropic.Beta.BetaMessage | null = null;
+  for (let rodada = 0; rodada <= MAX_RODADAS; rodada++) {
+    const semFerramentas = rodada === MAX_RODADAS || Date.now() - inicio > PRAZO_FERRAMENTAS_MS;
+    resposta = await anthropic.beta.messages.create({
+      model: "claude-opus-5-5",
+      max_tokens: 4000,
+      // Se o modelo recusar por política de segurança, a própria API refaz
+      // a chamada num modelo reserva (fallback padrão da Anthropic).
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default",
+      system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
+      tools: FERRAMENTAS,
+      tool_choice: semFerramentas ? { type: "none" } : { type: "auto" },
+      messages: mensagens,
+    });
+    if (resposta.stop_reason !== "tool_use") break;
+
+    // Histórico só cresce (append-only): o turno do assistente vai inteiro.
+    mensagens.push({ role: "assistant", content: resposta.content });
+    const chamadas = resposta.content.filter((b): b is Anthropic.Beta.BetaToolUseBlock => b.type === "tool_use");
+    const resultados = await Promise.all(
+      chamadas.map(async (c) => ({
+        type: "tool_result" as const,
+        tool_use_id: c.id,
+        content: await executarFerramenta(c.name, c.input),
+      }))
+    );
+    mensagens.push({ role: "user", content: resultados });
+  }
+
+  if (resposta?.stop_reason === "refusal") {
+    return "Não consigo responder essa pergunta por aqui.";
+  }
+  const texto = (resposta?.content ?? [])
+    .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text")
     .map((b) => b.text)
     .join("\n")
     .trim();
