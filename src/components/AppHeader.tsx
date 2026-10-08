@@ -100,6 +100,7 @@ export default function AppHeader({
                 ...(isMatheus(userEmail) ? [{ href: "/gestao-emails", label: "Gestão de E-mails" }] : []),
                 ...(isMatheus(userEmail) ? [{ href: "/admin/acessos", label: "Uso diário do Workspace" }] : []),
                 ...(isEquipe(userEmail) ? [{ href: "/admin/relatorio-diario", label: "Relatório diário (WhatsApp)" }] : []),
+                ...(isMatheus(userEmail) ? [{ href: "/admin/whatsapp", label: "WhatsApp — contatos" }] : []),
                 ...(isMatheus(userEmail) ? [{ href: "/admin/usuarios", label: "Logins do Workspace (admin)" }] : []),
               ]}
             />

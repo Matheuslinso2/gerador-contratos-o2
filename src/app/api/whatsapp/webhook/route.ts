@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { createServiceClient } from "@/lib/supabase/service";
-import { enviarTextoWhatsApp, numeroAutorizado } from "@/lib/whatsapp";
+import { enviarTextoWhatsApp } from "@/lib/whatsapp";
+import { buscarContato, type ContatoWhatsApp } from "@/lib/whatsappContatos";
 import { responderPerguntaWhatsApp } from "@/lib/whatsappAssistente";
 
 export const dynamic = "force-dynamic";
@@ -43,7 +44,7 @@ function assinaturaValida(corpoCru: string, cabecalho: string | null, segredo: s
 type MensagemMeta = { id: string; from: string; type: string; text?: { body?: string } };
 type EventoMeta = { entry?: { changes?: { value?: { messages?: MensagemMeta[] } }[] }[] };
 
-async function processar(m: MensagemMeta) {
+async function processar(m: MensagemMeta, contato: ContatoWhatsApp) {
   const supabase = createServiceClient();
   const texto = m.type === "text" ? (m.text?.body ?? "").trim() : null;
 
@@ -59,6 +60,11 @@ async function processar(m: MensagemMeta) {
   let erro: string | null = null;
   if (!texto) {
     resposta = "Por enquanto eu só entendo mensagens de texto. Me mande a pergunta escrita. 🙂";
+  } else if (contato.tipo === "imobiliaria") {
+    // Fase C (atendimento às imobiliárias, só com os dados da própria
+    // imobiliária) ainda não está pronta -- NUNCA cai na IA da equipe, que
+    // enxerga o Workspace inteiro.
+    resposta = "Olá! Em breve você vai poder consultar por aqui as informações da sua imobiliária com a O2 Seguros. Por enquanto, fale com a nossa equipe pelo atendimento de sempre.";
   } else {
     try {
       resposta = await responderPerguntaWhatsApp(m.from, m.id, texto);
@@ -96,12 +102,14 @@ export async function POST(request: NextRequest) {
   }
 
   // Também chegam eventos de status (entregue/lido) do relatório -- sem
-  // "messages", são ignorados. Número fora da lista: ignora em silêncio
+  // "messages", são ignorados. Número fora do cadastro (whatsapp_contatos): ignora em silêncio
   // (dados internos da O2).
   const recebidas = (evento.entry ?? []).flatMap((e) => e.changes ?? []).flatMap((c) => c.value?.messages ?? []);
-  const mensagens = recebidas.filter((m) => numeroAutorizado(m.from));
+  const mensagens: { m: MensagemMeta; contato: ContatoWhatsApp }[] = [];
   for (const m of recebidas) {
-    if (!mensagens.includes(m)) console.warn(`WhatsApp webhook: número fora da lista (…${m.from.slice(-4)}, ${m.from.length} dígitos) -- ignorado`);
+    const contato = await buscarContato(m.from);
+    if (contato) mensagens.push({ m, contato });
+    else console.warn(`WhatsApp webhook: número fora do cadastro (…${m.from.slice(-4)}, ${m.from.length} dígitos) -- ignorado`);
   }
   if (mensagens.length) console.info(`WhatsApp webhook: ${mensagens.length} mensagem(ns) autorizada(s)`);
 
@@ -109,7 +117,7 @@ export async function POST(request: NextRequest) {
   // da IA depois.
   if (mensagens.length) {
     after(async () => {
-      for (const m of mensagens) await processar(m);
+      for (const { m, contato } of mensagens) await processar(m, contato);
     });
   }
   return NextResponse.json({ ok: true });

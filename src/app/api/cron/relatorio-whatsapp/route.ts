@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { montarRelatorioDiario, parametrosModelo, MODELO_WHATSAPP } from "@/lib/relatorioDiario/montar";
 import { ehDiaUtil } from "@/lib/relatorioDiario/periodo";
-import { enviarModeloWhatsApp, destinatariosRelatorio } from "@/lib/whatsapp";
+import { enviarModeloWhatsApp } from "@/lib/whatsapp";
+import { destinatariosDoRelatorio } from "@/lib/whatsappContatos";
 import { alertarAdmin } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
@@ -23,9 +24,9 @@ export async function GET(request: NextRequest) {
   // O agendamento já é seg-sex; isso só protege contra disparo manual.
   if (!ehDiaUtil()) return NextResponse.json({ ok: true, pulado: "fim de semana" });
 
-  const destinatarios = destinatariosRelatorio();
+  const destinatarios = await destinatariosDoRelatorio();
   if (destinatarios.length === 0) {
-    return NextResponse.json({ ok: false, erro: "WHATSAPP_RELATORIO_DESTINATARIOS vazia" }, { status: 500 });
+    return NextResponse.json({ ok: false, erro: "nenhum contato marcado pra receber o relatório" }, { status: 500 });
   }
 
   const parametros = parametrosModelo(await montarRelatorioDiario());
