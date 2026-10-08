@@ -31,6 +31,10 @@ export type ResumoProduto = {
   efetivados: number;
   conversao: number | null; // 0..1; null = nenhum card concluído no mês
   comissao: number;
+  // Pedidos (cards criados) -- por enquanto só Capitalização: o Matheus
+  // reclamou em 08/10/2026 que via 7 títulos no Workspace e o relatório
+  // mostrava 0 (nenhum tinha chegado em "Emitido" ainda).
+  solicitacoes?: { ontem: number | null; mes: number };
 };
 
 export type RelatorioDiario = {
@@ -88,6 +92,15 @@ function efetivadosNoPeriodo(payloads: { porDia?: ContagemDia[] }[], dias: strin
     .reduce((s, l) => s + l.concluidos, 0);
 }
 
+// Cards criados no período -- null = retrato antigo, sem porDia.
+function novosNoPeriodo(payloads: { porDia?: ContagemDia[] }[], dias: string[]): number | null {
+  if (payloads.some((p) => !p.porDia)) return null;
+  return payloads
+    .flatMap((p) => p.porDia!)
+    .filter((l) => dias.includes(l.data))
+    .reduce((s, l) => s + l.novos, 0);
+}
+
 function taxa(efetivados: number, concluidos: number): number | null {
   return concluidos > 0 ? efetivados / concluidos : null;
 }
@@ -136,6 +149,7 @@ async function montarParaPeriodo(periodo: PeriodoRelatorio): Promise<RelatorioDi
       efetivados: doMes.kpis.emitidos,
       conversao: doMes.kpis.taxaConversao,
       comissao: doMes.kpis.comissaoEfetivada,
+      solicitacoes: { ontem: novosNoPeriodo([...todos.values()], periodo.dias), mes: doMes.kpis.total },
     })),
     secao<PainelSeguroAuto, ResumoProduto>("seguro_auto_snapshots", periodo, (doMes, todos) => ({
       ontemEfetivados: efetivadosNoPeriodo([...todos.values()], periodo.dias),
@@ -246,9 +260,14 @@ export function parametrosModelo(r: RelatorioDiario): string[] {
     if (s.parcial) avisos.push(`${nome} (foto de ${fmtHora.format(new Date(s.atualizadoEm))})`);
     const d = s.dados;
     comissaoTotal += d.comissao;
+    const pedidos = d.solicitacoes;
+    const pedidosOntem = pedidos ? `${pedidos.ontem === null ? "—" : plural(pedidos.ontem, "solicitação", "solicitações")} · ` : "";
+    const pedidosMes = pedidos ? `${plural(pedidos.mes, "solicitação", "solicitações")} · ` : "";
     return [
-      d.ontemEfetivados === null ? `${rotuloOntem}: —` : `${rotuloOntem}: ${plural(d.ontemEfetivados, doc[0], doc[1])}`,
-      `No mês: ${mesEfetivados(d)} · ${fmtConversao(d.conversao)} · ${fmtReais.format(d.comissao)} de comissão`,
+      d.ontemEfetivados === null
+        ? `${rotuloOntem}: ${pedidosOntem}—`
+        : `${rotuloOntem}: ${pedidosOntem}${plural(d.ontemEfetivados, doc[0], doc[1])}`,
+      `No mês: ${pedidosMes}${mesEfetivados(d)} · ${fmtConversao(d.conversao)} · ${fmtReais.format(d.comissao)} de comissão`,
     ];
   }
 
