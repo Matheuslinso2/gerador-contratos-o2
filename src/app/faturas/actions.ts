@@ -16,6 +16,54 @@ async function checarAcesso() {
   return supabase;
 }
 
+// Grava (cria ou atualiza) uma linha de faturas_esperadas à mão -- sem usar
+// ON CONFLICT. Desde 03/09/2026 (migração faturas_esperadas_trava_com_codigo_produtor)
+// a chave única é (imobiliária, seguradora, CNPJ O2, código do produtor), mas
+// os formulários manuais não têm o código: o upsert antigo por 3 colunas
+// passou a dar "no unique or exclusion constraint matching the ON CONFLICT
+// specification" (visto em 08/10/2026 ao incluir a Zero Três na Porto Fiança).
+// Se já existe linha pra (imobiliária, seguradora, CNPJ O2), atualiza ela
+// (preservando o código do produtor que a Conferência aprendeu); senão cria
+// com código vazio.
+async function gravarEsperada(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  linha: {
+    imobiliaria_id: string;
+    seguradora: string;
+    cnpj_o2: string;
+    ativo: boolean;
+    dia_vencimento?: number | null;
+    observacao?: string | null;
+  }
+): Promise<string | null> {
+  const { data: existentes, error: erroBusca } = await supabase
+    .from("faturas_esperadas")
+    .select("id, codigo_produtor")
+    .eq("imobiliaria_id", linha.imobiliaria_id)
+    .eq("seguradora", linha.seguradora)
+    .eq("cnpj_o2", linha.cnpj_o2);
+  if (erroBusca) return erroBusca.message;
+
+  const alvos = (existentes ?? []).length === 1 ? existentes ?? [] : (existentes ?? []).filter((e) => e.codigo_produtor === "");
+  if (alvos.length > 0) {
+    const { imobiliaria_id: _i, seguradora: _s, cnpj_o2: _c, ...campos } = linha;
+    void _i;
+    void _s;
+    void _c;
+    const { error } = await supabase
+      .from("faturas_esperadas")
+      .update(campos)
+      .in(
+        "id",
+        alvos.map((a) => a.id)
+      );
+    return error ? error.message : null;
+  }
+
+  const { error } = await supabase.from("faturas_esperadas").insert({ ...linha, codigo_produtor: "" });
+  return error ? error.message : null;
+}
+
 // Adiciona uma imobiliária nova (ou atualiza uma existente pelo CNPJ),
 // habilitando de uma vez todas as seguradoras marcadas no formulário — um
 // campo único pra imobiliária, em vez de repetir o cadastro aba por aba.
@@ -48,17 +96,17 @@ export async function adicionarEsperada(formData: FormData) {
     await supabase.from("imobiliarias").update({ email_faturas: separarEmails(emailFaturas) }).eq("id", imobiliariaId);
   }
 
-  const linhas = seguradorasSelecionadas.map((seguradora) => ({
-    imobiliaria_id: imobiliariaId,
-    seguradora,
-    ativo: true,
-    dia_vencimento: Number(diaVencimento),
-  }));
-  const { error } = await supabase
-    .from("faturas_esperadas")
-    .upsert(linhas, { onConflict: "imobiliaria_id, seguradora, cnpj_o2" });
-  if (error) {
-    redirect(`/faturas?erro=${encodeURIComponent(error.message)}${voltarPara}`);
+  for (const seguradora of seguradorasSelecionadas) {
+    const erro = await gravarEsperada(supabase, {
+      imobiliaria_id: imobiliariaId,
+      seguradora,
+      cnpj_o2: "",
+      ativo: true,
+      dia_vencimento: Number(diaVencimento),
+    });
+    if (erro) {
+      redirect(`/faturas?erro=${encodeURIComponent(erro)}${voltarPara}`);
+    }
   }
 
   redirect(`/faturas?ok=${encodeURIComponent("Imobiliária salva.")}${voltarPara}`);
@@ -128,17 +176,15 @@ export async function salvarSeguradorasImobiliaria(formData: FormData) {
     // acumula lixo toda vez que a tela é salva.
     if (!ativo && !diaVencimento && !cnpjO2 && !observacao) continue;
 
-    await supabase.from("faturas_esperadas").upsert(
-      {
-        imobiliaria_id: imobiliariaId,
-        seguradora,
-        ativo,
-        dia_vencimento: diaVencimento ? Number(diaVencimento) : null,
-        cnpj_o2: cnpjO2,
-        observacao: observacao || null,
-      },
-      { onConflict: "imobiliaria_id, seguradora, cnpj_o2" }
-    );
+    const erro = await gravarEsperada(supabase, {
+      imobiliaria_id: imobiliariaId,
+      seguradora,
+      ativo,
+      dia_vencimento: diaVencimento ? Number(diaVencimento) : null,
+      cnpj_o2: cnpjO2,
+      observacao: observacao || null,
+    });
+    if (erro) redirect(`/faturas?erro=${encodeURIComponent(erro)}`);
   }
 
   redirect(`${voltarPara}?ok=${encodeURIComponent("Dados salvos.")}`);
@@ -340,17 +386,15 @@ export async function resolverImobiliariaProvisoria(formData: FormData) {
 
     if (!ativo && !diaVencimento && !cnpjO2 && !observacao) continue;
 
-    await supabase.from("faturas_esperadas").upsert(
-      {
-        imobiliaria_id: imobiliariaId,
-        seguradora,
-        ativo,
-        dia_vencimento: diaVencimento ? Number(diaVencimento) : null,
-        cnpj_o2: cnpjO2,
-        observacao: observacao || null,
-      },
-      { onConflict: "imobiliaria_id, seguradora, cnpj_o2" }
-    );
+    const erro = await gravarEsperada(supabase, {
+      imobiliaria_id: imobiliariaId,
+      seguradora,
+      ativo,
+      dia_vencimento: diaVencimento ? Number(diaVencimento) : null,
+      cnpj_o2: cnpjO2,
+      observacao: observacao || null,
+    });
+    if (erro) redirect(`/faturas?erro=${encodeURIComponent(erro)}`);
   }
 
   redirect(`/faturas/imobiliaria/${imobiliariaId}?ok=${encodeURIComponent("Imobiliária cadastrada.")}`);

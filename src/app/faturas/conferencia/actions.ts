@@ -107,7 +107,7 @@ export async function confirmarIdentificacao(formData: FormData) {
       codigo_produtor: fatura?.codigo_produtor ?? "",
       ativo: true,
     },
-    { onConflict: "imobiliaria_id, seguradora, cnpj_o2" }
+    { onConflict: "imobiliaria_id, seguradora, cnpj_o2, codigo_produtor" }
   );
 
   redirect(
