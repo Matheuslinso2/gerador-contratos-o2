@@ -5,9 +5,11 @@ import { signOut } from "../../actions";
 import AppHeader from "@/components/AppHeader";
 import SubmitButton from "@/components/SubmitButton";
 import type { MetricasMidia } from "@/lib/instagram";
+import { atualizarMetricasPosts } from "@/lib/social/metricas";
 import { atualizarMetricasAgora } from "./actions";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 type PostPublicado = {
   id: number;
@@ -122,7 +124,19 @@ export default async function DashboardSocialMediaPage({
       .returns<PostPublicado[]>();
     return data ?? [];
   };
-  const [posts, postsAnterior] = await Promise.all([buscar(ano, mes), buscar(anoAnt, mesAnt)]);
+  let [posts, postsAnterior] = await Promise.all([buscar(ano, mes), buscar(anoAnt, mesAnt)]);
+
+  // Primeira abertura (nenhum post ainda tem métrica buscada): busca na hora
+  // em vez de mostrar tudo "—" até o cron das 10h ou o clique no botão.
+  let erroBuscaAutomatica: string | null = null;
+  if (posts.length && posts.every((p) => !p.metricas_atualizadas_em)) {
+    const resultado = await atualizarMetricasPosts(supabase);
+    if (resultado.ok) {
+      [posts, postsAnterior] = await Promise.all([buscar(ano, mes), buscar(anoAnt, mesAnt)]);
+    } else {
+      erroBuscaAutomatica = resultado.erro;
+    }
+  }
 
   const ultimaAtualizacao = posts
     .map((p) => p.metricas_atualizadas_em)
@@ -178,7 +192,11 @@ export default async function DashboardSocialMediaPage({
           </div>
         </div>
 
-        {erro && <p className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">Erro ao atualizar: {erro}</p>}
+        {(erro ?? erroBuscaAutomatica) && (
+          <p className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+            Erro ao buscar métricas no Instagram: {erro ?? erroBuscaAutomatica}
+          </p>
+        )}
         {atualizados && !erro && (
           <p className="mb-4 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
             Métricas atualizadas ({atualizados} {Number(atualizados) === 1 ? "post" : "posts"}).
