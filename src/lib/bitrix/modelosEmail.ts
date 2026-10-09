@@ -30,6 +30,15 @@ export type ModeloEmail = {
 
 const FIANCA = [ENTITY_TYPE_ID_SEGURO_FIANCA];
 
+// Destaques usados pela equipe nos e-mails do Gmail (Verdana, azul-escuro
+// #073763 como cor base; destaque = negrito branco sobre laranja #ff9900;
+// ou só texto laranja). Mantidos aqui pra o e-mail sair igual ao original.
+const LARANJA = "#ff9900";
+const dest = (t: string) => `<b><span style="background-color:${LARANJA};color:#ffffff;">${t}</span></b>`;
+const destSub = (t: string) => `<b><u><span style="background-color:${LARANJA};color:#ffffff;">${t}</span></u></b>`;
+const laranja = (t: string) => `<b><span style="color:${LARANJA};">${t}</span></b>`;
+const laranjaSub = (t: string) => `<b><u><span style="color:${LARANJA};">${t}</span></u></b>`;
+
 export const MODELOS_EMAIL: ModeloEmail[] = [
   {
     id: "fianca-renovacao-conferir-valores",
@@ -38,15 +47,15 @@ export const MODELOS_EMAIL: ModeloEmail[] = [
     assunto: "⚠️ RENOVAÇÃO SEGURO FIANÇA - [MÊS/ANO] - {{empresa}}",
     corpoHtml: [
       "<p>Prezados, bom dia!<br>Tudo bem?</p>",
-      "<p>Segue em anexo relatório com informações dos valores para verificação referentes às renovações do mês de <b>[MÊS/ANO]</b>.</p>",
+      "<p>Segue em anexo relatório com informações dos valores para verificação referentes às renovações do mês de " + dest("[MÊS/ANO]") + ".</p>",
       "<p>Solicitamos que os valores sejam devidamente verificados e atualizados, caso haja correção para atualização e envio das novas cotações.</p>",
       "<p>Seguem abaixo, importantes considerações sobre a renovação da apólice de seguro fiança.</p>",
-      "<ul>",
+      "<ul style=\"font-style:italic;\">",
       "<li><b>Caso tenha boletos em aberto, peço que nos notifiquem, pois a renovação não poderá ser concluída.</b></li>",
       "<li>Vale ressaltar que os valores do reajuste <b>não poderão ser maiores que 10%</b> do valor informado no ano anterior. (Salvo taxa do IGPM)</li>",
       "<li>A renovação do seguro não é automática. O Locador/Representante Legal deve confirmar os valores atualizados da locação, para que a renovação seja realizada.</li>",
       "<li>Ultrapassado o prazo de vigência, a Seguradora poderá aceitar ou não a renovação deste seguro, e poderá exigir novos documentos cadastrais para tanto.</li>",
-      "<li><b>Ressaltamos que após a data de fim de vigência, caso haja alguma inadimplência ou entrega de chaves com débitos, a apólice não estará concedendo cobertura. Favor nos sinalizar o mais breve possível para verificarmos se deve seguir ou não com a renovação.</b></li>",
+      "<li>" + laranja("Ressaltamos que após a data de fim de vigência, caso haja alguma inadimplência ou entrega de chaves com débitos, a apólice não estará concedendo cobertura. ") + destSub("Favor nos sinalizar o mais breve possível para verificarmos se deve seguir ou não com a renovação.") + "</li>",
       "</ul>",
       "<p>Qualquer dúvida estou à disposição.</p>",
       "<p>Atenciosamente,</p>",
@@ -60,13 +69,13 @@ export const MODELOS_EMAIL: ModeloEmail[] = [
     corpoHtml: [
       "<p>Olá {{responsavel}}, boa tarde!</p>",
       "<p>Segue cotação para a Renovação do Seguro Fiança do cliente <b>[NOME DO LOCATÁRIO]</b>.</p>",
-      "<p><b>Por força das Circulares 587 e 594 da SUSEP (Superintendência de Seguros Privados), a garantia de Seguro Fiança Locatícia sofreu alteração referente ao prazo de vigência. As contratações realizadas a partir deste mês (março) deverão possuir o mesmo prazo de vigência equivalente ao Contrato de Locação. Para renovação, após fim de Contrato, será efetivado Seguro com prazo de 12 meses.</b> <b>Para renovações com o prazo maior que os 12 meses será necessário o envio do aditivo informando o novo prazo ou o envio do contrato de locação renovado.</b></p>",
-      "<p>Vale ressaltar que o seguro atual possui <b>fim de vigência dia [DD/MM]</b>.</p>",
-      "<p><b>Segue cotação com parcelamento:</b></p>",
-      "<ul><li><b>[11x] – sem juros R$ [VALOR DA PARCELA]</b> -&gt; <b>opção na fatura imobiliária sem entrada</b></li></ul>",
-      "<p><b>OBS.: Ressaltamos que o ressarcimento da parcela para a administradora, em caso de sinistro, somente será garantido caso o parcelamento seja feito no máximo de vezes e na fatura imobiliária.</b></p>",
-      "<p><b>ATENÇÃO!</b></p>",
-      "<p><b>Seguem abaixo, importantes considerações sobre a renovação da apólice de seguro fiança.</b></p>",
+      "<p style=\"font-style:italic;background-color:#eeeeee;\">Por força das Circulares 587 e 594 da SUSEP (Superintendência de Seguros Privados), a garantia de Seguro Fiança Locatícia sofreu alteração referente ao prazo de vigência. As contratações realizadas a partir deste mês (março) deverão possuir o mesmo prazo de vigência equivalente ao Contrato de Locação. Para renovação, após fim de Contrato, será efetivado Seguro com prazo de 12 meses. Para renovações com o prazo maior que os 12 meses será necessário o envio do aditivo informando o novo prazo ou o envio do contrato de locação renovado.</p>",
+      "<p>Vale ressaltar que o seguro atual possui " + destSub("fim de vigência dia [DD/MM].") + "</p>",
+      "<p><u>Segue cotação com parcelamento:</u></p>",
+      "<ul><li>" + dest("[11x]") + " – <b>sem juros</b> " + dest("R$ [VALOR DA PARCELA]") + " -&gt; <i>opção na fatura imobiliária sem entrada</i></li></ul>",
+      "<p>" + destSub("OBS.: Ressaltamos que o ressarcimento da parcela para a administradora, em caso de sinistro, somente será garantido caso o parcelamento seja feito no máximo de vezes e na fatura imobiliária.") + "</p>",
+      "<p>" + destSub("ATENÇÃO!") + "</p>",
+      "<p><b><u>Seguem abaixo, importantes considerações sobre a renovação da apólice de seguro fiança.</u></b></p>",
       "<p><b>Ressaltamos que após a data de fim de vigência, caso haja alguma inadimplência ou entrega de chaves com débitos, a apólice não estará concedendo cobertura.</b></p>",
       "<p><b>A renovação do seguro não é automática. O Locador/Representante Legal deve confirmar os valores atualizados da locação, para que a renovação seja realizada.</b></p>",
       "<p><b>Ultrapassado o prazo de vigência, a Seguradora poderá aceitar ou não a renovação deste seguro, e poderá exigir novos documentos cadastrais para tanto.</b></p>",
@@ -80,11 +89,11 @@ export const MODELOS_EMAIL: ModeloEmail[] = [
     assunto: "ANÁLISE FIANÇA - [NOME DO PRETENDENTE] - RECUSADO",
     corpoHtml: [
       "<p>Prezados, bom dia<br>Tudo bem?</p>",
-      "<p><b>RECUSADO! 😓</b></p>",
-      "<p>Infelizmente o <b>[NOME DO PRETENDENTE]</b>, foi recusado.</p>",
+      "<p>" + dest("RECUSADO! 😓") + "</p>",
+      "<p>Infelizmente o " + laranja("[NOME DO PRETENDENTE]") + ", foi recusado.</p>",
       "<p>Seguem cartas recusas.</p>",
-      "<p><b>Para maiores esclarecimentos, por gentileza, entrar em contato com a [SEGURADORA] através do telefone [TELEFONE DA SEGURADORA].</b></p>",
-      "<p>De modo a orientar e viabilizar a locação, mediante a recusa, sugerimos o <b>Título de Capitalização</b>.</p>",
+      "<p><b>Para maiores esclarecimentos, por gentileza, entrar em contato com a </b>" + laranjaSub("[SEGURADORA]") + "<b> através do telefone [TELEFONE DA SEGURADORA].</b></p>",
+      "<p>De modo a orientar e viabilizar a locação, mediante a recusa, sugerimos o " + laranjaSub("Título de Capitalização") + ".</p>",
       "<p>Garantia sem perda pecuniária para o locatário, pois, o mesmo resgata o valor corrigido ao fim da locação.</p>",
       "<p>Vale ressaltar que a partir de R$ 6.000,00, a Seguradora atua com seu jurídico, no tocante à ação de despejo. O que de certa forma é muito conveniente para a imobiliária e locador, que não se preocuparão com a demanda judicial.</p>",
       "<p>Atenciosamente,</p>",
@@ -98,14 +107,14 @@ export const MODELOS_EMAIL: ModeloEmail[] = [
     corpoHtml: [
       "<p>{{responsavel}}, boa tarde!</p>",
       "<p><b>Em emissão! 😎</b></p>",
-      "<p>Informamos que o processo encontra-se em emissão e a cobrança iniciará junto ao faturamento de <b>[MÊS/ANO]</b>.</p>",
+      "<p>Informamos que o processo encontra-se em emissão e a cobrança iniciará junto ao faturamento de " + dest("[MÊS/ANO]") + "</p>",
       "<ul>",
       "<li>Forma de Pagamento: <b>Fatura Imobiliária</b></li>",
       "<li>Locatário: <b>[NOME DO LOCATÁRIO]</b></li>",
-      "<li>Parcelamento: <b>[11X]</b></li>",
-      "<li>Valor da Parcela: <b>R$ [VALOR DA PARCELA]</b></li>",
+      "<li>Parcelamento: " + dest("[11X]") + "</li>",
+      "<li>Valor da Parcela: " + dest("R$ [VALOR DA PARCELA]") + "</li>",
       "</ul>",
-      "<p><b>⚠️ Lembrando que na modalidade de fatura imobiliária a cobrança do seguro deverá ser inclusa no boleto de aluguel do locatário.</b></p>",
+      "<p><b>⚠️ </b>" + dest("Lembrando que na modalidade de fatura imobiliária a cobrança do seguro deverá ser inclusa no boleto de aluguel do locatário.") + "</p>",
       "<p><b>🚨 Atenção: Informamos que o prazo para o envio da apólice é de até 15 dias, contados a partir da presente data.</b></p>",
       "<p>Atenciosamente,</p>",
     ].join(""),

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { enviarEmail, type AnexoEmail } from "@/lib/email";
 import { ccPorEntidade, gerarEnderecoRespostaCard } from "@/lib/bitrix/entidadesCard";
 import { registrarAtividadeEmail } from "@/lib/bitrix/atividades";
-import { tokenBitrixValido, buscarInfoCardParaEmail, BUCKET_ANEXOS } from "@/lib/bitrix/emailNoCard";
+import { tokenBitrixValido, BUCKET_ANEXOS } from "@/lib/bitrix/emailNoCard";
 import { createServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
@@ -15,84 +15,24 @@ export const dynamic = "force-dynamic";
 // senão vira relay aberto pra mandar e-mail em nome da O2 pra qualquer
 // endereço e gravar atividade falsa em qualquer card.
 
-const O2_NAVY = "#01192e";
-const O2_LARANJA = "#F8540D";
-const O2_CINZA_CLARO = "#d9d9d9";
-const O2_CINZA_MEDIO = "#8d8683";
-const FONTE = "'Poppins', Arial, sans-serif";
-const LOGO_URL = "https://gerador-contratos-o2.vercel.app/marca-o2/o2-logo-horizontal.png";
-
 // Mesmo texto do AVISO LEGAL que a equipe já usa na assinatura dos e-mails
-// do Gmail. Vai sempre no rodapé, fora do corpo editável, pra não depender
+// do Gmail. Vai sempre no final, fora do corpo editável, pra não depender
 // de a pessoa lembrar de colar e não duplicar quando ela edita a mensagem.
 const AVISO_LEGAL =
   "Esta mensagem é destinada exclusivamente para a(s) pessoa(s) a quem é dirigida, podendo conter informação confidencial e/ou legalmente privilegiada. Se você não for o destinatário desta mensagem, desde já fica notificado de abster-se a divulgar, copiar, distribuir, examinar ou, de qualquer forma, utilizar a informação contida nesta mensagem, por ser ilegal. Caso você tenha recebido esta mensagem por engano, pedimos que nos retorne este E-Mail, promovendo, desde logo, a eliminação do seu conteúdo em sua base de dados, registros ou sistema de controle.";
 
-// Bloco "sobre este card" -- contexto pra quem recebe uma cópia (CC) ou lê o
-// e-mail depois, sem precisar abrir o Bitrix pra saber do que se trata.
-// Best-effort: qualquer campo que não vier (empresa/responsável) some da
-// lista em vez de mostrar "undefined" ou travar o envio.
-function montarBlocoInfoCard(linhas: { rotulo: string; valor: string }[], link: string): string {
-  const linhasHtml = linhas
-    .filter((l) => l.valor)
-    .map(
-      (l) => `
-      <tr>
-        <td style="padding:6px 0;font-size:12px;color:${O2_CINZA_MEDIO};font-family:${FONTE};width:110px;vertical-align:top;">${l.rotulo}</td>
-        <td style="padding:6px 0;font-size:13px;color:${O2_NAVY};font-family:${FONTE};font-weight:600;">${l.valor}</td>
-      </tr>`
-    )
-    .join("");
-  return `
-    <tr>
-      <td style="padding:0 28px 20px;">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8f8f7;border-radius:10px;padding:14px 16px;border-collapse:collapse;">
-          ${linhasHtml}
-          <tr>
-            <td colspan="2" style="padding:10px 0 0;">
-              <a href="${link}" style="font-size:12px;color:${O2_LARANJA};font-family:${FONTE};font-weight:700;text-decoration:none;">Abrir card no Bitrix →</a>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>`;
-}
-
-// E-mail de pessoa pra pessoa (colaborador -> cliente), não uma notificação
-// estruturada de formulário -- por isso não reaproveita envolverEmailO2
-// integralmente (feito pra "card de formulário preenchido", com badge fixo
-// de produto + protocolo). Aqui o corpo já vem em HTML (editado na tela de
+// Mesma aparência dos e-mails que a equipe de Fiança já manda pelo Gmail
+// (pedido do Matheus, 09/10/2026): sem logo, selo, caixa de dados do card
+// nem moldura -- só Verdana pequena em azul-escuro (#073763), com os
+// destaques em laranja que cada pessoa aplica no próprio texto, e o AVISO
+// LEGAL em itálico no final. O corpo já vem em HTML (editado na tela de
 // composição), então é inserido direto, sem reprocessar quebra de linha.
-function montarHtmlEmailCard(params: { corpoHtml: string; badge: string; blocoInfo: string }): string {
+function montarHtmlEmailCard(params: { corpoHtml: string }): string {
   return `
-    <div style="background:#f4f4f4;padding:28px 12px;font-family:${FONTE};">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid ${O2_CINZA_CLARO};">
-        <tr>
-          <td style="padding:24px 28px 8px;" align="center">
-            <img src="${LOGO_URL}" alt="O2 Seguros" width="140" style="display:block;" />
-          </td>
-        </tr>
-        <tr>
-          <td style="padding:14px 28px 4px;" align="center">
-            <span style="display:inline-block;background:${O2_LARANJA};color:#ffffff;font-family:${FONTE};font-weight:700;font-size:11px;letter-spacing:0.6px;text-transform:uppercase;padding:6px 16px;border-radius:999px;">${params.badge}</span>
-          </td>
-        </tr>
-        ${params.blocoInfo}
-        <tr>
-          <td style="padding:4px 28px 24px;font-size:14px;line-height:1.6;color:${O2_NAVY};font-family:${FONTE};">${params.corpoHtml}</td>
-        </tr>
-        <tr>
-          <td style="padding:0 28px 24px;">
-            <hr style="border:none;border-top:1px solid ${O2_CINZA_CLARO};margin:0 0 16px;" />
-            <p style="margin:0 0 14px;font-size:10px;line-height:1.5;color:${O2_CINZA_MEDIO};font-family:${FONTE};text-align:justify;font-style:italic;">
-              <b>AVISO LEGAL</b> ${AVISO_LEGAL}
-            </p>
-            <p style="margin:0;font-size:11px;color:${O2_CINZA_MEDIO};font-family:${FONTE};text-align:center;">
-              O2 Seguros · <span style="color:${O2_LARANJA};">#SomosTodosO2</span>
-            </p>
-          </td>
-        </tr>
-      </table>
+    <div style="font-family:verdana,sans-serif;font-size:small;line-height:1.5;color:#073763;">
+      ${params.corpoHtml}
+      <br />
+      <div style="font-family:verdana,sans-serif;font-size:small;color:#073763;"><i><b>AVISO LEGAL</b> ${AVISO_LEGAL}</i></div>
     </div>`;
 }
 
@@ -146,30 +86,12 @@ export async function POST(request: NextRequest) {
   const cc = ccPorEntidade(entityTypeId);
   const replyTo = gerarEnderecoRespostaCard(entityTypeId, itemId);
 
-  // Melhor esforço: busca título/empresa/responsável do card pra dar
-  // contexto no e-mail (quem recebe em cópia não precisa abrir o Bitrix pra
-  // saber do que se trata). Se falhar por qualquer motivo, o e-mail ainda
-  // sai -- só sem esse bloco, nunca bloqueia o envio por causa disso.
-  const info = await buscarInfoCardParaEmail(entityTypeId, itemId);
-  const badge = info?.badge ?? "O2 Seguros";
-  const blocoInfo = info
-    ? montarBlocoInfoCard(
-        [
-          { rotulo: "Card", valor: info.tituloCard ? `#${itemId} · ${info.tituloCard}` : `#${itemId}` },
-          { rotulo: "Empresa/Imóvel", valor: info.empresa ?? "" },
-          { rotulo: "Responsável", valor: info.responsavel ?? "" },
-        ],
-        info.link
-      )
-    : "";
-
-  const html = montarHtmlEmailCard({ corpoHtml: sanitizarHtmlSimples(corpo), badge, blocoInfo });
+  const html = montarHtmlEmailCard({ corpoHtml: sanitizarHtmlSimples(corpo) });
 
   // Anexos sobem direto pro Storage a partir do navegador (ver
   // anexo-upload-url/route.ts) -- aqui só baixamos de volta (chamada de
   // servidor pro Storage, não passa pelo limite de 4,5MB do Vercel) pra
-  // montar o e-mail de verdade. Ao contrário do bloco de contexto do card
-  // (best-effort), uma falha aqui bloqueia o envio: o colaborador escolheu
+  // montar o e-mail de verdade. Uma falha aqui bloqueia o envio: o colaborador escolheu
   // esse anexo de propósito, mandar sem ele silenciosamente seria enganoso.
   const caminhosAnexos: string[] = [];
   let anexos: AnexoEmail[] | undefined;

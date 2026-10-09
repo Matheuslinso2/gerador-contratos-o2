@@ -139,7 +139,7 @@ export async function POST(request: NextRequest) {
     #barra-formatacao button { margin: 0; background: #fff; color: #01192e; border: 1px solid #d9d9d9; border-radius: 6px; width: 30px; height: 30px; padding: 0; font-size: 13px; font-weight: 700; cursor: pointer; line-height: 1; }
     #barra-formatacao button:hover { background: #f4f4f4; }
     #barra-formatacao button[data-cmd="italic"] { font-style: italic; }
-    #corpo { min-height: 140px; box-sizing: border-box; padding: 9px 10px; border: 1px solid #d9d9d9; border-radius: 8px; font-family: inherit; font-size: 14px; margin-top: 6px; }
+    #corpo { min-height: 140px; box-sizing: border-box; padding: 9px 10px; border: 1px solid #d9d9d9; border-radius: 8px; font-family: verdana, sans-serif; font-size: 13px; line-height: 1.5; color: #073763; margin-top: 6px; }
     #corpo:focus { outline: 2px solid #F8540D22; }
     #corpo ul, #corpo ol { margin: 0 0 0 20px; padding: 0; }
     #corpo a { color: #F8540D; }
@@ -312,7 +312,7 @@ export async function POST(request: NextRequest) {
           if (info.tituloCard) linhas += '<div class="linha"><span class="rotulo">Card</span><span class="valor">#' + itemId + ' · ' + info.tituloCard + '</span></div>';
           if (info.empresa) linhas += '<div class="linha"><span class="rotulo">Empresa/Imóvel</span><span class="valor">' + info.empresa + '</span></div>';
           if (info.responsavel) linhas += '<div class="linha"><span class="rotulo">Responsável</span><span class="valor">' + info.responsavel + '</span></div>';
-          linhas += '<div class="aviso" style="margin-top:6px;">Esse bloco (+ o selo "' + info.badge + '") entra automaticamente no e-mail, junto com sua mensagem.</div>';
+          linhas += '<div class="aviso" style="margin-top:6px;">Dados do card só para sua conferência — não vão no e-mail.</div>';
           previaEl.innerHTML = linhas;
           previaEl.style.display = "block";
         })
