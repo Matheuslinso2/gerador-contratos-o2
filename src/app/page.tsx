@@ -7,6 +7,7 @@ import { signOut } from "./actions";
 import AppHeader from "@/components/AppHeader";
 import PainelCategorias from "@/components/PainelCategorias";
 import DashboardProducao from "@/components/DashboardProducao";
+import DashboardOperacao from "@/components/DashboardOperacao";
 import RankingImobiliarias from "@/components/RankingImobiliarias";
 import { PRODUTOS_LANDING_PAGE } from "@/lib/produtosLandingPage";
 import { buscarImobiliariaDoUsuario } from "@/lib/imobiliariaDoUsuario";
@@ -416,6 +417,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ a
         )}
 
         {verKpis && abaAtiva === "kpis" && <DashboardProducao />}
+        {verKpis && abaAtiva === "kpis" && <DashboardOperacao />}
         {verKpis && abaAtiva === "kpis" && <RankingImobiliarias mes={rank === "anterior" ? "anterior" : "atual"} />}
 
         {abaAtiva === "ferramentas" && <PainelCategorias categorias={categorias} />}

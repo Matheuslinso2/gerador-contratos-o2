@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { days360 } from "@/lib/days360";
+import { registrarUsoCalculadora } from "./actions";
 
 const fmtMoeda = (v: number) =>
   v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -12,6 +13,7 @@ export default function CalculadoraMulta() {
   const [inicio, setInicio] = useState("");
   const [fim, setFim] = useState("");
   const [desocupacao, setDesocupacao] = useState("");
+  const usoRegistrado = useRef(false);
 
   const resultado = useMemo(() => {
     const aluguelNum = Number(aluguel);
@@ -39,6 +41,14 @@ export default function CalculadoraMulta() {
       valorApurado,
     };
   }, [aluguel, vezes, inicio, fim, desocupacao]);
+
+  // Conta 1 uso por abertura da página: a 1ª vez que um resultado aparece.
+  useEffect(() => {
+    if (resultado && !usoRegistrado.current) {
+      usoRegistrado.current = true;
+      void registrarUsoCalculadora();
+    }
+  }, [resultado]);
 
   return (
     <div className="space-y-6">
