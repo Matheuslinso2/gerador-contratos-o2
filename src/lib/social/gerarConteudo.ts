@@ -70,6 +70,7 @@ Regras rígidas:
 - NUNCA copie frases inteiras da fonte — reescreva com as próprias palavras, no máximo uma citação curta entre aspas se necessário.
 - NUNCA dê recomendação de investimento personalizada nem aconselhamento jurídico específico — comente o cenário, não diga o que "você deveria fazer com seu dinheiro".
 - NUNCA use números internos da O2 (produção, comissão, nomes de clientes) — esse post é público.
+- Escreva 100% em português do Brasil, em toda a legenda e em todos os textos de imagem. NUNCA deixe palavra solta em inglês no meio da frase (ex: "like", "also", "so", "but" no lugar de "como", "também", "então", "mas") — isso é lapso, não estilo. Só use termo em inglês quando for nome próprio ou termo de mercado sem tradução corrente (ex: proptech, insurtech, home equity), e nesse caso só ele, nunca palavras comuns.
 - Termine a legenda com 3 a 6 hashtags relevantes em português (ex: #SeguroFiança #MercadoImobiliário).
 - Legenda entre 400 e 900 caracteres, parágrafos curtos, sem emoji em excesso (no máximo 2-3).`;
 
