@@ -2,10 +2,11 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { createClient } from "@/lib/supabase/server";
-import { isAdmin, isColaboradorO2 } from "@/lib/admin";
+import { isAdmin, isColaboradorO2, DOMINIO_O2 } from "@/lib/admin";
 import { signOut } from "./actions";
 import AppHeader from "@/components/AppHeader";
 import PainelCategorias from "@/components/PainelCategorias";
+import DashboardProducao from "@/components/DashboardProducao";
 import { PRODUTOS_LANDING_PAGE } from "@/lib/produtosLandingPage";
 import { buscarImobiliariaDoUsuario } from "@/lib/imobiliariaDoUsuario";
 
@@ -380,6 +381,9 @@ export default async function Home() {
             poder gerar e auditar contratos. Clique aqui para começar →
           </Link>
         )}
+
+        {/* Dashboard de produção: só pra login @o2seguros.com.br (pedido do Matheus, 09/10/2026) */}
+        {user.email?.toLowerCase().endsWith(DOMINIO_O2) && <DashboardProducao />}
 
         <PainelCategorias categorias={categorias} />
       </main>
