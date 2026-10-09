@@ -230,6 +230,84 @@ export async function publicarCarrossel(imageUrls: string[], legenda: string): P
   }
 }
 
+export type MetricasMidia = {
+  curtidas: number;
+  comentarios: number;
+  alcance: number | null;
+  visualizacoes: number | null;
+  salvamentos: number | null;
+  compartilhamentos: number | null;
+  interacoes: number | null;
+};
+
+// Remove query string e barra final -- o permalink guardado em
+// social_media_posts.instagram_post_id e o devolvido pela listagem de mídias
+// podem diferir só nisso.
+export function normalizarPermalink(url: string): string {
+  return url.split("?")[0].replace(/\/+$/, "");
+}
+
+// Busca curtidas/comentários e os insights (alcance, visualizações etc.) dos
+// últimos posts da conta e devolve indexado pelo permalink normalizado. Exige
+// o escopo instagram_business_manage_insights -- se o token foi gerado antes
+// dele existir, os insights falham (erro de permissão) e só curtidas e
+// comentários (escopo básico) voltam preenchidos; os demais ficam null, e a
+// página mostra o aviso pra reconectar. A listagem em si (incluindo
+// like_count/comments_count) falhar é erro de verdade e sobe.
+export async function buscarMetricasMidias(limite = 50): Promise<Map<string, MetricasMidia>> {
+  const auth = await obterAuthValida();
+  const token = encodeURIComponent(auth.access_token);
+  const lista = await chamarGraphApi<{
+    data: { id: string; permalink: string; like_count?: number; comments_count?: number }[];
+  }>(`${GRAPH_BASE}/${auth.instagram_business_account_id}/media?fields=id,permalink,like_count,comments_count&limit=${limite}&access_token=${token}`);
+
+  const resultado = new Map<string, MetricasMidia>();
+  for (const midia of lista.data) {
+    const insights = await buscarInsightsMidia(midia.id, token);
+    resultado.set(normalizarPermalink(midia.permalink), {
+      curtidas: midia.like_count ?? 0,
+      comentarios: midia.comments_count ?? 0,
+      alcance: insights.reach ?? null,
+      visualizacoes: insights.views ?? null,
+      salvamentos: insights.saved ?? null,
+      compartilhamentos: insights.shares ?? null,
+      interacoes: insights.total_interactions ?? null,
+    });
+  }
+  return resultado;
+}
+
+// Tenta todas as métricas numa chamada só; se algum tipo de mídia rejeitar
+// uma delas (a API recusa a chamada inteira nesse caso), cai pra uma chamada
+// por métrica pra não perder as que funcionam.
+async function buscarInsightsMidia(mediaId: string, tokenCodificado: string): Promise<Record<string, number>> {
+  type Resposta = { data: { name: string; values?: { value: number }[]; total_value?: { value: number } }[] };
+  const extrair = (r: Resposta) => {
+    const saida: Record<string, number> = {};
+    for (const m of r.data) saida[m.name] = m.values?.[0]?.value ?? m.total_value?.value ?? 0;
+    return saida;
+  };
+  const metricas = ["reach", "views", "saved", "shares", "total_interactions"];
+  try {
+    return extrair(
+      await chamarGraphApi<Resposta>(`${GRAPH_BASE}/${mediaId}/insights?metric=${metricas.join(",")}&access_token=${tokenCodificado}`)
+    );
+  } catch {
+    const saida: Record<string, number> = {};
+    for (const metrica of metricas) {
+      try {
+        Object.assign(
+          saida,
+          extrair(await chamarGraphApi<Resposta>(`${GRAPH_BASE}/${mediaId}/insights?metric=${metrica}&access_token=${tokenCodificado}`))
+        );
+      } catch {
+        // métrica indisponível pra essa mídia (ou sem permissão) -- fica fora
+      }
+    }
+    return saida;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Troca/renovação de token -- usadas só pela rota de callback do OAuth
 // (troca inicial) e pelo cron de renovação (src/app/api/cron/

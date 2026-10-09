@@ -162,6 +162,9 @@ export default async function SocialMediaPage({
             </a>
           ) : (
             <div className="flex items-center gap-4">
+              <a href="/social-media/dashboard" className="text-sm font-medium text-o2-navy hover:underline">
+                Desempenho
+              </a>
               <a href="/social-media?arquivadas=1" className="text-sm font-medium text-o2-navy hover:underline">
                 Ver arquivadas
               </a>

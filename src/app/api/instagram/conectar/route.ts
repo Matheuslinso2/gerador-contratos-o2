@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
   const url = new URL("https://www.instagram.com/oauth/authorize");
   url.searchParams.set("client_id", appId);
   url.searchParams.set("redirect_uri", `${siteUrl}/api/instagram/callback`);
-  url.searchParams.set("scope", "instagram_business_basic,instagram_business_content_publish");
+  url.searchParams.set("scope", "instagram_business_basic,instagram_business_content_publish,instagram_business_manage_insights");
   url.searchParams.set("response_type", "code");
   url.searchParams.set("state", state);
 
