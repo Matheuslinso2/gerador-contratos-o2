@@ -34,7 +34,9 @@ export type ResumoProduto = {
   // Pedidos (cards criados) -- por enquanto só Capitalização: o Matheus
   // reclamou em 08/10/2026 que via 7 títulos no Workspace e o relatório
   // mostrava 0 (nenhum tinha chegado em "Emitido" ainda).
-  solicitacoes?: { ontem: number | null; mes: number };
+  // Fiança (09/10/2026): mesmo bloco, rotulado como "análises", e com o
+  // total em andamento agora (novos + herdados de meses anteriores).
+  solicitacoes?: { ontem: number | null; mes: number; rotulo?: [string, string]; rotuloMes?: [string, string]; emAndamento?: number };
 };
 
 export type RelatorioDiario = {
@@ -142,6 +144,15 @@ async function montarParaPeriodo(periodo: PeriodoRelatorio): Promise<RelatorioDi
         conversao: taxa(convertidos.total, convertidos.total + recusados.total + perdidos.total),
         // Mesma soma do quadro "Convertido" do painel (mês do evento).
         comissao: Object.values(doMes.convertidoPorSeguradora ?? {}).reduce((s, c) => s + c.comissao, 0),
+        // Pedido do Matheus (09/10/2026): análises de ontem, recebidas no mês
+        // e em andamento agora -- mesmos números dos quadros do painel.
+        solicitacoes: {
+          ontem: [...todos.values()].reduce((s, a) => s + somarQuadro(a.analisesDiariasPorResponsavel, periodo.dias), 0),
+          mes: doMes.kpis.total,
+          rotulo: ["análise", "análises"],
+          rotuloMes: ["análise recebida", "análises recebidas"],
+          emAndamento: doMes.kpis.emAndamento.total,
+        },
       };
     }),
     secao<PainelCapitalizacao, ResumoProduto>("capitalizacao_snapshots", periodo, (doMes, todos) => ({
@@ -261,8 +272,12 @@ export function parametrosModelo(r: RelatorioDiario): string[] {
     const d = s.dados;
     comissaoTotal += d.comissao;
     const pedidos = d.solicitacoes;
-    const pedidosOntem = pedidos ? `${pedidos.ontem === null ? "—" : plural(pedidos.ontem, "solicitação", "solicitações")} · ` : "";
-    const pedidosMes = pedidos ? `${plural(pedidos.mes, "solicitação", "solicitações")} · ` : "";
+    const [um, varios] = pedidos?.rotulo ?? ["solicitação", "solicitações"];
+    const [umMes, variosMes] = pedidos?.rotuloMes ?? [um, varios];
+    const pedidosOntem = pedidos ? `${pedidos.ontem === null ? "—" : plural(pedidos.ontem, um, varios)} · ` : "";
+    const pedidosMes = pedidos
+      ? `${plural(pedidos.mes, umMes, variosMes)} · ${pedidos.emAndamento !== undefined ? `${pedidos.emAndamento} em andamento · ` : ""}`
+      : "";
     return [
       d.ontemEfetivados === null
         ? `${rotuloOntem}: ${pedidosOntem}—`
