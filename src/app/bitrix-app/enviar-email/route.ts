@@ -22,6 +22,12 @@ const O2_CINZA_MEDIO = "#8d8683";
 const FONTE = "'Poppins', Arial, sans-serif";
 const LOGO_URL = "https://gerador-contratos-o2.vercel.app/marca-o2/o2-logo-horizontal.png";
 
+// Mesmo texto do AVISO LEGAL que a equipe já usa na assinatura dos e-mails
+// do Gmail. Vai sempre no rodapé, fora do corpo editável, pra não depender
+// de a pessoa lembrar de colar e não duplicar quando ela edita a mensagem.
+const AVISO_LEGAL =
+  "Esta mensagem é destinada exclusivamente para a(s) pessoa(s) a quem é dirigida, podendo conter informação confidencial e/ou legalmente privilegiada. Se você não for o destinatário desta mensagem, desde já fica notificado de abster-se a divulgar, copiar, distribuir, examinar ou, de qualquer forma, utilizar a informação contida nesta mensagem, por ser ilegal. Caso você tenha recebido esta mensagem por engano, pedimos que nos retorne este E-Mail, promovendo, desde logo, a eliminação do seu conteúdo em sua base de dados, registros ou sistema de controle.";
+
 // Bloco "sobre este card" -- contexto pra quem recebe uma cópia (CC) ou lê o
 // e-mail depois, sem precisar abrir o Bitrix pra saber do que se trata.
 // Best-effort: qualquer campo que não vier (empresa/responsável) some da
@@ -78,6 +84,9 @@ function montarHtmlEmailCard(params: { corpoHtml: string; badge: string; blocoIn
         <tr>
           <td style="padding:0 28px 24px;">
             <hr style="border:none;border-top:1px solid ${O2_CINZA_CLARO};margin:0 0 16px;" />
+            <p style="margin:0 0 14px;font-size:10px;line-height:1.5;color:${O2_CINZA_MEDIO};font-family:${FONTE};text-align:justify;font-style:italic;">
+              <b>AVISO LEGAL</b> ${AVISO_LEGAL}
+            </p>
             <p style="margin:0;font-size:11px;color:${O2_CINZA_MEDIO};font-family:${FONTE};text-align:center;">
               O2 Seguros · <span style="color:${O2_LARANJA};">#SomosTodosO2</span>
             </p>
