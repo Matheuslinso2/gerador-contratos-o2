@@ -401,7 +401,8 @@ export async function montarPainelSeguroAuto(competencia: string, agora = new Da
     porDia: contarPorDia(
       competencia,
       cards.map((c) => c.criadoEm),
-      cards.filter((c) => c.etapaId === "DT1050_30:SUCCESS" && c.movidoEm).map((c) => c.movidoEm!)
+      cards.filter((c) => c.etapaId === "DT1050_30:SUCCESS" && c.movidoEm).map((c) => ({ quando: c.movidoEm!, comissao: c.comissaoGerada })),
+      cards.filter((c) => c.semantica === "F" && c.movidoEm).map((c) => c.movidoEm!)
     ),
     atualizadoEm: agora.toISOString(),
   };

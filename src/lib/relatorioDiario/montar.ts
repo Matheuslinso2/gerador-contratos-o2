@@ -103,6 +103,22 @@ function novosNoPeriodo(payloads: { porDia?: ContagemDia[] }[], dias: string[]):
     .reduce((s, l) => s + l.novos, 0);
 }
 
+// "No mês" por data do EVENTO (09/10/2026, pedido do Matheus): conta tudo
+// o que foi efetivado/perdido dentro da competência, qualquer que seja o mês
+// do pedido -- coerente com o "Ontem". null = retrato anterior a essa
+// mudança (sem comissão/perdas por dia): usa os kpis do painel.
+function mesPorEvento(payload: { porDia?: ContagemDia[] }): Pick<ResumoProduto, "efetivados" | "conversao" | "comissao"> | null {
+  const dias = payload.porDia;
+  if (!dias || dias.some((d) => d.comissao === undefined || d.perdidos === undefined)) return null;
+  const efetivados = dias.reduce((s, d) => s + d.concluidos, 0);
+  const perdidos = dias.reduce((s, d) => s + (d.perdidos ?? 0), 0);
+  return {
+    efetivados,
+    conversao: taxa(efetivados, efetivados + perdidos),
+    comissao: dias.reduce((s, d) => s + (d.comissao ?? 0), 0),
+  };
+}
+
 function taxa(efetivados: number, concluidos: number): number | null {
   return concluidos > 0 ? efetivados / concluidos : null;
 }
@@ -157,16 +173,20 @@ async function montarParaPeriodo(periodo: PeriodoRelatorio): Promise<RelatorioDi
     }),
     secao<PainelCapitalizacao, ResumoProduto>("capitalizacao_snapshots", periodo, (doMes, todos) => ({
       ontemEfetivados: efetivadosNoPeriodo([...todos.values()], periodo.dias),
-      efetivados: doMes.kpis.emitidos,
-      conversao: doMes.kpis.taxaConversao,
-      comissao: doMes.kpis.comissaoEfetivada,
+      ...(mesPorEvento(doMes) ?? {
+        efetivados: doMes.kpis.emitidos,
+        conversao: doMes.kpis.taxaConversao,
+        comissao: doMes.kpis.comissaoEfetivada,
+      }),
       solicitacoes: { ontem: novosNoPeriodo([...todos.values()], periodo.dias), mes: doMes.kpis.total },
     })),
     secao<PainelSeguroAuto, ResumoProduto>("seguro_auto_snapshots", periodo, (doMes, todos) => ({
       ontemEfetivados: efetivadosNoPeriodo([...todos.values()], periodo.dias),
-      efetivados: doMes.kpis.convertidos,
-      conversao: doMes.kpis.taxaConversao,
-      comissao: doMes.kpis.comissaoGerada,
+      ...(mesPorEvento(doMes) ?? {
+        efetivados: doMes.kpis.convertidos,
+        conversao: doMes.kpis.taxaConversao,
+        comissao: doMes.kpis.comissaoGerada,
+      }),
     })),
     secao<AnaliseRamosElementares, Extract<RelatorioDiario["ramos"], { ok: true }>["dados"]>(
       "ramos_elementares_snapshots",
