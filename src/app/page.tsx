@@ -10,7 +10,8 @@ import DashboardProducao from "@/components/DashboardProducao";
 import { PRODUTOS_LANDING_PAGE } from "@/lib/produtosLandingPage";
 import { buscarImobiliariaDoUsuario } from "@/lib/imobiliariaDoUsuario";
 
-export default async function Home() {
+export default async function Home({ searchParams }: { searchParams: Promise<{ aba?: string }> }) {
+  const { aba } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -366,11 +367,42 @@ export default async function Home() {
     },
   ];
 
+  // Aba padrão: KPIs pra quem tem login @o2seguros.com.br; Ferramentas pra
+  // todo o resto (imobiliárias, Nichoos), que não tem a aba de KPIs.
+  const verKpis = !!user.email?.toLowerCase().endsWith(DOMINIO_O2);
+  const abaAtiva: "kpis" | "ferramentas" = verKpis && aba !== "ferramentas" ? "kpis" : "ferramentas";
+
   return (
     <>
       <AppHeader userEmail={user.email} logoutAction={signOut} />
       <main className="mx-auto max-w-4xl flex-1 space-y-6 p-8">
         <h1 className="text-xl font-semibold text-o2-navy">Painel</h1>
+
+        {/* Duas abas (pedido do Matheus, 09/10/2026): KPIs de produção (só @o2seguros.com.br) e Ferramentas. Quem não vê os KPIs não vê as abas. */}
+        {verKpis && (
+          <nav className="flex gap-1 border-b border-gray-200" aria-label="Seções da página inicial">
+            <Link
+              href="/?aba=kpis"
+              scroll={false}
+              aria-current={abaAtiva === "kpis" ? "page" : undefined}
+              className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition ${
+                abaAtiva === "kpis" ? "border-o2-coral text-o2-navy" : "border-transparent text-o2-cinza-medio hover:text-o2-navy"
+              }`}
+            >
+              Painel de KPIs
+            </Link>
+            <Link
+              href="/?aba=ferramentas"
+              scroll={false}
+              aria-current={abaAtiva === "ferramentas" ? "page" : undefined}
+              className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition ${
+                abaAtiva === "ferramentas" ? "border-o2-coral text-o2-navy" : "border-transparent text-o2-cinza-medio hover:text-o2-navy"
+              }`}
+            >
+              Ferramentas
+            </Link>
+          </nav>
+        )}
 
         {!cadastroCompleto && (
           <Link
@@ -382,10 +414,9 @@ export default async function Home() {
           </Link>
         )}
 
-        {/* Dashboard de produção: só pra login @o2seguros.com.br (pedido do Matheus, 09/10/2026) */}
-        {user.email?.toLowerCase().endsWith(DOMINIO_O2) && <DashboardProducao />}
+        {verKpis && abaAtiva === "kpis" && <DashboardProducao />}
 
-        <PainelCategorias categorias={categorias} />
+        {abaAtiva === "ferramentas" && <PainelCategorias categorias={categorias} />}
       </main>
     </>
   );
