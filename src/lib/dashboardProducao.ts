@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import type { AnaliseGerencial } from "@/lib/bitrix/seguroFianca";
 import type { PainelCapitalizacao } from "@/lib/capitalizacao/painel";
 import type { PainelSeguroAuto } from "@/lib/seguroAuto/painel";
+import { montarRanking, type LinhaRanking } from "@/lib/rankingImobiliarias";
 import { STATUS_TERMINAIS, type AnaliseRamosElementares } from "@/lib/ramos-elementares/analise";
 
 // Dashboard "Produção do mês" da página inicial (pedido do Matheus,
@@ -165,4 +166,43 @@ export function somarMes(produtos: LinhaProduto[], mes: "atual" | "anterior"): (
     atualizadoEm: presentes.map((i) => i.atualizadoEm).sort().at(-1) ?? "",
     incompleto: presentes.length < itens.length,
   };
+}
+
+// --- Ranking de imobiliárias (quadro da página inicial) ---
+// Lê os mesmos retratos mensais; a junção dos nomes entre painéis e a ordem
+// do ranking estão em rankingImobiliarias.ts. Seguro Auto fica de fora (o
+// painel dele não registra imobiliária).
+export type RankingImobiliarias = {
+  competencia: string;
+  linhas: LinhaRanking[];
+  painelsSemRetrato: string[]; // nomes dos painéis sem retrato da competência (ranking incompleto)
+  atualizadoEm: string | null;
+};
+
+export async function montarRankingImobiliarias(competencia: string, limite = 10): Promise<RankingImobiliarias> {
+  const [fianca, cap, ramos] = await Promise.all([
+    lerRetratos<AnaliseGerencial>("seguro_fianca_snapshots", [competencia]).catch(() => null),
+    lerRetratos<PainelCapitalizacao>("capitalizacao_snapshots", [competencia]).catch(() => null),
+    lerRetratos<AnaliseRamosElementares>("ramos_elementares_snapshots", [competencia]).catch(() => null),
+  ]);
+  const f = fianca?.get(competencia);
+  const c = cap?.get(competencia);
+  const r = ramos?.get(competencia);
+
+  const semRetrato = [!f && "Seguro Fiança", !c && "Capitalização", !r && "Ramos Elementares"].filter((x): x is string => !!x);
+  const linhas = montarRanking(
+    {
+      fianca: f?.payload.topImobiliarias ?? [],
+      capitalizacao: c?.payload.titulos ?? [],
+      ramos: r?.payload.novos.consolidado.porImobiliaria ?? [],
+    },
+    limite
+  );
+  const datas = [f, c, r].filter((x): x is NonNullable<typeof x> => !!x).map((x) => x.atualizadoEm).sort();
+  return { competencia, linhas, painelsSemRetrato: semRetrato, atualizadoEm: datas.at(-1) ?? null };
+}
+
+export function competenciasAtualEAnterior(agora = new Date()): { atual: string; anterior: string } {
+  const { ano, mes } = hojeEmBrasilia(agora);
+  return { atual: competenciaDe(ano, mes), anterior: mes === 1 ? competenciaDe(ano - 1, 12) : competenciaDe(ano, mes - 1) };
 }
