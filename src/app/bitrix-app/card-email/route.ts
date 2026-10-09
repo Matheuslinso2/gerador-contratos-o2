@@ -115,6 +115,13 @@ export async function POST(request: NextRequest) {
   // fonte inicial e reforçamos com o do cliente.
   const entityTypeIdDoPost = entityTypeIdPorPlacement(campos.PLACEMENT) ?? null;
 
+  // Só mostra os modelos que valem pro tipo de card aberto (ex: modelos de
+  // Fiança só nos cards de Seguro Fiança). Sem tipo identificado, mostra só
+  // os que servem pra qualquer card.
+  const modelosDoCard = MODELOS_EMAIL.filter(
+    (m) => !m.entidades || (entityTypeIdDoPost !== null && m.entidades.includes(entityTypeIdDoPost))
+  );
+
   const html = `<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -163,7 +170,7 @@ export async function POST(request: NextRequest) {
     <label for="para">Para</label>
     <input id="para" type="email" required placeholder="cliente@exemplo.com" />
 
-    <label for="modelo">Modelo de e-mail</label>
+    <label for="modelo" id="rotulo-modelo">Modelo de e-mail</label>
     <select id="modelo">
       <option value="">Em branco (escrever do zero)</option>
     </select>
@@ -208,7 +215,7 @@ export async function POST(request: NextRequest) {
     // Modelos de e-mail (src/lib/bitrix/modelosEmail.ts). infoCard é preenchido
     // quando a prévia do card chega; até lá (ou se falhar) os placeholders viram
     // trechos entre colchetes pra pessoa completar à mão.
-    var MODELOS_EMAIL = ${JSON.stringify(MODELOS_EMAIL).replace(/</g, "\\u003c")};
+    var MODELOS_EMAIL = ${JSON.stringify(modelosDoCard).replace(/</g, "\\u003c")};
     var infoCard = null;
     var ultimoAssuntoModelo = "";
     var ultimoCorpoModelo = "";
@@ -232,6 +239,13 @@ export async function POST(request: NextRequest) {
 
     function popularModelos() {
       var select = document.getElementById("modelo");
+      if (!MODELOS_EMAIL.length) {
+        // Nenhum modelo pra esse tipo de card: esconde o campo inteiro.
+        document.getElementById("rotulo-modelo").style.display = "none";
+        select.style.display = "none";
+        document.getElementById("dica-modelo").style.display = "none";
+        return;
+      }
       MODELOS_EMAIL.forEach(function (modelo) {
         var opcao = document.createElement("option");
         opcao.value = modelo.id;
