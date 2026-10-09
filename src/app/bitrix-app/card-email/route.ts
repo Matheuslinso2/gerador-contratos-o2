@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { salvarInstalacao } from "@/lib/bitrix/appAuth";
 import { entityTypeIdPorPlacement } from "@/lib/bitrix/entidadesCard";
+import { MODELOS_EMAIL } from "@/lib/bitrix/modelosEmail";
 
 export const dynamic = "force-dynamic";
 
@@ -125,7 +126,8 @@ export async function POST(request: NextRequest) {
     body { font-family: 'Poppins', system-ui, sans-serif; margin: 0; padding: 20px; color: #01192e; background: #fff; }
     #status { font-size: 13px; color: #8d8683; margin-bottom: 12px; }
     label { display: block; font-size: 12px; font-weight: 600; color: #444440; margin: 12px 0 4px; }
-    input { width: 100%; box-sizing: border-box; padding: 9px 10px; border: 1px solid #d9d9d9; border-radius: 8px; font-family: inherit; font-size: 14px; }
+    input, select { width: 100%; box-sizing: border-box; padding: 9px 10px; border: 1px solid #d9d9d9; border-radius: 8px; font-family: inherit; font-size: 14px; background: #fff; color: #01192e; }
+    #dica-modelo { font-size: 11px; color: #8d8683; margin-top: 4px; }
     #barra-formatacao { display: flex; gap: 4px; margin-top: 6px; }
     #barra-formatacao button { margin: 0; background: #fff; color: #01192e; border: 1px solid #d9d9d9; border-radius: 6px; width: 30px; height: 30px; padding: 0; font-size: 13px; font-weight: 700; cursor: pointer; line-height: 1; }
     #barra-formatacao button:hover { background: #f4f4f4; }
@@ -160,6 +162,12 @@ export async function POST(request: NextRequest) {
   <form id="form-email" style="display:none;">
     <label for="para">Para</label>
     <input id="para" type="email" required placeholder="cliente@exemplo.com" />
+
+    <label for="modelo">Modelo de e-mail</label>
+    <select id="modelo">
+      <option value="">Em branco (escrever do zero)</option>
+    </select>
+    <div id="dica-modelo">Escolha um modelo para preencher assunto e mensagem. Depois é só editar o que precisar.</div>
 
     <label for="assunto">Assunto</label>
     <input id="assunto" type="text" required />
@@ -197,6 +205,66 @@ export async function POST(request: NextRequest) {
     );
     var anexosConcluidos = [];
 
+    // Modelos de e-mail (src/lib/bitrix/modelosEmail.ts). infoCard é preenchido
+    // quando a prévia do card chega; até lá (ou se falhar) os placeholders viram
+    // trechos entre colchetes pra pessoa completar à mão.
+    var MODELOS_EMAIL = ${JSON.stringify(MODELOS_EMAIL).replace(/</g, "\\u003c")};
+    var infoCard = null;
+    var ultimoAssuntoModelo = "";
+    var ultimoCorpoModelo = "";
+
+    function escaparHtml(texto) {
+      return String(texto).split("&").join("&amp;").split("<").join("&lt;").split(">").join("&gt;");
+    }
+
+    function preencherPlaceholders(texto, comoHtml) {
+      var valores = {
+        responsavel: (infoCard && infoCard.responsavel) || "[nome do cliente]",
+        empresa: (infoCard && infoCard.empresa) || "[empresa/imóvel]",
+        card: (infoCard && infoCard.tituloCard) || "[título do card]",
+      };
+      Object.keys(valores).forEach(function (chave) {
+        var valor = comoHtml ? escaparHtml(valores[chave]) : valores[chave];
+        texto = texto.split("{{" + chave + "}}").join(valor);
+      });
+      return texto;
+    }
+
+    function popularModelos() {
+      var select = document.getElementById("modelo");
+      MODELOS_EMAIL.forEach(function (modelo) {
+        var opcao = document.createElement("option");
+        opcao.value = modelo.id;
+        opcao.textContent = modelo.nome;
+        select.appendChild(opcao);
+      });
+      select.addEventListener("change", function () {
+        var modelo = MODELOS_EMAIL.filter(function (m) { return m.id === select.value; })[0];
+        var assuntoEl = document.getElementById("assunto");
+        var corpoEl = document.getElementById("corpo");
+        if (!modelo) return; // "Em branco" não apaga nada que a pessoa já escreveu
+
+        // Só pede confirmação se a pessoa já mexeu no texto (diferente do último
+        // modelo inserido) -- trocar de um modelo pra outro sem editar é livre.
+        var corpoEditado = corpoEl.textContent.trim() && corpoEl.innerHTML !== ultimoCorpoModelo;
+        if (corpoEditado && !window.confirm("A mensagem já tem texto. Substituir pelo modelo escolhido?")) {
+          select.value = "";
+          return;
+        }
+
+        var assuntoEditado = assuntoEl.value.trim() && assuntoEl.value !== ultimoAssuntoModelo;
+        ultimoCorpoModelo = "";
+        corpoEl.innerHTML = preencherPlaceholders(modelo.corpoHtml, true);
+        ultimoCorpoModelo = corpoEl.innerHTML;
+        if (!assuntoEditado) {
+          assuntoEl.value = preencherPlaceholders(modelo.assunto, false);
+          ultimoAssuntoModelo = assuntoEl.value;
+        }
+        corpoEl.focus();
+      });
+    }
+    popularModelos();
+
     function mostrarStatus(texto) {
       document.getElementById("status").textContent = texto;
     }
@@ -225,6 +293,7 @@ export async function POST(request: NextRequest) {
         .then(function (resultado) {
           if (!resultado.ok || !resultado.info) return; // best-effort, some silenciosamente
           var info = resultado.info;
+          infoCard = info;
           var linhas = "";
           if (info.tituloCard) linhas += '<div class="linha"><span class="rotulo">Card</span><span class="valor">#' + itemId + ' · ' + info.tituloCard + '</span></div>';
           if (info.empresa) linhas += '<div class="linha"><span class="rotulo">Empresa/Imóvel</span><span class="valor">' + info.empresa + '</span></div>';
@@ -389,6 +458,8 @@ export async function POST(request: NextRequest) {
                 mensagem.textContent = "E-mail enviado.";
                 document.getElementById("form-email").reset();
                 corpoEl.innerHTML = "";
+                ultimoAssuntoModelo = "";
+                ultimoCorpoModelo = "";
                 anexosConcluidos = [];
                 renderizarAnexos();
               } else {
