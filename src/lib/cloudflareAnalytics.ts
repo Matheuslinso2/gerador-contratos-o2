@@ -211,3 +211,38 @@ export async function buscarTrafegoSite(dias: number): Promise<ResultadoTrafego 
     paginas24h,
   };
 }
+
+// Versão leve só com visitantes únicos por dia, pro KPI "Visitas no site" da
+// página inicial (precisa de ~60 dias). A consulta completa acima pede
+// países/navegadores/status e deu "Internal server error" do Cloudflare nessa
+// janela (09/10/2026); aqui vai só o necessário e tenta de novo 1 vez.
+export async function buscarVisitasPorDia(dias: number): Promise<TrafegoDiario[] | null> {
+  const zoneId = process.env.CLOUDFLARE_ZONE_ID;
+  if (!process.env.CLOUDFLARE_API_TOKEN || !zoneId) return null;
+
+  const agora = new Date();
+  const inicio = new Date(agora.getTime() - (dias - 1) * 24 * 60 * 60 * 1000);
+  const dia = (d: Date) => d.toISOString().slice(0, 10);
+  const consulta = `query Visitas($zoneTag: String!, $desde: Date!, $ate: Date!) {
+    viewer {
+      zones(filter: { zoneTag: $zoneTag }) {
+        porDia: httpRequests1dGroups(limit: 100, filter: { date_geq: $desde, date_leq: $ate }, orderBy: [date_ASC]) {
+          dimensions { date }
+          sum { pageViews }
+          uniq { uniques }
+        }
+      }
+    }
+  }`;
+
+  for (let tentativa = 1; tentativa <= 2; tentativa++) {
+    const resposta = await consultarCloudflare(consulta, { zoneTag: zoneId, desde: dia(inicio), ate: dia(agora) });
+    if (resposta && !resposta.errors?.length) {
+      type Item = { dimensions: { date: string }; sum: { pageViews: number }; uniq: { uniques: number } };
+      const itens = (resposta.data?.viewer?.zones?.[0]?.porDia ?? []) as Item[];
+      return itens.map((i) => ({ data: i.dimensions.date, visitas: i.uniq.uniques, pageviews: i.sum.pageViews }));
+    }
+    console.error(`Erro da API do Cloudflare (visitas por dia, tentativa ${tentativa}):`, JSON.stringify(resposta?.errors ?? "sem resposta"));
+  }
+  return null;
+}

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { createServiceClient } from "@/lib/supabase/service";
-import { buscarTrafegoSite } from "@/lib/cloudflareAnalytics";
+import { buscarVisitasPorDia } from "@/lib/cloudflareAnalytics";
 import { competenciasAtualEAnterior } from "@/lib/dashboardProducao";
 
 // KPIs de operação e marketing da aba "Painel de KPIs" (pedido do Matheus,
@@ -102,9 +102,9 @@ export async function montarDashboardOperacao(agora = new Date()): Promise<Dashb
       // Do 1º dia do mês anterior até hoje (máx. ~62 dias).
       const inicio = new Date(`${anterior}-01T12:00:00Z`);
       const dias = Math.ceil((agora.getTime() - inicio.getTime()) / 86_400_000) + 1;
-      const trafego = await buscarTrafegoSite(dias);
-      if (!trafego) return null;
-      const soma = (c: string) => trafego.diario.filter((d) => d.data.startsWith(c)).reduce((s, d) => s + d.visitas, 0);
+      const diario = await buscarVisitasPorDia(dias);
+      if (!diario) return null;
+      const soma = (c: string) => diario.filter((d) => d.data.startsWith(c)).reduce((s, d) => s + d.visitas, 0);
       return { atual: soma(atual), anterior: soma(anterior) };
     }),
   ]);
