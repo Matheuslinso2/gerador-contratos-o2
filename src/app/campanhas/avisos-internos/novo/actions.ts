@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { buscarTemplateAviso } from "@/lib/avisosInternos/templates";
 import { COOKIE_MENSAGEM_AVISO } from "@/lib/avisosInternos/cookie";
+import { gravarRascunhoAviso, limparSurrogates } from "@/lib/avisosInternos/rascunho";
 
 // Pedido do Matheus, 01/10/2026: suporte a imagem no recado de Avisos
 // Internos (reaproveita o EditorCorpo de Campanhas) -- o recado passou a
@@ -29,7 +30,7 @@ export async function prepararRevisaoAviso(formData: FormData) {
   if (!template) redirect("/campanhas/avisos-internos");
 
   const valores: Record<string, string> = Object.fromEntries(
-    template.campos.map((c) => [c.key, String(formData.get(c.key) ?? "").trim()])
+    template.campos.map((c) => [c.key, limparSurrogates(String(formData.get(c.key) ?? "").trim())])
   );
   const mensagemHtml = String(formData.get("mensagem_html") ?? "").trim();
 
@@ -38,12 +39,20 @@ export async function prepararRevisaoAviso(formData: FormData) {
     redirect(`/campanhas/avisos-internos/novo?template=${template.id}&erro=${encodeURIComponent("Preencha todos os campos obrigatórios.")}`);
   }
 
+  // O recado vai pra uma tabela e o cookie leva só o id (ver lib/avisosInternos/rascunho.ts).
   const cookieStore = await cookies();
-  cookieStore.set(COOKIE_MENSAGEM_AVISO, mensagemHtml, {
-    httpOnly: true,
-    maxAge: 60 * 15,
-    path: "/campanhas/avisos-internos",
-  });
+  let idRascunho: string | null = null;
+  try {
+    idRascunho = await gravarRascunhoAviso(supabase, user.id, mensagemHtml);
+  } catch (erro) {
+    console.error("Falha ao guardar o recado do aviso interno:", erro);
+    redirect(`/campanhas/avisos-internos/novo?template=${template.id}&erro=${encodeURIComponent("Não consegui guardar o recado. Tente de novo.")}`);
+  }
+  if (idRascunho) {
+    cookieStore.set(COOKIE_MENSAGEM_AVISO, idRascunho, { httpOnly: true, maxAge: 60 * 15, path: "/campanhas/avisos-internos" });
+  } else {
+    cookieStore.delete({ name: COOKIE_MENSAGEM_AVISO, path: "/campanhas/avisos-internos" });
+  }
 
   redirect(`/campanhas/avisos-internos/revisar?${new URLSearchParams({ template: template.id, ...valores }).toString()}`);
 }

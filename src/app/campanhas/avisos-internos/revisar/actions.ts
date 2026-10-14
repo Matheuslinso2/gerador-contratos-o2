@@ -8,6 +8,7 @@ import { buscarTemplateAviso } from "@/lib/avisosInternos/templates";
 import { montarHtmlAvisoInterno } from "@/lib/avisosInternos/email";
 import { COOKIE_MENSAGEM_AVISO } from "@/lib/avisosInternos/cookie";
 import { enviarPendentesDoAviso } from "@/lib/avisosInternos/envio";
+import { apagarRascunhoAviso, limparSurrogates } from "@/lib/avisosInternos/rascunho";
 
 // Remetente transacional (avisos@), não o de marketing -- comunicado
 // interno da RH não é campanha comercial, não precisa (nem deve ter)
@@ -27,8 +28,8 @@ export async function enviarAvisoInterno(formData: FormData) {
   const template = buscarTemplateAviso(templateId);
   if (!template) redirect("/campanhas/avisos-internos");
 
-  const valores: Record<string, string> = Object.fromEntries(template.campos.map((c) => [c.key, String(formData.get(c.key) ?? "").trim()]));
-  const mensagemHtml = String(formData.get("mensagem_html") ?? "").trim();
+  const valores: Record<string, string> = Object.fromEntries(template.campos.map((c) => [c.key, limparSurrogates(String(formData.get(c.key) ?? "").trim())]));
+  const mensagemHtml = limparSurrogates(String(formData.get("mensagem_html") ?? "").trim());
 
   const camposFaltando = template.campos.filter((c) => c.obrigatorio && !valores[c.key]);
   if (camposFaltando.length) {
@@ -86,6 +87,7 @@ export async function enviarAvisoInterno(formData: FormData) {
   }
 
   const cookieStore = await cookies();
+  await apagarRascunhoAviso(supabase, cookieStore.get(COOKIE_MENSAGEM_AVISO)?.value);
   cookieStore.delete(COOKIE_MENSAGEM_AVISO);
 
   const pendencias = resultado.falhas + resultado.restantes;

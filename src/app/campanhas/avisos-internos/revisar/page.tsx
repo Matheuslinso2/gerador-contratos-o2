@@ -11,6 +11,7 @@ import { IconMail } from "@/components/icons";
 import { buscarTemplateAviso } from "@/lib/avisosInternos/templates";
 import { montarHtmlAvisoInterno } from "@/lib/avisosInternos/email";
 import { COOKIE_MENSAGEM_AVISO } from "@/lib/avisosInternos/cookie";
+import { lerRascunhoAviso } from "@/lib/avisosInternos/rascunho";
 import { enviarAvisoInterno } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -27,13 +28,14 @@ export default async function RevisarAvisoInternoPage({
   const { template: templateId, erro, ...valores } = params;
 
   const cookieStore = await cookies();
-  const mensagemHtml = cookieStore.get(COOKIE_MENSAGEM_AVISO)?.value ?? "";
+  const valorCookie = cookieStore.get(COOKIE_MENSAGEM_AVISO)?.value;
 
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!isAdmin(user?.email) && !isColaboradorO2(user?.email)) redirect("/");
+  const mensagemHtml = await lerRascunhoAviso(supabase, valorCookie);
 
   const template = templateId ? buscarTemplateAviso(templateId) : undefined;
   if (!template) redirect("/campanhas/avisos-internos");
