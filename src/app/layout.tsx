@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Poppins } from "next/font/google";
 import Footer from "@/components/Footer";
 import BotaoWhatsApp from "@/components/BotaoWhatsApp";
+import AvisoNovaVersao from "@/components/AvisoNovaVersao";
 import "./globals.css";
 
 const poppins = Poppins({
@@ -26,6 +27,7 @@ export default function RootLayout({
         {children}
         <Footer />
         <BotaoWhatsApp />
+        <AvisoNovaVersao />
       </body>
     </html>
   );

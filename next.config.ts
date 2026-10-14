@@ -2,6 +2,9 @@ import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
+  // Código da publicação que gerou esta página: o aviso "sistema atualizado"
+  // (components/AvisoNovaVersao.tsx) compara com /api/versao.
+  env: { NEXT_PUBLIC_BUILD_ID: process.env.VERCEL_GIT_COMMIT_SHA ?? "local" },
   experimental: {
     serverActions: {
       // Contratos reais (PDF/Word de várias páginas) passam facilmente do
