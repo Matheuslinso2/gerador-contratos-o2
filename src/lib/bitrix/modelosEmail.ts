@@ -155,6 +155,21 @@ export const MODELOS_EMAIL: ModeloEmail[] = [
     ].join(""),
   },
   {
+    id: "fianca-pre-aprovado",
+    nome: "Fiança — Pré-aprovado",
+    entidades: FIANCA,
+    assunto: "PRÉ-APROVADO - [NOME DO CLIENTE] - {{empresa}}",
+    corpoHtml: [
+      "<p>Olá {{responsavel}}, tudo bem?</p>",
+      "<p>Cliente <b>[NOME DO CLIENTE]</b> <b>PRÉ-APROVADO! ✅🎉</b></p>",
+      "<p>O prazo das cartas aprovadas tem validade até o dia <b>[DD/MM]</b>.</p>",
+      "<p>(PANORAMA DISPONÍVEL EM ANEXO)</p>",
+      "<p><b>✅ Atenção:</b><br>As cláusulas obrigatórias para inclusão no contrato e as condições gerais encontram-se no link abaixo:<br>" +
+        "<a href=\"https://drive.google.com/drive/folders/1E8vR_TdZ0uIeiX6f9iEBQf66DhKUlbP3\">https://drive.google.com/drive/folders/1E8vR_TdZ0uIeiX6f9iEBQf66DhKUlbP3</a></p>",
+      "<p>Atenciosamente,</p>",
+    ].join(""),
+  },
+  {
     id: "cap-proposta-transmitida",
     nome: "Capitalização — Proposta transmitida",
     entidades: CAPITALIZACAO,
