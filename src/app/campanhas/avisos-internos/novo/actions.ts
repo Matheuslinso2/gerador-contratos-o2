@@ -18,6 +18,17 @@ import { gravarRascunhoAviso, limparSurrogates } from "@/lib/avisosInternos/rasc
 // (nome/data/etc.) continuam curtos o bastante pra ir pela URL sem risco.
 
 export async function prepararRevisaoAviso(formData: FormData) {
+  try {
+    return await prepararRevisaoAvisoInterno(formData);
+  } catch (erro) {
+    // redirect() do Next funciona lançando uma exceção especial -- tem que passar.
+    if (erro && typeof erro === "object" && "digest" in erro && String((erro as { digest: unknown }).digest).startsWith("NEXT_REDIRECT")) throw erro;
+    console.error("Falha ao preparar a revisão do aviso interno:", erro);
+    redirect(`/campanhas/avisos-internos/novo?template=${encodeURIComponent(String(formData.get("template") ?? ""))}&erro=${encodeURIComponent("Não consegui preparar o aviso. Tente de novo; se repetir, avise o time de tecnologia.")}`);
+  }
+}
+
+async function prepararRevisaoAvisoInterno(formData: FormData) {
   const supabase = await createClient();
   const {
     data: { user },
