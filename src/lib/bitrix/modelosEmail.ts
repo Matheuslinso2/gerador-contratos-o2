@@ -139,6 +139,22 @@ export const MODELOS_EMAIL: ModeloEmail[] = [
     ].join(""),
   },
   {
+    id: "fianca-solicitacao-documentos",
+    nome: "Fiança — Pendências (solicitação de documentos)",
+    entidades: FIANCA,
+    assunto: "PENDÊNCIAS - SOLICITAÇÃO DE DOCUMENTOS - [NOME DO CLIENTE] - {{empresa}}",
+    corpoHtml: [
+      "<p>Prezados, [bom dia/boa tarde]!<br>Tudo bem?</p>",
+      "<p><b>⏳ SOLICITAÇÃO DE DOCUMENTOS</b></p>",
+      "<p>Após a análise do cliente <b>[NOME DO CLIENTE]</b>, tivemos retorno das seguradoras consultadas. Neste momento, a seguradora <b>[SEGURADORA]</b> solicitou documentos complementares para prosseguir com a análise.</p>",
+      "<p>Para darmos continuidade ao processo, será necessário o envio dos seguintes documentos:</p>",
+      "<ul><li>[documento 1]</li><li>[documento 2]</li><li>[documento 3]</li></ul>",
+      "<p>Assim que recebermos a documentação, encaminharemos à seguradora para continuidade da análise.</p>",
+      "<p><b>OBS:</b> O envio completo da documentação solicitada é fundamental para que a seguradora possa dar continuidade à análise e avaliar a possibilidade de aceitação.</p>",
+      "<p>Atenciosamente,</p>",
+    ].join(""),
+  },
+  {
     id: "cap-proposta-transmitida",
     nome: "Capitalização — Proposta transmitida",
     entidades: CAPITALIZACAO,
