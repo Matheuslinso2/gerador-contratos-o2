@@ -5,6 +5,8 @@ import { IconCar } from "@/components/icons";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "../actions";
+import { pediuAtualizacao, retratoRecente } from "@/lib/retratoPaineis";
+
 import { competenciaAtual, competenciaValida, montarPainelSeguroAuto, type PainelSeguroAuto as PainelSeguroAutoData } from "@/lib/seguroAuto/painel";
 import PainelSeguroAuto from "./PainelSeguroAuto";
 import SeletorCompetencia from "./SeletorCompetencia";
@@ -37,9 +39,10 @@ function rotuloCompetencia(competencia: string): string {
 export default async function PainelSeguroAutoPage({
   searchParams,
 }: {
-  searchParams: Promise<{ competencia?: string }>;
+  searchParams: Promise<{ competencia?: string; atualizar?: string }>;
 }) {
   const parametros = await searchParams;
+  const forcarAtualizacao = pediuAtualizacao(parametros.atualizar);
   const competenciaHoje = competenciaAtual();
   const competencia = competenciaValida(parametros.competencia) ? parametros.competencia : competenciaHoje;
   const ehCompetenciaAtual = competencia === competenciaHoje;
@@ -59,7 +62,19 @@ export default async function PainelSeguroAutoPage({
   // competência ATUAL busca ao vivo e salva um retrato pra virar fallback;
   // competência PASSADA só lê o retrato já congelado (por um cron, dia 1º
   // de cada mês -- ver src/app/api/cron/congelar-paineis/route.ts).
-  if (ehCompetenciaAtual) {
+  // Caminho rápido: retrato salvo de até 10 min (ver lib/retratoPaineis.ts).
+  let usouRetratoRecente = false;
+  if (ehCompetenciaAtual && !forcarAtualizacao) {
+    const { data } = await supabase.from("seguro_auto_snapshots").select("payload, atualizado_em").eq("competencia", competencia).maybeSingle();
+    if (data && retratoRecente(data.atualizado_em)) {
+      dados = data.payload as PainelSeguroAutoData;
+      usouRetratoRecente = true;
+    }
+  }
+
+  if (usouRetratoRecente) {
+    // nada a buscar: já está carregado acima
+  } else if (ehCompetenciaAtual) {
     try {
       dados = await comLimiteDeTempo(montarPainelSeguroAuto(competencia), LIMITE_TEMPO_AO_VIVO_MS);
       const { error: erroUpsert } = await supabase

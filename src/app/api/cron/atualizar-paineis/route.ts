@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { buscarAnaliseGerencialAoVivo } from "@/lib/bitrix/seguroFianca";
+import { buscarPainelRenovacaoAoVivo } from "@/lib/bitrix/renovacaoFianca";
+import { buscarKpisComercialAoVivo } from "@/lib/bitrix/comercial";
 import {
   competenciaAnterior,
   competenciaAtual as competenciaAtualCapitalizacao,
@@ -46,6 +48,20 @@ const PAINEIS = {
     async salvar(competencia: string) {
       const payload = await buscarAnaliseGerencialAoVivo(competencia);
       return { tabela: "seguro_fianca_snapshots", payload, atualizadoEm: new Date().toISOString(), extra: {} };
+    },
+  },
+  "fianca-renovacao": {
+    nome: "Seguro Fiança — Renovação",
+    async salvar(competencia: string) {
+      const payload = await buscarPainelRenovacaoAoVivo(competencia);
+      return { tabela: "seguro_fianca_renovacao_snapshots", payload, atualizadoEm: new Date().toISOString(), extra: {} };
+    },
+  },
+  comercial: {
+    nome: "Comercial",
+    async salvar(competencia: string) {
+      const payload = await buscarKpisComercialAoVivo(competencia);
+      return { tabela: "comercial_kpis_snapshots", payload, atualizadoEm: new Date().toISOString(), extra: {} };
     },
   },
   capitalizacao: {
@@ -102,11 +118,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ erro: `painel inválido, use: ${Object.keys(PAINEIS).join(", ")}` }, { status: 400 });
   }
 
+  // Modo frequente (?frequente=1, a cada 10 min em horário comercial -- ver
+  // vercel.json): só o mês corrente, pra os painéis abrirem na hora com um
+  // retrato de até 10 min (lib/retratoPaineis.ts), e SEM e-mail de alerta se
+  // falhar (uma falha passageira do Bitrix não pode virar enxurrada de
+  // e-mails; a próxima rodada tenta de novo).
+  const frequente = request.nextUrl.searchParams.get("frequente") === "1";
+  const mesAgora = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit" }).format(new Date());
+
   // As mesmas competências que o relatório das 8h vai ler (na segunda, sexta
   // a domingo pode atravessar a virada do mês).
   const periodo = calcularPeriodoRelatorio();
-  const competencias = [...new Set([...periodo.dias.map((d) => d.slice(0, 7)), periodo.competenciaMes])];
-  if (chave === "capitalizacao") {
+  const competencias = frequente ? [mesAgora] : [...new Set([...periodo.dias.map((d) => d.slice(0, 7)), periodo.competenciaMes])];
+  if (chave === "capitalizacao" && !frequente) {
     const hoje = competenciaAtualCapitalizacao();
     const diaHoje = Number(new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", day: "2-digit" }).format(new Date()));
     const anterior = competenciaAnterior(hoje);
@@ -128,7 +152,9 @@ export async function GET(request: NextRequest) {
   }
 
   const ok = resultados.every((r) => r.ok);
-  if (!ok) {
+  if (!ok && frequente) {
+    console.error(`Atualização frequente do painel ${painel.nome} falhou:`, JSON.stringify(resultados));
+  } else if (!ok) {
     await alertarAdmin({
       contexto: `A atualização de madrugada do painel ${painel.nome} falhou -- o relatório das 8h vai sair com a última foto salva (com aviso de "pode faltar algo").`,
       detalhe: JSON.stringify(resultados),

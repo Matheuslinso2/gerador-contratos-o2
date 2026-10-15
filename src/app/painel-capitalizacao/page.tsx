@@ -5,6 +5,8 @@ import { IconChart } from "@/components/icons";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "../actions";
+import { pediuAtualizacao, retratoRecente } from "@/lib/retratoPaineis";
+import AtualizarAgora from "@/components/AtualizarAgora";
 import { competenciaAtual, competenciaValida, montarPainelCapitalizacao, type PainelCapitalizacao as PainelCapitalizacaoData } from "@/lib/capitalizacao/painel";
 import PainelCapitalizacao from "./PainelCapitalizacao";
 import SeletorCompetencia from "./SeletorCompetencia";
@@ -36,9 +38,10 @@ function rotuloCompetencia(competencia: string): string {
 export default async function PainelCapitalizacaoPage({
   searchParams,
 }: {
-  searchParams: Promise<{ competencia?: string }>;
+  searchParams: Promise<{ competencia?: string; atualizar?: string }>;
 }) {
   const parametros = await searchParams;
+  const forcarAtualizacao = pediuAtualizacao(parametros.atualizar);
   const competenciaHoje = competenciaAtual();
   const competencia = competenciaValida(parametros.competencia) ? parametros.competencia : competenciaHoje;
   const ehCompetenciaAtual = competencia === competenciaHoje;
@@ -58,7 +61,19 @@ export default async function PainelCapitalizacaoPage({
   // ATUAL busca ao vivo e salva um retrato pra virar fallback; competência
   // PASSADA só lê o retrato já congelado (por um cron, dia 1º de cada mês --
   // ver src/app/api/cron/congelar-paineis/route.ts), sem bater no Bitrix.
-  if (ehCompetenciaAtual) {
+  // Caminho rápido: retrato salvo de até 10 min (ver lib/retratoPaineis.ts).
+  let usouRetratoRecente = false;
+  if (ehCompetenciaAtual && !forcarAtualizacao) {
+    const { data } = await supabase.from("capitalizacao_snapshots").select("payload, atualizado_em").eq("competencia", competencia).maybeSingle();
+    if (data && retratoRecente(data.atualizado_em)) {
+      dados = data.payload as PainelCapitalizacaoData;
+      usouRetratoRecente = true;
+    }
+  }
+
+  if (usouRetratoRecente) {
+    // nada a buscar: já está carregado acima
+  } else if (ehCompetenciaAtual) {
     try {
       dados = await comLimiteDeTempo(montarPainelCapitalizacao(competencia), LIMITE_TEMPO_AO_VIVO_MS);
       const { error: erroUpsert } = await supabase
@@ -96,6 +111,7 @@ export default async function PainelCapitalizacaoPage({
             <div className={styles.meta}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, justifyContent: "flex-end", marginBottom: 6 }}>
                 <SeletorCompetencia competencia={competencia} />
+                {ehCompetenciaAtual && <AtualizarAgora />}
                 {dados && (
                   <BotaoExportarPainelPdf
                     painelId="painel-capitalizacao-completo"

@@ -13,6 +13,7 @@ import ExportarQuadro, {
   BotaoExportarPainelPdf,
 } from "@/components/ExportarQuadro";
 import PageHeader from "@/components/PageHeader";
+import AtualizarAgora from "@/components/AtualizarAgora";
 import { IconFlame } from "@/components/icons";
 
 function linhasItemAgrupado(dados: ItemAgrupado[]): Record<string, unknown>[] {
@@ -1674,6 +1675,7 @@ export default function PainelRamosElementares({
           </span>
         </div>
         <div className={styles.linksFonte}>
+          <AtualizarAgora estilo={{ border: "1px solid #c9d1d9", color: "inherit", padding: "4px 10px", fontSize: 12 }} />
           {analise.fonte.url ? (
             <a href={analise.fonte.url} target="_blank" rel="noreferrer">
               {tipoFonte === "planilha" ? "Abrir planilha fonte" : "Abrir CRM"}

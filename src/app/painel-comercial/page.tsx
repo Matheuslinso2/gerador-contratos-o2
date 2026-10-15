@@ -7,7 +7,9 @@ import PageHeader from "@/components/PageHeader";
 import { IconChart } from "@/components/icons";
 import Link from "next/link";
 import SeletorCompetencia from "./SeletorCompetencia";
-import AtualizarAgora from "../seguro-fianca/AtualizarAgora";
+import AtualizarAgora from "@/components/AtualizarAgora";
+import { pediuAtualizacao, retratoRecente } from "@/lib/retratoPaineis";
+
 import styles from "./painel-comercial.module.css";
 import {
   buscarKpisComercialAoVivo,
@@ -163,12 +165,13 @@ function PorResponsavelTabela({ dados }: { dados: RegistroResponsavel[] }) {
 export default async function PainelComercialPage({
   searchParams,
 }: {
-  searchParams: Promise<{ competencia?: string }>;
+  searchParams: Promise<{ competencia?: string; atualizar?: string }>;
 }) {
-  const { competencia: competenciaParam } = await searchParams;
+  const { competencia: competenciaParam, atualizar: atualizarParam } = await searchParams;
   const competenciaAtual = mesAtualDefault();
   const competencia = competenciaParam || competenciaAtual;
   const ehCompetenciaAtual = competencia === competenciaAtual;
+  const forcarAtualizacao = pediuAtualizacao(atualizarParam);
 
   const supabase = await createClient();
   const {
@@ -186,15 +189,29 @@ export default async function PainelComercialPage({
   // estado atual, ver crmLeads.ts) -- busca ao vivo sempre, independente do
   // mês selecionado pro bloco Sucesso do Cliente. Falha isolada (não derruba
   // o resto da página se o Bitrix Leads estiver fora do ar).
-  let dadosLeads: DadosLeadsAoVivo | null = null;
-  let erroLeads: string | null = null;
-  try {
-    dadosLeads = await comLimiteDeTempo(buscarLeadsAoVivo(), LIMITE_TEMPO_AO_VIVO_MS);
-  } catch (e) {
-    erroLeads = e instanceof Error ? e.message : "Falha ao buscar Leads do Bitrix.";
+  // Começa já, em paralelo com os KPIs do Sucesso do Cliente (não soma tempo).
+  const leadsPromessa: Promise<{ dados: DadosLeadsAoVivo | null; erro: string | null }> = comLimiteDeTempo(
+    buscarLeadsAoVivo(),
+    LIMITE_TEMPO_AO_VIVO_MS
+  ).then(
+    (dados) => ({ dados, erro: null }),
+    (e) => ({ dados: null, erro: e instanceof Error ? e.message : "Falha ao buscar Leads do Bitrix." })
+  );
+
+  // Caminho rápido: retrato salvo de até 10 min (ver lib/retratoPaineis.ts).
+  let usouRetratoRecente = false;
+  if (ehCompetenciaAtual && !forcarAtualizacao) {
+    const { data } = await supabase.from("comercial_kpis_snapshots").select("payload, atualizado_em").eq("competencia", competencia).maybeSingle();
+    if (data && retratoRecente(data.atualizado_em)) {
+      kpis = data.payload as Kpis;
+      atualizadoEm = data.atualizado_em;
+      usouRetratoRecente = true;
+    }
   }
 
-  if (ehCompetenciaAtual) {
+  if (usouRetratoRecente) {
+    // nada a buscar: já está carregado acima
+  } else if (ehCompetenciaAtual) {
     try {
       kpis = await comLimiteDeTempo(buscarKpisComercialAoVivo(competencia), LIMITE_TEMPO_AO_VIVO_MS);
       atualizadoEm = new Date().toISOString();
@@ -234,6 +251,8 @@ export default async function PainelComercialPage({
       semRegistroNoPeriodo = true;
     }
   }
+
+  const { dados: dadosLeads, erro: erroLeads } = await leadsPromessa;
 
   return (
     <>

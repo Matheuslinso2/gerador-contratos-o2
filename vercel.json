@@ -2,6 +2,30 @@
   "regions": ["gru1"],
   "crons": [
     {
+      "path": "/api/cron/atualizar-paineis?painel=fianca&frequente=1",
+      "schedule": "0-59/10 11-22 * * 1-5"
+    },
+    {
+      "path": "/api/cron/atualizar-paineis?painel=fianca-renovacao&frequente=1",
+      "schedule": "2-59/10 11-22 * * 1-5"
+    },
+    {
+      "path": "/api/cron/atualizar-paineis?painel=comercial&frequente=1",
+      "schedule": "4-59/10 11-22 * * 1-5"
+    },
+    {
+      "path": "/api/cron/atualizar-paineis?painel=capitalizacao&frequente=1",
+      "schedule": "6-59/10 11-22 * * 1-5"
+    },
+    {
+      "path": "/api/cron/atualizar-paineis?painel=seguro-auto&frequente=1",
+      "schedule": "8-59/10 11-22 * * 1-5"
+    },
+    {
+      "path": "/api/cron/atualizar-paineis?painel=ramos-elementares&frequente=1",
+      "schedule": "1-59/10 11-22 * * 1-5"
+    },
+    {
       "path": "/api/cron/coletar-noticias",
       "schedule": "0 9 * * *"
     },

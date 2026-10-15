@@ -25,12 +25,19 @@ export const dynamic = "force-dynamic";
 // timeout de plataforma não passa por catch nenhum). Dá mais fôlego.
 export const maxDuration = 180;
 
+const PASSO_LISTA = 20;
+
 export default async function AuditarContratoPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ultimo?: string; erro?: string }>;
+  searchParams: Promise<{ ultimo?: string; erro?: string; busca?: string; limite?: string }>;
 }) {
-  const { ultimo, erro } = await searchParams;
+  const { ultimo, erro, busca: buscaParam, limite: limiteParam } = await searchParams;
+  // Histórico paginado: a página carregava TODAS as auditorias (mais de 2 MB
+  // de HTML, 2-3 s por abertura em 15/10/2026). Agora mostra as 20 mais
+  // recentes, com "Ver mais" e busca feita no servidor.
+  const limite = Math.min(Math.max(Number(limiteParam) || PASSO_LISTA, PASSO_LISTA), 500);
+  const busca = (buscaParam ?? "").trim().slice(0, 80);
   const supabase = await createClient();
   const {
     data: { user },
@@ -136,11 +143,21 @@ export default async function AuditarContratoPage({
   let consultaAuditorias = supabase
     .from("auditorias_contrato")
     .select(
-      "id, nome_arquivo, status_geral, tipo_garantia_identificada, locador_identificado, locatario_identificado, endereco_identificado, relatorio, created_at, imobiliarias(nome)"
+      "id, nome_arquivo, status_geral, tipo_garantia_identificada, locador_identificado, locatario_identificado, endereco_identificado, relatorio, created_at, imobiliarias(nome)",
+      { count: "exact" }
     )
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .range(0, limite - 1);
   if (!vePermitidosDeTodos) consultaAuditorias = consultaAuditorias.eq("imobiliaria_id", imobiliaria.id);
-  const { data: auditorias } = await consultaAuditorias;
+  if (busca) {
+    // Tira o que quebra a sintaxe do filtro (vírgula, parênteses, % e _).
+    const termo = busca.replace(/[,()%_*\\]/g, " ").trim();
+    if (termo) {
+      const campos = ["nome_arquivo", "status_geral", "tipo_garantia_identificada", "locador_identificado", "locatario_identificado", "endereco_identificado"];
+      consultaAuditorias = consultaAuditorias.or(campos.map((c) => `${c}.ilike.%${termo}%`).join(","));
+    }
+  }
+  const { data: auditorias, count: totalAuditorias } = await consultaAuditorias;
 
   return (
     <>
@@ -170,7 +187,15 @@ export default async function AuditarContratoPage({
 
         <section className="space-y-3">
           <h2 className="text-lg font-semibold text-o2-navy">Auditorias realizadas</h2>
-          <ListaAuditorias auditorias={auditorias ?? []} destaque={ultimo} mostrarImobiliaria={vePermitidosDeTodos} />
+          <ListaAuditorias
+            auditorias={auditorias ?? []}
+            destaque={ultimo}
+            mostrarImobiliaria={vePermitidosDeTodos}
+            total={totalAuditorias ?? (auditorias ?? []).length}
+            limite={limite}
+            passo={PASSO_LISTA}
+            busca={busca}
+          />
         </section>
       </main>
     </>

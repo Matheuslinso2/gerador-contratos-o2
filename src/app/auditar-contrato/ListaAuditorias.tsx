@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import Link from "next/link";
 import RelatorioView from "./RelatorioView";
 import type { RelatorioAuditoria } from "@/lib/auditorContrato";
 
@@ -28,32 +28,43 @@ export default function ListaAuditorias({
   auditorias,
   destaque,
   mostrarImobiliaria = false,
+  total,
+  limite,
+  passo,
+  busca,
 }: {
   auditorias: Auditoria[];
   destaque?: string;
   mostrarImobiliaria?: boolean;
+  total: number;
+  limite: number;
+  passo: number;
+  busca: string;
 }) {
-  const [busca, setBusca] = useState("");
-
-  const filtradas = useMemo(() => {
-    const termo = busca.trim().toLowerCase();
-    if (!termo) return auditorias;
-    return auditorias.filter((a) =>
-      `${a.nome_arquivo ?? ""} ${a.status_geral} ${a.tipo_garantia_identificada ?? ""}`
-        .toLowerCase()
-        .includes(termo)
-    );
-  }, [auditorias, busca]);
+  // A busca e a paginação são feitas no servidor (página.tsx): a lista só traz
+  // as mais recentes de cada vez, em vez do histórico inteiro.
+  const filtradas = auditorias;
+  const linkVerMais = `?${new URLSearchParams({ ...(busca ? { busca } : {}), limite: String(limite + passo) }).toString()}`;
 
   return (
     <div className="space-y-3">
-      {auditorias.length > 3 && (
-        <input
-          value={busca}
-          onChange={(e) => setBusca(e.target.value)}
-          placeholder="Buscar por nome do arquivo, status ou garantia..."
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-o2-coral focus:outline-none"
-        />
+      {(total > 3 || busca) && (
+        <form method="get" className="flex gap-2">
+          <input
+            name="busca"
+            defaultValue={busca}
+            placeholder="Buscar por arquivo, locador, locatário, endereço, status ou garantia..."
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-o2-coral focus:outline-none"
+          />
+          <button type="submit" className="rounded-lg bg-o2-navy px-4 py-2 text-sm font-medium text-white transition hover:opacity-90">
+            Buscar
+          </button>
+          {busca && (
+            <Link href="?" className="self-center text-xs text-gray-500 underline">
+              limpar
+            </Link>
+          )}
+        </form>
       )}
 
       {filtradas.map((a) => (
@@ -79,10 +90,18 @@ export default function ListaAuditorias({
         </details>
       ))}
 
-      {!filtradas.length && auditorias.length > 0 && (
-        <p className="text-sm text-gray-500">Nenhuma auditoria encontrada para essa busca.</p>
+      {total > filtradas.length && (
+        <div className="flex items-center justify-between gap-3 pt-1 text-sm text-gray-600">
+          <span>
+            Mostrando {filtradas.length} de {total}
+          </span>
+          <Link href={linkVerMais} className="rounded-full border border-o2-navy px-4 py-1.5 font-medium text-o2-navy transition hover:bg-gray-50">
+            Ver mais {passo}
+          </Link>
+        </div>
       )}
-      {!auditorias.length && <p className="text-sm text-gray-500">Nenhuma auditoria realizada ainda.</p>}
+      {!filtradas.length && busca && <p className="text-sm text-gray-500">Nenhuma auditoria encontrada para essa busca.</p>}
+      {!filtradas.length && !busca && <p className="text-sm text-gray-500">Nenhuma auditoria realizada ainda.</p>}
     </div>
   );
 }

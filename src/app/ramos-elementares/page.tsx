@@ -3,6 +3,8 @@ import AppHeader from "@/components/AppHeader";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "../actions";
+import { pediuAtualizacao, retratoRecente } from "@/lib/retratoPaineis";
+
 import { lerFonteRamosElementares } from "@/lib/ramos-elementares/fonteGoogle";
 import { lerFonteRamosElementaresHibrida } from "@/lib/ramos-elementares/fonteHibrida";
 import {
@@ -53,9 +55,10 @@ function comLimiteDeTempo<T>(promessa: Promise<T>, ms: number): Promise<T> {
 export default async function RamosElementaresPage({
   searchParams,
 }: {
-  searchParams: Promise<{ competencia?: string }>;
+  searchParams: Promise<{ competencia?: string; atualizar?: string }>;
 }) {
   const parametros = await searchParams;
+  const forcarAtualizacao = pediuAtualizacao(parametros.atualizar);
   const competencia = competenciaValida(parametros.competencia) ? parametros.competencia : competenciaAtual();
   const supabase = await createClient();
   const {
@@ -78,6 +81,20 @@ export default async function RamosElementaresPage({
   let origem: "planilha" | "hibrida" | "snapshot" | "indisponivel" = usarHibrido ? "hibrida" : "planilha";
   let erroFonte: string | null = null;
 
+  // Caminho rápido: retrato salvo de até 10 min (ver lib/retratoPaineis.ts).
+  let retratoRecenteUsado: AnaliseRamosElementares | null = null;
+  if (!forcarAtualizacao) {
+    const { data: recente } = await supabase
+      .from("ramos_elementares_snapshots")
+      .select("payload, atualizado_em")
+      .eq("competencia", competencia)
+      .maybeSingle();
+    if (recente?.payload && retratoRecente(recente.atualizado_em)) retratoRecenteUsado = recente.payload as AnaliseRamosElementares;
+  }
+
+  if (retratoRecenteUsado) {
+    analise = retratoRecenteUsado;
+  } else {
   try {
     const fonte = await comLimiteDeTempo(
       usarHibrido ? lerFonteRamosElementaresHibrida(competencia) : lerFonteRamosElementares(competencia),
@@ -120,6 +137,7 @@ export default async function RamosElementaresPage({
         : { ...analise.fonte, tipo: "google_sheets" };
       origem = "indisponivel";
     }
+  }
   }
 
   return (
