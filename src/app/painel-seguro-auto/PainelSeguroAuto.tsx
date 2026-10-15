@@ -160,8 +160,9 @@ export default function PainelSeguroAuto({
           margin: "0 0 8px",
         }}
       >
-        Convertidas/Perdidas contam pelo mês em que a ficha foi criada, não pelo
-        mês em que o Bitrix registrou a conclusão.
+        Fichas no mês e documentos contam pelo mês em que a ficha foi criada.
+        Convertidas, perdidas, prêmio e comissão contam pelo mês em que o card
+        chegou em Finalizado/Perda no Bitrix.
       </p>
       <div id="quadro-auto-novidades" className={styles.kpis}>
         <Kpi
@@ -172,13 +173,13 @@ export default function PainelSeguroAuto({
         <Kpi
           label="Convertidas"
           value={String(kpis.convertidos)}
-          sub="cotação fechada com sucesso"
+          sub="chegaram em Finalizado no mês"
           tone="positive"
         />
         <Kpi
           label="Perdidas"
           value={String(kpis.perdidos)}
-          sub="não fechou"
+          sub="chegaram em Perda no mês"
           tone="negative"
         />
         <Kpi
@@ -267,9 +268,9 @@ export default function PainelSeguroAuto({
           margin: "0 0 8px",
         }}
       >
-        Único quadro que herda de meses anteriores — assim que a ficha conclui
-        (convertida/perdida), ela deixa de ser herdada e passa a contar no mês
-        em que nasceu, acima.
+        Fichas ainda em aberto, de qualquer mês — assim que a ficha conclui
+        (Finalizado/Perda), ela sai daqui e passa a contar no mês do fechamento,
+        acima.
       </p>
       <div id="quadro-auto-andamento" className={styles.kpis}>
         <Kpi
@@ -348,7 +349,7 @@ export default function PainelSeguroAuto({
                 className={styles.swatch}
                 style={{ background: "var(--positive)" }}
               />{" "}
-              Sucesso
+              Finalizado
             </div>
             <div className={styles.legendItem}>
               <span
@@ -477,8 +478,8 @@ export default function PainelSeguroAuto({
         <div className={styles.sectionHead}>
           <h2>Convertidas — prêmio e comissão</h2>
           <div className={styles.note}>
-            preenchido manualmente pelo time depois do fechamento, só nas fichas
-            da competência selecionada
+            preenchido manualmente pelo time depois do fechamento — cards que
+            chegaram em Finalizado na competência selecionada
           </div>
           <ExportarQuadro
             quadroId="quadro-auto-convertidas"

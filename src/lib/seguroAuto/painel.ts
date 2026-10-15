@@ -12,12 +12,9 @@ import { diasUteisEquivalentesEntre } from "@/lib/bitrix/horarioComercial";
 import { contarPorDia, type ContagemDia } from "@/lib/contagemPorDia";
 
 // Modelagem do painel Seguro Auto — fonte: SPA "Seguro Automóvel" no
-// Bitrix24, entityTypeId 1050, um único funil (categoria 30). Etapas
-// verificadas ao vivo via crm.status.list em 18/08/2026 (mesmo dia em que o
-// Matheus criou a SPA e o formulário público /seguro-auto passou a
-// alimentá-la). Diferente de Fiança/Capitalização, essa SPA não tem campo
-// de valor/prêmio -- o painel foca em volume, funil e qualidade de
-// preenchimento (documentos anexados), não em receita.
+// Bitrix24, entityTypeId 1050, um único funil (categoria 30). A SPA foi
+// criada em 18/08/2026 junto com o formulário público /seguro-auto. Prêmio
+// e comissão são preenchidos à mão pelo time depois do fechamento.
 
 export const ENTITY_TYPE_ID = 1050;
 export const CATEGORIA_PADRAO = 30;
@@ -25,11 +22,18 @@ export const CATEGORIA_PADRAO = 30;
 type Semantica = "P" | "S" | "F";
 type Etapa = { statusId: string; nome: string; semantica: Semantica };
 
+// Etapas conferidas ao vivo via crm.status.list em 15/10/2026 -- o time
+// renomeou as 3 primeiras e criou as 3 de "Ag." depois da versão de
+// 18/08/2026. Se aparecer etapa nova no Bitrix, ela entra no funil com o
+// próprio ID (ver montarPainelSeguroAuto) até ser cadastrada aqui.
 export const ETAPAS: Etapa[] = [
-  { statusId: "DT1050_30:NEW", nome: "Cotação", semantica: "P" },
-  { statusId: "DT1050_30:PREPARATION", nome: "Negociação", semantica: "P" },
-  { statusId: "DT1050_30:CLIENT", nome: "Fechamento", semantica: "P" },
-  { statusId: "DT1050_30:SUCCESS", nome: "Sucesso", semantica: "S" },
+  { statusId: "DT1050_30:NEW", nome: "Iniciando", semantica: "P" },
+  { statusId: "DT1050_30:PREPARATION", nome: "Cotação", semantica: "P" },
+  { statusId: "DT1050_30:CLIENT", nome: "Transmitida", semantica: "P" },
+  { statusId: "DT1050_30:AG_VISTORIA", nome: "Ag. vistoria", semantica: "P" },
+  { statusId: "DT1050_30:AG_EMISSAO", nome: "Ag. emissão", semantica: "P" },
+  { statusId: "DT1050_30:AG_CADASTRO", nome: "Ag. cadastro", semantica: "P" },
+  { statusId: "DT1050_30:SUCCESS", nome: "Finalizado", semantica: "S" },
   { statusId: "DT1050_30:FAIL", nome: "Perda", semantica: "F" },
 ];
 const etapaPorStatusId = new Map(ETAPAS.map((e) => [e.statusId, e]));
@@ -73,8 +77,19 @@ function dataValida(valor: unknown): Date | null {
   return Number.isNaN(data.getTime()) ? null : data;
 }
 
+// Competência no fuso de Brasília -- um card fechado em 31/08 às 22h é de
+// agosto, não de setembro (o que aconteceria contando em UTC).
+const FORMATO_COMPETENCIA = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/Sao_Paulo",
+  year: "numeric",
+  month: "2-digit",
+});
+
 function competenciaData(data: Date): string {
-  return `${data.getUTCFullYear()}-${String(data.getUTCMonth() + 1).padStart(2, "0")}`;
+  const partes = FORMATO_COMPETENCIA.formatToParts(data);
+  const ano = partes.find((p) => p.type === "year")?.value;
+  const mes = partes.find((p) => p.type === "month")?.value;
+  return `${ano}-${mes}`;
 }
 
 function enumLabel(defs: Record<string, BitrixDefinicaoCampo>, campo: string, valor: unknown): string {
@@ -91,6 +106,9 @@ export type CardSeguroAuto = {
   semantica: Semantica;
   criadoEm: Date;
   movidoEm: Date | null;
+  // Quando o card entrou na etapa final (Finalizado/Perda) -- é o mês que
+  // conta pra Convertidas/Perdidas/prêmio/comissão. Null enquanto em aberto.
+  concluidoEm: Date | null;
   diasParadoEtapaAtual: number | null;
   nome: string;
   email: string;
@@ -124,17 +142,17 @@ export type PainelSeguroAuto = {
   competencia: string;
   kpis: {
     total: number; // "novidades" -- só cards criados nesta competência
-    convertidos: number; // "novidades" -- só cards criados nesta competência
-    perdidos: number; // "novidades" -- só cards criados nesta competência
+    convertidos: number; // chegaram em Finalizado nesta competência (qualquer mês de criação)
+    perdidos: number; // chegaram em Perda nesta competência (qualquer mês de criação)
     emAndamento: ContagemPorOrigem; // novos + herdados, ainda "P" agora -- ÚNICA coisa que herda de mês anterior (pedido do Matheus: uma vez concluído, não herda mais)
     taxaConversao: number | null;
     cardsComAlerta: number;
     percentualComCnh: number; // "novidades"
     percentualComCrlv: number; // "novidades"
     comApoliceAnterior: number; // "novidades"
-    premioEfetivado: number; // "novidades"
-    comissaoGerada: number; // "novidades"
-    percentualComissaoMedio: number | null; // "novidades"
+    premioEfetivado: number; // das convertidas da competência (mês de fechamento)
+    comissaoGerada: number; // das convertidas da competência (mês de fechamento)
+    percentualComissaoMedio: number | null; // das convertidas da competência (mês de fechamento)
   };
   funil: FunilEtapa[];
   distribuicaoUtilizacao: { rotulo: string; quantidade: number }[];
@@ -175,14 +193,18 @@ function mapearCard(
   const etapa = etapaPorStatusId.get(texto(item.stageId));
   const movidoEm = dataValida(item.movedTime);
   const diasParadoEtapaAtual = movidoEm ? diasUteisEquivalentesEntre(movidoEm, agora) : null;
+  const semantica = etapa?.semantica ?? "P";
   return {
     id: Number(item.id),
     titulo: texto(item.title),
     etapaId: texto(item.stageId),
     etapaNome: etapa?.nome ?? texto(item.stageId),
-    semantica: etapa?.semantica ?? "P",
+    semantica,
     criadoEm,
     movidoEm,
+    // movedTime só muda quando o card troca de etapa, então num card
+    // concluído ele é exatamente a hora em que chegou em Finalizado/Perda.
+    concluidoEm: semantica === "P" ? null : (movidoEm ?? criadoEm),
     diasParadoEtapaAtual,
     nome: texto(item[CAMPOS.nome]) || texto(item.title),
     email: texto(item[CAMPOS.email]),
@@ -244,14 +266,7 @@ function tempoMedioPorEtapa(itens: BitrixItemRaw[], historico: BitrixStageHistor
 }
 
 export function competenciaAtual(): string {
-  const partes = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Sao_Paulo",
-    year: "numeric",
-    month: "2-digit",
-  }).formatToParts(new Date());
-  const ano = partes.find((p) => p.type === "year")?.value;
-  const mes = partes.find((p) => p.type === "month")?.value;
-  return `${ano}-${mes}`;
+  return competenciaData(new Date());
 }
 
 export function competenciaValida(valor: string | undefined): valor is string {
@@ -278,28 +293,28 @@ export async function montarPainelSeguroAuto(competencia: string, agora = new Da
   const cards = itens.map((item) => mapearCard(item, defs, agora)).filter((c): c is CardSeguroAuto => c !== null);
   const novidades = cards.filter((c) => competenciaData(c.criadoEm) === competencia);
 
-  // Redefinido com o Matheus em 01/09/2026 (mesma mudança em
-  // capitalizacao/painel.ts): a ÚNICA coisa que herda de mês anterior é
-  // "Em Andamento". Uma vez que o card CONCLUI (Sucesso/Perda), ele deixa
-  // de ser herdado -- Convertidos/Perdidos voltam a ser só sobre quem foi
-  // CRIADO neste mês, não sobre quando o Bitrix registrou a etapa final.
   const emAndamentoTodos = cards.filter((c) => c.semantica === "P");
   const emAndamento = contagemPorOrigem(emAndamentoTodos, competencia);
 
-  const convertidosNovidades = novidades.filter((c) => c.etapaId === "DT1050_30:SUCCESS");
-  const perdidosNovidades = novidades.filter((c) => c.semantica === "F");
-  const convertidos = convertidosNovidades.length;
-  const perdidos = perdidosNovidades.length;
+  // Redefinido com o Matheus em 15/10/2026: Convertidas/Perdidas (e o
+  // prêmio/comissão delas) contam no mês em que o card CHEGOU em
+  // Finalizado/Perda, não no mês em que foi criado. Antes contava pela
+  // criação, e como o mês é congelado no dia 1º, um card criado em agosto
+  // e fechado em setembro não entrava em mês nenhum -- ~R$ 2,1 mil de
+  // comissão de ago-out/2026 nunca apareceram no painel por causa disso.
+  const concluidosNaCompetencia = cards.filter((c) => c.concluidoEm && competenciaData(c.concluidoEm) === competencia);
+  const convertidosMes = concluidosNaCompetencia.filter((c) => c.etapaId === "DT1050_30:SUCCESS");
+  const perdidosMes = concluidosNaCompetencia.filter((c) => c.semantica === "F");
+  const convertidos = convertidosMes.length;
+  const perdidos = perdidosMes.length;
   const taxaConversao = convertidos + perdidos > 0 ? convertidos / (convertidos + perdidos) : null;
   const comCnh = novidades.filter((c) => c.temCnh).length;
   const comCrlv = novidades.filter((c) => c.temCrlv).length;
   const comApolice = novidades.filter((c) => c.temApolice).length;
 
-  // Prêmio/comissão só existem depois do fechamento -- soma sobre quem
-  // converteu e foi criado ESTE mês.
-  const premioEfetivado = convertidosNovidades.reduce((soma, c) => soma + c.premioEfetivado, 0);
-  const comissaoGerada = convertidosNovidades.reduce((soma, c) => soma + c.comissaoGerada, 0);
-  const comPercentualComissao = convertidosNovidades.filter((c) => c.percentualComissao > 0);
+  const premioEfetivado = convertidosMes.reduce((soma, c) => soma + c.premioEfetivado, 0);
+  const comissaoGerada = convertidosMes.reduce((soma, c) => soma + c.comissaoGerada, 0);
+  const comPercentualComissao = convertidosMes.filter((c) => c.percentualComissao > 0);
   const percentualComissaoMedio =
     comPercentualComissao.length > 0
       ? comPercentualComissao.reduce((soma, c) => soma + c.percentualComissao, 0) / comPercentualComissao.length
@@ -316,12 +331,20 @@ export async function montarPainelSeguroAuto(competencia: string, agora = new Da
     // Etapa "P" (em andamento) reflete o estado ATUAL, de qualquer origem --
     // mesmo critério do bloco "Em andamento". Etapas terminais (S/F) nunca
     // saem de lá uma vez concluídas, então contar todo o histórico inflaria
-    // o funil pra sempre com meses antigos -- contam só as novidades desta
-    // competência, mesmo critério de Convertidos/Perdidos.
-    if (card.semantica !== "P" && competenciaData(card.criadoEm) !== competencia) continue;
+    // o funil pra sempre com meses antigos -- contam só as concluídas nesta
+    // competência, mesmo critério de Convertidas/Perdidas.
+    if (card.semantica !== "P" && !(card.concluidoEm && competenciaData(card.concluidoEm) === competencia)) continue;
     contagemAtualPorEtapa.set(card.etapaId, (contagemAtualPorEtapa.get(card.etapaId) || 0) + 1);
   }
-  const funil: FunilEtapa[] = ETAPAS.map((etapa) => ({
+  // Etapa que existe no Bitrix mas ainda não está em ETAPAS: entra antes das
+  // etapas finais com o próprio ID, pra nenhum card sumir do funil.
+  const etapasConhecidas = new Set(ETAPAS.map((e) => e.statusId));
+  const etapasDesconhecidas: Etapa[] = [...contagemAtualPorEtapa.keys()]
+    .filter((id) => !etapasConhecidas.has(id))
+    .map((id) => ({ statusId: id, nome: id, semantica: "P" }));
+  const primeiraConcluida = ETAPAS.findIndex((e) => e.semantica !== "P");
+  const etapasFunil = [...ETAPAS.slice(0, primeiraConcluida), ...etapasDesconhecidas, ...ETAPAS.slice(primeiraConcluida)];
+  const funil: FunilEtapa[] = etapasFunil.map((etapa) => ({
     statusId: etapa.statusId,
     nome: etapa.nome,
     semantica: etapa.semantica,
@@ -343,7 +366,7 @@ export async function montarPainelSeguroAuto(competencia: string, agora = new Da
     semGaragem: novidades.filter((c) => !c.temGaragem).length,
   };
 
-  const convertidasFinanceiro = [...convertidosNovidades]
+  const convertidasFinanceiro = [...convertidosMes]
     .sort((a, b) => b.premioEfetivado - a.premioEfetivado)
     .map((c) => ({
       id: c.id,
