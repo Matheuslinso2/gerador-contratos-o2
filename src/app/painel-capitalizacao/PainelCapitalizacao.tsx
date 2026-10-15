@@ -128,9 +128,9 @@ export default function PainelCapitalizacao({ dados }: { dados: PainelCapitaliza
         />
       </div>
       <p style={{ fontSize: 11.5, color: "var(--ink-muted, #5b6b7c)", margin: "0 0 8px" }}>
-        Emitidos/Perdidos contam pelo mês em que o card foi criado, não pelo mês em que o Bitrix registrou a conclusão
-        (evita atribuir ao mês errado um card que só teve a etapa atualizada depois, ex: esperando o Controle
-        confirmar no Corp).
+        Emitidos (e valor/comissão) contam pelo mês do pagamento (Pagamento concluído ou Boleto pago), mesmo que o
+        card tenha sido criado antes ou só chegue em Emitido depois, quando o Controle confirmar no Corp. Perdidos
+        contam pelo mês em que o card foi para Pagamento não realizado/Desistência. Os demais, pelo mês de criação.
         {ant && mesEmAndamento && ` Variação vs ${mesAnterior} é contra o mês anterior completo; o mês atual ainda está em andamento.`}
       </p>
       <div id="quadro-cap-novidades" className={styles.kpis}>
@@ -169,7 +169,7 @@ export default function PainelCapitalizacao({ dados }: { dados: PainelCapitaliza
       </div>
       <p style={{ fontSize: 11.5, color: "var(--ink-muted, #5b6b7c)", margin: "0 0 8px" }}>
         Único quadro que herda de meses anteriores — assim que o card conclui (emitido/perdido), ele deixa de ser
-        herdado e passa a contar no mês em que nasceu, acima.
+        herdado e passa a contar acima, no mês do pagamento (ou da perda).
       </p>
       <div id="quadro-cap-andamento" className={styles.kpis}>
         <Kpi label="Novos" value={String(kpis.emAndamento.mesAtual)} sub="criados neste mês, ainda em aberto" tone="info" />
@@ -280,7 +280,7 @@ export default function PainelCapitalizacao({ dados }: { dados: PainelCapitaliza
       <section id="quadro-cap-titulos" className={styles.section}>
         <div className={styles.sectionHead}>
           <h2>Títulos solicitados</h2>
-          <div className={styles.note}>novidades do mês + em andamento herdados — mesma lógica dos KPIs acima</div>
+          <div className={styles.note}>criados no mês + concluídos no mês + em andamento herdados — mesma lógica dos KPIs acima</div>
           <ExportarQuadro
             quadroId="quadro-cap-titulos"
             corFundo="#f7f8fa"

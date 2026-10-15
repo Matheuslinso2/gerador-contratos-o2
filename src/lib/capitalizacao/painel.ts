@@ -65,9 +65,24 @@ function dataValida(valor: unknown): Date | null {
   return Number.isNaN(data.getTime()) ? null : data;
 }
 
+// Competência no fuso de Brasília -- um título pago em 31/08 às 22h é de
+// agosto, não de setembro (o que aconteceria contando em UTC).
+const FORMATO_COMPETENCIA = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/Sao_Paulo",
+  year: "numeric",
+  month: "2-digit",
+});
+
 function competenciaData(data: Date): string {
-  return `${data.getUTCFullYear()}-${String(data.getUTCMonth() + 1).padStart(2, "0")}`;
+  const partes = FORMATO_COMPETENCIA.formatToParts(data);
+  const ano = partes.find((p) => p.type === "year")?.value;
+  const mes = partes.find((p) => p.type === "month")?.value;
+  return `${ano}-${mes}`;
 }
+
+// Etapas de pagamento (cartão ou boleto) -- a data em que o card entrou numa
+// delas é a que decide o mês de um título Emitido.
+const ETAPAS_PAGAMENTO = new Set(["DT1048_28:CLIENT", "DT1048_28:BOLETO_PAGO"]);
 
 export type CardCapitalizacao = {
   id: number;
@@ -77,6 +92,10 @@ export type CardCapitalizacao = {
   semantica: Semantica;
   criadoEm: Date;
   movidoEm: Date | null;
+  // Data que decide o mês de Emitidos/Perdidos: Emitido = quando o
+  // pagamento entrou (Pagamento concluído/Boleto pago); Perdido = quando
+  // chegou em Pagamento não realizado/Desistência. Null enquanto em aberto.
+  concluidoEm: Date | null;
   valorTitulo: number;
   comissao: number;
   diasParadoEtapaAtual: number | null;
@@ -96,9 +115,10 @@ export type FunilEtapa = {
   tempoMedioDiasFechado: number | null;
 };
 
-// Indicadores de "novidades" (só cards criados na competência) -- os mesmos
-// 10 do quadro "Novidades do mês", reaproveitados pro comparativo com o mês
-// anterior.
+// Os 10 indicadores do quadro "Novidades do mês", reaproveitados pro
+// comparativo com o mês anterior. Emitidos/perdidos/taxa/valor emitido/
+// comissão efetivada contam pelo mês do pagamento (ver concluidoEm); os
+// demais pelo mês de criação do card.
 export type KpisNovidades = {
   total: number;
   emitidos: number;
@@ -119,12 +139,12 @@ export type PainelCapitalizacao = {
   kpisAnterior?: KpisNovidades & { competencia: string };
   kpis: {
     total: number; // "novidades" -- só cards criados nesta competência
-    emitidos: number; // "novidades" -- só cards criados nesta competência
-    perdidos: number; // "novidades" -- só cards criados nesta competência
+    emitidos: number; // pagos nesta competência e já Emitidos (qualquer mês de criação)
+    perdidos: number; // chegaram em Pag. não realizado/Desistência nesta competência
     emAndamento: ContagemPorOrigem; // novos + herdados, ainda "P" agora -- ÚNICA coisa que herda de mês anterior (pedido do Matheus: uma vez concluído, não herda mais)
     taxaConversao: number | null;
-    valorTotalEmitido: number; // "novidades"
-    comissaoEfetivada: number; // "novidades"
+    valorTotalEmitido: number; // dos emitidos da competência (mês do pagamento)
+    comissaoEfetivada: number; // dos emitidos da competência (mês do pagamento)
     comissaoPotencial: number; // "novidades"
     cardsComAlerta: number;
     premioPotencial: number; // "novidades"
@@ -148,20 +168,42 @@ export type PainelCapitalizacao = {
   atualizadoEm: string;
 };
 
-function mapearCard(item: BitrixItemRaw, agora: Date): CardCapitalizacao | null {
+// Última entrada de cada card numa etapa de pagamento (um card que volta de
+// "Pagamento não realizado" e paga depois fica com o pagamento novo).
+function pagamentoPorCard(historico: BitrixStageHistoryEvent[]): Map<number, Date> {
+  const pagoEm = new Map<number, Date>();
+  for (const evento of historico) {
+    if (!ETAPAS_PAGAMENTO.has(texto(evento.STAGE_ID))) continue;
+    const quando = dataValida(evento.CREATED_TIME);
+    const id = Number(evento.OWNER_ID);
+    const anterior = pagoEm.get(id);
+    if (quando && (!anterior || quando > anterior)) pagoEm.set(id, quando);
+  }
+  return pagoEm;
+}
+
+function mapearCard(item: BitrixItemRaw, agora: Date, pagoEm: Map<number, Date>): CardCapitalizacao | null {
   const criadoEm = dataValida(item.createdTime);
   if (!criadoEm) return null;
   const etapa = etapaPorStatusId.get(texto(item.stageId));
+  const semantica = etapa?.semantica ?? "P";
   const movidoEm = dataValida(item.movedTime);
   const diasParadoEtapaAtual = movidoEm ? diasUteisEquivalentesEntre(movidoEm, agora) : null;
+  // movedTime só muda quando o card troca de etapa, então num card concluído
+  // é a hora em que chegou na etapa final -- vale pra Perdidos e pra um
+  // Emitido que pulou a etapa de pagamento.
+  const finalizadoEm = movidoEm ?? criadoEm;
+  const concluidoEm =
+    semantica === "P" ? null : semantica === "S" ? (pagoEm.get(Number(item.id)) ?? finalizadoEm) : finalizadoEm;
   return {
     id: Number(item.id),
     titulo: texto(item.title),
     etapaId: texto(item.stageId),
     etapaNome: etapa?.nome ?? texto(item.stageId),
-    semantica: etapa?.semantica ?? "P",
+    semantica,
     criadoEm,
     movidoEm,
+    concluidoEm,
     valorTitulo: dinheiro(item[CAMPOS.valorTitulo]),
     comissao: dinheiro(item[CAMPOS.comissao]),
     diasParadoEtapaAtual,
@@ -213,14 +255,7 @@ function tempoMedioPorEtapa(itens: BitrixItemRaw[], historico: BitrixStageHistor
 }
 
 export function competenciaAtual(): string {
-  const partes = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Sao_Paulo",
-    year: "numeric",
-    month: "2-digit",
-  }).formatToParts(new Date());
-  const ano = partes.find((p) => p.type === "year")?.value;
-  const mes = partes.find((p) => p.type === "month")?.value;
-  return `${ano}-${mes}`;
+  return competenciaData(new Date());
 }
 
 export function competenciaValida(valor: string | undefined): valor is string {
@@ -233,10 +268,16 @@ export function competenciaAnterior(competencia: string): string {
   return `${data.getUTCFullYear()}-${String(data.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-function kpisDeNovidades(novidades: CardCapitalizacao[]): KpisNovidades {
-  const emitidosLista = novidades.filter((c) => c.etapaId === "DT1048_28:SUCCESS");
+function concluidosNaCompetencia(cards: CardCapitalizacao[], competencia: string): CardCapitalizacao[] {
+  return cards.filter((c) => c.concluidoEm && competenciaData(c.concluidoEm) === competencia);
+}
+
+function kpisDoMes(cards: CardCapitalizacao[], competencia: string): KpisNovidades {
+  const novidades = cards.filter((c) => competenciaData(c.criadoEm) === competencia);
+  const concluidos = concluidosNaCompetencia(cards, competencia);
+  const emitidosLista = concluidos.filter((c) => c.etapaId === "DT1048_28:SUCCESS");
   const emitidos = emitidosLista.length;
-  const perdidos = novidades.filter((c) => c.semantica === "F").length;
+  const perdidos = concluidos.filter((c) => c.semantica === "F").length;
   const premioPotencial = novidades.reduce((soma, c) => soma + c.valorTitulo, 0);
   return {
     total: novidades.length,
@@ -262,27 +303,41 @@ function contagemPorOrigem(itens: CardCapitalizacao[], competencia: string): Con
   return { mesAtual, herdado, total: mesAtual + herdado };
 }
 
-export async function montarPainelCapitalizacao(competencia: string, agora = new Date()): Promise<PainelCapitalizacao> {
+// retratoCongelado: retrato já salvo de uma competência que JÁ FECHOU. Com
+// ele, só os números de fechamento (emitidos, perdidos, valores, etapas
+// finais do funil, títulos concluídos) são recalculados; "em andamento",
+// alertas e etapas abertas do funil ficam como foram congelados (o estado
+// de hoje não diz nada sobre o fim daquele mês). Serve pra completar o mês
+// anterior com títulos pagos nele que só chegaram em Emitido depois.
+export async function montarPainelCapitalizacao(
+  competencia: string,
+  agora = new Date(),
+  retratoCongelado?: PainelCapitalizacao
+): Promise<PainelCapitalizacao> {
   const [itens, historico] = await Promise.all([
     listarItensSpa(ENTITY_TYPE_ID),
     listarHistoricoEtapas(ENTITY_TYPE_ID),
   ]);
 
-  const cards = itens.map((item) => mapearCard(item, agora)).filter((c): c is CardCapitalizacao => c !== null);
+  const pagoEm = pagamentoPorCard(historico);
+  const cards = itens.map((item) => mapearCard(item, agora, pagoEm)).filter((c): c is CardCapitalizacao => c !== null);
   const novidades = cards.filter((c) => competenciaData(c.criadoEm) === competencia);
 
-  // Redefinido com o Matheus em 01/09/2026: a ÚNICA coisa que herda de mês
-  // anterior é "Em Andamento" (card ainda aberto, de qualquer origem) --
-  // uma vez que o card CONCLUI (Emitido/Pagamento não realizado/
-  // Desistência), ele deixa de ser herdado e Emitidos/Perdidos voltam a
-  // ser só sobre quem foi CRIADO neste mês, não sobre quando o Bitrix
-  // registrou a conclusão. Motivo: o card só muda de etapa quando o
-  // Controle confirma o registro no Corp, o que pode acontecer dias depois
-  // do título ter sido emitido de fato -- usar a data de mudança de etapa
-  // pra decidir o mês fazia um card nascido em agosto (emitido de fato em
-  // agosto) contar como setembro só por causa do atraso do Controle.
-  const emAndamentoTodos = cards.filter((c) => c.semantica === "P");
-  const emAndamento = contagemPorOrigem(emAndamentoTodos, competencia);
+  // Redefinido com o Matheus em 15/10/2026: Emitidos (e o valor/comissão
+  // deles) contam no mês em que o PAGAMENTO entrou (Pagamento concluído/
+  // Boleto pago); Perdidos, no mês em que o card chegou em Pagamento não
+  // realizado/Desistência -- não mais no mês de criação. Pela criação, como
+  // o mês congela no dia 1º, um título criado em agosto e pago em setembro
+  // não entrava em mês nenhum (R$ 4.968,65 de comissão de ago-set/2026
+  // sumiram assim). Não usa a data de Emitido porque o Controle só move o
+  // card depois de confirmar no Corp, às vezes dias depois do pagamento
+  // (motivo da decisão de 01/09/2026, que continua valendo).
+  //
+  // "Em Andamento" continua sendo a única coisa que herda de mês anterior.
+  // Só entram cards criados até o fim da competência -- sem isso, um mês
+  // passado recalculado depois contava como herdados cards criados depois.
+  const emAndamentoTodos = cards.filter((c) => c.semantica === "P" && competenciaData(c.criadoEm) <= competencia);
+  const emAndamento = retratoCongelado?.kpis.emAndamento ?? contagemPorOrigem(emAndamentoTodos, competencia);
 
   const {
     emitidos,
@@ -294,19 +349,19 @@ export async function montarPainelCapitalizacao(competencia: string, agora = new
     premioPotencial,
     numeroImobiliarias,
     ticketMedioPremio,
-  } = kpisDeNovidades(novidades);
+  } = kpisDoMes(cards, competencia);
+  const concluidos = concluidosNaCompetencia(cards, competencia);
   const competenciaAnt = competenciaAnterior(competencia);
-  const kpisAnterior = {
-    competencia: competenciaAnt,
-    ...kpisDeNovidades(cards.filter((c) => competenciaData(c.criadoEm) === competenciaAnt)),
-  };
+  const kpisAnterior = { competencia: competenciaAnt, ...kpisDoMes(cards, competenciaAnt) };
 
   // Alerta de card parado é operacional (agora), não fica preso à
   // competência selecionada — um card antigo esquecido continua alertando.
-  const cardsAlertaLista = cards
-    .filter((c) => c.semantica === "P" && c.diasParadoEtapaAtual !== null && c.diasParadoEtapaAtual >= LIMITE_ALERTA_DIAS)
-    .map((c) => ({ id: c.id, titulo: c.titulo, etapaNome: c.etapaNome, diasParado: Math.floor(c.diasParadoEtapaAtual!) }))
-    .sort((a, b) => b.diasParado - a.diasParado);
+  const cardsAlertaLista =
+    retratoCongelado?.cardsAlerta ??
+    cards
+      .filter((c) => c.semantica === "P" && c.diasParadoEtapaAtual !== null && c.diasParadoEtapaAtual >= LIMITE_ALERTA_DIAS)
+      .map((c) => ({ id: c.id, titulo: c.titulo, etapaNome: c.etapaNome, diasParado: Math.floor(c.diasParadoEtapaAtual!) }))
+      .sort((a, b) => b.diasParado - a.diasParado);
 
   const mediasPorEtapa = tempoMedioPorEtapa(itens, historico);
   const contagemAtualPorEtapa = new Map<string, number>();
@@ -315,29 +370,34 @@ export async function montarPainelCapitalizacao(competencia: string, agora = new
     // mesmo critério do bloco "Em andamento" acima. Etapas terminais (S/F)
     // nunca saem de lá uma vez concluídas, então contar todo o histórico
     // inflaria o funil pra sempre com meses antigos -- contam só as
-    // novidades desta competência, mesmo critério de Emitidos/Perdidos.
-    if (card.semantica !== "P" && competenciaData(card.criadoEm) !== competencia) continue;
+    // concluídos nesta competência, mesmo critério de Emitidos/Perdidos.
+    if (card.semantica !== "P" && !(card.concluidoEm && competenciaData(card.concluidoEm) === competencia)) continue;
     contagemAtualPorEtapa.set(card.etapaId, (contagemAtualPorEtapa.get(card.etapaId) || 0) + 1);
   }
 
+  const congeladoPorEtapa = new Map((retratoCongelado?.funil ?? []).map((e) => [e.statusId, e.quantidadeAtual]));
   const funil: FunilEtapa[] = ETAPAS.map((etapa) => ({
     statusId: etapa.statusId,
     nome: etapa.nome,
     semantica: etapa.semantica,
-    quantidadeAtual: contagemAtualPorEtapa.get(etapa.statusId) || 0,
+    quantidadeAtual:
+      retratoCongelado && etapa.semantica === "P"
+        ? (congeladoPorEtapa.get(etapa.statusId) ?? 0)
+        : contagemAtualPorEtapa.get(etapa.statusId) || 0,
     tempoMedioDiasFechado: mediasPorEtapa.get(etapa.statusId) ?? null,
   }));
 
-  // Mesma lógica da herança dos KPIs: só entram na lista os títulos da
-  // competência (novidades, qualquer status) e os que ainda estão em
-  // andamento de meses anteriores (herdados) -- um título concluído em
-  // outro mês não aparece aqui, ele já foi contado no mês em que nasceu.
-  const idsNovidades = new Set(novidades.map((c) => c.id));
-  const herdadosEmAndamento = emAndamentoTodos.filter((c) => !idsNovidades.has(c.id));
-  const titulosRelevantes = [...novidades, ...herdadosEmAndamento];
+  // Mesma lógica dos KPIs: títulos criados na competência (qualquer status),
+  // os concluídos nela (mesmo criados antes) e os herdados ainda em
+  // andamento. Num retrato congelado, os herdados são os que estavam lá.
+  const doMes = new Map<number, CardCapitalizacao>();
+  for (const c of [...novidades, ...concluidos]) doMes.set(c.id, c);
+  const criadoAteCompetencia = new Set(cards.filter((c) => competenciaData(c.criadoEm) <= competencia).map((c) => c.id));
+  const herdados = retratoCongelado
+    ? retratoCongelado.titulos.filter((t) => !doMes.has(t.id) && criadoAteCompetencia.has(t.id))
+    : emAndamentoTodos.filter((c) => !doMes.has(c.id));
 
-  const titulos = titulosRelevantes
-    .sort((a, b) => b.criadoEm.getTime() - a.criadoEm.getTime())
+  const titulos = [...doMes.values(), ...herdados]
     .map((c) => ({
       id: c.id,
       titular: c.titular,
@@ -345,7 +405,9 @@ export async function montarPainelCapitalizacao(competencia: string, agora = new
       etapaNome: c.etapaNome,
       valorTitulo: c.valorTitulo,
       comissao: c.comissao,
-    }));
+    }))
+    // id do Bitrix cresce com a criação -- mais novo primeiro.
+    .sort((a, b) => b.id - a.id);
 
   return {
     competencia,
@@ -367,6 +429,8 @@ export async function montarPainelCapitalizacao(competencia: string, agora = new
     funil,
     cardsAlerta: cardsAlertaLista,
     titulos,
+    // "concluidos" por dia = dia em que chegou em Emitido (é o "Ontem" do
+    // relatório do WhatsApp); o "No mês" do relatório usa os kpis acima.
     porDia: contarPorDia(
       competencia,
       cards.map((c) => c.criadoEm),

@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { buscarAnaliseGerencialAoVivo } from "@/lib/bitrix/seguroFianca";
-import { montarPainelCapitalizacao } from "@/lib/capitalizacao/painel";
+import {
+  competenciaAnterior,
+  competenciaAtual as competenciaAtualCapitalizacao,
+  montarPainelCapitalizacao,
+  type PainelCapitalizacao,
+} from "@/lib/capitalizacao/painel";
 import { montarPainelSeguroAuto } from "@/lib/seguroAuto/painel";
 import { lerFonteRamosElementares } from "@/lib/ramos-elementares/fonteGoogle";
 import { lerFonteRamosElementaresHibrida } from "@/lib/ramos-elementares/fonteHibrida";
@@ -28,6 +33,13 @@ export const maxDuration = 60;
 // Ver ramos-elementares/page.tsx -- a partir daqui Novos vêm do Bitrix.
 const COMPETENCIA_INICIO_HIBRIDO_RAMOS = "2026-09";
 
+// Capitalização conta Emitidos pelo mês do pagamento, mas o card só chega em
+// Emitido quando o Controle confirma no Corp, às vezes dias depois. Até esse
+// dia do mês, o mês anterior também é completado (decisão de 15/10/2026).
+const DIA_LIMITE_COMPLETAR_MES_ANTERIOR = 15;
+
+type Supabase = ReturnType<typeof createServiceClient>;
+
 const PAINEIS = {
   fianca: {
     nome: "Seguro Fiança",
@@ -38,8 +50,15 @@ const PAINEIS = {
   },
   capitalizacao: {
     nome: "Capitalização",
-    async salvar(competencia: string) {
-      const payload = await montarPainelCapitalizacao(competencia);
+    // Mês já fechado: só completa os números de fechamento em cima do
+    // retrato congelado (ver montarPainelCapitalizacao).
+    async salvar(competencia: string, supabase: Supabase) {
+      let congelado: PainelCapitalizacao | undefined;
+      if (competencia < competenciaAtualCapitalizacao()) {
+        const { data } = await supabase.from("capitalizacao_snapshots").select("payload").eq("competencia", competencia).maybeSingle();
+        congelado = (data?.payload as PainelCapitalizacao | undefined) ?? undefined;
+      }
+      const payload = await montarPainelCapitalizacao(competencia, new Date(), congelado);
       return { tabela: "capitalizacao_snapshots", payload, atualizadoEm: payload.atualizadoEm, extra: {} };
     },
   },
@@ -87,12 +106,18 @@ export async function GET(request: NextRequest) {
   // a domingo pode atravessar a virada do mês).
   const periodo = calcularPeriodoRelatorio();
   const competencias = [...new Set([...periodo.dias.map((d) => d.slice(0, 7)), periodo.competenciaMes])];
+  if (chave === "capitalizacao") {
+    const hoje = competenciaAtualCapitalizacao();
+    const diaHoje = Number(new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", day: "2-digit" }).format(new Date()));
+    const anterior = competenciaAnterior(hoje);
+    if (diaHoje <= DIA_LIMITE_COMPLETAR_MES_ANTERIOR && !competencias.includes(anterior)) competencias.unshift(anterior);
+  }
   const supabase = createServiceClient();
 
   const resultados = [];
   for (const competencia of competencias) {
     try {
-      const { tabela, payload, atualizadoEm, extra } = await painel.salvar(competencia);
+      const { tabela, payload, atualizadoEm, extra } = await painel.salvar(competencia, supabase);
       const { error } = await supabase
         .from(tabela)
         .upsert({ competencia, atualizado_em: atualizadoEm, payload, ...extra }, { onConflict: "competencia" });

@@ -171,13 +171,13 @@ async function montarParaPeriodo(periodo: PeriodoRelatorio): Promise<RelatorioDi
         },
       };
     }),
+    // "No mês" = mesmos números do painel, que desde 15/10/2026 contam pelo
+    // mês do pagamento (não pelo dia em que o Controle moveu pra Emitido).
     secao<PainelCapitalizacao, ResumoProduto>("capitalizacao_snapshots", periodo, (doMes, todos) => ({
       ontemEfetivados: efetivadosNoPeriodo([...todos.values()], periodo.dias),
-      ...(mesPorEvento(doMes) ?? {
-        efetivados: doMes.kpis.emitidos,
-        conversao: doMes.kpis.taxaConversao,
-        comissao: doMes.kpis.comissaoEfetivada,
-      }),
+      efetivados: doMes.kpis.emitidos,
+      conversao: doMes.kpis.taxaConversao,
+      comissao: doMes.kpis.comissaoEfetivada,
       solicitacoes: { ontem: novosNoPeriodo([...todos.values()], periodo.dias), mes: doMes.kpis.total },
     })),
     secao<PainelSeguroAuto, ResumoProduto>("seguro_auto_snapshots", periodo, (doMes, todos) => ({
