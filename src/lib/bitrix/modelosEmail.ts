@@ -18,7 +18,7 @@
 // campo o modelo aparece em qualquer card. Pra incluir um modelo novo, é só
 // acrescentar um item na lista abaixo.
 
-import { ENTITY_TYPE_ID_CAPITALIZACAO, ENTITY_TYPE_ID_SEGURO_FIANCA } from "./entidadesCard";
+import { ENTITY_TYPE_ID_CAPITALIZACAO, ENTITY_TYPE_ID_RAMOS_ELEMENTARES, ENTITY_TYPE_ID_SEGURO_FIANCA } from "./entidadesCard";
 
 export type ModeloEmail = {
   id: string;
@@ -30,6 +30,7 @@ export type ModeloEmail = {
 
 const FIANCA = [ENTITY_TYPE_ID_SEGURO_FIANCA];
 const CAPITALIZACAO = [ENTITY_TYPE_ID_CAPITALIZACAO];
+const RAMOS = [ENTITY_TYPE_ID_RAMOS_ELEMENTARES];
 
 // Destaques usados pela equipe nos e-mails do Gmail (Verdana, azul-escuro
 // #073763 como cor base; destaque = negrito branco sobre laranja #ff9900;
@@ -305,6 +306,107 @@ export const MODELOS_EMAIL: ModeloEmail[] = [
       "</ul>",
       "<p>Caso a imobiliária realize a assinatura dos documentos representando o Locador, enviar também:</p>",
       "<ul><li>Contrato de Administração;</li></ul>",
+      "<p>Atenciosamente,</p>",
+    ].join(""),
+  },
+  {
+    id: "ramos-confirmacao-adjuve",
+    nome: "Ramos — Confirmação de contratação ADJUVE",
+    entidades: RAMOS,
+    assunto: "CONFIRMAÇÃO DE CONTRATAÇÃO ADJUVE",
+    corpoHtml: [
+      "<p>Olá Prezados, boa tarde! Tudo bem?</p>",
+      "<p><b>CONTRATAÇÃO CONFIRMADA 👍</b></p>",
+      "<p>Conforme solicitado realizamos a contratação do seguro.</p>",
+      "<ul>",
+      "<li>Seguro: <b>incêndio</b></li>",
+      "<li>Cliente: <b>[NOME DO CLIENTE] / Planilha com [X] itens</b></li>",
+      "<li>Endereço:</li>",
+      "<li>Data de contratação:</li>",
+      "<li>Total: <b>R$ 00,00</b></li>",
+      "<li>Parcelamento: <b>1x de R$ 00,00</b></li>",
+      "<li>Vencimento:</li>",
+      "</ul>",
+      "<p>Qualquer dúvida estamos a disposição!</p>",
+      "<p>Atenciosamente,</p>",
+    ].join(""),
+  },
+  {
+    id: "ramos-confirmacao-individual",
+    nome: "Ramos — Confirmação de contratação individual",
+    entidades: RAMOS,
+    assunto: "CONFIRMAÇÃO DE CONTRATAÇÃO INDIVIDUAL",
+    corpoHtml: [
+      "<p>Olá Prezados, boa tarde! Tudo bem?</p>",
+      "<p><b>CONTRATAÇÃO CONFIRMADA 👍</b></p>",
+      "<p>Conforme solicitado realizamos a contratação do seguro.</p>",
+      "<ul>",
+      "<li>Seguro: <b>incêndio tokio marine</b></li>",
+      "<li>Cliente: <b>[NOME DO CLIENTE] / Planilha com [X] itens</b></li>",
+      "<li>Endereço:</li>",
+      "<li>Forma de pagamento: <b>fatura / boleto / cartão de crédito</b></li>",
+      "<li>Parcelamento: <b>1x de R$ 00,00</b></li>",
+      "</ul>",
+      "<p>" + dest("🛑SEGUE EM ANEXO O BOLETO COM VENCIMENTO EM [DD/MM].") + "</p>",
+      "<p>Assim que disponível a apólice será encaminhada <b>😁</b></p>",
+      "<p>Qualquer dúvida estamos a disposição!</p>",
+      "<p>Atenciosamente,</p>",
+    ].join(""),
+  },
+  {
+    id: "ramos-confirmacao-imobiliario",
+    nome: "Ramos — Confirmação de contratação imobiliário",
+    entidades: RAMOS,
+    assunto: "CONFIRMAÇÃO DE CONTRATAÇÃO IMOBILIÁRIO",
+    corpoHtml: [
+      "<p>Olá Prezados, boa tarde! Tudo bem?</p>",
+      "<p><b>CONTRATAÇÃO CONFIRMADA 👍</b></p>",
+      "<p>Conforme solicitado realizamos a contratação do seguro.</p>",
+      "<ul>",
+      "<li>Seguro: <b>incêndio tokio marine</b></li>",
+      "<li>Imobiliária: <b>{{empresa}}</b></li>",
+      "<li>Cliente: <b>[NOME DO CLIENTE] / Planilha com [X] itens</b></li>",
+      "<li>Forma de pagamento: <b>fatura / boleto / cartão de crédito</b></li>",
+      "<li>Parcelamento: <b>1x de R$ 00,00</b></li>",
+      "</ul>",
+      "<p>" + dest("🛑SEGUE EM ANEXO O BOLETO COM VENCIMENTO EM [DD/MM].") + "<br>🛑" + dest("A cobrança será realizada no faturamento de [MÊS/ANO]") + "</p>",
+      "<p>Assim que disponível a apólice será encaminhada <b>😁</b></p>",
+      "<p>Qualquer dúvida estamos a disposição!</p>",
+      "<p>Atenciosamente,</p>",
+    ].join(""),
+  },
+  {
+    id: "ramos-script-cotacao-adjuve-porto",
+    nome: "Ramos — Script cotação ADJUVE (Porto Seguro)",
+    entidades: RAMOS,
+    assunto: "SCRIPT COTAÇÃO - ADJUVE - PORTO SEGURO",
+    corpoHtml: [
+      "<p>Olá, boa tarde!</p>",
+      "<p>A " + laranja("O") + "<b>2</b> Seguros busca sempre as melhores condições para seus clientes!</p>",
+      "<p><b>🟠 SEGUE EM <i><u>ANEXO</u></i> A MELHOR PROPOSTA!</b></p>",
+      "<p>Aguardamos seu retorno para seguir com a contratação. 🔥<br>As formas de <u>pagamento</u> encontram-se na cotação. Por gentileza, informar a opção desejada.</p>",
+      "<p><b>Entenda melhor as nomenclaturas da proposta:</b></p>",
+      "<p>" + laranja("🔸LMI:") + " Limite máximo indenizado, ou seja, em caso de sinistro de algum dos itens cobertos, esse será o valor máximo a ser indenizado pela Seguradora.<br>" +
+        laranja("🔸Cobertura de conteúdo:") + " Cobertura destinada a bens/mobília pessoais em caso de incêndio.<br>🔸 " +
+        laranja("Assistência 24h") + " – Plano Intermediário Rede Referenciada: Ao contratar o seguro incêndio, você conta com os serviços emergenciais de manutenção do imóvel, incluindo chaveiro, encanador e eletricista, além de help desk remoto para eletrônicos como celular, tablet, smart TV e mais. Ideal para imprevistos no dia a dia!</p>",
+      "<p>Atenciosamente,</p>",
+    ].join(""),
+  },
+  {
+    id: "ramos-script-cotacao-imobiliario-individual",
+    nome: "Ramos — Script cotação imobiliário e individual",
+    entidades: RAMOS,
+    assunto: "SCRIPT COTAÇÃO - IMOBILIÁRIO E INDIVIDUAL",
+    corpoHtml: [
+      "<p>Olá {{responsavel}}, boa tarde! Tudo bem?</p>",
+      "<p>A " + laranja("O") + "<b>2</b> Seguros busca sempre as melhores condições para seus clientes!</p>",
+      "<p><b>🟠 SEGUE EM <i><u>ANEXO</u></i> AS MELHORES PROPOSTAS!</b></p>",
+      "<p>Aguardamos seu retorno para seguir com a contratação. 🔥<br>As formas de <u>pagamento</u> encontram-se na cotação. Por gentileza, informar a opção desejada.</p>",
+      "<p><b>Entenda melhor as nomenclaturas da proposta:</b></p>",
+      "<p>" + laranja("🔸LMI:") + " Limite máximo indenizado, ou seja, em caso de sinistro de algum dos itens cobertos, esse será o valor máximo a ser indenizado pela Seguradora.<br>" +
+        laranja("🔸Cobertura de conteúdo:") + " Cobertura destinada a bens/mobília pessoais em caso de incêndio.<br>🔸 " +
+        laranja("Assistências 24h:") + " Ao contratar o seguro incêndio você recebe gratuitamente os serviços de assistência 24h que ajudam na manutenção e conservação do imóvel. (Ex: Chaveiro, encanador, eletricista, entre outros)</p>",
+      "<p>Qualquer dúvida estou à disposição para ajudar!</p>",
       "<p>Atenciosamente,</p>",
     ].join(""),
   },
