@@ -8,6 +8,7 @@ import { IconShield } from "@/components/icons";
 import SeletorCompetencia from "./SeletorCompetencia";
 import AtualizarAgora from "./AtualizarAgora";
 import InfoLegenda from "@/components/InfoLegenda";
+import MarcadorTendencia, { totaisPorDia } from "./MarcadorTendencia";
 import type { ReactNode } from "react";
 import ImobiliariasTabela from "./ImobiliariasTabela";
 import { AbasProvider, AbaSlot, type DefinicaoAba } from "./AbasPainel";
@@ -821,6 +822,22 @@ export default async function SeguroFiancaPage({
   const totalRelevantesMesAnterior =
     (snapshotAnterior?.payload as AnaliseGerencial | undefined)?.kpis
       .totalRelevantes ?? 0;
+  // Retrato do mês anterior já normalizado (formatos antigos) -- base dos
+  // marcadores de tendência dos 3 quadros diários (reunião de 15/10/2026).
+  const gerencialAnterior = snapshotAnterior?.payload
+    ? normalizarSnapshot(
+        snapshotAnterior.payload as AnaliseGerencial & {
+          totalMovimentacoes: number;
+        },
+        competenciaAnterior(competencia),
+      )
+    : null;
+  const diaHoje = Number(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Sao_Paulo",
+      day: "2-digit",
+    }).format(new Date()),
+  );
 
   // Classificação operacional das imobiliárias (estudo da Patricia,
   // 16/09/2026) -- status vigente do par de meses fechado mais recente, não
@@ -2409,6 +2426,19 @@ export default async function SeguroFiancaPage({
                       preenchido não entram na quebra por pessoa, mas viram
                       alerta em &quot;Qualidade dos dados&quot;
                     </div>
+                    <MarcadorTendencia
+                      atual={totaisPorDia(gerencial.analisesDiariasPorResponsavel)}
+                      anterior={
+                        gerencialAnterior
+                          ? totaisPorDia(gerencialAnterior.analisesDiariasPorResponsavel)
+                          : null
+                      }
+                      ehCompetenciaAtual={ehCompetenciaAtual}
+                      diaHoje={diaHoje}
+                      competencia={competencia}
+                      competenciaAnterior={competenciaAnterior(competencia)}
+                      rotulo="análises"
+                    />
                     <QuadroDiarioTabela
                       quadro={gerencial.analisesDiariasPorResponsavel}
                     />
@@ -2782,6 +2812,25 @@ export default async function SeguroFiancaPage({
                         competência, Mês Anterior conta os herdados de qualquer
                         competência anterior
                       </div>
+                      <MarcadorTendencia
+                        atual={totaisPorDia(
+                    gerencial.contratosRecebidosPorDia.mesAtual,
+                    gerencial.contratosRecebidosPorDia.herdado,
+                  )}
+                        anterior={
+                          gerencialAnterior
+                            ? totaisPorDia(
+                          gerencialAnterior.contratosRecebidosPorDia.mesAtual,
+                          gerencialAnterior.contratosRecebidosPorDia.herdado,
+                        )
+                            : null
+                        }
+                        ehCompetenciaAtual={ehCompetenciaAtual}
+                        diaHoje={diaHoje}
+                        competencia={competencia}
+                        competenciaAnterior={competenciaAnterior(competencia)}
+                        rotulo="contratos recebidos"
+                      />
                       <ContratosRecebidosTabela
                         mesAtual={gerencial.contratosRecebidosPorDia.mesAtual}
                         herdado={gerencial.contratosRecebidosPorDia.herdado}
@@ -2795,6 +2844,19 @@ export default async function SeguroFiancaPage({
                         &quot;Qualidade dos dados&quot;, não entra na quebra por
                         pessoa
                       </div>
+                      <MarcadorTendencia
+                        atual={totaisPorDia(gerencial.efetivacoesPorDia)}
+                        anterior={
+                          gerencialAnterior
+                            ? totaisPorDia(gerencialAnterior.efetivacoesPorDia)
+                            : null
+                        }
+                        ehCompetenciaAtual={ehCompetenciaAtual}
+                        diaHoje={diaHoje}
+                        competencia={competencia}
+                        competenciaAnterior={competenciaAnterior(competencia)}
+                        rotulo="efetivações"
+                      />
                       <QuadroDiarioTabela
                         quadro={gerencial.efetivacoesPorDia}
                       />
