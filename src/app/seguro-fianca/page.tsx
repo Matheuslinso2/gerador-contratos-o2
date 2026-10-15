@@ -8,7 +8,6 @@ import { IconShield } from "@/components/icons";
 import SeletorCompetencia from "./SeletorCompetencia";
 import AtualizarAgora from "./AtualizarAgora";
 import InfoLegenda from "@/components/InfoLegenda";
-import RitmoDoMes, { serieDeQuadro, somarSeries, type SerieRitmo } from "./RitmoDoMes";
 import type { ReactNode } from "react";
 import ImobiliariasTabela from "./ImobiliariasTabela";
 import { AbasProvider, AbaSlot, type DefinicaoAba } from "./AbasPainel";
@@ -120,43 +119,6 @@ function fmtTendencia(atual: number, anterior: number): string {
       ? ""
       : ` ${t.pct.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}%`;
   return `${seta}${pct} vs. mês anterior (${anterior})`;
-}
-
-// Séries diárias do "Ritmo do mês" (setas de tendência, reunião de 15/10/2026):
-// análises = cards criados no dia; contratos recebidos = entradas em Contrato
-// Recebido (mês atual + herdados); efetivações = contratos efetivados no dia.
-function montarSeriesRitmo(
-  atual: AnaliseGerencial,
-  anterior: AnaliseGerencial | null,
-): SerieRitmo[] {
-  const contratos = (g: AnaliseGerencial) =>
-    somarSeries(
-      serieDeQuadro(g.contratosRecebidosPorDia.mesAtual),
-      serieDeQuadro(g.contratosRecebidosPorDia.herdado),
-    );
-  return [
-    {
-      chave: "analises",
-      titulo: "Análises",
-      legenda: "Cards de Seguro Fiança criados no dia (novas cotações pedidas pelas imobiliárias).",
-      atual: serieDeQuadro(atual.analisesDiariasPorResponsavel) ?? [],
-      anterior: anterior ? serieDeQuadro(anterior.analisesDiariasPorResponsavel) : null,
-    },
-    {
-      chave: "contratos",
-      titulo: "Contratos recebidos",
-      legenda: "Cards que entraram na etapa Contrato Recebido no dia, de qualquer origem (criados no mês ou herdados de meses anteriores).",
-      atual: contratos(atual) ?? [],
-      anterior: anterior ? contratos(anterior) : null,
-    },
-    {
-      chave: "efetivacoes",
-      titulo: "Efetivações",
-      legenda: "Contratos cuja Data de Efetivação cai no dia (contrato fechado e efetivado).",
-      atual: serieDeQuadro(atual.efetivacoesPorDia) ?? [],
-      anterior: anterior ? serieDeQuadro(anterior.efetivacoesPorDia) : null,
-    },
-  ];
 }
 
 // Abas reais do painel (09/09/2026, pedido do Matheus) -- classificação dos
@@ -859,22 +821,6 @@ export default async function SeguroFiancaPage({
   const totalRelevantesMesAnterior =
     (snapshotAnterior?.payload as AnaliseGerencial | undefined)?.kpis
       .totalRelevantes ?? 0;
-  // Retrato do mês anterior já normalizado (formatos antigos) -- base das
-  // setas de tendência diária/acumulada do "Ritmo do mês".
-  const gerencialAnterior = snapshotAnterior?.payload
-    ? normalizarSnapshot(
-        snapshotAnterior.payload as AnaliseGerencial & {
-          totalMovimentacoes: number;
-        },
-        competenciaAnterior(competencia),
-      )
-    : null;
-  const diaHoje = Number(
-    new Intl.DateTimeFormat("en-CA", {
-      timeZone: "America/Sao_Paulo",
-      day: "2-digit",
-    }).format(new Date()),
-  );
 
   // Classificação operacional das imobiliárias (estudo da Patricia,
   // 16/09/2026) -- status vigente do par de meses fechado mais recente, não
@@ -977,16 +923,6 @@ export default async function SeguroFiancaPage({
                     tone="info"
                   />
                 </div>
-
-                <RitmoDoMes
-                  id="quadro-fianca-ritmo-mes"
-                  titulo="Ritmo do mês — hoje e acumulado vs. mês anterior"
-                  competencia={competencia}
-                  competenciaAnterior={competenciaAnterior(competencia)}
-                  ehCompetenciaAtual={ehCompetenciaAtual}
-                  diaHoje={diaHoje}
-                  series={montarSeriesRitmo(gerencial, gerencialAnterior)}
-                />
 
                 <div
                   style={{
