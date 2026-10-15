@@ -1,0 +1,104 @@
+/* Panorama de Preços -- canvas fixo 1600×900 (é o tamanho do PNG final).
+   Layout aprovado pelo Matheus em 15/10/2026 a partir do modelo antigo,
+   com as cores/fonte do manual de marca O2. */
+
+.panorama {
+  --navy: #01192e;
+  --azul: #00447e;
+  --laranja: #f8540d;
+  --laranja-escuro: #af2505;
+  --cinza-claro: #d9d9d9;
+  --cinza-medio: #8d8683;
+  --cinza-escuro: #444440;
+
+  width: 1600px;
+  height: 900px;
+  background: #fff;
+  position: relative;
+  overflow: hidden;
+  padding: 36px 44px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  font-family: var(--font-poppins), sans-serif;
+  color: var(--navy);
+  box-sizing: border-box;
+}
+.panorama * { box-sizing: border-box; }
+
+.blur {
+  position: absolute;
+  top: -160px;
+  right: -160px;
+  width: 420px;
+  height: 420px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(248, 84, 13, 0.22), rgba(248, 84, 13, 0) 70%);
+  pointer-events: none;
+}
+
+.topo { display: flex; justify-content: space-between; align-items: center; }
+.logo { height: 74px; width: auto; }
+.pagamento { text-align: center; }
+.pagamento h3 { font-size: 15px; font-weight: 600; letter-spacing: 0.08em; margin: 0 0 8px; }
+.opcoes { display: flex; gap: 10px; background: var(--navy); border-radius: 999px; padding: 8px 18px; }
+.opcao { display: flex; align-items: center; gap: 8px; color: #fff; font-size: 13px; font-weight: 600; padding: 0 8px; }
+.caixa {
+  width: 20px; height: 20px; border-radius: 4px; background: #fff;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--laranja); font-weight: 700; font-size: 15px; line-height: 1;
+}
+
+.cabecalho { display: grid; grid-template-columns: 400px 1fr 1fr; gap: 12px; }
+.dados {
+  background: var(--navy); color: #fff; border-radius: 14px; padding: 14px 18px; font-size: 13px;
+  display: flex; flex-direction: column; gap: 4px; justify-content: center;
+}
+.dados b { font-weight: 600; color: var(--laranja); margin-right: 6px; }
+.valores { display: flex; gap: 14px; margin-top: 4px; padding-top: 6px; border-top: 1px solid rgba(255, 255, 255, 0.18); }
+.valores b { color: #fff; }
+.plano {
+  background: var(--cinza-claro); border-radius: 14px; padding: 12px 16px; text-align: center;
+  display: flex; flex-direction: column; justify-content: center;
+}
+.plano h2 { font-size: 20px; font-weight: 700; margin: 0; }
+.plano p { font-size: 11.5px; color: var(--cinza-escuro); margin: 2px 0 0; }
+.sub { margin-top: 8px; background: #fff; border-radius: 999px; font-size: 12px; font-weight: 600; padding: 4px 0; letter-spacing: 0.05em; }
+
+.tabela { border-collapse: separate; border-spacing: 4px; table-layout: fixed; margin: -4px; width: calc(100% + 8px); }
+.colSeg { width: 228px; }
+.colSt { width: 168px; }
+.colSep { width: 8px; }
+.tabela th {
+  background: var(--laranja); color: #fff; font-size: 13px; font-weight: 700; height: 36px;
+  border-radius: 8px; letter-spacing: 0.04em;
+}
+.tabela td { height: 50px; border-radius: 8px; font-size: 13px; text-align: center; background: #f1f1f1; }
+.tabela .sep { background: transparent !important; border: none !important; }
+.seg {
+  background: #fff !important; border: 1.5px solid var(--cinza-claro); text-align: left !important; padding-left: 16px;
+}
+.seg img { height: 26px; max-width: 130px; object-fit: contain; vertical-align: middle; }
+.seg img[data-seguradora="Porto"] { height: 20px; }
+.seg img[data-seguradora="Too"] { height: 36px; }
+.seg img[data-seguradora="Tokio Marine"] { height: 34px; max-width: 140px; }
+.seg img[data-seguradora="Pottencial"] { height: 24px; }
+.seg img[data-seguradora="Junto"] { height: 34px; }
+.seg small { display: inline-block; margin-left: 10px; vertical-align: middle; font-size: 11px; font-weight: 600; color: var(--cinza-medio); }
+.st { font-weight: 700; font-size: 12px !important; letter-spacing: 0.04em; background: #fff !important; border: 1.5px solid var(--cinza-claro); }
+.ok .st { color: var(--laranja); }
+.preco { background: #fff3ec !important; color: var(--navy); font-weight: 700; font-size: 14px !important; line-height: 1.25; }
+.preco span { display: block; font-size: 11px; font-weight: 600; color: var(--laranja-escuro); }
+
+.off td { background: var(--cinza-claro) !important; }
+.off .seg, .off .st { color: var(--cinza-medio); border-color: var(--cinza-claro); }
+.off .seg img { filter: grayscale(1); opacity: 0.45; }
+
+.rodape {
+  margin-top: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 28px;
+  font-size: 11.5px; color: var(--cinza-escuro); line-height: 1.45;
+}
+.rodape p { padding-left: 14px; position: relative; margin: 0; }
+.rodape p::before {
+  content: ""; position: absolute; left: 0; top: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--laranja);
+}

@@ -83,7 +83,7 @@ async function comConcorrenciaLimitada<X, Y>(itens: X[], limite: number, tarefa:
 
 // Busca a 1ª página pra saber o total, depois busca o resto em paralelo (com
 // limite de concorrência) em vez de uma página esperando a outra terminar.
-async function buscarTodasPaginas<X>(metodo: string, paramsBase: Record<string, BitrixParamValue>): Promise<X[]> {
+export async function buscarTodasPaginas<X>(metodo: string, paramsBase: Record<string, BitrixParamValue>): Promise<X[]> {
   const primeira = await chamarBitrix<{ result: { items: X[] }; next?: number; total?: number }>(metodo, {
     ...paramsBase,
     start: 0,
