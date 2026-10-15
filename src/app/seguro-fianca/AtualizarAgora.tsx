@@ -1,16 +1,26 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
 
 export default function AtualizarAgora() {
   const router = useRouter();
+  const pathname = usePathname();
+  const parametros = useSearchParams();
   const [pendente, iniciar] = useTransition();
+
+  // A página usa um retrato salvo de até 10 min; este botão pede a busca ao
+  // vivo mandando a hora do clique (ver pediuAtualizacao em page.tsx).
+  function atualizar() {
+    const novos = new URLSearchParams(parametros.toString());
+    novos.set("atualizar", String(Date.now()));
+    iniciar(() => router.push(`${pathname}?${novos.toString()}`));
+  }
 
   return (
     <button
       type="button"
-      onClick={() => iniciar(() => router.refresh())}
+      onClick={atualizar}
       disabled={pendente}
       style={{
         background: "none",

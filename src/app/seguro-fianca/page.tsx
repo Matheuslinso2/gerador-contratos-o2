@@ -152,6 +152,24 @@ function fmtDuracao(minutosTotais: number): string {
 // responder) em vez de deixar o Bitrix decidir quando a página quebra.
 const LIMITE_TEMPO_AO_VIVO_MS = 40_000;
 
+// Abrir o painel buscava TUDO ao vivo no Bitrix toda vez (5 a 18 s por clique,
+// medido em 15/10/2026). Agora, se o retrato salvo desta competência tem até
+// 10 minutos, a página usa ele na hora; passou disso (ou ao clicar em
+// "Atualizar agora", que manda ?atualizar=<hora>) busca ao vivo como antes.
+const IDADE_MAXIMA_RETRATO_MS = 10 * 60 * 1000;
+
+function retratoRecente(atualizadoEm: string | null | undefined): boolean {
+  if (!atualizadoEm) return false;
+  return Date.now() - new Date(atualizadoEm).getTime() < IDADE_MAXIMA_RETRATO_MS;
+}
+
+// "Atualizar agora" manda a hora do clique; vale só por 30 s pra um link ou
+// recarga antiga com esse parâmetro não forçar busca ao vivo pra sempre.
+function pediuAtualizacao(valor: string | undefined): boolean {
+  const quando = Number(valor);
+  return Number.isFinite(quando) && quando > 0 && Math.abs(Date.now() - quando) < 30_000;
+}
+
 function comLimiteDeTempo<T>(promessa: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
   const limite = new Promise<never>((_, reject) => {
@@ -248,17 +266,25 @@ async function carregarRenovacao(
   supabase: Awaited<ReturnType<typeof createClient>>,
   competencia: string,
   ehCompetenciaAtual: boolean,
+  forcarAtualizacao: boolean,
 ): Promise<{ dados: PainelRenovacao; erro: string | null }> {
-  const lerRetrato = async () => {
+  const lerRetratoCompleto = async () => {
     const { data } = await supabase
       .from("seguro_fianca_renovacao_snapshots")
-      .select("payload")
+      .select("payload, atualizado_em")
       .eq("competencia", competencia)
       .maybeSingle();
-    return (data?.payload as PainelRenovacao | undefined) ?? null;
+    return data
+      ? { dados: data.payload as PainelRenovacao, atualizadoEm: data.atualizado_em as string }
+      : null;
   };
+  const lerRetrato = async () => (await lerRetratoCompleto())?.dados ?? null;
   if (!ehCompetenciaAtual) {
     return { dados: (await lerRetrato()) ?? painelRenovacaoVazio(competencia), erro: null };
+  }
+  if (!forcarAtualizacao) {
+    const salvo = await lerRetratoCompleto();
+    if (salvo && retratoRecente(salvo.atualizadoEm)) return { dados: salvo.dados, erro: null };
   }
   try {
     const dados = await comLimiteDeTempo(
@@ -644,9 +670,10 @@ function QuadroDiarioTabela({
 export default async function SeguroFiancaPage({
   searchParams,
 }: {
-  searchParams: Promise<{ competencia?: string }>;
+  searchParams: Promise<{ competencia?: string; atualizar?: string }>;
 }) {
-  const { competencia: competenciaParam } = await searchParams;
+  const { competencia: competenciaParam, atualizar } = await searchParams;
+  const forcarAtualizacao = pediuAtualizacao(atualizar);
   const competenciaAtual = mesAtualDefault();
   const competencia = competenciaParam || competenciaAtual;
   const ehCompetenciaAtual = competencia === competenciaAtual;
@@ -662,6 +689,7 @@ export default async function SeguroFiancaPage({
     supabase,
     competencia,
     ehCompetenciaAtual,
+    forcarAtualizacao,
   );
 
   let gerencial: (AnaliseGerencial & { totalMovimentacoes: number }) | null =
@@ -671,7 +699,27 @@ export default async function SeguroFiancaPage({
   let semRegistroNoPeriodo = false;
   let usandoRetratoSalvo = false;
 
-  if (ehCompetenciaAtual) {
+  // Caminho rápido: retrato salvo de até 10 min (ver IDADE_MAXIMA_RETRATO_MS).
+  let usouRetratoRecente = false;
+  if (ehCompetenciaAtual && !forcarAtualizacao) {
+    const { data } = await supabase
+      .from("seguro_fianca_snapshots")
+      .select("payload, atualizado_em")
+      .eq("competencia", competencia)
+      .maybeSingle();
+    if (data && retratoRecente(data.atualizado_em)) {
+      gerencial = normalizarSnapshot(
+        data.payload as AnaliseGerencial & { totalMovimentacoes: number },
+        competencia,
+      );
+      atualizadoEm = data.atualizado_em;
+      usouRetratoRecente = true;
+    }
+  }
+
+  if (usouRetratoRecente) {
+    // nada a buscar: já está carregado acima
+  } else if (ehCompetenciaAtual) {
     try {
       gerencial = await comLimiteDeTempo(
         buscarAnaliseGerencialAoVivo(competencia),
