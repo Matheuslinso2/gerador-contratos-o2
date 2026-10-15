@@ -1,5 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
 import { NOME_COOKIE_ACESSO_PUBLICO, ROTAS_PUBLICAS_COM_COOKIE } from "@/lib/acessoPublico";
 
 const ROTAS_PUBLICAS = [
@@ -95,7 +95,7 @@ const ROTAS_PUBLICAS = [
 ];
 const ROTAS_SO_DESLOGADO = ["/login", "/signup"];
 
-export async function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest, event: NextFetchEvent) {
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -148,11 +148,17 @@ export async function proxy(request: NextRequest) {
   // registrar_acesso_diario já faz upsert (ON CONFLICT DO UPDATE), então
   // primeiro_acesso é preenchido só uma vez (default now() do INSERT) e as
   // chamadas seguintes só atualizam ultimo_acesso/qtd_requisicoes.
+  // Roda em segundo plano (waitUntil): a página não espera esse registro --
+  // antes ele era aguardado em TODA navegação e somava uma ida e volta ao
+  // banco (~0,1-0,25 s) ao tempo de cada clique.
   if (user?.email) {
-    const { error } = await supabase.rpc("registrar_acesso_diario", { p_email: user.email });
-    if (error) {
-      console.error("[registro-acesso-diario] falhou para", user.email, error.message);
-    }
+    const email = user.email;
+    event.waitUntil(
+      (async () => {
+        const { error } = await supabase.rpc("registrar_acesso_diario", { p_email: email });
+        if (error) console.error("[registro-acesso-diario] falhou para", email, error.message);
+      })()
+    );
   }
 
   return response;
