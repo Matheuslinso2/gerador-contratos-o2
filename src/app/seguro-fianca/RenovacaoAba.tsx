@@ -114,6 +114,8 @@ export default function RenovacaoAba({
 }) {
   const { kpis } = dados;
   const maxEtapa = Math.max(...dados.porEtapa.map((e) => e.quantidade), 1);
+  // Etapas pendentes do funil, na ordem do Bitrix -- colunas do quadro de vencimento.
+  const etapasAndamento = dados.porEtapa.map((e) => e.etapa);
   const maxMotivo = Math.max(...dados.perdasPorMotivo.map((m) => m.quantidade), 1);
   const totaisDiario = dados.controleDiario.reduce(
     (t, d) => ({
@@ -530,6 +532,7 @@ export default function RenovacaoAba({
               mes_vencimento: fmtMes(v.mes),
               total: v.total,
               em_andamento: v.emAndamento,
+              ...Object.fromEntries(etapasAndamento.map((e) => [`etapa_${e}`, v.porEtapa ? (v.porEtapa[e] ?? 0) : ""])),
               renovados: v.renovados,
               perdidos: v.perdidos,
             }))}
@@ -537,15 +540,25 @@ export default function RenovacaoAba({
           />
         </div>
         <div className={styles.tableWrap}>
-          <table className={styles.data}>
+          <table className={`${styles.data} ${styles.compacta}`}>
             <thead>
               <tr>
-                <th>Vencimento</th>
-                <th className={styles.numCol}>Total</th>
-                <th className={styles.numCol}>Em andamento</th>
-                <th className={styles.numCol}>Renovados</th>
-                <th className={styles.numCol}>Perdidos</th>
-                <th className={styles.numCol}>Taxa de renovação</th>
+                <th rowSpan={2}>Vencimento</th>
+                <th rowSpan={2} className={styles.numCol}>Total</th>
+                <th rowSpan={2} className={styles.numCol}>Em andamento</th>
+                <th colSpan={etapasAndamento.length} className={styles.numCol} style={{ textAlign: "center" }}>
+                  Em andamento — etapa atual
+                </th>
+                <th rowSpan={2} className={styles.numCol}>Renovados</th>
+                <th rowSpan={2} className={styles.numCol}>Perdidos</th>
+                <th rowSpan={2} className={styles.numCol}>Taxa de renovação</th>
+              </tr>
+              <tr>
+                {etapasAndamento.map((e) => (
+                  <th key={e} className={styles.numCol}>
+                    {e}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -554,6 +567,11 @@ export default function RenovacaoAba({
                   <td>{fmtMes(v.mes)}</td>
                   <td className={`${styles.numCol} ${styles.num}`}>{v.total}</td>
                   <td className={`${styles.numCol} ${styles.num}`}>{v.emAndamento}</td>
+                  {etapasAndamento.map((e) => (
+                    <td key={e} className={`${styles.numCol} ${styles.num}`} style={{ color: v.porEtapa && !v.porEtapa[e] ? "var(--ink-faint)" : undefined }}>
+                      {v.porEtapa ? (v.porEtapa[e] ?? 0) : "—"}
+                    </td>
+                  ))}
                   <td className={styles.numCol}>
                     <span className={`${styles.pill} ${styles.pillPositive}`}>{v.renovados}</span>
                   </td>
@@ -567,7 +585,7 @@ export default function RenovacaoAba({
               ))}
               {dados.porVencimento.length === 0 && (
                 <tr>
-                  <td colSpan={6} style={{ color: "var(--ink-faint)" }}>
+                  <td colSpan={6 + etapasAndamento.length} style={{ color: "var(--ink-faint)" }}>
                     Nenhum card no funil de Renovação.
                   </td>
                 </tr>

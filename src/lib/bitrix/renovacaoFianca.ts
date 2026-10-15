@@ -210,7 +210,10 @@ export type PainelRenovacao = {
     cotacaoPorCotador?: { cotador: string; cards: number; mediaMinutos: number }[];
   };
   tempoPorEtapa: { etapa: string; estatistica: EstatisticaTempoRenovacao }[]; // minutos comerciais
-  porVencimento: ({ mes: string } & ContagemStatus)[]; // mês do Fim da vigência anterior (carteira inteira)
+  // mês do Fim da vigência anterior (carteira inteira). porEtapa = onde estão
+  // hoje os cards em andamento daquele mês (nome da etapa -> quantidade);
+  // ausente em retratos salvos antes de 15/10/2026.
+  porVencimento: ({ mes: string; porEtapa?: Record<string, number> } & ContagemStatus)[];
 };
 
 // Equipe do quadro "Renovação por cotador", na ordem e com o rótulo da
@@ -513,14 +516,18 @@ export function montarPainelRenovacao(
     .map((e) => ({ etapa: e.nome, estatistica: estatisticas(porEtapaMin[e.nome] ?? []) }));
 
   // --- carteira por mês de vencimento (todos os cards do funil) ---
-  const porVenc = new Map<string, { mes: string } & ContagemStatus>();
+  const porVenc = new Map<string, { mes: string; porEtapa: Record<string, number> } & ContagemStatus>();
   for (const c of cards) {
     const mes = diaManual(c.it[CAMPO_FIM_VIGENCIA_ANTERIOR]).slice(0, 7) || "Sem data";
-    const linha = porVenc.get(mes) ?? { mes, total: 0, renovados: 0, perdidos: 0, emAndamento: 0 };
+    const linha = porVenc.get(mes) ?? { mes, total: 0, renovados: 0, perdidos: 0, emAndamento: 0, porEtapa: {} };
     linha.total++;
     if (c.resultado === "Renovado") linha.renovados++;
     else if (c.resultado === "Perdido") linha.perdidos++;
-    else linha.emAndamento++;
+    else {
+      linha.emAndamento++;
+      const etapa = ETAPA_POR_ID.get(c.it.stageId)?.nome;
+      if (etapa) linha.porEtapa[etapa] = (linha.porEtapa[etapa] ?? 0) + 1;
+    }
     porVenc.set(mes, linha);
   }
   const porVencimento = [...porVenc.values()].sort((a, b) =>
