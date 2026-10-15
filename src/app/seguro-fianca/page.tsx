@@ -7,6 +7,9 @@ import PageHeader from "@/components/PageHeader";
 import { IconShield } from "@/components/icons";
 import SeletorCompetencia from "./SeletorCompetencia";
 import AtualizarAgora from "./AtualizarAgora";
+import InfoLegenda from "@/components/InfoLegenda";
+import RitmoDoMes, { serieDeQuadro, somarSeries, type SerieRitmo } from "./RitmoDoMes";
+import type { ReactNode } from "react";
 import ImobiliariasTabela from "./ImobiliariasTabela";
 import { AbasProvider, AbaSlot, type DefinicaoAba } from "./AbasPainel";
 import styles from "./seguro-fianca.module.css";
@@ -117,6 +120,43 @@ function fmtTendencia(atual: number, anterior: number): string {
       ? ""
       : ` ${t.pct.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}%`;
   return `${seta}${pct} vs. mês anterior (${anterior})`;
+}
+
+// Séries diárias do "Ritmo do mês" (setas de tendência, reunião de 15/10/2026):
+// análises = cards criados no dia; contratos recebidos = entradas em Contrato
+// Recebido (mês atual + herdados); efetivações = contratos efetivados no dia.
+function montarSeriesRitmo(
+  atual: AnaliseGerencial,
+  anterior: AnaliseGerencial | null,
+): SerieRitmo[] {
+  const contratos = (g: AnaliseGerencial) =>
+    somarSeries(
+      serieDeQuadro(g.contratosRecebidosPorDia.mesAtual),
+      serieDeQuadro(g.contratosRecebidosPorDia.herdado),
+    );
+  return [
+    {
+      chave: "analises",
+      titulo: "Análises",
+      legenda: "Cards de Seguro Fiança criados no dia (novas cotações pedidas pelas imobiliárias).",
+      atual: serieDeQuadro(atual.analisesDiariasPorResponsavel) ?? [],
+      anterior: anterior ? serieDeQuadro(anterior.analisesDiariasPorResponsavel) : null,
+    },
+    {
+      chave: "contratos",
+      titulo: "Contratos recebidos",
+      legenda: "Cards que entraram na etapa Contrato Recebido no dia, de qualquer origem (criados no mês ou herdados de meses anteriores).",
+      atual: contratos(atual) ?? [],
+      anterior: anterior ? contratos(anterior) : null,
+    },
+    {
+      chave: "efetivacoes",
+      titulo: "Efetivações",
+      legenda: "Contratos cuja Data de Efetivação cai no dia (contrato fechado e efetivado).",
+      atual: serieDeQuadro(atual.efetivacoesPorDia) ?? [],
+      anterior: anterior ? serieDeQuadro(anterior.efetivacoesPorDia) : null,
+    },
+  ];
 }
 
 // Abas reais do painel (09/09/2026, pedido do Matheus) -- classificação dos
@@ -373,6 +413,7 @@ function Kpi({
   sub,
   tone,
   conta,
+  legenda,
 }: {
   label: string;
   value: string;
@@ -380,10 +421,15 @@ function Kpi({
   tone?: "positive" | "negative" | "warning" | "info";
   // Linha com a origem do número (ex: "20 novos + 12 herdados = 32").
   conta?: string;
+  // Ícone ⓘ com a explicação de como o número é calculado.
+  legenda?: ReactNode;
 }) {
   return (
     <div className={styles.kpi}>
-      <div className={styles.kpiLabel}>{label}</div>
+      <div className={styles.kpiLabel}>
+        {label}
+        {legenda}
+      </div>
       <div
         className={`${styles.kpiValue} ${styles.num} ${tone ? styles[tone] : ""}`}
       >
@@ -813,6 +859,22 @@ export default async function SeguroFiancaPage({
   const totalRelevantesMesAnterior =
     (snapshotAnterior?.payload as AnaliseGerencial | undefined)?.kpis
       .totalRelevantes ?? 0;
+  // Retrato do mês anterior já normalizado (formatos antigos) -- base das
+  // setas de tendência diária/acumulada do "Ritmo do mês".
+  const gerencialAnterior = snapshotAnterior?.payload
+    ? normalizarSnapshot(
+        snapshotAnterior.payload as AnaliseGerencial & {
+          totalMovimentacoes: number;
+        },
+        competenciaAnterior(competencia),
+      )
+    : null;
+  const diaHoje = Number(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Sao_Paulo",
+      day: "2-digit",
+    }).format(new Date()),
+  );
 
   // Classificação operacional das imobiliárias (estudo da Patricia,
   // 16/09/2026) -- status vigente do par de meses fechado mais recente, não
@@ -910,10 +972,21 @@ export default async function SeguroFiancaPage({
                     label="Total de Análises do Mês"
                     value={String(gerencial.kpis.totalRelevantes)}
                     sub={`${fmtTendencia(gerencial.kpis.totalRelevantes, totalRelevantesMesAnterior)} — novidades + herdados ativos`}
+                    legenda={<InfoLegenda titulo="Total de Análises do Mês">Todos os cards de Seguro Fiança que deram trabalho neste mês: os criados no mês (novidades) mais os criados antes que ainda estão em andamento ou tiveram um desfecho (recusa, aprovação, negativação ou conversão) dentro do mês (herdados). A seta compara com o mesmo total do mês anterior.</InfoLegenda>}
                     conta={`${gerencial.kpis.total} novidades + ${gerencial.kpis.totalRelevantes - gerencial.kpis.total} herdados = ${gerencial.kpis.totalRelevantes}`}
                     tone="info"
                   />
                 </div>
+
+                <RitmoDoMes
+                  id="quadro-fianca-ritmo-mes"
+                  titulo="Ritmo do mês — hoje e acumulado vs. mês anterior"
+                  competencia={competencia}
+                  competenciaAnterior={competenciaAnterior(competencia)}
+                  ehCompetenciaAtual={ehCompetenciaAtual}
+                  diaHoje={diaHoje}
+                  series={montarSeriesRitmo(gerencial, gerencialAnterior)}
+                />
 
                 <div
                   style={{
@@ -933,6 +1006,7 @@ export default async function SeguroFiancaPage({
                     }}
                   >
                     Novidades do mês
+                    <InfoLegenda titulo="Novidades do mês">Cards criados nesta competência (mês). Em Andamento = ainda sem desfecho. Recusados = não avançaram na Análise e Cotação. Aprovados = saíram da Análise e Cotação para a Negociação. Negativados = o cliente não quis contratar. Convertidos = contrato fechado. A linha de baixo de cada quadro mostra novos + herdados = total.</InfoLegenda>
                   </h2>
                   <ExportarQuadro
                     quadroId="quadro-fianca-novidades"
@@ -1053,6 +1127,7 @@ export default async function SeguroFiancaPage({
                     }}
                   >
                     Herdado de meses anteriores
+                    <InfoLegenda titulo="Herdado de meses anteriores">Cards criados em meses anteriores que continuam relevantes neste mês: seguem em andamento ou tiveram desfecho (recusa, aprovação, negativação ou conversão) dentro do mês selecionado. Não entram em Total de Cards, que conta só os criados no mês.</InfoLegenda>
                   </h2>
                   <ExportarQuadro
                     quadroId="quadro-fianca-herdado"
@@ -1148,6 +1223,7 @@ export default async function SeguroFiancaPage({
                     }}
                   >
                     Renovação
+                    <InfoLegenda titulo="Renovação (resumo)">Funil de Renovação (categoria 32 do Bitrix). Renovados = cards que entraram em Sucesso neste mês; Perdidos = entraram em Perdido neste mês. Taxa de renovação = renovados ÷ (renovados + perdidos). O detalhamento por imobiliária e por vencimento fica na aba Renovação.</InfoLegenda>
                   </h2>
                   <ExportarQuadro
                     quadroId="quadro-fianca-renovacao-resumo"
@@ -3007,7 +3083,10 @@ export default async function SeguroFiancaPage({
                   className={styles.section}
                 >
                   <div className={styles.sectionHead}>
-                    <h2>Imobiliárias — status de todos os cards</h2>
+                    <h2>
+                      Imobiliárias — status de todos os cards
+                      <InfoLegenda titulo="Como ler este quadro">Cotações e Contratações trazem a classe da imobiliária, calculada pelo volume dos 2 últimos meses fechados (atualiza todo mês): cotações no eixo Cotações, contratos fechados no eixo Contratações. É um ranking por volume, e imobiliárias empatadas ficam na mesma classe. Pilar Central = os 10% de maior volume; Consolidado = até 30%; Expansão = até 60%; Fiel da Balança = até 85%; Avulso = o restante. Fora de Linha = já teve atividade antes e ficou com volume zero nos 2 meses. Tend. compara as cotações do mês com as do mês anterior. O percentual ao lado de Recusados, Negativados e Convertidos é sobre as cotações da imobiliária no mês.</InfoLegenda>
+                    </h2>
                     <div className={styles.note}>
                       {gerencial.kpis.imobiliariasAtivas} imobiliárias com
                       novidade ou card herdado em andamento
@@ -3096,7 +3175,10 @@ export default async function SeguroFiancaPage({
                   return (
                     <section id="quadro-fianca-cruzamento-prioridades" className={styles.section}>
                       <div className={styles.sectionHead}>
-                        <h2>Prioridades — cruzamento Cotação × Contratação</h2>
+                        <h2>
+                          Prioridades — cruzamento Cotação × Contratação
+                          <InfoLegenda titulo="Como ler este quadro">Cruza a classe da imobiliária em Cotações com a classe em Contratações. Liderança nos dois eixos = Pilar Central em ambos. Cota muito, fecha pouco = topo (Pilar Central ou Consolidado) em Cotações, mas Expansão ou abaixo em Contratações. Contratação em destaque = o contrário. Só entram esses 3 padrões, o restante da base não aparece aqui. Pendências = cards em andamento agora, por imobiliária.</InfoLegenda>
+                        </h2>
                         <div className={styles.note}>
                           Baseado na classificação vigente ({nomeCompetencia(classificacao.par[0])} + {nomeCompetencia(classificacao.par[1])})
                         </div>
@@ -3168,7 +3250,10 @@ export default async function SeguroFiancaPage({
                   className={styles.section}
                 >
                   <div className={styles.sectionHead}>
-                    <h2>Taxa de locação do mês (menor entre seguradoras)</h2>
+                    <h2>
+                      Taxa de locação do mês (menor entre seguradoras)
+                      <InfoLegenda titulo="Taxa de locação">Para cada card, vale a menor taxa entre as seguradoras que cotaram. Entram só os cards negativados e os contratados do mês. Mostra a menor taxa e a taxa média do mês.</InfoLegenda>
+                    </h2>
                     <div className={styles.note}>
                       por card, pega a menor taxa entre as seguradoras que
                       cotaram — só negativados + contratados
@@ -3219,7 +3304,10 @@ export default async function SeguroFiancaPage({
                       className={styles.section}
                     >
                       <div className={styles.sectionHead}>
-                        <h2>Clientes novos</h2>
+                        <h2>
+                          Clientes novos
+                          <InfoLegenda titulo="Clientes novos">Imobiliárias cuja primeira cotação em toda a história do Bitrix caiu neste mês.</InfoLegenda>
+                        </h2>
                         <div className={styles.note}>
                           imobiliárias cuja 1ª cotação de toda a história caiu
                           neste mês
@@ -3431,7 +3519,10 @@ export default async function SeguroFiancaPage({
                       className={styles.section}
                     >
                       <div className={styles.sectionHead}>
-                        <h2>Comparativo com o mês anterior — Top 10</h2>
+                        <h2>
+                          Comparativo com o mês anterior — Top 10
+                          <InfoLegenda titulo="Comparativo">Compara cada imobiliária com ela mesma no mês anterior: cotações e conversões (contratos fechados). Mostra as 10 que mais cresceram e as 10 que mais caíram em cada um dos dois indicadores.</InfoLegenda>
+                        </h2>
                         <div className={styles.note}>
                           maior crescimento e maior queda, em cotações e em
                           conversões
@@ -3527,7 +3618,10 @@ export default async function SeguroFiancaPage({
                       className={styles.section}
                     >
                       <div className={styles.sectionHead}>
-                        <h2>Entraram e sumiram</h2>
+                        <h2>
+                          Entraram e sumiram
+                          <InfoLegenda titulo="Entraram e sumiram">Imobiliárias que cotaram em só um dos dois meses. Cotaram só este mês = não tinham cotado no mês anterior. Cotaram só no mês anterior = cotaram lá e ainda não cotaram neste mês, a lista para acompanhar a retenção.</InfoLegenda>
+                        </h2>
                         <div className={styles.note}>
                           imobiliárias que cotaram só num dos 2 meses —
                           categoria por tier ainda não existe (Fase 2)
