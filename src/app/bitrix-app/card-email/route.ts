@@ -159,6 +159,7 @@ export async function POST(request: NextRequest) {
     .anexo-item.enviando { color: #8d8683; font-style: italic; }
     #btn-anexar { background: #fff; color: #01192e; border: 1px solid #d9d9d9; border-radius: 999px; padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer; margin-top: 8px; }
     #btn-anexar:disabled { opacity: 0.6; cursor: default; }
+    #dica-remetente { font-size: 12px; color: #8d8683; margin-top: 4px; }
   </style>
 </head>
 <body>
@@ -167,6 +168,10 @@ export async function POST(request: NextRequest) {
   <div id="preview-card"></div>
 
   <form id="form-email" style="display:none;">
+    <label for="remetente-nome">Remetente (seu nome)</label>
+    <input id="remetente-nome" type="text" maxlength="40" placeholder="Ex: Henrique Guterres" autocomplete="off" />
+    <div id="dica-remetente"></div>
+
     <label for="para">Para</label>
     <input id="para" type="email" required placeholder="cliente@exemplo.com" />
 
@@ -433,6 +438,21 @@ export async function POST(request: NextRequest) {
         var authInicial = BX24.getAuth();
         if (itemId && entityTypeId) carregarPreviaCard(authInicial && authInicial.access_token);
 
+        // Nome que a imobiliária vê como remetente. Lembrado no navegador de
+        // quem usa (só conveniência -- sem isso o campo só fica vazio).
+        var remetenteEl = document.getElementById("remetente-nome");
+        var dicaRemetenteEl = document.getElementById("dica-remetente");
+        function atualizarDicaRemetente() {
+          var nome = remetenteEl.value.replace(/[^\\p{L}\\p{N} '\\-]/gu, "").replace(/\\s+/g, " ").trim();
+          dicaRemetenteEl.textContent = "Aparece na caixa de entrada como: " + (nome ? nome + " | O2 Seguros" : "O2 Seguros");
+        }
+        function restaurarRemetente() {
+          try { remetenteEl.value = localStorage.getItem("o2_remetente_nome") || ""; } catch (e) {}
+          atualizarDicaRemetente();
+        }
+        remetenteEl.addEventListener("input", atualizarDicaRemetente);
+        restaurarRemetente();
+
         document.getElementById("form-email").addEventListener("submit", function (evento) {
           evento.preventDefault();
           var corpoEl = document.getElementById("corpo");
@@ -458,6 +478,7 @@ export async function POST(request: NextRequest) {
               authId: auth && auth.access_token,
               entityTypeId: entityTypeId,
               itemId: Number(itemId),
+              remetenteNome: remetenteEl.value,
               para: document.getElementById("para").value,
               assunto: document.getElementById("assunto").value,
               corpo: corpoEl.innerHTML,
@@ -470,7 +491,9 @@ export async function POST(request: NextRequest) {
               if (resultado.ok && resultado.dados.ok) {
                 mensagem.className = "sucesso";
                 mensagem.textContent = "E-mail enviado.";
+                try { localStorage.setItem("o2_remetente_nome", remetenteEl.value); } catch (e) {}
                 document.getElementById("form-email").reset();
+                restaurarRemetente();
                 corpoEl.innerHTML = "";
                 ultimoAssuntoModelo = "";
                 ultimoCorpoModelo = "";

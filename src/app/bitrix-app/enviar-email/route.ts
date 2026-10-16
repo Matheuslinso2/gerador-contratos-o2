@@ -4,6 +4,7 @@ import { ccPorEntidade, gerarEnderecoRespostaCard } from "@/lib/bitrix/entidades
 import { registrarAtividadeEmail } from "@/lib/bitrix/atividades";
 import { tokenBitrixValido, BUCKET_ANEXOS } from "@/lib/bitrix/emailNoCard";
 import { createServiceClient } from "@/lib/supabase/service";
+import { nomeExibidoRemetente } from "@/lib/campanhas/remetente";
 
 export const dynamic = "force-dynamic";
 
@@ -58,6 +59,7 @@ export async function POST(request: NextRequest) {
     entityTypeId?: number;
     itemId?: number;
     para?: string;
+    remetenteNome?: string;
     assunto?: string;
     corpo?: string;
     anexos?: { caminho: string; nome: string }[];
@@ -117,7 +119,7 @@ export async function POST(request: NextRequest) {
       html,
       anexos,
       replyTo,
-      remetente: "O2 Seguros",
+      remetente: nomeExibidoRemetente(body.remetenteNome),
       throwSeFalhar: true,
     });
   } catch (erro) {
