@@ -247,11 +247,19 @@ export default function Montador({
 
   // Envio por e-mail (Fase 2, 16/10/2026): garante a versão, gera a imagem
   // (vai no corpo) e o PDF alta qualidade (vai anexo) e abre a janela.
+  // janelaAberta + envio: card sem seguradora aprovada abre a janela só
+  // com recusa/pendências (envio = null, sem panorama).
+  const [janelaAberta, setJanelaAberta] = useState(false);
   const [envio, setEnvio] = useState<DadosEnvio | null>(null);
   const [preparandoEnvio, setPreparandoEnvio] = useState(false);
   async function abrirEnvio() {
     if (!capturaRef.current) return;
     setMensagem(null);
+    if (!card.linhas.some((l) => statusEditavel(l.status))) {
+      setEnvio(null);
+      setJanelaAberta(true);
+      return;
+    }
     setPreparandoEnvio(true);
     try {
       const garantida = await garantirVersao("enviar");
@@ -265,6 +273,7 @@ export default function Montador({
         pngDataUrl: corpoPng.toDataURL("image/png"),
         pdfBase64: pdf.output("datauristring").split(",")[1],
       });
+      setJanelaAberta(true);
       if (garantida.nova) {
         router.refresh();
         setVersaoAberta(garantida.versao);
@@ -503,14 +512,15 @@ export default function Montador({
         <PanoramaVisual ref={capturaRef} {...dadosVisual} />
       </div>
 
-      {envio && (
+      {janelaAberta && (
         <JanelaEnvioEmail
           cardId={card.id}
           passeBitrix={passeBitrix}
+          card={{ inquilino: card.cabecalho.inquilino, imobiliaria: card.cabecalho.imobiliaria, linhas: card.linhas }}
           dados={envio}
-          onFechar={() => setEnvio(null)}
+          onFechar={() => setJanelaAberta(false)}
           onEnviado={(texto) => {
-            setEnvio(null);
+            setJanelaAberta(false);
             setMensagem({ tipo: "ok", texto });
             router.refresh();
           }}

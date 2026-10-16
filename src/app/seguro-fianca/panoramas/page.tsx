@@ -10,6 +10,8 @@ import {
   ETAPAS_MONTAR,
   INICIO_FILA_PANORAMA,
   listarCardsFila,
+  listarCardsRecusados,
+  cardsComRecusaRegistrada,
   temSeguradoraAprovada,
   type CardPanorama,
 } from "@/lib/bitrix/panoramaFianca";
@@ -19,11 +21,13 @@ export const maxDuration = 60;
 
 // Fila do Panorama de Preços (Fase 1 -- 15/10/2026). Abas de envio
 // ("Gerados não enviados"/"Enviados") entram na Fase 2.
-type Aba = "montar" | "atualizar" | "gerados";
+type Aba = "montar" | "atualizar" | "gerados" | "recusados";
 const ABAS: { chave: Aba; rotulo: string }[] = [
   { chave: "montar", rotulo: "A montar" },
   { chave: "atualizar", rotulo: "Atualização disponível" },
   { chave: "gerados", rotulo: "Gerados" },
+  // Cards todo recusados ainda sem o e-mail de recusa (16/10/2026).
+  { chave: "recusados", rotulo: "Recusados (avisar)" },
 ];
 
 // Minúsculas e sem acento -- "joão" acha "JOAO" e vice-versa.
@@ -55,11 +59,27 @@ export default async function PanoramasPage({ searchParams }: { searchParams: Pr
   const aba: Aba = ABAS.some((a) => a.chave === abaParam) ? (abaParam as Aba) : "montar";
 
   let cards: CardPanorama[] = [];
+  let recusados: CardPanorama[] = [];
   let erro: string | null = null;
   try {
-    cards = await listarCardsFila();
+    [cards, recusados] = await Promise.all([listarCardsFila(), listarCardsRecusados()]);
   } catch (e) {
     erro = (e as Error).message;
+  }
+
+  // Recusa já avisada (e-mail tipo "recusado" enviado pelo panorama) sai da aba.
+  const { data: recusasEnviadas } = recusados.length
+    ? await supabase
+        .from("panoramas_fianca_envios")
+        .select("card_id")
+        .eq("tipo", "recusado")
+        .in("card_id", recusados.map((c) => c.id))
+    : { data: [] };
+  const recusaAvisada = new Set((recusasEnviadas ?? []).map((r) => r.card_id));
+  try {
+    for (const id of await cardsComRecusaRegistrada(recusados.map((c) => c.id))) recusaAvisada.add(id);
+  } catch (e) {
+    console.warn("Não consegui conferir recusas já registradas no Bitrix:", e);
   }
 
   const { data: versoes } = cards.length
@@ -84,14 +104,19 @@ export default async function PanoramasPage({ searchParams }: { searchParams: Pr
         : ETAPAS_MONTAR.includes(c.etapaId) && new Date(c.movidoEm) >= new Date(INICIO_FILA_PANORAMA)
           ? "montar"
           : null;
-      return { card: c, ultima, grupo };
+      return { card: c, ultima, grupo: grupo as Aba | null };
     })
-    .filter((x) => x.grupo !== null);
+    .filter((x) => x.grupo !== null)
+    .concat(
+      recusados
+        .filter((c) => !recusaAvisada.has(c.id))
+        .map((c) => ({ card: c, ultima: undefined, grupo: "recusados" as Aba }))
+    );
   const contagem = Object.fromEntries(ABAS.map((a) => [a.chave, classificados.filter((x) => x.grupo === a.chave).length]));
   // Mais antigos primeiro -- quem está esperando há mais tempo é atendido antes.
   const lista = (
     busca
-      ? cards
+      ? [...cards, ...recusados.filter((r) => !cards.some((c) => c.id === r.id))]
           .filter((c) => normalizar(c.cabecalho.inquilino).includes(busca))
           .map((c) => ({
             card: c,
@@ -184,7 +209,7 @@ export default async function PanoramasPage({ searchParams }: { searchParams: Pr
                         href={`/seguro-fianca/panoramas/${card.id}`}
                         className="rounded-lg bg-o2-coral px-3 py-1.5 text-xs font-semibold text-white"
                       >
-                        {grupo === "montar" ? "Montar" : grupo === "atualizar" ? "Atualizar" : "Abrir"}
+                        {grupo === "montar" ? "Montar" : grupo === "atualizar" ? "Atualizar" : grupo === "recusados" ? "Avisar recusa" : "Abrir"}
                       </Link>
                     </td>
                   </tr>

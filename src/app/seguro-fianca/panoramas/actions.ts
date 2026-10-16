@@ -2,6 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { autorizarPanorama } from "@/lib/panoramaAutorizacao";
+import { createServiceClient } from "@/lib/supabase/service";
+import { BUCKET_ANEXOS } from "@/lib/bitrix/emailNoCard";
+import { ENTITY_TYPE_ID_SEGURO_FIANCA } from "@/lib/bitrix/entidadesCard";
 import {
   buscarCardPanorama,
   buscarContatosEnvioPanorama,
@@ -88,4 +91,30 @@ export async function buscarContatosEnvio(
   } catch (e) {
     return { ok: false, erro: `Não consegui ler os contatos no Bitrix: ${(e as Error).message}` };
   }
+}
+
+// Cartas das seguradoras (recusa/pendência) anexadas ao e-mail: o navegador
+// sobe direto pro Storage com esta URL assinada (mesmo bucket e mesmo
+// esquema do E-mail no card), sem passar pelo limite de 4,5 MB do Vercel.
+// A rota de envio só aceita caminhos dentro da pasta deste card.
+const TAMANHO_MAXIMO_CARTA = 15 * 1024 * 1024;
+
+export async function prepararUploadCarta(
+  cardId: number,
+  nomeArquivo: string,
+  tamanho: number,
+  passeBitrix?: string | null
+): Promise<{ ok: true; caminho: string; token: string; bucket: string } | { ok: false; erro: string }> {
+  if (!(await autorizarPanorama(cardId, passeBitrix))) return { ok: false, erro: "Sem permissão." };
+  if (tamanho > TAMANHO_MAXIMO_CARTA) return { ok: false, erro: `"${nomeArquivo}" passa de 15 MB.` };
+  // Chave do Storage sem acento/espaço (o nome original vai no e-mail).
+  const seguro = nomeArquivo
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .slice(-120);
+  const caminho = `${ENTITY_TYPE_ID_SEGURO_FIANCA}-${cardId}/${crypto.randomUUID()}-${seguro}`;
+  const { data, error } = await createServiceClient().storage.from(BUCKET_ANEXOS).createSignedUploadUrl(caminho);
+  if (error || !data) return { ok: false, erro: "Falha ao preparar o anexo." };
+  return { ok: true, caminho: data.path, token: data.token, bucket: BUCKET_ANEXOS };
 }

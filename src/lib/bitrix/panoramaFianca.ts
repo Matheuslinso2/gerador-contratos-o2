@@ -217,3 +217,59 @@ export async function buscarContatosEnvioPanorama(cardId: number): Promise<Conta
       .map((u) => ({ nome: [u.NAME, u.LAST_NAME].filter(Boolean).join(" "), email: limpar(u.EMAIL) })),
   };
 }
+
+// -- Recusados (aba "Recusados (avisar)" da fila, 16/10/2026) ----------------
+
+const ETAPA_RECUSADO = "DT1042_18:FAIL";
+
+// Card todo recusado: nenhuma aprovada/em análise e pelo menos uma recusa.
+export const todoRecusado = (c: CardPanorama) => {
+  const visiveis = c.linhas.filter((l) => l.status !== "oculto");
+  return visiveis.length > 0 && visiveis.every((l) => l.status === "recusado" || l.status === "limite_insuficiente");
+};
+
+// Cards a avisar da recusa: os que foram pra etapa RECUSADO desde o
+// lançamento (sem o corte viria o histórico inteiro) + os que ainda estão
+// nas etapas de cotação mas já com todas as seguradoras recusadas.
+export async function listarCardsRecusados(): Promise<CardPanorama[]> {
+  const [campos, naEtapaRecusado, naCotacao] = await Promise.all([
+    buscarDefinicaoCampos(ENTITY_TYPE_ID),
+    buscarTodasPaginas<BitrixItemRaw>("crm.item.list", {
+      entityTypeId: ENTITY_TYPE_ID,
+      select: CAMPOS_SELECT,
+      "filter[stageId]": ETAPA_RECUSADO,
+      "filter[>=movedTime]": INICIO_FILA_PANORAMA,
+      "order[id]": "desc",
+    }),
+    buscarTodasPaginas<BitrixItemRaw>("crm.item.list", {
+      entityTypeId: ENTITY_TYPE_ID,
+      select: CAMPOS_SELECT,
+      "filter[@stageId]": ETAPAS_MONTAR,
+      "order[id]": "desc",
+    }),
+  ]);
+  const itens = [...naEtapaRecusado, ...naCotacao];
+  const [empresas, usuarios] = await Promise.all([
+    buscarEmpresas(itens.map((i) => i.companyId)),
+    buscarUsuarios(idsUsuarios(itens)),
+  ]);
+  const cards = itens.map((i) => montarCard(i, campos, empresas, usuarios));
+  return cards.filter((c) => c.etapaId === ETAPA_RECUSADO || todoRecusado(c));
+}
+
+// Cards que já têm um e-mail de recusa registrado no Bitrix (ex.: enviado
+// pelo "E-mail no card" com o modelo "Fiança — Recusado") -- contam como
+// avisados na aba "Recusados (avisar)". Recusa mandada pelo Gmail sem o
+// endereço do card em cópia não aparece aqui (não há como saber).
+export async function cardsComRecusaRegistrada(ids: number[]): Promise<Set<number>> {
+  if (!ids.length) return new Set();
+  const resp = await chamarBitrix<{ result: { OWNER_ID: string; SUBJECT: string }[] }>("crm.activity.list", {
+    "filter[OWNER_TYPE_ID]": ENTITY_TYPE_ID,
+    "filter[TYPE_ID]": 4,
+    "filter[DIRECTION]": 2,
+    "filter[@OWNER_ID]": ids,
+    "filter[%SUBJECT]": "RECUSADO",
+    select: ["OWNER_ID", "SUBJECT"],
+  });
+  return new Set((resp.result ?? []).map((a) => Number(a.OWNER_ID)));
+}
