@@ -60,6 +60,17 @@ async function capturar(elemento: HTMLElement, escala: number): Promise<HTMLCanv
   return html2canvas(elemento, { scale: escala, backgroundColor: "#ffffff", useCORS: true, width: LARGURA, height: ALTURA });
 }
 
+// Máscara de moeda do campo valor (pedido do Matheus 16/10/2026): o
+// colaborador digita só números e os 2 últimos viram centavos -- "15151" ->
+// "151,51", "1235400" -> "12.354,00". Evita o erro de digitar 12354 querendo
+// dizer 123,54 (caso real do card 2816). Resultado continua compatível com
+// precoNumero().
+function mascaraReal(digitado: string): string {
+  const digitos = digitado.replace(/\D/g, "").replace(/^0+/, "").slice(0, 9);
+  if (!digitos) return "";
+  return (Number(digitos) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 // Só as células preenchidas das linhas aprovadas -- pra saber se o rascunho
 // mudou em relação à última versão salva.
 function assinaturaPrecos(linhas: LinhaPanorama[]): string {
@@ -261,7 +272,7 @@ export default function Montador({ card, versoes }: { card: CardPanorama; versoe
           Colunas = LMI (múltiplos do aluguel). Em cada célula: nº de parcelas e valor da parcela. Deixe vazio o LMI que a seguradora não oferece.
         </p>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[980px] border-separate border-spacing-1 text-sm">
+          <table className="w-full min-w-[1100px] border-separate border-spacing-1 text-sm">
             <thead>
               <tr className="text-xs text-gray-500">
                 <th className="text-left" rowSpan={2}>Seguradora</th>
@@ -295,11 +306,11 @@ export default function Montador({ card, versoes }: { card: CardPanorama; versoe
                         <span className="text-xs text-gray-400">x</span>
                         <input
                           aria-label={`${def.seguradora} ${def.plano ?? ""} ${plano} ${lmi}x valor`}
-                          inputMode="decimal"
-                          placeholder="R$"
-                          className={`${inputBase} w-20`}
+                          inputMode="numeric"
+                          placeholder="0,00"
+                          className={`${inputBase} w-24 text-right`}
                           value={c?.valor ?? ""}
-                          onChange={(e) => alterarCelula(l.chave, plano, lmi, "valor", e.target.value)}
+                          onChange={(e) => alterarCelula(l.chave, plano, lmi, "valor", mascaraReal(e.target.value))}
                         />
                       </div>
                     </td>
