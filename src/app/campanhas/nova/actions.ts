@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { lerProdutosDoFormulario } from "@/lib/campanhas/produtos";
 import { contemApelido } from "@/lib/campanhas/personalizacao";
+import { limparNomeRemetente } from "@/lib/campanhas/remetente";
 
 export async function criarCampanha(formData: FormData) {
   const supabase = await createClient();
@@ -26,6 +27,7 @@ export async function criarCampanha(formData: FormData) {
   const corpoHtml = String(formData.get("corpo_html") ?? "").trim();
   const ctaTexto = String(formData.get("cta_texto") ?? "").trim();
   const ctaHref = String(formData.get("cta_href") ?? "").trim();
+  const remetenteNome = limparNomeRemetente(formData.get("remetente_nome"));
 
   // corpo_html vem do editor com formatação (EditorCorpo) já reembrulhado em
   // <tr><td> -- checa se sobra texto de verdade removendo as tags antes de
@@ -60,6 +62,7 @@ export async function criarCampanha(formData: FormData) {
       corpo_html: corpoHtml,
       cta_texto: ctaTexto || null,
       cta_href: ctaHref || null,
+      remetente_nome: remetenteNome,
       criado_por: user.id,
       criado_por_email: user.email,
     })

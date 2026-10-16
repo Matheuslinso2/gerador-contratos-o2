@@ -11,6 +11,7 @@ import { ROTULO_STATUS_CAMPANHA, COR_STATUS_CAMPANHA } from "@/lib/campanhas/rot
 import { produtosDaCampanha, rotuloProdutoCampanha, rotulosProdutosCampanha } from "@/lib/campanhas/produtos";
 import { montarHtmlCampanha, personalizarCampanha, type CampanhaRow } from "@/lib/campanhas/processarLote";
 import { NOME_EXEMPLO_PREVIA } from "@/lib/campanhas/personalizacao";
+import { nomeExibidoRemetente } from "@/lib/campanhas/remetente";
 import { emailsElegiveisCampanha } from "@/lib/campanhas/elegibilidade";
 import { buscarEmailsEquipeInterna } from "@/lib/campanhas/equipeInterna";
 import SubmitButton from "@/components/SubmitButton";
@@ -344,6 +345,9 @@ export default async function CampanhaDetalhePage({
             Criada por <strong className="font-semibold text-o2-navy">{campanha.criado_por_email ?? "—"}</strong> em{" "}
             {new Date(campanha.created_at).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })}
           </p>
+          <p className="text-xs text-gray-500">
+            Remetente exibido: <strong className="font-semibold text-o2-navy">{nomeExibidoRemetente(campanha.remetente_nome)}</strong>
+          </p>
           {(campanha.valido_de || campanha.valido_ate) && (
             <p className="text-xs font-medium text-o2-coral">
               {campanha.valido_de && campanha.valido_ate
@@ -507,6 +511,7 @@ export default async function CampanhaDetalhePage({
             corpo_html: campanha.corpo_html,
             cta_texto: campanha.cta_texto,
             cta_href: campanha.cta_href,
+            remetente_nome: campanha.remetente_nome ?? null,
           }}
           htmlEmail={htmlEmail}
           rascunho={rascunho}

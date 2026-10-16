@@ -16,6 +16,7 @@ import { linkDescadastro } from "@/lib/campanhas/unsubscribeToken";
 import { dispararCampanha } from "@/lib/campanhas/dispararCampanha";
 import { listarDestinatariosReenvio, type PublicoReenvio } from "@/lib/campanhas/reenvio";
 import { lerProdutosDoFormulario, produtosDaCampanha } from "@/lib/campanhas/produtos";
+import { limparNomeRemetente, nomeExibidoRemetente } from "@/lib/campanhas/remetente";
 
 // Fuso fixo -03:00 (Brasil não tem mais horário de verão desde 2019) --
 // <input type="datetime-local"> devolve "AAAA-MM-DDTHH:mm" sem fuso
@@ -141,7 +142,7 @@ export async function enviarTesteCampanha(formData: FormData) {
       para: EMAILS_MODO_TESTE,
       assunto: `[TESTE] ${campanhaTeste.assunto}`,
       html,
-      remetente: "O2 Seguros",
+      remetente: nomeExibidoRemetente(campanhaTeste.remetente_nome),
       enderecoRemetente: ENDERECO_REMETENTE_CAMPANHAS,
       throwSeFalhar: true,
     });
@@ -194,7 +195,7 @@ export async function reenviarCampanha(formData: FormData) {
   const { data: original } = await supabase
     .from("campanhas")
     .select(
-      "nome, assunto, template, personalizacao, titulo, introducao, valido_de, valido_ate, produto, produtos, corpo_html, cta_texto, cta_href, imobiliarias_selecionadas, contatos_externos_selecionados, incluir_equipe_interna, status"
+      "nome, assunto, template, personalizacao, titulo, introducao, valido_de, valido_ate, produto, produtos, corpo_html, cta_texto, cta_href, imobiliarias_selecionadas, contatos_externos_selecionados, incluir_equipe_interna, remetente_nome, status"
     )
     .eq("id", campanhaId)
     .single();
@@ -226,6 +227,7 @@ export async function reenviarCampanha(formData: FormData) {
       imobiliarias_selecionadas: original.imobiliarias_selecionadas,
       contatos_externos_selecionados: original.contatos_externos_selecionados,
       incluir_equipe_interna: original.incluir_equipe_interna,
+      remetente_nome: original.remetente_nome,
       status: "rascunho",
       criado_por: user.id,
       criado_por_email: user.email,
@@ -345,6 +347,7 @@ export async function editarConteudoCampanha(formData: FormData) {
   const corpoHtml = String(formData.get("corpo_html") ?? "").trim();
   const ctaTexto = String(formData.get("cta_texto") ?? "").trim();
   const ctaHref = String(formData.get("cta_href") ?? "").trim();
+  const remetenteNome = limparNomeRemetente(formData.get("remetente_nome"));
 
   const temConteudo = corpoHtml.replace(/<[^>]+>/g, "").trim().length > 0 || /<img[\s>]/i.test(corpoHtml);
   if (!nome || !assunto || !titulo || !temConteudo || !produtos.length) {
@@ -375,6 +378,7 @@ export async function editarConteudoCampanha(formData: FormData) {
       corpo_html: corpoHtml,
       cta_texto: ctaTexto || null,
       cta_href: ctaHref || null,
+      remetente_nome: remetenteNome,
     })
     .eq("id", campanhaId);
 

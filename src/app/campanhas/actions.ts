@@ -29,7 +29,7 @@ export async function duplicarCampanha(formData: FormData) {
   const { data: original } = await supabase
     .from("campanhas")
     .select(
-      "nome, assunto, template, personalizacao, titulo, introducao, valido_de, valido_ate, produto, produtos, corpo_html, cta_texto, cta_href, imobiliarias_selecionadas, contatos_externos_selecionados"
+      "nome, assunto, template, personalizacao, titulo, introducao, valido_de, valido_ate, produto, produtos, corpo_html, cta_texto, cta_href, imobiliarias_selecionadas, contatos_externos_selecionados, remetente_nome"
     )
     .eq("id", campanhaId)
     .single();
@@ -53,6 +53,7 @@ export async function duplicarCampanha(formData: FormData) {
       cta_href: original.cta_href,
       imobiliarias_selecionadas: original.imobiliarias_selecionadas,
       contatos_externos_selecionados: original.contatos_externos_selecionados,
+      remetente_nome: original.remetente_nome,
       status: "rascunho",
       criado_por: user.id,
       criado_por_email: user.email,

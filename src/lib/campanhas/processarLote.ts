@@ -4,6 +4,7 @@ import { envolverEmailCampanha, type TemplateCampanha } from "@/lib/integracoes/
 import { linkDescadastro, linkDescadastroApi } from "./unsubscribeToken";
 import { aplicarApelido, type ModoPersonalizacao } from "./personalizacao";
 import { nomeParaComunicacao } from "@/lib/nomeParaComunicacao";
+import { nomeExibidoRemetente } from "./remetente";
 
 // Endereço separado do transacional (avisos@...) -- rejeições/denúncias de
 // marketing não podem contaminar a reputação do domínio usado hoje por
@@ -32,10 +33,11 @@ export type CampanhaRow = {
   cta_texto: string | null;
   cta_href: string | null;
   personalizacao: ModoPersonalizacao;
+  remetente_nome: string | null;
 };
 
 export const COLUNAS_CAMPANHA_ENVIO =
-  "id, assunto, template, titulo, introducao, valido_de, valido_ate, corpo_html, cta_texto, cta_href, personalizacao";
+  "id, assunto, template, titulo, introducao, valido_de, valido_ate, corpo_html, cta_texto, cta_href, personalizacao, remetente_nome";
 
 // Troca {{apelido}} pelo nome do destinatário em todos os textos da campanha
 // (assunto é texto puro; o resto vai pro HTML). `nome` null = sem imobiliária.
@@ -153,7 +155,7 @@ export async function processarLote(campanhaId: string, limite = TAMANHO_LOTE_PA
         para: envio.email,
         assunto: campanhaDoEnvio.assunto,
         html,
-        remetente: "O2 Seguros",
+        remetente: nomeExibidoRemetente(campanhaDoEnvio.remetente_nome),
         enderecoRemetente: ENDERECO_REMETENTE_CAMPANHAS,
         headers: {
           "List-Unsubscribe": `<${unsubscribeHrefApi}>`,

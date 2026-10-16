@@ -79,6 +79,18 @@ export default async function NovaCampanhaPage({
           </div>
 
           <div>
+            <label className="mb-1 block text-xs font-medium text-gray-600">Remetente (nome da pessoa)</label>
+            <input name="remetente_nome" maxLength={40} list="sugestoes-remetente" placeholder="Opcional — ex: Henrique" className={inputClass} />
+            <datalist id="sugestoes-remetente">
+              <option value="Henrique" />
+              <option value="Vanessa" />
+            </datalist>
+            <p className="mt-1 text-xs text-gray-400">
+              Na caixa de entrada o e-mail aparece como &quot;Nome | O2 Seguros&quot;. Muda só o nome exibido: o endereço de envio e o e-mail de resposta continuam os mesmos. Vazio = &quot;O2 Seguros&quot;.
+            </p>
+          </div>
+
+          <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">Assunto do e-mail</label>
             <input name="assunto" required placeholder="O que a imobiliária vai ver na caixa de entrada" className={inputClass} />
           </div>
