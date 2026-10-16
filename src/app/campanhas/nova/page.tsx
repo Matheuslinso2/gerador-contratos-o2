@@ -7,6 +7,7 @@ import AppHeader from "@/components/AppHeader";
 import PageHeader from "@/components/PageHeader";
 import SubmitButton from "@/components/SubmitButton";
 import { IconMail } from "@/components/icons";
+import InfoLegenda from "@/components/InfoLegenda";
 import { SeletorProdutos } from "../SeletorProdutos";
 import { EditorCorpo } from "../EditorCorpo";
 import { criarCampanha } from "./actions";
@@ -79,15 +80,13 @@ export default async function NovaCampanhaPage({
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-600">Remetente (nome da pessoa)</label>
-            <input name="remetente_nome" maxLength={40} list="sugestoes-remetente" placeholder="Opcional — ex: Henrique" className={inputClass} />
-            <datalist id="sugestoes-remetente">
-              <option value="Henrique" />
-              <option value="Vanessa" />
-            </datalist>
-            <p className="mt-1 text-xs text-gray-400">
-              Na caixa de entrada o e-mail aparece como &quot;Nome | O2 Seguros&quot;. Muda só o nome exibido: o endereço de envio e o e-mail de resposta continuam os mesmos. Vazio = &quot;O2 Seguros&quot;.
-            </p>
+            <label className="mb-1 block text-xs font-medium text-gray-600">
+              Remetente (nome da pessoa)
+              <InfoLegenda titulo="Remetente do e-mail">
+                Escreva o nome de quem está enviando (ex: Henrique). Na caixa de entrada de quem recebe, o e-mail aparece como &quot;Henrique | O2 Seguros&quot;, para a imobiliária se familiarizar com uma pessoa. Muda só o nome exibido: o endereço de envio e o e-mail de resposta continuam os mesmos. Deixe vazio para aparecer só &quot;O2 Seguros&quot;.
+              </InfoLegenda>
+            </label>
+            <input name="remetente_nome" maxLength={40} placeholder="Opcional — ex: Henrique" className={inputClass} />
           </div>
 
           <div>
