@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import PanoramaVisual from "../PanoramaVisual";
+import JanelaEnvioEmail, { type DadosEnvio } from "./JanelaEnvioEmail";
 import { gerarVersaoPanorama } from "../actions";
 import type { CardPanorama } from "@/lib/bitrix/panoramaFianca";
 import {
@@ -87,6 +88,15 @@ function assinaturaPrecos(linhas: LinhaPanorama[]): string {
         ),
       ])
   );
+}
+
+async function montarPdf(canvas: HTMLCanvasElement) {
+  const { default: jsPDF } = await import("jspdf");
+  const pdf = new jsPDF({ orientation: "l", unit: "px", format: [LARGURA, ALTURA], hotfixes: ["px_scaling"], compress: true });
+  // PNG sem perda (texto nítido em qualquer zoom). Sem a compressão
+  // "SLOW" o jsPDF guardava os pixels crus e o arquivo passava de 9 MB.
+  pdf.addImage(canvas, "PNG", 0, 0, LARGURA, ALTURA, undefined, "SLOW");
+  return pdf;
 }
 
 function baixar(url: string, nome: string) {
@@ -174,50 +184,46 @@ export default function Montador({ card, versoes }: { card: CardPanorama; versoe
   // rascunho, o download salva a versão antes -- todo arquivo que sai tem
   // versão registrada (base do controle de envio). Se o rascunho é igual à
   // última versão, reaproveita ela em vez de criar duplicata.
+  // Versão que vai sair (download ou e-mail). No rascunho, salva antes --
+  // ou reaproveita a última se nada mudou. null = não deu (mensagem já
+  // mostrada).
+  async function garantirVersao(acao: string): Promise<{ versao: number; nova: boolean } | null> {
+    if (versaoExibida) return { versao: versaoExibida.versao, nova: false };
+    if (!formaPagamento) {
+      setMensagem({ tipo: "erro", texto: `Escolha a forma de pagamento antes de ${acao}.` });
+      return null;
+    }
+    const igualUltima =
+      !!ultima &&
+      !statusMudou &&
+      ultima.formaPagamento === formaPagamento &&
+      assinaturaPrecos(ultima.linhas) === assinaturaPrecos(rascunho);
+    if (igualUltima) return { versao: ultima.versao, nova: false };
+    const r = await gerarVersaoPanorama(card.id, formaPagamento, precos);
+    if (!r.ok) {
+      setMensagem({ tipo: "erro", texto: r.erro });
+      return null;
+    }
+    return { versao: r.versao, nova: true };
+  }
+
   async function exportar(tipo: "png" | "png_hd" | "pdf") {
     if (!capturaRef.current) return;
     setMensagem(null);
-    let versao: number;
-    let novaVersao = false;
-    if (versaoExibida) {
-      versao = versaoExibida.versao;
-    } else {
-      if (!formaPagamento) {
-        setMensagem({ tipo: "erro", texto: "Escolha a forma de pagamento antes de baixar." });
-        return;
-      }
-      const igualUltima =
-        !!ultima &&
-        !statusMudou &&
-        ultima.formaPagamento === formaPagamento &&
-        assinaturaPrecos(ultima.linhas) === assinaturaPrecos(rascunho);
-      if (igualUltima) {
-        versao = ultima.versao;
-      } else {
-        setBaixando(tipo);
-        const r = await gerarVersaoPanorama(card.id, formaPagamento, precos);
-        if (!r.ok) {
-          setBaixando(null);
-          setMensagem({ tipo: "erro", texto: r.erro });
-          return;
-        }
-        versao = r.versao;
-        novaVersao = true;
-      }
-    }
     setBaixando(tipo);
+    const garantida = await garantirVersao("baixar");
+    if (!garantida) {
+      setBaixando(null);
+      return;
+    }
+    const { versao, nova: novaVersao } = garantida;
     try {
       const canvas = await capturar(capturaRef.current, tipo === "png" ? 1.5 : 3);
       const nome = nomeArquivo(card.id, versao, dadosVisual.cabecalho.inquilino);
       if (tipo !== "pdf") {
         baixar(canvas.toDataURL("image/png"), `${nome}${tipo === "png_hd" ? "-alta-qualidade" : ""}.png`);
       } else {
-        const { default: jsPDF } = await import("jspdf");
-        const pdf = new jsPDF({ orientation: "l", unit: "px", format: [LARGURA, ALTURA], hotfixes: ["px_scaling"], compress: true });
-        // PNG sem perda (texto nítido em qualquer zoom). Sem a compressão
-        // "SLOW" o jsPDF guardava os pixels crus e o arquivo passava de 9 MB.
-        pdf.addImage(canvas, "PNG", 0, 0, LARGURA, ALTURA, undefined, "SLOW");
-        pdf.save(`${nome}.pdf`);
+        (await montarPdf(canvas)).save(`${nome}.pdf`);
       }
       if (novaVersao) {
         setMensagem({ tipo: "ok", texto: `Versão ${versao} salva e baixada.` });
@@ -226,6 +232,35 @@ export default function Montador({ card, versoes }: { card: CardPanorama; versoe
       }
     } finally {
       setBaixando(null);
+    }
+  }
+
+  // Envio por e-mail (Fase 2, 16/10/2026): garante a versão, gera a imagem
+  // (vai no corpo) e o PDF alta qualidade (vai anexo) e abre a janela.
+  const [envio, setEnvio] = useState<DadosEnvio | null>(null);
+  const [preparandoEnvio, setPreparandoEnvio] = useState(false);
+  async function abrirEnvio() {
+    if (!capturaRef.current) return;
+    setMensagem(null);
+    setPreparandoEnvio(true);
+    try {
+      const garantida = await garantirVersao("enviar");
+      if (!garantida) return;
+      const corpoPng = await capturar(capturaRef.current, 1.5);
+      const pdf = await montarPdf(await capturar(capturaRef.current, 3));
+      setEnvio({
+        versao: garantida.versao,
+        inquilino: dadosVisual.cabecalho.inquilino,
+        linhas: dadosVisual.linhas,
+        pngDataUrl: corpoPng.toDataURL("image/png"),
+        pdfBase64: pdf.output("datauristring").split(",")[1],
+      });
+      if (garantida.nova) {
+        router.refresh();
+        setVersaoAberta(garantida.versao);
+      }
+    } finally {
+      setPreparandoEnvio(false);
     }
   }
 
@@ -426,6 +461,14 @@ export default function Montador({ card, versoes }: { card: CardPanorama; versoe
               >
                 {baixando === "png_hd" ? "Gerando…" : "Baixar imagem alta qualidade (e-mail)"}
               </button>
+              <button
+                type="button"
+                onClick={abrirEnvio}
+                disabled={!!baixando || preparandoEnvio}
+                className="rounded-lg bg-o2-coral px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {preparandoEnvio ? "Preparando…" : "✉ Enviar por e-mail"}
+              </button>
             </span>
         </div>
         {versaoExibida ? (
@@ -449,6 +492,19 @@ export default function Montador({ card, versoes }: { card: CardPanorama; versoe
       <div aria-hidden style={{ position: "fixed", left: -10000, top: 0, pointerEvents: "none" }}>
         <PanoramaVisual ref={capturaRef} {...dadosVisual} />
       </div>
+
+      {envio && (
+        <JanelaEnvioEmail
+          cardId={card.id}
+          dados={envio}
+          onFechar={() => setEnvio(null)}
+          onEnviado={(texto) => {
+            setEnvio(null);
+            setMensagem({ tipo: "ok", texto });
+            router.refresh();
+          }}
+        />
+      )}
     </div>
   );
 }

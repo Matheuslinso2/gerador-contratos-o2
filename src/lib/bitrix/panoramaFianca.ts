@@ -10,6 +10,7 @@ import {
   buscarItem,
   buscarTodasPaginas,
   buscarUsuarios,
+  chamarBitrix,
   type BitrixDefinicaoCampo,
   type BitrixItemRaw,
 } from "./client";
@@ -177,3 +178,42 @@ export async function buscarCardPanorama(id: number): Promise<CardPanorama> {
 // Card entra na fila quando pelo menos 1 seguradora aprovou/pré-aprovou --
 // não espera as outras responderem (decisão 15/10/2026).
 export const temSeguradoraAprovada = (c: CardPanorama) => c.linhas.some((l) => statusEditavel(l.status));
+
+// -- Envio por e-mail (Fase 2, 16/10/2026) ---------------------------------
+
+const CAMPO_EMAIL_INQUILINO = "ufCrm10_1783366659"; // "E-mail locatário 1"
+
+export type ContatosEnvioPanorama = {
+  emailsImobiliaria: string[];
+  emailInquilino: string | null;
+  cotadores: { nome: string; email: string }[];
+};
+
+// Destinatários sugeridos na janela de envio: e-mails da empresa
+// (imobiliária) do card no Bitrix (39/43 da fila têm em 16/10, 25 com mais
+// de um), e-mail do inquilino e dos cotadores (vão em cópia, como a equipe
+// faz no Gmail).
+export async function buscarContatosEnvioPanorama(cardId: number): Promise<ContatosEnvioPanorama> {
+  const item = await buscarItem(ENTITY_TYPE_ID, cardId);
+  const [empresa, usuarios] = await Promise.all([
+    item.companyId
+      ? chamarBitrix<{ result: { EMAIL?: { VALUE: string }[] } }>("crm.company.get", { id: item.companyId })
+      : Promise.resolve(null),
+    idsCotadores(item).length
+      ? chamarBitrix<{ result: { NAME: string; LAST_NAME: string; EMAIL: string }[] }>(
+          "user.get",
+          { "FILTER[ID]": idsCotadores(item) },
+          "BITRIX_WEBHOOK_URL_USUARIOS"
+        )
+      : Promise.resolve(null),
+  ]);
+  const limpar = (e: string) => e.trim().toLowerCase();
+  const emailInquilino = texto(item[CAMPO_EMAIL_INQUILINO]);
+  return {
+    emailsImobiliaria: [...new Set((empresa?.result.EMAIL ?? []).map((e) => limpar(e.VALUE)).filter(Boolean))],
+    emailInquilino: emailInquilino ? limpar(emailInquilino) : null,
+    cotadores: (usuarios?.result ?? [])
+      .filter((u) => u.EMAIL)
+      .map((u) => ({ nome: [u.NAME, u.LAST_NAME].filter(Boolean).join(" "), email: limpar(u.EMAIL) })),
+  };
+}

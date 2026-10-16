@@ -3,7 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
-import { buscarCardPanorama } from "@/lib/bitrix/panoramaFianca";
+import {
+  buscarCardPanorama,
+  buscarContatosEnvioPanorama,
+  type ContatosEnvioPanorama,
+} from "@/lib/bitrix/panoramaFianca";
 import {
   LMI_BASICO,
   LMI_COMPLETO,
@@ -73,4 +77,20 @@ export async function gerarVersaoPanorama(
   revalidatePath("/seguro-fianca/panoramas");
   revalidatePath(`/seguro-fianca/panoramas/${cardId}`);
   return { ok: true, versao, linhas, cabecalho: card.cabecalho };
+}
+
+// Destinatários sugeridos pra janela de envio por e-mail (Fase 2).
+export async function buscarContatosEnvio(
+  cardId: number
+): Promise<({ ok: true } & ContatosEnvioPanorama) | { ok: false; erro: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user?.email || (!isAdmin(user.email) && !isColaboradorO2(user.email))) return { ok: false, erro: "Sem permissão." };
+  try {
+    return { ok: true, ...(await buscarContatosEnvioPanorama(cardId)) };
+  } catch (e) {
+    return { ok: false, erro: `Não consegui ler os contatos no Bitrix: ${(e as Error).message}` };
+  }
 }
