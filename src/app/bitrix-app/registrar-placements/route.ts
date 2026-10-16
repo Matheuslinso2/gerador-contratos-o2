@@ -19,6 +19,7 @@ const TITLE = "E-mail";
 
 const ALVOS = [
   { rotulo: "Lead", padrao: "CRM_LEAD_DETAIL_TAB" },
+  { rotulo: "Negócios (Deal)", padrao: "CRM_DEAL_DETAIL_TAB" },
   { rotulo: "SPA Seguro Fiança (1042)", padrao: "CRM_DYNAMIC_1042_DETAIL_TAB" },
   { rotulo: "SPA Ramos Elementares/Incêndio (1046)", padrao: "CRM_DYNAMIC_1046_DETAIL_TAB" },
   { rotulo: "SPA Capitalização (1048)", padrao: "CRM_DYNAMIC_1048_DETAIL_TAB" },
