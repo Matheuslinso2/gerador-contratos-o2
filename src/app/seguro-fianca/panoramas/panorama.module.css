@@ -72,8 +72,11 @@
 .tabela th {
   background: var(--laranja); color: #fff; font-size: 13px; font-weight: 700; height: 36px;
   border-radius: 8px; letter-spacing: 0.04em;
+  /* explícito: o centro padrão do navegador em <th> não é respeitado pelo
+     html2canvas em alguns navegadores (saía tudo à esquerda no PNG) */
+  text-align: center; vertical-align: middle; padding: 0;
 }
-.tabela td { height: 50px; border-radius: 8px; font-size: 13px; text-align: center; background: #f1f1f1; }
+.tabela td { height: 50px; border-radius: 8px; font-size: 13px; text-align: center; vertical-align: middle; background: #f1f1f1; }
 .tabela .sep { background: transparent !important; border: none !important; }
 .seg {
   background: #fff !important; border: 1.5px solid var(--cinza-claro); text-align: left !important; padding-left: 16px;
