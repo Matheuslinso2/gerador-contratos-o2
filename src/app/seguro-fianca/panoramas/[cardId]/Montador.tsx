@@ -11,6 +11,8 @@ import {
   LMI_COMPLETO,
   ROTULO_PAGAMENTO,
   ROTULO_STATUS,
+  celulaPreenchida,
+  precoNumero,
   statusEditavel,
   type CabecalhoPanorama,
   type CelulaPreco,
@@ -58,6 +60,24 @@ async function capturar(elemento: HTMLElement, escala: number): Promise<HTMLCanv
   return html2canvas(elemento, { scale: escala, backgroundColor: "#ffffff", useCORS: true, width: LARGURA, height: ALTURA });
 }
 
+// Só as células preenchidas das linhas aprovadas -- pra saber se o rascunho
+// mudou em relação à última versão salva.
+function assinaturaPrecos(linhas: LinhaPanorama[]): string {
+  return JSON.stringify(
+    linhas
+      .filter((l) => statusEditavel(l.status))
+      .map((l) => [
+        l.chave,
+        ...(["basico", "completo"] as const).flatMap((plano) =>
+          Object.entries(l.precos[plano] as Record<string, CelulaPreco>)
+            .filter(([, c]) => celulaPreenchida(c))
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([lmi, c]) => `${plano}${lmi}:${c.parcelas.trim()}x${precoNumero(c.valor)}`)
+        ),
+      ])
+  );
+}
+
 function baixar(url: string, nome: string) {
   const a = document.createElement("a");
   a.href = url;
@@ -75,7 +95,11 @@ export default function Montador({ card, versoes }: { card: CardPanorama; versoe
     Object.fromEntries((ultima?.linhas ?? []).map((l) => [l.chave, l.precos]))
   );
   const [formaPagamento, setFormaPagamento] = useState<FormaPagamento | null>(ultima?.formaPagamento ?? null);
-  const [versaoAberta, setVersaoAberta] = useState<number | null>(null); // null = rascunho atual
+  // null = rascunho atual. Card que já tem versão abre nela, com os botões
+  // de download à mão (antes abria no rascunho e o colaborador não achava
+  // os downloads -- relato do Matheus 16/10/2026). Editar qualquer campo
+  // volta pro rascunho.
+  const [versaoAberta, setVersaoAberta] = useState<number | null>(ultima?.versao ?? null);
   const [mensagem, setMensagem] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null);
   const [baixando, setBaixando] = useState<"png" | "png_hd" | "pdf" | null>(null);
   const [gerando, iniciarGeracao] = useTransition();
@@ -135,12 +159,45 @@ export default function Montador({ card, versoes }: { card: CardPanorama; versoe
   // png = WhatsApp (2400×1350, leve); png_hd e pdf = e-mail em alta
   // qualidade (4800×2700, sem perda) -- pedido do Matheus em 16/10/2026,
   // enquanto o envio por e-mail não é ligado no Workspace (Fase 2).
+  // Baixar funciona em qualquer tela (pedido do Matheus 16/10/2026). No
+  // rascunho, o download salva a versão antes -- todo arquivo que sai tem
+  // versão registrada (base do controle de envio). Se o rascunho é igual à
+  // última versão, reaproveita ela em vez de criar duplicata.
   async function exportar(tipo: "png" | "png_hd" | "pdf") {
-    if (!capturaRef.current || !versaoExibida) return;
+    if (!capturaRef.current) return;
+    setMensagem(null);
+    let versao: number;
+    let novaVersao = false;
+    if (versaoExibida) {
+      versao = versaoExibida.versao;
+    } else {
+      if (!formaPagamento) {
+        setMensagem({ tipo: "erro", texto: "Escolha a forma de pagamento antes de baixar." });
+        return;
+      }
+      const igualUltima =
+        !!ultima &&
+        !statusMudou &&
+        ultima.formaPagamento === formaPagamento &&
+        assinaturaPrecos(ultima.linhas) === assinaturaPrecos(rascunho);
+      if (igualUltima) {
+        versao = ultima.versao;
+      } else {
+        setBaixando(tipo);
+        const r = await gerarVersaoPanorama(card.id, formaPagamento, precos);
+        if (!r.ok) {
+          setBaixando(null);
+          setMensagem({ tipo: "erro", texto: r.erro });
+          return;
+        }
+        versao = r.versao;
+        novaVersao = true;
+      }
+    }
     setBaixando(tipo);
     try {
       const canvas = await capturar(capturaRef.current, tipo === "png" ? 1.5 : 3);
-      const nome = nomeArquivo(card.id, versaoExibida.versao, versaoExibida.cabecalho.inquilino);
+      const nome = nomeArquivo(card.id, versao, dadosVisual.cabecalho.inquilino);
       if (tipo !== "pdf") {
         baixar(canvas.toDataURL("image/png"), `${nome}${tipo === "png_hd" ? "-alta-qualidade" : ""}.png`);
       } else {
@@ -150,6 +207,11 @@ export default function Montador({ card, versoes }: { card: CardPanorama; versoe
         // "SLOW" o jsPDF guardava os pixels crus e o arquivo passava de 9 MB.
         pdf.addImage(canvas, "PNG", 0, 0, LARGURA, ALTURA, undefined, "SLOW");
         pdf.save(`${nome}.pdf`);
+      }
+      if (novaVersao) {
+        setMensagem({ tipo: "ok", texto: `Versão ${versao} salva e baixada.` });
+        router.refresh();
+        setVersaoAberta(versao);
       }
     } finally {
       setBaixando(null);
@@ -328,8 +390,7 @@ export default function Montador({ card, versoes }: { card: CardPanorama; versoe
               v{v.versao} · {new Date(v.geradoEm).toLocaleDateString("pt-BR")}
             </button>
           ))}
-          {versaoExibida && (
-            <span className="ml-auto flex gap-2">
+            <span className="ml-auto flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => exportar("png")}
@@ -355,7 +416,6 @@ export default function Montador({ card, versoes }: { card: CardPanorama; versoe
                 {baixando === "png_hd" ? "Gerando…" : "Baixar imagem alta qualidade (e-mail)"}
               </button>
             </span>
-          )}
         </div>
         {versaoExibida ? (
           <p className="mb-2 text-xs text-gray-500">
@@ -363,7 +423,7 @@ export default function Montador({ card, versoes }: { card: CardPanorama; versoe
             {new Date(versaoExibida.geradoEm).toLocaleString("pt-BR")} (retrato salvo, não muda mais)
           </p>
         ) : (
-          <p className="mb-2 text-xs text-gray-500">Rascunho: atualiza enquanto você digita. Para baixar, gere uma versão.</p>
+          <p className="mb-2 text-xs text-gray-500">Rascunho: atualiza enquanto você digita. Ao baixar, ele é salvo como nova versão automaticamente.</p>
         )}
 
         <div ref={caixaRef} className="w-full overflow-clip rounded-lg border border-gray-200" style={{ height: ALTURA * escala }}>
