@@ -1,8 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
-import { isAdmin, isColaboradorO2 } from "@/lib/admin";
+import { autorizarPanorama } from "@/lib/panoramaAutorizacao";
 import {
   buscarCardPanorama,
   buscarContatosEnvioPanorama,
@@ -27,13 +26,12 @@ export type ResultadoGerar = { ok: true; versao: number; linhas: LinhaPanorama[]
 export async function gerarVersaoPanorama(
   cardId: number,
   formaPagamento: FormaPagamento,
-  precos: Partial<Record<ChaveLinha, PrecosLinha>>
+  precos: Partial<Record<ChaveLinha, PrecosLinha>>,
+  passeBitrix?: string | null // aba "Panorama" dentro do card do Bitrix
 ): Promise<ResultadoGerar> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user?.email || (!isAdmin(user.email) && !isColaboradorO2(user.email))) return { ok: false, erro: "Sem permissão." };
+  const autor = await autorizarPanorama(cardId, passeBitrix);
+  if (!autor) return { ok: false, erro: "Sem permissão (se estiver no Bitrix, reabra a aba Panorama)." };
+  const supabase = autor.db;
   if (!["fatura", "boleto", "cartao"].includes(formaPagamento)) return { ok: false, erro: "Escolha a forma de pagamento." };
 
   let card;
@@ -70,7 +68,7 @@ export async function gerarVersaoPanorama(
     linhas,
     forma_pagamento: formaPagamento,
     assinatura_status: card.assinaturaStatus,
-    gerado_por_email: user.email,
+    gerado_por_email: autor.email,
   });
   if (error) return { ok: false, erro: `Erro ao salvar: ${error.message}` };
 
@@ -81,13 +79,10 @@ export async function gerarVersaoPanorama(
 
 // Destinatários sugeridos pra janela de envio por e-mail (Fase 2).
 export async function buscarContatosEnvio(
-  cardId: number
+  cardId: number,
+  passeBitrix?: string | null
 ): Promise<({ ok: true } & ContatosEnvioPanorama) | { ok: false; erro: string }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user?.email || (!isAdmin(user.email) && !isColaboradorO2(user.email))) return { ok: false, erro: "Sem permissão." };
+  if (!(await autorizarPanorama(cardId, passeBitrix))) return { ok: false, erro: "Sem permissão." };
   try {
     return { ok: true, ...(await buscarContatosEnvioPanorama(cardId)) };
   } catch (e) {

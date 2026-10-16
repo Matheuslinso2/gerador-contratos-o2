@@ -106,7 +106,17 @@ function baixar(url: string, nome: string) {
   a.click();
 }
 
-export default function Montador({ card, versoes }: { card: CardPanorama; versoes: VersaoSalva[] }) {
+// passeBitrix: preenchido quando a tela roda dentro da aba "Panorama" do
+// card no Bitrix (sem login do Workspace) -- ver lib/bitrix/sessaoPanorama.ts.
+export default function Montador({
+  card,
+  versoes,
+  passeBitrix,
+}: {
+  card: CardPanorama;
+  versoes: VersaoSalva[];
+  passeBitrix?: string;
+}) {
   const router = useRouter();
   const ultima = versoes[0];
 
@@ -166,7 +176,7 @@ export default function Montador({ card, versoes }: { card: CardPanorama; versoe
       return;
     }
     iniciarGeracao(async () => {
-      const r = await gerarVersaoPanorama(card.id, formaPagamento, precos);
+      const r = await gerarVersaoPanorama(card.id, formaPagamento, precos, passeBitrix);
       if (!r.ok) {
         setMensagem({ tipo: "erro", texto: r.erro });
         return;
@@ -199,7 +209,7 @@ export default function Montador({ card, versoes }: { card: CardPanorama; versoe
       ultima.formaPagamento === formaPagamento &&
       assinaturaPrecos(ultima.linhas) === assinaturaPrecos(rascunho);
     if (igualUltima) return { versao: ultima.versao, nova: false };
-    const r = await gerarVersaoPanorama(card.id, formaPagamento, precos);
+    const r = await gerarVersaoPanorama(card.id, formaPagamento, precos, passeBitrix);
     if (!r.ok) {
       setMensagem({ tipo: "erro", texto: r.erro });
       return null;
@@ -496,6 +506,7 @@ export default function Montador({ card, versoes }: { card: CardPanorama; versoe
       {envio && (
         <JanelaEnvioEmail
           cardId={card.id}
+          passeBitrix={passeBitrix}
           dados={envio}
           onFechar={() => setEnvio(null)}
           onEnviado={(texto) => {

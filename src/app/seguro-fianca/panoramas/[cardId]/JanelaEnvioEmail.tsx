@@ -31,11 +31,13 @@ const ddmm = (iso: string) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : 
 
 export default function JanelaEnvioEmail({
   cardId,
+  passeBitrix,
   dados,
   onFechar,
   onEnviado,
 }: {
   cardId: number;
+  passeBitrix?: string;
   dados: DadosEnvio;
   onFechar: () => void;
   onEnviado: (texto: string) => void;
@@ -61,7 +63,7 @@ export default function JanelaEnvioEmail({
   const [copiado, setCopiado] = useState(false);
 
   useEffect(() => {
-    buscarContatosEnvio(cardId).then((r) => {
+    buscarContatosEnvio(cardId, passeBitrix).then((r) => {
       setCarregando(false);
       if (!r.ok) {
         setErroContatos(r.erro);
@@ -76,7 +78,7 @@ export default function JanelaEnvioEmail({
       setCc(Object.fromEntries(r.cotadores.map((c) => [c.email, true])));
       setNomesCotadores(Object.fromEntries(r.cotadores.map((c) => [c.email, c.nome])));
     });
-  }, [cardId]);
+  }, [cardId, passeBitrix]);
 
   const listaExtras = extras
     .split(/[,;\s]+/)
@@ -106,7 +108,7 @@ export default function JanelaEnvioEmail({
     if (!validade) return setErro("Preencha a validade das cartas.");
     setEnviando(true);
     try {
-      const resp = await fetch("/api/seguro-fianca/panoramas/enviar", {
+      const resp = await fetch(passeBitrix ? "/bitrix-app/panorama-enviar" : "/api/seguro-fianca/panoramas/enviar", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -121,6 +123,7 @@ export default function JanelaEnvioEmail({
           observacoes,
           pngBase64: dados.pngDataUrl.split(",")[1],
           pdfBase64: dados.pdfBase64,
+          passeBitrix,
         }),
       });
       const r = await resp.json().catch(() => ({ ok: false, erro: `Erro ${resp.status}` }));

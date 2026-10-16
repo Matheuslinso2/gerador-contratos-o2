@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { isAdmin, isColaboradorO2 } from "@/lib/admin";
+import { autorizarPanorama } from "@/lib/panoramaAutorizacao";
 import { enviarEmail } from "@/lib/email";
 import { ENTITY_TYPE_ID_SEGURO_FIANCA, gerarEnderecoRespostaCard } from "@/lib/bitrix/entidadesCard";
 import { registrarAtividadeEmail } from "@/lib/bitrix/atividades";
@@ -37,6 +36,7 @@ type Corpo = {
   observacoes?: string;
   pngBase64?: string;
   pdfBase64?: string;
+  passeBitrix?: string;
 };
 
 function limparLista(lista: unknown): string[] {
@@ -45,20 +45,17 @@ function limparLista(lista: unknown): string[] {
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user?.email || (!isAdmin(user.email) && !isColaboradorO2(user.email))) {
-    return NextResponse.json({ ok: false, erro: "Sem permissão." }, { status: 403 });
-  }
-
   let corpo: Corpo;
   try {
     corpo = await request.json();
   } catch {
     return NextResponse.json({ ok: false, erro: "Requisição inválida." }, { status: 400 });
   }
+
+  // Sessão do Workspace OU passe da aba "Panorama" no card do Bitrix.
+  const autor = await autorizarPanorama(Number(corpo.cardId), corpo.passeBitrix);
+  if (!autor) return NextResponse.json({ ok: false, erro: "Sem permissão." }, { status: 403 });
+  const supabase = autor.db;
 
   const { cardId, versao, assunto, status, validade, observacoes = "", pngBase64, pdfBase64 } = corpo;
   const para = limparLista(corpo.para);
@@ -149,7 +146,7 @@ export async function POST(request: NextRequest) {
     para,
     cc,
     assunto: assunto.trim(),
-    enviado_por_email: user.email,
+    enviado_por_email: autor.email,
     registrado_no_card: registradoNoCard,
     resend_id: resendId,
   });
