@@ -46,7 +46,7 @@ function nomeArquivo(cardId: number, versao: number, inquilino: string) {
   return `panorama-fianca-${cardId}-v${versao}-${slug}`;
 }
 
-async function capturar(elemento: HTMLElement): Promise<HTMLCanvasElement> {
+async function capturar(elemento: HTMLElement, escala: number): Promise<HTMLCanvasElement> {
   const { default: html2canvas } = await import("html2canvas-pro");
   // Garante fonte e logos carregados antes da captura (senão sai sem logo).
   await document.fonts.ready;
@@ -55,7 +55,7 @@ async function capturar(elemento: HTMLElement): Promise<HTMLCanvasElement> {
       img.complete ? null : new Promise((ok) => ((img.onload = ok), (img.onerror = ok)))
     )
   );
-  return html2canvas(elemento, { scale: 1.5, backgroundColor: "#ffffff", useCORS: true, width: LARGURA, height: ALTURA });
+  return html2canvas(elemento, { scale: escala, backgroundColor: "#ffffff", useCORS: true, width: LARGURA, height: ALTURA });
 }
 
 function baixar(url: string, nome: string) {
@@ -77,7 +77,7 @@ export default function Montador({ card, versoes }: { card: CardPanorama; versoe
   const [formaPagamento, setFormaPagamento] = useState<FormaPagamento | null>(ultima?.formaPagamento ?? null);
   const [versaoAberta, setVersaoAberta] = useState<number | null>(null); // null = rascunho atual
   const [mensagem, setMensagem] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null);
-  const [baixando, setBaixando] = useState<"png" | "pdf" | null>(null);
+  const [baixando, setBaixando] = useState<"png" | "png_hd" | "pdf" | null>(null);
   const [gerando, iniciarGeracao] = useTransition();
 
   const statusMudou = !!ultima && ultima.assinaturaStatus !== card.assinaturaStatus;
@@ -132,21 +132,23 @@ export default function Montador({ card, versoes }: { card: CardPanorama; versoe
     });
   }
 
-  async function exportar(tipo: "png" | "pdf") {
+  // png = WhatsApp (2400×1350, leve); png_hd e pdf = e-mail em alta
+  // qualidade (4800×2700, sem perda) -- pedido do Matheus em 16/10/2026,
+  // enquanto o envio por e-mail não é ligado no Workspace (Fase 2).
+  async function exportar(tipo: "png" | "png_hd" | "pdf") {
     if (!capturaRef.current || !versaoExibida) return;
     setBaixando(tipo);
     try {
-      const canvas = await capturar(capturaRef.current);
+      const canvas = await capturar(capturaRef.current, tipo === "png" ? 1.5 : 3);
       const nome = nomeArquivo(card.id, versaoExibida.versao, versaoExibida.cabecalho.inquilino);
-      const png = canvas.toDataURL("image/png");
-      if (tipo === "png") {
-        baixar(png, `${nome}.png`);
+      if (tipo !== "pdf") {
+        baixar(canvas.toDataURL("image/png"), `${nome}${tipo === "png_hd" ? "-alta-qualidade" : ""}.png`);
       } else {
         const { default: jsPDF } = await import("jspdf");
-        const pdf = new jsPDF({ orientation: "l", unit: "px", format: [LARGURA, ALTURA], hotfixes: ["px_scaling"] });
-        // JPEG dentro do PDF: com o PNG o arquivo passava de 9 MB (pesado
-        // demais pra anexo de e-mail); JPEG 0.92 fica visualmente igual.
-        pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, LARGURA, ALTURA);
+        const pdf = new jsPDF({ orientation: "l", unit: "px", format: [LARGURA, ALTURA], hotfixes: ["px_scaling"], compress: true });
+        // PNG sem perda (texto nítido em qualquer zoom). Sem a compressão
+        // "SLOW" o jsPDF guardava os pixels crus e o arquivo passava de 9 MB.
+        pdf.addImage(canvas, "PNG", 0, 0, LARGURA, ALTURA, undefined, "SLOW");
         pdf.save(`${nome}.pdf`);
       }
     } finally {
@@ -342,7 +344,15 @@ export default function Montador({ card, versoes }: { card: CardPanorama; versoe
                 disabled={!!baixando}
                 className="rounded-lg border border-o2-navy px-3 py-1.5 text-sm font-semibold text-o2-navy disabled:opacity-60"
               >
-                {baixando === "pdf" ? "Gerando…" : "Baixar PDF (e-mail)"}
+                {baixando === "pdf" ? "Gerando…" : "Baixar PDF alta qualidade (e-mail)"}
+              </button>
+              <button
+                type="button"
+                onClick={() => exportar("png_hd")}
+                disabled={!!baixando}
+                className="rounded-lg border border-o2-navy px-3 py-1.5 text-sm font-semibold text-o2-navy disabled:opacity-60"
+              >
+                {baixando === "png_hd" ? "Gerando…" : "Baixar imagem alta qualidade (e-mail)"}
               </button>
             </span>
           )}
