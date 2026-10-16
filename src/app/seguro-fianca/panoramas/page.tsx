@@ -26,6 +26,11 @@ const ABAS: { chave: Aba; rotulo: string }[] = [
   { chave: "gerados", rotulo: "Gerados" },
 ];
 
+// Minúsculas e sem acento -- "joão" acha "JOAO" e vice-versa.
+function normalizar(t: string): string {
+  return t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+}
+
 function tempoDesde(iso: string): string {
   const horas = Math.max(0, (Date.now() - new Date(iso).getTime()) / 36e5);
   if (horas < 1) return "menos de 1h";
@@ -44,6 +49,9 @@ export default async function PanoramasPage({ searchParams }: { searchParams: Pr
   // Atalho: digitou o nº do card -> vai direto pra montagem (vale pra card
   // fora da fila também, ex: etapa diferente das previstas).
   if (buscaCard && /^\d+$/.test(buscaCard.trim())) redirect(`/seguro-fianca/panoramas/${buscaCard.trim()}`);
+  // Texto = busca pelo nome do inquilino (pedido do Matheus 16/10/2026), em
+  // todos os cards das etapas do panorama, sem depender de aba/corte de data.
+  const busca = normalizar(buscaCard ?? "");
   const aba: Aba = ABAS.some((a) => a.chave === abaParam) ? (abaParam as Aba) : "montar";
 
   let cards: CardPanorama[] = [];
@@ -81,9 +89,17 @@ export default async function PanoramasPage({ searchParams }: { searchParams: Pr
     .filter((x) => x.grupo !== null);
   const contagem = Object.fromEntries(ABAS.map((a) => [a.chave, classificados.filter((x) => x.grupo === a.chave).length]));
   // Mais antigos primeiro -- quem está esperando há mais tempo é atendido antes.
-  const lista = classificados
-    .filter((x) => x.grupo === aba)
-    .sort((a, b) => new Date(a.card.movidoEm).getTime() - new Date(b.card.movidoEm).getTime());
+  const lista = (
+    busca
+      ? cards
+          .filter((c) => normalizar(c.cabecalho.inquilino).includes(busca))
+          .map((c) => ({
+            card: c,
+            ultima: ultimaPorCard.get(c.id),
+            grupo: classificados.find((x) => x.card.id === c.id)?.grupo ?? null,
+          }))
+      : classificados.filter((x) => x.grupo === aba)
+  ).sort((a, b) => new Date(a.card.movidoEm).getTime() - new Date(b.card.movidoEm).getTime());
 
   return (
     <>
@@ -93,16 +109,16 @@ export default async function PanoramasPage({ searchParams }: { searchParams: Pr
           <PageHeader
             icon={<IconShield />}
             titulo="Panoramas de preços — Seguro Fiança"
-            subtitulo="Cards com pelo menos uma seguradora aprovada ou pré-aprovada. Card fora da fila? Digite o número ao lado."
+            subtitulo="Cards com pelo menos uma seguradora aprovada ou pré-aprovada. Busque pelo nº do card ou pelo nome do inquilino."
           />
           <form className="flex items-center gap-2" action="/seguro-fianca/panoramas">
             <input
               name="card"
-              inputMode="numeric"
-              placeholder="Nº do card"
-              className="w-32 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+              defaultValue={busca ? buscaCard : ""}
+              placeholder="Nº do card ou nome do inquilino"
+              className="w-72 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
             />
-            <button className="rounded-lg bg-o2-navy px-3 py-1.5 text-sm font-semibold text-white">Abrir</button>
+            <button className="rounded-lg bg-o2-navy px-3 py-1.5 text-sm font-semibold text-white">Buscar</button>
           </form>
         </div>
 
@@ -120,10 +136,18 @@ export default async function PanoramasPage({ searchParams }: { searchParams: Pr
           ))}
         </nav>
 
+        {busca && !erro && (
+          <p className="text-sm text-gray-600">
+            {lista.length} card(s) com &ldquo;{buscaCard}&rdquo; no nome do inquilino.{" "}
+            <Link href={`/seguro-fianca/panoramas?aba=${aba}`} className="text-o2-navy underline">
+              Limpar busca
+            </Link>
+          </p>
+        )}
         {erro ? (
           <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">Erro ao ler o Bitrix: {erro}</p>
         ) : lista.length === 0 ? (
-          <p className="p-6 text-center text-sm text-gray-500">Nenhum card nesta aba.</p>
+          <p className="p-6 text-center text-sm text-gray-500">{busca ? "Nenhum inquilino encontrado." : "Nenhum card nesta aba."}</p>
         ) : (
           <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
             <table className="w-full text-sm">
@@ -133,7 +157,7 @@ export default async function PanoramasPage({ searchParams }: { searchParams: Pr
                   <th className="px-3 py-2">Inquilino</th>
                   <th className="px-3 py-2">Imobiliária</th>
                   <th className="px-3 py-2">Etapa</th>
-                  <th className="px-3 py-2">Responsável</th>
+                  <th className="px-3 py-2">Cotador</th>
                   <th className="px-3 py-2">Na etapa há</th>
                   <th className="px-3 py-2">Aprovadas</th>
                   <th className="px-3 py-2">Última versão</th>
@@ -141,7 +165,7 @@ export default async function PanoramasPage({ searchParams }: { searchParams: Pr
                 </tr>
               </thead>
               <tbody>
-                {lista.map(({ card, ultima }) => (
+                {lista.map(({ card, ultima, grupo }) => (
                   <tr key={card.id} className="border-t border-gray-100">
                     <td className="px-3 py-2 font-mono text-xs">{card.id}</td>
                     <td className="px-3 py-2 font-medium text-o2-navy">{card.cabecalho.inquilino}</td>
@@ -160,7 +184,7 @@ export default async function PanoramasPage({ searchParams }: { searchParams: Pr
                         href={`/seguro-fianca/panoramas/${card.id}`}
                         className="rounded-lg bg-o2-coral px-3 py-1.5 text-xs font-semibold text-white"
                       >
-                        {aba === "montar" ? "Montar" : aba === "atualizar" ? "Atualizar" : "Abrir"}
+                        {grupo === "montar" ? "Montar" : grupo === "atualizar" ? "Atualizar" : "Abrir"}
                       </Link>
                     </td>
                   </tr>

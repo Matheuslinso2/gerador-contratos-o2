@@ -36,6 +36,20 @@ const CAMPO_ENDERECO_COMPLETO = "ufCrm10_1781116682"; // formulário novo -- vaz
 const CAMPO_ALUGUEL = "ufCrm10_1776352052";
 const CAMPO_CONDOMINIO = "ufCrm10_1776352074";
 const CAMPO_IPTU = "ufCrm10_1776352100";
+// "Responsáveis pela Cotação" (employee, múltiplo) -- quem monta/envia o
+// panorama é o cotador, não o dono atual do card (assignedById), que já
+// costuma ser a negociação. Pedido do Matheus 16/10/2026.
+const CAMPO_RESPONSAVEIS_COTACAO = "ufCrm10_1786644429";
+
+function idsCotadores(item: BitrixItemRaw): number[] {
+  const v = item[CAMPO_RESPONSAVEIS_COTACAO];
+  const bruto = v === null || v === undefined || v === "" ? [] : Array.isArray(v) ? v : [v];
+  return bruto.map(Number).filter((n) => Number.isFinite(n) && n > 0);
+}
+
+// IDs a resolver via user.get: cotadores + dono (reserva quando o campo de
+// cotação está vazio).
+const idsUsuarios = (itens: BitrixItemRaw[]) => itens.flatMap((i) => [...idsCotadores(i), i.assignedById]);
 
 // Etapas em que o card pode ter panorama (spec, seção 1): fim da Análise e
 // Cotação + começo da Negociação (inclui Em Negociação/Tratativa de
@@ -110,7 +124,11 @@ function montarCard(
     id: item.id,
     etapa: ETAPAS.find((e) => e.statusId === item.stageId)?.nome ?? item.stageId,
     etapaId: item.stageId,
-    responsavel: usuarios[item.assignedById] ?? "",
+    responsavel:
+      idsCotadores(item)
+        .map((id) => usuarios[id])
+        .filter(Boolean)
+        .join(", ") || (usuarios[item.assignedById] ? `${usuarios[item.assignedById]} (dono)` : ""),
     movidoEm: item.movedTime,
     cabecalho: {
       imobiliaria: empresas[item.companyId] ?? "",
@@ -129,7 +147,7 @@ function montarCard(
 const CAMPOS_SELECT = [
   "id", "title", "stageId", "companyId", "assignedById", "movedTime",
   CAMPO_INQUILINO, CAMPO_LOGRADOURO, CAMPO_NUMERO, CAMPO_COMPLEMENTO, CAMPO_CIDADE, CAMPO_UF, CAMPO_CEP,
-  CAMPO_ENDERECO_COMPLETO, CAMPO_ALUGUEL, CAMPO_CONDOMINIO, CAMPO_IPTU,
+  CAMPO_ENDERECO_COMPLETO, CAMPO_ALUGUEL, CAMPO_CONDOMINIO, CAMPO_IPTU, CAMPO_RESPONSAVEIS_COTACAO,
   ...LINHAS_PANORAMA.map((l) => l.campoStatus),
 ];
 
@@ -145,14 +163,14 @@ export async function listarCardsFila(): Promise<CardPanorama[]> {
   ]);
   const [empresas, usuarios] = await Promise.all([
     buscarEmpresas(itens.map((i) => i.companyId)),
-    buscarUsuarios(itens.map((i) => i.assignedById)),
+    buscarUsuarios(idsUsuarios(itens)),
   ]);
   return itens.map((i) => montarCard(i, campos, empresas, usuarios));
 }
 
 export async function buscarCardPanorama(id: number): Promise<CardPanorama> {
   const [campos, item] = await Promise.all([buscarDefinicaoCampos(ENTITY_TYPE_ID), buscarItem(ENTITY_TYPE_ID, id)]);
-  const [empresas, usuarios] = await Promise.all([buscarEmpresas([item.companyId]), buscarUsuarios([item.assignedById])]);
+  const [empresas, usuarios] = await Promise.all([buscarEmpresas([item.companyId]), buscarUsuarios(idsUsuarios([item]))]);
   return montarCard(item, campos, empresas, usuarios);
 }
 
