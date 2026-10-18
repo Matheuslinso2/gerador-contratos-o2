@@ -124,3 +124,40 @@ create policy "base_unica_emails_dias colaborador o2" on base_unica_emails_dias
   for all to authenticated
   using ((select public.is_colaborador_o2()))
   with check ((select public.is_colaborador_o2()));
+
+-- Planilhas de controle congeladas como referência (Matheus, 2026-10-18:
+-- "considere como a planilha está nesse momento"). Mês fecha no último dia;
+-- alteração posterior num mês fechado = edição indevida (alerta, nunca
+-- reimportação silenciosa). Ver scripts/base-unica/congelar-planilhas.mjs.
+create table if not exists base_unica_planilhas_congeladas (
+  arquivo_id text primary key,
+  nome text not null,
+  pasta text,
+  mime_type text not null,
+  modificado_em timestamptz,
+  revisao_id text,
+  md5 text,
+  tamanho_bytes bigint,
+  congelado_em timestamptz not null default now(),
+  verificado_em timestamptz,
+  alterado_depois boolean not null default false,
+  alterado_em timestamptz
+);
+alter table base_unica_planilhas_congeladas enable row level security;
+drop policy if exists "planilhas_congeladas colaborador o2" on base_unica_planilhas_congeladas;
+create policy "planilhas_congeladas colaborador o2" on base_unica_planilhas_congeladas
+  for all to authenticated
+  using ((select public.is_colaborador_o2()))
+  with check ((select public.is_colaborador_o2()));
+
+-- Cópia física das planilhas congeladas (2026-10-18): bucket PRIVADO, sem
+-- nenhuma policy em storage.objects — só service_role lê/grava (as planilhas
+-- têm CPF de locatário, mesmo tratamento do cofre). Limite 50 MB por arquivo.
+insert into storage.buckets (id, name, public, file_size_limit)
+values ('planilhas-congeladas', 'planilhas-congeladas', false, 52428800)
+on conflict (id) do nothing;
+
+alter table base_unica_planilhas_congeladas add column if not exists copia_storage_path text;
+alter table base_unica_planilhas_congeladas add column if not exists copia_tamanho_bytes bigint;
+alter table base_unica_planilhas_congeladas add column if not exists copia_md5 text;
+alter table base_unica_planilhas_congeladas add column if not exists copiado_em timestamptz;
