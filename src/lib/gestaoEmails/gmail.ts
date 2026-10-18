@@ -15,7 +15,7 @@ const ESCOPOS = [
   "https://www.googleapis.com/auth/gmail.modify",
 ];
 
-function obterClienteGmail(): gmail_v1.Gmail {
+export function obterClienteGmail(): gmail_v1.Gmail {
   const email = process.env.GESTAO_EMAILS_GOOGLE_SERVICE_ACCOUNT_EMAIL;
   const chavePrivada = process.env.GESTAO_EMAILS_GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY;
 
@@ -55,7 +55,7 @@ function obterClienteGmail(): gmail_v1.Gmail {
 // mesmo nos raros casos em que ele aparece em "Para" (não só em cópia).
 // Cortar na própria busca do Gmail evita gastar uma chamada de classificação
 // por IA com cada um desses e-mails.
-const REMETENTES_EXCLUIDOS = [
+export const REMETENTES_EXCLUIDOS = [
   // Marketing pessoal / spam, sem nenhuma relação com a O2.
   "casasbahia.com.br",
   "comunicacao.inter.co",

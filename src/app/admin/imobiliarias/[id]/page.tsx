@@ -8,6 +8,8 @@ import VinculosFaturas, { type Vinculo } from "../../../faturas/VinculosFaturas"
 import VinculosRepasse from "../../../faturas/VinculosRepasse";
 import VinculosCampanhas from "../../../campanhas/VinculosCampanhas";
 import VinculosWhatsapp, { type ContatoWhatsappImobiliaria } from "../VinculosWhatsapp";
+import FontesVinculos from "../FontesVinculos";
+import { buscarFontesDaFicha, buscarNomesSoltos, type RegistroFonte } from "@/lib/baseUnica/revisao";
 import { atualizarImobiliariaAdmin, adicionarMembroImobiliariaAdmin, removerMembroImobiliariaAdmin } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -20,10 +22,10 @@ export default async function AdminImobiliariaDetalhePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ erro?: string; sucesso?: string }>;
+  searchParams: Promise<{ erro?: string; sucesso?: string; buscar_nome?: string }>;
 }) {
   const { id } = await params;
-  const { erro, sucesso } = await searchParams;
+  const { erro, sucesso, buscar_nome } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -40,6 +42,19 @@ export default async function AdminImobiliariaDetalhePage({
       supabase.from("whatsapp_contatos").select("id, nome, numero, ativo").eq("imobiliaria_id", id).order("criado_em"),
     ]);
   if (!imobiliaria) redirect("/admin/imobiliarias");
+
+  // Base Única — revisão uma a uma (Fase 2): fontes, sugestões e grupo.
+  const buscaTermo = (buscar_nome ?? "").trim();
+  const [{ ligados, sugeridos }, { data: grupos }, buscaResultados] = await Promise.all([
+    buscarFontesDaFicha(supabase, id),
+    supabase.from("imobiliaria_grupos").select("id, nome").order("nome"),
+    buscarNomesSoltos(supabase, buscaTermo),
+  ]);
+  const idsCitados = [...new Set([...sugeridos, ...buscaResultados].flatMap((r: RegistroFonte) => r.sugestoes.map((x) => x.imobiliaria_id)))];
+  const { data: fichasCitadas } = idsCitados.length
+    ? await supabase.from("imobiliarias").select("id, nome").in("id", idsCitados)
+    : { data: [] as { id: string; nome: string }[] };
+  const nomesFichas = Object.fromEntries((fichasCitadas ?? []).map((f) => [f.id, f.nome]));
 
   const voltarPara = `/admin/imobiliarias/${id}`;
 
@@ -62,6 +77,16 @@ export default async function AdminImobiliariaDetalhePage({
 
         {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
         {sucesso && <p className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-700">{sucesso}</p>}
+        <FontesVinculos
+          ficha={imobiliaria}
+          ligados={ligados}
+          sugeridos={sugeridos}
+          grupos={grupos ?? []}
+          nomesFichas={nomesFichas}
+          buscaTermo={buscaTermo}
+          buscaResultados={buscaResultados}
+          voltarPara={voltarPara}
+        />
 
         {imobiliaria.cadastro_incompleto && (
           <p className="rounded-lg border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800">

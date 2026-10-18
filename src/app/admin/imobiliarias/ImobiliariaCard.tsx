@@ -23,6 +23,10 @@ export type ImobiliariaAdminRow = {
   auditorias: number;
   faturasEsperadas: number;
   membros: number;
+  // Base Única (Fase 2): revisão uma a uma e volume de produção ligado/sugerido.
+  revisao_status: string;
+  volumeConfirmado: number;
+  volumeSugerido: number;
 };
 
 // Resumo + link pra tela unificada (/admin/imobiliarias/[id]), onde de
@@ -38,11 +42,18 @@ export default function ImobiliariaCard({ imobiliaria: i }: { imobiliaria: Imobi
         <Link href={`/admin/imobiliarias/${i.id}`} className="font-medium text-o2-navy hover:underline">
           {i.nome}
         </Link>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+        {i.revisao_status !== "revisada" && (
+          <span className="rounded-full bg-o2-navy/10 px-2 py-0.5 text-xs font-medium text-o2-navy">
+            revisão pendente{i.volumeSugerido ? ` · ${i.volumeSugerido.toLocaleString("pt-BR")} a confirmar` : ""}
+          </span>
+        )}
         {i.cadastro_incompleto && (
           <span className="shrink-0 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800">
             cadastro incompleto
           </span>
         )}
+        </div>
       </div>
       <div className="mt-1 grid grid-cols-1 gap-x-4 gap-y-1 text-sm text-gray-600 sm:grid-cols-2">
         <p>CNPJ: {i.cnpj || "não informado"}</p>

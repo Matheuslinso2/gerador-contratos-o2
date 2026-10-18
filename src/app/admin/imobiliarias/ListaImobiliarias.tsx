@@ -11,13 +11,20 @@ function normalizar(valor: string | null | undefined): string {
 
 export default function ListaImobiliarias({ imobiliarias }: { imobiliarias: ImobiliariaAdminRow[] }) {
   const [busca, setBusca] = useState("");
+  // Base Única (Fase 2): fila de revisão uma a uma, maiores produções primeiro.
+  const [soPendentes, setSoPendentes] = useState(false);
 
   const filtradas = useMemo(() => {
     const termo = busca.trim().toLowerCase();
-    if (!termo) return imobiliarias;
+    const base = soPendentes
+      ? imobiliarias
+          .filter((i) => i.revisao_status !== "revisada")
+          .sort((a, b) => b.volumeConfirmado + b.volumeSugerido - (a.volumeConfirmado + a.volumeSugerido))
+      : imobiliarias;
+    if (!termo) return base;
     const termoDigitos = apenasDigitos(termo);
 
-    return imobiliarias.filter((i) => {
+    return base.filter((i) => {
       if (normalizar(i.nome).includes(termo)) return true;
       if (normalizar(i.email).includes(termo)) return true;
       if (normalizar(i.creci).includes(termo)) return true;
@@ -27,7 +34,7 @@ export default function ListaImobiliarias({ imobiliarias }: { imobiliarias: Imob
       if (termoDigitos && apenasDigitos(i.telefone ?? "").includes(termoDigitos)) return true;
       return false;
     });
-  }, [imobiliarias, busca]);
+  }, [imobiliarias, busca, soPendentes]);
 
   // Alguns CNPJs distintos são a mesma empresa/grupo econômico (GRUPOS_
   // VISUAIS, mesma fonte usada em Faturas) -- cada um continua sendo um
@@ -65,7 +72,12 @@ export default function ListaImobiliarias({ imobiliarias }: { imobiliarias: Imob
         />
       </div>
 
-      {busca && (
+      <label className="flex items-center gap-2 text-sm text-gray-600">
+        <input type="checkbox" checked={soPendentes} onChange={(e) => setSoPendentes(e.target.checked)} />
+        Só pendentes de revisão (maior produção primeiro) — {imobiliarias.filter((i) => i.revisao_status !== "revisada").length} pendente(s)
+      </label>
+
+      {(busca || soPendentes) && (
         <p className="text-xs text-gray-500">
           {filtradas.length} de {imobiliarias.length} cadastro(s)
         </p>

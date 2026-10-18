@@ -11,6 +11,8 @@ import { type ImobiliariaAdminRow } from "./ImobiliariaCard";
 import MesclarDuplicidade, { type ImobiliariaDuplicadaLinha } from "./MesclarDuplicidade";
 import ListaImobiliarias from "./ListaImobiliarias";
 import { autorizarImobiliaria } from "./actions";
+import NomesSemImobiliaria from "./NomesSemImobiliaria";
+import { buscarNomesSemImobiliaria, volumePorFicha } from "@/lib/baseUnica/revisao";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +41,7 @@ export default async function AdminImobiliariasPage({
       supabase
         .from("imobiliarias")
         .select(
-          "id, nome, cnpj, creci, telefone, email, endereco, responsavel, indice_reajuste, plataforma_assinatura, created_at, cadastro_incompleto, user_id, autorizado, autorizado_em"
+          "id, nome, cnpj, creci, telefone, email, endereco, responsavel, indice_reajuste, plataforma_assinatura, created_at, cadastro_incompleto, user_id, autorizado, autorizado_em, revisao_status"
         )
         .order("created_at", { ascending: false }),
       supabase.from("contratos").select("imobiliaria_id"),
@@ -47,6 +49,7 @@ export default async function AdminImobiliariasPage({
       supabase.from("faturas_esperadas").select("imobiliaria_id"),
       supabase.from("imobiliaria_membros").select("imobiliaria_id"),
     ]);
+  const [volumes, semImobiliaria] = await Promise.all([volumePorFicha(supabase), buscarNomesSemImobiliaria(supabase)]);
 
   const contratosPorId = contarPorImobiliaria(contratosData);
   const auditoriasPorId = contarPorImobiliaria(auditoriasData);
@@ -59,6 +62,8 @@ export default async function AdminImobiliariasPage({
     auditorias: auditoriasPorId.get(i.id) ?? 0,
     faturasEsperadas: faturasPorId.get(i.id) ?? 0,
     membros: membrosPorId.get(i.id) ?? 0,
+    volumeConfirmado: volumes.confirmado.get(i.id) ?? 0,
+    volumeSugerido: volumes.sugerido.get(i.id) ?? 0,
   }));
 
   // Duplicidade = mesmo CNPJ (normalizado, só dígitos) em mais de um
@@ -182,6 +187,12 @@ export default async function AdminImobiliariasPage({
             ))}
           </section>
         )}
+
+        <NomesSemImobiliaria
+          nomes={semImobiliaria.nomes}
+          total={semImobiliaria.total}
+          fichas={imobiliarias.map((i) => ({ id: i.id, nome: i.nome, cnpj: i.cnpj }))}
+        />
 
         <section className="space-y-3">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Todos os cadastros</h2>
