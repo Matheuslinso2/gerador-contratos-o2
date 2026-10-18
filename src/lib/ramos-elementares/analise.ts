@@ -47,6 +47,9 @@ export type AnaliseRamosElementares = {
     novasEntradas: number;
     pendenciasAnteriores: number;
     renovacoesCompetencia: number;
+    // Renovações que entraram na competência (origem), sem as de outras
+    // competências efetivadas neste mês. Retratos antigos não têm o campo.
+    renovacoesEntradas?: number;
     novosEfetivados: number;
     renovacoesEfetivadas: number;
     comissaoEfetivada: number;
@@ -509,6 +512,14 @@ function agrupar(registros: RegistroBase[], obterNome: (registro: RegistroBase) 
     .sort((a, b) => b.total - a.total || a.nome.localeCompare(b.nome, "pt-BR"));
 }
 
+// Mês (YYYY-MM) de uma data serial do Google/Bitrix. Data só com dia (número
+// inteiro) vale como está; com hora, usa o horário de Brasília.
+function mesDoSerial(serial: number): string {
+  const ms = (serial - 25569) * 86_400_000;
+  const data = new Date(Number.isInteger(serial) ? ms : ms - 3 * 3_600_000);
+  return `${data.getUTCFullYear()}-${String(data.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
 function resumir(registros: (RegistroNovo | RegistroRenovacao)[]): ResumoPopulacao {
   const efetivados = registros.filter((registro) => registro.efetivado);
   const tempos = registros
@@ -569,8 +580,19 @@ export function montarAnaliseRamosElementares(fonte: FonteRamosBruta, agora = ne
   const pendentes = mapearNovos(fonte.abas.novosPendentes, abaPendentes);
   const novosMes = mapearNovos(fonte.abas.novosMes, abaMes, fonte.competencia);
   const novosConsolidados = [...pendentes, ...novosMes];
-  const rnAtual = mapearRenovacoes(fonte.abas.renovacoesAtual, abaRnAtual);
-  const rnFutura = mapearRenovacoes(fonte.abas.renovacoesFutura, abaRnFutura);
+  // Regra da efetivação (Matheus, 18/10/2026): origem é uma coisa, mês da
+  // efetivação é outra -- a efetivação/perda conta no mês em que ocorreu.
+  // Renovação já efetivada/perdida em mês anterior sai da competência;
+  // renovação da próxima competência efetivada/perdida neste mês entra aqui.
+  const rnAtualBruto = mapearRenovacoes(fonte.abas.renovacoesAtual, abaRnAtual);
+  const rnFuturaBruto = mapearRenovacoes(fonte.abas.renovacoesFutura, abaRnFutura);
+  const desfechoComData = (registro: RegistroRenovacao) =>
+    (registro.status === "EFETIVADO" || registro.status === "NÃO EFETIVADO") && registro.dataEfetivacao !== null;
+  const mesDesfecho = (registro: RegistroRenovacao) => (registro.dataEfetivacao === null ? null : mesDoSerial(registro.dataEfetivacao));
+  const rnAtualDaOrigem = rnAtualBruto.filter((registro) => !(desfechoComData(registro) && (mesDesfecho(registro) ?? "") < fonte.competencia));
+  const rnAntecipadas = rnFuturaBruto.filter((registro) => desfechoComData(registro) && mesDesfecho(registro) === fonte.competencia);
+  const rnAtual = [...rnAtualDaOrigem, ...rnAntecipadas];
+  const rnFutura = rnFuturaBruto.filter((registro) => !(desfechoComData(registro) && mesDesfecho(registro) === fonte.competencia));
   const endossos = mapearEndossos(fonte.abas.endossos, abaEndossos);
 
   const resumoPendentes = resumir(pendentes);
@@ -757,6 +779,7 @@ export function montarAnaliseRamosElementares(fonte: FonteRamosBruta, agora = ne
       novasEntradas: novosMes.length,
       pendenciasAnteriores: pendentes.length,
       renovacoesCompetencia: rnAtual.length,
+      renovacoesEntradas: rnAtualDaOrigem.length,
       novosEfetivados: resumoNovos.efetivados,
       renovacoesEfetivadas: resumoRnAtual.efetivados,
       comissaoEfetivada,

@@ -16,9 +16,9 @@ import { STATUS_TERMINAIS, type AnaliseRamosElementares } from "@/lib/ramos-elem
 //   conversão = efetivadas ÷ concluídas (efetivadas + recusadas/perdidas),
 //   a mesma de cada painel (ver relatorioDiario/montar.ts).
 //
-// Ramos Elementares entra só com os "novos" (renovações ficam de fora: são
-// outro nível, centenas de itens vindos da planilha, e distorceriam a
-// comparação com cotações dos outros produtos).
+// Ramos Elementares entra com novos + renovações (Matheus, 18/10/2026). A
+// efetivação conta no mês em que ocorreu, mesmo de card que entrou antes
+// (herdado) -- origem e mês da efetivação são coisas separadas.
 
 export type ProdutoDashboard = "fianca" | "capitalizacao" | "auto" | "ramos";
 
@@ -96,14 +96,17 @@ function numerosAuto(p: PainelSeguroAuto, atualizadoEm: string): NumerosMes {
 }
 
 function numerosRamos(p: AnaliseRamosElementares, atualizadoEm: string): NumerosMes {
-  const consolidado = p.novos.consolidado;
-  const concluidas = consolidado.porStatus.filter((s) => STATUS_TERMINAIS.has(s.nome.trim().toUpperCase())).reduce((s, x) => s + x.total, 0);
+  const terminais = (resumo: AnaliseRamosElementares["novos"]["consolidado"]) =>
+    resumo.porStatus.filter((s) => STATUS_TERMINAIS.has(s.nome.trim().toUpperCase())).reduce((s, x) => s + x.total, 0);
+  const novos = p.novos.consolidado;
+  const renovacoes = p.renovacoes.atual;
+  const concluidas = terminais(novos) + terminais(renovacoes);
   return {
-    cotacoes: p.visaoGeral.novasEntradas,
-    efetivadas: p.visaoGeral.novosEfetivados,
+    cotacoes: p.visaoGeral.novasEntradas + (p.visaoGeral.renovacoesEntradas ?? p.visaoGeral.renovacoesCompetencia),
+    efetivadas: p.visaoGeral.novosEfetivados + p.visaoGeral.renovacoesEfetivadas,
     concluidas,
-    comissao: consolidado.comissaoEfetivada,
-    emAndamento: consolidado.total - concluidas,
+    comissao: p.financeiro.comissaoEfetivada,
+    emAndamento: novos.total + renovacoes.total - concluidas,
     atualizadoEm,
   };
 }

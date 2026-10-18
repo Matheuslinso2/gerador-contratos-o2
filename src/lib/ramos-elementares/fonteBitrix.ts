@@ -136,6 +136,16 @@ function competenciaData(data: Date): string {
   return `${data.getUTCFullYear()}-${String(data.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
+// Mês (YYYY-MM) de um instante, no horário de Brasília -- usado pra dizer em
+// que mês o card foi efetivado (o evento do Bitrix vem com hora; perto da
+// virada do mês, UTC jogaria o card no mês errado).
+function mesBrasilia(data: Date): string {
+  const partes = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit" }).formatToParts(data);
+  const ano = partes.find((p) => p.type === "year")?.value;
+  const mes = partes.find((p) => p.type === "month")?.value;
+  return `${ano}-${mes}`;
+}
+
 function proximaCompetencia(competencia: string): string {
   const [ano, mes] = competencia.split("-").map(Number);
   const data = new Date(Date.UTC(ano, mes, 1));
@@ -159,7 +169,11 @@ function serialGoogle(data: Date | null): number | null {
 // reconfira com crm.status.list (filter ENTITY_ID=DYNAMIC_1046_STAGE_22)
 // antes de mexer em outra coisa.
 function etapaNovo(item: BitrixItemRaw): string {
-  const etapa = texto(item.stageId).split(":").pop() || "";
+  return etapaPorStageId(texto(item.stageId));
+}
+
+function etapaPorStageId(stageId: string): string {
+  const etapa = stageId.split(":").pop() || "";
   const mapa: Record<string, string> = {
     NEW: "PENDENTE",
     PREPARATION: "AG COTAÇÃO",
@@ -180,6 +194,20 @@ function etapaMovimentacao(item: BitrixItemRaw, tipoMovimentacao: string): strin
   }
   if (etapa === "FAIL") return "NÃO EFETIVADO";
   return "PENDENTE";
+}
+
+// Regra do Matheus (18/10/2026): a efetivação conta no mês em que aconteceu,
+// não no mês de origem do card. Quando o card só foi efetivado/perdido DEPOIS
+// do mês que está sendo montado, nesse mês ele ainda estava em andamento --
+// o status exibido é o da última etapa não terminal até o fim do mês.
+function statusNoMes(eventos: BitrixStageHistoryEvent[], competencia: string): string {
+  let ultimo: BitrixStageHistoryEvent | undefined;
+  for (const evento of eventos) {
+    if (evento.STAGE_SEMANTIC_ID === "S" || evento.STAGE_SEMANTIC_ID === "F") continue;
+    const data = dataValida(evento.CREATED_TIME);
+    if (data && mesBrasilia(data) <= competencia) ultimo = evento;
+  }
+  return ultimo ? etapaPorStageId(ultimo.STAGE_ID) : "PENDENTE";
 }
 
 function eventoTerminal(eventos: BitrixStageHistoryEvent[]): BitrixStageHistoryEvent | undefined {
@@ -215,8 +243,9 @@ function linhaNovo(params: {
   competencia: Date;
   eventos: BitrixStageHistoryEvent[];
   agora: Date;
+  desfechoNoMes: boolean;
 }): CelulaGoogle[] {
-  const { item, status, origem, produto, seguradora, imobiliaria, responsavel, competencia, eventos, agora } = params;
+  const { item, status, origem, produto, seguradora, imobiliaria, responsavel, competencia, eventos, agora, desfechoNoMes } = params;
   const linha: CelulaGoogle[] = Array(42).fill(null);
   const criadaEm = dataValida(item.createdTime);
   const duracao = duracaoEmDias(item, eventos, agora);
@@ -237,7 +266,7 @@ function linhaNovo(params: {
   linha[29] = premioTotal;
   linha[32] = comissao;
   linha[34] = valorRepasse(item, premioTotal);
-  linha[39] = serialGoogle(dataTerminal(eventos));
+  linha[39] = desfechoNoMes ? serialGoogle(dataTerminal(eventos)) : null;
   return linha;
 }
 
@@ -250,8 +279,9 @@ function linhaRenovacao(params: {
   imobiliaria: string;
   responsavel: string;
   eventos: BitrixStageHistoryEvent[];
+  desfechoNoMes: boolean;
 }): CelulaGoogle[] {
-  const { item, status, origem, produto, seguradora, imobiliaria, responsavel, eventos } = params;
+  const { item, status, origem, produto, seguradora, imobiliaria, responsavel, eventos, desfechoNoMes } = params;
   const linha: CelulaGoogle[] = Array(27).fill(null);
   linha[0] = status;
   linha[1] = origem;
@@ -268,7 +298,7 @@ function linhaRenovacao(params: {
   linha[19] = valorRepasse(item, premioTotal);
   linha[20] = normalizar(origem) === "SEGIMOB" ? "IMOBILIARIA" : responsavel;
   linha[21] = serialGoogle(dataValida(item.createdTime));
-  linha[25] = serialGoogle(dataTerminal(eventos));
+  linha[25] = desfechoNoMes ? serialGoogle(dataTerminal(eventos)) : null;
   return linha;
 }
 
@@ -368,17 +398,36 @@ export async function lerFonteRamosElementaresBitrix(
     }
 
     if (Number(item.categoryId) !== CATEGORIA_CONTRATACOES) continue;
-    const status = etapaNovo(item);
-    const terminal = status === "EFETIVADO" || status === "NÃO EFETIVADO";
+    const statusAtual = etapaNovo(item);
+    const terminal = statusAtual === "EFETIVADO" || statusAtual === "NÃO EFETIVADO";
+    // Mês do desfecho (efetivado/perdido), em Brasília. Só vale se o card está
+    // terminal agora (card reaberto não tem desfecho).
+    const dataDesfecho = terminal ? dataTerminal(eventos) : null;
+    const mesDesfecho = dataDesfecho ? mesBrasilia(dataDesfecho) : null;
+    // Desfecho depois do mês montado: nesse mês o card ainda estava aberto.
+    const abertoNoMes = !terminal || (mesDesfecho !== null && mesDesfecho > competencia);
+    const status = terminal && mesDesfecho !== null && mesDesfecho > competencia ? statusNoMes(eventos, competencia) : statusAtual;
+    const desfechoNoMes = terminal && mesDesfecho !== null && mesDesfecho <= competencia;
+    const desfechoDesteMes = mesDesfecho === competencia;
 
     if (tipoProcesso === "RENOVACAO") {
-      const linha = linhaRenovacao({ item, status, origem, produto, seguradora, imobiliaria, responsavel, eventos });
+      const linha = linhaRenovacao({ item, status, origem, produto, seguradora, imobiliaria, responsavel, eventos, desfechoNoMes });
       if (competenciaItem === competencia) abas.renovacoesAtual.push(linha);
+      // Renovação de outra competência efetivada/perdida neste mês (antecipada
+      // ou atrasada): conta aqui, no mês em que aconteceu.
+      else if (desfechoDesteMes) abas.renovacoesAtual.push(linha);
       else if (competenciaItem === futura) abas.renovacoesFutura.push(linha);
       continue;
     }
 
+    // Regra da efetivação (18/10/2026): o card pertence ao mês se foi
+    // concluído nele, ou se já tinha entrado (competência <= mês) e ainda
+    // estava aberto nele. Concluído num mês anterior ao montado não conta mais.
+    const pertence = desfechoDesteMes || (competenciaItem <= competencia && abertoNoMes);
+    if (!pertence) continue;
+
     const linha = linhaNovo({
+      desfechoNoMes,
       item,
       status,
       origem,
@@ -391,7 +440,7 @@ export async function lerFonteRamosElementaresBitrix(
       agora,
     });
     if (competenciaItem === competencia) abas.novosMes.push(linha);
-    else if (competenciaItem < competencia && !terminal) abas.novosPendentes.push(linha);
+    else abas.novosPendentes.push(linha);
   }
 
   if (semCompetencia > 0) {

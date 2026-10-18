@@ -247,7 +247,7 @@ function PainelVisao({
         />
         <Kpi
           label="Total efetivados"
-          legenda="Novos negócios efetivados (do mês e pendências anteriores) mais as renovações efetivadas. Efetivado é o status EFETIVADO."
+          legenda="Novos efetivados (do mês e herdados) mais as renovações efetivadas, sempre pelo mês em que a efetivação aconteceu."
           value={String(analise.visaoGeral.novosEfetivados + analise.visaoGeral.renovacoesEfetivadas)}
           note="Novos efetivados + renovações efetivadas"
           tone="ok"
@@ -267,19 +267,19 @@ function PainelVisao({
         />
         <Kpi
           label="Pendências anteriores"
-          legenda="Negócios novos de meses anteriores que ainda não foram concluídos e seguem na carteira de entrada."
+          legenda="Negócios novos que entraram em meses anteriores e ainda estavam abertos neste mês ou foram concluídos (efetivados ou perdidos) neste mês. A efetivação conta no mês em que aconteceu, e a origem continua sendo o mês de entrada."
           value={String(analise.visaoGeral.pendenciasAnteriores)}
           note="Carteira de entrada"
         />
         <Kpi
           label="Renovações da competência"
-          legenda="Apólices em renovação na competência selecionada. A próxima competência não entra nesta conta."
+          legenda="Apólices em renovação na competência selecionada, mais as de outras competências efetivadas ou perdidas neste mês (antecipadas ou atrasadas). Renovação concluída em mês anterior não entra."
           value={String(analise.visaoGeral.renovacoesCompetencia)}
           note="Competência selecionada"
         />
         <Kpi
           label="Novos efetivados"
-          legenda="Novos negócios que chegaram a EFETIVADO, somando os novos do mês e as pendências anteriores."
+          legenda="Novos negócios efetivados neste mês, somando os que entraram no mês e os herdados de meses anteriores. Conta pelo mês em que a efetivação aconteceu."
           value={String(analise.visaoGeral.novosEfetivados)}
           note="Mês + pendências"
           tone="ok"

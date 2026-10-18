@@ -208,7 +208,7 @@ export default async function DashboardProducao() {
         Todos os números vêm das fotos que cada painel já guarda (nada é buscado de novo no Bitrix). {rotuloAtual.split("/")[0]} está parcial ({dados.diaAtual} de{" "}
         {dados.diasMesAtual} dias), por isso o volume é comparado pelo <b>ritmo por dia</b>; as taxas (%) comparam direto. Conversão = efetivadas ÷ concluídas
         (efetivadas + recusadas/perdidas), a mesma conta de cada painel. Cada painel mantém a própria base: na Fiança, recusadas, perdidas e efetivadas contam pelo mês
-        em que aconteceram; em Capitalização e Auto, pelo mês em que o card foi criado. Ramos Elementares considera só os <b>novos</b> (renovações ficam de fora).
+        em que aconteceram; em Capitalização, pelo mês do pagamento; no Auto, pelo mês do fechamento. Ramos Elementares soma <b>novos e renovações</b>, com a efetivação contada no mês em que aconteceu (mesmo de card que entrou em mês anterior).
         {incompletos.length > 0 && <> <b>Atenção:</b> sem retrato de {rotuloAtual} em {incompletos.join(", ")} — o total está incompleto.</>}
         {semAnterior.length > 0 && <> Sem retrato de {rotuloAnterior} em {semAnterior.join(", ")}.</>}
       </p>
