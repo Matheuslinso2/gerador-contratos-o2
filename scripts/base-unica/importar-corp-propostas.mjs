@@ -14,7 +14,7 @@
 //   ver schema_producao_erp.sql).
 // - Cliente (nome/documento parcial) NÃO é gravado: aguardando decisão do
 //   Matheus sobre o cofre.
-// uso: node scripts/base-unica/importar-corp-propostas.mjs [--gravar]
+// uso: node scripts/base-unica/importar-corp-propostas.mjs [--gravar] [--somente-novos]
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -30,6 +30,14 @@ function produtoDoRamo(ramo) {
   if (/CAPITALIZ/.test(r)) return ["capitalizacao", "Capitalização"];
   if (/FIANC/.test(r)) return ["fianca", "Fiança locatícia"];
   if (/AUTOMOVEL/.test(r)) return ["automovel", "Automóvel"];
+  // "demais ramos" de RE (relatórios 2POR, COND, CCOM…) — antes de RESIDENCIAL
+  // para "CONTEÚDO RESIDENCIAL" não cair em Residencial.
+  if (/CONTEUDO/.test(r)) return ["re", "Conteúdo residencial/comercial"];
+  if (/CONDOMINIO/.test(r)) return ["re", "Condomínio"];
+  if (/VIDA/.test(r)) return ["re", "Vida"];
+  if (/VIAGEM/.test(r)) return ["re", "Viagem"];
+  if (/RC PROFISSIONAL|RESPONSABILIDADE CIV/.test(r)) return ["re", "RC"];
+  if (/PORTAT/.test(r)) return ["re", "Equipamentos portáteis"];
   if (/IMOBILIARIO/.test(r)) return ["re", "Incêndio Imobiliário"];
   if (/RESIDENCIAL/.test(r)) return ["re", "Residencial"];
   if (/EMPRESARIAL/.test(r)) return ["re", "Empresarial"];
@@ -54,6 +62,15 @@ const pdfs = (await buscarTudo("base_unica_planilhas_congeladas", "arquivo_id, n
   .sort((a, b) => (a.arquivo_id.includes("auto") ? -1 : 0) - (b.arquivo_id.includes("auto") ? -1 : 0) || a.arquivo_id.localeCompare(b.arquivo_id));
 
 const vistas = new Set();
+// --somente-novos: só importa relatórios ainda sem importação; as propostas já
+// gravadas entram em `vistas` para não duplicar.
+const somenteNovos = process.argv.includes("--somente-novos");
+if (somenteNovos) {
+  const feitos = new Set((await buscarTudo("base_unica_importacoes", "arquivo_id", (q) => q.eq("layout", "corp_relatorio_propostas"))).map((r) => r.arquivo_id));
+  for (let i = pdfs.length - 1; i >= 0; i--) if (feitos.has(pdfs[i].arquivo_id)) pdfs.splice(i, 1);
+  for (const r of await buscarTudo("producao_unificada", "produto, origem_corp_numero", (q) => q.eq("fonte", "corp"))) vistas.add(`${r.produto}|${r.origem_corp_numero}`);
+  console.log(`somente novos: ${pdfs.length} relatório(s) | ${vistas.size} propostas já no banco`);
+}
 const resumo = {};
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "corp-pdf-"));
 for (const c of pdfs) {
