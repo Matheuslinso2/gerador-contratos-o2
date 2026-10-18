@@ -108,7 +108,7 @@ export default function PainelCapitalizacao({ dados }: { dados: PainelCapitaliza
   return (
     <>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-        <h2 style={{ fontSize: 14, fontWeight: 700, margin: "0 0 8px", color: "var(--ink)" }}>Novidades do mês<InfoLegenda titulo="Novidades do mês">Indicadores do mês, comparados com o mês anterior completo (setas). Solicitações = cards criados no mês. Emitidos = título emitido, contado pelo mês do pagamento (Pagamento concluído ou Boleto pago). Perdidos = Pagamento não realizado ou Desistência, contado pelo mês da perda. Taxa de conversão = emitidos ÷ (emitidos + perdidos). Valor total emitido = soma do prêmio dos emitidos; Comissão efetivada = comissão dos emitidos. Comissão potencial e Prêmio potencial = soma de todos os cards novos do mês (a comissão, dos que têm o campo preenchido). Imobiliárias = quantas distintas têm cards novos. Ticket médio = prêmio médio por card novo.</InfoLegenda></h2>
+        <h2 style={{ fontSize: 14, fontWeight: 700, margin: "0 0 8px", color: "var(--ink)" }}>Novidades do mês<InfoLegenda titulo="Novidades do mês">Indicadores do mês, comparados com o mês anterior completo (setas). Solicitações = cards criados no mês. Emitidos = título com pagamento confirmado (Pagamento concluído, Boleto pago ou Emitido), contado pelo mês do pagamento. Perdidos = Pagamento não realizado ou Desistência, contado pelo mês da perda. Taxa de conversão = emitidos ÷ (emitidos + perdidos). Valor total emitido = soma do prêmio dos pagos/emitidos; Comissão efetivada = comissão deles. Comissão potencial e Prêmio potencial = soma de todos os cards novos do mês (a comissão, dos que têm o campo preenchido). Imobiliárias = quantas distintas têm cards novos. Ticket médio = prêmio médio por card novo.</InfoLegenda></h2>
         <ExportarQuadro
           quadroId="quadro-cap-novidades"
           corFundo="#f7f8fa"
@@ -129,14 +129,14 @@ export default function PainelCapitalizacao({ dados }: { dados: PainelCapitaliza
         />
       </div>
       <p style={{ fontSize: 11.5, color: "var(--ink-muted, #5b6b7c)", margin: "0 0 8px" }}>
-        Emitidos (e valor/comissão) contam pelo mês do pagamento (Pagamento concluído ou Boleto pago), mesmo que o
-        card tenha sido criado antes ou só chegue em Emitido depois, quando o Controle confirmar no Corp. Perdidos
+        Emitidos (e valor/comissão) contam assim que o pagamento entra (Pagamento concluído, Boleto pago ou Emitido),
+        pelo mês do pagamento, mesmo que o card tenha sido criado antes ou ainda não tenha sido movido para Emitido. Perdidos
         contam pelo mês em que o card foi para Pagamento não realizado/Desistência. Os demais, pelo mês de criação.
         {ant && mesEmAndamento && ` Variação vs ${mesAnterior} é contra o mês anterior completo; o mês atual ainda está em andamento.`}
       </p>
       <div id="quadro-cap-novidades" className={styles.kpis}>
         <Kpi label="Solicitações no mês" value={String(kpis.total)} sub="cards criados na competência" comparativo={comp(kpis.total, ant?.total, "numero")} />
-        <Kpi label="Emitidos" value={String(kpis.emitidos)} sub="título emitido com sucesso" tone="positive" comparativo={comp(kpis.emitidos, ant?.emitidos, "numero")} />
+        <Kpi label="Emitidos" value={String(kpis.emitidos)} sub="pago (cartão ou boleto) ou emitido" tone="positive" comparativo={comp(kpis.emitidos, ant?.emitidos, "numero")} />
         <Kpi label="Perdidos" value={String(kpis.perdidos)} sub="pagamento não realizado ou desistência" tone="negative" comparativo={comp(kpis.perdidos, ant?.perdidos, "numero", true)} />
         <Kpi
           label="Taxa de conversão"
