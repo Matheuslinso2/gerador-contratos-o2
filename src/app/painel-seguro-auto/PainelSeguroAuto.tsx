@@ -1,6 +1,7 @@
 import styles from "./painel-seguro-auto.module.css";
 import type { PainelSeguroAuto as PainelSeguroAutoData } from "@/lib/seguroAuto/painel";
 import ExportarQuadro from "@/components/ExportarQuadro";
+import InfoLegenda from "@/components/InfoLegenda";
 
 function fmtPct(v: number | null): string {
   return `${((v ?? 0) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}%`;
@@ -117,7 +118,7 @@ export default function PainelSeguroAuto({
             color: "var(--ink)",
           }}
         >
-          Novidades do mês
+          Novidades do mês<InfoLegenda titulo="Novidades do mês">Fichas no mês e documentos (CNH, CRLV, apólice anterior) contam pelo mês em que a ficha foi criada. Convertidas (chegaram em Finalizado), Perdidas (chegaram em Perda), prêmio e comissão contam pelo mês em que o card chegou nessa etapa. Taxa de conversão = convertidas ÷ (convertidas + perdidas). Prêmio efetivado e Comissão gerada = soma das convertidas; % de comissão médio = média entre as convertidas com o percentual preenchido. Com CNH e Com CRLV = percentual das fichas novas com o documento anexado (fica verde a partir de 80%). Com apólice anterior = fichas de quem já tinha seguro vigente, possível troca de seguradora.</InfoLegenda>
         </h2>
         <ExportarQuadro
           quadroId="quadro-auto-novidades"
@@ -246,7 +247,7 @@ export default function PainelSeguroAuto({
             color: "var(--ink)",
           }}
         >
-          Em andamento (novos + herdados)
+          Em andamento (novos + herdados)<InfoLegenda titulo="Em andamento">Fichas ainda em aberto agora, de qualquer mês de criação. Novas = criadas neste mês; Herdadas = criadas antes. Quando a ficha conclui (Finalizado ou Perda) ela sai daqui e passa a contar no mês do fechamento. Cards com alerta = parados há 3 ou mais dias úteis sem mudar de etapa.</InfoLegenda>
         </h2>
         <ExportarQuadro
           quadroId="quadro-auto-andamento"
@@ -301,7 +302,7 @@ export default function PainelSeguroAuto({
 
       <section id="quadro-auto-funil" className={styles.section}>
         <div className={styles.sectionHead}>
-          <h2>Funil e tempo por etapa</h2>
+          <h2>Funil e tempo por etapa<InfoLegenda titulo="Funil e tempo por etapa">Quantas fichas estão em cada etapa agora e o tempo médio, em dias, que as fichas ficaram naquela etapa nas passagens já encerradas.</InfoLegenda></h2>
           <ExportarQuadro
             quadroId="quadro-auto-funil"
             corFundo="#f7f8fa"
@@ -364,7 +365,7 @@ export default function PainelSeguroAuto({
 
       <section id="quadro-auto-perfil" className={styles.section}>
         <div className={styles.sectionHead}>
-          <h2>Perfil das fichas do mês</h2>
+          <h2>Perfil das fichas do mês<InfoLegenda titulo="Perfil das fichas do mês">Como são as fichas do período: utilização declarada do veículo (cada barra é a quantidade de fichas) e quantas têm garagem.</InfoLegenda></h2>
           <div className={styles.note}>
             utilização declarada do veículo e presença de garagem
           </div>
@@ -425,7 +426,7 @@ export default function PainelSeguroAuto({
 
       <section id="quadro-auto-alerta" className={styles.section}>
         <div className={styles.sectionHead}>
-          <h2>Cards que pedem atenção</h2>
+          <h2>Cards que pedem atenção<InfoLegenda titulo="Cards que pedem atenção">Fichas ativas paradas há 3 ou mais dias úteis na mesma etapa, de qualquer mês (sem filtro de competência).</InfoLegenda></h2>
           <div className={styles.note}>
             parados 3+ dias úteis sem mudar de etapa — todas as fichas ativas, sem
             filtro de mês
@@ -476,7 +477,7 @@ export default function PainelSeguroAuto({
 
       <section id="quadro-auto-convertidas" className={styles.section}>
         <div className={styles.sectionHead}>
-          <h2>Convertidas — prêmio e comissão</h2>
+          <h2>Convertidas — prêmio e comissão<InfoLegenda titulo="Convertidas">Fichas que chegaram em Finalizado na competência escolhida, com prêmio, comissão, percentual de comissão e parcelas. Esses valores são preenchidos à mão pelo time depois do fechamento.</InfoLegenda></h2>
           <div className={styles.note}>
             preenchido manualmente pelo time depois do fechamento — cards que
             chegaram em Finalizado na competência selecionada
@@ -539,7 +540,7 @@ export default function PainelSeguroAuto({
 
       <section id="quadro-auto-fichas" className={styles.section}>
         <div className={styles.sectionHead}>
-          <h2>Fichas recebidas</h2>
+          <h2>Fichas recebidas<InfoLegenda titulo="Fichas recebidas">As fichas do mês (novidades) mais as herdadas ainda em andamento, a mesma lógica dos indicadores acima. Mostra os dados de contato, a etapa atual e se CNH e CRLV foram anexados.</InfoLegenda></h2>
           <div className={styles.note}>
             {fichas.length} ficha(s) — novidades do mês + em andamento herdados,
             mesma lógica dos KPIs acima

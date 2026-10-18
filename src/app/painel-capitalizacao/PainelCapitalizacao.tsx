@@ -2,6 +2,7 @@ import styles from "./painel-capitalizacao.module.css";
 import { competenciaAtual, type PainelCapitalizacao as PainelCapitalizacaoData } from "@/lib/capitalizacao/painel";
 import TitulosTabela from "./TitulosTabela";
 import ExportarQuadro from "@/components/ExportarQuadro";
+import InfoLegenda from "@/components/InfoLegenda";
 
 function fmtBRL(v: number): string {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -107,7 +108,7 @@ export default function PainelCapitalizacao({ dados }: { dados: PainelCapitaliza
   return (
     <>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-        <h2 style={{ fontSize: 14, fontWeight: 700, margin: "0 0 8px", color: "var(--ink)" }}>Novidades do mês</h2>
+        <h2 style={{ fontSize: 14, fontWeight: 700, margin: "0 0 8px", color: "var(--ink)" }}>Novidades do mês<InfoLegenda titulo="Novidades do mês">Indicadores do mês, comparados com o mês anterior completo (setas). Solicitações = cards criados no mês. Emitidos = título emitido, contado pelo mês do pagamento (Pagamento concluído ou Boleto pago). Perdidos = Pagamento não realizado ou Desistência, contado pelo mês da perda. Taxa de conversão = emitidos ÷ (emitidos + perdidos). Valor total emitido = soma do prêmio dos emitidos; Comissão efetivada = comissão dos emitidos. Comissão potencial e Prêmio potencial = soma de todos os cards novos do mês (a comissão, dos que têm o campo preenchido). Imobiliárias = quantas distintas têm cards novos. Ticket médio = prêmio médio por card novo.</InfoLegenda></h2>
         <ExportarQuadro
           quadroId="quadro-cap-novidades"
           corFundo="#f7f8fa"
@@ -153,7 +154,7 @@ export default function PainelCapitalizacao({ dados }: { dados: PainelCapitaliza
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-        <h2 style={{ fontSize: 14, fontWeight: 700, margin: "20px 0 8px", color: "var(--ink)" }}>Em andamento (novos + herdados)</h2>
+        <h2 style={{ fontSize: 14, fontWeight: 700, margin: "20px 0 8px", color: "var(--ink)" }}>Em andamento (novos + herdados)<InfoLegenda titulo="Em andamento">Cards ainda em aberto agora, de qualquer mês de criação. Novos = criados neste mês; Herdados = criados antes. Quando o card conclui (emitido ou perdido) ele sai daqui e passa a contar no mês do pagamento ou da perda. Cards com alerta = parados há 3 ou mais dias úteis sem mudar de etapa.</InfoLegenda></h2>
         <ExportarQuadro
           quadroId="quadro-cap-andamento"
           corFundo="#f7f8fa"
@@ -185,7 +186,7 @@ export default function PainelCapitalizacao({ dados }: { dados: PainelCapitaliza
 
       <section id="quadro-cap-funil" className={styles.section}>
         <div className={styles.sectionHead}>
-          <h2>Funil e tempo por etapa</h2>
+          <h2>Funil e tempo por etapa<InfoLegenda titulo="Funil e tempo por etapa">Quantos cards estão em cada etapa agora e o tempo médio, em dias, que os cards ficaram naquela etapa nas passagens já encerradas. Pagamento concluído (cartão) e Boleto pago são caminhos alternativos do mesmo passo: cada card passa só por um deles.</InfoLegenda></h2>
           <div className={styles.note}>
             &ldquo;Pagamento concluído (cartão)&rdquo; e &ldquo;Boleto pago&rdquo; são caminhos alternativos do mesmo
             passo — cada card passa só por um dos dois
@@ -235,7 +236,7 @@ export default function PainelCapitalizacao({ dados }: { dados: PainelCapitaliza
 
       <section id="quadro-cap-alerta" className={styles.section}>
         <div className={styles.sectionHead}>
-          <h2>Cards que pedem atenção</h2>
+          <h2>Cards que pedem atenção<InfoLegenda titulo="Cards que pedem atenção">Cards ativos parados há 3 ou mais dias úteis na mesma etapa, de qualquer mês (sem filtro de competência). Dias parado = quantos dias úteis o card está sem mudar de etapa.</InfoLegenda></h2>
           <div className={styles.note}>parados 3+ dias úteis sem mudar de etapa — todos os títulos ativos, sem filtro de mês</div>
           <ExportarQuadro
             quadroId="quadro-cap-alerta"
@@ -279,7 +280,7 @@ export default function PainelCapitalizacao({ dados }: { dados: PainelCapitaliza
 
       <section id="quadro-cap-titulos" className={styles.section}>
         <div className={styles.sectionHead}>
-          <h2>Títulos solicitados</h2>
+          <h2>Títulos solicitados<InfoLegenda titulo="Títulos solicitados">Lista os títulos que entram nos números acima: criados no mês, concluídos no mês e os herdados que seguem em andamento. Dá para filtrar por imobiliária. Valor do título e comissão vêm do próprio card.</InfoLegenda></h2>
           <div className={styles.note}>criados no mês + concluídos no mês + em andamento herdados — mesma lógica dos KPIs acima</div>
           <ExportarQuadro
             quadroId="quadro-cap-titulos"

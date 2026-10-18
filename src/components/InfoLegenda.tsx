@@ -22,8 +22,19 @@ export default function InfoLegenda({
   alinhar?: "esquerda" | "direita";
 }) {
   const [aberto, setAberto] = useState(false);
+  const [viraPraEsquerda, setViraPraEsquerda] = useState(false);
   const raiz = useRef<HTMLSpanElement>(null);
   const idBalao = useId();
+
+  // Ícone perto da borda direita da tela (ex.: último KPI de uma linha):
+  // abre o balão pra esquerda em vez de cortar.
+  function abrir() {
+    if (raiz.current) {
+      const { left } = raiz.current.getBoundingClientRect();
+      setViraPraEsquerda(left + 300 > window.innerWidth - 12);
+    }
+    setAberto(true);
+  }
 
   useEffect(() => {
     if (!aberto) return;
@@ -48,7 +59,7 @@ export default function InfoLegenda({
       ref={raiz}
       data-export-ignore="true"
       style={{ position: "relative", display: "inline-block", marginLeft: 6, verticalAlign: "middle", textTransform: "none", letterSpacing: "normal", fontWeight: 400 }}
-      onMouseEnter={() => setAberto(true)}
+      onMouseEnter={abrir}
       onMouseLeave={() => setAberto(false)}
     >
       <button
@@ -56,8 +67,8 @@ export default function InfoLegenda({
         aria-label={titulo ? `Como é calculado: ${titulo}` : "Como é calculado"}
         aria-expanded={aberto}
         aria-controls={idBalao}
-        onClick={() => setAberto(true)}
-        onFocus={() => setAberto(true)}
+        onClick={abrir}
+        onFocus={abrir}
         onBlur={() => setAberto(false)}
         style={{
           width: 16,
@@ -87,7 +98,7 @@ export default function InfoLegenda({
           style={{
             position: "absolute",
             top: "calc(100% + 6px)",
-            [alinhar === "direita" ? "right" : "left"]: -6,
+            [alinhar === "direita" || viraPraEsquerda ? "right" : "left"]: -6,
             zIndex: 50,
             width: 300,
             maxWidth: "80vw",

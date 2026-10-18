@@ -13,6 +13,7 @@ import ExportarQuadro, {
   BotaoExportarPainelPdf,
 } from "@/components/ExportarQuadro";
 import PageHeader from "@/components/PageHeader";
+import InfoLegenda from "@/components/InfoLegenda";
 import AtualizarAgora from "@/components/AtualizarAgora";
 import { IconFlame } from "@/components/icons";
 
@@ -90,15 +91,20 @@ function Kpi({
   value,
   note,
   tone,
+  legenda,
 }: {
   label: string;
   value: string;
   note: string;
   tone?: "ok" | "warning" | "danger";
+  legenda?: string;
 }) {
   return (
     <div className={styles.kpi}>
-      <div className={styles.kpiLabel}>{label}</div>
+      <div className={styles.kpiLabel}>
+        {label}
+        {legenda && <InfoLegenda titulo={label}>{legenda}</InfoLegenda>}
+      </div>
       <div className={`${styles.kpiValue} ${tone ? styles[tone] : ""}`}>
         {value}
       </div>
@@ -235,44 +241,52 @@ function PainelVisao({
       <div className={styles.kpis}>
         <Kpi
           label="Total de entradas"
+          legenda="Novas entradas mais renovações da competência, somadas. Mostra o tamanho total do trabalho do mês antes de separar por origem."
           value={String(analise.visaoGeral.novasEntradas + analise.visaoGeral.renovacoesCompetencia)}
           note="Novas entradas + renovações da competência"
         />
         <Kpi
           label="Total efetivados"
+          legenda="Novos negócios efetivados (do mês e pendências anteriores) mais as renovações efetivadas. Efetivado é o status EFETIVADO."
           value={String(analise.visaoGeral.novosEfetivados + analise.visaoGeral.renovacoesEfetivadas)}
           note="Novos efetivados + renovações efetivadas"
           tone="ok"
         />
         <Kpi
           label="Comissão dos efetivados"
+          legenda="Soma estimada da comissão dos negócios efetivados, novos mais renovações. É estimativa operacional, não receita recebida."
           value={brl(analise.visaoGeral.comissaoEfetivada)}
           note="Valor estimado — novos + renovações"
           tone="ok"
         />
         <Kpi
           label="Novas entradas"
+          legenda="Negócios novos que entraram neste mês."
           value={String(analise.visaoGeral.novasEntradas)}
           note="NOVOS MÊS"
         />
         <Kpi
           label="Pendências anteriores"
+          legenda="Negócios novos de meses anteriores que ainda não foram concluídos e seguem na carteira de entrada."
           value={String(analise.visaoGeral.pendenciasAnteriores)}
           note="Carteira de entrada"
         />
         <Kpi
           label="Renovações da competência"
+          legenda="Apólices em renovação na competência selecionada. A próxima competência não entra nesta conta."
           value={String(analise.visaoGeral.renovacoesCompetencia)}
           note="Competência selecionada"
         />
         <Kpi
           label="Novos efetivados"
+          legenda="Novos negócios que chegaram a EFETIVADO, somando os novos do mês e as pendências anteriores."
           value={String(analise.visaoGeral.novosEfetivados)}
           note="Mês + pendências"
           tone="ok"
         />
         <Kpi
           label="Renovações efetivadas"
+          legenda="Renovações da competência que chegaram a EFETIVADO. O percentual embaixo é a conversão: efetivadas ÷ renovações da competência."
           value={String(analise.visaoGeral.renovacoesEfetivadas)}
           note={pct(analise.renovacoes.atual.conversao)}
           tone="ok"
@@ -289,7 +303,7 @@ function PainelVisao({
               flexWrap: "wrap",
             }}
           >
-            <h2>Novos negócios — situação atual</h2>
+            <h2>Novos negócios — situação atual<InfoLegenda titulo="Novos negócios">Situação atual dos negócios novos: os do mês mais as pendências de meses anteriores, agrupados por status.</InfoLegenda></h2>
             <ExportarQuadro
               quadroId="quadro-ramos-novos-situacao"
               corFundo="#f7f8fa"
@@ -316,7 +330,7 @@ function PainelVisao({
               flexWrap: "wrap",
             }}
           >
-            <h2>Renovações — competência atual</h2>
+            <h2>Renovações — competência atual<InfoLegenda titulo="Renovações">Situação das renovações da competência selecionada, agrupadas por status. A próxima competência não entra nesta conversão.</InfoLegenda></h2>
             <ExportarQuadro
               quadroId="quadro-ramos-renovacoes-situacao"
               corFundo="#f7f8fa"
@@ -342,7 +356,7 @@ function PainelVisao({
               flexWrap: "wrap",
             }}
           >
-            <h2>Ramos com maior volume</h2>
+            <h2>Ramos com maior volume<InfoLegenda titulo="Ramos com maior volume">Ramos (produtos) com mais registros, somando os negócios novos (mês e pendências anteriores) e as renovações da competência. A SUSEP segue como dimensão operacional.</InfoLegenda></h2>
             <ExportarQuadro
               quadroId="quadro-ramos-maior-volume"
               corFundo="#f7f8fa"
@@ -364,7 +378,7 @@ function PainelVisao({
               flexWrap: "wrap",
             }}
           >
-            <h2>Pontos que exigem atenção</h2>
+            <h2>Pontos que exigem atenção<InfoLegenda titulo="Pontos que exigem atenção">Até 5 ocorrências reais, entre os alertas operacionais e os de qualidade dos dados. A lista completa está na aba de alertas.</InfoLegenda></h2>
             <ExportarQuadro
               quadroId="quadro-ramos-atencao"
               corFundo="#f7f8fa"
@@ -437,34 +451,40 @@ function PainelNovos({
       <div className={styles.kpis}>
         <Kpi
           label="Total"
+          legenda="Quantidade de registros com status na carteira selecionada acima (consolidado, novos do mês ou pendências anteriores)."
           value={String(resumo.total)}
           note="Registros com status"
         />
         <Kpi
           label="Efetivados"
+          legenda="Registros com status EFETIVADO na carteira selecionada. O percentual embaixo é a conversão: efetivados ÷ total."
           value={String(resumo.efetivados)}
           note={pct(resumo.conversao)}
           tone="ok"
         />
         <Kpi
           label="Comissão potencial"
+          legenda="Soma da comissão prevista de todos os registros da carteira selecionada, efetivados ou não. É estimativa."
           value={brl(resumo.comissaoPotencial)}
           note="Carteira selecionada"
         />
         <Kpi
           label="Comissão dos efetivados"
+          legenda="Soma da comissão apenas dos registros EFETIVADOS da carteira selecionada."
           value={brl(resumo.comissaoEfetivada)}
           note="Somente efetivados"
           tone="ok"
         />
         <Kpi
           label="Resultado estimado O2"
+          legenda="Comissão dos efetivados menos o repasse estimado dessa mesma carteira. É estimativa operacional, não lucro realizado."
           value={brl(resumo.resultadoEstimado)}
           note="Comissão menos repasse"
           tone="ok"
         />
         <Kpi
           label="Tempo médio"
+          legenda="Média do tempo gasto dos registros da carteira que têm esse tempo preenchido e válido. A nota embaixo diz quantos tempos entraram na média."
           value={duracao(resumo.tempoMedioMinutos)}
           note={`${resumo.temposValidos} tempos válidos`}
         />
@@ -480,7 +500,7 @@ function PainelNovos({
               flexWrap: "wrap",
             }}
           >
-            <h2>Status</h2>
+            <h2>Status<InfoLegenda titulo="Status">Distribuição dos registros da carteira selecionada (consolidado, novos do mês ou pendências anteriores) por status.</InfoLegenda></h2>
             <ExportarQuadro
               quadroId="quadro-ramos-novos-status"
               corFundo="#f7f8fa"
@@ -502,7 +522,7 @@ function PainelNovos({
               flexWrap: "wrap",
             }}
           >
-            <h2>Produção por cotador ou origem</h2>
+            <h2>Produção por cotador ou origem<InfoLegenda titulo="Produção por cotador ou origem">Quantos registros cada cotador atendeu na carteira selecionada. A produção direta da imobiliária fica separada das pessoas.</InfoLegenda></h2>
             <ExportarQuadro
               quadroId="quadro-ramos-novos-cotador"
               corFundo="#f7f8fa"
@@ -526,7 +546,7 @@ function PainelNovos({
               flexWrap: "wrap",
             }}
           >
-            <h2>Ramos</h2>
+            <h2>Ramos<InfoLegenda titulo="Ramos">Registros por ramo (produto), com Total, Efetivados e Conversão (efetivados ÷ total) de cada um.</InfoLegenda></h2>
             <ExportarQuadro
               quadroId="quadro-ramos-novos-ramo"
               corFundo="#f7f8fa"
@@ -548,7 +568,7 @@ function PainelNovos({
               flexWrap: "wrap",
             }}
           >
-            <h2>Seguradoras</h2>
+            <h2>Seguradoras<InfoLegenda titulo="Seguradoras">Registros por seguradora, com Total, Efetivados e Conversão. Segimob aparece como origem sem seguradora informada.</InfoLegenda></h2>
             <ExportarQuadro
               quadroId="quadro-ramos-novos-seguradora"
               corFundo="#f7f8fa"
@@ -571,7 +591,7 @@ function PainelNovos({
             flexWrap: "wrap",
           }}
         >
-          <h2>Imobiliárias — 100% da produção</h2>
+          <h2>Imobiliárias — 100% da produção<InfoLegenda titulo="Imobiliárias">Todas as imobiliárias com pelo menos um registro na carteira selecionada, com Total, Efetivados e Conversão. As 10 maiores aparecem primeiro; o botão mostra as demais.</InfoLegenda></h2>
           <ExportarQuadro
             quadroId="quadro-ramos-novos-imobiliarias"
             corFundo="#f7f8fa"
@@ -625,6 +645,7 @@ function PainelRenovacoes({
       <div className={styles.kpis}>
         <Kpi
           label="Carteira"
+          legenda="Total de renovações da competência escolhida (atual ou próxima). A próxima competência é só previsão operacional e não se mistura com o mês atual."
           value={String(resumo.total)}
           note={
             recorte === "atual" ? "Resultado atual" : "Previsão operacional"
@@ -632,6 +653,7 @@ function PainelRenovacoes({
         />
         <Kpi
           label="Efetivados"
+          legenda="Renovações com status EFETIVADO. Na competência atual, o percentual embaixo é a conversão: efetivados ÷ carteira."
           value={String(resumo.efetivados)}
           note={
             recorte === "atual"
@@ -642,22 +664,26 @@ function PainelRenovacoes({
         />
         <Kpi
           label="Comissão anterior"
+          legenda="Soma da comissão da apólice anterior, registrada como referência para comparar com a renovação."
           value={brl(resumo.comissaoAnterior)}
           note="Referência registrada"
         />
         <Kpi
           label="Comissão atual prevista"
+          legenda="Soma da comissão prevista de todas as renovações da carteira, efetivadas ou não."
           value={brl(resumo.comissaoPotencial)}
           note="Carteira total"
         />
         <Kpi
           label="Comissão dos efetivados"
+          legenda="Soma da comissão apenas das renovações EFETIVADAS."
           value={brl(resumo.comissaoEfetivada)}
           note="Somente efetivados"
           tone="ok"
         />
         <Kpi
           label="Resultado estimado O2"
+          legenda="Comissão dos efetivados menos o repasse estimado. É estimativa operacional, não lucro realizado."
           value={brl(resumo.resultadoEstimado)}
           note="Comissão menos repasse"
           tone="ok"
@@ -674,7 +700,7 @@ function PainelRenovacoes({
               flexWrap: "wrap",
             }}
           >
-            <h2>Status da carteira</h2>
+            <h2>Status da carteira<InfoLegenda titulo="Status da carteira">Distribuição das renovações por status. Na competência atual mostra a conversão do mês; na próxima competência é a preparação do período.</InfoLegenda></h2>
             <ExportarQuadro
               quadroId="quadro-ramos-renov-status"
               corFundo="#f7f8fa"
@@ -700,7 +726,7 @@ function PainelRenovacoes({
               flexWrap: "wrap",
             }}
           >
-            <h2>Produção por cotador</h2>
+            <h2>Produção por cotador<InfoLegenda titulo="Produção por cotador">Renovações atribuídas a cada responsável na competência selecionada.</InfoLegenda></h2>
             <ExportarQuadro
               quadroId="quadro-ramos-renov-cotador"
               corFundo="#f7f8fa"
@@ -724,7 +750,7 @@ function PainelRenovacoes({
               flexWrap: "wrap",
             }}
           >
-            <h2>Ramos</h2>
+            <h2>Ramos<InfoLegenda titulo="Ramos">Renovações por ramo (produto), com Total, Efetivados e Conversão de cada um.</InfoLegenda></h2>
             <ExportarQuadro
               quadroId="quadro-ramos-renov-ramo"
               corFundo="#f7f8fa"
@@ -745,7 +771,7 @@ function PainelRenovacoes({
               flexWrap: "wrap",
             }}
           >
-            <h2>Seguradoras</h2>
+            <h2>Seguradoras<InfoLegenda titulo="Seguradoras">Renovações por seguradora, com Total, Efetivados e Conversão de cada uma.</InfoLegenda></h2>
             <ExportarQuadro
               quadroId="quadro-ramos-renov-seguradora"
               corFundo="#f7f8fa"
@@ -767,7 +793,7 @@ function PainelRenovacoes({
             flexWrap: "wrap",
           }}
         >
-          <h2>Imobiliárias — carteira completa</h2>
+          <h2>Imobiliárias — carteira completa<InfoLegenda titulo="Imobiliárias">Todas as imobiliárias com renovação na competência selecionada, com Total, Efetivados e Conversão. As 10 maiores aparecem primeiro; o botão mostra as demais.</InfoLegenda></h2>
           <ExportarQuadro
             quadroId="quadro-ramos-renov-imobiliarias"
             corFundo="#f7f8fa"
@@ -836,28 +862,33 @@ function PainelFinanceiro({
       <div className={styles.kpis}>
         <Kpi
           label="Comissão potencial"
+          legenda="Soma da comissão prevista de toda a carteira atual: novos do mês, pendências anteriores e renovações da competência."
           value={brl(analise.financeiro.comissaoPotencial)}
           note="Carteira total atual"
         />
         <Kpi
           label="Comissão dos efetivados"
+          legenda="Soma da comissão dos negócios com status EFETIVADO."
           value={brl(analise.financeiro.comissaoEfetivada)}
           note="Status EFETIVADO"
           tone="ok"
         />
         <Kpi
           label="Repasse estimado"
+          legenda="Repasse previsto sobre os negócios efetivados."
           value={brl(analise.financeiro.repasseEstimado)}
           note="Somente efetivados"
         />
         <Kpi
           label="Resultado estimado O2"
+          legenda="Comissão dos efetivados menos o repasse estimado. Não representa lucro realizado."
           value={brl(analise.financeiro.resultadoEstimado)}
           note="Comissão menos repasse"
           tone="ok"
         />
         <Kpi
           label="Conversão financeira"
+          legenda="Comissão dos efetivados ÷ comissão potencial."
           value={pct(analise.financeiro.conversaoFinanceira)}
           note="Efetivada ÷ potencial"
         />
@@ -872,7 +903,7 @@ function PainelFinanceiro({
             flexWrap: "wrap",
           }}
         >
-          <h2>Comissão potencial versus efetivada</h2>
+          <h2>Comissão potencial versus efetivada<InfoLegenda titulo="Comissão potencial versus efetivada">Compara, por origem (novos do mês, pendências anteriores e renovações da competência), a comissão prevista com a efetivada. Conversão = efetivada ÷ potencial. As populações ficam separadas. São valores operacionais estimados, não receita recebida.</InfoLegenda></h2>
           <ExportarQuadro
             quadroId="quadro-ramos-financeiro"
             corFundo="#f7f8fa"
@@ -922,33 +953,39 @@ function PainelEndossos({
       <div className={styles.kpis}>
         <Kpi
           label="Solicitações"
+          legenda="Quantidade de solicitações de endosso (cada linha operacional). Endosso não entra na conversão comercial."
           value={String(dados.total)}
           note="Linhas operacionais"
         />
         <Kpi
           label="Cancelados"
+          legenda="Solicitações com status CANCELADO, ou seja, com o fluxo concluído."
           value={String(dados.cancelados)}
           note="Fluxo concluído"
           tone="ok"
         />
         <Kpi
           label="Pendentes"
+          legenda="Solicitações ainda sem conclusão, que exigem acompanhamento."
           value={String(dados.pendentes)}
           note="Exigem acompanhamento"
           tone={dados.pendentes ? "warning" : "ok"}
         />
         <Kpi
           label="Tempos válidos"
+          legenda="Quantas solicitações têm tempo gasto preenchido e válido (zero ou mais). Os inválidos ficam de fora da média."
           value={String(dados.temposValidos)}
           note={`${dados.temposInvalidos} inválidos`}
         />
         <Kpi
           label="Tempo médio"
+          legenda="Média do tempo gasto, somando só as durações válidas."
           value={duracao(dados.tempoMedioMinutos)}
           note="Somente durações válidas"
         />
         <Kpi
           label="Restituição informada"
+          legenda="Soma dos valores de restituição informados na fonte, mantendo o sinal original."
           value={brl(dados.restituicaoInformada)}
           note="Sinal mantido da fonte"
         />
@@ -964,7 +1001,7 @@ function PainelEndossos({
               flexWrap: "wrap",
             }}
           >
-            <h2>Status</h2>
+            <h2>Status<InfoLegenda titulo="Status dos endossos">Distribuição das solicitações de endosso por status. Endosso não entra na conversão comercial.</InfoLegenda></h2>
             <ExportarQuadro
               quadroId="quadro-ramos-endossos-status"
               corFundo="#f7f8fa"
@@ -986,7 +1023,7 @@ function PainelEndossos({
               flexWrap: "wrap",
             }}
           >
-            <h2>Ramos</h2>
+            <h2>Ramos<InfoLegenda titulo="Ramos">Solicitações de endosso por ramo (produto).</InfoLegenda></h2>
             <ExportarQuadro
               quadroId="quadro-ramos-endossos-ramo"
               corFundo="#f7f8fa"
@@ -1012,7 +1049,7 @@ function PainelEndossos({
               flexWrap: "wrap",
             }}
           >
-            <h2>Responsáveis</h2>
+            <h2>Responsáveis<InfoLegenda titulo="Responsáveis">Solicitações de endosso atendidas por cada responsável.</InfoLegenda></h2>
             <ExportarQuadro
               quadroId="quadro-ramos-endossos-responsavel"
               corFundo="#f7f8fa"
@@ -1033,7 +1070,7 @@ function PainelEndossos({
               flexWrap: "wrap",
             }}
           >
-            <h2>Seguradoras</h2>
+            <h2>Seguradoras<InfoLegenda titulo="Seguradoras">Solicitações de endosso por seguradora.</InfoLegenda></h2>
             <ExportarQuadro
               quadroId="quadro-ramos-endossos-seguradora"
               corFundo="#f7f8fa"
@@ -1059,11 +1096,13 @@ function ListaAlertas({
   itens,
   quadroId,
   nomeArquivo,
+  legenda,
 }: {
   titulo: string;
   itens: AnaliseRamosElementares["qualidade"];
   quadroId: string;
   nomeArquivo: string;
+  legenda?: string;
 }) {
   return (
     <section id={quadroId} className={styles.panel}>
@@ -1076,7 +1115,10 @@ function ListaAlertas({
           flexWrap: "wrap",
         }}
       >
-        <h2>{titulo}</h2>
+        <h2>
+          {titulo}
+          {legenda && <InfoLegenda titulo={titulo}>{legenda}</InfoLegenda>}
+        </h2>
         <ExportarQuadro
           quadroId={quadroId}
           corFundo="#f7f8fa"
@@ -1135,18 +1177,21 @@ function PainelAlertas({
       <div className={styles.kpis}>
         <Kpi
           label="Alertas operacionais"
+          legenda="Soma das ocorrências que pedem ação da equipe. O detalhe está na lista Central de alertas operacionais."
           value={String(totalOperacional)}
           note="Itens que pedem ação"
           tone={totalOperacional ? "warning" : "ok"}
         />
         <Kpi
           label="Ocorrências de qualidade"
+          legenda="Soma das falhas de preenchimento encontradas. Uma mesma linha pode cair em mais de uma categoria, por isso as categorias podem se sobrepor."
           value={String(totalQualidade)}
           note="Categorias podem se sobrepor"
           tone={totalQualidade ? "warning" : "ok"}
         />
         <Kpi
           label="Correções automáticas"
+          legenda="Sempre zero: o painel só lê a fonte e aponta o problema, nunca altera a planilha nem os cards."
           value="0"
           note="A fonte nunca é alterada"
           tone="ok"
@@ -1156,12 +1201,14 @@ function PainelAlertas({
         <ListaAlertas
           titulo="Central de alertas operacionais"
           itens={analise.alertasOperacionais}
+          legenda="Ocorrências reais encontradas na leitura que pedem ação da equipe. O número à direita de cada linha é quantos registros caem naquela situação; zero aparece em verde."
           quadroId="quadro-ramos-alertas-operacionais"
           nomeArquivo={`ramos-elementares-alertas-operacionais-${competencia}`}
         />
         <ListaAlertas
           titulo="Qualidade dos dados"
           itens={analise.qualidade}
+          legenda="Falhas de preenchimento na fonte (cotador, seguradora, imobiliária, tempo, comissão, datas etc.). O painel só aponta o problema, nunca corrige. Uma mesma linha pode cair em mais de uma categoria."
           quadroId="quadro-ramos-qualidade"
           nomeArquivo={`ramos-elementares-qualidade-${competencia}`}
         />
@@ -1325,18 +1372,21 @@ function PainelEmails({
       <div className={styles.kpis}>
         <Kpi
           label="Negócios com atualização pendente"
+          legenda="Negócios em que um e-mail confirma algo (contratação, apólice emitida ou cancelamento) que a planilha ainda não reflete."
           value={String(pendencias.length)}
           note="E-mail confirma algo que a planilha ainda não reflete"
           tone={pendencias.length ? "warning" : "ok"}
         />
         <Kpi
           label="Cancelamentos não refletidos"
+          legenda="Cancelamentos confirmados por e-mail em negócios que a planilha ainda mostra como ativos."
           value={String(cancelamentosNaoRefletidos.length)}
           note="Cancelado por e-mail, planilha ainda mostra ativo"
           tone={cancelamentosNaoRefletidos.length ? "danger" : "ok"}
         />
         <Kpi
           label="Cliente autorizou, sem confirmação"
+          legenda="Negócios em que o cliente já deu o aval por e-mail há 2 dias ou mais e a O2 ainda não fechou o ciclo com contratação, apólice ou cancelamento."
           value={String(autorizacoesPendentes.length)}
           note={`Aval do cliente há ${LIMIAR_DIAS_AUTORIZACAO_PENDENTE}d+ sem a O2 fechar o loop`}
           tone={autorizacoesPendentes.length ? "danger" : "ok"}
@@ -1358,7 +1408,7 @@ function PainelEmails({
               flexWrap: "wrap",
             }}
           >
-            <h2>⏳ Cliente autorizou — aguardando confirmação da O2</h2>
+            <h2>⏳ Cliente autorizou — aguardando confirmação da O2<InfoLegenda titulo="Cliente autorizou">Negócios em que a imobiliária ou o cliente já deu o aval por e-mail e nenhum e-mail de contratação, apólice emitida ou cancelamento chegou depois. Entra na lista quando passam 2 dias ou mais sem a O2 confirmar.</InfoLegenda></h2>
             <ExportarQuadro
               quadroId="quadro-ramos-emails-autorizacoes"
               corFundo="#f7f8fa"
@@ -1440,7 +1490,7 @@ function PainelEmails({
           flexWrap: "wrap",
         }}
       >
-        <h2>Negócios com atualização pendente</h2>
+        <h2>Negócios com atualização pendente<InfoLegenda titulo="Atualização pendente">Negócios cujos e-mails confirmam algo (contratação, apólice emitida ou cancelamento) que o status na planilha ainda não reflete. É o que precisa ser atualizado na fonte.</InfoLegenda></h2>
         <ExportarQuadro
           quadroId="quadro-ramos-emails-pendencias"
           corFundo="#f7f8fa"
