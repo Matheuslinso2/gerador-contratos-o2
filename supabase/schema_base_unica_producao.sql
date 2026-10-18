@@ -162,3 +162,11 @@ revoke all on table locatarios from anon, authenticated;
 -- Carga (2026-10-18): clientes com CPF/CNPJ vêm da grade do Corp (producao_erp,
 -- pelo nº da proposta = nosso_numero); nomes dos PDFs via
 -- scripts/base-unica/cofre-clientes-corp.mjs (tabela temporária, já apagada).
+
+-- Cadastro de clientes do Corp (xlsx, 18/10/2026) → cofre: código do cliente
+-- no Corp e demais dados (endereço, nascimento, sexo, RG, produtor…) em
+-- dados_extras. Carga: scripts/base-unica/cofre-cadastro-clientes-corp.mjs
+-- (tabela temporária base_unica_tmp_cadastro_clientes, apagada após o
+-- cruzamento por documento e por nome único).
+alter table locatarios add column if not exists codigo_corp_cliente text;
+alter table locatarios add column if not exists dados_extras jsonb not null default '{}'::jsonb;
