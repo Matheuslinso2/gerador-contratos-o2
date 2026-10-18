@@ -119,3 +119,28 @@ left join imobiliarias i on i.id = v.imobiliaria_id
 left join imobiliaria_grupos g on g.id = i.grupo_id;
 
 create index if not exists imob_registros_fonte_nome_idx on imobiliaria_registros_fonte (fonte, nome_original) where situacao = 'confirmado';
+
+-- Atualização (Matheus 2026-10-18): canal "Venda direta O2" (produtor
+-- principal é a própria O2 Corretora — produção sem imobiliária intermediando,
+-- fora do ranking de imobiliárias) e SUSEP do grupo O2 (prefixo "2 " no ramo
+-- do Corp = efetivado pela segunda SUSEP; ex.: CAP × CAP2).
+create or replace view producao_resolvida with (security_invoker = true) as
+select p.*,
+       case when canal.venda_direta then null else v.imobiliaria_id end as imobiliaria_id,
+       case when canal.venda_direta then null else i.grupo_id end as grupo_id,
+       case when canal.venda_direta then 'Venda direta O2' else coalesce(g.nome, i.apelido, i.nome) end as imobiliaria_exibicao,
+       case when canal.venda_direta then 'venda_direta_o2' else 'imobiliaria' end as canal,
+       case when p.fonte = 'corp' then (case when p.ramo_original ~ '^2 ' then 'segunda_susep' else 'primeira_susep' end) end as susep_o2
+from producao_unificada p
+cross join lateral (select coalesce(p.imobiliaria_texto ~* '^O2 CORRETORA', false) as venda_direta) canal
+left join lateral (
+  select r.imobiliaria_id
+  from imobiliaria_registros_fonte r
+  where r.fonte = p.fonte_vinculo
+    and r.situacao = 'confirmado'
+    and (r.chave_externa = p.imobiliaria_texto or r.nome_original = p.imobiliaria_texto)
+  order by (r.chave_externa = p.imobiliaria_texto) desc
+  limit 1
+) v on true
+left join imobiliarias i on i.id = v.imobiliaria_id
+left join imobiliaria_grupos g on g.id = i.grupo_id;
