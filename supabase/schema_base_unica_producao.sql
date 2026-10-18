@@ -144,3 +144,21 @@ left join lateral (
 ) v on true
 left join imobiliarias i on i.id = v.imobiliaria_id
 left join imobiliaria_grupos g on g.id = i.grupo_id;
+
+-- Cofre de clientes (tabela `locatarios`: locatários, segurados, titulares) —
+-- continua SÓ armazenamento (sem policy; só service_role). Aceita cliente
+-- identificado só pelo nome (relatórios antigos do Corp não trazem documento).
+alter table locatarios alter column cpf drop not null;
+alter table locatarios add column if not exists nome_normalizado text;
+alter table locatarios add column if not exists tipo_documento text check (tipo_documento in ('cpf', 'cnpj'));
+alter table locatarios add column if not exists identificacao text not null default 'documento'
+  check (identificacao in ('documento', 'nome'));
+alter table locatarios add column if not exists fontes text[] not null default '{}';
+create unique index if not exists locatarios_nome_sem_doc_uidx on locatarios (nome_normalizado) where cpf is null;
+create index if not exists locatarios_nome_idx on locatarios (nome_normalizado);
+alter table producao_unificada add column if not exists locatario_vinculo text
+  check (locatario_vinculo in ('documento', 'nome_unico', 'so_nome'));
+revoke all on table locatarios from anon, authenticated;
+-- Carga (2026-10-18): clientes com CPF/CNPJ vêm da grade do Corp (producao_erp,
+-- pelo nº da proposta = nosso_numero); nomes dos PDFs via
+-- scripts/base-unica/cofre-clientes-corp.mjs (tabela temporária, já apagada).
