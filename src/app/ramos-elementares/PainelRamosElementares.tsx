@@ -613,6 +613,92 @@ function PainelNovos({
   );
 }
 
+function LinhaControle({ rotulo, valor, destaque }: { rotulo: string; valor: number; destaque?: boolean }) {
+  return (
+    <tr>
+      <td style={destaque ? { fontWeight: 700 } : undefined}>{rotulo}</td>
+      <td style={{ textAlign: "right", fontWeight: destaque ? 700 : undefined }}>{valor}</td>
+    </tr>
+  );
+}
+
+function ControleRenovacaoQuadro({ controle, competencia }: { controle: NonNullable<AnaliseRamosElementares["controleRenovacao"]>; competencia: string }) {
+  const { entradas, efetivadasNoMes, carteiraDaVigencia } = controle;
+  const tabela = (titulo: string, linhas: { rotulo: string; valor: number; destaque?: boolean }[]) => (
+    <div>
+      <h3 style={{ fontSize: 12, margin: "0 0 6px" }}>{titulo}</h3>
+      <div className={styles.tabelaWrap}>
+        <table className={styles.tabela}>
+          <tbody>
+            {linhas.map((l) => (
+              <LinhaControle key={l.rotulo} {...l} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+  return (
+    <section id="quadro-ramos-renov-controle" className={styles.panel} style={{ marginBottom: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+        <h2>
+          Controle da renovação — entrada, vigência e efetivação
+          <InfoLegenda titulo="Controle da renovação">
+            Três datas independentes, porque a cotação de renovação vai ao cliente pelo menos 1 mês antes do vencimento e ele pode efetivar antes da vigência.
+            Entrada = mês em que o card entrou (cotação enviada). Vigência = mês em que a apólice renova. Efetivação = mês em que o cliente fechou.
+            Antecipada = efetivada neste mês com vigência em mês seguinte; atrasada = efetivada neste mês com vigência em mês anterior.
+            Considera as renovações com vigência no mês e no mês seguinte.
+          </InfoLegenda>
+        </h2>
+        <ExportarQuadro
+          quadroId="quadro-ramos-renov-controle"
+          corFundo="#f7f8fa"
+          nomeArquivo={`ramos-elementares-renovacoes-controle-${competencia}`}
+          dadosExcel={[
+            { grupo: "Entraram no mês", indicador: "Total", valor: entradas.total },
+            { grupo: "Entraram no mês", indicador: "Vigência no mês", valor: entradas.vigenciaDoMes },
+            { grupo: "Entraram no mês", indicador: "Vigência em mês seguinte", valor: entradas.vigenciaSeguinte },
+            { grupo: "Entraram no mês", indicador: "Vigência em mês anterior", valor: entradas.vigenciaAnterior },
+            { grupo: "Efetivadas no mês", indicador: "Total", valor: efetivadasNoMes.total },
+            { grupo: "Efetivadas no mês", indicador: "Vigência no mês", valor: efetivadasNoMes.vigenciaDoMes },
+            { grupo: "Efetivadas no mês", indicador: "Antecipadas", valor: efetivadasNoMes.antecipadas },
+            { grupo: "Efetivadas no mês", indicador: "Atrasadas", valor: efetivadasNoMes.atrasadas },
+            { grupo: "Vigência do mês", indicador: "Total", valor: carteiraDaVigencia.total },
+            { grupo: "Vigência do mês", indicador: "Efetivadas antes do mês", valor: carteiraDaVigencia.efetivadasAntes },
+            { grupo: "Vigência do mês", indicador: "Efetivadas no mês", valor: carteiraDaVigencia.efetivadasNoMes },
+            { grupo: "Vigência do mês", indicador: "Efetivadas depois", valor: carteiraDaVigencia.efetivadasDepois },
+            { grupo: "Vigência do mês", indicador: "Em aberto", valor: carteiraDaVigencia.emAberto },
+            { grupo: "Vigência do mês", indicador: "Encerradas sem efetivar", valor: carteiraDaVigencia.encerradasSemEfetivar },
+          ]}
+          nomeAbaExcel="Controle renovação"
+        />
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
+        {tabela("Entraram no card neste mês", [
+          { rotulo: "Total de entradas", valor: entradas.total, destaque: true },
+          { rotulo: "Com vigência neste mês", valor: entradas.vigenciaDoMes },
+          { rotulo: "Com vigência em mês seguinte", valor: entradas.vigenciaSeguinte },
+          { rotulo: "Com vigência em mês anterior", valor: entradas.vigenciaAnterior },
+        ])}
+        {tabela("Efetivadas neste mês", [
+          { rotulo: "Total efetivadas", valor: efetivadasNoMes.total, destaque: true },
+          { rotulo: "Com vigência neste mês", valor: efetivadasNoMes.vigenciaDoMes },
+          { rotulo: "Antecipadas (vigência em mês seguinte)", valor: efetivadasNoMes.antecipadas },
+          { rotulo: "Atrasadas (vigência em mês anterior)", valor: efetivadasNoMes.atrasadas },
+        ])}
+        {tabela("Apólices com vigência neste mês", [
+          { rotulo: "Total da vigência", valor: carteiraDaVigencia.total, destaque: true },
+          { rotulo: "Efetivadas antes do mês", valor: carteiraDaVigencia.efetivadasAntes },
+          { rotulo: "Efetivadas neste mês", valor: carteiraDaVigencia.efetivadasNoMes },
+          { rotulo: "Efetivadas depois", valor: carteiraDaVigencia.efetivadasDepois },
+          { rotulo: "Ainda em aberto", valor: carteiraDaVigencia.emAberto },
+          { rotulo: "Encerradas sem efetivar", valor: carteiraDaVigencia.encerradasSemEfetivar },
+        ])}
+      </div>
+    </section>
+  );
+}
+
 function PainelRenovacoes({
   analise,
   competencia,
@@ -689,6 +775,7 @@ function PainelRenovacoes({
           tone="ok"
         />
       </div>
+      {analise.controleRenovacao && <ControleRenovacaoQuadro controle={analise.controleRenovacao} competencia={competencia} />}
       <div className={styles.duasColunas}>
         <section id="quadro-ramos-renov-status" className={styles.panel}>
           <div

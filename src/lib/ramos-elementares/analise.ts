@@ -37,6 +37,12 @@ export type AlertaRamos = {
   gravidade: "alta" | "media" | "baixa";
 };
 
+export type ControleRenovacao = {
+  entradas: { total: number; vigenciaDoMes: number; vigenciaSeguinte: number; vigenciaAnterior: number };
+  efetivadasNoMes: { total: number; vigenciaDoMes: number; antecipadas: number; atrasadas: number };
+  carteiraDaVigencia: { total: number; efetivadasAntes: number; efetivadasNoMes: number; efetivadasDepois: number; emAberto: number; encerradasSemEfetivar: number };
+};
+
 export type AnaliseRamosElementares = {
   competencia: string;
   atualizadoEm: string;
@@ -63,6 +69,12 @@ export type AnaliseRamosElementares = {
     atual: ResumoPopulacao;
     futura: ResumoPopulacao;
   };
+  // Controle da renovação (Matheus, 18/10/2026): três datas independentes --
+  // entrada no card (quando a cotação de renovação foi enviada), vigência da
+  // apólice e mês da efetivação. O cliente pode efetivar em outubro uma
+  // renovação com vigência em novembro. Considera as renovações da vigência
+  // do mês e do mês seguinte. Retratos antigos não têm o campo.
+  controleRenovacao?: ControleRenovacao;
   financeiro: {
     comissaoPotencial: number;
     comissaoEfetivada: number;
@@ -520,6 +532,12 @@ function mesDoSerial(serial: number): string {
   return `${data.getUTCFullYear()}-${String(data.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
+function somarMeses(competencia: string, n: number): string {
+  const [ano, mes] = competencia.split("-").map(Number);
+  const data = new Date(Date.UTC(ano, mes - 1 + n, 1));
+  return `${data.getUTCFullYear()}-${String(data.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
 function resumir(registros: (RegistroNovo | RegistroRenovacao)[]): ResumoPopulacao {
   const efetivados = registros.filter((registro) => registro.efetivado);
   const tempos = registros
@@ -594,6 +612,42 @@ export function montarAnaliseRamosElementares(fonte: FonteRamosBruta, agora = ne
   const rnAtual = [...rnAtualDaOrigem, ...rnAntecipadas];
   const rnFutura = rnFuturaBruto.filter((registro) => !(desfechoComData(registro) && mesDesfecho(registro) === fonte.competencia));
   const endossos = mapearEndossos(fonte.abas.endossos, abaEndossos);
+
+  const proximaVigencia = somarMeses(fonte.competencia, 1);
+  const controleRenovacao: ControleRenovacao = {
+    entradas: { total: 0, vigenciaDoMes: 0, vigenciaSeguinte: 0, vigenciaAnterior: 0 },
+    efetivadasNoMes: { total: 0, vigenciaDoMes: 0, antecipadas: 0, atrasadas: 0 },
+    carteiraDaVigencia: { total: 0, efetivadasAntes: 0, efetivadasNoMes: 0, efetivadasDepois: 0, emAberto: 0, encerradasSemEfetivar: 0 },
+  };
+  for (const [lista, abaFutura] of [[rnAtualBruto, false], [rnFuturaBruto, true]] as const) {
+    for (const registro of lista) {
+      const vigencia = registro.fimVigencia !== null ? mesDoSerial(registro.fimVigencia) : abaFutura ? proximaVigencia : fonte.competencia;
+      const entrada = registro.dataEnvio !== null ? mesDoSerial(registro.dataEnvio) : null;
+      const mesEfetivacao = registro.efetivado ? (registro.dataEfetivacao !== null ? mesDoSerial(registro.dataEfetivacao) : fonte.competencia) : null;
+      if (entrada === fonte.competencia) {
+        controleRenovacao.entradas.total++;
+        if (vigencia === fonte.competencia) controleRenovacao.entradas.vigenciaDoMes++;
+        else if (vigencia > fonte.competencia) controleRenovacao.entradas.vigenciaSeguinte++;
+        else controleRenovacao.entradas.vigenciaAnterior++;
+      }
+      if (mesEfetivacao === fonte.competencia) {
+        controleRenovacao.efetivadasNoMes.total++;
+        if (vigencia === fonte.competencia) controleRenovacao.efetivadasNoMes.vigenciaDoMes++;
+        else if (vigencia > fonte.competencia) controleRenovacao.efetivadasNoMes.antecipadas++;
+        else controleRenovacao.efetivadasNoMes.atrasadas++;
+      }
+      if (vigencia === fonte.competencia) {
+        const c = controleRenovacao.carteiraDaVigencia;
+        c.total++;
+        if (registro.efetivado) {
+          if (mesEfetivacao !== null && mesEfetivacao < fonte.competencia) c.efetivadasAntes++;
+          else if (mesEfetivacao !== null && mesEfetivacao > fonte.competencia) c.efetivadasDepois++;
+          else c.efetivadasNoMes++;
+        } else if (STATUS_TERMINAIS.has(registro.status)) c.encerradasSemEfetivar++;
+        else c.emAberto++;
+      }
+    }
+  }
 
   const resumoPendentes = resumir(pendentes);
   const resumoMes = resumir(novosMes);
@@ -786,6 +840,7 @@ export function montarAnaliseRamosElementares(fonte: FonteRamosBruta, agora = ne
     },
     novos: { consolidado: resumoNovos, mes: resumoMes, pendentes: resumoPendentes },
     renovacoes: { atual: resumoRnAtual, futura: resumoRnFutura },
+    controleRenovacao,
     financeiro: {
       comissaoPotencial,
       comissaoEfetivada,
