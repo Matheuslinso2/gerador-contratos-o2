@@ -1314,7 +1314,7 @@ export default async function SeguroFiancaPage({
                         className={styles.section}
                       >
                         <div className={styles.sectionHead}>
-                          <h2>Distribuição por etapa — Análise e Cotação</h2>
+                          <h2>Distribuição por etapa — Análise e Cotação<InfoLegenda titulo="Distribuição por etapa">Mostra em que etapa do funil Análise e Cotação está cada card. Em andamento = todos os cards que estão no funil agora, de qualquer mês de criação. Aprovado e Recusado = só os que tiveram esse desfecho neste mês. O total da barra é a soma dos segmentos.</InfoLegenda></h2>
                           <div className={styles.note}>
                             em andamento (todos) + recusado/aprovado deste mês
                           </div>
@@ -1378,7 +1378,7 @@ export default async function SeguroFiancaPage({
                       >
                         <div className={styles.sectionHead}>
                           <h2>
-                            Distribuição por etapa — Negociação e Contrato
+                            Distribuição por etapa — Negociação e Contrato<InfoLegenda titulo="Distribuição por etapa">Mostra em que etapa do funil Negociação e Contrato está cada card. Em andamento = todos os cards que estão no funil agora, de qualquer mês de criação. Convertido (contrato fechado) e Negativado (cliente não quis contratar) = só os que tiveram esse desfecho neste mês. O total da barra é a soma dos segmentos.</InfoLegenda>
                           </h2>
                           <div className={styles.note}>
                             em andamento (todos) + convertido/negativado deste
@@ -1523,7 +1523,7 @@ export default async function SeguroFiancaPage({
                             }}
                           >
                             <h3>
-                              Tempo em aberto por etapa — Análise e Cotação
+                              Tempo em aberto por etapa — Análise e Cotação<InfoLegenda titulo="Tempo em aberto por etapa">Para cada etapa, quantos cards estão nela agora e há quanto tempo. Cada card conta uma vez, pelo tempo da passagem atual na etapa. Média = tempo médio dos cards da etapa; Máx. = o card que está parado há mais tempo. Considera os cards do mês (novidades + herdados) e serve para achar onde o trabalho está parando.</InfoLegenda>
                             </h3>
                             <ExportarQuadro
                               quadroId="quadro-fianca-tempo-aberto-cotacoes"
@@ -1567,7 +1567,7 @@ export default async function SeguroFiancaPage({
                             }}
                           >
                             <h3>
-                              Tempo em aberto por etapa — Negociação e Contrato
+                              Tempo em aberto por etapa — Negociação e Contrato<InfoLegenda titulo="Tempo em aberto por etapa">Para cada etapa, quantos cards estão nela agora e há quanto tempo. Cada card conta uma vez, pelo tempo da passagem atual na etapa. Média = tempo médio dos cards da etapa; Máx. = o card que está parado há mais tempo. Considera os cards do mês (novidades + herdados) e serve para achar onde o trabalho está parando.</InfoLegenda>
                             </h3>
                             <ExportarQuadro
                               quadroId="quadro-fianca-tempo-aberto-fechamento"
@@ -1607,7 +1607,7 @@ export default async function SeguroFiancaPage({
                   className={styles.section}
                 >
                   <div className={styles.sectionHead}>
-                    <h2>Análise, recusa e aprovação</h2>
+                    <h2>Análise, recusa e aprovação<InfoLegenda titulo="Análise, recusa e aprovação">Total de Análise = todos os cards ativos no mês (novidades + herdados). Aprovados = cards que passaram para Negociação e Contrato; Recusados = a seguradora negou. Os dois são contados no mês em que o evento aconteceu. Recusa em Análise e Cotação é decisão de compliance da seguradora.</InfoLegenda></h2>
                     <div className={styles.note}>
                       total de análise = todo o conjunto ativo do mês (novidades
                       + herdados ativos)
@@ -1674,7 +1674,7 @@ export default async function SeguroFiancaPage({
                       className={styles.section}
                     >
                       <div className={styles.sectionHead}>
-                        <h2>Negativação</h2>
+                        <h2>Negativação<InfoLegenda titulo="Negativação">Negativado = o cliente não quis contratar (card perdido em Negociação e Contrato), contado no mês em que isso aconteceu. O percentual é calculado em duas frentes separadas, cada uma com numerador e denominador da mesma origem: Entradas do Mês = negativados dos cards criados neste mês ÷ novidades do mês; Herdados = negativados dos cards de meses anteriores ÷ herdados relevantes. Fica em amarelo quando passa de 20%.</InfoLegenda></h2>
                         <div className={styles.note}>
                           separado por origem -- entradas deste mês vs.
                           respostas deste mês de cards de mês anterior
@@ -1731,7 +1731,7 @@ export default async function SeguroFiancaPage({
                   className={styles.section}
                 >
                   <div className={styles.sectionHead}>
-                    <h2>Análise por seguradora e plano</h2>
+                    <h2>Análise por seguradora e plano<InfoLegenda titulo="Análise por seguradora e plano">Mostra como ficou a cotação de cada seguradora nos cards novos do mês (Porto e Pottencial têm mais de um plano, cada um em sua linha). Verde = aprovado ou pré-aprovado; vermelho = recusado; amarelo = pendente, em análise ou limite insuficiente; cinza = não analisar. O número à direita é quantos cards tiveram cotação naquela seguradora, sobre o total de novidades do mês.</InfoLegenda></h2>
                     <div className={styles.note}>
                       status de cotação — Porto e Pottencial têm mais de um
                       plano cotado por card
@@ -1870,7 +1870,7 @@ export default async function SeguroFiancaPage({
                   className={styles.section}
                 >
                   <div className={styles.sectionHead}>
-                    <h2>Top 10 imobiliárias — aprovação na Pottencial</h2>
+                    <h2>Top 10 imobiliárias — aprovação na Pottencial<InfoLegenda titulo="Aprovação na Pottencial">Imobiliárias com mais cards aprovados ou pré-aprovados na Pottencial, em qualquer um dos 2 planos (Taxa Fixa ou Tradicional), entre os cards criados neste mês. A barra é proporcional à primeira colocada.</InfoLegenda></h2>
                     <div className={styles.note}>
                       aprovado/pré-aprovado em qualquer um dos 2 planos (Taxa
                       Fixa ou Tradicional), cards deste mês
@@ -1918,7 +1918,7 @@ export default async function SeguroFiancaPage({
                   className={styles.section}
                 >
                   <div className={styles.sectionHead}>
-                    <h2>Produtividade por responsável, por funil</h2>
+                    <h2>Produtividade por responsável, por funil<InfoLegenda titulo="Produtividade por responsável">Trabalho de cada pessoa em cada funil, nunca pelo dono atual do card. Análise e Cotação: vale quem está em Responsável(is) pela Cotação (ou o Responsável pelo Cadastro, se a cotação ainda não foi atribuída). Negociação e Contrato: Responsável(is) pela Negociação. Novos = criados no mês (no funil 2, os que entraram nele no mês); Andamento = ainda abertos; Negativos = recusados ou perdidos no mês; Positivos = aprovados (encaminhados ao funil 2) ou convertidos no mês. Card com mais de uma pessoa credita todas.</InfoLegenda></h2>
                     <div className={styles.note}>
                       Análise e Cotação: Responsável(is) pela Cotação, ou pelo
                       Cadastro se a cotação ainda não foi atribuída. Negociação
@@ -1985,7 +1985,7 @@ export default async function SeguroFiancaPage({
                   className={styles.section}
                 >
                   <div className={styles.sectionHead}>
-                    <h2>Taxa média da parcela sobre o pacote de locação</h2>
+                    <h2>Taxa média da parcela sobre o pacote de locação<InfoLegenda titulo="Taxa média da parcela">Para cada seguradora, a média de parcela do seguro ÷ pacote de locação (e ÷ aluguel) dos cards novos do mês que foram cotados nela. Cotados = quantos cards entraram na média.</InfoLegenda></h2>
                     <div className={styles.note}>
                       parcela do seguro ÷ pacote de locação, por seguradora — só
                       nos cards cotados
@@ -2055,7 +2055,7 @@ export default async function SeguroFiancaPage({
                   className={styles.section}
                 >
                   <div className={styles.sectionHead}>
-                    <h2>Cotado vs. Convertido, por seguradora</h2>
+                    <h2>Cotado vs. Convertido, por seguradora<InfoLegenda titulo="Cotado vs. Convertido">Compara tudo o que foi cotado nos cards novos do mês com o que foi efetivamente fechado. Prêmio cotado = valor da parcela × nº de parcelas (cards sem Parcelas preenchido ficam de fora do valor em R$, mas contam na quantidade). Comissão cotada é estimada (prêmio × % de comissão da seguradora), é potencial e não dinheiro confirmado. O convertido usa o prêmio líquido e a comissão final registrados no fechamento do contrato.</InfoLegenda></h2>
                     <div className={styles.note}>
                       todo prêmio cotado até agora contra o que já foi
                       efetivamente convertido
@@ -2253,7 +2253,7 @@ export default async function SeguroFiancaPage({
               <AbaSlot aba="imobiliaria">
                 <section id="quadro-fianca-valores" className={styles.section}>
                   <div className={styles.sectionHead}>
-                    <h2>Valores trabalhados no mês</h2>
+                    <h2>Valores trabalhados no mês<InfoLegenda titulo="Valores trabalhados no mês">Agrupa os cards novos do mês por faixa de pacote de locação e mostra o pacote médio de cada faixa e a parcela média do seguro cotado. São valores de aluguel e pacote trabalhados, não é receita da O2.</InfoLegenda></h2>
                     <div className={styles.note}>
                       não é receita — ver nota no rodapé
                     </div>
@@ -2326,7 +2326,7 @@ export default async function SeguroFiancaPage({
                   className={styles.section}
                 >
                   <div className={styles.sectionHead}>
-                    <h2>Tempo de ciclo — Análise e Cotação</h2>
+                    <h2>Tempo de ciclo — Análise e Cotação<InfoLegenda titulo="Tempo de ciclo">Quanto tempo o card levou no funil Análise e Cotação, do início até ser aprovado ou recusado. Conta os cards que saíram do funil neste mês. Cards = quantos têm esse tempo definido; Média, Mediana, Mín. e Máx. são calculadas sobre eles.</InfoLegenda></h2>
                     <div className={styles.note}>
                       do início até aprovar/recusar
                     </div>
@@ -2406,7 +2406,7 @@ export default async function SeguroFiancaPage({
                     produtividade por pessoa. */}
                 <section id="quadro-fianca-diarios" className={styles.section}>
                   <div className={styles.sectionHead}>
-                    <h2>Quantitativo de análises diárias</h2>
+                    <h2>Quantitativo de análises diárias<InfoLegenda titulo="Quantitativo de análises diárias">Quantas análises entraram em cada dia do mês, por Responsável(is) pela Cotação. Independe de a HORA FIM estar preenchida. Card com mais de uma pessoa credita as duas, então a soma das colunas pode passar do Total; cards sem o campo preenchido não entram na divisão por pessoa e viram alerta em Qualidade dos dados. A seta compara o ritmo com o mesmo período do mês anterior.</InfoLegenda></h2>
                     <div className={styles.note}>
                       campo de responsável por etapa, adicionado em 17/08/2026
                       — meses anteriores a essa data ficam vazios aqui
@@ -2452,7 +2452,7 @@ export default async function SeguroFiancaPage({
                   className={styles.section}
                 >
                   <div className={styles.sectionHead}>
-                    <h2>Tempo de ciclo — Negociação e Contrato</h2>
+                    <h2>Tempo de ciclo — Negociação e Contrato<InfoLegenda titulo="Tempo de ciclo">Quanto tempo o card levou no funil Negociação e Contrato, do início até ser convertido ou perdido. Conta os cards que saíram do funil neste mês. Cards = quantos têm esse tempo definido (só existe para quem foi aprovado em Análise e Cotação); Média, Mediana, Mín. e Máx. são calculadas sobre eles.</InfoLegenda></h2>
                     <div className={styles.note}>
                       do início do funil 2 até converter/perder
                     </div>
@@ -2538,7 +2538,7 @@ export default async function SeguroFiancaPage({
                   className={styles.section}
                 >
                   <div className={styles.sectionHead}>
-                    <h2>Tempo de cotação por responsável</h2>
+                    <h2>Tempo de cotação por responsável<InfoLegenda titulo="Tempo de cotação por responsável">Tempo da fase de cotação (HORA INICIO até HORA FIM) por Responsável(is) pela Cotação, no mês em que a cotação foi concluída. Separado por resultado porque recusar é bem mais rápido do que cotar de verdade com as seguradoras. A amostra depende de a HORA INICIO e a HORA FIM estarem preenchidas.</InfoLegenda></h2>
                     <div className={styles.note}>
                       HORA INICIO → HORA FIM da fase de cotação, por
                       Responsável(is) pela Cotação — separado por resultado
@@ -2700,7 +2700,7 @@ export default async function SeguroFiancaPage({
                       className={styles.section}
                     >
                       <div className={styles.sectionHead}>
-                        <h2>Tempo de retorno e produção por analista</h2>
+                        <h2>Tempo de retorno e produção por analista<InfoLegenda titulo="Tempo de retorno e produção por analista">Junta, por analista, o tempo de retorno (média entre os cards recusados e os aprovados/liberados, da HORA INICIO à HORA FIM) com o total de análises (cotações novas criadas no mês atribuídas à pessoa). A média geral do time é ponderada pelo número de cards de cada um.</InfoLegenda></h2>
                         <div className={styles.note}>
                           tempo de retorno = média entre recusados e
                           aprovados/liberados (HORA INICIO → HORA FIM); total de
@@ -2792,7 +2792,7 @@ export default async function SeguroFiancaPage({
               <AbaSlot aba="fechamento">
                 <section id="quadro-fianca-diarios-fechamento" className={styles.section}>
                   <div className={styles.sectionHead}>
-                    <h2>Contratos recebidos e efetivações por dia</h2>
+                    <h2>Contratos recebidos e efetivações por dia<InfoLegenda titulo="Contratos recebidos e efetivações por dia">Calendário diário do fechamento. Contratos recebidos = dia em que o card entrou na etapa Contrato Recebido (Mês Atual = cards criados neste mês; Mês Anterior = herdados de meses anteriores). Efetivações = dia da Data de Efetivação do card, sem separar por origem. Meses anteriores a 17/08/2026 ficam vazios porque o campo de responsável por etapa só passou a existir nessa data.</InfoLegenda></h2>
                     <div className={styles.note}>
                       campo de responsável por etapa, adicionado em 17/08/2026
                       — meses anteriores a essa data ficam vazios aqui
@@ -2871,7 +2871,7 @@ export default async function SeguroFiancaPage({
                   className={styles.section}
                 >
                   <div className={styles.sectionHead}>
-                    <h2>Contratos e contratação tardios</h2>
+                    <h2>Contratos e contratação tardios<InfoLegenda titulo="Contratos e contratação tardios">Mede o que ficou para trás de um mês para o outro. Contrato tardio = card criado em mês anterior que recebeu o contrato este mês. Contratação tardia = recebeu o contrato em mês anterior, mas só fechou (converteu) este mês. Tardios Efetivados = dos contratos tardios, os convertidos este mês. % s/ Total de Fechamentos = contratação tardia ÷ convertidos do mês. Negociação e Ag. Contrato (Tardia) = herdados que continuam parados nessas etapas.</InfoLegenda></h2>
                     <div className={styles.note}>
                       contrato tardio = criado em mês anterior, entrou em
                       &quot;Contrato Recebido&quot; este mês. Contratação tardia
@@ -2982,7 +2982,7 @@ export default async function SeguroFiancaPage({
                   className={styles.section}
                 >
                   <div className={styles.sectionHead}>
-                    <h2>Motivos de recusa</h2>
+                    <h2>Motivos de recusa<InfoLegenda titulo="Motivos de recusa">Total de recusas em Análise e Cotação neste mês. A recusa é decisão de compliance da seguradora e não tem motivo interno esperado, por isso o quadro mostra só o total.</InfoLegenda></h2>
                     <div className={styles.note}>
                       {gerencial.motivosRecusaFunil1.total} recusados em Análise
                       e Cotação
@@ -3011,7 +3011,7 @@ export default async function SeguroFiancaPage({
                   className={styles.section}
                 >
                   <div className={styles.sectionHead}>
-                    <h2>Motivos de negativação</h2>
+                    <h2>Motivos de negativação<InfoLegenda titulo="Motivos de negativação">Por que os cards foram negativados em Negociação e Contrato neste mês, conforme o motivo registrado no card. A barra é proporcional ao total de negativados. Sem motivo registrado = card perdido sem o campo preenchido, que também aparece como alerta em Qualidade dos dados.</InfoLegenda></h2>
                     <div className={styles.note}>
                       {gerencial.motivosPerdaFunil2.total} negativados em
                       Negociação e Contrato
@@ -3736,7 +3736,7 @@ export default async function SeguroFiancaPage({
                     >
                       <div className={styles.sectionHead}>
                         <h2>
-                          Prêmio líquido e comissão por imobiliária — mês × mês
+                          Prêmio líquido e comissão por imobiliária — mês × mês<InfoLegenda titulo="Prêmio líquido e comissão">Participação de cada imobiliária no total efetivado (contratos fechados) do mês: prêmio líquido, % sobre o total do mês e comissão. As duas últimas colunas trazem o prêmio líquido e o % do mês anterior para comparação.</InfoLegenda>
                         </h2>
                         <div className={styles.note}>
                           participação de cada imobiliária no total efetivado do
@@ -3834,7 +3834,7 @@ export default async function SeguroFiancaPage({
                   className={styles.section}
                 >
                   <div className={styles.sectionHead}>
-                    <h2>Qualidade dos dados</h2>
+                    <h2>Qualidade dos dados<InfoLegenda titulo="Qualidade dos dados">Confere se os cards do mês foram preenchidos corretamente: imobiliária vinculada, motivo nas negativações, HORA FIM nas cotações concluídas e os responsáveis por cotação, negociação e efetivação. O selo fica em ATENÇÃO quando algum item falha. Os números de funil não mudam por causa desses alertas, eles vêm do status real do card. Cards marcados como Não Administrada são informativos, não alerta.</InfoLegenda></h2>
                     <ExportarQuadro
                       quadroId="quadro-fianca-qualidade"
                       corFundo="#f7f8fa"

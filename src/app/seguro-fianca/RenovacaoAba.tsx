@@ -1,5 +1,6 @@
 import styles from "./seguro-fianca.module.css";
 import ExportarQuadro from "@/components/ExportarQuadro";
+import InfoLegenda from "@/components/InfoLegenda";
 import type { EstatisticaTempoRenovacao, PainelRenovacao } from "@/lib/bitrix/renovacaoFianca";
 import RenovacaoImobiliariasTabela from "./RenovacaoImobiliariasTabela";
 import type { ClassificacaoImobiliaria } from "./ImobiliariasTabela";
@@ -141,7 +142,7 @@ export default function RenovacaoAba({
       {/* ---------- Visão geral e funil ---------- */}
       <section id="quadro-renovacao-visao-geral" className={styles.section}>
         <div className={styles.sectionHead}>
-          <h2>Renovações do mês</h2>
+          <h2>Renovações do mês<InfoLegenda titulo="Renovações do mês">Funil de Renovação (categoria 32 do Bitrix). Novos = entraram no funil neste mês; Herdados = de meses anteriores, ainda em andamento ou resolvidos neste mês. Renovados = entraram em Sucesso neste mês; Perdidos = entraram em Perdido neste mês. Taxa de renovação = renovados ÷ (renovados + perdidos).</InfoLegenda></h2>
           <div className={styles.note}>
             novos = entraram no funil neste mês · herdados = de meses anteriores ainda em andamento ou resolvidos neste mês
           </div>
@@ -175,7 +176,7 @@ export default function RenovacaoAba({
           />
         </div>
         <div className={styles.panel} style={{ marginTop: 16 }}>
-          <h3>Em andamento por etapa</h3>
+          <h3>Em andamento por etapa<InfoLegenda titulo="Em andamento por etapa">Onde estão hoje os cards de renovação ainda sem resultado, etapa por etapa.</InfoLegenda></h3>
           <div className={styles.panelSub}>onde estão hoje os {kpis.emAndamento} cards em aberto</div>
           {dados.porEtapa.map((e) => (
             <Barra key={e.etapa} label={e.etapa} value={e.quantidade} max={maxEtapa} />
@@ -186,7 +187,7 @@ export default function RenovacaoAba({
       {/* ---------- Controle diário ---------- */}
       <section id="quadro-renovacao-controle-diario" className={styles.section}>
         <div className={styles.sectionHead}>
-          <h2>Controle diário</h2>
+          <h2>Controle diário<InfoLegenda titulo="Controle diário">Dia a dia do mês: Valores atualizados = dia em que o card foi liberado para cotação com os valores novos da imobiliária; Contratos/aditivos = dia do campo Data e Hora do Recebimento de Contrato; Efetivações = dia em que o card entrou em Sucesso.</InfoLegenda></h2>
           <div className={styles.note}>
             Valores atualizados = dia em que o card foi liberado para cotação com os valores novos da imobiliária ·
             Contratos/aditivos = campo &quot;Data E Hora do Recebimento de Contrato&quot; · Efetivações = entrada em Sucesso
@@ -245,7 +246,7 @@ export default function RenovacaoAba({
       {/* ---------- Perdas e reajuste ---------- */}
       <section id="quadro-renovacao-perdas-reajuste" className={styles.section}>
         <div className={styles.sectionHead}>
-          <h2>Perdas, reajuste e seguradoras</h2>
+          <h2>Perdas, reajuste e seguradoras<InfoLegenda titulo="Perdas, reajuste e seguradoras">Perdas e valores contam pelo mês do resultado (Sucesso ou Perdido). Reajuste médio = média do campo Reajuste (%) preenchido nos cards, de todos e só dos renovados. Prêmio líquido renovado = soma dos renovados no mês; Comissão renovada = prêmio × comissão trabalhada (%). Renovados por seguradora usa a Seguradora Escolhida.</InfoLegenda></h2>
           <div className={styles.note}>perdas e valores contam pelo mês do resultado (Sucesso/Perdido)</div>
           <ExportarQuadro
             quadroId="quadro-renovacao-perdas-reajuste"
@@ -280,7 +281,7 @@ export default function RenovacaoAba({
         </div>
         <div className={styles.grid2} style={{ marginTop: 16 }}>
           <div className={styles.panel}>
-            <h3>Perdas por motivo</h3>
+            <h3>Perdas por motivo<InfoLegenda titulo="Perdas por motivo">Motivos registrados nos cards que entraram em Perdido neste mês.</InfoLegenda></h3>
             <div className={styles.panelSub}>{kpis.perdidos} perdido(s) no mês</div>
             {dados.perdasPorMotivo.map((m) => (
               <Barra key={m.motivo} label={m.motivo} value={m.quantidade} max={maxMotivo} />
@@ -290,7 +291,7 @@ export default function RenovacaoAba({
             {/* A renovação é sempre na mesma seguradora da apólice: o card
                 tem uma lista só (Seguradora Escolhida) desde 01/10/2026 --
                 saiu a comparação "mesma × trocou" com Seguradora anterior. */}
-            <h3>Renovados por seguradora</h3>
+            <h3>Renovados por seguradora<InfoLegenda titulo="Renovados por seguradora">Seguradora Escolhida nos cards que foram renovados (Sucesso) neste mês.</InfoLegenda></h3>
             <div className={styles.panelSub}>Seguradora Escolhida, só renovados no mês</div>
             {dados.seguradoras.porSeguradoraNova.map((s) => (
               <Barra key={s.seguradora} label={s.seguradora} value={s.renovados} max={Math.max(kpis.renovados, 1)} />
@@ -311,7 +312,7 @@ export default function RenovacaoAba({
           substituiu a tabela simples "Renovações por imobiliária". */}
       <section id="quadro-renovacao-imobiliarias" className={styles.section}>
         <div className={styles.sectionHead}>
-          <h2>Imobiliárias — status de todos os cards</h2>
+          <h2>Imobiliárias — status de todos os cards<InfoLegenda titulo="Imobiliárias na renovação">Situação de todos os cards de renovação por imobiliária (em andamento, renovados, perdidos). Quando a visão é por vencimento, os cards são separados pelo Fim da vigência anterior: o lote do mês, a herança de meses anteriores ainda em andamento e o lote do mês seguinte. A classe da imobiliária é a mesma classificação usada no Seguro Fiança.</InfoLegenda></h2>
           <div className={styles.note}>
             {porVenc
               ? "separado pelo vencimento da apólice anterior (Fim da vigência anterior): mês atual, herança e mês seguinte"
@@ -404,7 +405,7 @@ export default function RenovacaoAba({
       {/* ---------- Equipe e tempos ---------- */}
       <section id="quadro-renovacao-por-cotador" className={styles.section}>
         <div className={styles.sectionHead}>
-          <h2>Renovação por cotador</h2>
+          <h2>Renovação por cotador<InfoLegenda titulo="Renovação por cotador">Cards de renovação cotados no mês (pela HORA FIM) por cotador, com o tempo médio gasto entre HORA INICIO e HORA FIM, contado em horário comercial.</InfoLegenda></h2>
           <div className={styles.note}>
             cards de renovação cotados no mês (pela HORA FIM) · média de tempo gasto entre HORA INICIO e HORA FIM, em
             horário comercial
@@ -445,7 +446,7 @@ export default function RenovacaoAba({
 
       <section id="quadro-renovacao-equipe" className={styles.section}>
         <div className={styles.sectionHead}>
-          <h2>Equipe e tempos</h2>
+          <h2>Equipe e tempos<InfoLegenda titulo="Equipe e tempos">Tempos da equipe em horário comercial (seg–sex, 9h–18h). Conferência, cotação e negociação usam os campos de início e fim preenchidos à mão, no mês do fim. Efetivação = tempo em Liberado para renovar + Concluir + Pendente, sem contar a espera em Renovar dia 01.</InfoLegenda></h2>
           <div className={styles.note}>
             horário comercial (seg–sex, 9h–18h) · conferência, cotação e negociação pelos campos de início/fim preenchidos à mão,
             no mês do fim · efetivação = tempo em Liberado para renovar + Concluir + Pendente (sem contar a espera de Renovar dia 01)
@@ -488,7 +489,7 @@ export default function RenovacaoAba({
           <TabelaTempos titulo="Efetivação" sub="Responsável pela Efetivação · renovados no mês" dados={dados.equipe.efetivacao} />
         </div>
         <div className={styles.panel} style={{ marginTop: 16 }}>
-          <h3>Tempo médio por etapa</h3>
+          <h3>Tempo médio por etapa<InfoLegenda titulo="Tempo médio por etapa">Tempo de permanência em cada etapa do funil de Renovação, incluindo a espera na fila. Renovar dia 01 é espera pedida pela imobiliária.</InfoLegenda></h3>
           <div className={styles.panelSub}>
             permanência em cada etapa (inclui espera na fila) · &quot;Renovar dia 01&quot; é espera pedida pela imobiliária
           </div>
@@ -520,7 +521,7 @@ export default function RenovacaoAba({
       {/* ---------- Carteira por vencimento ---------- */}
       <section id="quadro-renovacao-vencimento" className={styles.section}>
         <div className={styles.sectionHead}>
-          <h2>Carteira por mês de vencimento</h2>
+          <h2>Carteira por mês de vencimento<InfoLegenda titulo="Carteira por mês de vencimento">Todos os cards do funil de Renovação agrupados pelo Fim da vigência anterior (mês em que a apólice vence), mostrando a situação atual de cada lote: em andamento (por etapa), renovados e perdidos.</InfoLegenda></h2>
           <div className={styles.note}>
             todos os cards do funil, agrupados pelo &quot;Fim da vigência anterior&quot; — situação atual de cada lote
           </div>
