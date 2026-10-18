@@ -184,6 +184,95 @@ export default function RenovacaoAba({
         </div>
       </section>
 
+      {/* ---------- Controle da renovação: entrada × vencimento × efetivação ---------- */}
+      {dados.controleRenovacao && (
+        <section id="quadro-renovacao-controle" className={styles.section}>
+          <div className={styles.sectionHead}>
+            <h2>
+              Controle da renovação — entrada, vencimento e efetivação
+              <InfoLegenda titulo="Controle da renovação">
+                Três datas independentes, porque a cotação de renovação vai ao cliente pelo menos 1 mês antes do vencimento e ele pode efetivar antes. Entrada = mês em
+                que o card foi criado. Vencimento = mês do Fim da vigência anterior (quando a nova apólice passa a valer). Efetivação = mês em que o card entrou em
+                Sucesso. Antecipada = efetivada neste mês com vencimento em mês seguinte; atrasada = efetivada neste mês com vencimento em mês anterior.
+              </InfoLegenda>
+            </h2>
+            <ExportarQuadro
+              quadroId="quadro-renovacao-controle"
+              corFundo="#f7f8fa"
+              nomeArquivo={`seguro-fianca-renovacao-controle-${competencia}`}
+              dadosExcel={[
+                { grupo: "Entraram no mês", indicador: "Total", valor: dados.controleRenovacao.entradas.total },
+                { grupo: "Entraram no mês", indicador: "Vencimento no mês", valor: dados.controleRenovacao.entradas.vencimentoNoMes },
+                { grupo: "Entraram no mês", indicador: "Vencimento em mês seguinte", valor: dados.controleRenovacao.entradas.vencimentoSeguinte },
+                { grupo: "Entraram no mês", indicador: "Vencimento em mês anterior", valor: dados.controleRenovacao.entradas.vencimentoAnterior },
+                { grupo: "Efetivadas no mês", indicador: "Total", valor: dados.controleRenovacao.efetivadasNoMes.total },
+                { grupo: "Efetivadas no mês", indicador: "Vencimento no mês", valor: dados.controleRenovacao.efetivadasNoMes.vencimentoNoMes },
+                { grupo: "Efetivadas no mês", indicador: "Antecipadas", valor: dados.controleRenovacao.efetivadasNoMes.antecipadas },
+                { grupo: "Efetivadas no mês", indicador: "Atrasadas", valor: dados.controleRenovacao.efetivadasNoMes.atrasadas },
+                { grupo: "Vencimento no mês", indicador: "Total", valor: dados.controleRenovacao.carteiraDoVencimento.total },
+                { grupo: "Vencimento no mês", indicador: "Efetivadas antes do mês", valor: dados.controleRenovacao.carteiraDoVencimento.efetivadasAntes },
+                { grupo: "Vencimento no mês", indicador: "Efetivadas no mês", valor: dados.controleRenovacao.carteiraDoVencimento.efetivadasNoMes },
+                { grupo: "Vencimento no mês", indicador: "Efetivadas depois", valor: dados.controleRenovacao.carteiraDoVencimento.efetivadasDepois },
+                { grupo: "Vencimento no mês", indicador: "Em andamento", valor: dados.controleRenovacao.carteiraDoVencimento.emAndamento },
+                { grupo: "Vencimento no mês", indicador: "Perdidas", valor: dados.controleRenovacao.carteiraDoVencimento.perdidas },
+              ]}
+              nomeAbaExcel="Controle renovação"
+            />
+          </div>
+          <div className={styles.grid2} style={{ gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
+            {[
+              {
+                titulo: "Entraram no card neste mês",
+                linhas: [
+                  ["Total de entradas", dados.controleRenovacao.entradas.total, true],
+                  ["Com vencimento neste mês", dados.controleRenovacao.entradas.vencimentoNoMes, false],
+                  ["Com vencimento em mês seguinte", dados.controleRenovacao.entradas.vencimentoSeguinte, false],
+                  ["Com vencimento em mês anterior", dados.controleRenovacao.entradas.vencimentoAnterior, false],
+                  ["Sem data de vencimento", dados.controleRenovacao.entradas.semVencimento, false],
+                ],
+              },
+              {
+                titulo: "Efetivadas neste mês",
+                linhas: [
+                  ["Total efetivadas", dados.controleRenovacao.efetivadasNoMes.total, true],
+                  ["Com vencimento neste mês", dados.controleRenovacao.efetivadasNoMes.vencimentoNoMes, false],
+                  ["Antecipadas (vencimento em mês seguinte)", dados.controleRenovacao.efetivadasNoMes.antecipadas, false],
+                  ["Atrasadas (vencimento em mês anterior)", dados.controleRenovacao.efetivadasNoMes.atrasadas, false],
+                  ["Sem data de vencimento", dados.controleRenovacao.efetivadasNoMes.semVencimento, false],
+                ],
+              },
+              {
+                titulo: "Apólices com vencimento neste mês",
+                linhas: [
+                  ["Total do vencimento", dados.controleRenovacao.carteiraDoVencimento.total, true],
+                  ["Efetivadas antes do mês", dados.controleRenovacao.carteiraDoVencimento.efetivadasAntes, false],
+                  ["Efetivadas neste mês", dados.controleRenovacao.carteiraDoVencimento.efetivadasNoMes, false],
+                  ["Efetivadas depois", dados.controleRenovacao.carteiraDoVencimento.efetivadasDepois, false],
+                  ["Ainda em andamento", dados.controleRenovacao.carteiraDoVencimento.emAndamento, false],
+                  ["Perdidas", dados.controleRenovacao.carteiraDoVencimento.perdidas, false],
+                ],
+              },
+            ].map((bloco) => (
+              <div key={bloco.titulo} className={styles.panel}>
+                <h3>{bloco.titulo}</h3>
+                <div className={styles.tableWrap}>
+                  <table className={styles.data}>
+                    <tbody>
+                      {bloco.linhas.map(([rotulo, valor, destaque]) => (
+                        <tr key={String(rotulo)} style={destaque ? { fontWeight: 700 } : undefined}>
+                          <td>{rotulo}</td>
+                          <td className={`${styles.numCol} ${styles.num}`}>{valor as number}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* ---------- Controle diário ---------- */}
       <section id="quadro-renovacao-controle-diario" className={styles.section}>
         <div className={styles.sectionHead}>

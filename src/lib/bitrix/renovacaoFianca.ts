@@ -164,6 +164,16 @@ export type ValoresImobiliariaRenovacao = {
 export type LinhaImobiliariaRenovacao = { nome: string; novos: number; taxaRenovacao: number | null } & ContagemStatus &
   ValoresImobiliariaRenovacao;
 
+// Controle da renovação (Matheus, 18/10/2026): entrada no card, vencimento da
+// apólice anterior (vigência) e mês da efetivação são datas independentes --
+// a cotação vai ao cliente pelo menos 1 mês antes do vencimento e ele pode
+// efetivar antes. Opcional: retratos antigos não têm.
+export type ControleRenovacaoFianca = {
+  entradas: { total: number; vencimentoNoMes: number; vencimentoSeguinte: number; vencimentoAnterior: number; semVencimento: number };
+  efetivadasNoMes: { total: number; vencimentoNoMes: number; antecipadas: number; atrasadas: number; semVencimento: number };
+  carteiraDoVencimento: { total: number; efetivadasAntes: number; efetivadasNoMes: number; efetivadasDepois: number; emAndamento: number; perdidas: number };
+};
+
 export type PainelRenovacao = {
   competencia: string;
   totalCardsFunil: number;
@@ -214,6 +224,7 @@ export type PainelRenovacao = {
   // hoje os cards em andamento daquele mês (nome da etapa -> quantidade);
   // ausente em retratos salvos antes de 15/10/2026.
   porVencimento: ({ mes: string; porEtapa?: Record<string, number> } & ContagemStatus)[];
+  controleRenovacao?: ControleRenovacaoFianca;
 };
 
 // Equipe do quadro "Renovação por cotador", na ordem e com o rótulo da
@@ -534,6 +545,42 @@ export function montarPainelRenovacao(
     a.mes === "Sem data" ? 1 : b.mes === "Sem data" ? -1 : a.mes.localeCompare(b.mes)
   );
 
+  // --- controle da renovação: entrada × vencimento × efetivação ---
+  const controleRenovacao: ControleRenovacaoFianca = {
+    entradas: { total: 0, vencimentoNoMes: 0, vencimentoSeguinte: 0, vencimentoAnterior: 0, semVencimento: 0 },
+    efetivadasNoMes: { total: 0, vencimentoNoMes: 0, antecipadas: 0, atrasadas: 0, semVencimento: 0 },
+    carteiraDoVencimento: { total: 0, efetivadasAntes: 0, efetivadasNoMes: 0, efetivadasDepois: 0, emAndamento: 0, perdidas: 0 },
+  };
+  for (const c of cards) {
+    const vencimento = diaManual(c.it[CAMPO_FIM_VIGENCIA_ANTERIOR]).slice(0, 7);
+    if (c.mesEntrada === competencia) {
+      const e = controleRenovacao.entradas;
+      e.total++;
+      if (!vencimento) e.semVencimento++;
+      else if (vencimento === competencia) e.vencimentoNoMes++;
+      else if (vencimento > competencia) e.vencimentoSeguinte++;
+      else e.vencimentoAnterior++;
+    }
+    if (c.resultado === "Renovado" && c.mesResolucao === competencia) {
+      const e = controleRenovacao.efetivadasNoMes;
+      e.total++;
+      if (!vencimento) e.semVencimento++;
+      else if (vencimento === competencia) e.vencimentoNoMes++;
+      else if (vencimento > competencia) e.antecipadas++;
+      else e.atrasadas++;
+    }
+    if (vencimento === competencia) {
+      const k = controleRenovacao.carteiraDoVencimento;
+      k.total++;
+      if (c.resultado === "Renovado") {
+        if (c.mesResolucao < competencia) k.efetivadasAntes++;
+        else if (c.mesResolucao > competencia) k.efetivadasDepois++;
+        else k.efetivadasNoMes++;
+      } else if (c.resultado === "Perdido") k.perdidas++;
+      else k.emAndamento++;
+    }
+  }
+
   return {
     competencia,
     totalCardsFunil: cards.length,
@@ -575,6 +622,7 @@ export function montarPainelRenovacao(
     },
     tempoPorEtapa,
     porVencimento,
+    controleRenovacao,
   };
 }
 
