@@ -67,7 +67,8 @@ const SUGESTAO_STATUS_FIANCA = {
   "PRE-APROVADO": "Aprovado", "PRE APROVADO": "Aprovado", "APROVADO": "Aprovado",
   "LIBERADO P/ NEGOCIAR": "Aprovado", "EM NEGOCIACAO": "Aprovado", "AG CONTRATO": "Aprovado",
   "CONTRATO PENDENCIA": "Aprovado", "CONTRATO COM PENDENCIA": "Aprovado", "CONTRATO RECEBIDO": "Aprovado",
-  "DESCONTO SOLICITADO": "Aprovado", "DESCONTO LIBERADO": "Aprovado",
+  "DESCONTO SOLICITADO": "Aprovado", "DESCONTO LIBERADO": "Aprovado", "PRE - APROVADO": "Aprovado",
+  "CONTATO PENDENTE": "Aprovado", "AG CADASTRO": "Aprovado", // validados pelo Matheus 19/10
   // seguradora recusou
   "RECUSADO": "Recusado", "RECUSA ENVIADA": "Recusado", "COTADO COM RECUSA": "Recusado",
   // aprovado mas não fechou
