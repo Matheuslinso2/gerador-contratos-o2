@@ -130,7 +130,10 @@ for (const c of pdfs) {
     importado_em: new Date().toISOString(),
   }, { onConflict: "arquivo_id,aba" }).select("id").single();
   if (e1) throw new Error("importacoes: " + e1.message);
-  await supabase.from("producao_unificada").delete().eq("importacao_id", imp.id);
+  // Regravação: apaga o que esta importação gravou antes. Falha aqui PARA tudo
+  // (antes um timeout passava em silêncio e a regravação batia em duplicidade).
+  const { error: eDel } = await supabase.from("producao_unificada").delete().eq("importacao_id", imp.id);
+  if (eDel) throw new Error("apagar importação anterior: " + eDel.message);
   for (let i = 0; i < linhas.length; i += 1000) {
     const { error: e2 } = await supabase.from("producao_unificada").insert(linhas.slice(i, i + 1000).map((l) => ({ ...l, importacao_id: imp.id })));
     if (e2) throw new Error(`producao_unificada (${c.nome}): ${e2.message}`);

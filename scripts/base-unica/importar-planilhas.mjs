@@ -63,7 +63,7 @@ function valor(v) {
 // Recusado, Perdido, Convertido) para o histórico bater com o painel atual.
 const SUGESTAO_STATUS_FIANCA = {
   // ainda sem resposta da seguradora / faltando informação
-  "ANALISE": "Em análise", "EM ANALISE": "Em análise", "PENDENTE": "Em análise", "PENDENTE INF": "Em análise",
+  "NOVA": "Em análise", "ANALISE": "Em análise", "EM ANALISE": "Em análise", "PENDENTE": "Em análise", "PENDENTE INF": "Em análise",
   "AG COTACAO": "Em análise", "AG SEGURADORA": "Em análise", "COTADO COM PENDENCIA": "Em análise",
   // aprovado e em negociação com a imobiliária/locatário
   "PRE-APROVADO": "Aprovado", "PRE APROVADO": "Aprovado", "APROVADO": "Aprovado",
@@ -116,10 +116,15 @@ function lerAbaAnalises(linhas, comp, aba, herdada) {
     const g = (c) => (c >= 0 ? l?.[c] : null);
     const vazia = !(l || []).some((x) => x != null && String(x).trim() !== "");
     if (vazia) return;
-    const statusOriginal = norm(g(k.status));
+    let statusOriginal = norm(g(k.status));
     const cpf = dig(g(k.cpf));
     const imob = txt(g(k.imob));
     if (!statusOriginal && !cpf && !imob) return desc("linha sem status, CPF e imobiliária");
+    // Análise recebida e ainda sem andamento: a planilha a conta como "NOVA"
+    // (validado pelo Matheus 19/10) — entra como Em análise.
+    // Só nas planilhas da aba PROCESSO (2020–jul/2023), onde o relatório da própria
+    // planilha conta essas linhas; a partir de set/2023 a contagem não as inclui.
+    if (!statusOriginal && imob && (txt(g(k.locatario)) || cpf) && norm(aba) === "PROCESSO") statusOriginal = "NOVA";
     if (!statusOriginal) return desc("linha sem status");
     if (/^#/.test(imob) || /^#/.test(statusOriginal)) return desc("fórmula quebrada (#REF!/#N/A)");
     const dataReceb = data(g(k.dataReceb), comp);
@@ -288,7 +293,10 @@ for (const r of resultado) {
     importado_em: new Date().toISOString(),
   }, { onConflict: "arquivo_id,aba" }).select("id").single();
   if (error) throw new Error("importacoes: " + error.message);
-  await supabase.from("producao_unificada").delete().eq("importacao_id", imp.id);
+  // Regravação: apaga o que esta importação gravou antes. Falha aqui PARA tudo
+  // (antes um timeout passava em silêncio e a regravação batia em duplicidade).
+  const { error: eDel } = await supabase.from("producao_unificada").delete().eq("importacao_id", imp.id);
+  if (eDel) throw new Error("apagar importação anterior: " + eDel.message);
   const linhas = r.registros.map((x) => ({ ...x.linha, importacao_id: imp.id, origem_arquivo_id: copia.arquivo_id, locatario_id: x.cpf ? idPorCpf.get(x.cpf) : null }));
   for (let i = 0; i < linhas.length; i += 500) {
     const { error: e2 } = await supabase.from("producao_unificada").insert(linhas.slice(i, i + 500));
