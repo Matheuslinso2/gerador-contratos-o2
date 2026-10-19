@@ -2,6 +2,8 @@
 // escopo CRM + Usuários básico). Sem SDK — fetch puro, no mesmo espírito de
 // src/lib/geocoding.ts pra outras APIs REST externas do projeto.
 
+import { createServiceClient } from "@/lib/supabase/service";
+
 function getWebhookUrl(envVar: "BITRIX_WEBHOOK_URL" | "BITRIX_WEBHOOK_URL_USUARIOS"): string {
   const url = process.env[envVar];
   if (!url) throw new Error(`${envVar} não configurada`);
@@ -180,10 +182,93 @@ export async function buscarItem(entityTypeId: number, id: number): Promise<Bitr
   return resposta.result.item;
 }
 
+// Histórico de etapas (crm.stagehistory.list). Só cresce, nunca é alterado --
+// então fica guardado em bitrix_stagehistory_cache e cada leitura busca no
+// Bitrix apenas os eventos com ID maior que o último guardado. Antes baixava
+// tudo a cada vez (7.384 eventos = 148 páginas em 19/10/2026) e o Bitrix
+// passou a recusar com 503, derrubando o painel da Fiança. Se o cache falhar,
+// cai pra busca completa. (No Bitrix, ordenação e filtro de ID só funcionam
+// com a chave em MAIÚSCULAS: order[ID], filter[>ID].)
+const TAMANHO_LOTE_CACHE = 500;
+
+type LinhaCacheHistorico = {
+  entity_type_id: number;
+  id: number;
+  owner_id: number;
+  type_id: number | null;
+  category_id: number | null;
+  stage_semantic_id: string | null;
+  stage_id: string | null;
+  created_time: string;
+};
+
+async function lerCacheHistorico(entityTypeId: number): Promise<BitrixStageHistoryEvent[]> {
+  const supabase = createServiceClient();
+  const eventos: BitrixStageHistoryEvent[] = [];
+  for (let inicio = 0; ; inicio += 1000) {
+    const { data, error } = await supabase
+      .from("bitrix_stagehistory_cache")
+      .select("id, owner_id, type_id, category_id, stage_semantic_id, stage_id, created_time")
+      .eq("entity_type_id", entityTypeId)
+      .order("id", { ascending: true })
+      .range(inicio, inicio + 999);
+    if (error) throw new Error(`cache do histórico: ${error.message}`);
+    for (const l of data ?? []) {
+      eventos.push({
+        ID: Number(l.id),
+        TYPE_ID: Number(l.type_id),
+        OWNER_ID: Number(l.owner_id),
+        CREATED_TIME: l.created_time as string,
+        CATEGORY_ID: Number(l.category_id),
+        STAGE_SEMANTIC_ID: (l.stage_semantic_id as BitrixStageHistoryEvent["STAGE_SEMANTIC_ID"]) ?? null,
+        STAGE_ID: (l.stage_id as string) ?? "",
+      });
+    }
+    if (!data || data.length < 1000) break;
+  }
+  return eventos;
+}
+
+async function guardarNoCacheHistorico(entityTypeId: number, novos: BitrixStageHistoryEvent[]): Promise<void> {
+  const supabase = createServiceClient();
+  for (let i = 0; i < novos.length; i += TAMANHO_LOTE_CACHE) {
+    const linhas: LinhaCacheHistorico[] = novos.slice(i, i + TAMANHO_LOTE_CACHE).map((e) => ({
+      entity_type_id: entityTypeId,
+      id: Number(e.ID),
+      owner_id: Number(e.OWNER_ID),
+      type_id: e.TYPE_ID ?? null,
+      category_id: e.CATEGORY_ID ?? null,
+      stage_semantic_id: e.STAGE_SEMANTIC_ID ?? null,
+      stage_id: e.STAGE_ID ?? null,
+      created_time: e.CREATED_TIME,
+    }));
+    const { error } = await supabase.from("bitrix_stagehistory_cache").upsert(linhas, { onConflict: "entity_type_id,id" });
+    if (error) throw new Error(`gravar cache do histórico: ${error.message}`);
+  }
+}
+
 export async function listarHistoricoEtapas(entityTypeId: number): Promise<BitrixStageHistoryEvent[]> {
-  // Histórico grande (7.384 eventos = 148 páginas em 19/10/2026): concorrência
-  // menor pra não estourar o limite de pedidos do Bitrix (503).
-  return buscarTodasPaginas<BitrixStageHistoryEvent>("crm.stagehistory.list", { entityTypeId, "order[id]": "asc" }, 3);
+  let guardados: BitrixStageHistoryEvent[] = [];
+  try {
+    guardados = await lerCacheHistorico(entityTypeId);
+  } catch (e) {
+    console.error("Cache do histórico indisponível, buscando tudo no Bitrix:", e);
+    return buscarTodasPaginas<BitrixStageHistoryEvent>("crm.stagehistory.list", { entityTypeId, "order[ID]": "asc" }, 3);
+  }
+  const ultimoId = guardados.reduce((m, e) => Math.max(m, Number(e.ID)), 0);
+  const novos = await buscarTodasPaginas<BitrixStageHistoryEvent>(
+    "crm.stagehistory.list",
+    { entityTypeId, "order[ID]": "asc", "filter[>ID]": ultimoId },
+    3
+  );
+  if (novos.length) {
+    try {
+      await guardarNoCacheHistorico(entityTypeId, novos);
+    } catch (e) {
+      console.error("Não consegui atualizar o cache do histórico:", e);
+    }
+  }
+  return [...guardados, ...novos];
 }
 
 export async function listarHistoricoEtapasCategoria(
