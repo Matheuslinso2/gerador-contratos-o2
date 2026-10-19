@@ -41,7 +41,11 @@ function data(v, compRef) {
   if (!a) a = compRef?.slice(0, 4);
   if (a && a.length === 2) a = "20" + a;
   if (!a || +mes > 12 || +d > 31) return null;
-  return `${a}-${mes.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  const iso = `${a}-${mes.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  // data que não existe no calendário (ex.: 29/02/2026) → vazia
+  const dt = new Date(`${iso}T00:00:00Z`);
+  if (isNaN(dt) || dt.toISOString().slice(0, 10) !== iso) return null;
+  return iso;
 }
 function valor(v) {
   if (v == null || v === "") return null;
@@ -89,9 +93,15 @@ function mapearColunas(colunas) {
 }
 
 function lerAbaAnalises(linhas, comp, aba, herdada) {
-  const cab = acharCabecalho(linhas.map((l) => (l || []).map((x) => (x instanceof Date ? "" : x))));
+  // Âncora IMOBILIÁRIA; em JUL/2025 a coluna da imobiliária ficou SEM título,
+  // logo depois de "INICIANTE" — aceita esse caso também.
+  const cab = acharCabecalho(linhas.map((l) => (l || []).map((x) => (x instanceof Date ? "" : x))), /^(IMOBILI|INICIANTE$)/);
   if (!cab) return { registros: [], descartes: { "aba sem cabeçalho IMOBILIÁRIA": 1 } };
   const k = mapearColunas(cab.colunas);
+  if (k.imob < 0) {
+    const iIni = cab.colunas.indexOf("INICIANTE");
+    if (iIni >= 0 && cab.colunas[iIni + 1] === "") k.imob = iIni + 1;
+  }
   const registros = [];
   const descartes = {};
   const desc = (m) => (descartes[m] = (descartes[m] || 0) + 1);
@@ -108,12 +118,18 @@ function lerAbaAnalises(linhas, comp, aba, herdada) {
     const dataReceb = data(g(k.dataReceb), comp);
     const sub = norm(g(k.subStatus));
     const statusPadrao = SUGESTAO_STATUS_FIANCA[statusOriginal] ?? null;
+    // A partir de 2026 a herança deixou de ter aba própria: as análises em
+    // andamento do mês anterior foram copiadas DENTRO da aba ANALISES do mês.
+    // Linha recebida em mês anterior ao do arquivo = herdada (origem = mês do
+    // recebimento). Antes de 2026 a herança tinha aba própria e o total da
+    // planilha incluía as linhas de virada de mês — não se aplica.
+    const herdadaNaAba = !herdada && comp >= "2026-01" && dataReceb && dataReceb.slice(0, 7) < comp;
     registros.push({
       linhaPlanilha: cab.indice + 2 + i,
       cpf, nome: txt(g(k.locatario)),
       linha: {
         produto: "fianca", tipo: "novo", fonte: "planilha", origem_aba: aba, origem_linha: cab.indice + 2 + i,
-        competencia_arquivo: comp, herdada,
+        competencia_arquivo: herdadaNaAba ? dataReceb.slice(0, 7) : comp, herdada: herdada || !!herdadaNaAba,
         chave_caso: cpf ? hash(`fianca|${cpf}|${dataReceb ?? ""}`) : hash(`fianca|${norm(imob)}|${dataReceb ?? ""}|${norm(g(k.locatario))}`),
         data_recebimento: dataReceb, data_efetivacao: data(g(k.dataEfetivacao), comp),
         status_original: statusOriginal, status_padrao: statusPadrao,
@@ -136,8 +152,19 @@ function lerAbaAnalises(linhas, comp, aba, herdada) {
 }
 
 // Totais da aba CONTAGEM (bloco da esquerda = mês; coluna "PEND" = herdadas).
+// Em 2026 a aba começa com uma "CONSULTA POR IMOBILIÁRIA" (filtrada) e o total
+// geral fica no bloco "TOTALIZADOR" mais abaixo — lê só esse bloco.
 function lerContagem(linhas) {
   const mes = {}, pend = {};
+  const iTot = linhas.findIndex((l, i) => i > 0 && norm(l?.[0]) === "TOTALIZADOR");
+  if (iTot > 0) {
+    for (const l of linhas.slice(iTot + 1, iTot + 15)) {
+      const r0 = norm(l?.[0]), v1 = l?.[1];
+      if (r0 && typeof v1 === "number" && !(r0 in mes)) mes[r0] = v1;
+    }
+    mes["TOTAL GERAL"] = ["ANALISE", "PENDENTE", "PRE-APROVADO", "APROVADO", "RECUSADO", "NEGATIVADO", "CONVERTIDO"].reduce((s, k) => s + (mes[k] || 0), 0);
+    return { mes, pend };
+  }
   for (const l of linhas.slice(0, 20)) {
     const r0 = norm(l?.[0]), v1 = l?.[1];
     if (r0 && typeof v1 === "number") mes[r0] = v1;
@@ -174,6 +201,8 @@ for (const r of resultado) {
   console.log(`\n== aba "${r.aba}" (${r.herdada ? "herdada de " + r.compAba : "mês " + r.compAba}): ${r.registros.length} linhas importáveis`);
   console.log("   por status:", JSON.stringify(porStatus));
   console.log("   descartadas:", JSON.stringify(r.descartes));
+  const herdNaAba = r.registros.filter((x) => x.linha.herdada && !r.herdada).length;
+  if (herdNaAba) console.log(`   herdadas dentro da aba: ${herdNaAba} | do mês: ${r.registros.length - herdNaAba}`);
 }
 if (contagem) console.log("\nCONTAGEM da planilha — mês:", JSON.stringify(contagem.mes), "\nCONTAGEM — herdadas (PEND):", JSON.stringify(contagem.pend));
 
