@@ -25,11 +25,35 @@ export async function chamarBitrix<T>(
     }
   }
   const url = `${base}${metodo}${busca.toString() ? `?${busca.toString()}` : ""}`;
-  const resposta = await fetch(url, { signal: AbortSignal.timeout(15000), cache: "no-store" });
-  if (!resposta.ok) throw new Error(`Bitrix ${metodo} falhou: HTTP ${resposta.status}`);
-  const dados = await resposta.json();
-  if (dados.error) throw new Error(`Bitrix ${metodo} erro: ${dados.error_description || dados.error}`);
-  return dados as T;
+  // O Bitrix devolve 503/429 (ou QUERY_LIMIT_EXCEEDED) quando recebe pedidos
+  // demais de uma vez -- achado de 19/10/2026: o painel da Fiança ficou
+  // com erro "crm.stagehistory.list falhou: HTTP 503" desde 16/10, depois que
+  // vários painéis passaram a atualizar a cada 10 min em paralelo. Tenta de
+  // novo com espera crescente em vez de desistir na primeira recusa.
+  const ESPERAS_MS = [800, 2000, 4500, 9000];
+  for (let tentativa = 0; ; tentativa++) {
+    let resposta: Response | null = null;
+    let erroRede: unknown = null;
+    try {
+      resposta = await fetch(url, { signal: AbortSignal.timeout(15000), cache: "no-store" });
+    } catch (e) {
+      erroRede = e;
+    }
+    const sobrecarga = resposta !== null && [429, 502, 503, 504].includes(resposta.status);
+    if ((sobrecarga || erroRede) && tentativa < ESPERAS_MS.length) {
+      await new Promise((r) => setTimeout(r, ESPERAS_MS[tentativa] + Math.random() * 400));
+      continue;
+    }
+    if (erroRede || !resposta) throw erroRede instanceof Error ? erroRede : new Error(`Bitrix ${metodo} falhou: sem resposta`);
+    if (!resposta.ok) throw new Error(`Bitrix ${metodo} falhou: HTTP ${resposta.status}`);
+    const dados = await resposta.json();
+    if (dados.error === "QUERY_LIMIT_EXCEEDED" && tentativa < ESPERAS_MS.length) {
+      await new Promise((r) => setTimeout(r, ESPERAS_MS[tentativa] + Math.random() * 400));
+      continue;
+    }
+    if (dados.error) throw new Error(`Bitrix ${metodo} erro: ${dados.error_description || dados.error}`);
+    return dados as T;
+  }
 }
 
 // Card bruto da SPA — campos padrão tipados, campos ufCrm10_* (dinâmicos,
@@ -83,7 +107,11 @@ async function comConcorrenciaLimitada<X, Y>(itens: X[], limite: number, tarefa:
 
 // Busca a 1ª página pra saber o total, depois busca o resto em paralelo (com
 // limite de concorrência) em vez de uma página esperando a outra terminar.
-export async function buscarTodasPaginas<X>(metodo: string, paramsBase: Record<string, BitrixParamValue>): Promise<X[]> {
+export async function buscarTodasPaginas<X>(
+  metodo: string,
+  paramsBase: Record<string, BitrixParamValue>,
+  concorrencia: number = CONCORRENCIA_PAGINACAO
+): Promise<X[]> {
   const primeira = await chamarBitrix<{ result: { items: X[] }; next?: number; total?: number }>(metodo, {
     ...paramsBase,
     start: 0,
@@ -95,7 +123,7 @@ export async function buscarTodasPaginas<X>(metodo: string, paramsBase: Record<s
   const starts: number[] = [];
   for (let start = TAMANHO_PAGINA_BITRIX; start < total; start += TAMANHO_PAGINA_BITRIX) starts.push(start);
 
-  const paginas = await comConcorrenciaLimitada(starts, CONCORRENCIA_PAGINACAO, (start) =>
+  const paginas = await comConcorrenciaLimitada(starts, concorrencia, (start) =>
     chamarBitrix<{ result: { items: X[] } }>(metodo, { ...paramsBase, start })
   );
   for (const pagina of paginas) itens.push(...pagina.result.items);
@@ -153,7 +181,9 @@ export async function buscarItem(entityTypeId: number, id: number): Promise<Bitr
 }
 
 export async function listarHistoricoEtapas(entityTypeId: number): Promise<BitrixStageHistoryEvent[]> {
-  return buscarTodasPaginas<BitrixStageHistoryEvent>("crm.stagehistory.list", { entityTypeId, "order[id]": "asc" });
+  // Histórico grande (7.384 eventos = 148 páginas em 19/10/2026): concorrência
+  // menor pra não estourar o limite de pedidos do Bitrix (503).
+  return buscarTodasPaginas<BitrixStageHistoryEvent>("crm.stagehistory.list", { entityTypeId, "order[id]": "asc" }, 3);
 }
 
 export async function listarHistoricoEtapasCategoria(
