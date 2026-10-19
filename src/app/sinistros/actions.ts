@@ -351,14 +351,14 @@ export async function cancelarRascunho(fd: FormData) {
   const { data: s } = await supabase.from("sinistros").select("etapa").eq("id", id).single();
   if (s?.etapa !== "rascunho") voltar(id, null, "Só dá pra descartar um rascunho.");
   await supabase.from("sinistros").update({ etapa: "cancelado", motivo_encerramento: "Rascunho descartado" }).eq("id", id);
-  redirect("/sinistros?sucesso=" + encodeURIComponent("Rascunho descartado."));
+  redirect("/sinistros/gestao?sucesso=" + encodeURIComponent("Rascunho descartado."));
 }
 
 // ---------- O2: pré-análise ----------
 
 async function exigirInterno() {
   const ctx = await contexto();
-  if (!ctx.interno) redirect("/sinistros");
+  if (!ctx.interno) redirect("/sinistros/gestao");
   return ctx;
 }
 

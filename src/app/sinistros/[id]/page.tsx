@@ -36,6 +36,7 @@ import {
   salvarContrato,
 } from "../actions";
 import FormContrato from "../FormContrato";
+import Abas from "../Abas";
 import Passos from "../Passos";
 import { Aviso, EtiquetaEtapa, botaoPrimario, botaoSecundario, cartao, enderecoCurto, inputClass, labelClass } from "../ui";
 import PassoSituacao from "./PassoSituacao";
@@ -96,9 +97,7 @@ export default async function SinistroPage({
     <>
       <AppHeader userEmail={user.email} logoutAction={signOut} />
       <main className="mx-auto max-w-5xl flex-1 space-y-6 p-8">
-        <Link href="/sinistros" className="text-sm text-gray-500 hover:text-o2-navy hover:underline">
-          ← Sinistros
-        </Link>
+        <Abas atual="ficha" interno={interno} />
         <div className="flex flex-wrap items-start justify-between gap-3">
           <PageHeader
             icon={<IconShield />}

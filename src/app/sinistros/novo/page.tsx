@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
@@ -11,6 +10,7 @@ import { criarRascunho } from "../actions";
 import FormContrato from "../FormContrato";
 import Passos from "../Passos";
 import { Aviso } from "../ui";
+import Abas from "../Abas";
 
 export const dynamic = "force-dynamic";
 
@@ -36,9 +36,7 @@ export default async function NovoSinistroPage({ searchParams }: { searchParams:
     <>
       <AppHeader userEmail={user.email} logoutAction={signOut} />
       <main className="mx-auto max-w-4xl flex-1 space-y-6 p-8">
-        <Link href="/sinistros" className="text-sm text-gray-500 hover:text-o2-navy hover:underline">
-          ← Sinistros
-        </Link>
+        <Abas atual="novo" interno={interno} />
         <PageHeader icon={<IconShield />} titulo="Abrir sinistro" subtitulo="Seguro Fiança · leva uns 10 minutos com os documentos em mãos" />
         <Passos atual={1} />
         {erro && <Aviso tipo="erro">{erro}</Aviso>}

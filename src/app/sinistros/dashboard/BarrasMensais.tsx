@@ -76,7 +76,7 @@ export default function BarrasMensais({
           return (
             <g key={p.mes}>
               {segs}
-              {(pontos.length - 1 - i) % 3 === 0 && (
+              {(pontos.length - 1 - i) % (pontos.length <= 8 ? 1 : pontos.length <= 18 ? 2 : pontos.length <= 36 ? 3 : Math.ceil(pontos.length / 12)) === 0 && (
                 <text x={cx} y={altura - 6} textAnchor="middle" fontSize={10} fill="#6b7280">
                   {rotuloMes(p.mes)}
                 </text>

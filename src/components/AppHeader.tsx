@@ -43,7 +43,7 @@ export default function AppHeader({
                 { href: "/auditar-contrato", label: "Auditar contrato" },
                 { href: "/multa-rescisoria", label: "Cálculo de multa rescisória" },
                 { href: "/contratos", label: "Contratos realizados" },
-                { href: "/sinistros", label: "Sinistros (Seguro Fiança)" },
+                { href: "/sinistros", label: "Sinistros" },
               ]}
             />
             <NavDropdown
@@ -65,7 +65,7 @@ export default function AppHeader({
                       { href: "/ramos-elementares", label: "Ramos Elementares" },
                       { href: "/seguro-fianca", label: "Seguro Fiança" },
                       { href: "/seguro-fianca/panoramas", label: "Panoramas Fiança" },
-                      { href: "/sinistros/painel", label: "Sinistros (KPIs)" },
+                      { href: "/sinistros", label: "Sinistros" },
                     ],
                   },
                   {

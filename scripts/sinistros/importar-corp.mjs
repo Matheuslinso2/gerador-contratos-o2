@@ -182,3 +182,7 @@ const cont = {};
 for (const r of registros) cont[r.situacao] = (cont[r.situacao] ?? 0) + 1;
 console.log(`\n${arquivos.length} arquivo(s), ${lidas} linhas lidas → ${registros.length} sinistros de fiança gravados.`);
 console.log(cont);
+
+// Refaz a base mensal do dashboard de Sinistros com o histórico novo.
+const { error: erroBase } = await supabase.rpc("atualizar_base_kpis_sinistros");
+console.log(erroBase ? `base do dashboard NÃO atualizada: ${erroBase.message}` : "base do dashboard atualizada.");
