@@ -165,7 +165,7 @@ for (const arquivo of arquivos) {
 
 const agora = new Date().toISOString();
 const registros = [...porChave.entries()].map(([chave, s]) => {
-  // eslint-disable-next-line no-unused-vars -- campos só de leitura
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- campos só de leitura
   const { fonte, tipo_linha, ...resto } = s;
   return { ...resto, chave, tipo_sinistro: tipoSinistro(s.descricao), atualizado_em: agora };
 });
