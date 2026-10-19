@@ -65,6 +65,7 @@ export default function AppHeader({
                       { href: "/ramos-elementares", label: "Ramos Elementares" },
                       { href: "/seguro-fianca", label: "Seguro Fiança" },
                       { href: "/seguro-fianca/panoramas", label: "Panoramas Fiança" },
+                      { href: "/sinistros/painel", label: "Sinistros (KPIs)" },
                     ],
                   },
                   {

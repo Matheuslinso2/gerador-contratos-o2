@@ -76,9 +76,16 @@ export default async function SinistrosPage({
             titulo={interno ? "Sinistros — fila do Setor de Garantias" : "Sinistros"}
             subtitulo="Seguro Fiança"
           />
-          <Link href="/sinistros/novo" className={botaoPrimario}>
-            + Abrir sinistro
-          </Link>
+          <div className="flex items-center gap-2">
+            {interno && (
+              <Link href="/sinistros/painel" className="rounded-full border border-o2-navy px-5 py-2 text-sm font-semibold text-o2-navy hover:bg-o2-navy hover:text-white">
+                KPIs
+              </Link>
+            )}
+            <Link href="/sinistros/novo" className={botaoPrimario}>
+              + Abrir sinistro
+            </Link>
+          </div>
         </div>
         {sucesso && <Aviso tipo="sucesso">{sucesso}</Aviso>}
 
