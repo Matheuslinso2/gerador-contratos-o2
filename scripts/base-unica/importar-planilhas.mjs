@@ -18,10 +18,12 @@ const dig = (v) => String(v ?? "").replace(/\D/g, "");
 const txt = (v) => (v == null ? "" : String(v).replace(/\s+/g, " ").trim());
 const hash = (s) => crypto.createHash("sha1").update(s).digest("hex").slice(0, 20);
 
-function competenciaDoArquivo(nome) {
+// Ano vem do nome; se não estiver lá (ex.: "NOVA PLANILHA AGOSTO.xlsm" na pasta 2020), da pasta.
+function competenciaDoArquivo(nome, pasta = "") {
   const n = norm(nome);
   const mes = MESES.findIndex((m) => n.includes(m));
-  const ano = (n.match(/20\d\d/) || [])[0] || (n.match(/^\d{1,2}\.(\d{2})\b/) ? "20" + n.match(/^\d{1,2}\.(\d{2})\b/)[1] : null);
+  const ano = (n.match(/20\d\d/) || [])[0] || (n.match(/^\d{1,2}\.(\d{2})\b/) ? "20" + n.match(/^\d{1,2}\.(\d{2})\b/)[1] : null)
+    || (norm(pasta).match(/20\d\d/) || [])[0];
   return mes >= 0 && ano ? `${ano}-${String(mes + 1).padStart(2, "0")}` : null;
 }
 function mesAnterior(comp) {
@@ -75,6 +77,9 @@ const SUGESTAO_STATUS_FIANCA = {
   "NEGATIVADO": "Perdido", "DESISTENCIA": "Perdido",
   // fechou
   "CONVERTIDO": "Convertido", "CONTRATADO": "Convertido", "EFETIVADO": "Convertido",
+  // fases da contratação (validado 19/10): continuam sendo UMA análise convertida;
+  // a fase vai em extras.fase_contratacao, nunca soma como análise nova.
+  "EMITIDO": "Convertido", "EM EMISSAO": "Convertido",
   "CANCELADO": "Cancelado",
 };
 
@@ -83,12 +88,13 @@ function mapearColunas(colunas) {
   const primeira = (re) => colunas.findIndex((c) => re.test(c));
   const ultima = (re) => colunas.map((c, i) => (re.test(c) ? i : -1)).filter((i) => i >= 0).pop() ?? -1;
   return {
-    status: primeira(/^STATUS$/), subStatus: primeira(/^SUB STATUS$/), imob: primeira(/^IMOBILI/), motivo: primeira(/^MOTIVO$/),
+    // STATUS (2024→) ou STATUS ANALISE (2020–2024)
+    status: primeira(/^STATUS$/) >= 0 ? primeira(/^STATUS$/) : primeira(/^STATUS ANALISE$/), statusConvertido: primeira(/^STATUS CONVERTIDO$/), subStatus: primeira(/^SUB STATUS$/), imob: primeira(/^IMOBILI/), motivo: primeira(/^MOTIVO$/),
     dataReceb: primeira(/^DATA RECEB/), cotador: primeira(/^COTADOR$/), tipoLocacao: primeira(/^TIPO DE LOCACAO$/),
     tipoAnalise: primeira(/^TIPO DE ANALISE$/), locatario: primeira(/^LOCATARIO$/), cpf: primeira(/^CPF/), cidade: primeira(/^CIDADE$/),
     uf: primeira(/^UF$/), origem: primeira(/^ORIGEM$/), plano: primeira(/^PLANO$/), aluguel: primeira(/^ALUGUEL$/),
     pacote: primeira(/^PACOTE LOCACAO$/), statusNegociacao: primeira(/^STATUS DE NEGOCIACAO$/), negociador: primeira(/^NEGOCIADOR$/),
-    dataEfetivacao: primeira(/^DATA DE EFETIVACAO$/), proposta: primeira(/^PROPOSTA$/), comissao: ultima(/^COMISSAO$/),
+    dataEfetivacao: primeira(/^DATA DE EFETIVACAO$/) >= 0 ? primeira(/^DATA DE EFETIVACAO$/) : primeira(/^DATA EMISSAO$/), proposta: primeira(/^PROPOSTA$/), comissao: ultima(/^COMISSAO$/),
     premioLiquido: ultima(/^PREMIO LIQUIDO$/), responsavel: primeira(/^RESPONSAVEL$/),
   };
 }
@@ -142,7 +148,12 @@ function lerAbaAnalises(linhas, comp, aba, herdada) {
         // extras.comissao_percentual; comissão em R$ só quando a fonte trouxer o valor.
         aluguel: valor(g(k.aluguel)), premio: valor(g(k.premioLiquido)), comissao: null,
         extras: Object.fromEntries(Object.entries({
-          sub_status: sub, motivo: norm(g(k.motivo)), tipo_locacao: norm(g(k.tipoLocacao)), tipo_analise: norm(g(k.tipoAnalise)),
+          sub_status: sub, status_convertido: norm(g(k.statusConvertido)),
+          fase_contratacao: statusPadrao !== "Convertido" ? null
+            : norm(g(k.statusConvertido)) === "EMITIDO" || statusOriginal === "EMITIDO" ? "emitido"
+            : norm(g(k.statusConvertido)) === "EM EMISSAO" || statusOriginal === "EM EMISSAO" ? "em emissão"
+            : ["CONTRATADO", "EFETIVADO"].includes(statusOriginal) ? "contratado" : "convertido",
+          motivo: norm(g(k.motivo)), tipo_locacao: norm(g(k.tipoLocacao)), tipo_analise: norm(g(k.tipoAnalise)),
           pacote_locacao: valor(g(k.pacote)), comissao_percentual: valor(g(k.comissao)), status_negociacao: txt(g(k.statusNegociacao)), negociador: txt(g(k.negociador)),
           proposta: txt(g(k.proposta)), origem: txt(g(k.origem)), cidade: txt(g(k.cidade)), uf: txt(g(k.uf)),
         }).filter(([, v]) => v != null && v !== "")),
@@ -175,25 +186,45 @@ function lerContagem(linhas) {
   return { mes, pend };
 }
 
+// 2020–2023: aba RELATÓRIOS — linha de títulos (TOTAL | NOVA | EM ANÁLISE | … |
+// CONVERTIDO | RECUSADO | NEGATIVADO) com os números na linha de baixo.
+function lerRelatorios(linhas) {
+  for (let i = 0; i < Math.min(linhas.length - 1, 40); i++) {
+    const t = (linhas[i] || []).map(norm);
+    if (t[0] !== "TOTAL" || !t.includes("NEGATIVADO")) continue;
+    const mes = {};
+    t.forEach((h, j) => { const v = linhas[i + 1]?.[j]; if (h && typeof v === "number") mes[h === "TOTAL" ? "TOTAL GERAL" : h] = v; });
+    return { mes, pend: {} };
+  }
+  return null;
+}
+
 // ---------- execução ----------
 const [nomeArquivo, flag] = process.argv.slice(2);
 const gravar = flag === "--gravar";
 const copia = (await listarCopias()).find((c) => c.nome === nomeArquivo);
 if (!copia) throw new Error(`arquivo não encontrado entre as cópias congeladas: ${nomeArquivo}`);
-const comp = competenciaDoArquivo(copia.nome);
+const comp = competenciaDoArquivo(copia.nome, copia.pasta);
+if (!comp) throw new Error("não consegui identificar o mês do arquivo: " + copia.nome);
 const abas = await abrirCopia(copia, { bruto: true });
 
 const resultado = [];
 for (const [aba, linhas] of abas) {
   const a = norm(aba);
   let herdada = null, compAba = null;
-  if (a === "ANALISES") { herdada = false; compAba = comp; }
+  // aba principal: ANALISES (set/2023→) ou PROCESSO (2020–jul/2023)
+  if (a === "ANALISES" || a === "PROCESSO") { herdada = false; compAba = comp; }
   else if (MESES.includes(a) && MESES.indexOf(a) + 1 !== Number(comp.slice(5))) { herdada = true; compAba = mesAnterior(comp); }
   else continue;
   const { registros, descartes } = lerAbaAnalises(linhas, compAba, aba, herdada);
   resultado.push({ aba, herdada, compAba, registros, descartes });
 }
-const contagem = (() => { const c = abas.find(([n]) => norm(n) === "CONTAGEM"); return c ? lerContagem(c[1]) : null; })();
+const contagem = (() => {
+  const c = abas.find(([n]) => norm(n) === "CONTAGEM");
+  if (c) return lerContagem(c[1]);
+  const r = abas.find(([n]) => norm(n) === "RELATORIOS");
+  return r ? lerRelatorios(r[1]) : null;
+})();
 
 // Relatório
 for (const r of resultado) {
@@ -210,7 +241,7 @@ if (contagem) console.log("\nCONTAGEM da planilha — mês:", JSON.stringify(con
 // Herança: casos da aba herdada que existem na planilha do mês anterior?
 const principal = resultado.find((r) => !r.herdada), herd = resultado.find((r) => r.herdada);
 if (herd) {
-  const anterior = (await listarCopias()).find((c) => competenciaDoArquivo(c.nome) === herd.compAba && /PLANILHA/.test(norm(c.nome)) && !/^COPIA/.test(norm(c.nome)));
+  const anterior = (await listarCopias()).find((c) => competenciaDoArquivo(c.nome, c.pasta) === herd.compAba && /PLANILHA/.test(norm(c.nome)) && !/^COPIA/.test(norm(c.nome)));
   if (anterior) {
     const abasAnt = await abrirCopia(anterior, { bruto: true });
     const ab = abasAnt.find(([n]) => norm(n) === "ANALISES");
