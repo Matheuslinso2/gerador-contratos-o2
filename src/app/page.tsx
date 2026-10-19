@@ -101,6 +101,24 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ a
       ),
     },
     {
+      href: "/sinistros",
+      titulo: "Sinistros",
+      descricao: "Avise um sinistro de Seguro Fiança e acompanhe até a indenização",
+      pendente: !cadastroCompleto,
+      icone: (
+        <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
+          <path
+            d="M12 3.5l7 2.5v5.2c0 4.6-3 7.9-7 9.3-4-1.4-7-4.7-7-9.3V6l7-2.5z"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinejoin="round"
+          />
+          <path d="M12 8v4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          <path d="M12 15.5h.01" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+        </svg>
+      ),
+    },
+    {
       href: "/multa-rescisoria",
       titulo: "Multa rescisória",
       descricao: "Calculadora rápida de consulta, sem cadastro necessário",

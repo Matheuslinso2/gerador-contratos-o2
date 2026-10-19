@@ -43,6 +43,7 @@ export default function AppHeader({
                 { href: "/auditar-contrato", label: "Auditar contrato" },
                 { href: "/multa-rescisoria", label: "Cálculo de multa rescisória" },
                 { href: "/contratos", label: "Contratos realizados" },
+                { href: "/sinistros", label: "Sinistros (Seguro Fiança)" },
               ]}
             />
             <NavDropdown
