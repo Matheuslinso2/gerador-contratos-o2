@@ -12,7 +12,7 @@ import {
   PRAZO_SEGURADORA_DIAS,
   SLA_PRE_ANALISE_DIAS_UTEIS,
   TEXTO_CIENCIA,
-  TIPOS,
+  tituloTipo,
   calcularPrazoAviso,
   diasEntre,
   diasUteisDesde,
@@ -23,7 +23,6 @@ import {
   validarEnvio,
   type Debito,
   type EtapaSinistro,
-  type TipoSinistro,
 } from "@/lib/sinistros/regras";
 import { signOut } from "../../actions";
 import {
@@ -34,6 +33,7 @@ import {
   enviarSinistro,
   marcarAbertoNaSeguradora,
   salvarContrato,
+  salvarProximaAcao,
 } from "../actions";
 import FormContrato from "../FormContrato";
 import Abas from "../Abas";
@@ -84,8 +84,15 @@ export default async function SinistroPage({
     docs.forEach((d, i) => (d.url = urls?.[i]?.signedUrl ?? null));
   }
 
+  // Equipe O2 pode definir/trocar a imobiliária no passo 1.
+  let imobiliarias: { id: string; nome: string }[] | undefined;
+  if (interno && s.etapa === "rascunho") {
+    const { data } = await supabase.from("imobiliarias").select("id, nome, apelido").order("nome");
+    imobiliarias = (data ?? []).map((i) => ({ id: i.id, nome: i.apelido ? `${i.nome} (${i.apelido})` : i.nome }));
+  }
+
   const etapa = s.etapa as EtapaSinistro;
-  const imobNome = s.imobiliarias?.apelido || s.imobiliarias?.nome || "Imobiliária";
+  const imobNome = s.imobiliarias?.apelido || s.imobiliarias?.nome || (s.imobiliaria_id ? "Imobiliária" : "Imobiliária não definida");
   const checklist = montarChecklist(s);
   const listaDebitos = (debitos ?? []) as Debito[];
 
@@ -101,10 +108,10 @@ export default async function SinistroPage({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <PageHeader
             icon={<IconShield />}
-            titulo={`${s.locatario_nome}`}
+            titulo={s.locatario_nome || "Locatário não informado"}
             subtitulo={
               <>
-                SIN-{s.codigo} · {TIPOS[s.tipo as TipoSinistro].titulo} · {s.seguradora}
+                SIN-{s.codigo} · {tituloTipo(s.tipo)} · {s.seguradora || "seguradora não informada"}
                 {interno && <> · {imobNome}</>}
               </>
             }
@@ -123,8 +130,10 @@ export default async function SinistroPage({
         {erro && <Aviso tipo="erro">{erro}</Aviso>}
         {sucesso && <Aviso tipo="sucesso">{sucesso}</Aviso>}
 
+        {interno && modoAssistente && <ProximaAcao s={s} />}
+
         {modoAssistente ? (
-          <Assistente s={s} passo={passo} debitos={listaDebitos} docs={docs} checklist={checklist} historico={historico ?? []} />
+          <Assistente s={s} passo={passo} debitos={listaDebitos} docs={docs} checklist={checklist} historico={historico ?? []} imobiliarias={imobiliarias} />
         ) : interno ? (
           <VisaoO2 s={s} debitos={listaDebitos} docs={docs} checklist={checklist} historico={historico ?? []} />
         ) : (
@@ -146,7 +155,7 @@ type Props = {
 
 // ---------- Assistente (rascunho / pendência) ----------
 
-function Assistente({ s, passo, debitos, docs, checklist, historico }: Props & { passo: number }) {
+function Assistente({ s, passo, debitos, docs, checklist, historico, imobiliarias }: Props & { passo: number; imobiliarias?: { id: string; nome: string }[] }) {
   const pendencia = s.etapa === "pendencia_imobiliaria";
   const ultimaPendencia = historico.find((h) => h.texto.startsWith("Pendência para a imobiliária"));
   return (
@@ -160,7 +169,7 @@ function Assistente({ s, passo, debitos, docs, checklist, historico }: Props & {
       )}
       <Passos atual={passo} id={s.id} />
 
-      {passo === 1 && <FormContrato action={salvarContrato} dados={s} textoBotao="Salvar e continuar →" />}
+      {passo === 1 && <FormContrato action={salvarContrato} dados={s} imobiliarias={imobiliarias} textoBotao="Salvar e continuar →" />}
 
       {passo === 2 && <PassoSituacao dados={s} />}
 
@@ -197,8 +206,8 @@ function PassoEnviar({ s, debitos, docs }: { s: any; debitos: Debito[]; docs: Do
   const pendencia = s.etapa === "pendencia_imobiliaria";
   const validacao = validarEnvio(s, debitos, docs, true);
   const prazo = calcularPrazoAviso(s);
-  // Sem a ciência e o favorecido (que são preenchidos aqui mesmo), o que
-  // sobrar de bloqueio precisa voltar a um passo anterior.
+  // Fase de testes: nada impede o envio; o que faltar aparece como aviso e
+  // vai pro histórico do sinistro.
   const bloqueiosDeOutrosPassos = validacao.bloqueios.filter((b) => !b.includes("favorecido") && !b.includes("fora do prazo"));
 
   return (
@@ -208,8 +217,8 @@ function PassoEnviar({ s, debitos, docs }: { s: any; debitos: Debito[]; docs: Do
       <section className={cartao}>
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-o2-navy">Resumo</h2>
         <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
-          <Item rotulo="Tipo" valor={TIPOS[s.tipo as TipoSinistro].titulo} />
-          <Item rotulo="Seguradora / apólice" valor={`${s.seguradora}${s.numero_apolice ? ` · ${s.numero_apolice}` : ""}`} />
+          <Item rotulo="Tipo" valor={tituloTipo(s.tipo)} />
+          <Item rotulo="Seguradora / apólice" valor={[s.seguradora, s.numero_apolice].filter(Boolean).join(" · ")} />
           <Item rotulo="Locador" valor={s.locador_nome} />
           <Item rotulo="Imóvel" valor={enderecoCurto(s)} />
           <Item rotulo="Cobranças" valor={COBERTURAS.filter((c) => s.coberturas.includes(c.chave)).map((c) => c.titulo).join(", ") || "—"} />
@@ -219,8 +228,8 @@ function PassoEnviar({ s, debitos, docs }: { s: any; debitos: Debito[]; docs: Do
       </section>
 
       {bloqueiosDeOutrosPassos.length > 0 && (
-        <Aviso tipo="erro">
-          <p className="font-semibold">Antes de enviar, corrija:</p>
+        <Aviso tipo="alerta">
+          <p className="font-semibold">Ainda incompleto (dá pra enviar assim mesmo — fica registrado no histórico):</p>
           <ul className="ml-5 list-disc">
             {bloqueiosDeOutrosPassos.map((b) => (
               <li key={b}>{b}</li>
@@ -243,8 +252,8 @@ function PassoEnviar({ s, debitos, docs }: { s: any; debitos: Debito[]; docs: Do
 
       {prazo.foraDoPrazo && (
         <section className="space-y-1">
-          <label className={labelClass}>Por que o aviso está sendo feito fora do prazo? *</label>
-          <textarea name="justificativa_fora_prazo" rows={2} required defaultValue={s.justificativa_fora_prazo ?? ""} className={inputClass} />
+          <label className={labelClass}>Por que o aviso está sendo feito fora do prazo?</label>
+          <textarea name="justificativa_fora_prazo" rows={2} defaultValue={s.justificativa_fora_prazo ?? ""} className={inputClass} />
         </section>
       )}
 
@@ -264,12 +273,12 @@ function PassoEnviar({ s, debitos, docs }: { s: any; debitos: Debito[]; docs: Do
           Se não for o locador, a seguradora exige o contrato de administração ou a procuração ao favorecido (já pedidos no passo 4).
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Campo nome="favorecido_nome" rotulo="Nome do favorecido *" valor={s.favorecido_nome} />
+          <Campo nome="favorecido_nome" rotulo="Nome do favorecido" valor={s.favorecido_nome} />
           <Campo nome="favorecido_documento" rotulo="CPF/CNPJ do favorecido" valor={s.favorecido_documento} />
-          <Campo nome="favorecido_banco" rotulo="Banco *" valor={s.favorecido_banco} />
+          <Campo nome="favorecido_banco" rotulo="Banco" valor={s.favorecido_banco} />
           <div className="grid grid-cols-2 gap-3">
-            <Campo nome="favorecido_agencia" rotulo="Agência *" valor={s.favorecido_agencia} />
-            <Campo nome="favorecido_conta" rotulo="Conta *" valor={s.favorecido_conta} />
+            <Campo nome="favorecido_agencia" rotulo="Agência" valor={s.favorecido_agencia} />
+            <Campo nome="favorecido_conta" rotulo="Conta" valor={s.favorecido_conta} />
           </div>
         </div>
       </section>
@@ -283,7 +292,7 @@ function PassoEnviar({ s, debitos, docs }: { s: any; debitos: Debito[]; docs: Do
             ))}
           </ol>
           <label className="flex items-start gap-2 text-sm font-semibold text-o2-navy">
-            <input type="checkbox" name="ciencia" required className="mt-1 accent-o2-coral" />
+            <input type="checkbox" name="ciencia" className="mt-1 accent-o2-coral" />
             Li e estou ciente destas regras.
           </label>
         </section>
@@ -340,8 +349,8 @@ function Dados({ s, interno }: { s: any; interno: boolean }) {
         <Item rotulo="Seguradora" valor={s.seguradora} />
         <Item rotulo="Apólice" valor={s.numero_apolice} />
         <Item rotulo="Vigência" valor={s.vigencia_inicio || s.vigencia_fim ? `${formatarData(s.vigencia_inicio)} a ${formatarData(s.vigencia_fim)}` : "—"} />
-        <Item rotulo="Locador (segurado)" valor={`${s.locador_nome}${s.locador_documento ? ` · ${s.locador_documento}` : ""}`} />
-        <Item rotulo="Locatário" valor={`${s.locatario_nome}${s.locatario_documento ? ` · ${s.locatario_documento}` : ""}`} />
+        <Item rotulo="Locador (segurado)" valor={[s.locador_nome, s.locador_documento].filter(Boolean).join(" · ")} />
+        <Item rotulo="Locatário" valor={[s.locatario_nome, s.locatario_documento].filter(Boolean).join(" · ")} />
         <Item rotulo="Contato do locatário" valor={[s.locatario_telefone, s.locatario_email].filter(Boolean).join(" · ")} />
         <Item
           rotulo="Imóvel"
@@ -396,7 +405,7 @@ function VisaoImobiliaria({ s, debitos, docs, checklist, historico }: Props) {
   const etapa = s.etapa as EtapaSinistro;
   const explicacao: Partial<Record<EtapaSinistro, string>> = {
     pre_analise: "A equipe de sinistro da O2 está conferindo os dados e os documentos antes de abrir na seguradora.",
-    na_seguradora: `O sinistro foi aberto na ${s.seguradora}. A seguradora tem até ${PRAZO_SEGURADORA_DIAS} dias, a contar da documentação completa, para dar retorno.`,
+    na_seguradora: `O sinistro foi aberto na ${s.seguradora ?? "seguradora"}. A seguradora tem até ${PRAZO_SEGURADORA_DIAS} dias, a contar da documentação completa, para dar retorno.`,
     em_indenizacao: "A seguradora começou a indenizar. Envie os boletos de cada mês enquanto o locatário estiver no imóvel.",
     acordo_judicial: "O caso está em acordo ou em cobrança judicial conduzida pela seguradora.",
     encerrado: `Sinistro encerrado${s.motivo_encerramento ? `: ${s.motivo_encerramento}` : "."}`,
@@ -481,6 +490,8 @@ function VisaoO2({ s, debitos, docs, checklist, historico }: Props) {
         )}
       </div>
 
+      <ProximaAcao s={s} />
+
       <Dados s={s} interno />
 
       <section className="space-y-2">
@@ -515,8 +526,8 @@ function VisaoO2({ s, debitos, docs, checklist, historico }: Props) {
             {!tudoAprovado && <p className="text-xs text-orange-700">Ainda há documentos sem aprovação. Pode abrir assim mesmo se a seguradora aceitar.</p>}
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className={labelClass}>Nº do sinistro *</label>
-                <input name="numero_sinistro_seguradora" required className={inputClass} />
+                <label className={labelClass}>Nº do sinistro</label>
+                <input name="numero_sinistro_seguradora" className={inputClass} />
               </div>
               <div>
                 <label className={labelClass}>Data da abertura</label>
@@ -552,5 +563,61 @@ function VisaoO2({ s, debitos, docs, checklist, historico }: Props) {
         </details>
       )}
     </div>
+  );
+}
+
+// ---------- O2: agenda de próxima ação ----------
+
+function ProximaAcao({ s }: { s: any }) {
+  const hoje = hojeSP();
+  const quando: string | null = s.proxima_acao_em;
+  const atrasada = !!quando && quando < hoje;
+  const ehHoje = quando === hoje;
+  const cor = atrasada ? "border-red-200 bg-red-50" : ehHoje ? "border-orange-200 bg-orange-50" : "border-blue-200 bg-blue-50";
+  return (
+    <section className={`rounded-xl border p-4 ${cor} space-y-3`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Próxima ação (agenda O2)</h2>
+        {quando && (
+          <span
+            className={`rounded-full px-3 py-1 text-xs font-semibold ${
+              atrasada ? "bg-red-100 text-red-700" : ehHoje ? "bg-orange-100 text-orange-800" : "bg-white text-o2-navy"
+            }`}
+          >
+            {atrasada ? `atrasada desde ${formatarData(quando)}` : ehHoje ? "é hoje" : `em ${formatarData(quando)} · faltam ${diasEntre(hoje, quando)} dia(s)`}
+          </span>
+        )}
+      </div>
+      <form action={salvarProximaAcao} className="grid gap-3 sm:grid-cols-[10rem_1fr_14rem_auto] sm:items-end">
+        <input type="hidden" name="id" value={s.id} />
+        <div>
+          <label className={labelClass}>Data</label>
+          <input type="date" name="proxima_acao_em" defaultValue={quando ?? ""} className={inputClass} />
+        </div>
+        <div>
+          <label className={labelClass}>O que fazer</label>
+          <input
+            name="proxima_acao_descricao"
+            defaultValue={s.proxima_acao_descricao ?? ""}
+            placeholder="Ex.: cobrar boleto de outubro da imobiliária"
+            className={inputClass}
+          />
+        </div>
+        <div>
+          <label className={labelClass}>Responsável</label>
+          <input name="proxima_acao_responsavel" defaultValue={s.proxima_acao_responsavel ?? s.responsavel_o2 ?? ""} placeholder="e-mail @o2seguros" className={inputClass} />
+        </div>
+        <div className="flex gap-2">
+          <SubmitButton className={botaoPrimario} textoCarregando="Salvando…">
+            Salvar
+          </SubmitButton>
+          {(quando || s.proxima_acao_descricao) && (
+            <button name="limpar" value="1" className={botaoSecundario}>
+              Concluída
+            </button>
+          )}
+        </div>
+      </form>
+    </section>
   );
 }

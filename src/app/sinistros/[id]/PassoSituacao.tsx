@@ -8,7 +8,7 @@ import { Aviso, botaoPrimario, inputClass, labelClass } from "../ui";
 
 type Dados = {
   id: string;
-  tipo: TipoSinistro;
+  tipo: TipoSinistro | null;
   data_primeiro_vencimento: string | null;
   data_segundo_vencimento: string | null;
   data_entrega_chaves: string | null;
@@ -42,7 +42,10 @@ export default function PassoSituacao({ dados }: { dados: Dados }) {
     data_entrega_chaves: dados.data_entrega_chaves ?? "",
   });
   const [coberturas, setCoberturas] = useState<string[]>(dados.coberturas.length ? dados.coberturas : ["aluguel"]);
+  // Sem tipo escolhido no passo 1 (fase de testes), mostra os dois blocos de datas.
+  const semTipo = !dados.tipo;
   const ocupado = dados.tipo === "ocupado";
+  const chaves = !!dados.tipo && !ocupado;
   const prazo = calcularPrazoAviso({ tipo: dados.tipo, ...datas });
   const pintura = coberturas.includes("pintura");
 
@@ -56,39 +59,38 @@ export default function PassoSituacao({ dados }: { dados: Dados }) {
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Datas</h2>
-        {ocupado ? (
+        {semTipo && <Aviso tipo="alerta">Tipo do sinistro ainda não escolhido (passo 1). Preencha as datas que se aplicam.</Aviso>}
+        {(ocupado || semTipo) && (
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className={labelClass}>Vencimento do 1º mês em aberto *</label>
+              <label className={labelClass}>Vencimento do 1º mês em aberto</label>
               <input
                 type="date"
                 name="data_primeiro_vencimento"
-                required
                 value={datas.data_primeiro_vencimento}
                 onChange={(e) => setDatas({ ...datas, data_primeiro_vencimento: e.target.value })}
                 className={inputClass}
               />
             </div>
             <div>
-              <label className={labelClass}>Vencimento do 2º mês em aberto *</label>
+              <label className={labelClass}>Vencimento do 2º mês em aberto</label>
               <input
                 type="date"
                 name="data_segundo_vencimento"
-                required
                 value={datas.data_segundo_vencimento}
                 onChange={(e) => setDatas({ ...datas, data_segundo_vencimento: e.target.value })}
                 className={inputClass}
               />
             </div>
           </div>
-        ) : (
+        )}
+        {(chaves || semTipo) && (
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className={labelClass}>Data da entrega das chaves *</label>
+              <label className={labelClass}>Data da entrega das chaves</label>
               <input
                 type="date"
                 name="data_entrega_chaves"
-                required
                 value={datas.data_entrega_chaves}
                 onChange={(e) => setDatas({ ...datas, data_entrega_chaves: e.target.value })}
                 className={inputClass}
@@ -103,7 +105,7 @@ export default function PassoSituacao({ dados }: { dados: Dados }) {
         )}
 
         {prazo.bloqueio ? (
-          (ocupado ? datas.data_segundo_vencimento : datas.data_entrega_chaves) && <Aviso tipo="erro">{prazo.bloqueio}</Aviso>
+          !semTipo && (ocupado ? datas.data_segundo_vencimento : datas.data_entrega_chaves) && <Aviso tipo="alerta">{prazo.bloqueio}</Aviso>
         ) : prazo.prazo ? (
           prazo.foraDoPrazo ? (
             <Aviso tipo="alerta">

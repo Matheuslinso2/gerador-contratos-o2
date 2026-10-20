@@ -1,6 +1,6 @@
 import { enviarEmail } from "@/lib/email";
 import { blocoSecao, botaoPill, envolverEmailO2, linhaCampo } from "@/lib/integracoes/emailO2";
-import { ETAPAS, TIPOS, formatarData, formatarReais, type EtapaSinistro, type TipoSinistro } from "./regras";
+import { ETAPAS, tituloTipo, formatarData, formatarReais, type EtapaSinistro, type TipoSinistro } from "./regras";
 
 // Caixa do Setor de Garantias -- é pra onde os avisos de sinistro já vão
 // hoje por e-mail (Manual de Abertura de Sinistro, ago/2026).
@@ -30,11 +30,11 @@ async function enviar(para: string[], assunto: string, html: string) {
 export type SinistroEmail = {
   id: string;
   codigo: number;
-  tipo: TipoSinistro;
+  tipo: TipoSinistro | null;
   etapa: EtapaSinistro;
-  seguradora: string;
+  seguradora: string | null;
   numero_apolice: string | null;
-  locatario_nome: string;
+  locatario_nome: string | null;
   imovel_logradouro: string | null;
   imovel_numero: string | null;
   imovel_complemento: string | null;
@@ -55,10 +55,10 @@ function resumo(s: SinistroEmail, imobiliariaNome?: string) {
     [
       linhaCampo("Protocolo O2", `SIN-${s.codigo}`),
       imobiliariaNome ? linhaCampo("Imobiliária", imobiliariaNome) : "",
-      linhaCampo("Tipo", TIPOS[s.tipo].titulo),
-      linhaCampo("Seguradora", s.seguradora),
+      linhaCampo("Tipo", tituloTipo(s.tipo)),
+      linhaCampo("Seguradora", s.seguradora ?? ""),
       linhaCampo("Apólice", s.numero_apolice ?? ""),
-      linhaCampo("Locatário", s.locatario_nome),
+      linhaCampo("Locatário", s.locatario_nome ?? ""),
       linhaCampo("Imóvel", endereco(s)),
       s.valor_avisado ? linhaCampo("Valor avisado", formatarReais(s.valor_avisado)) : "",
       s.numero_sinistro_seguradora ? linhaCampo("Nº do sinistro na seguradora", s.numero_sinistro_seguradora) : "",
@@ -97,7 +97,7 @@ export async function emailNovoSinistroParaO2(s: SinistroEmail, imobiliariaNome:
     protocolo: `SIN-${s.codigo}`,
     origem: "Módulo Sinistro",
   });
-  await enviar([EMAIL_O2], `Novo sinistro SIN-${s.codigo} — ${imobiliariaNome} — ${s.locatario_nome}`, html);
+  await enviar([EMAIL_O2], `Novo sinistro SIN-${s.codigo} — ${imobiliariaNome} — ${s.locatario_nome ?? "locatário não informado"}`, html);
 }
 
 export async function emailRespostaPendenciaParaO2(s: SinistroEmail, imobiliariaNome: string, mensagem: string) {
@@ -122,22 +122,22 @@ export async function emailPendenciaParaImobiliaria(
   const html = envolverEmailO2({
     badge: "Pendência no sinistro",
     titulo: "Precisamos de alguns ajustes",
-    introducao: `Para seguirmos com o sinistro de ${escapar(s.locatario_nome)}, responda pelo Workspace até ${formatarData(prazo)}.`,
+    introducao: `Para seguirmos com o sinistro de ${escapar(s.locatario_nome ?? "locatário não informado")}, responda pelo Workspace até ${formatarData(prazo)}.`,
     corpoHtml: resumo(s) + listaHtml(itens) + paragrafo(mensagem) + botaoPill(urlSinistro(s.id), "Resolver pendência"),
     protocolo: `SIN-${s.codigo}`,
     origem: "Módulo Sinistro",
   });
-  await enviar(destinos, `Pendência no sinistro SIN-${s.codigo} — ${s.locatario_nome}`, html);
+  await enviar(destinos, `Pendência no sinistro SIN-${s.codigo} — ${s.locatario_nome ?? "locatário não informado"}`, html);
 }
 
 export async function emailAtualizacaoParaImobiliaria(s: SinistroEmail, destinos: string[], titulo: string, texto: string, itens: string[] = []) {
   const html = envolverEmailO2({
     badge: ETAPAS[s.etapa].tituloImobiliaria,
     titulo,
-    introducao: `Sinistro de ${escapar(s.locatario_nome)}.`,
+    introducao: `Sinistro de ${escapar(s.locatario_nome ?? "locatário não informado")}.`,
     corpoHtml: resumo(s) + paragrafo(texto) + listaHtml(itens) + botaoPill(urlSinistro(s.id), "Acompanhar no Workspace"),
     protocolo: `SIN-${s.codigo}`,
     origem: "Módulo Sinistro",
   });
-  await enviar(destinos, `${titulo} — SIN-${s.codigo} — ${s.locatario_nome}`, html);
+  await enviar(destinos, `${titulo} — SIN-${s.codigo} — ${s.locatario_nome ?? "locatário não informado"}`, html);
 }

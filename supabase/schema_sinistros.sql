@@ -253,3 +253,18 @@ revoke execute on function sinistro_pasta_acessivel(text) from anon, public;
 grant execute on function sinistro_da_imobiliaria_do_usuario(uuid) to authenticated;
 grant execute on function sinistro_editavel_pela_imobiliaria(uuid) to authenticated;
 grant execute on function sinistro_pasta_acessivel(text) to authenticated;
+
+-- 19/10/2026 (pedido do Matheus, fase de testes): abertura sem campo
+-- obrigatório — salva só o que foi preenchido. Imobiliária também pode ficar
+-- vazia (sinistro aberto pela O2 sem imobiliária ainda definida; só a O2 vê).
+alter table sinistros alter column tipo drop not null;
+alter table sinistros alter column seguradora drop not null;
+alter table sinistros alter column locador_nome drop not null;
+alter table sinistros alter column locatario_nome drop not null;
+alter table sinistros alter column imobiliaria_id drop not null;
+
+-- Agenda de próxima ação da equipe O2 (equivalente ao "Próx. Agendamento" do Corp).
+alter table sinistros add column if not exists proxima_acao_em date;
+alter table sinistros add column if not exists proxima_acao_descricao text;
+alter table sinistros add column if not exists proxima_acao_responsavel text;
+create index if not exists sinistros_proxima_acao_idx on sinistros(proxima_acao_em) where proxima_acao_em is not null;

@@ -8,6 +8,8 @@ import { botaoPrimario, inputClass, labelClass } from "./ui";
 
 export type DadosContrato = {
   id?: string;
+  imobiliaria_id?: string | null;
+  origem?: string | null;
   tipo?: string | null;
   seguradora?: string | null;
   numero_apolice?: string | null;
@@ -71,11 +73,9 @@ export default function FormContrato({
           <p className="text-sm font-semibold text-o2-navy">Abrindo em nome da imobiliária (uso da equipe O2)</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className={labelClass}>Imobiliária *</label>
-              <select name="imobiliaria_id" required className={inputClass} defaultValue="">
-                <option value="" disabled>
-                  Escolha…
-                </option>
+              <label className={labelClass}>Imobiliária</label>
+              <select name="imobiliaria_id" className={inputClass} defaultValue={d.imobiliaria_id ?? ""}>
+                <option value="">— definir depois —</option>
                 {imobiliarias.map((i) => (
                   <option key={i.id} value={i.id}>
                     {i.nome}
@@ -85,7 +85,7 @@ export default function FormContrato({
             </div>
             <div>
               <label className={labelClass}>Como o aviso chegou</label>
-              <select name="origem" className={inputClass} defaultValue="email">
+              <select name="origem" className={inputClass} defaultValue={d.origem ?? "email"}>
                 <option value="email">E-mail (sinistro@)</option>
                 <option value="workspace">Outro canal</option>
               </select>
@@ -99,7 +99,7 @@ export default function FormContrato({
         <div className="grid gap-2 sm:grid-cols-3">
           {(Object.keys(TIPOS) as TipoSinistro[]).map((t) => (
             <label key={t} className="flex cursor-pointer gap-2 rounded-xl border border-gray-200 bg-white p-3 text-sm has-[:checked]:border-o2-coral has-[:checked]:bg-orange-50">
-              <input type="radio" name="tipo" value={t} required defaultChecked={d.tipo === t} className="mt-1 accent-o2-coral" />
+              <input type="radio" name="tipo" value={t} defaultChecked={d.tipo === t} className="mt-1 accent-o2-coral" />
               <span>
                 <span className="block font-semibold text-o2-navy">{TIPOS[t].titulo}</span>
                 <span className="text-xs text-gray-500">{TIPOS[t].descricao}</span>
@@ -113,11 +113,9 @@ export default function FormContrato({
         <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Apólice</h2>
         <div className="grid gap-3 sm:grid-cols-4">
           <div className="sm:col-span-2">
-            <label className={labelClass}>Seguradora *</label>
-            <select name="seguradora" required className={inputClass} defaultValue={seguradoraConhecida ? d.seguradora ?? "" : "Outra"}>
-              <option value="" disabled>
-                Escolha…
-              </option>
+            <label className={labelClass}>Seguradora</label>
+            <select name="seguradora" className={inputClass} defaultValue={seguradoraConhecida ? d.seguradora ?? "" : "Outra"}>
+              <option value="">— não informada —</option>
               {SEGURADORAS.map((s) => (
                 <option key={s}>{s}</option>
               ))}
@@ -142,16 +140,16 @@ export default function FormContrato({
         <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Partes</h2>
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
-            <label className={labelClass}>Locador (segurado) *</label>
-            <input name="locador_nome" required defaultValue={d.locador_nome ?? ""} className={inputClass} />
+            <label className={labelClass}>Locador (segurado)</label>
+            <input name="locador_nome" defaultValue={d.locador_nome ?? ""} className={inputClass} />
           </div>
           <div>
             <label className={labelClass}>CPF/CNPJ do locador</label>
             <input name="locador_documento" defaultValue={d.locador_documento ?? ""} className={inputClass} />
           </div>
           <div>
-            <label className={labelClass}>Locatário *</label>
-            <input name="locatario_nome" required defaultValue={d.locatario_nome ?? ""} className={inputClass} />
+            <label className={labelClass}>Locatário</label>
+            <input name="locatario_nome" defaultValue={d.locatario_nome ?? ""} className={inputClass} />
           </div>
           <div>
             <label className={labelClass}>CPF/CNPJ do locatário</label>

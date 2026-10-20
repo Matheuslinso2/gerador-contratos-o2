@@ -10,6 +10,7 @@ import {
   PRAZO_PENDENCIA_DIAS,
   TEXTO_CIENCIA,
   calcularPrazoAviso,
+  formatarData,
   hojeSP,
   montarChecklist,
   somarDias,
@@ -123,17 +124,14 @@ function camposContrato(fd: FormData) {
 export async function criarRascunho(fd: FormData) {
   const { supabase, user, interno } = await contexto();
   const tipo = texto(fd, "tipo") as TipoSinistro | null;
+  // Fase de testes (19/10/2026): nenhum campo obrigatório -- salva o que vier.
   const campos = camposContrato(fd);
-  if (!tipo || !campos.seguradora || !campos.locador_nome || !campos.locatario_nome) {
-    redirect("/sinistros/novo?erro=" + encodeURIComponent("Preencha tipo, seguradora, locador e locatário."));
-  }
 
   let imobiliariaId: string | null = null;
   let origem = "workspace";
   if (interno) {
     imobiliariaId = texto(fd, "imobiliaria_id");
     origem = texto(fd, "origem") === "email" ? "email" : "workspace";
-    if (!imobiliariaId) redirect("/sinistros/novo?erro=" + encodeURIComponent("Escolha a imobiliária."));
   } else {
     const imob = await buscarImobiliariaDoUsuario(supabase, user);
     if (!imob) redirect("/imobiliaria");
@@ -142,12 +140,16 @@ export async function criarRascunho(fd: FormData) {
 
   // R3: um sinistro em andamento por contrato. Mesma apólice (ou, sem
   // apólice, mesmo locatário) dessa imobiliária leva pro que já existe.
-  const { data: abertos } = await supabase
-    .from("sinistros")
-    .select("id, numero_apolice, locatario_nome")
-    .eq("imobiliaria_id", imobiliariaId)
-    .not("etapa", "in", "(encerrado,cancelado)");
   const norm = (v: string | null | undefined) => (v ?? "").replace(/\W/g, "").toUpperCase();
+  const temChave = !!(norm(campos.numero_apolice) || norm(campos.locatario_nome));
+  const { data: abertos } =
+    imobiliariaId && temChave
+      ? await supabase
+          .from("sinistros")
+          .select("id, numero_apolice, locatario_nome")
+          .eq("imobiliaria_id", imobiliariaId)
+          .not("etapa", "in", "(encerrado,cancelado)")
+      : { data: [] as { id: string; numero_apolice: string | null; locatario_nome: string | null }[] };
   const existente = (abertos ?? []).find((a) =>
     campos.numero_apolice ? norm(a.numero_apolice) === norm(campos.numero_apolice) : norm(a.locatario_nome) === norm(campos.locatario_nome)
   );
@@ -169,14 +171,16 @@ export async function criarRascunho(fd: FormData) {
 }
 
 export async function salvarContrato(fd: FormData) {
-  const { supabase } = await contexto();
+  const { supabase, interno } = await contexto();
   const id = texto(fd, "id")!;
   const tipo = texto(fd, "tipo") as TipoSinistro | null;
   const campos = camposContrato(fd);
-  if (!tipo || !campos.seguradora || !campos.locador_nome || !campos.locatario_nome) {
-    voltar(id, 1, "Preencha tipo, seguradora, locador e locatário.");
-  }
-  const { error } = await supabase.from("sinistros").update({ ...campos, tipo }).eq("id", id);
+  // Equipe O2 pode definir/trocar a imobiliária no próprio passo 1.
+  const extra =
+    interno && fd.has("imobiliaria_id")
+      ? { imobiliaria_id: texto(fd, "imobiliaria_id"), origem: texto(fd, "origem") === "email" ? "email" : "workspace" }
+      : {};
+  const { error } = await supabase.from("sinistros").update({ ...campos, tipo, ...extra }).eq("id", id);
   if (error) voltar(id, 1, error.message);
   voltar(id, 2);
 }
@@ -188,13 +192,14 @@ export async function salvarSituacao(fd: FormData) {
   const id = texto(fd, "id")!;
   const { data: s } = await supabase.from("sinistros").select("tipo").eq("id", id).single();
   if (!s) voltar(id, 2, "Sinistro não encontrado.");
-  const tipo = s.tipo as TipoSinistro;
+  const tipo = (s.tipo ?? null) as TipoSinistro | null;
   const coberturasValidas = new Set(COBERTURAS.map((c) => c.chave));
   const coberturas = fd.getAll("coberturas").filter((c): c is string => typeof c === "string" && coberturasValidas.has(c as never));
 
   const dados = {
-    data_primeiro_vencimento: tipo === "ocupado" ? texto(fd, "data_primeiro_vencimento") : null,
-    data_segundo_vencimento: tipo === "ocupado" ? texto(fd, "data_segundo_vencimento") : null,
+    // Sem tipo escolhido, guarda as datas que vierem.
+    data_primeiro_vencimento: tipo !== "chaves_sem_danos" && tipo !== "chaves_com_danos" ? texto(fd, "data_primeiro_vencimento") : null,
+    data_segundo_vencimento: tipo !== "chaves_sem_danos" && tipo !== "chaves_com_danos" ? texto(fd, "data_segundo_vencimento") : null,
     data_entrega_chaves: tipo !== "ocupado" ? texto(fd, "data_entrega_chaves") : null,
     locatario_assinou_documentos: tipo !== "ocupado" ? bool(fd, "locatario_assinou_documentos") : null,
     pintura_vistoria_nova: coberturas.includes("pintura") ? bool(fd, "pintura_vistoria_nova") : null,
@@ -208,7 +213,7 @@ export async function salvarSituacao(fd: FormData) {
     .update({ ...dados, prazo_aviso: prazo.prazo, aviso_fora_prazo: prazo.foraDoPrazo })
     .eq("id", id);
   if (error) voltar(id, 2, error.message);
-  if (prazo.bloqueio) voltar(id, 2, prazo.bloqueio);
+  // O aviso do prazo aparece nos passos 2 e 5; não impede seguir.
   voltar(id, 3);
 }
 
@@ -217,10 +222,11 @@ export async function salvarSituacao(fd: FormData) {
 export async function salvarDebitos(id: string, debitos: Debito[]): Promise<{ ok: boolean; erro?: string }> {
   const { supabase } = await contexto();
   const linhas = debitos
-    .filter((d) => d.discriminacao && (Number(d.valor) || 0) > 0)
+    // Guarda a linha com qualquer coisa preenchida.
+    .filter((d) => (Number(d.valor) || 0) > 0 || (Number(d.multa) || 0) > 0 || (Number(d.acrescimos) || 0) > 0 || !!d.vencimento || !!d.competencia)
     .map((d, i) => ({
       sinistro_id: id,
-      discriminacao: d.discriminacao,
+      discriminacao: d.discriminacao || "Outros encargos",
       vencimento: d.vencimento || null,
       competencia: d.competencia || null,
       valor: Number(d.valor) || 0,
@@ -296,7 +302,8 @@ export async function enviarSinistro(fd: FormData) {
   const { data: docs } = await supabase.from("sinistro_documentos").select("tipo, situacao").eq("sinistro_id", id);
   const cienciaOk = ciencia || !!s.ciencia_aceita_em;
   const validacao = validarEnvio({ ...s, ...favorecido }, (debitos ?? []) as Debito[], docs ?? [], cienciaOk);
-  if (validacao.bloqueios.length) voltar(id, 5, validacao.bloqueios.join(" "));
+  // Fase de testes (19/10/2026): o envio não é barrado; o que faltar vai pro histórico.
+  const pendenciasEnvio = validacao.bloqueios;
 
   const agora = new Date().toISOString();
   const valorAvisado = totalDebitos((debitos ?? []) as Debito[]);
@@ -316,9 +323,9 @@ export async function enviarSinistro(fd: FormData) {
             enviado_em: agora,
             prazo_aviso: prazo.prazo,
             aviso_fora_prazo: prazo.foraDoPrazo,
-            ciencia_texto: TEXTO_CIENCIA.join("\n"),
-            ciencia_aceita_em: agora,
-            ciencia_aceita_por: user.email,
+            ...(ciencia
+              ? { ciencia_texto: TEXTO_CIENCIA.join("\n"), ciencia_aceita_em: agora, ciencia_aceita_por: user.email }
+              : {}),
           }
         : {}),
     })
@@ -332,7 +339,7 @@ export async function enviarSinistro(fd: FormData) {
     texto: eraRascunho
       ? `Aviso de sinistro enviado${prazo.foraDoPrazo ? " (fora do prazo)" : " dentro do prazo"}.${
           faltando.length ? ` Documentos ainda faltando: ${faltando.join("; ")}.` : ""
-        }${mensagem ? `\n\n${mensagem}` : ""}`
+        }${pendenciasEnvio.length ? ` Enviado com pendências: ${pendenciasEnvio.join(" ")}` : ""}${mensagem ? `\n\n${mensagem}` : ""}`
       : `Pendência respondida.${mensagem ? `\n\n${mensagem}` : ""}`,
     etapa_de: s.etapa,
     etapa_para: "pre_analise",
@@ -429,7 +436,6 @@ export async function marcarAbertoNaSeguradora(fd: FormData) {
   const numero = texto(fd, "numero_sinistro_seguradora");
   const data = texto(fd, "data_abertura_seguradora") ?? hojeSP();
   const docCompleta = fd.get("documentacao_completa") === "on";
-  if (!numero) voltar(id, null, "Informe o número do sinistro na seguradora.");
   const s = await carregar(supabase, id);
   if (!s) voltar(id, null, "Sinistro não encontrado.");
   await supabase
@@ -501,4 +507,35 @@ export async function cancelarSinistroO2(fd: FormData) {
   await supabase.from("sinistros").update({ etapa: "cancelado", motivo_encerramento: motivo, encerrado_em: hojeSP() }).eq("id", id);
   await registrar(supabase, id, { autor_tipo: "o2", referente: "imobiliaria", texto: `Sinistro cancelado: ${motivo}`, etapa_de: s?.etapa, etapa_para: "cancelado" });
   voltar(id, null);
+}
+
+// ---------- O2: agenda de próxima ação ----------
+
+export async function salvarProximaAcao(fd: FormData) {
+  const { supabase, user } = await exigirInterno();
+  const id = texto(fd, "id")!;
+  const voltarPara = texto(fd, "voltar");
+  const limpar = fd.get("limpar") === "1";
+  const dados = limpar
+    ? { proxima_acao_em: null, proxima_acao_descricao: null, proxima_acao_responsavel: null }
+    : {
+        proxima_acao_em: texto(fd, "proxima_acao_em"),
+        proxima_acao_descricao: texto(fd, "proxima_acao_descricao"),
+        proxima_acao_responsavel: texto(fd, "proxima_acao_responsavel") ?? user.email ?? null,
+      };
+  const { error } = await supabase.from("sinistros").update(dados).eq("id", id);
+  if (error) voltar(id, null, error.message);
+  await registrar(supabase, id, {
+    autor_tipo: "o2",
+    referente: "interno",
+    texto: limpar
+      ? "Próxima ação concluída/removida da agenda."
+      : `Próxima ação agendada${dados.proxima_acao_em ? ` para ${formatarData(dados.proxima_acao_em)}` : ""}${
+          dados.proxima_acao_descricao ? `: ${dados.proxima_acao_descricao}` : ""
+        }${dados.proxima_acao_responsavel ? ` (${dados.proxima_acao_responsavel})` : ""}.`,
+    visivel_imobiliaria: false,
+  });
+  revalidatePath("/sinistros/gestao");
+  if (voltarPara === "gestao") redirect("/sinistros/gestao?sucesso=" + encodeURIComponent("Agenda atualizada."));
+  redirect(`/sinistros/${id}?sucesso=${encodeURIComponent("Agenda atualizada.")}`);
 }

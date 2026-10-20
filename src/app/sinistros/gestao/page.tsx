@@ -11,7 +11,7 @@ import {
   ETAPAS,
   PRAZO_SEGURADORA_DIAS,
   SLA_PRE_ANALISE_DIAS_UTEIS,
-  TIPOS,
+  tituloTipo,
   calcularPrazoAviso,
   diasEntre,
   diasUteisDesde,
@@ -19,7 +19,6 @@ import {
   formatarReais,
   hojeSP,
   type EtapaSinistro,
-  type TipoSinistro,
 } from "@/lib/sinistros/regras";
 import { signOut } from "../../actions";
 import { Aviso, EtiquetaEtapa, enderecoCurto } from "../ui";
@@ -31,7 +30,7 @@ export const dynamic = "force-dynamic";
 /* eslint-disable @typescript-eslint/no-explicit-any -- linhas do Supabase sem tipos gerados */
 
 const CAMPOS =
-  "id, codigo, tipo, etapa, seguradora, numero_apolice, locatario_nome, imovel_logradouro, imovel_numero, imovel_complemento, data_primeiro_vencimento, data_segundo_vencimento, data_entrega_chaves, prazo_aviso, aviso_fora_prazo, valor_avisado, responsavel_o2, pre_analise_desde, pendencia_prazo, documentacao_completa_em, numero_sinistro_seguradora, updated_at, imobiliarias(nome, apelido)";
+  "id, codigo, tipo, etapa, seguradora, numero_apolice, locatario_nome, imovel_logradouro, imovel_numero, imovel_complemento, data_primeiro_vencimento, data_segundo_vencimento, data_entrega_chaves, prazo_aviso, aviso_fora_prazo, valor_avisado, responsavel_o2, pre_analise_desde, pendencia_prazo, documentacao_completa_em, numero_sinistro_seguradora, proxima_acao_em, proxima_acao_descricao, proxima_acao_responsavel, updated_at, imobiliarias(nome, apelido)";
 
 export default async function SinistrosPage({
   searchParams,
@@ -189,13 +188,13 @@ function ListaImobiliaria({ sinistros }: { sinistros: any[] }) {
                   <tr key={s.id} className="border-t border-gray-100 hover:bg-gray-50">
                     <td className="px-3 py-2">
                       <Link href={`/sinistros/${s.id}`} className="font-semibold text-o2-navy hover:underline">
-                        {s.locatario_nome}
+                        {s.locatario_nome || "Locatário não informado"}
                       </Link>
                       <div className="text-xs text-gray-500">
                         SIN-{s.codigo} · {enderecoCurto(s)}
                       </div>
                     </td>
-                    <td className="px-3 py-2 text-xs">{TIPOS[s.tipo as TipoSinistro].titulo}</td>
+                    <td className="px-3 py-2 text-xs">{tituloTipo(s.tipo)}</td>
                     <td className="px-3 py-2">
                       <EtiquetaEtapa etapa={s.etapa} visao="imobiliaria" />
                     </td>
@@ -256,9 +255,72 @@ function Fila({ sinistros }: { sinistros: any[] }) {
   const foraPrazo = ativos.filter((s) => s.aviso_fora_prazo).length;
   const rascunhos = sinistros.filter((s) => s.etapa === "rascunho");
   const encerrados = sinistros.filter((s) => s.etapa === "encerrado" || s.etapa === "cancelado");
+  const hoje = hojeSP();
+  // Agenda de próxima ação da equipe O2 (inclui rascunhos abertos pela O2).
+  const agenda = sinistros
+    .filter((s) => s.etapa !== "encerrado" && s.etapa !== "cancelado" && (s.proxima_acao_em || s.proxima_acao_descricao))
+    .sort((x, y) => (x.proxima_acao_em ?? "9999").localeCompare(y.proxima_acao_em ?? "9999"));
+  const acoesVencidas = agenda.filter((s) => s.proxima_acao_em && s.proxima_acao_em <= hoje).length;
+  const semAgenda = [...ativos, ...rascunhos].filter((s) => !s.proxima_acao_em && !s.proxima_acao_descricao).length;
 
   return (
     <div className="space-y-6">
+      <section className="space-y-2">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Agenda de próximas ações</h2>
+          <p className="text-xs text-gray-500">
+            <span className={acoesVencidas ? "font-semibold text-red-700" : ""}>{acoesVencidas} para hoje ou atrasada(s)</span> · {semAgenda} em andamento sem
+            próxima ação
+          </p>
+        </div>
+        {agenda.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-gray-300 bg-white p-4 text-center text-xs text-gray-500">
+            Nenhuma próxima ação agendada. Abra um sinistro e preencha o quadro &quot;Próxima ação&quot;.
+          </p>
+        ) : (
+          <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-left text-xs text-gray-500">
+                <tr>
+                  <th className="px-3 py-2">Quando</th>
+                  <th className="px-3 py-2">O que fazer</th>
+                  <th className="px-3 py-2">Sinistro</th>
+                  <th className="px-3 py-2">Etapa</th>
+                  <th className="px-3 py-2">Responsável</th>
+                </tr>
+              </thead>
+              <tbody>
+                {agenda.map((s) => {
+                  const quando: string | null = s.proxima_acao_em;
+                  const atrasada = !!quando && quando < hoje;
+                  const ehHoje = quando === hoje;
+                  return (
+                    <tr key={s.id} className={`border-t border-gray-100 ${atrasada ? "bg-red-50" : ehHoje ? "bg-orange-50" : ""}`}>
+                      <td className={`whitespace-nowrap px-3 py-2 text-xs ${atrasada ? "font-semibold text-red-700" : ehHoje ? "font-semibold text-orange-800" : "text-o2-navy"}`}>
+                        {quando ? formatarData(quando) : "sem data"}
+                        {atrasada && <span className="ml-1">({diasEntre(quando!, hoje)}d atrasada)</span>}
+                        {ehHoje && <span className="ml-1">(hoje)</span>}
+                      </td>
+                      <td className="px-3 py-2 text-xs">{s.proxima_acao_descricao || "—"}</td>
+                      <td className="px-3 py-2 text-xs">
+                        <Link href={`/sinistros/${s.id}`} className="font-semibold text-o2-navy hover:underline">
+                          {s.locatario_nome || "Locatário não informado"}
+                        </Link>
+                        <span className="text-gray-500"> · SIN-{s.codigo} · {s.imobiliarias?.apelido || s.imobiliarias?.nome || "imob. não definida"}</span>
+                      </td>
+                      <td className="px-3 py-2">
+                        <EtiquetaEtapa etapa={s.etapa} visao="o2" />
+                      </td>
+                      <td className="px-3 py-2 text-xs text-gray-600">{(s.proxima_acao_responsavel || s.responsavel_o2 || "—").split("@")[0]}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
       <div className="grid gap-3 sm:grid-cols-4">
         <Contador titulo="Pré-análise atrasada" valor={preAtrasada} perigo subtitulo={`SLA ${SLA_PRE_ANALISE_DIAS_UTEIS} dia útil`} />
         <Contador titulo="Pendência vencida" valor={pendAtrasada} perigo subtitulo="imobiliária passou dos 5 dias" />
@@ -285,13 +347,18 @@ function Fila({ sinistros }: { sinistros: any[] }) {
                       a.nivel === "vermelho" ? "border-red-600" : a.nivel === "laranja" ? "border-o2-coral" : "border-o2-blue"
                     }`}
                   >
-                    <p className="font-semibold text-o2-navy">{s.locatario_nome}</p>
+                    <p className="font-semibold text-o2-navy">{s.locatario_nome || "Locatário não informado"}</p>
                     <p className="text-gray-500">{s.imobiliarias?.apelido || s.imobiliarias?.nome}</p>
                     <p className="text-gray-500">
-                      {s.seguradora} · {TIPOS[s.tipo as TipoSinistro].titulo.split(" — ")[0]}
-                      {s.tipo !== "ocupado" ? " (chaves)" : ""}
+                      {s.seguradora || "seguradora?"} · {tituloTipo(s.tipo).split(" — ")[0]}
+                      {s.tipo && s.tipo !== "ocupado" ? " (chaves)" : ""}
                     </p>
                     {a.texto && <p className={a.nivel === "vermelho" ? "font-semibold text-red-700" : a.nivel === "laranja" ? "font-semibold text-orange-700" : "text-gray-500"}>{a.texto}</p>}
+                    {s.proxima_acao_em && (
+                      <p className={s.proxima_acao_em < hoje ? "font-semibold text-red-700" : s.proxima_acao_em === hoje ? "font-semibold text-orange-700" : "text-o2-blue"}>
+                        ▸ {formatarData(s.proxima_acao_em)} {s.proxima_acao_descricao ?? ""}
+                      </p>
+                    )}
                     <p className="text-gray-400">{s.responsavel_o2 ? s.responsavel_o2.split("@")[0] : "sem responsável"}</p>
                   </Link>
                 ))}
@@ -304,14 +371,14 @@ function Fila({ sinistros }: { sinistros: any[] }) {
 
       {rascunhos.length > 0 && (
         <details className="text-sm">
-          <summary className="cursor-pointer font-semibold text-o2-navy">Rascunhos ainda não enviados pelas imobiliárias ({rascunhos.length})</summary>
+          <summary className="cursor-pointer font-semibold text-o2-navy">Rascunhos ainda não enviados ({rascunhos.length})</summary>
           <ul className="mt-2 space-y-1">
             {rascunhos.map((s) => (
               <li key={s.id}>
                 <Link href={`/sinistros/${s.id}`} className="text-o2-blue hover:underline">
-                  {s.locatario_nome}
+                  {s.locatario_nome || "Locatário não informado"}
                 </Link>{" "}
-                · {s.imobiliarias?.apelido || s.imobiliarias?.nome} · prazo {formatarData(s.prazo_aviso)}
+                · {s.imobiliarias?.apelido || s.imobiliarias?.nome || "imob. não definida"} · prazo {formatarData(s.prazo_aviso)}
               </li>
             ))}
           </ul>
@@ -324,7 +391,7 @@ function Fila({ sinistros }: { sinistros: any[] }) {
             {encerrados.map((s) => (
               <li key={s.id}>
                 <Link href={`/sinistros/${s.id}`} className="text-o2-blue hover:underline">
-                  {s.locatario_nome}
+                  {s.locatario_nome || "Locatário não informado"}
                 </Link>{" "}
                 · {s.imobiliarias?.apelido || s.imobiliarias?.nome} · {ETAPAS[s.etapa as EtapaSinistro].titulo}
               </li>

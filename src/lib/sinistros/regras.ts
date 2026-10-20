@@ -82,12 +82,18 @@ export const COBERTURAS: { chave: Cobertura; titulo: string; soChaves?: boolean;
   { chave: "limpeza", titulo: "Limpeza (até R$ 300, residencial)", soDanos: true },
 ];
 
-export function coberturasDoTipo(tipo: TipoSinistro) {
+// Sem tipo escolhido (abertura incompleta, fase de testes) mostra todas.
+export function coberturasDoTipo(tipo: TipoSinistro | null | undefined) {
+  if (!tipo) return COBERTURAS;
   return COBERTURAS.filter((c) => {
     if (c.soDanos) return tipo === "chaves_com_danos";
     if (c.soChaves) return tipo !== "ocupado";
     return true;
   });
+}
+
+export function tituloTipo(tipo: string | null | undefined) {
+  return tipo && tipo in TIPOS ? TIPOS[tipo as TipoSinistro].titulo : "Tipo não informado";
 }
 
 export const DISCRIMINACOES = COBERTURAS.map((c) => c.titulo).concat(["Outros encargos"]);
@@ -148,13 +154,16 @@ export type ResultadoPrazo = {
 
 export function calcularPrazoAviso(
   s: {
-    tipo: TipoSinistro;
+    tipo: TipoSinistro | null;
     data_primeiro_vencimento?: string | null;
     data_segundo_vencimento?: string | null;
     data_entrega_chaves?: string | null;
   },
   hoje = hojeSP()
 ): ResultadoPrazo {
+  if (!s.tipo) {
+    return { prazo: null, diasRestantes: null, foraDoPrazo: false, bloqueio: "Escolha o tipo do sinistro (passo 1) para calcular o prazo de aviso.", explicacao: "" };
+  }
   if (s.tipo === "ocupado") {
     if (!s.data_primeiro_vencimento || !s.data_segundo_vencimento) {
       return { prazo: null, diasRestantes: null, foraDoPrazo: false, bloqueio: "Informe o 1º e o 2º vencimento em aberto.", explicacao: "" };
@@ -209,7 +218,7 @@ export type ItemChecklist = {
 };
 
 export type DadosChecklist = {
-  tipo: TipoSinistro;
+  tipo: TipoSinistro | null;
   coberturas: string[];
   locatario_assinou_documentos?: boolean | null;
   favorecido_eh_segurado?: boolean | null;
@@ -217,7 +226,8 @@ export type DadosChecklist = {
 
 export function montarChecklist(s: DadosChecklist): ItemChecklist[] {
   const tem = (c: Cobertura) => s.coberturas.includes(c);
-  const chaves = s.tipo !== "ocupado";
+  const chaves = s.tipo === "chaves_sem_danos" || s.tipo === "chaves_com_danos";
+  const ocupado = s.tipo === "ocupado";
   const danos = s.tipo === "chaves_com_danos";
   const itens: ItemChecklist[] = [
     { chave: "contrato_locacao", titulo: "Contrato de locação assinado", obrigatorio: true },
@@ -244,7 +254,7 @@ export function montarChecklist(s: DadosChecklist): ItemChecklist[] {
   if (tem("iptu")) itens.push({ chave: "iptu", titulo: "Guia / espelho do IPTU com as parcelas", obrigatorio: true });
   if (tem("agua") || tem("luz") || tem("gas"))
     itens.push({ chave: "contas_consumo", titulo: "Contas de consumo em aberto (água, luz, gás)", obrigatorio: true });
-  if (!chaves)
+  if (ocupado)
     itens.push({
       chave: "procuracao_ad_judicia",
       titulo: "Procuração Ad Judicia",
