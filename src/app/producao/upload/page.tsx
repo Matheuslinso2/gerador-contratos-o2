@@ -28,10 +28,10 @@ export default async function UploadProducaoPage({
       <main className="mx-auto max-w-2xl flex-1 space-y-6 p-8">
         <div className="space-y-2">
           <Link
-            href="/producao"
+            href="/producao/relatorios"
             className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-o2-navy hover:underline"
           >
-            ← Voltar para Produção
+            ← Voltar para a grade do Corp
           </Link>
           <div>
             <h1 className="text-xl font-semibold text-o2-navy">Carregar grade de produção</h1>

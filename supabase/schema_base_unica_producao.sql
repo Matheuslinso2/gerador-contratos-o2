@@ -170,3 +170,12 @@ revoke all on table locatarios from anon, authenticated;
 -- cruzamento por documento e por nome único).
 alter table locatarios add column if not exists codigo_corp_cliente text;
 alter table locatarios add column if not exists dados_extras jsonb not null default '{}'::jsonb;
+
+-- 2026-10-20 (Fase 4): cotações do Bitrix entram 1 card = 1 linha, atualizadas
+-- de hora em hora pelo cron /api/cron/base-unica-bitrix (upsert pelo ID do card).
+-- A fonte viva fica registrada em base_unica_planilhas_congeladas como
+-- arquivo_id 'bitrix:spa-1042' (pasta 'Bitrix'), para a importação ter origem.
+create unique index if not exists producao_unificada_bitrix_uidx on producao_unificada (fonte, produto, origem_bitrix_id);
+insert into base_unica_planilhas_congeladas (arquivo_id, nome, pasta, mime_type)
+values ('bitrix:spa-1042', 'Bitrix — SPA Seguro Fiança (fonte viva, sincronizada)', 'Bitrix', 'application/x-bitrix-spa')
+on conflict (arquivo_id) do nothing;

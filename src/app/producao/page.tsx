@@ -1,589 +1,856 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import type { ReactNode } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
-import { signOut } from "../actions";
+import { pediuAtualizacao } from "@/lib/retratoPaineis";
 import AppHeader from "@/components/AppHeader";
 import PageHeader from "@/components/PageHeader";
+import AtualizarAgora from "@/components/AtualizarAgora";
+import InfoLegenda from "@/components/InfoLegenda";
 import { IconChart } from "@/components/icons";
-import { RAMOS_PRODUCAO, rotuloRamo } from "@/lib/producaoRamos";
+import BarrasMensais from "./BarrasMensais";
+import { signOut } from "../actions";
+import FiltrosProducao, { type Filtros, type OpcaoImob } from "./FiltrosProducao";
 
 export const dynamic = "force-dynamic";
 
-const MESES_PT = [
-  "jan", "fev", "mar", "abr", "mai", "jun",
-  "jul", "ago", "set", "out", "nov", "dez",
+// Painel Produção (Base Única — Fase 5). Dois universos que se conectam mas
+// têm fontes diferentes (Matheus, 20/10/2026), cada um no seu bloco:
+//  - COTAÇÕES (funil): tomadas de preço — análise → aprovação/recusa →
+//    negociação → conversão ou negativação. Planilhas de análise até
+//    jul/2026 e SPA do Bitrix a partir de ago/2026, com os MESMOS KPIs ("quando
+//    a fonte muda, só a fonte muda"): entradas pelo mês em que a cotação
+//    entrou; aprovação/recusa/negativação/conversão pelo mês em que aconteceu
+//    (regra do painel /seguro-fianca). Bitrix lido de hora em hora pelo cron
+//    /api/cron/base-unica-bitrix.
+//  - APÓLICES (Corp): o que foi efetivado — propostas, prêmio líquido,
+//    comissão —, pelo mês da data da proposta.
+// O filtro de período e de imobiliária/grupo recorta os dois blocos; o de
+// seguradora só as apólices. Números: supabase/schema_producao_painel.sql
+// (imobiliária só por vínculo CONFIRMADO). Grade antiga: /producao/relatorios.
+
+type Valores = { propostas: number; premio: number; comissao: number };
+type Eventos = { entradas: number; aprovacoes: number; recusas: number; perdas: number; conversoes: number };
+type Entidade = { id: string; nome: string | null; tipo: "grupo" | "imobiliaria" };
+type Kpis = {
+  de: string;
+  ate: string;
+  meses: number;
+  resumo: Valores & { entidades_ativas: number };
+  resumo_ano_anterior: Valores & { entidades_ativas: number; de: string; ate: string };
+  por_produto: (Valores & { produto: string; premio_ano_anterior: number; propostas_ano_anterior: number })[];
+  mensal: { competencia: string; produtos: Record<string, Valores> }[];
+  por_seguradora: (Valores & { seguradora: string; produtos: Record<string, number> })[];
+  por_ramo_re: (Valores & { ramo: string })[];
+  por_canal: (Valores & { canal: string })[];
+  por_susep: { susep: string; propostas: number; premio: number }[];
+  por_entidade: (Valores & Entidade & { premio_ano_anterior: number })[];
+  funil: Eventos & { premio_convertido: number; identificados: number; etapa_atual_das_entradas: Record<string, number> };
+  funil_ano_anterior: Eventos;
+  funil_mensal: { competencia: string; eventos: Partial<Record<"entrada" | "aprovacao" | "recusa" | "perda" | "conversao", number>> }[];
+  funil_por_entidade: (Eventos & Entidade & { premio_convertido: number })[];
+  funil_meses_com_planilha: string[];
+  atualizado_em: string | null;
+};
+type Fontes = { bitrix: string | null; corp: string | null };
+
+const PRODUTOS: Record<string, { rotulo: string; cor: string }> = {
+  capitalizacao: { rotulo: "Capitalização", cor: "#2E6FB7" },
+  fianca: { rotulo: "Seguro Fiança", cor: "#F8540D" },
+  re: { rotulo: "Ramos Elementares", cor: "#01192e" },
+  automovel: { rotulo: "Automóvel", cor: "#9CA3AF" },
+};
+const ORDEM_PRODUTOS = ["capitalizacao", "fianca", "re", "automovel"];
+const SEGURADORAS = [
+  "Tokio Marine", "Porto", "Pottencial", "Yelum (ex-Liberty)", "Brasilcap", "Icatu", "SulAmérica", "Bradesco", "Alfa", "Too",
+  "Allianz", "Cardif", "Mapfre", "Zurich", "Suhai", "Azul", "HDI", "Sompo", "Outras",
 ];
-
-function formatarCompetencia(competencia: string): string {
-  const [ano, mes] = competencia.split("-");
-  const nomeMes = MESES_PT[Number(mes) - 1];
-  return nomeMes ? `${nomeMes}/${ano}` : competencia;
-}
-
-function fmtMoeda(v: number): string {
-  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
-
-function fmtNumero(v: number): string {
-  return v.toLocaleString("pt-BR");
-}
-
-type LinhaMensal = { ramo: string; competencia: string; tipo: string; quantidade: number; premio_total: number; comissao_corretora: number };
-type LinhaSeguradora = { seguradora: string; ramo: string; quantidade: number; premio_total: number; comissao_corretora: number };
-type LinhaBairro = {
-  ramo: string;
-  bairro: string;
-  cidade: string | null;
-  uf: string | null;
-  quantidade: number;
-  premio_total: number;
-  comissao_soma: number;
-  aluguel_soma: number;
-  aluguel_quantidade: number;
+const CANAIS: Record<string, { rotulo: string; legenda: string }> = {
+  imobiliaria: { rotulo: "Imobiliária identificada", legenda: "produtor do Corp ligado (confirmado) a uma ficha do cadastro" },
+  nao_identificado: { rotulo: "Imobiliária ainda não confirmada", legenda: "produtor do Corp sem vínculo confirmado — confirme em Imobiliárias cadastradas" },
+  venda_direta: { rotulo: "Venda direta O2", legenda: "produtor principal é a própria O2 Corretora" },
+  so_canal: { rotulo: "Só canal (Segimob, Base, Superlógica…)", legenda: "proposta sem imobiliária, só com canal ou marcador do Corp" },
+  automovel: { rotulo: "Automóvel", legenda: "Automóvel não tem vínculo com imobiliária (entra só no macro)" },
 };
-type LinhaClientesRamo = { ramo: string; clientes_distintos: number };
-type LinhaCruzamento = { ramo_a: string; ramo_b: string; clientes_em_comum: number };
-type LinhaCrossSell = { total_clientes_imobiliario: number; clientes_imobiliario_com_auto: number };
-type LinhaDispersao = {
-  ramo: string;
-  quantidade: number;
-  media: number;
-  mediana: number;
-  desvio_padrao: number;
-  minimo: number;
-  maximo: number;
-  q1: number;
-  q3: number;
-  coeficiente_variacao: number;
-};
+const COR_ENTRADA = "#2E6FB7";
+const DESFECHOS = [
+  { chave: "conversao", rotulo: "Convertidas", cor: "#2E6FB7" },
+  { chave: "perda", rotulo: "Negativadas", cor: "#F8540D" },
+  { chave: "recusa", rotulo: "Recusadas", cor: "#01192e" },
+] as const;
+// Cotações de Seguro Fiança: planilhas de análise jul/2020 → jul/2026, Bitrix
+// de ago/2026 em diante. Meses sem planilha confirmados pelo Matheus em
+// 19/10/2026 (não existem no Drive) ou ainda não importáveis.
+const MESES_INEXISTENTES = new Set(["2020-06", "2021-07", "2023-08", "2025-10"]);
+const MESES_SEM_STATUS_GERAL = new Set(["2024-03", "2024-12"]);
+const INICIO_FUNIL = "2020-07";
+const INICIO_BITRIX_FIANCA = "2026-08";
 
-const TAMANHO_PAGINA = 1000;
+const MESES_PT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+const rotuloMes = (m: string) => `${MESES_PT[Number(m.slice(5, 7)) - 1]}/${m.slice(0, 4)}`;
+const num = (v: number) => Math.round(v).toLocaleString("pt-BR");
+const reais = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+const compacto = (v: number) =>
+  Math.abs(v) >= 1_000_000
+    ? `R$ ${(v / 1_000_000).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} mi`
+    : `R$ ${Math.round(v / 1000).toLocaleString("pt-BR")} mil`;
+const pct = (a: number, b: number, casas = 1) => (b ? `${((100 * a) / b).toLocaleString("pt-BR", { maximumFractionDigits: casas })}%` : "—");
+const dataHora = (iso: string) => new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" });
 
-// O Supabase devolve no máximo 1000 linhas por consulta sem paginação
-// explícita -- as tabelas-resumo são pequenas hoje, mas "por bairro" pode
-// crescer bastante conforme mais relatórios de endereço forem entrando.
-async function buscarTudo<T>(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  tabela: string,
-  colunas: string
-): Promise<T[]> {
-  const linhas: T[] = [];
-  let inicio = 0;
-  for (;;) {
-    const { data } = await supabase.from(tabela).select(colunas).range(inicio, inicio + TAMANHO_PAGINA - 1);
-    linhas.push(...((data ?? []) as T[]));
-    if (!data || data.length < TAMANHO_PAGINA) break;
-    inicio += TAMANHO_PAGINA;
-  }
-  return linhas;
+function somarMeses(mes: string, n: number) {
+  const [a, m] = mes.split("-").map(Number);
+  const t = a * 12 + (m - 1) + n;
+  return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, "0")}`;
+}
+function listaMeses(de: string, ate: string) {
+  const r: string[] = [];
+  for (let m = de; m <= ate; m = somarMeses(m, 1)) r.push(m);
+  return r;
+}
+const mesValido = (v: string | undefined) => (v && /^\d{4}-(0[1-9]|1[0-2])$/.test(v) ? v : null);
+const lista = (v: string | undefined) => (v ? v.split(",").map((x) => x.trim()).filter(Boolean) : []);
+const uuid = (v: string) => /^[0-9a-f-]{36}$/i.test(v);
+
+type Variacao = { texto: string; cls: string } | null;
+function variacao(atual: number, anterior: number): Variacao {
+  if (!anterior) return null;
+  const v = (atual / anterior - 1) * 100;
+  const t = `${v >= 0 ? "+" : "−"}${Math.abs(v).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
+  if (Math.abs(v) < 2) return { texto: t, cls: "bg-gray-100 text-gray-600" };
+  return { texto: t, cls: v > 0 ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700" };
+}
+// Diferença de taxa em pontos percentuais (ex.: conversão 22% → 24% = +2 p.p.).
+function variacaoPp(atual: number, anterior: number): Variacao {
+  const d = (atual - anterior) * 100;
+  return { texto: `${d >= 0 ? "+" : "−"}${Math.abs(d).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} p.p.`, cls: d >= 0 ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700" };
 }
 
 export default async function ProducaoPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ramo?: string }>;
+  searchParams: Promise<{ de?: string; ate?: string; p?: string; s?: string; g?: string; i?: string; atualizar?: string; todas?: string; todasc?: string }>;
 }) {
-  const { ramo: ramoParam } = await searchParams;
-  const ramoSelecionado = ramoParam && RAMOS_PRODUCAO.some((r) => r.valor === ramoParam) ? ramoParam : "";
-
+  const sp = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!isAdmin(user?.email) && !isColaboradorO2(user?.email)) redirect("/");
+  if (!user) redirect("/login");
+  if (!isAdmin(user.email) && !isColaboradorO2(user.email)) redirect("/");
 
-  const [mensal, seguradoras, bairros, clientesRamo, cruzamento, crossSellLinhas, dispersao] = await Promise.all([
-    buscarTudo<LinhaMensal>(supabase, "producao_resumo_mensal", "ramo, competencia, tipo, quantidade, premio_total, comissao_corretora"),
-    buscarTudo<LinhaSeguradora>(supabase, "producao_resumo_seguradora", "seguradora, ramo, quantidade, premio_total, comissao_corretora"),
-    buscarTudo<LinhaBairro>(
-      supabase,
-      "producao_resumo_bairro",
-      "ramo, bairro, cidade, uf, quantidade, premio_total, comissao_soma, aluguel_soma, aluguel_quantidade"
-    ),
-    buscarTudo<LinhaClientesRamo>(supabase, "producao_resumo_clientes_ramo", "ramo, clientes_distintos"),
-    buscarTudo<LinhaCruzamento>(supabase, "producao_resumo_cruzamento", "ramo_a, ramo_b, clientes_em_comum"),
-    buscarTudo<LinhaCrossSell>(supabase, "producao_resumo_cross_sell", "total_clientes_imobiliario, clientes_imobiliario_com_auto"),
-    buscarTudo<LinhaDispersao>(
-      supabase,
-      "producao_resumo_dispersao",
-      "ramo, quantidade, media, mediana, desvio_padrao, minimo, maximo, q1, q3, coeficiente_variacao"
-    ),
+  const mesAtual = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }).slice(0, 7);
+  const ultimoFechado = somarMeses(mesAtual, -1);
+  let de = mesValido(sp.de) ?? somarMeses(ultimoFechado, -11);
+  let ate = mesValido(sp.ate) ?? ultimoFechado;
+  if (de < "2015-01") de = "2015-01";
+  if (ate > mesAtual) ate = mesAtual;
+  if (de > ate) [de, ate] = [ate, de];
+  const filtros: Filtros = {
+    de,
+    ate,
+    produtos: lista(sp.p).filter((p) => p in PRODUTOS),
+    seguradoras: lista(sp.s).filter((s) => SEGURADORAS.includes(s)),
+    grupos: lista(sp.g).filter(uuid),
+    imobs: lista(sp.i).filter(uuid),
+  };
+  const filtroImob = filtros.grupos.length + filtros.imobs.length > 0;
+
+  // Resumo remontado só quando houve vínculo/grupo/importação nova (ou no botão).
+  const { error: erroAtualizar } = await supabase.rpc("atualizar_producao_painel", { p_forcar: pediuAtualizacao(sp.atualizar) });
+  const [{ data: kpisData, error: erroKpis }, { data: opcoesData }, { data: imports }] = await Promise.all([
+    supabase.rpc("kpis_producao", {
+      p_de: de,
+      p_ate: ate,
+      p_produtos: filtros.produtos.length ? filtros.produtos : null,
+      p_grupos: filtros.grupos.length ? filtros.grupos : null,
+      p_imobs: filtros.imobs.length ? filtros.imobs : null,
+      p_seguradoras: filtros.seguradoras.length ? filtros.seguradoras : null,
+    }),
+    supabase.rpc("opcoes_filtro_producao"),
+    supabase.from("base_unica_importacoes").select("layout, importado_em").in("layout", ["bitrix_spa", "corp_relatorio_propostas"]),
   ]);
-  const crossSell = crossSellLinhas[0] ?? null;
-  const dispersaoOrdenada = [...dispersao].sort((a, b) => b.coeficiente_variacao - a.coeficiente_variacao);
-
-  const semDadoNenhum = !mensal.length && !seguradoras.length;
-
-  // Contagem por ramo (pra badge nas abas) -- soma direto do resumo mensal,
-  // tabela pequena, não é reprocessar a base bruta.
-  const quantidadePorRamo = new Map<string, number>();
-  for (const l of mensal) quantidadePorRamo.set(l.ramo, (quantidadePorRamo.get(l.ramo) ?? 0) + l.quantidade);
-
-  const mensalFiltrado = ramoSelecionado ? mensal.filter((l) => l.ramo === ramoSelecionado) : mensal;
-  const seguradorasFiltrado = ramoSelecionado ? seguradoras.filter((l) => l.ramo === ramoSelecionado) : seguradoras;
-
-  // --- Cards do topo ---
-  const totalApolices = mensalFiltrado.reduce((s, l) => s + l.quantidade, 0);
-  const totalPremio = mensalFiltrado.reduce((s, l) => s + l.premio_total, 0);
-  const totalComissao = mensalFiltrado.reduce((s, l) => s + l.comissao_corretora, 0);
-
-  // --- Evolução mensal (soma NOVO+RENV por competência) ---
-  const porCompetencia = new Map<string, { quantidade: number; premio_total: number; comissao_corretora: number }>();
-  for (const l of mensalFiltrado) {
-    const atual = porCompetencia.get(l.competencia) ?? { quantidade: 0, premio_total: 0, comissao_corretora: 0 };
-    atual.quantidade += l.quantidade;
-    atual.premio_total += l.premio_total;
-    atual.comissao_corretora += l.comissao_corretora;
-    porCompetencia.set(l.competencia, atual);
-  }
-  const evolucaoMensal = Array.from(porCompetencia.entries())
-    .map(([competencia, v]) => ({
-      competencia,
-      quantidade: v.quantidade,
-      ticket_medio_premio: v.quantidade ? v.premio_total / v.quantidade : 0,
-      ticket_medio_comissao: v.quantidade ? v.comissao_corretora / v.quantidade : 0,
-    }))
-    .sort((a, b) => a.competencia.localeCompare(b.competencia))
-    .slice(-18); // últimos 18 meses, senão fica ilegível
-
-  // --- Painel secundário: ticket médio por ramo (visão "Todos") ou
-  // Novo x Renovação do ramo selecionado -- comparação de mercado, não de
-  // produtor/imobiliária (isso já é acompanhado no Power BI/ERP).
-  const porRamo = new Map<string, { quantidade: number; premio_total: number }>();
-  for (const l of mensal) {
-    const atual = porRamo.get(l.ramo) ?? { quantidade: 0, premio_total: 0 };
-    atual.quantidade += l.quantidade;
-    atual.premio_total += l.premio_total;
-    porRamo.set(l.ramo, atual);
-  }
-  const ticketPorRamo = Array.from(porRamo.entries())
-    .map(([ramo, v]) => ({ ramo, ticket_medio: v.quantidade ? v.premio_total / v.quantidade : 0, quantidade: v.quantidade }))
-    .sort((a, b) => b.ticket_medio - a.ticket_medio);
-  const maiorTicketRamo = Math.max(1, ...ticketPorRamo.map((r) => r.ticket_medio));
-
-  // --- Cross-sell: taxa de anexação com Automóvel + cesta de produtos ---
-  const attachRateAuto = crossSell && crossSell.total_clientes_imobiliario
-    ? (crossSell.clientes_imobiliario_com_auto / crossSell.total_clientes_imobiliario) * 100
-    : null;
-  const cestaProdutos = cruzamento
-    .filter((c) => c.clientes_em_comum > 0)
-    .sort((a, b) => b.clientes_em_comum - a.clientes_em_comum)
-    .slice(0, 8);
-  const maiorCruzamento = Math.max(1, ...cestaProdutos.map((c) => c.clientes_em_comum));
-
-  // --- Mix por seguradora (agrega ramos se "Todos") -- ticket médio de
-  // prêmio e de comissão, não mais o total absoluto. ---
-  const porSeguradora = new Map<string, { quantidade: number; premio_total: number; comissao_corretora: number }>();
-  for (const l of seguradorasFiltrado) {
-    const atual = porSeguradora.get(l.seguradora) ?? { quantidade: 0, premio_total: 0, comissao_corretora: 0 };
-    atual.quantidade += l.quantidade;
-    atual.premio_total += l.premio_total;
-    atual.comissao_corretora += l.comissao_corretora;
-    porSeguradora.set(l.seguradora, atual);
-  }
-  const mixSeguradoras = Array.from(porSeguradora.entries())
-    .map(([seguradora, v]) => ({
-      seguradora,
-      quantidade: v.quantidade,
-      ticket_medio_premio: v.quantidade ? v.premio_total / v.quantidade : 0,
-      ticket_medio_comissao: v.quantidade ? v.comissao_corretora / v.quantidade : 0,
-    }))
-    .sort((a, b) => b.ticket_medio_premio - a.ticket_medio_premio);
-  const maiorTicketSeguradora = Math.max(1, ...mixSeguradoras.map((s) => s.ticket_medio_premio));
-
-  // --- Por bairro (mercado) -- top bairros por volume + ticket médio de
-  // prêmio, comissão e aluguel onde existir. ---
-  const bairrosFiltrado = ramoSelecionado ? bairros.filter((b) => b.ramo === ramoSelecionado) : bairros;
-  const porBairro = new Map<
-    string,
-    { bairro: string; cidade: string | null; uf: string | null; quantidade: number; premio_total: number; comissao_soma: number; aluguel_soma: number; aluguel_quantidade: number }
-  >();
-  for (const b of bairrosFiltrado) {
-    const chave = `${b.bairro}|${b.cidade ?? ""}`;
-    const atual =
-      porBairro.get(chave) ?? { bairro: b.bairro, cidade: b.cidade, uf: b.uf, quantidade: 0, premio_total: 0, comissao_soma: 0, aluguel_soma: 0, aluguel_quantidade: 0 };
-    atual.quantidade += b.quantidade;
-    atual.premio_total += b.premio_total;
-    atual.comissao_soma += b.comissao_soma;
-    atual.aluguel_soma += b.aluguel_soma;
-    atual.aluguel_quantidade += b.aluguel_quantidade;
-    porBairro.set(chave, atual);
-  }
-  const rankingBairros = Array.from(porBairro.values())
-    .map((b) => ({
-      ...b,
-      ticket_medio_premio: b.quantidade ? b.premio_total / b.quantidade : 0,
-      ticket_medio_comissao: b.quantidade ? b.comissao_soma / b.quantidade : 0,
-      ticket_aluguel: b.aluguel_quantidade ? b.aluguel_soma / b.aluguel_quantidade : null,
-    }))
-    .sort((a, b) => b.quantidade - a.quantidade)
-    .slice(0, 20);
-  const maiorQuantidadeBairro = Math.max(1, ...rankingBairros.map((b) => b.quantidade));
-
-  // --- Concentração 80/20 (Pareto): quantos bairros concentram 80% do
-  // prêmio mapeado -- mesma lista de bairros acima, só ordenada por prêmio
-  // em vez de quantidade e com acumulado, nenhum dado novo é lido. ---
-  const totalBairrosDistintos = porBairro.size;
-  const totalPremioBairros = Array.from(porBairro.values()).reduce((s, b) => s + b.premio_total, 0);
-  const bairrosPorPremio = Array.from(porBairro.values()).sort((a, b) => b.premio_total - a.premio_total);
-  let paretoAcumulado = 0;
-  let paretoContagem = 0;
-  const metaPareto = totalPremioBairros * 0.8;
-  for (const b of bairrosPorPremio) {
-    paretoAcumulado += b.premio_total;
-    paretoContagem++;
-    if (paretoAcumulado >= metaPareto) break;
-  }
-  const paretoPercentualBairros = totalBairrosDistintos ? (paretoContagem / totalBairrosDistintos) * 100 : 0;
+  const kpis = kpisData as Kpis | null;
+  const opcoes = (opcoesData ?? []) as OpcaoImob[];
+  const nomesSelecionados = opcoes.filter((o) => (o.tipo === "grupo" ? filtros.grupos : filtros.imobs).includes(o.id)).map((o) => o.nome);
+  const ultima = (layout: string) =>
+    (imports ?? [])
+      .filter((r) => r.layout === layout)
+      .map((r) => r.importado_em as string)
+      .sort()
+      .at(-1) ?? null;
+  const fontes: Fontes = { bitrix: ultima("bitrix_spa"), corp: ultima("corp_relatorio_propostas") };
 
   return (
     <>
-      <AppHeader userEmail={user?.email} logoutAction={signOut} />
-      <main className="mx-auto max-w-[1400px] flex-1 space-y-6 p-8">
+      <AppHeader userEmail={user.email} logoutAction={signOut} />
+      <main className="mx-auto max-w-7xl flex-1 space-y-6 p-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <PageHeader
             icon={<IconChart />}
             titulo="Produção"
-            subtitulo="Estatísticas de mercado — prêmio, comissão e ticket médio por produto e período."
+            subtitulo={`${rotuloMes(de)} a ${rotuloMes(ate)}${filtroImob ? ` · só ${nomesSelecionados.join(", ") || "imobiliárias selecionadas"}` : " · visão macro"}`}
           />
-          <Link
-            href="/producao/upload"
-            className="whitespace-nowrap rounded-full bg-o2-coral px-4 py-1.5 text-sm font-medium text-white transition hover:opacity-90"
-          >
-            Carregar grade
-          </Link>
+          <div className="flex items-center gap-3 text-xs text-gray-500">
+            {kpis?.atualizado_em && <span>resumo de {dataHora(kpis.atualizado_em)}</span>}
+            <AtualizarAgora />
+            <Link href="/producao/relatorios" className="text-o2-blue underline">
+              Grade do Corp (relatórios antigos)
+            </Link>
+          </div>
         </div>
 
-        {semDadoNenhum ? (
-          <div className="rounded-xl border border-o2-navy/10 bg-quadro p-8 text-center shadow-sm">
-            <p className="text-sm text-gray-500">
-              Nenhuma grade de produção carregada ainda.{" "}
-              <Link href="/producao/upload" className="font-medium text-o2-navy hover:underline">
-                Carregar a primeira
-              </Link>
-              .
-            </p>
-          </div>
-        ) : (
+        {/* key: remonta a barra quando o recorte muda por link (ex.: clique numa imobiliária da tabela). */}
+        <FiltrosProducao key={JSON.stringify(filtros)} filtros={filtros} mesAtual={mesAtual} opcoesImob={opcoes} seguradoras={SEGURADORAS} />
+
+        {(erroKpis || erroAtualizar) && (
+          <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">Não foi possível calcular agora ({(erroKpis ?? erroAtualizar)?.message}).</p>
+        )}
+        {kpis && filtroImob && (
+          <p className="rounded-lg border border-o2-coral/30 bg-o2-coral/5 p-3 text-sm text-o2-navy">
+            Os dois blocos abaixo mostram só as imobiliárias selecionadas (grupo = soma de todas as fichas do grupo). Automóvel não entra, porque não tem vínculo com
+            imobiliária. Só conta o que já tem vínculo <b>confirmado</b> no cadastro.
+          </p>
+        )}
+        {kpis && (
           <>
-            <div className="flex flex-wrap gap-1.5 rounded-full bg-o2-gray/60 p-1.5">
-              <Link
-                href="/producao"
-                className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition ${
-                  !ramoSelecionado ? "bg-o2-navy text-white shadow-sm" : "text-gray-600 hover:bg-white/70 hover:text-o2-navy"
-                }`}
-              >
-                Todos
-              </Link>
-              {RAMOS_PRODUCAO.map((r) => (
-                <Link
-                  key={r.valor}
-                  href={`/producao?ramo=${r.valor}`}
-                  className={`flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-medium transition ${
-                    ramoSelecionado === r.valor
-                      ? "bg-o2-navy text-white shadow-sm"
-                      : "text-gray-600 hover:bg-white/70 hover:text-o2-navy"
-                  }`}
-                >
-                  {r.rotulo}
-                  {quantidadePorRamo.get(r.valor) ? (
-                    <span
-                      className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none ${
-                        ramoSelecionado === r.valor ? "bg-o2-coral text-white" : "bg-o2-navy/10 text-o2-navy"
-                      }`}
-                    >
-                      {fmtNumero(quantidadePorRamo.get(r.valor)!)}
-                    </span>
-                  ) : null}
-                </Link>
-              ))}
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div className="rounded-xl border border-o2-navy/10 bg-quadro p-4 shadow-sm">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Apólices</p>
-                <p className="mt-1 text-2xl font-bold text-o2-navy">{fmtNumero(totalApolices)}</p>
-              </div>
-              <div className="rounded-xl border border-o2-navy/10 bg-quadro p-4 shadow-sm">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Ticket médio do prêmio</p>
-                <p className="mt-1 text-2xl font-bold text-o2-navy">
-                  {totalApolices ? fmtMoeda(totalPremio / totalApolices) : "—"}
-                </p>
-              </div>
-              <div className="rounded-xl border border-o2-navy/10 bg-quadro p-4 shadow-sm">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Ticket médio da comissão</p>
-                <p className="mt-1 text-2xl font-bold text-o2-navy">
-                  {totalApolices ? fmtMoeda(totalComissao / totalApolices) : "—"}
-                </p>
-              </div>
-            </div>
-
-            <section className="rounded-xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
-              <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-400">
-                Evolução mensal {ramoSelecionado ? `— ${rotuloRamo(ramoSelecionado)}` : ""}
-              </h2>
-              {evolucaoMensal.length ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-100 text-xs text-gray-500">
-                        <th className="px-2 py-1.5 font-medium">Competência</th>
-                        <th className="px-2 py-1.5 font-medium">Apólices</th>
-                        <th className="px-2 py-1.5 font-medium">Ticket médio do prêmio</th>
-                        <th className="px-2 py-1.5 font-medium">Ticket médio da comissão</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {evolucaoMensal.map((m) => (
-                        <tr key={m.competencia} className="border-b border-gray-50 last:border-0">
-                          <td className="px-2 py-2 text-gray-800">{formatarCompetencia(m.competencia)}</td>
-                          <td className="px-2 py-2 text-gray-800">{fmtNumero(m.quantidade)}</td>
-                          <td className="px-2 py-2 text-gray-800">{fmtMoeda(m.ticket_medio_premio)}</td>
-                          <td className="px-2 py-2 text-gray-800">{fmtMoeda(m.ticket_medio_comissao)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <p className="text-sm text-gray-500">Sem competência identificada nessas linhas.</p>
-              )}
-            </section>
-
-            {!ramoSelecionado && (attachRateAuto !== null || cestaProdutos.length > 0) ? (
-              <section className="rounded-xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
-                <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-gray-400">Cross-sell</h2>
-                <p className="mb-4 text-xs text-gray-500">
-                  Cruzamento por CPF/CNPJ do cliente entre ramos — só números agregados, sem nomes.
-                </p>
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                  <div className="rounded-lg bg-o2-navy/5 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                      Taxa de anexação com Automóvel
-                    </p>
-                    {attachRateAuto !== null ? (
-                      <>
-                        <p className="mt-1 text-2xl font-bold text-o2-navy">{attachRateAuto.toFixed(1)}%</p>
-                        <p className="mt-0.5 text-xs text-gray-500">
-                          {fmtNumero(crossSell!.clientes_imobiliario_com_auto)} de {fmtNumero(crossSell!.total_clientes_imobiliario)}{" "}
-                          clientes com produto imobiliário também têm Automóvel conosco.
-                        </p>
-                      </>
-                    ) : (
-                      <p className="mt-1 text-sm text-gray-500">Sem dados.</p>
-                    )}
-                  </div>
-                  <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
-                      Produtos que mais aparecem juntos (mesmo cliente)
-                    </p>
-                    {cestaProdutos.length ? (
-                      <div className="space-y-2">
-                        {cestaProdutos.map((c) => (
-                          <div key={`${c.ramo_a}-${c.ramo_b}`} className="text-sm">
-                            <div className="mb-1 flex items-center justify-between gap-2">
-                              <span className="truncate text-gray-800">
-                                {rotuloRamo(c.ramo_a)} + {rotuloRamo(c.ramo_b)}
-                              </span>
-                              <span className="whitespace-nowrap text-xs font-medium text-o2-navy">{fmtNumero(c.clientes_em_comum)}</span>
-                            </div>
-                            <div className="h-1.5 overflow-hidden rounded-full bg-o2-gray/50">
-                              <div
-                                className="h-full rounded-full bg-o2-indigo"
-                                style={{ width: `${Math.max(4, (c.clientes_em_comum / maiorCruzamento) * 100)}%` }}
-                              />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-gray-500">Nenhum cliente com mais de 1 produto ainda.</p>
-                    )}
-                  </div>
-                </div>
-              </section>
-            ) : null}
-
-            {!ramoSelecionado && dispersaoOrdenada.length ? (
-              <section className="rounded-xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
-                <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-gray-400">Dispersão de prêmio por ramo</h2>
-                <p className="mb-4 text-xs text-gray-500">
-                  Quanto maior o coeficiente de variação, mais inconsistente é a precificação dentro do produto — muita
-                  apólice barata misturada com pouca muito cara (ou o contrário).
-                </p>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-100 text-xs text-gray-500">
-                        <th className="px-2 py-1.5 font-medium">Ramo</th>
-                        <th className="px-2 py-1.5 font-medium">Média</th>
-                        <th className="px-2 py-1.5 font-medium">Mediana</th>
-                        <th className="px-2 py-1.5 font-medium">Desvio padrão</th>
-                        <th className="px-2 py-1.5 font-medium">Coef. de variação</th>
-                        <th className="px-2 py-1.5 font-medium">Mín – Máx</th>
-                        <th className="px-2 py-1.5 font-medium">Q1 – Q3 (IQR)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {dispersaoOrdenada.map((d) => (
-                        <tr key={d.ramo} className="border-b border-gray-50 last:border-0">
-                          <td className="px-2 py-2 text-gray-800">{rotuloRamo(d.ramo)}</td>
-                          <td className="px-2 py-2 text-gray-800">{fmtMoeda(d.media)}</td>
-                          <td className="px-2 py-2 text-gray-800">{fmtMoeda(d.mediana)}</td>
-                          <td className="px-2 py-2 text-gray-800">{fmtMoeda(d.desvio_padrao)}</td>
-                          <td className="px-2 py-2">
-                            <span
-                              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                                d.coeficiente_variacao >= 100
-                                  ? "bg-red-50 text-red-600"
-                                  : d.coeficiente_variacao >= 50
-                                    ? "bg-amber-50 text-amber-600"
-                                    : "bg-green-50 text-green-600"
-                              }`}
-                            >
-                              {d.coeficiente_variacao.toFixed(0)}%
-                            </span>
-                          </td>
-                          <td className="px-2 py-2 text-gray-500">
-                            {fmtMoeda(d.minimo)} – {fmtMoeda(d.maximo)}
-                          </td>
-                          <td className="px-2 py-2 text-gray-500">
-                            {fmtMoeda(d.q1)} – {fmtMoeda(d.q3)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            ) : null}
-
-            <div className={`grid grid-cols-1 gap-4 ${ramoSelecionado ? "" : "lg:grid-cols-2"}`}>
-              {!ramoSelecionado ? (
-                <section className="rounded-xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
-                  <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-400">Ticket médio por ramo</h2>
-                  {ticketPorRamo.length ? (
-                    <div className="space-y-2">
-                      {ticketPorRamo.map((r) => (
-                        <div key={r.ramo} className="text-sm">
-                          <div className="mb-1 flex items-center justify-between gap-2">
-                            <span className="truncate text-gray-800">{rotuloRamo(r.ramo)}</span>
-                            <span className="whitespace-nowrap text-xs font-medium text-o2-navy">{fmtMoeda(r.ticket_medio)}</span>
-                          </div>
-                          <div className="h-2 overflow-hidden rounded-full bg-o2-gray/50">
-                            <div
-                              className="h-full rounded-full bg-o2-navy"
-                              style={{ width: `${Math.max(3, (r.ticket_medio / maiorTicketRamo) * 100)}%` }}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-500">Sem dados.</p>
-                  )}
-                </section>
-              ) : null}
-
-              <section className="rounded-xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
-                <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-gray-400">Mix por seguradora</h2>
-                <p className="mb-4 text-xs text-gray-500">Ticket médio do prêmio e da comissão, por seguradora.</p>
-                {mixSeguradoras.length ? (
-                  <div className="space-y-2">
-                    {mixSeguradoras.map((s) => (
-                      <div key={s.seguradora} className="text-sm">
-                        <div className="mb-1 flex items-center justify-between gap-2">
-                          <span className="truncate text-gray-800">{s.seguradora}</span>
-                          <span className="whitespace-nowrap text-xs text-gray-500">
-                            <span className="font-medium text-o2-navy">{fmtMoeda(s.ticket_medio_premio)}</span> ·{" "}
-                            comissão {fmtMoeda(s.ticket_medio_comissao)}
-                          </span>
-                        </div>
-                        <div className="h-2 overflow-hidden rounded-full bg-o2-gray/50">
-                          <div
-                            className="h-full rounded-full bg-o2-indigo"
-                            style={{ width: `${Math.max(3, (s.ticket_medio_premio / maiorTicketSeguradora) * 100)}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500">Sem dados.</p>
-                )}
-              </section>
-            </div>
-
-            <section className="rounded-xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
-              <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-gray-400">
-                Por bairro {ramoSelecionado ? `— ${rotuloRamo(ramoSelecionado)}` : ""}
-              </h2>
-              <p className="mb-2 text-xs text-gray-500">
-                Vem dos relatórios de endereço carregados — cobertura parcial, cresce conforme mais
-                relatórios forem enviados.
-              </p>
-              {totalBairrosDistintos > 0 ? (
-                <p className="mb-4 inline-block rounded-full bg-o2-navy/5 px-3 py-1 text-xs font-medium text-o2-navy">
-                  {fmtNumero(paretoContagem)} de {fmtNumero(totalBairrosDistintos)} bairros (
-                  {paretoPercentualBairros.toFixed(0)}%) concentram 80% do prêmio mapeado
-                </p>
-              ) : null}
-              {rankingBairros.length ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-100 text-xs text-gray-500">
-                        <th className="px-2 py-1.5 font-medium">Bairro</th>
-                        <th className="px-2 py-1.5 font-medium">Cidade/UF</th>
-                        <th className="px-2 py-1.5 font-medium">Apólices</th>
-                        <th className="px-2 py-1.5 font-medium">Ticket médio do prêmio</th>
-                        <th className="px-2 py-1.5 font-medium">Ticket médio da comissão</th>
-                        <th className="px-2 py-1.5 font-medium">Ticket médio de aluguel</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rankingBairros.map((b) => (
-                        <tr key={`${b.bairro}-${b.cidade}`} className="border-b border-gray-50 last:border-0">
-                          <td className="px-2 py-2">
-                            <div className="mb-1 flex items-center gap-2">
-                              <span className="text-gray-800">{b.bairro}</span>
-                            </div>
-                            <div className="h-1.5 w-24 overflow-hidden rounded-full bg-o2-gray/50">
-                              <div
-                                className="h-full rounded-full bg-o2-coral"
-                                style={{ width: `${Math.max(4, (b.quantidade / maiorQuantidadeBairro) * 100)}%` }}
-                              />
-                            </div>
-                          </td>
-                          <td className="px-2 py-2 text-gray-500">
-                            {b.cidade ?? "—"}
-                            {b.uf ? `/${b.uf}` : ""}
-                          </td>
-                          <td className="px-2 py-2 text-gray-800">{fmtNumero(b.quantidade)}</td>
-                          <td className="px-2 py-2 text-gray-800">{fmtMoeda(b.ticket_medio_premio)}</td>
-                          <td className="px-2 py-2 text-gray-800">{fmtMoeda(b.ticket_medio_comissao)}</td>
-                          <td className="px-2 py-2 text-gray-800">
-                            {b.ticket_aluguel !== null ? fmtMoeda(b.ticket_aluguel) : <span className="text-gray-300">—</span>}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <p className="text-sm text-gray-500">
-                  Nenhum endereço carregado ainda.{" "}
-                  <Link href="/producao/upload" className="font-medium text-o2-navy hover:underline">
-                    Carregar relatório de endereços
-                  </Link>
-                  .
-                </p>
-              )}
-            </section>
+            <BlocoCotacoes kpis={kpis} filtros={filtros} filtroImob={filtroImob} fontes={fontes} todas={sp.todasc === "1"} sp={sp} />
+            <BlocoApolices kpis={kpis} filtroImob={filtroImob} mesAtual={mesAtual} fontes={fontes} todas={sp.todas === "1"} sp={sp} />
           </>
         )}
       </main>
     </>
+  );
+}
+
+function Bloco({ titulo, fonte, cor, children }: { titulo: string; fonte: ReactNode; cor: string; children: ReactNode }) {
+  return (
+    <section className="space-y-6 rounded-2xl border border-gray-200 bg-gray-50/60 p-5" style={{ borderTop: `4px solid ${cor}` }}>
+      <div>
+        <h2 className="text-lg font-bold text-o2-navy">{titulo}</h2>
+        <p className="text-xs text-gray-500">{fonte}</p>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Cartao({ rotulo, valor, linhas, legenda, variacaoAno }: { rotulo: string; valor: string; linhas: string[]; legenda: ReactNode; variacaoAno?: Variacao }) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4">
+      <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
+        {rotulo}
+        <InfoLegenda titulo={rotulo}>{legenda}</InfoLegenda>
+      </p>
+      <p className="mt-1 text-2xl font-bold tabular-nums text-o2-navy">{valor}</p>
+      {linhas.map((l) => (
+        <p key={l} className="text-xs text-gray-500">
+          {l}
+        </p>
+      ))}
+      {variacaoAno && <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${variacaoAno.cls}`}>{variacaoAno.texto} vs ano anterior</span>}
+    </div>
+  );
+}
+
+function Titulo({ children, legenda }: { children: ReactNode; legenda?: ReactNode }) {
+  return (
+    <h3 className="flex items-center gap-1 text-sm font-semibold uppercase tracking-wide text-o2-navy">
+      {children}
+      {legenda && <InfoLegenda titulo={typeof children === "string" ? children : undefined}>{legenda}</InfoLegenda>}
+    </h3>
+  );
+}
+
+function Grafico({ titulo, children }: { titulo: string; children: ReactNode }) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4">
+      <h4 className="mb-2 text-sm font-semibold text-o2-navy">{titulo}</h4>
+      {children}
+    </div>
+  );
+}
+
+// Link que aplica o filtro de uma imobiliária/grupo mantendo período/produto/seguradora.
+function linkEntidade(sp: Record<string, string | undefined>, id: string, tipo: string) {
+  const q = new URLSearchParams(Object.entries(sp).filter(([k, v]) => v && !["atualizar", "todas", "todasc", "g", "i"].includes(k)) as [string, string][]);
+  q.set(tipo === "grupo" ? "g" : "i", id);
+  return `/producao?${q.toString()}`;
+}
+function linkVerTodas(sp: Record<string, string | undefined>, chave: "todas" | "todasc") {
+  const q = new URLSearchParams(Object.entries(sp).filter(([k, v]) => v && k !== "atualizar") as [string, string][]);
+  q.set(chave, "1");
+  return `/producao?${q.toString()}`;
+}
+function NomeEntidade({ e, sp }: { e: Entidade; sp: Record<string, string | undefined> }) {
+  return (
+    <>
+      <Link href={linkEntidade(sp, e.id, e.tipo)} className="font-medium text-o2-navy hover:underline">
+        {e.nome ?? "—"}
+      </Link>
+      {e.tipo === "grupo" && <span className="ml-1 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-800">grupo</span>}
+    </>
+  );
+}
+
+function motivoSemFonte(m: string) {
+  if (MESES_INEXISTENTES.has(m)) return "planilha não existe";
+  if (MESES_SEM_STATUS_GERAL.has(m)) return "planilha só tem status por seguradora (pendente)";
+  if (m < INICIO_FUNIL) return "2015–jun/2020 ainda não importado";
+  return "sem planilha";
+}
+
+// ---------------------------------------------------------------- Cotações
+
+function BlocoCotacoes({
+  kpis,
+  filtros,
+  filtroImob,
+  fontes,
+  todas,
+  sp,
+}: {
+  kpis: Kpis;
+  filtros: Filtros;
+  filtroImob: boolean;
+  fontes: Fontes;
+  todas: boolean;
+  sp: Record<string, string | undefined>;
+}) {
+  const f = kpis.funil;
+  const fa = kpis.funil_ano_anterior;
+  const meses = listaMeses(kpis.de, kpis.ate);
+  const compara = kpis.meses <= 24 && fa.entradas > 0;
+  const porMes = new Map(kpis.funil_mensal.map((m) => [m.competencia, m.eventos]));
+  const andamento = (f.etapa_atual_das_entradas["Em análise"] ?? 0) + (f.etapa_atual_das_entradas["Aprovado"] ?? 0);
+  const comFonte = new Set([...kpis.funil_meses_com_planilha, ...meses.filter((m) => m >= INICIO_BITRIX_FIANCA)]);
+  const semFonte = meses.filter((m) => !comFonte.has(m));
+  const entidades = todas ? kpis.funil_por_entidade : kpis.funil_por_entidade.slice(0, 30);
+  const soOutrosProdutos = filtros.produtos.length > 0 && !filtros.produtos.includes("fianca");
+
+  return (
+    <Bloco
+      titulo="Cotações (funil)"
+      cor="#F8540D"
+      fonte={
+        <>
+          Tomadas de preço: análise → aprovação ou recusa → negociação → conversão ou negativação. Fontes: planilhas de análise (jul/2020 a jul/2026) e Bitrix (ago/2026
+          em diante{fontes.bitrix ? `, lido em ${dataHora(fontes.bitrix)}` : ""}) — os indicadores são os mesmos nas duas fontes. Por enquanto só Seguro Fiança; Ramos
+          Elementares, Capitalização e Automóvel entram em seguida.
+        </>
+      }
+    >
+      {soOutrosProdutos ? (
+        <p className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-600">
+          As cotações dos produtos selecionados ainda não foram ligadas a este painel (por enquanto só Seguro Fiança).
+        </p>
+      ) : filtroImob && f.entradas === 0 ? (
+        <p className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-600">
+          Nenhuma cotação ligada a essa seleção no período. O nome da imobiliária na planilha (ou a empresa do card no Bitrix) só conta depois que o vínculo é confirmado em{" "}
+          <Link href="/admin/imobiliarias" className="text-o2-blue underline">
+            Imobiliárias cadastradas
+          </Link>
+          .
+        </p>
+      ) : (
+        <>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <Cartao
+              rotulo="Cotações recebidas"
+              valor={num(f.entradas)}
+              linhas={[`${num(andamento)} ainda em andamento`]}
+              variacaoAno={compara ? variacao(f.entradas, fa.entradas) : null}
+              legenda="Cotações (análises) que entraram no período — na planilha, a linha do mês em que a análise foi recebida (a herança para o mês seguinte não conta de novo); no Bitrix, o card criado no mês."
+            />
+            <Cartao
+              rotulo="Aprovadas"
+              valor={num(f.aprovacoes)}
+              linhas={[`aprovação ${pct(f.aprovacoes, f.aprovacoes + f.recusas)}`]}
+              variacaoAno={compara ? variacao(f.aprovacoes, fa.aprovacoes) : null}
+              legenda="Aprovadas pela seguradora no período (pelo mês da aprovação), incluindo as que depois converteram ou negativaram. Aprovação = aprovadas ÷ (aprovadas + recusadas)."
+            />
+            <Cartao
+              rotulo="Recusadas"
+              valor={num(f.recusas)}
+              linhas={[`${pct(f.recusas, f.aprovacoes + f.recusas)} das decididas`]}
+              variacaoAno={compara ? variacao(f.recusas, fa.recusas) : null}
+              legenda="Recusadas pela seguradora no período (pelo mês da recusa). RECUSA ENVIADA é a mesma recusa, já comunicada ao cliente."
+            />
+            <Cartao
+              rotulo="Negativadas"
+              valor={num(f.perdas)}
+              linhas={[`${pct(f.perdas, f.aprovacoes)} das aprovadas`]}
+              variacaoAno={compara ? variacao(f.perdas, fa.perdas) : null}
+              legenda="Aprovadas em que o cliente não fechou (NEGATIVADO/DESISTÊNCIA; no Bitrix, PERDIDO em Negociação e Contrato), pelo mês em que aconteceu."
+            />
+            <Cartao
+              rotulo="Convertidas"
+              valor={num(f.conversoes)}
+              linhas={[`conversão ${pct(f.conversoes, f.entradas)} das recebidas`]}
+              variacaoAno={compara ? variacaoPp(f.conversoes / Math.max(1, f.entradas), fa.conversoes / Math.max(1, fa.entradas)) : null}
+              legenda="Cotações convertidas (contrato fechado) no período, pelo mês da conversão. Conversão = convertidas ÷ cotações recebidas no mesmo período; a variação é em pontos percentuais."
+            />
+          </div>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Grafico titulo="Cotações recebidas por mês">
+              <BarrasMensais pontos={meses.map((m) => ({ mes: m, valores: { e: porMes.get(m)?.entrada ?? 0 } }))} series={[{ chave: "e", rotulo: "Recebidas", cor: COR_ENTRADA }]} altura={170} />
+            </Grafico>
+            <Grafico titulo="Desfechos por mês">
+              <BarrasMensais
+                pontos={meses.map((m) => ({ mes: m, valores: Object.fromEntries(DESFECHOS.map((d) => [d.chave, porMes.get(m)?.[d.chave] ?? 0])) }))}
+                series={DESFECHOS.map((d) => ({ chave: d.chave, rotulo: d.rotulo, cor: d.cor }))}
+                altura={170}
+              />
+            </Grafico>
+          </div>
+          {semFonte.length > 0 && (
+            <p className="text-xs text-gray-500">
+              Meses sem fonte de cotação neste período (aparecem vazios, não são zero):{" "}
+              {semFonte
+                .reduce<{ motivo: string; meses: string[] }[]>((acc, m) => {
+                  const motivo = motivoSemFonte(m);
+                  const ult = acc[acc.length - 1];
+                  // Junta só meses seguidos com o mesmo motivo.
+                  if (ult && ult.motivo === motivo && somarMeses(ult.meses[ult.meses.length - 1], 1) === m) ult.meses.push(m);
+                  else acc.push({ motivo, meses: [m] });
+                  return acc;
+                }, [])
+                .map((g) => `${g.meses.length > 2 ? `${rotuloMes(g.meses[0])} a ${rotuloMes(g.meses[g.meses.length - 1])}` : g.meses.map(rotuloMes).join(", ")} (${g.motivo})`)
+                .join(" · ")}
+              .
+            </p>
+          )}
+
+          <div className="space-y-2">
+            <Titulo
+              legenda={
+                <>
+                  Cotações de cada imobiliária/grupo no período, com a mesma regra dos cartões acima. Clique no nome para ver o painel inteiro só daquela imobiliária. Só
+                  aparece quem já tem vínculo confirmado no cadastro.
+                </>
+              }
+            >
+              {filtroImob ? "Cotações das imobiliárias selecionadas" : "Cotações por imobiliária / grupo"}
+            </Titulo>
+            <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+              <table className="w-full text-sm">
+                <thead className="bg-o2-navy text-left text-xs text-white">
+                  <tr>
+                    <th className="px-3 py-2">#</th>
+                    <th className="px-3 py-2">Imobiliária / grupo</th>
+                    <th className="px-3 py-2 text-right">Recebidas</th>
+                    <th className="px-3 py-2 text-right">Aprovadas</th>
+                    <th className="px-3 py-2 text-right">Recusadas</th>
+                    <th className="px-3 py-2 text-right">Negativadas</th>
+                    <th className="px-3 py-2 text-right">Convertidas</th>
+                    <th className="px-3 py-2 text-right">Conversão</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {entidades.map((x, i) => (
+                    <tr key={x.id} className="border-t border-gray-100">
+                      <td className="px-3 py-2 text-xs text-gray-400">{i + 1}</td>
+                      <td className="px-3 py-2">
+                        <NomeEntidade e={x} sp={sp} />
+                      </td>
+                      <td className="px-3 py-2 text-right">{num(x.entradas)}</td>
+                      <td className="px-3 py-2 text-right">{num(x.aprovacoes)}</td>
+                      <td className="px-3 py-2 text-right">{num(x.recusas)}</td>
+                      <td className="px-3 py-2 text-right">{num(x.perdas)}</td>
+                      <td className="px-3 py-2 text-right">{num(x.conversoes)}</td>
+                      <td className="px-3 py-2 text-right font-semibold">{pct(x.conversoes, x.entradas)}</td>
+                    </tr>
+                  ))}
+                  {!entidades.length && (
+                    <tr>
+                      <td colSpan={8} className="px-3 py-6 text-center text-gray-500">
+                        Nenhuma cotação com imobiliária confirmada no período.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {!todas && kpis.funil_por_entidade.length > entidades.length && (
+              <Link href={linkVerTodas(sp, "todasc")} className="text-sm text-o2-blue underline">
+                Ver todas as {kpis.funil_por_entidade.length}
+              </Link>
+            )}
+            {!filtroImob && f.entradas > 0 && (
+              <p className="text-xs text-gray-500">
+                {pct(f.identificados, f.entradas, 0)} das cotações recebidas no período já têm a imobiliária confirmada no cadastro; o restante ainda é sugestão por nome e
+                não entra nesta tabela nem no filtro por imobiliária.
+              </p>
+            )}
+          </div>
+        </>
+      )}
+    </Bloco>
+  );
+}
+
+// ---------------------------------------------------------------- Apólices (Corp)
+
+function estatisticas(valores: number[]) {
+  const n = valores.length;
+  if (!n) return null;
+  const media = valores.reduce((s, v) => s + v, 0) / n;
+  const ord = [...valores].sort((a, b) => a - b);
+  const mediana = n % 2 ? ord[(n - 1) / 2] : (ord[n / 2 - 1] + ord[n / 2]) / 2;
+  const desvio = Math.sqrt(valores.reduce((s, v) => s + (v - media) ** 2, 0) / n);
+  return { media, mediana, desvio, cv: media ? desvio / media : 0 };
+}
+
+// Tendência: inclinação da reta (mínimos quadrados) por mês, em % da média.
+function tendencia(valores: number[]) {
+  const n = valores.length;
+  if (n < 3) return null;
+  const mx = (n - 1) / 2;
+  const my = valores.reduce((s, v) => s + v, 0) / n;
+  let numerador = 0;
+  let den = 0;
+  valores.forEach((v, i) => {
+    numerador += (i - mx) * (v - my);
+    den += (i - mx) ** 2;
+  });
+  return my ? numerador / den / my : null;
+}
+
+function BlocoApolices({
+  kpis,
+  filtroImob,
+  mesAtual,
+  fontes,
+  todas,
+  sp,
+}: {
+  kpis: Kpis;
+  filtroImob: boolean;
+  mesAtual: string;
+  fontes: Fontes;
+  todas: boolean;
+  sp: Record<string, string | undefined>;
+}) {
+  const r = kpis.resumo;
+  const ant = kpis.resumo_ano_anterior;
+  const compara = kpis.meses <= 24 && ant.propostas > 0;
+  const meses = listaMeses(kpis.de, kpis.ate);
+  const porMes = new Map(kpis.mensal.map((m) => [m.competencia, m.produtos]));
+  const produtosNaTela = ORDEM_PRODUTOS.filter((p) => kpis.por_produto.some((x) => x.produto === p));
+  const premioMensal = meses.map((m) => Object.values(porMes.get(m) ?? {}).reduce((s, v) => s + v.premio, 0));
+  const est = estatisticas(premioMensal);
+  const tend = tendencia(premioMensal);
+  const melhor = meses.length ? meses[premioMensal.indexOf(Math.max(...premioMensal))] : null;
+  const pior = meses.length ? meses[premioMensal.indexOf(Math.min(...premioMensal))] : null;
+  const entidades = todas ? kpis.por_entidade : kpis.por_entidade.slice(0, 30);
+  const totalCanal = kpis.por_canal.reduce((s, c) => s + c.premio, 0);
+
+  return (
+    <Bloco
+      titulo="Apólices efetivadas (Corp)"
+      cor="#01192e"
+      fonte={
+        <>
+          O que foi efetivado de fato: propostas emitidas, prêmio líquido e comissão, pelo mês da data da proposta. Fonte: Relatório de Propostas do Corp
+          {fontes.corp ? `, importado em ${dataHora(fontes.corp)}` : ""} (2015 em diante, conferido com os totais do próprio Corp). Entram todas as propostas que o Corp
+          registra (novas, renovações e endossos). O filtro de seguradora vale só para este bloco.
+        </>
+      }
+    >
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Cartao
+          rotulo="Prêmio líquido"
+          valor={compacto(r.premio)}
+          linhas={[`média de ${compacto(r.premio / Math.max(1, kpis.meses))} por mês`]}
+          variacaoAno={compara ? variacao(r.premio, ant.premio) : null}
+          legenda={`Soma do prêmio líquido das propostas efetivadas no Corp no período. A comparação é com o mesmo período do ano anterior (${rotuloMes(ant.de)} a ${rotuloMes(ant.ate)}).`}
+        />
+        <Cartao
+          rotulo="Comissão da corretora"
+          valor={compacto(r.comissao)}
+          linhas={[`${pct(r.comissao, r.premio)} do prêmio`]}
+          variacaoAno={compara ? variacao(r.comissao, ant.comissao) : null}
+          legenda="Comissão da corretora registrada no Corp para essas propostas (antes do repasse às imobiliárias)."
+        />
+        <Cartao
+          rotulo="Propostas efetivadas"
+          valor={num(r.propostas)}
+          linhas={[`ticket médio ${reais(r.propostas ? r.premio / r.propostas : 0)}`]}
+          variacaoAno={compara ? variacao(r.propostas, ant.propostas) : null}
+          legenda="Quantidade de propostas efetivadas no Corp. Ticket médio = prêmio líquido ÷ propostas."
+        />
+        <Cartao
+          rotulo={filtroImob ? "Fichas com produção" : "Imobiliárias ativas"}
+          valor={num(r.entidades_ativas)}
+          linhas={[compara && !filtroImob ? `${num(ant.entidades_ativas)} no ano anterior` : "com ao menos 1 proposta no período"]}
+          variacaoAno={compara && !filtroImob ? variacao(r.entidades_ativas, ant.entidades_ativas) : null}
+          legenda="Imobiliárias (ou grupos, contados uma vez) com ao menos uma proposta efetivada no período. Só conta quem já tem vínculo confirmado no cadastro."
+        />
+      </div>
+      {kpis.ate === mesAtual && fontes.corp && (
+        <p className="text-xs text-gray-500">O mês corrente ({rotuloMes(mesAtual)}) está incompleto: o Corp foi importado em {dataHora(fontes.corp)}.</p>
+      )}
+
+      <div className="space-y-2">
+        <Titulo>Por produto</Titulo>
+        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+          <table className="w-full text-sm">
+            <thead className="bg-o2-navy text-left text-xs text-white">
+              <tr>
+                <th className="px-3 py-2">Produto</th>
+                <th className="px-3 py-2 text-right">Propostas</th>
+                <th className="px-3 py-2 text-right">Prêmio líquido</th>
+                <th className="px-3 py-2 text-right">% do prêmio</th>
+                <th className="px-3 py-2 text-right">Comissão</th>
+                <th className="px-3 py-2 text-right">Ticket médio</th>
+                {compara && <th className="px-3 py-2 text-right">Prêmio vs ano anterior</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {kpis.por_produto.map((p) => {
+                const v = variacao(p.premio, p.premio_ano_anterior);
+                return (
+                  <tr key={p.produto} className="border-t border-gray-100">
+                    <td className="px-3 py-2 font-medium text-o2-navy">
+                      <span className="mr-2 inline-block h-2.5 w-2.5 rounded-sm" style={{ background: PRODUTOS[p.produto]?.cor }} />
+                      {PRODUTOS[p.produto]?.rotulo ?? p.produto}
+                    </td>
+                    <td className="px-3 py-2 text-right">{num(p.propostas)}</td>
+                    <td className="px-3 py-2 text-right">{reais(p.premio)}</td>
+                    <td className="px-3 py-2 text-right">{pct(p.premio, r.premio)}</td>
+                    <td className="px-3 py-2 text-right">{reais(p.comissao)}</td>
+                    <td className="px-3 py-2 text-right">{reais(p.propostas ? p.premio / p.propostas : 0)}</td>
+                    {compara && <td className="px-3 py-2 text-right">{v ? <span className={`rounded-full px-2 py-0.5 text-xs ${v.cls}`}>{v.texto}</span> : "—"}</td>}
+                  </tr>
+                );
+              })}
+              {!kpis.por_produto.length && (
+                <tr>
+                  <td colSpan={7} className="px-3 py-6 text-center text-gray-500">
+                    Nenhuma proposta efetivada com esse recorte.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Grafico titulo="Prêmio líquido por mês">
+          <BarrasMensais
+            pontos={meses.map((m) => ({ mes: m, valores: Object.fromEntries(produtosNaTela.map((p) => [p, porMes.get(m)?.[p]?.premio ?? 0])) }))}
+            series={produtosNaTela.map((p) => ({ chave: p, rotulo: PRODUTOS[p].rotulo, cor: PRODUTOS[p].cor }))}
+            formato="reais"
+            altura={180}
+          />
+        </Grafico>
+        <Grafico titulo="Propostas efetivadas por mês">
+          <BarrasMensais
+            pontos={meses.map((m) => ({ mes: m, valores: Object.fromEntries(produtosNaTela.map((p) => [p, porMes.get(m)?.[p]?.propostas ?? 0])) }))}
+            series={produtosNaTela.map((p) => ({ chave: p, rotulo: PRODUTOS[p].rotulo, cor: PRODUTOS[p].cor }))}
+            altura={180}
+          />
+        </Grafico>
+      </div>
+
+      {est && meses.length >= 3 && (
+        <div className="space-y-2">
+          <Titulo
+            legenda={
+              <>
+                Calculado sobre o prêmio líquido de cada mês do período (meses sem produção contam como zero). Coeficiente de variação = desvio-padrão ÷ média: quanto
+                maior, mais irregular a produção mês a mês. Tendência = inclinação da reta que melhor passa pelos meses, em % da média por mês.
+              </>
+            }
+          >
+            Estatística mensal do prêmio
+          </Titulo>
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            {[
+              ["Média", compacto(est.media)],
+              ["Mediana", compacto(est.mediana)],
+              ["Desvio-padrão", compacto(est.desvio)],
+              ["Coef. de variação", `${(est.cv * 100).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}%`],
+              ["Melhor mês", melhor ? `${rotuloMes(melhor)} · ${compacto(Math.max(...premioMensal))}` : "—"],
+              ["Tendência", tend == null ? "—" : `${tend >= 0 ? "+" : "−"}${Math.abs(tend * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}% ao mês`],
+            ].map(([rot, val]) => (
+              <div key={rot} className="rounded-xl border border-gray-200 bg-white p-3">
+                <p className="text-xs text-gray-500">{rot}</p>
+                <p className="mt-0.5 text-sm font-semibold text-o2-navy">{val}</p>
+              </div>
+            ))}
+          </div>
+          {pior && (
+            <p className="text-xs text-gray-500">
+              Pior mês: {rotuloMes(pior)} · {compacto(Math.min(...premioMensal))}
+            </p>
+          )}
+        </div>
+      )}
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="space-y-2">
+          <Titulo legenda="Seguradora da proposta no Corp, com os nomes agrupados (ex.: as duas grafias da Porto viram uma; Liberty e Yelum são a mesma companhia).">
+            Por seguradora
+          </Titulo>
+          <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+            <table className="w-full text-sm">
+              <thead className="bg-o2-navy text-left text-xs text-white">
+                <tr>
+                  <th className="px-3 py-2">Seguradora</th>
+                  <th className="px-3 py-2 text-right">Propostas</th>
+                  <th className="px-3 py-2 text-right">Prêmio</th>
+                  <th className="px-3 py-2 text-right">% prêmio</th>
+                  <th className="px-3 py-2 text-right">Comissão</th>
+                </tr>
+              </thead>
+              <tbody>
+                {kpis.por_seguradora.map((s) => (
+                  <tr key={s.seguradora} className="border-t border-gray-100">
+                    <td className="px-3 py-2 font-medium text-o2-navy">
+                      {s.seguradora}
+                      <span className="ml-1 text-[11px] font-normal text-gray-400">
+                        {ORDEM_PRODUTOS.filter((p) => s.produtos[p])
+                          .map((p) => PRODUTOS[p].rotulo.split(" ")[0])
+                          .join(" · ")}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-right">{num(s.propostas)}</td>
+                    <td className="px-3 py-2 text-right">{compacto(s.premio)}</td>
+                    <td className="px-3 py-2 text-right">{pct(s.premio, r.premio)}</td>
+                    <td className="px-3 py-2 text-right">{compacto(s.comissao)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          {!filtroImob && (
+            <div className="space-y-2">
+              <Titulo legenda="De onde vem a produção do período. 'Ainda não confirmada' é produção de produtor do Corp sem vínculo confirmado no cadastro: diminui à medida que as fichas são revisadas.">
+                Origem da produção
+              </Titulo>
+              <div className="space-y-1.5 rounded-xl border border-gray-200 bg-white p-4 text-sm">
+                {Object.keys(CANAIS)
+                  .map((k) => kpis.por_canal.find((c) => c.canal === k))
+                  .filter((c): c is NonNullable<typeof c> => !!c)
+                  .map((c) => (
+                    <div key={c.canal}>
+                      <div className="flex justify-between gap-2">
+                        <span className="text-o2-navy" title={CANAIS[c.canal].legenda}>
+                          {CANAIS[c.canal].rotulo}
+                        </span>
+                        <span className="tabular-nums text-gray-600">
+                          {compacto(c.premio)} · {pct(c.premio, totalCanal)}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 h-1.5 rounded-full bg-gray-100">
+                        <div className="h-1.5 rounded-full bg-o2-blue" style={{ width: `${totalCanal ? (100 * c.premio) / totalCanal : 0}%` }} />
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {kpis.por_ramo_re.length > 0 && (
+            <div className="space-y-2">
+              <Titulo>Ramos Elementares por ramo</Titulo>
+              <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+                <table className="w-full text-sm">
+                  <thead className="bg-o2-navy text-left text-xs text-white">
+                    <tr>
+                      <th className="px-3 py-2">Ramo</th>
+                      <th className="px-3 py-2 text-right">Propostas</th>
+                      <th className="px-3 py-2 text-right">Prêmio</th>
+                      <th className="px-3 py-2 text-right">Comissão</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {kpis.por_ramo_re.map((x) => (
+                      <tr key={x.ramo} className="border-t border-gray-100">
+                        <td className="px-3 py-2 text-o2-navy">{x.ramo}</td>
+                        <td className="px-3 py-2 text-right">{num(x.propostas)}</td>
+                        <td className="px-3 py-2 text-right">{compacto(x.premio)}</td>
+                        <td className="px-3 py-2 text-right">{compacto(x.comissao)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {kpis.por_susep.length > 1 && (
+            <p className="text-xs text-gray-500">
+              SUSEP do grupo O2:{" "}
+              {[...kpis.por_susep]
+                .sort((a, b) => a.susep.localeCompare(b.susep))
+                .map((s) => `${s.susep === "primeira_susep" ? "1ª SUSEP" : "2ª SUSEP"} ${compacto(s.premio)} (${num(s.propostas)} propostas)`)
+                .join(" · ")}
+              .
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Titulo
+          legenda={
+            <>
+              Imobiliárias e grupos com produção efetivada no período (grupo = soma das fichas). Clique no nome para ver o painel inteiro só daquela imobiliária. Só aparece
+              quem já tem vínculo confirmado no cadastro.
+            </>
+          }
+        >
+          {filtroImob ? "Apólices das imobiliárias selecionadas" : "Apólices por imobiliária / grupo"}
+        </Titulo>
+        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+          <table className="w-full text-sm">
+            <thead className="bg-o2-navy text-left text-xs text-white">
+              <tr>
+                <th className="px-3 py-2">#</th>
+                <th className="px-3 py-2">Imobiliária / grupo</th>
+                <th className="px-3 py-2 text-right">Propostas</th>
+                <th className="px-3 py-2 text-right">Prêmio</th>
+                <th className="px-3 py-2 text-right">% prêmio</th>
+                <th className="px-3 py-2 text-right">Comissão</th>
+                {compara && <th className="px-3 py-2 text-right">vs ano anterior</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {entidades.map((x, i) => {
+                const v = variacao(x.premio, x.premio_ano_anterior);
+                return (
+                  <tr key={x.id} className="border-t border-gray-100">
+                    <td className="px-3 py-2 text-xs text-gray-400">{i + 1}</td>
+                    <td className="px-3 py-2">
+                      <NomeEntidade e={x} sp={sp} />
+                    </td>
+                    <td className="px-3 py-2 text-right">{num(x.propostas)}</td>
+                    <td className="px-3 py-2 text-right">{reais(x.premio)}</td>
+                    <td className="px-3 py-2 text-right">{pct(x.premio, r.premio)}</td>
+                    <td className="px-3 py-2 text-right">{reais(x.comissao)}</td>
+                    {compara && (
+                      <td className="px-3 py-2 text-right">
+                        {v ? <span className={`rounded-full px-2 py-0.5 text-xs ${v.cls}`}>{v.texto}</span> : <span className="text-xs text-gray-400">nova</span>}
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        {!todas && kpis.por_entidade.length > entidades.length && (
+          <Link href={linkVerTodas(sp, "todas")} className="text-sm text-o2-blue underline">
+            Ver todas as {kpis.por_entidade.length}
+          </Link>
+        )}
+      </div>
+    </Bloco>
   );
 }
