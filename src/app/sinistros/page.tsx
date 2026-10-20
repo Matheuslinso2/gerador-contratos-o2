@@ -252,8 +252,8 @@ function Conteudo({ d, periodoRotulo, filtros, meses, produtos }: { d: Dashboard
           <input type="hidden" name="volta" value={filtros} />
           <span>base atualizada {d.base_atualizada_em ? new Date(d.base_atualizada_em).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" }) : "—"}</span>
           <InfoLegenda titulo="Base do dashboard" alinhar="direita">
-            O histórico vem das exportações do Corp (importadas com scripts/sinistros/importar-corp.mjs) e a carteira, da produção do Corp. A base mensal é refeita
-            toda madrugada, a cada importação e por este botão (leva uns 30 segundos).
+            O histórico vem das exportações do Corp (importadas com scripts/sinistros/importar-corp.mjs) e a carteira, da produção do Corp. Cada mês fechado fica
+            gravado e não muda mais; toda madrugada, a cada importação e por este botão só o mês atual é refeito (e o anterior até o dia 15).
           </InfoLegenda>
           <SubmitButton className="rounded border border-gray-300 px-2 py-1 text-xs text-o2-navy hover:bg-gray-50" textoCarregando="Atualizando base…">
             Atualizar base

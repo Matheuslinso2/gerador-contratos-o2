@@ -5,12 +5,13 @@
 -- isso a base é guardada já mensal:
 --   sinistros_kpi_fato           1 linha por sinistro, já com produto, seguradora
 --                                (da apólice) e grupo/imobiliária resolvidos;
---   sinistros_kpi_carteira_mes   por produto × grupo/imobiliária × seguradora × mês:
+--   sinistros_kpi_carteira_mes   por produto × produtor do Corp × seguradora × mês (mês fechado congela):
 --                                apólices vigentes no fim do mês e prêmio ganho no mês
 --                                (pro rata por dia da vigência);
 --   sinistros_kpi_grupos         opções do filtro de imobiliária/grupo.
 -- Refeita por atualizar_base_kpis_sinistros() (importador do Corp, cron da
--- madrugada e o botão "Atualizar base"; ~25 s, por isso service_role tem
+-- madrugada e o botão "Atualizar base"; ~3 s, só o mês aberto -- a
+-- reconstrução completa leva ~30 s, por isso service_role tem
 -- statement_timeout de 120 s). Fase B (20/10/2026): todos os ramos do Corp --
 -- produto = chave de produto_sinistro_de_ramo(). Só equipe O2. Aplicado via MCP.
 
@@ -36,14 +37,17 @@ create index if not exists sinistros_kpi_fato_grupo_idx on sinistros_kpi_fato(gr
 
 create table if not exists sinistros_kpi_carteira_mes (
   produto text not null,
-  grupo_chave text not null,
+  imob_texto text not null,             -- texto do produtor no Corp (imutável)
+  grupo_chave text not null,            -- derivado de sinistros_kpi_vinculo
   seguradora text not null,
   mes date not null,
   vigentes integer not null,
   premio_ganho numeric(16,2) not null,
-  primary key (produto, grupo_chave, seguradora, mes)
+  primary key (produto, imob_texto, seguradora, mes)
 );
 create index if not exists sinistros_kpi_carteira_mes_mes_idx on sinistros_kpi_carteira_mes(mes);
+create index if not exists sinistros_kpi_carteira_mes_texto_idx on sinistros_kpi_carteira_mes(imob_texto);
+create index if not exists sinistros_kpi_carteira_mes_grupo_idx on sinistros_kpi_carteira_mes(grupo_chave);
 
 create table if not exists sinistros_kpi_grupos (
   chave text primary key,
@@ -97,94 +101,136 @@ notify pgrst, 'reload config';
 
 -- Os DELETE levam "where true": pela API o Supabase (safeupdate) recusa
 -- DELETE sem WHERE.
+--
+-- MÊS FECHADO CONGELA (regra do Matheus, 20/10/2026): a carteira de cada mês é
+-- gravada uma vez e não é recalculada; a atualização de rotina refaz só o mês
+-- atual (e o anterior até o dia 15, para lançamentos atrasados no Corp),
+-- lendo só as apólices com fim de vigência no período (índice abaixo). O
+-- retrato guarda o texto do produtor do Corp (imutável); o vínculo com
+-- imobiliária/grupo fica em sinistros_kpi_vinculo e só é reapontado.
+-- Reconstrução completa (só se a regra de cálculo mudar), pelo SQL Editor:
+--   select calcular_carteira_sinistros('2019-01-01');
+
+create index if not exists producao_unificada_corp_vig_fim_idx
+  on producao_unificada ((extras ->> 'vigencia_fim')) where fonte = 'corp';
+
+create table if not exists sinistros_kpi_vinculo (
+  texto text primary key,               -- texto do produtor no Corp
+  chave text not null                   -- g:<grupo> | i:<imobiliária> | t:<texto>
+);
+alter table sinistros_kpi_vinculo enable row level security;
+drop policy if exists "sinistros_kpi_vinculo o2" on sinistros_kpi_vinculo;
+create policy "sinistros_kpi_vinculo o2" on sinistros_kpi_vinculo for all to authenticated using (is_colaborador_o2()) with check (is_colaborador_o2());
+
+create or replace function calcular_carteira_sinistros(p_ini date)
+returns integer
+language plpgsql security definer set search_path to 'public'
+as $$
+declare
+  n integer;
+begin
+  drop table if exists tmp_ap;
+  create temp table tmp_ap on commit drop as
+  select produto_sinistro_de_ramo(p.produto, p.ramo_padrao) produto, trim(p.imobiliaria_texto) texto,
+    coalesce(p.seguradora, '—') seguradora, coalesce(p.premio, 0) premio,
+    (p.extras ->> 'vigencia_inicio')::date vi, (p.extras ->> 'vigencia_fim')::date vf
+  from producao_unificada p
+  where p.fonte = 'corp' and (p.extras ->> 'vigencia_fim') >= p_ini::text
+    and (p.extras ->> 'vigencia_inicio') is not null and p.imobiliaria_texto is not null;
+  delete from tmp_ap where vf < vi or vi > current_date;
+
+  -- Vigente no último dia do mês (ou hoje) e prêmio ganho = prêmio × dias de
+  -- vigência dentro do mês (até hoje) ÷ dias totais da vigência.
+  delete from sinistros_kpi_carteira_mes where mes >= p_ini;
+  insert into sinistros_kpi_carteira_mes (produto, imob_texto, grupo_chave, seguradora, mes, vigentes, premio_ganho)
+  select a.produto, a.texto, 't:' || a.texto, a.seguradora, me.ini,
+    count(*) filter (where a.vi <= me.fim and a.vf >= me.fim),
+    coalesce(sum(case when a.premio > 0 then
+      a.premio * greatest(0, least(a.vf, me.fim) - greatest(a.vi, me.ini) + 1)::numeric / greatest(a.vf - a.vi + 1, 1)
+    end), 0)
+  from tmp_ap a
+  join (
+    select m::date ini, least((m + interval '1 month - 1 day')::date, current_date) fim
+    from generate_series(greatest(p_ini, date '2019-01-01'), date_trunc('month', current_date), interval '1 month') m
+  ) me on me.ini <= a.vf and me.fim >= a.vi
+  group by 1, 2, 3, 4, 5;
+  get diagnostics n = row_count;
+  return n;
+end;
+$$;
+revoke execute on function calcular_carteira_sinistros(date) from anon, public, authenticated;
+
 create or replace function atualizar_base_kpis_sinistros()
 returns timestamptz
-language plpgsql
-security definer
-set search_path to 'public'
+language plpgsql security definer set search_path to 'public'
 as $$
 declare
   agora timestamptz := now();
+  desde date := case when extract(day from current_date) <= 15
+                     then (date_trunc('month', current_date) - interval '1 month')::date
+                     else date_trunc('month', current_date)::date end;
 begin
   -- Equipe O2, ou o próprio servidor (service_role: cron e importador).
   if coalesce(auth.jwt() ->> 'role', 'service_role') <> 'service_role' and not is_colaborador_o2() then
     raise exception 'acesso restrito à equipe O2';
   end if;
 
-  -- Uma única leitura da produção do Corp (a tabela é larga e o banco é
-  -- pequeno: cada varredura custa ~10 s), em tabela estreita.
-  drop table if exists tmp_prod;
-  create temp table tmp_prod on commit drop as
-  select origem_corp_numero nn, trim(imobiliaria_texto) texto, seguradora, data_efetivacao,
-    produto_sinistro_de_ramo(produto, ramo_padrao) produto, coalesce(premio, 0) premio,
-    (extras ->> 'vigencia_inicio')::date vi, (extras ->> 'vigencia_fim')::date vf
-  from producao_unificada where fonte = 'corp';
+  perform calcular_carteira_sinistros(desde);
 
-  -- Quem é quem: grupo da imobiliária > imobiliária confirmada > texto do Corp.
-  drop table if exists tmp_quem;
-  create temp table tmp_quem on commit drop as
-  with vinc as (
+  -- Sinistros (tabela pequena): imobiliária e seguradora pela apólice, via índice
+  -- (produto, Nosso Nº) da produção -- sem varrer a produção.
+  delete from sinistros_kpi_fato where true;
+  insert into sinistros_kpi_fato (id, origem, produto, nosso_numero, numero_sinistro, seguradora, grupo_chave,
+    tipo_sinistro, situacao, dt_aviso, dt_encerramento, vl_avisado, vl_indenizado, segurado)
+  select sc.id, 'corp', coalesce(sc.produto, 'fianca'), sc.nosso_numero, sc.numero_sinistro, coalesce(ap.seguradora, sc.seguradora),
+    case when ap.texto is not null then 't:' || ap.texto end,
+    coalesce(sc.tipo_sinistro, sc.subtipo), sc.situacao, coalesce(sc.dt_aviso, sc.dt_ocorrencia), sc.dt_encerramento,
+    sc.vl_avisado, sc.vl_indenizado, sc.segurado
+  from sinistros_corp sc
+  left join lateral (
+    select trim(p.imobiliaria_texto) texto, p.seguradora
+    from producao_unificada p
+    where p.fonte = 'corp' and p.origem_corp_numero = sc.nosso_numero
+      and p.produto = case when coalesce(sc.produto, 'fianca') in ('fianca', 'capitalizacao', 'automovel') then coalesce(sc.produto, 'fianca') else 're' end
+    limit 1
+  ) ap on true;
+
+  -- Vínculo texto -> imobiliária/grupo: grupo da imobiliária > imobiliária
+  -- confirmada > texto do Corp. Só os textos que aparecem na base.
+  delete from sinistros_kpi_vinculo where true;
+  insert into sinistros_kpi_vinculo (texto, chave)
+  with textos as (
+    select distinct imob_texto texto from sinistros_kpi_carteira_mes
+    union select distinct substr(grupo_chave, 3) from sinistros_kpi_fato where grupo_chave like 't:%'
+  ),
+  vinc as (
     select distinct on (trim(nome_original)) trim(nome_original) nome, imobiliaria_id
     from imobiliaria_registros_fonte
     where fonte = 'corp_produtor' and situacao = 'confirmado' and imobiliaria_id is not null
     order by trim(nome_original), confirmado_em desc nulls last
   )
-  select t.texto,
-    coalesce('g:' || g.id::text, 'i:' || i.id::text, 't:' || t.texto) chave,
-    coalesce(g.nome, nullif(i.apelido, ''), i.nome, t.texto) nome,
-    case when g.id is not null then 'grupo' when i.id is not null then 'imobiliaria' else 'sem_vinculo' end tipo
-  from (select distinct texto from tmp_prod where texto is not null) t
+  select t.texto, coalesce('g:' || i.grupo_id::text, 'i:' || i.id::text, 't:' || t.texto)
+  from textos t
   left join vinc v on v.nome = t.texto
-  left join imobiliarias i on i.id = v.imobiliaria_id
-  left join imobiliaria_grupos g on g.id = i.grupo_id;
-  create index on tmp_quem(texto);
+  left join imobiliarias i on i.id = v.imobiliaria_id;
 
   delete from sinistros_kpi_grupos where true;
   insert into sinistros_kpi_grupos (chave, nome, tipo)
-  select distinct on (chave) chave, nome, tipo from tmp_quem order by chave;
+  select distinct on (vi.chave) vi.chave,
+    coalesce(g.nome, nullif(i.apelido, ''), i.nome, vi.texto),
+    case when g.id is not null then 'grupo' when i.id is not null then 'imobiliaria' else 'sem_vinculo' end
+  from sinistros_kpi_vinculo vi
+  left join imobiliarias i on vi.chave = 'i:' || i.id::text
+  left join imobiliaria_grupos g on vi.chave = 'g:' || g.id::text
+  order by vi.chave;
 
-  -- Sinistros de todos os ramos (decisão 20/10/2026: toda linha do Corp conta).
-  -- Imobiliária e seguradora vêm da apólice (Nosso Nº), de qualquer produto.
-  drop table if exists tmp_apnn;
-  create temp table tmp_apnn on commit drop as
-  select distinct on (nn) nn, texto, seguradora from tmp_prod where nn is not null
-  order by nn, data_efetivacao desc nulls last;
-  create index on tmp_apnn(nn);
-
-  delete from sinistros_kpi_fato where true;
-  insert into sinistros_kpi_fato (id, origem, produto, nosso_numero, numero_sinistro, seguradora, grupo_chave,
-    tipo_sinistro, situacao, dt_aviso, dt_encerramento, vl_avisado, vl_indenizado, segurado)
-  select sc.id, 'corp', coalesce(sc.produto, 'fianca'), sc.nosso_numero, sc.numero_sinistro, coalesce(ap.seguradora, sc.seguradora), q.chave,
-    coalesce(sc.tipo_sinistro, sc.subtipo), sc.situacao, coalesce(sc.dt_aviso, sc.dt_ocorrencia), sc.dt_encerramento,
-    sc.vl_avisado, sc.vl_indenizado, sc.segurado
-  from sinistros_corp sc
-  left join tmp_apnn ap on ap.nn = sc.nosso_numero
-  left join tmp_quem q on q.texto = ap.texto;
-
-  -- Carteira mês a mês (desde 2019) de todos os produtos do Corp: vigente no
-  -- último dia do mês (ou hoje) e prêmio ganho = prêmio × dias de vigência
-  -- dentro do mês (até hoje) ÷ dias totais da vigência.
-  drop table if exists tmp_ap;
-  create temp table tmp_ap on commit drop as
-  select p.produto, q.chave, coalesce(p.seguradora, '—') seguradora, p.premio, p.vi, p.vf
-  from tmp_prod p join tmp_quem q on q.texto = p.texto
-  where p.vi is not null and p.vf is not null and p.vf >= p.vi and p.vf >= date '2019-01-01';
-
-  drop table if exists tmp_meses;
-  create temp table tmp_meses on commit drop as
-  select m::date ini, least((m + interval '1 month - 1 day')::date, current_date) fim
-  from generate_series(date '2019-01-01', date_trunc('month', current_date), interval '1 month') m;
-
-  delete from sinistros_kpi_carteira_mes where true;
-  insert into sinistros_kpi_carteira_mes (produto, grupo_chave, seguradora, mes, vigentes, premio_ganho)
-  select a.produto, a.chave, a.seguradora, me.ini,
-    count(*) filter (where a.vi <= me.fim and a.vf >= me.fim),
-    coalesce(sum(case when a.premio > 0 then
-      a.premio * greatest(0, least(a.vf, me.fim) - greatest(a.vi, me.ini) + 1)::numeric / greatest(a.vf - a.vi + 1, 1)
-    end), 0)
-  from tmp_ap a
-  join tmp_meses me on me.ini <= a.vf and me.fim >= a.vi
-  group by 1, 2, 3, 4;
+  -- Reaponta só o que mudou de vínculo (meses fechados não são recalculados).
+  update sinistros_kpi_carteira_mes c set grupo_chave = vi.chave
+  from sinistros_kpi_vinculo vi
+  where vi.texto = c.imob_texto and c.grupo_chave is distinct from vi.chave;
+  update sinistros_kpi_fato f set grupo_chave = vi.chave
+  from sinistros_kpi_vinculo vi
+  where f.grupo_chave = 't:' || vi.texto and vi.chave <> f.grupo_chave;
 
   insert into sinistros_kpi_base_meta (id, atualizado_em) values (1, agora)
   on conflict (id) do update set atualizado_em = excluded.atualizado_em;

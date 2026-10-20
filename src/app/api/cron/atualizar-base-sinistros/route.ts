@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 // Refaz a base mensal do dashboard de Sinistros (atualizar_base_kpis_sinistros,
-// ~25 s) toda madrugada -- a carteira muda com a importação da produção do
+// ~3 s, só o mês aberto; mês fechado fica congelado) toda madrugada -- a carteira muda com a importação da produção do
 // Corp, e o mês corrente precisa avançar mesmo sem ninguém clicar em
 // "Atualizar base". Protegida por CRON_SECRET (mesmo esquema dos outros crons).
 export async function GET(request: NextRequest) {
