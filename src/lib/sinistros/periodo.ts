@@ -3,6 +3,7 @@
 // corrente conta até hoje. Os filtros moram na URL (link compartilhável):
 //   ?periodo=12m | 3m | 6m | mes | mes_anterior | ano | ano_anterior | s1-2026 | s2-2025 | t3-2026 | ano-2024
 //   ?de=2026-01&ate=2026-06           (personalizado; vence o "periodo")
+//   ?prod=fianca&prod=capitalizacao   (produtos; sem nenhum = todos)
 //   ?seg=PORTO SEGURO&seg=POTTENCIAL  (seguradoras)
 //   ?imob=<chave>                     (imobiliária/grupo — recorta tudo)
 //   ?tipo=ocupado&tipo=chaves · ?sit=em_aberto|indenizado|sem_indenizacao
@@ -80,7 +81,7 @@ export function mesesNoPeriodo(p: Periodo) {
   return (a2 - a1) * 12 + (m2 - m1) + 1;
 }
 
-const CHAVES_DASHBOARD = ["periodo", "de", "ate", "seg", "imob", "tipo", "sit"];
+const CHAVES_DASHBOARD = ["periodo", "de", "ate", "prod", "seg", "imob", "tipo", "sit"];
 
 // Query string só com os filtros do dashboard (para levar à Gestão e voltar).
 export function filtrosDashboard(params: Record<string, string | string[] | undefined>) {

@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { TIPOS_SINISTRO, rotuloProduto, rotuloTipoSinistro } from "@/lib/sinistros/produtos";
 
 // Barra de filtros do dashboard (planejamento v2, seção 3): uma linha só,
 // vale para a tela inteira, fica na URL. Imobiliária/grupo recorta TODOS os
@@ -9,11 +10,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 export type OpcaoGrupo = { chave: string; nome: string; tipo: "grupo" | "imobiliaria" | "sem_vinculo" };
 export type Atalho = { chave: string; rotulo: string };
 
-const TIPOS = [
-  { valor: "ocupado", rotulo: "Imóvel ocupado" },
-  { valor: "chaves", rotulo: "Entrega de chaves" },
-  { valor: "nao_informado", rotulo: "Não informado" },
-];
 const SITUACOES = [
   { valor: "em_aberto", rotulo: "Em aberto" },
   { valor: "indenizado", rotulo: "Indenizado" },
@@ -26,11 +22,13 @@ const rotulo = "mb-1 block text-[11px] font-semibold uppercase tracking-wide tex
 export default function Filtros({
   atalhos,
   periodoAtual,
+  produtos,
   seguradoras,
   grupos,
 }: {
   atalhos: Atalho[];
   periodoAtual: { chave: string; inicio: string; fim: string; rotulo: string };
+  produtos: string[];
   seguradoras: string[];
   grupos: OpcaoGrupo[];
 }) {
@@ -45,11 +43,31 @@ export default function Filtros({
   const [abertoImob, setAbertoImob] = useState(false);
   const caixaImob = useRef<HTMLDivElement>(null);
 
+  const prodSel = params.getAll("prod");
   const segSel = params.getAll("seg");
   const imobSel = params.get("imob");
   const tipoSel = params.get("tipo") ?? "";
   const sitSel = params.get("sit") ?? "";
   const grupoSel = grupos.find((g) => g.chave === imobSel);
+  // Tipo depende do produto: Fiança (ocupado/chaves), Capitalização (motivo do resgate).
+  const tipos = TIPOS_SINISTRO.filter((x) => x.produto == null || !prodSel.length || prodSel.includes(x.produto));
+
+  // Multi-seleção na URL (?prod=a&prod=b, ?seg=...).
+  function alternar(chave: string, valor: string, marcado: boolean) {
+    aplicar((q) => {
+      const atuais = new Set(q.getAll(chave));
+      if (marcado) atuais.add(valor);
+      else atuais.delete(valor);
+      q.delete(chave);
+      atuais.forEach((x) => q.append(chave, x));
+      if (chave === "prod") q.delete("tipo");
+    });
+  }
+  const tirar = (chave: string, valor: string) => (q: URLSearchParams) => {
+    const resto = q.getAll(chave).filter((x) => x !== valor);
+    q.delete(chave);
+    resto.forEach((x) => q.append(chave, x));
+  };
 
   function aplicar(mudar: (q: URLSearchParams) => void) {
     const q = new URLSearchParams(params.toString());
@@ -68,8 +86,9 @@ export default function Filtros({
 
   const ativos: { rotulo: string; limpar: (q: URLSearchParams) => void }[] = [];
   if (grupoSel) ativos.push({ rotulo: `${grupoSel.tipo === "grupo" ? "Grupo" : "Imobiliária"}: ${grupoSel.nome}`, limpar: (q) => q.delete("imob") });
-  for (const s of segSel) ativos.push({ rotulo: `Seguradora: ${s}`, limpar: (q) => { const resto = q.getAll("seg").filter((x) => x !== s); q.delete("seg"); resto.forEach((x) => q.append("seg", x)); } });
-  if (tipoSel) ativos.push({ rotulo: `Tipo: ${TIPOS.find((t) => t.valor === tipoSel)?.rotulo ?? tipoSel}`, limpar: (q) => q.delete("tipo") });
+  for (const p of prodSel) ativos.push({ rotulo: `Produto: ${rotuloProduto(p)}`, limpar: tirar("prod", p) });
+  for (const s of segSel) ativos.push({ rotulo: `Seguradora: ${s}`, limpar: tirar("seg", s) });
+  if (tipoSel) ativos.push({ rotulo: `Tipo: ${rotuloTipoSinistro(tipoSel)}`, limpar: (q) => q.delete("tipo") });
   if (sitSel) ativos.push({ rotulo: `Situação: ${SITUACOES.find((s) => s.valor === sitSel)?.rotulo ?? sitSel}`, limpar: (q) => q.delete("sit") });
 
   return (
@@ -94,12 +113,19 @@ export default function Filtros({
         </div>
         <div>
           <label className={rotulo}>Produto</label>
-          <select className={campo} value="fianca" onChange={() => {}}>
-            <option value="fianca">Seguro Fiança</option>
-            <option disabled>Capitalização (em breve)</option>
-            <option disabled>Seguro Incêndio / RE (em breve)</option>
-            <option disabled>Automóvel (em breve)</option>
-          </select>
+          <details className="relative">
+            <summary className={`${campo} cursor-pointer list-none truncate`}>
+              {prodSel.length === 0 ? "Todos" : prodSel.length === 1 ? rotuloProduto(prodSel[0]) : `${prodSel.length} produtos`}
+            </summary>
+            <div className="absolute z-20 mt-1 max-h-72 w-64 overflow-auto rounded-lg border border-gray-200 bg-white p-2 shadow-lg">
+              {produtos.map((p) => (
+                <label key={p} className="flex items-center gap-2 rounded px-1 py-1 text-sm hover:bg-gray-50">
+                  <input type="checkbox" className="accent-o2-coral" checked={prodSel.includes(p)} onChange={(e) => alternar("prod", p, e.target.checked)} />
+                  {rotuloProduto(p)}
+                </label>
+              ))}
+            </div>
+          </details>
         </div>
         <div>
           <label className={rotulo}>Seguradora</label>
@@ -112,15 +138,7 @@ export default function Filtros({
                     type="checkbox"
                     className="accent-o2-coral"
                     checked={segSel.includes(s)}
-                    onChange={(e) =>
-                      aplicar((q) => {
-                        const atuais = new Set(q.getAll("seg"));
-                        if (e.target.checked) atuais.add(s);
-                        else atuais.delete(s);
-                        q.delete("seg");
-                        atuais.forEach((x) => q.append("seg", x));
-                      })
-                    }
+                    onChange={(e) => alternar("seg", s, e.target.checked)}
                   />
                   {s}
                 </label>
@@ -162,8 +180,11 @@ export default function Filtros({
           <label className={rotulo}>Tipo</label>
           <select className={campo} value={tipoSel} onChange={(e) => aplicar((q) => (e.target.value ? q.set("tipo", e.target.value) : q.delete("tipo")))}>
             <option value="">Todos</option>
-            {TIPOS.map((t) => (
-              <option key={t.valor} value={t.valor}>{t.rotulo}</option>
+            {tipos.map((t) => (
+              <option key={t.valor} value={t.valor}>
+                {t.rotulo}
+                {t.produto && prodSel.length !== 1 ? ` (${rotuloProduto(t.produto)})` : ""}
+              </option>
             ))}
           </select>
         </div>
@@ -206,7 +227,7 @@ export default function Filtros({
             </button>
           ))}
           {ativos.length > 1 && (
-            <button type="button" className="text-gray-500 hover:underline" onClick={() => aplicar((q) => ["seg", "imob", "tipo", "sit"].forEach((k) => q.delete(k)))}>
+            <button type="button" className="text-gray-500 hover:underline" onClick={() => aplicar((q) => ["prod", "seg", "imob", "tipo", "sit"].forEach((k) => q.delete(k)))}>
               limpar filtros
             </button>
           )}

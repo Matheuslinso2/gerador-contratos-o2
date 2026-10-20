@@ -1,4 +1,4 @@
--- Histórico de sinistros de Seguro Fiança vindo das exportações do Corp
+-- Histórico de sinistros (todos os ramos) vindo das exportações do Corp
 -- ("Consulta de sinistros" encerrados/pendentes + "Grade"). Base dos KPIs de
 -- sinistro (frequência, sinistralidade, desfecho) até o módulo novo
 -- (tabela `sinistros`) acumular histórico próprio. Retrato e regras em
@@ -50,3 +50,13 @@ alter table sinistros_corp enable row level security;
 drop policy if exists "sinistros_corp o2" on sinistros_corp;
 create policy "sinistros_corp o2" on sinistros_corp for all to authenticated
   using (is_colaborador_o2()) with check (is_colaborador_o2());
+
+-- Fase B (20/10/2026): todos os ramos do Corp. produto = chave do painel
+-- (fianca, capitalizacao, automovel, incendio, ...; ver produto_sinistro_de_ramo
+-- em schema_sinistros_dashboard.sql); subtipo = motivo do resgate na
+-- Capitalização (cap_execucao, cap_acordo, cap_debitos, cap_reaplicacao,
+-- cap_administrativo, cap_resgate), tirado da Descrição.
+alter table sinistros_corp add column if not exists produto text;
+alter table sinistros_corp add column if not exists subtipo text;
+update sinistros_corp set produto = 'fianca' where produto is null;
+create index if not exists sinistros_corp_produto_idx on sinistros_corp(produto);

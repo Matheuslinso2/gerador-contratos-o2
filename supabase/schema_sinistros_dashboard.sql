@@ -9,8 +9,10 @@
 --                                apólices vigentes no fim do mês e prêmio ganho no mês
 --                                (pro rata por dia da vigência);
 --   sinistros_kpi_grupos         opções do filtro de imobiliária/grupo.
--- Refeita por atualizar_base_kpis_sinistros() (importador do Corp e a própria
--- página quando a base passa de 12 h). Só equipe O2. Aplicado via MCP.
+-- Refeita por atualizar_base_kpis_sinistros() (importador do Corp, cron da
+-- madrugada e o botão "Atualizar base"; ~25 s, por isso service_role tem
+-- statement_timeout de 120 s). Fase B (20/10/2026): todos os ramos do Corp --
+-- produto = chave de produto_sinistro_de_ramo(). Só equipe O2. Aplicado via MCP.
 
 create table if not exists sinistros_kpi_fato (
   id uuid primary key,
@@ -67,6 +69,34 @@ create policy "sinistros_kpi_grupos o2" on sinistros_kpi_grupos for all to authe
 drop policy if exists "sinistros_kpi_base_meta o2" on sinistros_kpi_base_meta;
 create policy "sinistros_kpi_base_meta o2" on sinistros_kpi_base_meta for all to authenticated using (is_colaborador_o2()) with check (is_colaborador_o2());
 
+-- Produto do painel a partir do ramo padronizado da produção
+-- (producao_unificada.ramo_padrao); mesmas chaves do importador do Corp e de
+-- src/lib/sinistros/produtos.ts.
+create or replace function produto_sinistro_de_ramo(p_produto text, p_ramo text)
+returns text language sql immutable as $$
+  select case
+    when p_produto = 'fianca' then 'fianca'
+    when p_produto = 'capitalizacao' then 'capitalizacao'
+    when p_produto = 'automovel' then 'automovel'
+    when p_ramo = 'Incêndio Imobiliário' then 'incendio'
+    when p_ramo = 'Residencial' then 'residencial'
+    when p_ramo = 'Condomínio' then 'condominio'
+    when p_ramo = 'Empresarial' then 'empresarial'
+    when p_ramo = 'Vida' then 'vida'
+    when p_ramo = 'Equipamentos portáteis' then 'portateis'
+    when p_ramo = 'RC' then 'rc'
+    when p_ramo = 'Viagem' then 'viagem'
+    when p_ramo = 'Conteúdo residencial/comercial' then 'conteudo'
+    else 'outros' end
+$$;
+
+-- Jobs do servidor (cron, importador, botão "Atualizar base") rodam como
+-- service_role; sem isso herdam os 8 s do authenticator. Usuários seguem com 8 s.
+alter role service_role set statement_timeout = '120s';
+notify pgrst, 'reload config';
+
+-- Os DELETE levam "where true": pela API o Supabase (safeupdate) recusa
+-- DELETE sem WHERE.
 create or replace function atualizar_base_kpis_sinistros()
 returns timestamptz
 language plpgsql
@@ -81,6 +111,15 @@ begin
     raise exception 'acesso restrito à equipe O2';
   end if;
 
+  -- Uma única leitura da produção do Corp (a tabela é larga e o banco é
+  -- pequeno: cada varredura custa ~10 s), em tabela estreita.
+  drop table if exists tmp_prod;
+  create temp table tmp_prod on commit drop as
+  select origem_corp_numero nn, trim(imobiliaria_texto) texto, seguradora, data_efetivacao,
+    produto_sinistro_de_ramo(produto, ramo_padrao) produto, coalesce(premio, 0) premio,
+    (extras ->> 'vigencia_inicio')::date vi, (extras ->> 'vigencia_fim')::date vf
+  from producao_unificada where fonte = 'corp';
+
   -- Quem é quem: grupo da imobiliária > imobiliária confirmada > texto do Corp.
   drop table if exists tmp_quem;
   create temp table tmp_quem on commit drop as
@@ -94,50 +133,49 @@ begin
     coalesce('g:' || g.id::text, 'i:' || i.id::text, 't:' || t.texto) chave,
     coalesce(g.nome, nullif(i.apelido, ''), i.nome, t.texto) nome,
     case when g.id is not null then 'grupo' when i.id is not null then 'imobiliaria' else 'sem_vinculo' end tipo
-  from (select distinct trim(imobiliaria_texto) texto from producao_unificada where fonte = 'corp' and imobiliaria_texto is not null) t
+  from (select distinct texto from tmp_prod where texto is not null) t
   left join vinc v on v.nome = t.texto
   left join imobiliarias i on i.id = v.imobiliaria_id
   left join imobiliaria_grupos g on g.id = i.grupo_id;
   create index on tmp_quem(texto);
 
-  delete from sinistros_kpi_grupos;
+  delete from sinistros_kpi_grupos where true;
   insert into sinistros_kpi_grupos (chave, nome, tipo)
   select distinct on (chave) chave, nome, tipo from tmp_quem order by chave;
 
-  delete from sinistros_kpi_fato;
+  -- Sinistros de todos os ramos (decisão 20/10/2026: toda linha do Corp conta).
+  -- Imobiliária e seguradora vêm da apólice (Nosso Nº), de qualquer produto.
+  drop table if exists tmp_apnn;
+  create temp table tmp_apnn on commit drop as
+  select distinct on (nn) nn, texto, seguradora from tmp_prod where nn is not null
+  order by nn, data_efetivacao desc nulls last;
+  create index on tmp_apnn(nn);
+
+  delete from sinistros_kpi_fato where true;
   insert into sinistros_kpi_fato (id, origem, produto, nosso_numero, numero_sinistro, seguradora, grupo_chave,
     tipo_sinistro, situacao, dt_aviso, dt_encerramento, vl_avisado, vl_indenizado, segurado)
-  select sc.id, 'corp', 'fianca', sc.nosso_numero, sc.numero_sinistro, coalesce(ap.seguradora, sc.seguradora), q.chave,
-    sc.tipo_sinistro, sc.situacao, coalesce(sc.dt_aviso, sc.dt_ocorrencia), sc.dt_encerramento,
+  select sc.id, 'corp', coalesce(sc.produto, 'fianca'), sc.nosso_numero, sc.numero_sinistro, coalesce(ap.seguradora, sc.seguradora), q.chave,
+    coalesce(sc.tipo_sinistro, sc.subtipo), sc.situacao, coalesce(sc.dt_aviso, sc.dt_ocorrencia), sc.dt_encerramento,
     sc.vl_avisado, sc.vl_indenizado, sc.segurado
   from sinistros_corp sc
-  left join (
-    select distinct on (origem_corp_numero) origem_corp_numero nn, trim(imobiliaria_texto) texto, seguradora
-    from producao_unificada where produto = 'fianca' and fonte = 'corp'
-    order by origem_corp_numero, data_efetivacao desc nulls last
-  ) ap on ap.nn = sc.nosso_numero
+  left join tmp_apnn ap on ap.nn = sc.nosso_numero
   left join tmp_quem q on q.texto = ap.texto;
 
-  -- Carteira mês a mês (desde 2019): vigente no último dia do mês (ou hoje,
-  -- no mês corrente) e prêmio ganho = prêmio × dias de vigência dentro do mês
-  -- (até hoje) ÷ dias totais da vigência. As apólices vão antes para uma tabela
-  -- estreita: ordenar a linha inteira (com extras) custava ~10 s.
+  -- Carteira mês a mês (desde 2019) de todos os produtos do Corp: vigente no
+  -- último dia do mês (ou hoje) e prêmio ganho = prêmio × dias de vigência
+  -- dentro do mês (até hoje) ÷ dias totais da vigência.
   drop table if exists tmp_ap;
   create temp table tmp_ap on commit drop as
-  select p.produto, q.chave, coalesce(p.seguradora, '—') seguradora, coalesce(p.premio, 0) premio,
-    (p.extras ->> 'vigencia_inicio')::date vi, (p.extras ->> 'vigencia_fim')::date vf
-  from producao_unificada p
-  join tmp_quem q on q.texto = trim(p.imobiliaria_texto)
-  where p.fonte = 'corp' and p.produto = 'fianca'
-    and (p.extras ->> 'vigencia_inicio') is not null and (p.extras ->> 'vigencia_fim') is not null;
-  delete from tmp_ap where vf < vi or vf < date '2019-01-01';
+  select p.produto, q.chave, coalesce(p.seguradora, '—') seguradora, p.premio, p.vi, p.vf
+  from tmp_prod p join tmp_quem q on q.texto = p.texto
+  where p.vi is not null and p.vf is not null and p.vf >= p.vi and p.vf >= date '2019-01-01';
 
   drop table if exists tmp_meses;
   create temp table tmp_meses on commit drop as
   select m::date ini, least((m + interval '1 month - 1 day')::date, current_date) fim
   from generate_series(date '2019-01-01', date_trunc('month', current_date), interval '1 month') m;
 
-  delete from sinistros_kpi_carteira_mes;
+  delete from sinistros_kpi_carteira_mes where true;
   insert into sinistros_kpi_carteira_mes (produto, grupo_chave, seguradora, mes, vigentes, premio_ganho)
   select a.produto, a.chave, a.seguradora, me.ini,
     count(*) filter (where a.vi <= me.fim and a.vf >= me.fim),
@@ -166,8 +204,9 @@ grant execute on function atualizar_base_kpis_sinistros() to authenticated, serv
 -- aberto = foto no último dia; sinistralidade = indenizado ÷ prêmio ganho no
 -- período; frequência = avisados ÷ média de vigentes (e anualizada na tela).
 
+drop function if exists kpis_sinistros_bloco(date, date, text[], text, text[], text[]);
 create or replace function kpis_sinistros_bloco(
-  p_ini date, p_fim date, p_segs text[], p_grupo text, p_tipos text[], p_sits text[]
+  p_ini date, p_fim date, p_segs text[], p_grupo text, p_tipos text[], p_sits text[], p_prods text[] default null
 ) returns jsonb
 language sql stable security definer set search_path to 'public'
 as $$
@@ -181,6 +220,7 @@ as $$
            when f.situacao = 'INDENIZADO' then 'indenizado' else 'sem_indenizacao' end sit
     from sinistros_kpi_fato f
     where (p_segs is null or f.seguradora = any(p_segs))
+      and (p_prods is null or f.produto = any(p_prods))
       and (p_grupo is null or f.grupo_chave = p_grupo)
       and (p_tipos is null or coalesce(f.tipo_sinistro, 'nao_informado') = any(p_tipos))
   ),
@@ -190,6 +230,7 @@ as $$
     from sinistros_kpi_carteira_mes cm
     where cm.mes between p_ini and p_fim
       and (p_segs is null or cm.seguradora = any(p_segs))
+      and (p_prods is null or cm.produto = any(p_prods))
       and (p_grupo is null or cm.grupo_chave = p_grupo)
     group by cm.mes
   ),
@@ -224,10 +265,12 @@ as $$
   group by lim.ini, lim.fim_dia, lim.meses;
 $$;
 
+drop function if exists kpis_sinistros_dashboard(date, date, text[], text, text[], text[]);
 create or replace function kpis_sinistros_dashboard(
   p_inicio date, p_fim date,
   p_seguradoras text[] default null, p_grupo text default null,
-  p_tipos text[] default null, p_situacoes text[] default null
+  p_tipos text[] default null, p_situacoes text[] default null,
+  p_produtos text[] default null
 ) returns jsonb
 language plpgsql stable security definer set search_path to 'public'
 as $$
@@ -247,6 +290,7 @@ begin
            when f.situacao = 'INDENIZADO' then 'indenizado' else 'sem_indenizacao' end sit
     from sinistros_kpi_fato f
     where (p_seguradoras is null or f.seguradora = any(p_seguradoras))
+      and (p_produtos is null or f.produto = any(p_produtos))
       and (p_grupo is null or f.grupo_chave = p_grupo)
       and (p_tipos is null or coalesce(f.tipo_sinistro, 'nao_informado') = any(p_tipos))
       and (p_situacoes is null or (case when f.situacao in ('PENDENTE', 'EM ANDAMENTO') then 'em_aberto'
@@ -256,10 +300,8 @@ begin
     select cm.* from sinistros_kpi_carteira_mes cm
     where cm.mes between p_inicio and p_fim
       and (p_seguradoras is null or cm.seguradora = any(p_seguradoras))
+      and (p_produtos is null or cm.produto = any(p_produtos))
       and (p_grupo is null or cm.grupo_chave = p_grupo)
-  ),
-  aberto as (
-    select * from f where f.dt_aviso <= fim_dia and (f.dt_encerramento > fim_dia or (f.dt_encerramento is null and f.sit = 'em_aberto'))
   ),
   meses as (select generate_series(p_inicio, p_fim, interval '1 month')::date mes),
   av_mes as (select date_trunc('month', f.dt_aviso)::date mes, count(*) n from f group by 1),
@@ -315,6 +357,22 @@ begin
       from f group by 1
     ) t where t.avisados > 0 or t.indenizado > 0
   ),
+  quebra_prod as (
+    select coalesce(jsonb_agg(jsonb_build_object(
+      'produto', pf.produto, 'avisados', pf.avisados, 'indenizados', pf.indenizados, 'indenizado', pf.indenizado,
+      'em_aberto', pf.em_aberto, 'vigentes_media', pc.vigentes_media, 'premio_ganho', pc.premio_ganho
+    ) order by pf.indenizado desc, pf.avisados desc), '[]'::jsonb) j
+    from (
+      select f.produto,
+        count(*) filter (where f.dt_aviso between p_inicio and fim_dia) avisados,
+        count(*) filter (where f.sit = 'indenizado' and f.dt_encerramento between p_inicio and fim_dia) indenizados,
+        round(coalesce(sum(f.vl_indenizado) filter (where f.sit = 'indenizado' and f.dt_encerramento between p_inicio and fim_dia), 0)) indenizado,
+        count(*) filter (where f.dt_aviso <= fim_dia and (f.dt_encerramento > fim_dia or (f.dt_encerramento is null and f.sit = 'em_aberto'))) em_aberto
+      from f group by 1
+    ) pf
+    left join (select c.produto, round(sum(c.vigentes)::numeric / n) vigentes_media, round(sum(c.premio_ganho)) premio_ganho from c group by 1) pc on pc.produto = pf.produto
+    where pf.avisados > 0 or pf.indenizado > 0 or pf.em_aberto > 0
+  ),
   rank_f as (
     select f.grupo_chave chave,
       count(*) filter (where f.dt_aviso between p_inicio and fim_dia) avisados,
@@ -338,6 +396,7 @@ begin
   lista as (
     select coalesce(jsonb_agg(jsonb_build_object(
       'segurado', l.segurado, 'seguradora', l.seguradora, 'numero_sinistro', l.numero_sinistro, 'tipo', l.tipo_sinistro,
+      'produto', l.produto,
       'situacao', l.situacao, 'dt_aviso', l.dt_aviso, 'dt_encerramento', l.dt_encerramento,
       'vl_avisado', l.vl_avisado, 'vl_indenizado', l.vl_indenizado
     ) order by l.dt_aviso desc), '[]'::jsonb) j
@@ -349,6 +408,7 @@ begin
     select m.* from sinistros m
     left join imobiliarias i on i.id = m.imobiliaria_id
     where m.enviado_em is not null and m.etapa <> 'cancelado'
+      and (p_produtos is null or 'fianca' = any(p_produtos))
       and m.enviado_em::date between p_inicio and fim_dia
       and (p_grupo is null or p_grupo = coalesce('g:' || i.grupo_id::text, 'i:' || i.id::text))
   ),
@@ -366,16 +426,19 @@ begin
                                   'parcial', p_fim >= date_trunc('month', current_date)::date),
     'base_atualizada_em', (select atualizado_em from sinistros_kpi_base_meta where id = 1),
     'grupo', (select jsonb_build_object('chave', g.chave, 'nome', g.nome, 'tipo', g.tipo) from sinistros_kpi_grupos g where g.chave = p_grupo),
-    'resumo', kpis_sinistros_bloco(p_inicio, p_fim, p_seguradoras, p_grupo, p_tipos, p_situacoes),
-    'anterior', kpis_sinistros_bloco((p_inicio - make_interval(months => n))::date, (p_fim - make_interval(months => n))::date, p_seguradoras, p_grupo, p_tipos, p_situacoes),
-    'ano_anterior', kpis_sinistros_bloco((p_inicio - interval '12 months')::date, (p_fim - interval '12 months')::date, p_seguradoras, p_grupo, p_tipos, p_situacoes),
-    'carteira', case when p_grupo is not null then kpis_sinistros_bloco(p_inicio, p_fim, p_seguradoras, null, p_tipos, p_situacoes) end,
+    'resumo', kpis_sinistros_bloco(p_inicio, p_fim, p_seguradoras, p_grupo, p_tipos, p_situacoes, p_produtos),
+    'anterior', kpis_sinistros_bloco((p_inicio - make_interval(months => n))::date, (p_fim - make_interval(months => n))::date, p_seguradoras, p_grupo, p_tipos, p_situacoes, p_produtos),
+    'ano_anterior', kpis_sinistros_bloco((p_inicio - interval '12 months')::date, (p_fim - interval '12 months')::date, p_seguradoras, p_grupo, p_tipos, p_situacoes, p_produtos),
+    'carteira', case when p_grupo is not null then kpis_sinistros_bloco(p_inicio, p_fim, p_seguradoras, null, p_tipos, p_situacoes, p_produtos) end,
     'mensal', (select j from mensal),
     'por_seguradora', (select j from quebra_seg),
     'por_tipo', (select j from quebra_tipo),
+    'por_produto', (select j from quebra_prod),
     'ranking', (select j from ranking),
     'sinistros', (select j from lista),
     'processo', (select j from processo),
+    'opcoes_produtos', (select coalesce(jsonb_agg(x.p order by x.p), '[]'::jsonb) from (
+        select distinct produto p from sinistros_kpi_fato union select distinct produto from sinistros_kpi_carteira_mes where vigentes > 0) x),
     'opcoes_seguradoras', (select coalesce(jsonb_agg(x.s order by x.s), '[]'::jsonb) from (
         select distinct cm.seguradora s from sinistros_kpi_carteira_mes cm where cm.vigentes > 0 and cm.seguradora <> '—'
         union select distinct sf.seguradora from sinistros_kpi_fato sf where sf.seguradora is not null) x)
@@ -395,8 +458,8 @@ as $$
      or exists (select 1 from sinistros_kpi_carteira_mes c where c.grupo_chave = g.chave and c.vigentes > 0);
 $$;
 
-revoke execute on function kpis_sinistros_bloco(date, date, text[], text, text[], text[]) from anon, public, authenticated;
-revoke execute on function kpis_sinistros_dashboard(date, date, text[], text, text[], text[]) from anon, public;
-grant execute on function kpis_sinistros_dashboard(date, date, text[], text, text[], text[]) to authenticated;
+revoke execute on function kpis_sinistros_bloco(date, date, text[], text, text[], text[], text[]) from anon, public, authenticated;
+revoke execute on function kpis_sinistros_dashboard(date, date, text[], text, text[], text[], text[]) from anon, public;
+grant execute on function kpis_sinistros_dashboard(date, date, text[], text, text[], text[], text[]) to authenticated;
 revoke execute on function opcoes_grupos_sinistros() from anon, public;
 grant execute on function opcoes_grupos_sinistros() to authenticated;

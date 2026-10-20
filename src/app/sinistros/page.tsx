@@ -9,6 +9,7 @@ import SubmitButton from "@/components/SubmitButton";
 import { IconShield } from "@/components/icons";
 import { formatarData, formatarReais } from "@/lib/sinistros/regras";
 import { atalhosPeriodo, filtrosDashboard, lista, mesesNoPeriodo, resolverPeriodo } from "@/lib/sinistros/periodo";
+import { ordenarProdutos, rotuloProduto, rotuloTipoSinistro } from "@/lib/sinistros/produtos";
 import { signOut } from "../actions";
 import { Aviso } from "./ui";
 import Abas from "./Abas";
@@ -20,8 +21,9 @@ export const dynamic = "force-dynamic";
 
 // Dashboard de Sinistros — tela de entrada do módulo (planejamento v2,
 // entregaveis/modulo-sinistro/Modulo Sinistros - Planejamento v2 ...pdf).
-// Uma barra de filtros (período flexível, seguradora, imobiliária/grupo,
-// tipo, situação) recorta TODOS os números. Cálculo em
+// Uma barra de filtros (período flexível, produto, seguradora,
+// imobiliária/grupo, tipo, situação) recorta TODOS os números. Fase B
+// (20/10/2026): todos os ramos do Corp; sem filtro = todos os produtos. Cálculo em
 // kpis_sinistros_dashboard() (supabase/schema_sinistros_dashboard.sql).
 
 type Bloco = {
@@ -46,7 +48,8 @@ type Bloco = {
 type Mes = { mes: string; avisados: number; indenizados: number; sem_indenizacao: number; valor_indenizado: number; vigentes: number; premio_ganho: number };
 type LinhaSeg = { seguradora: string; avisados: number; indenizados: number; sem_indenizacao: number; indenizado: number; em_aberto: number; vigentes_media: number | null; premio_ganho: number | null };
 type LinhaRank = { chave: string; nome: string; tipo: "grupo" | "imobiliaria" | "sem_vinculo"; avisados: number; indenizados: number; indenizado: number; em_aberto: number; vigentes_media: number | null; premio_ganho: number | null };
-type SinistroLista = { segurado: string | null; seguradora: string | null; numero_sinistro: string | null; tipo: string | null; situacao: string; dt_aviso: string | null; dt_encerramento: string | null; vl_avisado: number | null; vl_indenizado: number | null };
+type LinhaProd = { produto: string; avisados: number; indenizados: number; indenizado: number; em_aberto: number; vigentes_media: number | null; premio_ganho: number | null };
+type SinistroLista = { segurado: string | null; seguradora: string | null; numero_sinistro: string | null; tipo: string | null; produto: string | null; situacao: string; dt_aviso: string | null; dt_encerramento: string | null; vl_avisado: number | null; vl_indenizado: number | null };
 type Dashboard = {
   periodo: { inicio: string; fim: string; fim_dia: string; meses: number; parcial: boolean };
   base_atualizada_em: string | null;
@@ -58,16 +61,17 @@ type Dashboard = {
   mensal: Mes[];
   por_seguradora: LinhaSeg[];
   por_tipo: { tipo: string; avisados: number; indenizado: number }[];
+  por_produto: LinhaProd[];
   ranking: LinhaRank[];
   sinistros: SinistroLista[];
   processo: { enviados: number; no_prazo: number; com_pendencia: number; abertos_na_seguradora: number; mediana_dias_ate_abrir: number | null };
   opcoes_seguradoras: string[];
+  opcoes_produtos: string[];
 };
 
 const AZUL = "#2E6FB7";
 const LARANJA = "#F8540D";
 const BASE_MINIMA = 20; // P6
-const TIPO_ROTULO: Record<string, string> = { ocupado: "Imóvel ocupado", chaves: "Entrega de chaves", nao_informado: "Não informado" };
 
 const num = (v: number | null | undefined) => (v ?? 0).toLocaleString("pt-BR");
 const pct = (v: number | null) => (v == null || !isFinite(v) ? "—" : `${(v * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`);
@@ -120,6 +124,7 @@ export default async function DashboardSinistrosPage({ searchParams }: { searchP
 
   const um = (k: string) => (Array.isArray(params[k]) ? (params[k] as string[])[0] : (params[k] as string | undefined));
   const periodo = resolverPeriodo({ periodo: um("periodo"), de: um("de"), ate: um("ate") });
+  const produtos = lista(params.prod);
   const seguradoras = lista(params.seg);
   const grupo = um("imob") || null;
   const tipos = lista(params.tipo);
@@ -133,6 +138,7 @@ export default async function DashboardSinistrosPage({ searchParams }: { searchP
       p_grupo: grupo,
       p_tipos: tipos.length ? tipos : null,
       p_situacoes: situacoes.length ? situacoes : null,
+      p_produtos: produtos.length ? produtos : null,
     }),
     supabase.rpc("opcoes_grupos_sinistros"),
   ]);
@@ -149,12 +155,13 @@ export default async function DashboardSinistrosPage({ searchParams }: { searchP
         <Filtros
           atalhos={atalhosPeriodo().map(({ chave, rotulo }) => ({ chave, rotulo }))}
           periodoAtual={periodo}
+          produtos={ordenarProdutos(d?.opcoes_produtos ?? [])}
           seguradoras={(d?.opcoes_seguradoras ?? []).filter((s) => !/PREMIA/i.test(s))}
           grupos={(grupos ?? []) as OpcaoGrupo[]}
         />
         {erro && <Aviso tipo="erro">{erro}</Aviso>}
         {error && <Aviso tipo="erro">Não foi possível calcular o dashboard: {error.message}</Aviso>}
-        {d && <Conteudo d={d} periodoRotulo={periodo.rotulo} filtros={filtros} meses={mesesNoPeriodo(periodo)} />}
+        {d && <Conteudo d={d} periodoRotulo={periodo.rotulo} filtros={filtros} meses={mesesNoPeriodo(periodo)} produtos={produtos} />}
       </main>
     </>
   );
@@ -206,7 +213,7 @@ function Cartao({
   );
 }
 
-function Conteudo({ d, periodoRotulo, filtros, meses }: { d: Dashboard; periodoRotulo: string; filtros: string; meses: number }) {
+function Conteudo({ d, periodoRotulo, filtros, meses, produtos }: { d: Dashboard; periodoRotulo: string; filtros: string; meses: number; produtos: string[] }) {
   const r = d.resumo;
   const t = taxas(r);
   const tAnt = taxas(d.anterior);
@@ -223,13 +230,22 @@ function Conteudo({ d, periodoRotulo, filtros, meses }: { d: Dashboard; periodoR
     n.set("imob", chave);
     return `/sinistros?${n.toString()}`;
   };
+  const comProduto = (chave: string) => {
+    const n = new URLSearchParams(q);
+    n.delete("prod");
+    n.delete("tipo");
+    n.set("prod", chave);
+    return `/sinistros?${n.toString()}`;
+  };
+  const rotuloProdutos = produtos.length === 0 ? "Todos os produtos" : produtos.map(rotuloProduto).join(", ");
+  const temFianca = r.avisados_ocupado + r.avisados_chaves > 0;
   const freqCarteiraAnual = t.frequenciaAnual;
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
         <p className="text-gray-600">
-          <b className="text-o2-navy">{d.grupo ? d.grupo.nome : "Carteira O2"}</b> · Seguro Fiança · {periodoRotulo} ({meses} {meses === 1 ? "mês" : "meses"}
+          <b className="text-o2-navy">{d.grupo ? d.grupo.nome : "Carteira O2"}</b> · {rotuloProdutos} · {periodoRotulo} ({meses} {meses === 1 ? "mês" : "meses"}
           {d.periodo.parcial ? `, mês atual até ${formatarData(d.periodo.fim_dia)}` : ""})
         </p>
         <form action={atualizarBaseSinistros} className="flex items-center gap-2 text-xs text-gray-500">
@@ -237,7 +253,7 @@ function Conteudo({ d, periodoRotulo, filtros, meses }: { d: Dashboard; periodoR
           <span>base atualizada {d.base_atualizada_em ? new Date(d.base_atualizada_em).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" }) : "—"}</span>
           <InfoLegenda titulo="Base do dashboard" alinhar="direita">
             O histórico vem das exportações do Corp (importadas com scripts/sinistros/importar-corp.mjs) e a carteira, da produção do Corp. A base mensal é refeita
-            toda madrugada, a cada importação e por este botão (leva uns 20 segundos).
+            toda madrugada, a cada importação e por este botão (leva uns 30 segundos).
           </InfoLegenda>
           <SubmitButton className="rounded border border-gray-300 px-2 py-1 text-xs text-o2-navy hover:bg-gray-50" textoCarregando="Atualizando base…">
             Atualizar base
@@ -249,7 +265,10 @@ function Conteudo({ d, periodoRotulo, filtros, meses }: { d: Dashboard; periodoR
         <Cartao
           rotulo="Sinistros avisados"
           valor={num(r.avisados)}
-          linhas={[`${r.avisados_ocupado} imóvel ocupado · ${r.avisados_chaves} entrega de chaves`, `${dinheiro(r.avisado_valor)} avisados`]}
+          linhas={[
+            ...(temFianca ? [`Fiança: ${r.avisados_ocupado} imóvel ocupado · ${r.avisados_chaves} entrega de chaves`] : []),
+            `${dinheiro(r.avisado_valor)} avisados`,
+          ]}
           comparacoes={[
             variacao(r.avisados, d.anterior.avisados, true) && { ...variacao(r.avisados, d.anterior.avisados, true)!, contra: ant },
             usarAno && variacao(r.avisados, d.ano_anterior.avisados, true) && { ...variacao(r.avisados, d.ano_anterior.avisados, true)!, contra: ano },
@@ -349,6 +368,56 @@ function Conteudo({ d, periodoRotulo, filtros, meses }: { d: Dashboard; periodoR
         </div>
       </section>
 
+      {produtos.length !== 1 && d.por_produto.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="flex items-center gap-1 text-sm font-semibold uppercase tracking-wide text-o2-navy">
+            Por produto
+            <InfoLegenda titulo="Por produto">
+              Clique num produto para ver o dashboard só dele. Todos os ramos vêm das exportações de sinistro do Corp; a carteira (apólices e prêmio ganho), da
+              produção do Corp. Na Capitalização todo resgate registrado no Corp conta como sinistro, e o valor é o do título resgatado — use o Tipo para separar
+              execução, acordo e resgate simples.
+            </InfoLegenda>
+          </h2>
+          <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+            <table className="w-full text-sm">
+              <thead className="bg-o2-navy text-left text-xs text-white">
+                <tr>
+                  <th className="px-3 py-2">Produto</th>
+                  <th className="px-3 py-2 text-right">Apólices (média)</th>
+                  <th className="px-3 py-2 text-right">Avisados</th>
+                  <th className="px-3 py-2 text-right">Freq. ao ano</th>
+                  <th className="px-3 py-2 text-right">Indenizado</th>
+                  <th className="px-3 py-2 text-right">Sinistralidade</th>
+                  <th className="px-3 py-2 text-right">Em aberto</th>
+                </tr>
+              </thead>
+              <tbody>
+                {d.por_produto.map((x) => {
+                  const ok = (x.vigentes_media ?? 0) >= BASE_MINIMA;
+                  return (
+                    <tr key={x.produto} className="border-t border-gray-100 hover:bg-blue-50">
+                      <td className="px-3 py-2">
+                        <Link href={comProduto(x.produto)} className="font-medium text-o2-navy hover:underline">
+                          {rotuloProduto(x.produto)}
+                        </Link>
+                      </td>
+                      <td className="px-3 py-2 text-right">{num(x.vigentes_media)}</td>
+                      <td className="px-3 py-2 text-right">{x.avisados}</td>
+                      <td className="px-3 py-2 text-right">
+                        {ok ? pct(((x.avisados / (x.vigentes_media ?? 1)) * 12) / meses) : <span className="text-xs text-gray-400">base pequena</span>}
+                      </td>
+                      <td className="px-3 py-2 text-right">{x.indenizado ? dinheiro(x.indenizado) : "—"}</td>
+                      <td className="px-3 py-2 text-right font-semibold">{ok && x.premio_ganho ? pct(x.indenizado / x.premio_ganho) : "—"}</td>
+                      <td className="px-3 py-2 text-right">{x.em_aberto || "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
       <section className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-2 lg:col-span-2">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Por seguradora</h2>
@@ -398,7 +467,7 @@ function Conteudo({ d, periodoRotulo, filtros, meses }: { d: Dashboard; periodoR
               <tbody>
                 {d.por_tipo.map((x) => (
                   <tr key={x.tipo} className="border-t border-gray-100 first:border-t-0">
-                    <td className="px-3 py-2 text-o2-navy">{TIPO_ROTULO[x.tipo] ?? x.tipo}</td>
+                    <td className="px-3 py-2 text-o2-navy">{rotuloTipoSinistro(x.tipo)}</td>
                     <td className="px-3 py-2 text-right">{x.avisados} avisados</td>
                     <td className="px-3 py-2 text-right">{dinheiro(x.indenizado)}</td>
                   </tr>
@@ -406,7 +475,10 @@ function Conteudo({ d, periodoRotulo, filtros, meses }: { d: Dashboard; periodoR
               </tbody>
             </table>
           </div>
-          <p className="text-xs text-gray-400">O tipo vem da descrição do Corp; antes de 2024 quase sempre está em branco.</p>
+          <p className="text-xs text-gray-400">
+            O tipo vem da descrição do Corp: na Fiança, imóvel ocupado ou entrega de chaves (antes de 2024 quase sempre em branco); na Capitalização, o motivo do
+            resgate. Os demais produtos não têm tipo no Corp.
+          </p>
         </div>
       </section>
 
@@ -424,7 +496,8 @@ function Conteudo({ d, periodoRotulo, filtros, meses }: { d: Dashboard; periodoR
             <table className="w-full text-sm">
               <thead className="bg-o2-navy text-left text-xs text-white">
                 <tr>
-                  <th className="px-3 py-2">Segurado (locador)</th>
+                  <th className="px-3 py-2">Segurado</th>
+                  <th className="px-3 py-2">Produto</th>
                   <th className="px-3 py-2">Seguradora</th>
                   <th className="px-3 py-2">Nº sinistro</th>
                   <th className="px-3 py-2">Tipo</th>
@@ -437,9 +510,10 @@ function Conteudo({ d, periodoRotulo, filtros, meses }: { d: Dashboard; periodoR
                 {d.sinistros.slice(0, 200).map((s, i) => (
                   <tr key={`${s.numero_sinistro}-${i}`} className="border-t border-gray-100">
                     <td className="px-3 py-2">{s.segurado ?? "—"}</td>
+                    <td className="px-3 py-2 text-xs">{rotuloProduto(s.produto)}</td>
                     <td className="px-3 py-2 text-xs">{s.seguradora}</td>
                     <td className="px-3 py-2 text-xs">{s.numero_sinistro ?? "—"}</td>
-                    <td className="px-3 py-2 text-xs">{s.tipo ? TIPO_ROTULO[s.tipo] : "—"}</td>
+                    <td className="px-3 py-2 text-xs">{s.tipo ? rotuloTipoSinistro(s.tipo) : "—"}</td>
                     <td className="px-3 py-2 text-xs">{formatarData(s.dt_aviso)}</td>
                     <td className="px-3 py-2 text-xs">
                       {s.situacao.toLowerCase()}
