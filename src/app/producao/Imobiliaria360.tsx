@@ -309,7 +309,7 @@ function Visao360({ visao, kpis, de, ate, linkCom }: { visao: Visao; kpis: Kpis;
           linhas={[`${num(cotConv)} convertidas`]}
           legenda="Tomadas de preço de todos os produtos no período (planilhas e Bitrix), na mesma régua do painel de cada produto."
         />
-        <Cartao rotulo="Apólices (Corp)" valor={num(kpis.resumo.propostas)} linhas={[`${compacto(kpis.resumo.premio)} de prêmio`]} legenda="Propostas efetivadas no Corp no período, pela data da proposta." />
+        <Cartao rotulo="Apólices (Corp)" valor={num(kpis.resumo.propostas)} linhas={[`${compacto(kpis.resumo.premio)} de prêmio líquido`]} legenda="Documentos efetivados no Corp no período, pela data da proposta (espelho do SharePoint, mesma conta do Power BI)." />
         <Cartao rotulo="Comissão" valor={compacto(kpis.resumo.comissao)} linhas={[`ano anterior: ${compacto(kpis.resumo_ano_anterior.comissao)}`]} />
         <Cartao
           rotulo="Sinistros avisados"
@@ -373,7 +373,7 @@ function Visao360({ visao, kpis, de, ate, linkCom }: { visao: Visao; kpis: Kpis;
       </Bloco>
 
       {/* Apólices */}
-      <Bloco titulo="Apólices (Corp)" cor="#2E6FB7" legenda="O que foi efetivado: propostas do Corp ligadas à imobiliária pelo produtor (vínculo confirmado).">
+      <Bloco titulo="Apólices (Corp)" cor="#2E6FB7" legenda="O que foi efetivado, na mesma conta do Power BI (espelho do SharePoint do Corp, 2020 em diante; PDFs de 2015 a 2019): documentos, prêmio líquido e comissão, ligados à imobiliária pelo código do produtor.">
         {kpis.por_produto.length === 0 ? (
           <p className="text-sm text-gray-500">Nenhuma apólice ligada a esta imobiliária no período.</p>
         ) : (

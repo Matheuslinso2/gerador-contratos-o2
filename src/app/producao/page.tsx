@@ -184,7 +184,7 @@ export default async function ProducaoPage({
       </>
     );
   }
-  const [{ data: kpisData, error: erroKpis }, opcoes, { data: imports }] = await Promise.all([
+  const [{ data: kpisData, error: erroKpis }, opcoes, { data: imports }, { data: espelho }] = await Promise.all([
     supabase.rpc("kpis_producao", {
       p_de: de,
       p_ate: ate,
@@ -194,7 +194,8 @@ export default async function ProducaoPage({
       p_seguradoras: filtros.seguradoras.length ? filtros.seguradoras : null,
     }),
     opcoesImobiliarias(supabase),
-    supabase.from("base_unica_importacoes").select("layout, importado_em").in("layout", ["bitrix_spa", "corp_relatorio_propostas"]),
+    supabase.from("base_unica_importacoes").select("layout, importado_em").in("layout", ["bitrix_spa"]),
+    supabase.from("corp_sp_arquivos").select("importado_em").eq("tipo", "grade").order("importado_em", { ascending: false }).limit(1).maybeSingle(),
   ]);
   const kpis = kpisData as Kpis | null;
   const nomesSelecionados = opcoes.filter((o) => (o.tipo === "grupo" ? filtros.grupos : filtros.imobs).includes(o.id)).map((o) => o.nome);
@@ -204,7 +205,8 @@ export default async function ProducaoPage({
       .map((r) => r.importado_em as string)
       .sort()
       .at(-1) ?? null;
-  const fontes: Fontes = { bitrix: ultima("bitrix_spa"), corp: ultima("corp_relatorio_propostas") };
+  // Corp = espelho do SharePoint (cron corp-sharepoint), de 2020 em diante.
+  const fontes: Fontes = { bitrix: ultima("bitrix_spa"), corp: (espelho?.importado_em as string | null) ?? null };
 
   return (
     <>
@@ -669,9 +671,10 @@ function BlocoApolices({
       cor="#01192e"
       fonte={
         <>
-          O que foi efetivado de fato: propostas emitidas, prêmio líquido e comissão, pelo mês da data da proposta. Fonte: Relatório de Propostas do Corp
-          {fontes.corp ? `, importado em ${dataHora(fontes.corp)}` : ""} (2015 em diante, conferido com os totais do próprio Corp). Entram todas as propostas que o Corp
-          registra (novas, renovações e endossos). O filtro de seguradora vale só para este bloco.
+          O que foi efetivado de fato: documentos, prêmio líquido e comissão da corretora, pelo mês da data da proposta — a mesma conta do Power BI (documento
+          conta uma vez; novos, renovações, endossos, faturas e cancelamentos). Fonte: espelho do SharePoint do Corp, de 2020 em diante
+          {fontes.corp ? ` (atualizado em ${dataHora(fontes.corp)})` : ""}; de 2015 a 2019, os relatórios PDF do Corp. A imobiliária é ligada pelo código do
+          produtor. O filtro de seguradora vale só para este bloco.
         </>
       }
     >
@@ -706,7 +709,7 @@ function BlocoApolices({
         />
       </div>
       {kpis.ate === mesAtual && fontes.corp && (
-        <p className="text-xs text-gray-500">O mês corrente ({rotuloMes(mesAtual)}) está incompleto: o Corp foi importado em {dataHora(fontes.corp)}.</p>
+        <p className="text-xs text-gray-500">O mês corrente ({rotuloMes(mesAtual)}) está incompleto: o espelho do Corp foi atualizado em {dataHora(fontes.corp)}.</p>
       )}
 
       <div className="space-y-2">

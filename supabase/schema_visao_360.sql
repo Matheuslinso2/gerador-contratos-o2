@@ -45,17 +45,22 @@ begin
   -- Sinistros: os mesmos da aba Sinistros (sinistros_kpi_fato já diz o grupo
   -- ou a ficha de cada um — mesma regra, mesmos totais). Só esses poucos são
   -- resolvidos até a FICHA, para a quebra por unidade: card → ficha do card;
-  -- Corp → apólice (Nosso Nº, índice único) → produtor → ficha (texto igual à
-  -- chave do registro vence o nome, como em producao_resolvida).
+  -- Corp → apólice (Nosso Nº no espelho do SharePoint) → CÓDIGO do produtor →
+  -- ficha (vínculo confirmado); sem código, pelo texto do relatório PDF.
   cand as (
     select f.* from sinistros_kpi_fato f where f.grupo_chave = v_chave
   ),
   cand_texto as (
-    select c.id, s.imobiliaria_id as imob_card, s.id as card, p.imobiliaria_texto as texto
+    select c.id, s.imobiliaria_id as imob_card, s.id as card, p.imobiliaria_texto as texto, g.codigo as codigo
     from cand c
     left join sinistros s on c.origem = 'workspace' and s.id = c.id
     left join sinistros_corp sc on sc.id = case when c.origem = 'corp' then c.id else s.sinistro_corp_id end
-    left join producao_unificada p on p.fonte = 'corp' and p.origem_corp_numero = sc.nosso_numero
+    left join lateral (
+      select x.codigo_produtor::text as codigo from corp_grade x
+      where sc.nosso_numero ~ '^\d+$' and x.nosso_numero = sc.nosso_numero::bigint and x.codigo_produtor is not null
+      order by x.incluir_corretora desc, x.id limit 1
+    ) g on true
+    left join producao_unificada p on g.codigo is null and p.fonte = 'corp' and p.origem_corp_numero = sc.nosso_numero
       and p.produto = case when coalesce(sc.produto, 'fianca') in ('fianca', 'capitalizacao', 'automovel') then coalesce(sc.produto, 'fianca') else 're' end
   ),
   nome_imob as (
@@ -67,12 +72,20 @@ begin
       where r.fonte = 'corp_produtor' and r.situacao = 'confirmado' and r.nome_original in (select texto from cand_texto)
     ) x order by texto, pri
   ),
+  codigo_imob as (
+    select distinct on (split_part(r.chave_externa, '#', 1)) split_part(r.chave_externa, '#', 1) codigo, r.imobiliaria_id
+    from imobiliaria_registros_fonte r
+    where r.fonte = 'corp_produtor' and r.situacao = 'confirmado' and r.imobiliaria_id is not null
+      and split_part(r.chave_externa, '#', 1) in (select codigo from cand_texto where codigo is not null)
+    order by split_part(r.chave_externa, '#', 1), r.confirmado_em desc nulls last
+  ),
   sin_todos as (
     select c.*, case when cardinality(v_imobs) = 1 and p_tipo <> 'grupo' and v_chave like 'i:%' then v_imobs[1]
-                     else coalesce(t.imob_card, n.imobiliaria_id) end as imob,
+                     else coalesce(t.imob_card, k.imobiliaria_id, n.imobiliaria_id) end as imob,
            t.card
     from cand c
     join cand_texto t on t.id = c.id
+    left join codigo_imob k on k.codigo = t.codigo
     left join nome_imob n on n.texto = t.texto
   ),
   -- Ficha avulsa / grupo: todos os do grupo. Unidade de um grupo: só os dela.

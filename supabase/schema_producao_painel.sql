@@ -46,7 +46,13 @@ $$;
 
 drop materialized view if exists producao_painel_mensal;
 create materialized view producao_painel_mensal as
-with corp as (
+-- 2026-10-21 (Matheus): apólices do Corp vêm do ESPELHO do SharePoint (tabelas
+-- corp_* lidas pelo cron corp-sharepoint, nunca escritas aqui) de 2020 em
+-- diante — a mesma conta do Power BI (base "corretora": documento conta 1x,
+-- prêmio líquido, comissão da corretora), ligada à ficha pelo CÓDIGO do
+-- produtor (vínculo confirmado em imobiliaria_registros_fonte/corp_produtor).
+-- Os relatórios PDF (producao_unificada fonte='corp') ficam só para 2015–2019.
+with corp_pdf as (
   select 'producao'::text as origem,
          p.competencia_arquivo as competencia,
          p.produto,
@@ -64,12 +70,75 @@ with corp as (
          case when p.produto = 'automovel' then null else p.grupo_id end as grupo_id,
          null::text as etapa,
          null::text as evento,
-         p.premio, p.comissao
+         1::bigint as n, p.premio, p.comissao
   from producao_resolvida p
   where p.fonte = 'corp'
-    and p.competencia_arquivo between '2015-01' and to_char(now(), 'YYYY-MM')
+    and p.competencia_arquivo between '2015-01' and '2019-12'
     and not coalesce(p.extras ? 'data_proposta_suspeita', false)
 ),
+-- produtor do Corp → código → ficha (um produtor pode ter 2 códigos: vale o
+-- vínculo confirmado mais recente).
+esp_codigo as (
+  select distinct g.produtor, g.codigo_produtor::text as codigo
+  from corp_grade g where g.produtor is not null and g.codigo_produtor is not null
+),
+esp_ficha as (
+  select distinct on (c.produtor) c.produtor, r.imobiliaria_id
+  from esp_codigo c
+  join imobiliaria_registros_fonte r
+    on r.fonte = 'corp_produtor' and r.situacao = 'confirmado' and r.imobiliaria_id is not null
+   and split_part(r.chave_externa, '#', 1) = c.codigo
+  order by c.produtor, r.confirmado_em desc nulls last
+),
+esp_linhas as (
+  select p.*,
+         case
+           when p.ramo in ('FIAN', '2FIA') then 'fianca'
+           when p.ramo in ('CAP', '2CAP', 'CAP2') then 'capitalizacao'
+           when t.produto is not null then t.produto
+           else 're'
+         end as produto_padrao,
+         case
+           when p.ramo in ('FIAN', '2FIA') then 'Fiança locatícia'
+           when p.ramo in ('CAP', '2CAP', 'CAP2') then 'Capitalização'
+           when t.ramo_padrao is not null then t.ramo_padrao
+           else initcap(coalesce(rtrim(rr.agrupamento_filho), p.ramo, 'Outros'))
+         end as ramo_padrao,
+         producao_seguradora_curta(coalesce(rtrim(s.abreviado), p.seg)) as seguradora_curta,
+         (p.produtor ~* '^O2 CORRETORA' or exists (select 1 from base_unica_produtores_venda_direta v where v.produtor = p.produtor)) as venda_direta,
+         (p.produtor ~* '^(SEGIMOB$|BASE SOFTWARE$|SUPERL[OÓ]GICA$|RETRANSMISS|TOMBAMENTO$|\d+ - )') as so_canal,
+         f.imobiliaria_id
+  from corp_retrato_producao p
+  left join base_unica_traducao_ramo t on t.valor_original = p.ramo and t.validado and t.produto is not null
+  left join corp_regra_ramo rr on rr.id_ramo = p.ramo
+  left join corp_regra_seguradora s on s.id_seguradora = p.seg
+  left join esp_ficha f on f.produtor = p.produtor
+  where p.base = 'corretora'
+    and p.mes >= date '2020-01-01' and p.mes <= date_trunc('month', now())::date
+),
+corp_espelho as (
+  select 'producao'::text as origem,
+         to_char(e.mes, 'YYYY-MM') as competencia,
+         e.produto_padrao as produto,
+         e.ramo_padrao as ramo,
+         e.seguradora_curta as seguradora,
+         case when e.ramo ~ '^2' then 'segunda_susep' else 'primeira_susep' end as susep,
+         case
+           when e.produto_padrao = 'automovel' then 'automovel'
+           when e.venda_direta then 'venda_direta'
+           when e.imobiliaria_id is not null then 'imobiliaria'
+           when e.so_canal then 'so_canal'
+           else 'nao_identificado'
+         end as canal,
+         case when e.produto_padrao = 'automovel' or e.venda_direta then null else e.imobiliaria_id end as imobiliaria_id,
+         case when e.produto_padrao = 'automovel' or e.venda_direta then null else i.grupo_id end as grupo_id,
+         null::text as etapa,
+         null::text as evento,
+         e.documentos::bigint as n, e.pr_liquido as premio, e.vl_com as comissao
+  from esp_linhas e
+  left join imobiliarias i on i.id = e.imobiliaria_id
+),
+corp as (select * from corp_pdf union all select * from corp_espelho),
 -- Planilhas: a mesma análise aparece no mês em que entrou e, se ainda estava
 -- em andamento no fim do mês, de novo no mês seguinte (herança). O mês de
 -- cada evento é o da primeira planilha em que a análise aparece naquela situação.
@@ -120,14 +189,14 @@ funil as (
          case when c.canal_resolvido = 'venda_direta_o2' then 'venda_direta'
               when c.imobiliaria_id is not null then 'imobiliaria' else 'nao_identificado' end,
          c.imobiliaria_id, c.grupo_id, e.etapa, e.evento,
-         case when e.evento = 'conversao' then c.premio end, case when e.evento = 'conversao' then c.comissao end
+         1::bigint, case when e.evento = 'conversao' then c.premio end, case when e.evento = 'conversao' then c.comissao end
   from casos c
   cross join lateral (values ('entrada', c.entrada, c.etapa), ('aprovacao', c.m_aprovacao, null), ('recusa', c.m_recusa, null),
                              ('perda', c.m_perda, null), ('conversao', c.m_conversao, null)) as e(evento, competencia, etapa)
   where e.competencia is not null
 )
 select origem, competencia, produto, ramo, seguradora, susep, canal, imobiliaria_id, grupo_id, etapa, evento,
-       count(*)::int as n,
+       sum(n)::int as n,
        coalesce(sum(premio), 0)::numeric(14, 2) as premio,
        coalesce(sum(comissao), 0)::numeric(14, 2) as comissao
 from (select * from corp union all select * from funil) x
@@ -162,7 +231,8 @@ begin
   select greatest(
            (select max(updated_at) from imobiliaria_registros_fonte),
            (select max(updated_at) from imobiliaria_grupos),
-           (select max(importado_em) from base_unica_importacoes)
+           (select max(importado_em) from base_unica_importacoes),
+           (select max(importado_em) from corp_sp_arquivos)
          ) into v_mudou;
   if p_forcar or v_ultimo is null or (v_mudou is not null and v_mudou > v_ultimo) then
     refresh materialized view producao_painel_mensal;

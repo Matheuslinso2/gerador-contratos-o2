@@ -66,6 +66,7 @@ export type ResultadoPowerBi = {
   ligarPorNomeIgual: number;
   fichasCriar: { nome: string; possivelDuplicataDe: string[] }[];
   semRegistroNoCorp: number;
+  registrosDoEspelho: number; // registros do Corp criados a partir do espelho do SharePoint (produtores novos)
   foraDaBase: number;
   vendaDireta: string[];
   grupos: { centralizador: string; grupo: string | null; novo: boolean; fichas: number; mudam: string[] }[];
@@ -132,6 +133,24 @@ export async function aplicarPowerBi(sb: SupabaseClient, { gravar }: { gravar: b
     if (!codigosDoProdutor.has(p.produtor)) codigosDoProdutor.set(p.produtor, new Set());
     codigosDoProdutor.get(p.produtor)!.add(String(p.codigo_produtor));
   }
+  // Produtor que já aparece no espelho do SharePoint (corp_grade) mas ainda não
+  // tem registro no Corp da base única (a planilha Produtores é de 18/10/2026):
+  // o registro nasce do próprio espelho (código + nome), para a ligação pelo
+  // código e a criação da ficha pelo Power BI acontecerem sozinhas (21/10/2026).
+  const codigosComRegistro = new Set(registros.map((r) => r.chave_externa.split("#")[0]));
+  const novosDoEspelho = pares.filter((p, i, arr) => !codigosComRegistro.has(String(p.codigo_produtor)) && arr.findIndex((x) => x.codigo_produtor === p.codigo_produtor) === i);
+  if (gravar && novosDoEspelho.length) {
+    const linhas = novosDoEspelho.map((p) => ({
+      fonte: "corp_produtor",
+      chave_externa: String(p.codigo_produtor),
+      nome_original: p.produtor,
+      dados: { origem: "corp_grade (espelho do SharePoint)" },
+    }));
+    const { data, error } = await sb.from("imobiliaria_registros_fonte").insert(linhas).select("id, chave_externa, nome_original, situacao, imobiliaria_id, sugestoes, dados, volume");
+    if (error) throw new Error("registros do espelho: " + error.message);
+    registros.push(...((data ?? []) as Registro[]));
+  }
+  const registrosDoEspelho = novosDoEspelho.length;
   const fichaPorId = new Map(fichas.map((f) => [f.id, f]));
   const grupoPorId = new Map(grupos.map((g) => [g.id, g]));
   const codigo = (r: Registro) => r.chave_externa.split("#")[0];
@@ -255,6 +274,7 @@ export async function aplicarPowerBi(sb: SupabaseClient, { gravar }: { gravar: b
     ligarPorNomeIgual: ligar.length,
     fichasCriar: criar.map((c) => ({ nome: t(c.item.produtor), possivelDuplicataDe: c.parecida })),
     semRegistroNoCorp: semRegistro,
+    registrosDoEspelho,
     foraDaBase,
     vendaDireta: vendaDireta.map((i) => t(i.produtor)),
     grupos: planoGrupos.map((g) => ({
