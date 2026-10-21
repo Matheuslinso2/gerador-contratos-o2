@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { finalizarImportacao, importarArquivo, sincronizarListas, type TipoArquivo } from "@/lib/corpSharepoint/gravar";
 import { lerListas, listarArquivos, sharepointConfigurado } from "@/lib/corpSharepoint/sharepoint";
+import { aplicarPowerBi } from "@/lib/baseUnica/aplicarPowerBi";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -45,5 +46,9 @@ export async function GET(request: NextRequest) {
   }
   // Regra de cadastro pode ter mudado mesmo sem arquivo novo: sempre reaplica.
   const final = await finalizarImportacao(sb, ultimoImportado);
-  return NextResponse.json({ ok: true, listas, arquivos: resultados, ...final });
+  // Base única de imobiliárias segue o cadastro de produtores do Power BI
+  // (Matheus, 21/10: "o Power BI sempre vale"). Conflito ainda não aprovado
+  // nunca é aplicado sozinho — fica em `pendentes`. Lógica em lib/baseUnica/aplicarPowerBi.ts.
+  const pbi = await aplicarPowerBi(sb, { gravar: true });
+  return NextResponse.json({ ok: true, listas, arquivos: resultados, ...final, imobiliarias_power_bi: pbi });
 }
