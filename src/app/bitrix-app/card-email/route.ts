@@ -330,15 +330,16 @@ export async function POST(request: NextRequest) {
       })
         .then(function (resp) { return resp.json(); })
         .then(function (resultado) {
-          if (!resultado.ok || !resultado.conversas || !resultado.conversas.length) {
-            // Card sem conversa registrada: oferece vincular a do Gmail.
-            document.getElementById("bloco-vincular").style.display = "block";
-            return;
-          }
+          // A busca no Gmail fica sempre disponível: card sem conversa registrada
+          // oferece vincular a do Gmail; card com conversa permite trocar pela certa.
+          document.getElementById("bloco-vincular").style.display = "block";
+          if (!resultado.ok || !resultado.conversas || !resultado.conversas.length) return;
           conversaDoCard = resultado.conversas[0].assuntoBase;
+          document.getElementById("aviso-sem-conversa").textContent =
+            "Esta não é a conversa certa? O e-mail vai em \\u201C" + conversaDoCard + "\\u201D. Se o cliente conversa com a equipe em outra conversa do Gmail, procure e vincule a correta.";
           aplicarConversa();
         })
-        .catch(function () {}); // só informativo: o servidor decide a conversa de qualquer forma
+        .catch(function () { document.getElementById("bloco-vincular").style.display = "block"; }); // o servidor decide a conversa de qualquer forma
     }
 
     // Card sem conversa registrada: procura no Gmail a que a equipe já tem

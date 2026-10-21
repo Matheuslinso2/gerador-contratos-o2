@@ -358,10 +358,19 @@ export default function JanelaEnvioEmail({
               </>
             )}
 
-            {!conversa && (
+            {(
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-                <b>Este card ainda não tem conversa por e-mail registrada.</b> Se o cliente já está conversando com a equipe pelo Gmail,
-                vincule essa conversa para este e-mail entrar nela (em vez de abrir outra).
+                {conversa ? (
+                  <>
+                    <b>Esta não é a conversa certa?</b> O e-mail vai em &ldquo;{conversa}&rdquo;. Se o cliente conversa com a equipe em outra
+                    conversa do Gmail, procure e vincule a correta.
+                  </>
+                ) : (
+                  <>
+                    <b>Este card ainda não tem conversa por e-mail registrada.</b> Se o cliente já está conversando com a equipe pelo Gmail,
+                    vincule essa conversa para este e-mail entrar nela (em vez de abrir outra).
+                  </>
+                )}
                 <div className="mt-2">
                   <button
                     type="button"
