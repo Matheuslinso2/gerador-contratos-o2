@@ -25,6 +25,11 @@ um "modelo" de imagem na tela (pasta `modelos/`) para clicar.
 
 ## Rodar
 
+No terminal do app (PowerShell) use `npx.cmd` (o `npx` puro é barrado pela
+política de scripts do Windows) e `;` no lugar de `&&`. O Corp lembra os
+filtros do usuário entre sessões; o robô confere o estado de cada caixa antes
+de marcar.
+
 ```bash
 npx tsx scripts/robo-corp/exportar.ts --mapear
 ```
@@ -56,5 +61,7 @@ Fotos de cada execução ficam em `saida/<data>/` para conferir se deu certo.
   Apólices + Endossos + Faturas + Endossos de Cancelamento, Prêmio Líquido,
   comissões marcadas. Os 4 arquivos são reexportados sempre (um cancelamento
   de hoje cai no ano da vigência).
-- Clientes com Documentos e Sinistros Geral - Grade: sem filtro de período
-  (histórico inteiro).
+- Clientes com Documentos: período 01/01/2020 → hoje (Início de Vigência) e
+  "Mostrar Documentos Cancelados" marcado (106.011 linhas, igual ao SharePoint).
+- Sinistros Geral - Grade: período 01/01/2020 → hoje por data de ocorrência
+  (3.232 linhas; o SharePoint de 16/10 tinha 3.226).
