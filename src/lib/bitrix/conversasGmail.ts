@@ -1,6 +1,7 @@
 import "server-only";
 import { obterClienteGmail } from "@/lib/gestaoEmails/gmail";
 import { createServiceClient } from "@/lib/supabase/service";
+import { chamarBitrix } from "./client";
 import { assuntoBase } from "./conversasEmail";
 
 // Achar, no Gmail, a conversa que a equipe já está tendo com o cliente por
@@ -22,7 +23,33 @@ export type ConversaGmail = {
   mensagens: number;
   participantes: string;
   trecho: string;
+  // Bate com o comentário "TRATATIVA: ..." do card (ver lerTratativaDoCard).
+  sugerida: boolean;
 };
+
+const mesmoAssunto = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+// A equipe anota no card o nome da conversa de origem num comentário do tipo
+// "TRATATIVA: BOA TARDE" (visto no card 3002, 21/10/2026). Devolve o assunto
+// do comentário mais recente nesse formato, ou null.
+export async function lerTratativaDoCard(entityTypeId: number, itemId: number): Promise<string | null> {
+  const tipo = entityTypeId === 1 ? "lead" : entityTypeId === 2 ? "deal" : `dynamic_${entityTypeId}`;
+  try {
+    const r = await chamarBitrix<{ result: { COMMENT?: string; CREATED?: string }[] }>("crm.timeline.comment.list", {
+      "filter[ENTITY_ID]": itemId,
+      "filter[ENTITY_TYPE]": tipo,
+      "select[]": ["ID", "COMMENT", "CREATED"],
+    } as never);
+    const achados = (r.result ?? [])
+      .map((c) => ({ criado: c.CREATED ?? "", assunto: /^\s*TRATATIVA\s*:\s*(.+)$/im.exec(c.COMMENT ?? "")?.[1]?.trim() ?? "" }))
+      .filter((c) => c.assunto)
+      .sort((a, b) => a.criado.localeCompare(b.criado));
+    return achados.length ? assuntoBase(achados[achados.length - 1].assunto) : null;
+  } catch (erro) {
+    console.warn("Falha ao ler comentários do card pra achar a tratativa:", erro);
+    return null;
+  }
+}
 
 const DIAS_BUSCA = 45;
 const MAX_CONVERSAS = 8;
@@ -43,7 +70,7 @@ function cabecalho(headers: { name?: string | null; value?: string | null }[] | 
   return headers?.find((h) => h.name?.toLowerCase() === nome.toLowerCase())?.value ?? "";
 }
 
-export async function buscarConversasGmail(enderecos: string[]): Promise<ConversaGmail[]> {
+export async function buscarConversasGmail(enderecos: string[], tratativa: string | null = null): Promise<ConversaGmail[]> {
   // Só endereços de e-mail "limpos" entram na busca do Gmail -- nada de
   // operadores digitados pelo usuário.
   const limpos = [...new Set(enderecos.map((e) => e.trim().toLowerCase()).filter((e) => EMAIL_REGEX.test(e)))].slice(0, 6);
@@ -79,9 +106,36 @@ export async function buscarConversasGmail(enderecos: string[]): Promise<Convers
       mensagens: msgs.length,
       participantes: [...nomes].slice(0, 4).join(", "),
       trecho: desescaparHtml(ultima.snippet ?? "").slice(0, 140),
+      sugerida: Boolean(tratativa) && mesmoAssunto(assuntoBase(assunto), tratativa!),
     });
   }
-  return resultado.sort((a, b) => b.ultimaEm.localeCompare(a.ultimaEm));
+  // A sugerida (bate com o "TRATATIVA:" do card) vem primeiro; o resto, da mais recente pra mais antiga.
+  return resultado.sort((a, b) => Number(b.sugerida) - Number(a.sugerida) || b.ultimaEm.localeCompare(a.ultimaEm));
+}
+
+// Chamado antes de cada envio: se o card tem comentário "TRATATIVA: X" e a
+// conversa mais recente registrada dele não é a X, procura no Gmail a conversa
+// X entre as do destinatário e vincula. Silencioso: se algo falhar, o envio
+// segue na conversa que já estiver registrada (ou abre uma nova).
+export async function vincularPorTratativa(entityTypeId: number, itemId: number, destinatarios: string[]): Promise<void> {
+  try {
+    const tratativa = await lerTratativaDoCard(entityTypeId, itemId);
+    if (!tratativa) return;
+    const { data: ultima } = await createServiceClient()
+      .from("bitrix_email_mensagens")
+      .select("assunto_base")
+      .eq("entity_type_id", entityTypeId)
+      .eq("item_id", itemId)
+      .order("criado_em", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (ultima && mesmoAssunto(ultima.assunto_base, tratativa)) return;
+    const candidatas = (await buscarConversasGmail(destinatarios, tratativa)).filter((c) => c.sugerida);
+    if (!candidatas.length) return;
+    await vincularConversaGmail(entityTypeId, itemId, candidatas[0].threadId);
+  } catch (erro) {
+    console.warn("Falha ao vincular a conversa pela tratativa do card:", erro);
+  }
 }
 
 // Vincula a conversa do Gmail ao card: guarda o Message-ID da ÚLTIMA mensagem

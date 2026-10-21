@@ -381,16 +381,19 @@ export async function POST(request: NextRequest) {
             return;
           }
           var escolhida = "";
+          var sugerida = r.conversas.filter(function (c) { return c.sugerida; })[0];
+          if (sugerida) escolhida = sugerida.threadId;
           r.conversas.forEach(function (c) {
             var linha = document.createElement("label");
             linha.className = "conversa-gmail";
             var radio = document.createElement("input");
             radio.type = "radio";
             radio.name = "conversa-gmail";
+            if (c.sugerida) radio.checked = true;
             radio.addEventListener("change", function () { escolhida = c.threadId; vincular.disabled = false; });
             var texto = document.createElement("span");
             var titulo = document.createElement("b");
-            titulo.textContent = c.assunto;
+            titulo.textContent = c.assunto + (c.sugerida ? "  ✔ sugerida pelo comentário TRATATIVA do card" : "");
             var detalhe = document.createElement("span");
             detalhe.className = "detalhe";
             detalhe.textContent = c.mensagens + (c.mensagens === 1 ? " mensagem" : " mensagens") + " · último em " + new Date(c.ultimaEm).toLocaleString("pt-BR") + " · " + c.participantes;
@@ -407,7 +410,7 @@ export async function POST(request: NextRequest) {
           var vincular = document.createElement("button");
           vincular.type = "button";
           vincular.textContent = "Vincular ao card (o e-mail sai nela)";
-          vincular.disabled = true;
+          vincular.disabled = !escolhida;
           vincular.addEventListener("click", function () {
             vincular.disabled = true;
             vincular.textContent = "Vinculando…";

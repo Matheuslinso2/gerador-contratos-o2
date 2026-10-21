@@ -6,7 +6,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { BUCKET_ANEXOS } from "@/lib/bitrix/emailNoCard";
 import { ENTITY_TYPE_ID_SEGURO_FIANCA } from "@/lib/bitrix/entidadesCard";
 import { listarConversas, type Conversa } from "@/lib/bitrix/conversasEmail";
-import { buscarConversasGmail, vincularConversaGmail, type ConversaGmail } from "@/lib/bitrix/conversasGmail";
+import { buscarConversasGmail, lerTratativaDoCard, vincularConversaGmail, type ConversaGmail } from "@/lib/bitrix/conversasGmail";
 import {
   buscarCardPanorama,
   buscarContatosEnvioPanorama,
@@ -120,7 +120,8 @@ export async function procurarConversasGmail(
 ): Promise<{ ok: true; conversas: ConversaGmail[] } | { ok: false; erro: string }> {
   if (!(await autorizarPanorama(cardId, passeBitrix))) return { ok: false, erro: "Sem permissão." };
   try {
-    return { ok: true, conversas: await buscarConversasGmail(enderecos) };
+    const tratativa = await lerTratativaDoCard(ENTITY_TYPE_ID_SEGURO_FIANCA, cardId);
+    return { ok: true, conversas: await buscarConversasGmail(enderecos, tratativa) };
   } catch (e) {
     return { ok: false, erro: `Não consegui consultar o Gmail: ${(e as Error).message}` };
   }

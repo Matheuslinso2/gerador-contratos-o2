@@ -116,7 +116,7 @@ export default function JanelaEnvioEmail({
 
   // Card sem conversa registrada: procurar no Gmail a que a equipe já tem com
   // o cliente e vincular (uma vez só -- depois todo envio entra nela).
-  type ConversaGmailTela = { threadId: string; assunto: string; ultimaEm: string; mensagens: number; participantes: string; trecho: string };
+  type ConversaGmailTela = { threadId: string; assunto: string; ultimaEm: string; mensagens: number; participantes: string; trecho: string; sugerida: boolean };
   const [conversasGmail, setConversasGmail] = useState<ConversaGmailTela[] | null>(null);
   const [escolhidaGmail, setEscolhidaGmail] = useState("");
   const [buscandoGmail, setBuscandoGmail] = useState(false);
@@ -129,7 +129,7 @@ export default function JanelaEnvioEmail({
       const r = await procurarConversasGmail(cardId, destinatarios, passeBitrix);
       if (!r.ok) return setErroGmail(r.erro);
       setConversasGmail(r.conversas);
-      setEscolhidaGmail("");
+      setEscolhidaGmail(r.conversas.find((c) => c.sugerida)?.threadId ?? "");
     } finally {
       setBuscandoGmail(false);
     }
@@ -393,6 +393,7 @@ export default function JanelaEnvioEmail({
                         <input type="radio" name="conversa-gmail" className="mt-0.5" checked={escolhidaGmail === c.threadId} onChange={() => setEscolhidaGmail(c.threadId)} />
                         <span>
                           <b className="text-o2-navy">{c.assunto}</b>
+                          {c.sugerida && <span className="ml-2 rounded bg-green-100 px-1.5 py-0.5 font-semibold text-green-800">sugerida pelo comentário &ldquo;TRATATIVA&rdquo; do card</span>}
                           <span className="block text-gray-500">
                             {c.mensagens} {c.mensagens === 1 ? "mensagem" : "mensagens"} · último em {new Date(c.ultimaEm).toLocaleString("pt-BR")} · {c.participantes}
                           </span>

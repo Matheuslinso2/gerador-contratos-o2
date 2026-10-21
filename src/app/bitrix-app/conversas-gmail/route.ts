@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { tokenBitrixValido } from "@/lib/bitrix/emailNoCard";
-import { buscarConversasGmail, vincularConversaGmail } from "@/lib/bitrix/conversasGmail";
+import { buscarConversasGmail, lerTratativaDoCard, vincularConversaGmail } from "@/lib/bitrix/conversasGmail";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -26,7 +26,8 @@ export async function POST(request: NextRequest) {
       if (!body.threadId) return NextResponse.json({ ok: false, erro: "Escolha uma conversa." }, { status: 400 });
       return NextResponse.json({ ok: true, ...(await vincularConversaGmail(entityTypeId, itemId, body.threadId)) });
     }
-    return NextResponse.json({ ok: true, conversas: await buscarConversasGmail(Array.isArray(body.enderecos) ? body.enderecos : []) });
+    const tratativa = await lerTratativaDoCard(entityTypeId, itemId);
+    return NextResponse.json({ ok: true, conversas: await buscarConversasGmail(Array.isArray(body.enderecos) ? body.enderecos : [], tratativa) });
   } catch (erro) {
     console.error("Falha na conversa do Gmail:", erro);
     return NextResponse.json({ ok: false, erro: `Não consegui consultar o Gmail: ${(erro as Error).message}` }, { status: 502 });

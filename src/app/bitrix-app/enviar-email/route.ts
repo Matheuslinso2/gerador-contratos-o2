@@ -6,6 +6,7 @@ import { tokenBitrixValido, BUCKET_ANEXOS } from "@/lib/bitrix/emailNoCard";
 import { createServiceClient } from "@/lib/supabase/service";
 import { nomeExibidoRemetente } from "@/lib/campanhas/remetente";
 import { bccDoCard, continuarConversa } from "@/lib/bitrix/conversasEmail";
+import { vincularPorTratativa } from "@/lib/bitrix/conversasGmail";
 
 export const dynamic = "force-dynamic";
 
@@ -116,6 +117,7 @@ export async function POST(request: NextRequest) {
   // de resposta, pra cair na mesma conversa no e-mail do cliente.
   let assuntoFinal = assunto.trim();
   let headers: Record<string, string> | undefined;
+  await vincularPorTratativa(entityTypeId, itemId, [para.trim()]);
   const continuacao = await continuarConversa(entityTypeId, itemId);
   if (continuacao) {
     assuntoFinal = continuacao.assunto;

@@ -7,6 +7,7 @@ import { BUCKET_ANEXOS } from "@/lib/bitrix/emailNoCard";
 import { nomeExibidoRemetente } from "@/lib/campanhas/remetente";
 import { buscarCardPanorama } from "@/lib/bitrix/panoramaFianca";
 import { bccDoCard, continuarConversa } from "@/lib/bitrix/conversasEmail";
+import { vincularPorTratativa } from "@/lib/bitrix/conversasGmail";
 import { createServiceClient } from "@/lib/supabase/service";
 import {
   EMAIL_FIANCA,
@@ -191,6 +192,7 @@ export async function POST(request: NextRequest) {
   // de resposta) -- nunca abre outra tratativa por e-mail pro mesmo card.
   let assuntoFinal = assunto.trim();
   let headers: Record<string, string> | undefined;
+  await vincularPorTratativa(ENTITY_TYPE_ID_SEGURO_FIANCA, cardId, para);
   const continuacao = await continuarConversa(ENTITY_TYPE_ID_SEGURO_FIANCA, cardId);
   if (continuacao) {
     assuntoFinal = continuacao.assunto;
