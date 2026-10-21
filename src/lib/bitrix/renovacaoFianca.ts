@@ -245,15 +245,10 @@ const COTADORES_RENOVACAO: { id: number; rotulo: string }[] = [
 
 type Resultado = "Renovado" | "Perdido" | "Em andamento";
 
-export function montarPainelRenovacao(
-  items: BitrixItemRaw[],
-  historico: BitrixStageHistoryEvent[],
-  usuarios: Record<number, string>,
-  empresas: Record<number, string>,
-  competencia: string,
-  agora: Date = new Date()
-): PainelRenovacao {
-  const nome = (id: number) => usuarios[id] || `ID ${id}`;
+// Cards do funil de Renovação com entrada (criação, em Brasília) e resolução
+// (Sucesso/Perdido) -- a mesma leitura serve ao painel e à Base Única
+// (listarCardsRenovacaoFianca), para os dois contarem igual.
+function montarCardsRenovacao(items: BitrixItemRaw[], historico: BitrixStageHistoryEvent[]) {
   const eventosPorCard = new Map<number, BitrixStageHistoryEvent[]>();
   for (const e of historico) {
     if (Number(e.CATEGORY_ID) !== CATEGORIA_RENOVACAO) continue;
@@ -265,7 +260,7 @@ export function montarPainelRenovacao(
     lista.sort((a, b) => new Date(a.CREATED_TIME).getTime() - new Date(b.CREATED_TIME).getTime());
   }
 
-  const cards = items
+  return items
     .filter((it) => Number(it.categoryId) === CATEGORIA_RENOVACAO)
     .map((it) => {
       const eventos = eventosPorCard.get(Number(it.id)) ?? [];
@@ -287,6 +282,18 @@ export function montarPainelRenovacao(
         mesResolucao: resolvidoEm ? diaBrasilia(resolvidoEm).slice(0, 7) : "",
       };
     });
+}
+
+export function montarPainelRenovacao(
+  items: BitrixItemRaw[],
+  historico: BitrixStageHistoryEvent[],
+  usuarios: Record<number, string>,
+  empresas: Record<number, string>,
+  competencia: string,
+  agora: Date = new Date()
+): PainelRenovacao {
+  const nome = (id: number) => usuarios[id] || `ID ${id}`;
+  const cards = montarCardsRenovacao(items, historico);
 
   const relevantes = cards.filter(
     (c) =>
@@ -648,4 +655,53 @@ export async function buscarPainelRenovacaoAoVivo(competencia: string): Promise<
     .filter((id) => id > 0);
   const [empresas, usuarios] = await Promise.all([buscarEmpresas(idsEmpresa), buscarUsuarios(idsUsuario)]);
   return montarPainelRenovacao(items, historico, usuarios, empresas, competencia);
+}
+
+// Um registro por card do funil de Renovação, para a Base Única pôr as
+// renovações de Fiança na linha do tempo do Power BI - O2 Seguros
+// (src/lib/baseUnica/bitrixRenovacoes.ts). Mesmas regras do painel: entrada =
+// mês de criação do card; renovada/perdida = dia em que entrou em
+// Sucesso/Perdido (etapa final atual). Não muda nada no painel.
+export type CardRenovacaoFianca = {
+  id: number;
+  companyId: number | null;
+  empresa: string | null;
+  dataCriacao: string; // AAAA-MM-DD (Brasília)
+  competencia: string; // AAAA-MM da criação
+  etapa: string;
+  resultado: Resultado;
+  dataResolucao: string | null; // AAAA-MM-DD (Brasília)
+  premioLiquido: number | null;
+  comissao: number | null; // prêmio líquido × % comissão
+  seguradora: string | null;
+  fimVigenciaAnterior: string | null; // AAAA-MM-DD
+  motivoPerda: string | null;
+  reajustePct: number | null;
+};
+export async function listarCardsRenovacaoFianca(): Promise<CardRenovacaoFianca[]> {
+  const [items, historico] = await Promise.all([
+    listarItensSpaCategoria(ENTITY_TYPE_ID, CATEGORIA_RENOVACAO),
+    listarHistoricoEtapasCategoria(ENTITY_TYPE_ID, CATEGORIA_RENOVACAO),
+  ]);
+  const empresas = await buscarEmpresas(items.map((it) => it.companyId).filter((id): id is number => !!id));
+  return montarCardsRenovacao(items, historico).map((c) => {
+    const premio = numero(c.it[CAMPO_PREMIO_LIQUIDO]);
+    const pct = numero(c.it[CAMPO_COMISSAO_PCT]);
+    return {
+      id: Number(c.it.id),
+      companyId: c.it.companyId ? Number(c.it.companyId) : null,
+      empresa: c.it.companyId ? (empresas[Number(c.it.companyId)] ?? null) : null,
+      dataCriacao: diaBrasilia(new Date(c.it.createdTime)),
+      competencia: c.mesEntrada,
+      etapa: ETAPA_POR_ID.get(c.it.stageId)?.nome ?? c.it.stageId,
+      resultado: c.resultado,
+      dataResolucao: c.resolvidoEm ? diaBrasilia(c.resolvidoEm) : null,
+      premioLiquido: premio,
+      comissao: premio !== null && pct !== null ? premio * (pct / 100) : null,
+      seguradora: SEGURADORA_POR_ID[String(c.it[CAMPO_SEGURADORA_ESCOLHIDA] ?? "")] ?? null,
+      fimVigenciaAnterior: diaManual(c.it[CAMPO_FIM_VIGENCIA_ANTERIOR]) || null,
+      motivoPerda: MOTIVO_POR_ID.get(String(c.it[CAMPO_MOTIVO_PERDA] ?? "")) ?? null,
+      reajustePct: numero(c.it[CAMPO_REAJUSTE_PCT]),
+    };
+  });
 }

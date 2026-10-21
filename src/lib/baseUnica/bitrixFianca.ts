@@ -149,6 +149,9 @@ export async function gravarBitrixFianca(supabase: SupabaseClient, dados: Awaite
       .select("id, origem_bitrix_id")
       .eq("fonte", "bitrix")
       .eq("produto", "fianca")
+      // Só os cards desta carga (negócio novo): as renovações do funil 32 são
+      // gravadas por lib/baseUnica/bitrixRenovacoes.ts, com outra origem.
+      .eq("origem_arquivo_id", ARQUIVO_BITRIX_FIANCA)
       .order("id")
       .range(inicio, inicio + 999);
     if (error) throw new Error("listar gravados: " + error.message);

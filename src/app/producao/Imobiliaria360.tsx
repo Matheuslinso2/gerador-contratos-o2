@@ -34,6 +34,9 @@ type Kpis = {
   mensal: { competencia: string; produtos: Record<string, Valores> }[];
   funil_por_produto: CotacaoProduto[];
   funil_mensal_produto: { competencia: string; produtos: Record<string, Partial<Record<"entrada" | "conversao", number>>> }[];
+  // Renovações (Fiança e RE), série separada das cotações novas (21/10/2026).
+  renovacoes_por_produto: { produto: string; entradas: number; conversoes: number; perdas: number; premio_convertido: number; historico_desde: string | null }[];
+  renovacoes_mensal_produto: { competencia: string; produtos: Record<string, Partial<Record<"entrada" | "conversao", number>>> }[];
 };
 type Unidade = {
   id: string;
@@ -52,6 +55,8 @@ type Unidade = {
   ultima_cotacao: string | null;
   cotacoes: number;
   convertidas: number;
+  renovacoes: number;
+  renovadas: number;
   apolices: number;
   premio: number;
   comissao: number;
@@ -232,11 +237,13 @@ function Visao360({ visao, kpis, de, ate, linkCom }: { visao: Visao; kpis: Kpis;
   const meses: string[] = [];
   for (let m = de; m <= ate; m = somarMeses(m, 1)) meses.push(m);
   const cotMes = new Map(kpis.funil_mensal_produto.map((x) => [x.competencia, x.produtos]));
+  const ren = kpis.renovacoes_por_produto.filter((p) => p.entradas + p.conversoes + p.perdas > 0);
+  const renMes = new Map(kpis.renovacoes_mensal_produto.map((x) => [x.competencia, x.produtos]));
   const apoMes = new Map(kpis.mensal.map((x) => [x.competencia, x.produtos]));
   const usoMes = new Map(visao.mensal.map((x) => [x.competencia, x]));
   const seriesProd = ORDEM.map((p) => ({ chave: p, rotulo: PRODUTOS[p].rotulo, cor: PRODUTOS[p].cor }));
   const unica = us.length === 1 ? us[0] : null;
-  const movimento = (u: Unidade) => u.cotacoes + u.apolices + u.sinistros + u.sinistros_abertos + u.auditorias + u.contratos + u.faturas + u.campanhas_recebidas > 0;
+  const movimento = (u: Unidade) => u.cotacoes + u.renovacoes + u.apolices + u.sinistros + u.sinistros_abertos + u.auditorias + u.contratos + u.faturas + u.campanhas_recebidas > 0;
   const ativos = us.filter(movimento);
   const parados = us.filter((u) => !movimento(u));
 
@@ -370,6 +377,59 @@ function Visao360({ visao, kpis, de, ate, linkCom }: { visao: Visao; kpis: Kpis;
             series={seriesProd}
           />
         </Grafico>
+        {/* Renovações: série separada (não entra nas cotações acima). */}
+        <div className="space-y-3 rounded-xl border border-dashed border-o2-coral/40 bg-white/60 p-4">
+          <h3 className="flex items-center gap-1 text-sm font-semibold uppercase tracking-wide text-o2-navy">
+            Renovações (Fiança e RE)
+            <InfoLegenda titulo="Renovações">
+              Série separada das cotações novas. A renovação conta como recebida no mês em que entrou (Fiança: primeira planilha em que aparece ou criação do card;
+              RE: mês do vencimento) e como renovada ou não renovada no mês em que isso aconteceu. Fontes: planilhas de nov/2025 a set/2026 e funis de renovação do
+              Bitrix (Fiança a partir de out/2026; RE a partir de set/2026).
+            </InfoLegenda>
+          </h3>
+          {ren.length === 0 ? (
+            <p className="text-sm text-gray-500">Nenhuma renovação ligada a esta imobiliária no período.</p>
+          ) : (
+            <>
+              <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+                    <tr>
+                      <th className="px-3 py-2">Produto</th>
+                      <th className="px-3 py-2 text-right">Recebidas</th>
+                      <th className="px-3 py-2 text-right">Renovadas</th>
+                      <th className="px-3 py-2 text-right">Não renovadas</th>
+                      <th className="px-3 py-2 text-right">Taxa</th>
+                      <th className="px-3 py-2 text-right">Prêmio renovado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ORDEM.map((k) => ren.find((p) => p.produto === k))
+                      .filter((p): p is (typeof ren)[number] => !!p)
+                      .map((p) => (
+                        <tr key={p.produto} className="border-t border-gray-100">
+                          <td className="px-3 py-2 font-medium text-o2-navy">{PRODUTOS[p.produto]?.rotulo ?? p.produto}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">{num(p.entradas)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">{num(p.conversoes)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">{num(p.perdas)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">
+                            {pct(p.conversoes, p.conversoes + p.perdas)} <span className="block text-[10px] text-gray-400">renovadas ÷ (renovadas + não renovadas)</span>
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums">{compacto(p.premio_convertido)}</td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+              <Grafico titulo="Renovações recebidas por mês">
+                <BarrasMensais
+                  pontos={meses.map((m) => ({ mes: m, valores: Object.fromEntries(ORDEM.map((p) => [p, renMes.get(m)?.[p]?.entrada ?? 0])) }))}
+                  series={seriesProd}
+                />
+              </Grafico>
+            </>
+          )}
+        </div>
       </Bloco>
 
       {/* Apólices */}
@@ -534,6 +594,8 @@ function Visao360({ visao, kpis, de, ate, linkCom }: { visao: Visao; kpis: Kpis;
                   <th className="px-3 py-2">Ficha</th>
                   <th className="px-3 py-2 text-right">Cotações</th>
                   <th className="px-3 py-2 text-right">Convertidas</th>
+                  <th className="px-3 py-2 text-right">Renovações</th>
+                  <th className="px-3 py-2 text-right">Renovadas</th>
                   <th className="px-3 py-2 text-right">Apólices</th>
                   <th className="px-3 py-2 text-right">Prêmio</th>
                   <th className="px-3 py-2 text-right">Sinistros</th>
@@ -555,6 +617,8 @@ function Visao360({ visao, kpis, de, ate, linkCom }: { visao: Visao; kpis: Kpis;
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">{num(u.cotacoes)}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{num(u.convertidas)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{num(u.renovacoes ?? 0)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{num(u.renovadas ?? 0)}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{num(u.apolices)}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{compacto(u.premio)}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{num(u.sinistros)}</td>

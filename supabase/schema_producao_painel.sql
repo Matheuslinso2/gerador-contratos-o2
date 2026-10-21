@@ -9,6 +9,13 @@
 --                entrada (mês em que entrou, com a etapa atual = a mais
 --                avançada) e aprovação/recusa/perda/conversão no mês em que
 --                aconteceram — mesma regra do painel /seguro-fianca.
+-- 2026-10-21: o funil ganhou a coluna `tipo` ('novo' | 'renovacao'). As
+-- RENOVAÇÕES de Seguro Fiança e de Ramos Elementares entram como série
+-- separada (recebida / renovada / não renovada), sem se misturar com as
+-- cotações novas nem mudar a conversão delas: Fiança = aba RENOVAÇÕES das
+-- planilhas de análise (nov/2025 → set/2026) + funil Renovação do Bitrix
+-- (cat. 32, out/2026 →); RE = abas RN das planilhas Cotação diária
+-- (nov/2025 → set/2026) + funil Renovações do Bitrix (cat. 34, set/2026 →).
 -- Automóvel não tem vínculo com imobiliária (decisão de 16/10): entra só no macro.
 -- Sem RLS (materialized view): fechada para anon/authenticated; leitura só pela
 -- função kpis_producao(), que confere is_colaborador_o2().
@@ -56,6 +63,7 @@ with corp_pdf as (
   select 'producao'::text as origem,
          p.competencia_arquivo as competencia,
          p.produto,
+         null::text as tipo,
          p.ramo_padrao as ramo,
          producao_seguradora_curta(p.seguradora) as seguradora,
          p.susep_o2 as susep,
@@ -120,6 +128,7 @@ corp_espelho as (
   select 'producao'::text as origem,
          to_char(e.mes, 'YYYY-MM') as competencia,
          e.produto_padrao as produto,
+         null::text as tipo,
          e.ramo_padrao as ramo,
          e.seguradora_curta as seguradora,
          case when e.ramo ~ '^2' then 'segunda_susep' else 'primeira_susep' end as susep,
@@ -147,10 +156,10 @@ plan_linhas as (
          case p.status_padrao when 'Convertido' then 6 when 'Perdido' then 5 when 'Recusado' then 4
                               when 'Cancelado' then 3 when 'Aprovado' then 2 when 'Em análise' then 1 else 0 end as rank_etapa
   from producao_resolvida p
-  where p.fonte = 'planilha' and p.tipo = 'novo'
+  where p.fonte = 'planilha' and p.tipo in ('novo', 'renovacao')
 ),
 plan_casos as (
-  select produto,
+  select produto, tipo,
          -- Herdada de mês não importado (extras.sem_entrada): a entrada foi antes, não conta aqui.
          coalesce(min(competencia_arquivo) filter (where not herdada),
                   case when bool_or(coalesce((extras ->> 'sem_entrada')::boolean, false)) then null else min(competencia_arquivo) end) as entrada,
@@ -161,18 +170,22 @@ plan_casos as (
          (array_agg(seguradora order by rank_etapa desc, competencia_arquivo desc))[1] as seguradora,
          (array_agg(premio order by rank_etapa desc, competencia_arquivo desc))[1] as premio,
          (array_agg(comissao order by rank_etapa desc, competencia_arquivo desc))[1] as comissao,
-         -- Aprovação/recusa da seguradora só existem no processo da Fiança.
-         case when produto = 'fianca' then min(competencia_arquivo) filter (where status_padrao in ('Aprovado', 'Perdido', 'Convertido')) end as m_aprovacao,
-         case when produto = 'fianca' then min(competencia_arquivo) filter (where status_padrao = 'Recusado') end as m_recusa,
-         min(competencia_arquivo) filter (where status_padrao = 'Perdido') as m_perda,
-         min(competencia_arquivo) filter (where status_padrao = 'Convertido') as m_conversao
+         -- Aprovação/recusa da seguradora só existem no processo da Fiança (negócio novo).
+         case when produto = 'fianca' and tipo = 'novo' then min(competencia_arquivo) filter (where status_padrao in ('Aprovado', 'Perdido', 'Convertido')) end as m_aprovacao,
+         case when produto = 'fianca' and tipo = 'novo' then min(competencia_arquivo) filter (where status_padrao = 'Recusado') end as m_recusa,
+         -- Renovações de RE trazem a data do desfecho (extras.data_perda/data_conversao):
+         -- vale o mês da data; sem data, a 1ª planilha em que aparece naquela situação.
+         coalesce(min(left(extras ->> 'data_perda', 7)) filter (where status_padrao = 'Perdido'),
+                  min(competencia_arquivo) filter (where status_padrao = 'Perdido')) as m_perda,
+         coalesce(min(left(extras ->> 'data_conversao', 7)) filter (where status_padrao = 'Convertido'),
+                  min(competencia_arquivo) filter (where status_padrao = 'Convertido')) as m_conversao
   from plan_linhas
-  group by chave_caso, produto
+  group by chave_caso, produto, tipo
 ),
 -- Bitrix: 1 card = 1 linha; as datas dos eventos vêm do histórico de etapas
 -- (gravadas pelo scripts/base-unica/sincronizar-bitrix-fianca.ts).
 bitrix_casos as (
-  select produto, case when coalesce((extras ->> 'sem_entrada')::boolean, false) then null else competencia_arquivo end as entrada,
+  select produto, tipo, case when coalesce((extras ->> 'sem_entrada')::boolean, false) then null else competencia_arquivo end as entrada,
          status_padrao as etapa, imobiliaria_id, grupo_id, canal as canal_resolvido,
          seguradora, premio, comissao,
          left(extras ->> 'data_aprovacao', 7) as m_aprovacao,
@@ -180,11 +193,11 @@ bitrix_casos as (
          left(extras ->> 'data_perda', 7) as m_perda,
          left(extras ->> 'data_conversao', 7) as m_conversao
   from producao_resolvida
-  where fonte = 'bitrix' and tipo = 'novo'
+  where fonte = 'bitrix' and tipo in ('novo', 'renovacao')
 ),
 casos as (select * from plan_casos union all select * from bitrix_casos),
 funil as (
-  select 'funil'::text, e.competencia, c.produto, null::text,
+  select 'funil'::text, e.competencia, c.produto, c.tipo, null::text,
          case when e.evento = 'conversao' then producao_seguradora_curta(c.seguradora) end, null::text,
          case when c.canal_resolvido = 'venda_direta_o2' then 'venda_direta'
               when c.imobiliaria_id is not null then 'imobiliaria' else 'nao_identificado' end,
@@ -195,12 +208,12 @@ funil as (
                              ('perda', c.m_perda, null), ('conversao', c.m_conversao, null)) as e(evento, competencia, etapa)
   where e.competencia is not null
 )
-select origem, competencia, produto, ramo, seguradora, susep, canal, imobiliaria_id, grupo_id, etapa, evento,
+select origem, competencia, produto, tipo, ramo, seguradora, susep, canal, imobiliaria_id, grupo_id, etapa, evento,
        sum(n)::int as n,
        coalesce(sum(premio), 0)::numeric(14, 2) as premio,
        coalesce(sum(comissao), 0)::numeric(14, 2) as comissao
 from (select * from corp union all select * from funil) x
-group by origem, competencia, produto, ramo, seguradora, susep, canal, imobiliaria_id, grupo_id, etapa, evento;
+group by origem, competencia, produto, tipo, ramo, seguradora, susep, canal, imobiliaria_id, grupo_id, etapa, evento;
 
 create index producao_painel_mensal_comp_idx on producao_painel_mensal (origem, competencia);
 create index producao_painel_mensal_imob_idx on producao_painel_mensal (imobiliaria_id);
@@ -282,8 +295,11 @@ begin
   ),
   prod_per as (select * from prod where competencia between p_de and p_ate),
   prod_ant as (select * from prod where competencia between v_de_ant and v_ate_ant),
-  fun_per as (select * from base where origem = 'funil' and competencia between p_de and p_ate),
-  fun_ant as (select * from base where origem = 'funil' and competencia between v_de_ant and v_ate_ant),
+  -- Cotações = só negócio novo (tipo 'novo'); as renovações ficam na série própria abaixo.
+  fun_per as (select * from base where origem = 'funil' and tipo = 'novo' and competencia between p_de and p_ate),
+  fun_ant as (select * from base where origem = 'funil' and tipo = 'novo' and competencia between v_de_ant and v_ate_ant),
+  ren_per as (select * from base where origem = 'funil' and tipo = 'renovacao' and competencia between p_de and p_ate),
+  ren_ant as (select * from base where origem = 'funil' and tipo = 'renovacao' and competencia between v_de_ant and v_ate_ant),
   nomes as (
     select g.id, g.nome, 'grupo'::text as tipo from imobiliaria_grupos g
     union all
@@ -371,7 +387,7 @@ begin
                coalesce(sum(f.comissao) filter (where f.evento = 'conversao'), 0) as comissao_convertida,
                (select coalesce(sum(a.n), 0) from fun_ant a where a.produto = f.produto and a.evento = 'entrada') as entradas_ano_anterior,
                (select coalesce(sum(a.n), 0) from fun_ant a where a.produto = f.produto and a.evento = 'conversao') as conversoes_ano_anterior,
-               (select min(m.competencia) from producao_painel_mensal m where m.origem = 'funil' and m.produto = f.produto and m.evento = 'entrada') as historico_desde
+               (select min(m.competencia) from producao_painel_mensal m where m.origem = 'funil' and m.tipo = 'novo' and m.produto = f.produto and m.evento = 'entrada') as historico_desde
         from fun_per f group by f.produto) x),
     'funil_mensal_produto', (select coalesce(jsonb_agg(x order by x.competencia), '[]') from (
         select competencia, jsonb_object_agg(produto, eventos) as produtos
@@ -380,6 +396,48 @@ begin
         group by competencia) x),
     'funil_meses_com_planilha', (select coalesce(jsonb_agg(distinct competencia order by competencia), '[]')
         from base_unica_importacoes where produto = 'fianca' and layout <> 'corp_relatorio_propostas' and competencia between p_de and p_ate),
+    -- Renovações (Fiança e RE), série separada das cotações novas (21/10/2026):
+    -- recebida = mês em que a renovação entrou (Fiança: 1ª planilha em que
+    -- aparece / criação do card; RE: mês do vencimento = aba RN / competência
+    -- do card); renovada e não renovada = mês do desfecho.
+    'renovacoes', (select jsonb_build_object(
+        'entradas', coalesce(sum(n) filter (where evento = 'entrada'), 0),
+        'conversoes', coalesce(sum(n) filter (where evento = 'conversao'), 0),
+        'perdas', coalesce(sum(n) filter (where evento = 'perda'), 0),
+        'premio_convertido', coalesce(sum(premio) filter (where evento = 'conversao'), 0),
+        'comissao_convertida', coalesce(sum(comissao) filter (where evento = 'conversao'), 0),
+        'identificados', coalesce(sum(n) filter (where evento = 'entrada' and canal = 'imobiliaria'), 0),
+        'etapa_atual_das_entradas', coalesce((select jsonb_object_agg(etapa, n) from (
+            select etapa, sum(n) n from ren_per where evento = 'entrada' group by 1) y), '{}')) from ren_per),
+    'renovacoes_ano_anterior', (select jsonb_build_object(
+        'entradas', coalesce(sum(n) filter (where evento = 'entrada'), 0),
+        'conversoes', coalesce(sum(n) filter (where evento = 'conversao'), 0),
+        'perdas', coalesce(sum(n) filter (where evento = 'perda'), 0)) from ren_ant),
+    'renovacoes_por_produto', (select coalesce(jsonb_agg(x order by x.produto), '[]') from (
+        select f.produto,
+               coalesce(sum(f.n) filter (where f.evento = 'entrada'), 0) as entradas,
+               coalesce(sum(f.n) filter (where f.evento = 'conversao'), 0) as conversoes,
+               coalesce(sum(f.n) filter (where f.evento = 'perda'), 0) as perdas,
+               coalesce(sum(f.premio) filter (where f.evento = 'conversao'), 0) as premio_convertido,
+               coalesce(sum(f.comissao) filter (where f.evento = 'conversao'), 0) as comissao_convertida,
+               (select coalesce(sum(a.n), 0) from ren_ant a where a.produto = f.produto and a.evento = 'entrada') as entradas_ano_anterior,
+               (select coalesce(sum(a.n), 0) from ren_ant a where a.produto = f.produto and a.evento = 'conversao') as conversoes_ano_anterior,
+               (select min(m.competencia) from producao_painel_mensal m where m.origem = 'funil' and m.tipo = 'renovacao' and m.produto = f.produto and m.evento = 'entrada') as historico_desde
+        from ren_per f group by f.produto) x),
+    'renovacoes_mensal_produto', (select coalesce(jsonb_agg(x order by x.competencia), '[]') from (
+        select competencia, jsonb_object_agg(produto, eventos) as produtos
+        from (select competencia, produto, jsonb_object_agg(evento, n) as eventos
+              from (select competencia, produto, evento, sum(n) n from ren_per group by 1, 2, 3) a group by 1, 2) b
+        group by competencia) x),
+    'renovacoes_por_entidade', (select coalesce(jsonb_agg(x order by x.entradas desc), '[]') from (
+        select f.entidade as id, nm.nome, nm.tipo,
+               coalesce(sum(f.n) filter (where f.evento = 'entrada'), 0) as entradas,
+               coalesce(sum(f.n) filter (where f.evento = 'conversao'), 0) as conversoes,
+               coalesce(sum(f.n) filter (where f.evento = 'perda'), 0) as perdas,
+               coalesce(sum(f.premio) filter (where f.evento = 'conversao'), 0) as premio_convertido
+        from ren_per f left join nomes nm on nm.id = f.entidade
+        where f.entidade is not null
+        group by f.entidade, nm.nome, nm.tipo) x),
     'atualizado_em', (select atualizado_em from producao_painel_estado where id = 1)
   ) into r;
   return r;

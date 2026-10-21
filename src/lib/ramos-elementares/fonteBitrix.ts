@@ -541,3 +541,66 @@ export async function listarNovosRamosElementares(): Promise<CardNovoRamosElemen
   }
   return cards;
 }
+
+// Cards de RENOVAÇÃO (funil "Renovações", categoria 34, e os antigos da
+// categoria 22 marcados com Tipo de Processo = Renovação), um por card, com
+// as mesmas regras de lerFonteRamosElementaresBitrix: competência = campo
+// "Competência operacional", senão o mês do fim da vigência, senão a criação;
+// desfecho (EFETIVADO / NÃO EFETIVADO) no mês em que o card chegou nele.
+// Usado pela Base Única (src/lib/baseUnica/bitrixRenovacoes.ts) para pôr as
+// renovações de RE no Power BI - O2 Seguros -- não muda nada no painel.
+export type CardRenovacaoRamosElementares = CardNovoRamosElementares & {
+  numeroApolice: string;
+  fimVigencia: string | null; // AAAA-MM-DD
+  categoria: number;
+};
+export async function listarRenovacoesRamosElementares(): Promise<CardRenovacaoRamosElementares[]> {
+  const [itens, historico, definicoes] = await Promise.all([
+    listarItensSpa(ENTITY_TYPE_ID),
+    listarHistoricoEtapas(ENTITY_TYPE_ID),
+    buscarDefinicaoCampos(ENTITY_TYPE_ID),
+  ]);
+  const empresas = await buscarEmpresas(itens.map((item) => Number(item.companyId || 0)));
+  const historicoPorItem = new Map<number, BitrixStageHistoryEvent[]>();
+  for (const evento of historico) {
+    const lista = historicoPorItem.get(Number(evento.OWNER_ID)) || [];
+    lista.push(evento);
+    historicoPorItem.set(Number(evento.OWNER_ID), lista);
+  }
+  for (const lista of historicoPorItem.values()) lista.sort((a, b) => new Date(a.CREATED_TIME).getTime() - new Date(b.CREATED_TIME).getTime());
+  const diaBrasilia = (d: Date) => d.toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
+
+  const cards: CardRenovacaoRamosElementares[] = [];
+  for (const item of itens) {
+    const categoria = Number(item.categoryId);
+    const ehFunilRenovacoes = categoria === CATEGORIA_RENOVACOES;
+    const marcadoRenovacao = categoria === CATEGORIA_CONTRATACOES && normalizar(valorEnum(item, CAMPOS.tipoProcesso, definicoes)) === "RENOVACAO";
+    if (!ehFunilRenovacoes && !marcadoRenovacao) continue;
+    const fimVigencia = dataValida(item[CAMPOS.fimVigencia]);
+    const dataCompetencia = dataValida(item[CAMPOS.competencia]) || fimVigencia || dataValida(item.createdTime);
+    if (!dataCompetencia) continue;
+    const status = etapaNovo(item);
+    const terminal = status === "EFETIVADO" || status === "NÃO EFETIVADO";
+    const dataDesfecho = terminal ? dataTerminal(historicoPorItem.get(Number(item.id)) || []) : null;
+    const premioTotal = dinheiro(item[CAMPOS.premioTotal]);
+    const criadoEm = dataValida(item.createdTime);
+    cards.push({
+      id: Number(item.id),
+      categoria,
+      competencia: competenciaData(dataCompetencia),
+      status,
+      desfecho: terminal && dataDesfecho ? (status as "EFETIVADO" | "NÃO EFETIVADO") : null,
+      dataDesfecho: dataDesfecho ? diaBrasilia(dataDesfecho) : null,
+      produto: valorEnum(item, CAMPOS.produto, definicoes) || "NÃO INFORMADO",
+      seguradora: valorEnum(item, CAMPOS.seguradoraSelecao, definicoes) || texto(item[CAMPOS.seguradora]),
+      companyId: item.companyId ? Number(item.companyId) : null,
+      empresa: item.companyId ? (empresas[Number(item.companyId)] ?? null) : null,
+      premioTotal,
+      comissao: valorComissao(item, premioTotal),
+      criadoEm: criadoEm ? diaBrasilia(criadoEm) : null,
+      numeroApolice: texto(item[CAMPOS.numeroApolice]),
+      fimVigencia: fimVigencia ? fimVigencia.toISOString().slice(0, 10) : null,
+    });
+  }
+  return cards;
+}

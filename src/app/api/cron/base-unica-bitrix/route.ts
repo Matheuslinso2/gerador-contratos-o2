@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { gravarBitrixFianca, lerBitrixFianca } from "@/lib/baseUnica/bitrixFianca";
 import { gravarBitrixProduto, lerBitrixProduto, type ProdutoBitrix } from "@/lib/baseUnica/bitrixProdutos";
+import { gravarRenovacoesBitrix, lerRenovacoesBitrix, type ProdutoRenovacao } from "@/lib/baseUnica/bitrixRenovacoes";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -25,6 +26,11 @@ export async function GET(request: NextRequest) {
   const sb = createServiceClient();
   if (produto === "fianca") {
     const resultado = await gravarBitrixFianca(sb, await lerBitrixFianca());
+    return NextResponse.json({ ok: true, produto, ...resultado });
+  }
+  if (produto === "fianca-renovacao" || produto === "re-renovacao") {
+    const p = produto.replace("-renovacao", "") as ProdutoRenovacao;
+    const resultado = await gravarRenovacoesBitrix(sb, p, await lerRenovacoesBitrix(p));
     return NextResponse.json({ ok: true, produto, ...resultado });
   }
   if (!OUTROS.includes(produto as ProdutoBitrix)) return NextResponse.json({ erro: "produto inválido" }, { status: 400 });

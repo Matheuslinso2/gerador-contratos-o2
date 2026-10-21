@@ -25,6 +25,11 @@ export const dynamic = "force-dynamic";
 //    painel do produto ("quando a fonte muda, só a fonte muda"): entradas pelo
 //    mês em que a cotação entrou; conversão/perda pelo mês em que aconteceu.
 //    Bitrix lido de hora em hora pelo cron /api/cron/base-unica-bitrix.
+//    RENOVAÇÕES de Fiança e RE (21/10/2026) são uma série à parte dentro do
+//    bloco (recebidas / renovadas / não renovadas), sem entrar nas cotações
+//    novas nem na conversão delas: Fiança = aba RENOVAÇÕES das planilhas
+//    (nov/2025–set/2026) + funil Renovação do Bitrix (out/2026 →); RE = abas RN
+//    das planilhas (nov/2025–set/2026) + funil Renovações do Bitrix (set/2026 →).
 //  - APÓLICES (Corp): o que foi efetivado — propostas, prêmio líquido,
 //    comissão —, pelo mês da data da proposta.
 // Aba "Imobiliária 360" (21/10/2026, Matheus): sem imobiliária escolhida, a O2
@@ -57,7 +62,21 @@ type Kpis = {
   funil_por_produto: CotacaoProduto[];
   funil_mensal_produto: { competencia: string; produtos: Record<string, Partial<Record<"entrada" | "aprovacao" | "recusa" | "perda" | "conversao", number>>> }[];
   funil_meses_com_planilha: string[];
+  renovacoes: Renovacoes & { premio_convertido: number; comissao_convertida: number; identificados: number; etapa_atual_das_entradas: Record<string, number> };
+  renovacoes_ano_anterior: Renovacoes;
+  renovacoes_por_produto: RenovacaoProduto[];
+  renovacoes_mensal_produto: { competencia: string; produtos: Record<string, Partial<Record<"entrada" | "perda" | "conversao", number>>> }[];
+  renovacoes_por_entidade: (Renovacoes & Entidade & { premio_convertido: number })[];
   atualizado_em: string | null;
+};
+type Renovacoes = { entradas: number; conversoes: number; perdas: number };
+type RenovacaoProduto = Renovacoes & {
+  produto: string;
+  premio_convertido: number;
+  comissao_convertida: number;
+  entradas_ano_anterior: number;
+  conversoes_ano_anterior: number;
+  historico_desde: string | null;
 };
 type Fontes = { bitrix: string | null; corp: string | null };
 type CotacaoProduto = Eventos & {
@@ -132,7 +151,7 @@ function variacao(atual: number, anterior: number): Variacao {
 export default async function ProducaoPage({
   searchParams,
 }: {
-  searchParams: Promise<{ de?: string; ate?: string; p?: string; s?: string; g?: string; i?: string; atualizar?: string; todas?: string; todasc?: string }>;
+  searchParams: Promise<{ de?: string; ate?: string; p?: string; s?: string; g?: string; i?: string; atualizar?: string; todas?: string; todasc?: string; todasr?: string }>;
 }) {
   const sp = await searchParams;
   const supabase = await createClient();
@@ -249,7 +268,7 @@ export default async function ProducaoPage({
         )}
         {kpis && (
           <>
-            <BlocoCotacoes kpis={kpis} filtros={filtros} filtroImob={filtroImob} fontes={fontes} todas={sp.todasc === "1"} sp={sp} />
+            <BlocoCotacoes kpis={kpis} filtros={filtros} filtroImob={filtroImob} fontes={fontes} todas={sp.todasc === "1"} todasRenov={sp.todasr === "1"} sp={sp} />
             <BlocoApolices kpis={kpis} filtroImob={filtroImob} mesAtual={mesAtual} fontes={fontes} todas={sp.todas === "1"} sp={sp} />
           </>
         )}
@@ -308,11 +327,11 @@ function Grafico({ titulo, children }: { titulo: string; children: ReactNode }) 
 
 // Link que abre a visão 360 da imobiliária/grupo, mantendo o período.
 function linkEntidade(sp: Record<string, string | undefined>, id: string, tipo: string) {
-  const q = new URLSearchParams(Object.entries(sp).filter(([k, v]) => v && !["atualizar", "todas", "todasc", "g", "i", "p", "s"].includes(k)) as [string, string][]);
+  const q = new URLSearchParams(Object.entries(sp).filter(([k, v]) => v && !["atualizar", "todas", "todasc", "todasr", "g", "i", "p", "s"].includes(k)) as [string, string][]);
   q.set(tipo === "grupo" ? "g" : "i", id);
   return `/producao?${q.toString()}`;
 }
-function linkVerTodas(sp: Record<string, string | undefined>, chave: "todas" | "todasc") {
+function linkVerTodas(sp: Record<string, string | undefined>, chave: "todas" | "todasc" | "todasr") {
   const q = new URLSearchParams(Object.entries(sp).filter(([k, v]) => v && k !== "atualizar") as [string, string][]);
   q.set(chave, "1");
   return `/producao?${q.toString()}`;
@@ -367,6 +386,20 @@ const FONTE_COTACOES: Record<string, string> = {
   automovel: "planilhas de RE (jul/2025 a ago/2026) e Bitrix (ago/2026 →); sem imobiliária",
 };
 
+// Renovações (21/10/2026): cada produto com a régua do painel dele —
+// Fiança (aba Renovação do /seguro-fianca): renovadas ÷ (renovadas + perdidas);
+// RE (/ramos-elementares): efetivadas ÷ renovações da competência.
+const REGUA_RENOVACAO: Record<string, { texto: string; calc: (p: Renovacoes) => [number, number] }> = {
+  fianca: { texto: "renovadas ÷ (renovadas + não renovadas)", calc: (p) => [p.conversoes, p.conversoes + p.perdas] },
+  re: { texto: "efetivadas ÷ recebidas", calc: (p) => [p.conversoes, p.entradas] },
+  automovel: { texto: "efetivadas ÷ recebidas", calc: (p) => [p.conversoes, p.entradas] },
+};
+const FONTE_RENOVACOES: Record<string, string> = {
+  fianca: "aba RENOVAÇÕES das planilhas de análise (nov/2025 a set/2026) e funil Renovação do Bitrix (out/2026 →)",
+  re: "abas RN das planilhas Cotação diária RE (nov/2025 a set/2026, 1 linha = 1 item) e funil Renovações do Bitrix (set/2026 →, 1 card = 1 negociação)",
+  automovel: "renovações de automóvel lançadas nas planilhas de RE; sem imobiliária",
+};
+
 // ---------------------------------------------------------------- Cotações
 
 function BlocoCotacoes({
@@ -375,6 +408,7 @@ function BlocoCotacoes({
   filtroImob,
   fontes,
   todas,
+  todasRenov,
   sp,
 }: {
   kpis: Kpis;
@@ -382,6 +416,7 @@ function BlocoCotacoes({
   filtroImob: boolean;
   fontes: Fontes;
   todas: boolean;
+  todasRenov: boolean;
   sp: Record<string, string | undefined>;
 }) {
   const f = kpis.funil;
@@ -605,7 +640,173 @@ function BlocoCotacoes({
           </div>
         </>
       )}
+      <Renovacoes kpis={kpis} filtroImob={filtroImob} todas={todasRenov} sp={sp} meses={meses} />
     </Bloco>
+  );
+}
+
+// Renovações de Seguro Fiança e Ramos Elementares — série separada das
+// cotações novas (Matheus, 21/10/2026): a renovação conta como recebida no
+// mês em que entrou (Fiança: 1ª planilha em que aparece / criação do card;
+// RE: mês do vencimento = aba RN / competência do card) e como renovada ou
+// não renovada no mês do desfecho. Não entra nos números de cotações acima.
+function Renovacoes({ kpis, filtroImob, todas, sp, meses }: { kpis: Kpis; filtroImob: boolean; todas: boolean; sp: Record<string, string | undefined>; meses: string[] }) {
+  const r = kpis.renovacoes;
+  const ra = kpis.renovacoes_ano_anterior;
+  const produtos = ORDEM_PRODUTOS.map((p) => kpis.renovacoes_por_produto.find((x) => x.produto === p)).filter((x): x is RenovacaoProduto => !!x);
+  if (!produtos.length) return null;
+  const produtosNaTela = produtos.map((p) => p.produto);
+  const porMes = new Map(kpis.renovacoes_mensal_produto.map((m) => [m.competencia, m.produtos]));
+  const entidades = todas ? kpis.renovacoes_por_entidade : kpis.renovacoes_por_entidade.slice(0, 30);
+  const compara = kpis.meses <= 24 && ra.entradas > 0 && produtos.every((p) => !p.entradas || p.entradas_ano_anterior > 0);
+  const transicaoRe = produtosNaTela.includes("re") && meses.some((m) => m >= "2026-09") && meses.some((m) => m <= "2026-09");
+
+  return (
+    <div className="space-y-4 rounded-xl border border-dashed border-o2-coral/40 bg-white/60 p-4">
+      <div>
+        <h3 className="flex items-center gap-1 text-sm font-semibold uppercase tracking-wide text-o2-navy">
+          Renovações (Seguro Fiança e Ramos Elementares)
+          <InfoLegenda titulo="Renovações">
+            Série separada das cotações novas acima — não entra nas cotações recebidas nem na conversão. A renovação conta como recebida no mês em que entrou
+            (Fiança: primeira planilha em que aparece ou criação do card; RE: mês do vencimento da apólice) e como renovada ou não renovada no mês em que isso
+            aconteceu, a mesma régua da aba Renovação do /seguro-fianca e do /ramos-elementares.
+          </InfoLegenda>
+        </h3>
+        <p className="text-xs text-gray-500">
+          Fiança: {FONTE_RENOVACOES.fianca}. RE: {FONTE_RENOVACOES.re}.
+        </p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Cartao
+          rotulo="Renovações recebidas"
+          valor={num(r.entradas)}
+          linhas={[produtos.map((p) => `${ROTULO_CURTO[p.produto] ?? p.produto} ${num(p.entradas)}`).join(" · ")]}
+          variacaoAno={compara ? variacao(r.entradas, ra.entradas) : null}
+          legenda="Renovações que entraram no período, cada uma contada uma vez, no mês em que entrou (Fiança: 1ª planilha em que aparece ou criação do card; RE: mês do vencimento)."
+        />
+        <Cartao
+          rotulo="Renovadas"
+          valor={num(r.conversoes)}
+          linhas={[`${compacto(r.premio_convertido)} de prêmio nas renovadas`]}
+          variacaoAno={compara ? variacao(r.conversoes, ra.conversoes) : null}
+          legenda="Renovações efetivadas no período, pelo mês em que foram efetivadas (Sucesso no funil ou RENOVADO/EFETIVADO na planilha)."
+        />
+        <Cartao
+          rotulo="Não renovadas"
+          valor={num(r.perdas)}
+          linhas={[produtos.map((p) => `${ROTULO_CURTO[p.produto] ?? p.produto} ${num(p.perdas)}`).join(" · ")]}
+          variacaoAno={compara ? variacao(r.perdas, ra.perdas) : null}
+          legenda="Renovações perdidas no período, pelo mês em que isso aconteceu (Perdido no funil; NÃO RENOVADO, NÃO EFETIVADO, SEM PARCERIA ou CANCELADO na planilha)."
+        />
+        <Cartao
+          rotulo="Taxa de renovação"
+          valor={pct(r.conversoes, r.conversoes + r.perdas)}
+          linhas={["renovadas ÷ (renovadas + não renovadas)"]}
+          legenda="Das renovações que tiveram desfecho no período, quantas renovaram. A taxa de cada produto, com a régua do painel dele, está na tabela ao lado."
+        />
+      </div>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+          <table className="w-full text-sm">
+            <thead className="bg-o2-navy text-left text-xs text-white">
+              <tr>
+                <th className="px-3 py-2">Produto</th>
+                <th className="px-3 py-2 text-right">Recebidas</th>
+                <th className="px-3 py-2 text-right">Renovadas</th>
+                <th className="px-3 py-2 text-right">Não renovadas</th>
+                <th className="px-3 py-2 text-right">Taxa</th>
+                <th className="px-3 py-2 text-right">Prêmio renovado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {produtos.map((p) => {
+                const [a, b] = REGUA_RENOVACAO[p.produto]?.calc(p) ?? [p.conversoes, p.entradas];
+                return (
+                  <tr key={p.produto} className="border-t border-gray-100 align-top">
+                    <td className="px-3 py-2">
+                      <p className="font-medium text-o2-navy">
+                        <span className="mr-2 inline-block h-2.5 w-2.5 rounded-sm" style={{ background: PRODUTOS[p.produto]?.cor }} />
+                        {PRODUTOS[p.produto]?.rotulo ?? p.produto}
+                      </p>
+                      <p className="text-[11px] text-gray-400">{p.historico_desde ? `desde ${rotuloMes(p.historico_desde)}` : ""}</p>
+                    </td>
+                    <td className="px-3 py-2 text-right">{num(p.entradas)}</td>
+                    <td className="px-3 py-2 text-right">{num(p.conversoes)}</td>
+                    <td className="px-3 py-2 text-right">{num(p.perdas)}</td>
+                    <td className="px-3 py-2 text-right">
+                      <span className="font-semibold">{pct(a, b)}</span>
+                      <p className="text-[10px] text-gray-400">{REGUA_RENOVACAO[p.produto]?.texto}</p>
+                    </td>
+                    <td className="px-3 py-2 text-right">{p.premio_convertido ? compacto(p.premio_convertido) : "—"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <Grafico titulo="Renovações recebidas e renovadas por mês">
+          <BarrasMensais
+            pontos={meses.map((m) => ({
+              mes: m,
+              valores: Object.fromEntries(produtosNaTela.flatMap((p) => [[`${p}_r`, porMes.get(m)?.[p]?.entrada ?? 0], [`${p}_c`, porMes.get(m)?.[p]?.conversao ?? 0]])),
+            }))}
+            series={produtosNaTela.flatMap((p) => [
+              { chave: `${p}_r`, rotulo: `${PRODUTOS[p].rotulo} recebidas`, cor: PRODUTOS[p].cor + "66" },
+              { chave: `${p}_c`, rotulo: `${PRODUTOS[p].rotulo} renovadas`, cor: PRODUTOS[p].cor },
+            ])}
+            altura={170}
+          />
+        </Grafico>
+      </div>
+      {transicaoRe && (
+        <p className="text-xs text-gray-500">
+          Ramos Elementares: até set/2026 as renovações vêm das planilhas e contam por item (1 linha = 1 apólice); a partir de out/2026 vêm do Bitrix e contam por
+          card (1 card = 1 negociação por imobiliária, com os itens em planilha anexa). Em set/2026 o painel soma as duas fontes. Set e out não são comparáveis.
+        </p>
+      )}
+      {entidades.length > 0 && (
+        <div className="space-y-2">
+          <Titulo legenda="Renovações de cada imobiliária/grupo no período (Automóvel não tem imobiliária). Só aparece quem já tem vínculo confirmado no cadastro.">
+            {filtroImob ? "Renovações das imobiliárias selecionadas" : "Renovações por imobiliária / grupo"}
+          </Titulo>
+          <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+            <table className="w-full text-sm">
+              <thead className="bg-o2-navy text-left text-xs text-white">
+                <tr>
+                  <th className="px-3 py-2">#</th>
+                  <th className="px-3 py-2">Imobiliária / grupo</th>
+                  <th className="px-3 py-2 text-right">Recebidas</th>
+                  <th className="px-3 py-2 text-right">Renovadas</th>
+                  <th className="px-3 py-2 text-right">Não renovadas</th>
+                  <th className="px-3 py-2 text-right">Taxa</th>
+                  <th className="px-3 py-2 text-right">Prêmio renovado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {entidades.map((x, i) => (
+                  <tr key={x.id} className="border-t border-gray-100">
+                    <td className="px-3 py-2 text-xs text-gray-400">{i + 1}</td>
+                    <td className="px-3 py-2">
+                      <NomeEntidade e={x} sp={sp} />
+                    </td>
+                    <td className="px-3 py-2 text-right">{num(x.entradas)}</td>
+                    <td className="px-3 py-2 text-right">{num(x.conversoes)}</td>
+                    <td className="px-3 py-2 text-right">{num(x.perdas)}</td>
+                    <td className="px-3 py-2 text-right font-semibold">{pct(x.conversoes, x.conversoes + x.perdas)}</td>
+                    <td className="px-3 py-2 text-right">{x.premio_convertido ? compacto(x.premio_convertido) : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {!todas && kpis.renovacoes_por_entidade.length > entidades.length && (
+            <Link href={linkVerTodas(sp, "todasr")} className="text-sm text-o2-blue underline">
+              Ver todas as {kpis.renovacoes_por_entidade.length}
+            </Link>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
