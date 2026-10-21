@@ -24,6 +24,7 @@ export function separarEmails(valor: string | string[] | null | undefined): stri
 export async function enviarEmail({
   para,
   cc,
+  bcc,
   assunto,
   html,
   anexos,
@@ -35,6 +36,7 @@ export async function enviarEmail({
 }: {
   para: string | string[];
   cc?: string[];
+  bcc?: string[];
   assunto: string;
   html: string;
   anexos?: AnexoEmail[];
@@ -66,6 +68,7 @@ export async function enviarEmail({
       from: `${remetente} <${enderecoRemetente}>`,
       to: para,
       cc: cc?.length ? cc : undefined,
+      bcc: bcc?.length ? bcc : undefined,
       replyTo,
       subject: assunto,
       html,

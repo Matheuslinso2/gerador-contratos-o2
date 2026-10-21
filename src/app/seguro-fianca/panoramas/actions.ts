@@ -5,6 +5,7 @@ import { autorizarPanorama } from "@/lib/panoramaAutorizacao";
 import { createServiceClient } from "@/lib/supabase/service";
 import { BUCKET_ANEXOS } from "@/lib/bitrix/emailNoCard";
 import { ENTITY_TYPE_ID_SEGURO_FIANCA } from "@/lib/bitrix/entidadesCard";
+import { listarConversas, type Conversa } from "@/lib/bitrix/conversasEmail";
 import {
   buscarCardPanorama,
   buscarContatosEnvioPanorama,
@@ -91,6 +92,17 @@ export async function buscarContatosEnvio(
   } catch (e) {
     return { ok: false, erro: `Não consegui ler os contatos no Bitrix: ${(e as Error).message}` };
   }
+}
+
+// Conversas de e-mail já existentes neste card (resposta do cliente, cópia
+// da equipe, e-mails nossos) -- o envio pode continuar uma delas em vez de
+// abrir outra tratativa por e-mail.
+export async function buscarConversasEnvio(
+  cardId: number,
+  passeBitrix?: string | null
+): Promise<{ ok: true; conversas: Conversa[] } | { ok: false; erro: string }> {
+  if (!(await autorizarPanorama(cardId, passeBitrix))) return { ok: false, erro: "Sem permissão." };
+  return { ok: true, conversas: await listarConversas(ENTITY_TYPE_ID_SEGURO_FIANCA, cardId) };
 }
 
 // Cartas das seguradoras (recusa/pendência) anexadas ao e-mail: o navegador

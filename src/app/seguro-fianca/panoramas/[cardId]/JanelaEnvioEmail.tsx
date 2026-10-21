@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { buscarContatosEnvio, prepararUploadCarta } from "../actions";
+import { buscarContatosEnvio, buscarConversasEnvio, prepararUploadCarta } from "../actions";
 import { createClient as criarSupabaseNavegador } from "@/lib/supabase/browser";
 import type { LinhaPanorama, LinhaStatus } from "@/lib/panoramaFiancaConstantes";
 import {
@@ -105,6 +105,17 @@ export default function JanelaEnvioEmail({
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [copiado, setCopiado] = useState(false);
+  // Conversas de e-mail que já existem neste card. Escolhida = o e-mail sai
+  // como resposta nela (mesma conversa na caixa do cliente), "" = conversa nova.
+  const [conversas, setConversas] = useState<{ assuntoBase: string; ultimaEm: string; mensagens: number }[]>([]);
+  const [conversa, setConversa] = useState("");
+  useEffect(() => {
+    buscarConversasEnvio(cardId, passeBitrix).then((r) => {
+      if (!r.ok) return;
+      setConversas(r.conversas);
+      if (r.conversas.length) setConversa(r.conversas[0].assuntoBase);
+    });
+  }, [cardId, passeBitrix]);
 
   useEffect(() => {
     buscarContatosEnvio(cardId, passeBitrix).then((r) => {
@@ -198,6 +209,7 @@ export default function JanelaEnvioEmail({
           para: destinatarios,
           cc: copias,
           assunto,
+          conversa: conversa || null,
           observacoes,
           cartas: cartasProntas,
           anexosExtras: extrasProntos,
@@ -318,10 +330,36 @@ export default function JanelaEnvioEmail({
               </>
             )}
 
+            {conversas.length > 0 && (
+              <div>
+                <label className={rotulo} htmlFor="conversa">Conversa por e-mail</label>
+                <select id="conversa" className={caixa} value={conversa} onChange={(e) => setConversa(e.target.value)}>
+                  {conversas.map((c) => (
+                    <option key={c.assuntoBase} value={c.assuntoBase}>
+                      Continuar: {c.assuntoBase} ({c.mensagens} {c.mensagens === 1 ? "e-mail" : "e-mails"}, último em{" "}
+                      {new Date(c.ultimaEm).toLocaleDateString("pt-BR")})
+                    </option>
+                  ))}
+                  <option value="">Nova conversa (usa o assunto abaixo)</option>
+                </select>
+                {conversa && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    O e-mail vai como resposta nessa conversa e aparece junto com as mensagens anteriores na caixa do cliente.
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
               <div>
                 <label className={rotulo} htmlFor="assunto">Assunto</label>
-                <input id="assunto" className={caixa} value={assunto} onChange={(e) => setAssunto(e.target.value)} />
+                <input
+                  id="assunto"
+                  className={caixa}
+                  value={conversa ? `Re: ${conversa}` : assunto}
+                  disabled={Boolean(conversa)}
+                  onChange={(e) => setAssunto(e.target.value)}
+                />
               </div>
               {tipo === "aprovado" && (
                 <div>

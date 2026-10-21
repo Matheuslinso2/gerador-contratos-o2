@@ -5,6 +5,7 @@ import { registrarAtividadeEmail } from "@/lib/bitrix/atividades";
 import { tokenBitrixValido, BUCKET_ANEXOS } from "@/lib/bitrix/emailNoCard";
 import { createServiceClient } from "@/lib/supabase/service";
 import { nomeExibidoRemetente } from "@/lib/campanhas/remetente";
+import { bccDoCard, continuarConversa } from "@/lib/bitrix/conversasEmail";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +61,7 @@ export async function POST(request: NextRequest) {
     itemId?: number;
     para?: string;
     remetenteNome?: string;
+    conversa?: string | null;
     assunto?: string;
     corpo?: string;
     anexos?: { caminho: string; nome: string }[];
@@ -111,11 +113,25 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // Continuar uma conversa já existente com o cliente: assunto "Re: ..." e
+  // cabeçalhos de resposta, pra cair na mesma conversa no e-mail dele.
+  let assuntoFinal = assunto.trim();
+  let headers: Record<string, string> | undefined;
+  if (body.conversa) {
+    const continuacao = await continuarConversa(entityTypeId, itemId, body.conversa);
+    if (continuacao) {
+      assuntoFinal = continuacao.assunto;
+      headers = continuacao.headers;
+    }
+  }
+
   try {
     await enviarEmail({
       para: para.trim(),
       cc: [cc],
-      assunto: assunto.trim(),
+      bcc: [bccDoCard(entityTypeId, itemId)],
+      headers,
+      assunto: assuntoFinal,
       html,
       anexos,
       replyTo,
@@ -144,7 +160,7 @@ export async function POST(request: NextRequest) {
     await registrarAtividadeEmail({
       entityTypeId,
       itemId,
-      assunto: assunto.trim(),
+      assunto: assuntoFinal,
       corpo: html,
       direcao: "enviado",
       enderecoEnvolvido: para.trim(),

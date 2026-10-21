@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { parseEnderecoResposta, ccPorEntidade } from "@/lib/bitrix/entidadesCard";
 import { registrarAtividadeEmail } from "@/lib/bitrix/atividades";
 import { enviarEmail } from "@/lib/email";
+import { assuntoBase } from "@/lib/bitrix/conversasEmail";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,8 @@ export async function POST(request: NextRequest) {
     remetente?: string;
     assunto?: string;
     texto?: string;
+    inReplyTo?: string | null;
+    references?: string | null;
   };
   try {
     corpo = await request.json();
@@ -57,6 +60,29 @@ export async function POST(request: NextRequest) {
 
   const { entityTypeId, itemId } = destino;
   const corpoTexto = texto ?? "";
+
+  // Guarda o Message-ID pra o próximo envio continuar esta conversa (ver
+  // lib/bitrix/conversasEmail.ts). Se o remetente é o nosso próprio domínio de
+  // envio, é a cópia oculta de um e-mail que NÓS mandamos: só serve pra
+  // aprender o Message-ID -- não é resposta de cliente, não vira atividade
+  // nem aviso.
+  const eco = /@notificacoes\.o2seguros\.com\.br$/i.test(remetente.trim());
+  const { error: erroConversa } = await supabase.from("bitrix_email_mensagens").upsert(
+    {
+      message_id: messageId,
+      entity_type_id: entityTypeId,
+      item_id: itemId,
+      direcao: eco ? "enviado" : "recebido",
+      remetente,
+      assunto,
+      assunto_base: assuntoBase(assunto),
+      in_reply_to: corpo.inReplyTo ?? null,
+      referencias: corpo.references ?? null,
+    },
+    { onConflict: "message_id", ignoreDuplicates: true }
+  );
+  if (erroConversa) console.error("Falha ao guardar mensagem da conversa:", erroConversa);
+  if (eco) return NextResponse.json({ ok: true, eco: true });
 
   let atividadeRegistrada = false;
   let erroAtividade: string | null = null;

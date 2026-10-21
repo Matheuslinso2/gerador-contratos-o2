@@ -6,6 +6,7 @@ import { registrarAtividadeEmail } from "@/lib/bitrix/atividades";
 import { BUCKET_ANEXOS } from "@/lib/bitrix/emailNoCard";
 import { nomeExibidoRemetente } from "@/lib/campanhas/remetente";
 import { buscarCardPanorama } from "@/lib/bitrix/panoramaFianca";
+import { bccDoCard, continuarConversa } from "@/lib/bitrix/conversasEmail";
 import { createServiceClient } from "@/lib/supabase/service";
 import {
   EMAIL_FIANCA,
@@ -52,6 +53,8 @@ type Corpo = {
   anexosExtras?: { caminho: string; nome: string }[];
   // Nome da pessoa que aparece na caixa de entrada ("Nome | O2 Seguros").
   remetenteNome?: string;
+  // Assunto-base da conversa existente a continuar (null = conversa nova).
+  conversa?: string | null;
   passeBitrix?: string;
   // aprovado
   versao?: number;
@@ -190,12 +193,26 @@ export async function POST(request: NextRequest) {
   }
   const todosAnexosDoStorage = [...cartas, ...anexosExtras];
 
+  // Continuar uma conversa que já existe com o cliente (assunto "Re: ..." +
+  // cabeçalhos de resposta) em vez de abrir outra tratativa por e-mail.
+  let assuntoFinal = assunto.trim();
+  let headers: Record<string, string> | undefined;
+  if (corpo.conversa) {
+    const continuacao = await continuarConversa(ENTITY_TYPE_ID_SEGURO_FIANCA, cardId, corpo.conversa);
+    if (continuacao) {
+      assuntoFinal = continuacao.assunto;
+      headers = continuacao.headers;
+    }
+  }
+
   let resendId: string | null = null;
   try {
     const r = await enviarEmail({
       para,
       cc,
-      assunto: assunto.trim(),
+      bcc: [bccDoCard(ENTITY_TYPE_ID_SEGURO_FIANCA, cardId)],
+      headers,
+      assunto: assuntoFinal,
       html,
       anexos,
       replyTo: gerarEnderecoRespostaCard(ENTITY_TYPE_ID_SEGURO_FIANCA, cardId),
@@ -222,7 +239,7 @@ export async function POST(request: NextRequest) {
     await registrarAtividadeEmail({
       entityTypeId: ENTITY_TYPE_ID_SEGURO_FIANCA,
       itemId: cardId,
-      assunto: assunto.trim(),
+      assunto: assuntoFinal,
       // A imagem inline (cid) não abre dentro do Bitrix -- troca por aviso.
       corpo:
         html.replace(/<img [^>]*src="cid:panorama"[^>]*\/>/, `<b>[Panorama v${versao} anexo ao e-mail]</b>`) +
@@ -243,7 +260,7 @@ export async function POST(request: NextRequest) {
     canal: "email",
     para,
     cc,
-    assunto: assunto.trim(),
+    assunto: assuntoFinal,
     anexos: todosAnexosDoStorage.map((c) => c.nome),
     enviado_por_email: autor.email,
     registrado_no_card: registradoNoCard,

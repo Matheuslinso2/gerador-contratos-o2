@@ -21,6 +21,8 @@ export default {
       remetente: email.from?.address || message.from,
       assunto: email.subject || "(sem assunto)",
       texto: email.text || "",
+      inReplyTo: email.inReplyTo || null,
+      references: email.references || null,
     };
 
     const resposta = await fetch(env.WEBHOOK_URL, {

@@ -160,6 +160,8 @@ export async function POST(request: NextRequest) {
     #btn-anexar { background: #fff; color: #01192e; border: 1px solid #d9d9d9; border-radius: 999px; padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer; margin-top: 8px; }
     #btn-anexar:disabled { opacity: 0.6; cursor: default; }
     #dica-remetente { font-size: 12px; color: #8d8683; margin-top: 4px; }
+    #dica-conversa { font-size: 12px; color: #8d8683; margin-top: 4px; }
+    #assunto:disabled { background: #f4f4f4; color: #6b6663; }
   </style>
 </head>
 <body>
@@ -180,6 +182,12 @@ export async function POST(request: NextRequest) {
       <option value="">Em branco (escrever do zero)</option>
     </select>
     <div id="dica-modelo">Escolha um modelo para preencher assunto e mensagem. Depois é só editar o que precisar.</div>
+
+    <div id="bloco-conversa" style="display:none;">
+      <label for="conversa">Conversa por e-mail</label>
+      <select id="conversa"></select>
+      <div id="dica-conversa">O e-mail vai como resposta nessa conversa e aparece junto com as mensagens anteriores na caixa do cliente.</div>
+    </div>
 
     <label for="assunto">Assunto</label>
     <input id="assunto" type="text" required />
@@ -279,10 +287,60 @@ export async function POST(request: NextRequest) {
           assuntoEl.value = preencherPlaceholders(modelo.assunto, false);
           ultimoAssuntoModelo = assuntoEl.value;
         }
+        aplicarConversa();
         corpoEl.focus();
       });
     }
     popularModelos();
+
+    // Conversa de e-mail existente neste card: quando escolhida, o assunto
+    // vira "Re: <assunto da conversa>" (travado) e o servidor manda os
+    // cabeçalhos de resposta pra cair na mesma conversa do cliente.
+    function aplicarConversa() {
+      var conversaEl = document.getElementById("conversa");
+      var assuntoEl = document.getElementById("assunto");
+      if (!conversaEl || document.getElementById("bloco-conversa").style.display === "none") return;
+      if (conversaEl.value) {
+        assuntoEl.value = "Re: " + conversaEl.value;
+        assuntoEl.disabled = true;
+        document.getElementById("dica-conversa").style.display = "block";
+      } else {
+        assuntoEl.disabled = false;
+        if (assuntoEl.value.indexOf("Re: ") === 0 && assuntoEl.value === ultimoAssuntoConversa) assuntoEl.value = "";
+        document.getElementById("dica-conversa").style.display = "none";
+      }
+      ultimoAssuntoConversa = conversaEl.value ? assuntoEl.value : "";
+    }
+    var ultimoAssuntoConversa = "";
+
+    function carregarConversas(authId) {
+      fetch("/bitrix-app/conversas", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ authId: authId, entityTypeId: entityTypeId, itemId: Number(itemId) }),
+      })
+        .then(function (resp) { return resp.json(); })
+        .then(function (resultado) {
+          if (!resultado.ok || !resultado.conversas || !resultado.conversas.length) return;
+          var select = document.getElementById("conversa");
+          resultado.conversas.forEach(function (c) {
+            var opcao = document.createElement("option");
+            opcao.value = c.assuntoBase;
+            var data = new Date(c.ultimaEm).toLocaleDateString("pt-BR");
+            opcao.textContent = "Continuar: " + c.assuntoBase + " (" + c.mensagens + (c.mensagens === 1 ? " e-mail" : " e-mails") + ", último em " + data + ")";
+            select.appendChild(opcao);
+          });
+          var nova = document.createElement("option");
+          nova.value = "";
+          nova.textContent = "Nova conversa (usa o assunto abaixo)";
+          select.appendChild(nova);
+          select.value = resultado.conversas[0].assuntoBase;
+          select.addEventListener("change", aplicarConversa);
+          document.getElementById("bloco-conversa").style.display = "block";
+          aplicarConversa();
+        })
+        .catch(function () {}); // opcional: sem a lista, o envio segue como conversa nova
+    }
 
     function mostrarStatus(texto) {
       document.getElementById("status").textContent = texto;
@@ -437,6 +495,7 @@ export async function POST(request: NextRequest) {
 
         var authInicial = BX24.getAuth();
         if (itemId && entityTypeId) carregarPreviaCard(authInicial && authInicial.access_token);
+        if (itemId && entityTypeId) carregarConversas(authInicial && authInicial.access_token);
 
         // Nome que a imobiliária vê como remetente. Lembrado no navegador de
         // quem usa (só conveniência -- sem isso o campo só fica vazio).
@@ -479,6 +538,7 @@ export async function POST(request: NextRequest) {
               entityTypeId: entityTypeId,
               itemId: Number(itemId),
               remetenteNome: remetenteEl.value,
+              conversa: document.getElementById("conversa").value || null,
               para: document.getElementById("para").value,
               assunto: document.getElementById("assunto").value,
               corpo: corpoEl.innerHTML,
@@ -494,6 +554,7 @@ export async function POST(request: NextRequest) {
                 try { localStorage.setItem("o2_remetente_nome", remetenteEl.value); } catch (e) {}
                 document.getElementById("form-email").reset();
                 restaurarRemetente();
+                aplicarConversa();
                 corpoEl.innerHTML = "";
                 ultimoAssuntoModelo = "";
                 ultimoCorpoModelo = "";
