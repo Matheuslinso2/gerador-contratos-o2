@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import type { OpcaoImob } from "../FiltrosProducao";
+import type { OpcaoImob } from "./FiltrosProducao";
 
 // Seletor da aba "Imobiliária 360": UMA imobiliária ou grupo + período. Vai
 // tudo para a URL (?g= ou ?i=, de, ate) e o servidor monta a visão.

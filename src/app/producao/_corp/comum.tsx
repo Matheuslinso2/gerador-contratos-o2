@@ -11,8 +11,7 @@ export const AZUL = "#2E6FB7";
 export const LARANJA = "#F8540D";
 
 export const ABAS = [
-  { href: "/producao", rotulo: "Cotações e apólices" },
-  { href: "/producao/imobiliaria", rotulo: "Imobiliária 360" },
+  { href: "/producao", rotulo: "Imobiliária 360" },
   { href: "/producao/geral", rotulo: "Produção Geral" },
   { href: "/producao/historica", rotulo: "Produção Histórica" },
   { href: "/producao/flash", rotulo: "Flash Report" },

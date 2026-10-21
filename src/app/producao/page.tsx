@@ -13,6 +13,7 @@ import BarrasMensais from "./BarrasMensais";
 import { signOut } from "../actions";
 import FiltrosProducao, { type Filtros, type OpcaoImob } from "./FiltrosProducao";
 import { Abas } from "./_corp/comum";
+import { Imobiliaria360 } from "./Imobiliaria360";
 
 export const dynamic = "force-dynamic";
 
@@ -26,8 +27,11 @@ export const dynamic = "force-dynamic";
 //    Bitrix lido de hora em hora pelo cron /api/cron/base-unica-bitrix.
 //  - APÓLICES (Corp): o que foi efetivado — propostas, prêmio líquido,
 //    comissão —, pelo mês da data da proposta.
-// O filtro de período e de imobiliária/grupo recorta os dois blocos; o de
-// seguradora só as apólices. Números: supabase/schema_producao_painel.sql
+// Aba "Imobiliária 360" (21/10/2026, Matheus): sem imobiliária escolhida, a O2
+// inteira com o ranking (os dois blocos abaixo); com UMA imobiliária ou grupo
+// (filtro ou clique no ranking), a visão 360 dela (Imobiliaria360.tsx); com
+// várias, os dois blocos somando as escolhidas. O filtro de seguradora só
+// recorta as apólices. Números: supabase/schema_producao_painel.sql
 // (imobiliária só por vínculo CONFIRMADO). Grade antiga: /producao/relatorios.
 
 type Valores = { propostas: number; premio: number; comissao: number };
@@ -140,8 +144,10 @@ export default async function ProducaoPage({
 
   const mesAtual = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }).slice(0, 7);
   const ultimoFechado = somarMeses(mesAtual, -1);
-  let de = mesValido(sp.de) ?? somarMeses(ultimoFechado, -11);
-  let ate = mesValido(sp.ate) ?? ultimoFechado;
+  const umAlvo = lista(sp.g).filter(uuid).length + lista(sp.i).filter(uuid).length === 1;
+  // 360: o mês atual entra (uso das ferramentas e sinistros abertos são recentes).
+  let de = mesValido(sp.de) ?? somarMeses(umAlvo ? mesAtual : ultimoFechado, -11);
+  let ate = mesValido(sp.ate) ?? (umAlvo ? mesAtual : ultimoFechado);
   if (de < "2015-01") de = "2015-01";
   if (ate > mesAtual) ate = mesAtual;
   if (de > ate) [de, ate] = [ate, de];
@@ -157,7 +163,29 @@ export default async function ProducaoPage({
 
   // Resumo remontado só quando houve vínculo/grupo/importação nova (ou no botão).
   const { error: erroAtualizar } = await supabase.rpc("atualizar_producao_painel", { p_forcar: pediuAtualizacao(sp.atualizar) });
-  const [{ data: kpisData, error: erroKpis }, { data: opcoesData }, { data: imports }] = await Promise.all([
+  if (umAlvo) {
+    const opcoes = await opcoesImobiliarias(supabase);
+    const nome = opcoes.find((o) => o.id === (filtros.grupos[0] ?? filtros.imobs[0]))?.nome;
+    return (
+      <>
+        <AppHeader userEmail={user.email} logoutAction={signOut} />
+        <main className="mx-auto max-w-7xl flex-1 space-y-6 p-8">
+          <PageHeader icon={<IconChart />} titulo="Power BI - O2 Seguros" subtitulo={`Imobiliária 360 · ${rotuloMes(de)} a ${rotuloMes(ate)}${nome ? ` · ${nome}` : ""}`} />
+          <Abas ativa="/producao" />
+          <Imobiliaria360
+            supabase={supabase}
+            de={de}
+            ate={ate}
+            grupo={filtros.grupos[0] ?? null}
+            imob={filtros.grupos.length ? null : (filtros.imobs[0] ?? null)}
+            mesAtual={mesAtual}
+            opcoes={opcoes}
+          />
+        </main>
+      </>
+    );
+  }
+  const [{ data: kpisData, error: erroKpis }, opcoes, { data: imports }] = await Promise.all([
     supabase.rpc("kpis_producao", {
       p_de: de,
       p_ate: ate,
@@ -166,11 +194,10 @@ export default async function ProducaoPage({
       p_imobs: filtros.imobs.length ? filtros.imobs : null,
       p_seguradoras: filtros.seguradoras.length ? filtros.seguradoras : null,
     }),
-    supabase.rpc("opcoes_filtro_producao"),
+    opcoesImobiliarias(supabase),
     supabase.from("base_unica_importacoes").select("layout, importado_em").in("layout", ["bitrix_spa", "corp_relatorio_propostas"]),
   ]);
   const kpis = kpisData as Kpis | null;
-  const opcoes = (opcoesData ?? []) as OpcaoImob[];
   const nomesSelecionados = opcoes.filter((o) => (o.tipo === "grupo" ? filtros.grupos : filtros.imobs).includes(o.id)).map((o) => o.nome);
   const ultima = (layout: string) =>
     (imports ?? [])
@@ -188,7 +215,7 @@ export default async function ProducaoPage({
           <PageHeader
             icon={<IconChart />}
             titulo="Power BI - O2 Seguros"
-            subtitulo={`Cotações e apólices · ${rotuloMes(de)} a ${rotuloMes(ate)}${filtroImob ? ` · só ${nomesSelecionados.join(", ") || "imobiliárias selecionadas"}` : " · visão macro"}`}
+            subtitulo={`Imobiliária 360 · ${rotuloMes(de)} a ${rotuloMes(ate)}${filtroImob ? ` · só ${nomesSelecionados.join(", ") || "imobiliárias selecionadas"}` : " · O2 inteira"}`}
           />
           <div className="flex items-center gap-3 text-xs text-gray-500">
             {kpis?.atualizado_em && <span>resumo de {dataHora(kpis.atualizado_em)}</span>}
@@ -206,6 +233,12 @@ export default async function ProducaoPage({
 
         {(erroKpis || erroAtualizar) && (
           <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">Não foi possível calcular agora ({(erroKpis ?? erroAtualizar)?.message}).</p>
+        )}
+        {!filtroImob && (
+          <p className="text-sm text-gray-600">
+            Visão da O2 inteira. Para ver tudo de uma imobiliária ou grupo (cadastro, cotações, apólices, sinistros e ferramentas), escolha no filtro ou clique no
+            nome dela no ranking.
+          </p>
         )}
         {kpis && filtroImob && (
           <p className="rounded-lg border border-o2-coral/30 bg-o2-coral/5 p-3 text-sm text-o2-navy">
@@ -272,9 +305,9 @@ function Grafico({ titulo, children }: { titulo: string; children: ReactNode }) 
   );
 }
 
-// Link que aplica o filtro de uma imobiliária/grupo mantendo período/produto/seguradora.
+// Link que abre a visão 360 da imobiliária/grupo, mantendo o período.
 function linkEntidade(sp: Record<string, string | undefined>, id: string, tipo: string) {
-  const q = new URLSearchParams(Object.entries(sp).filter(([k, v]) => v && !["atualizar", "todas", "todasc", "g", "i"].includes(k)) as [string, string][]);
+  const q = new URLSearchParams(Object.entries(sp).filter(([k, v]) => v && !["atualizar", "todas", "todasc", "g", "i", "p", "s"].includes(k)) as [string, string][]);
   q.set(tipo === "grupo" ? "g" : "i", id);
   return `/producao?${q.toString()}`;
 }
@@ -292,6 +325,20 @@ function NomeEntidade({ e, sp }: { e: Entidade; sp: Record<string, string | unde
       {e.tipo === "grupo" && <span className="ml-1 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-800">grupo</span>}
     </>
   );
+}
+
+// Opções do filtro: grupos e fichas com produção (maiores primeiro) + todas as
+// outras fichas (a 360 também serve para quem só usa as ferramentas).
+async function opcoesImobiliarias(supabase: Awaited<ReturnType<typeof createClient>>): Promise<OpcaoImob[]> {
+  const [{ data: opcoesData }, { data: fichas }] = await Promise.all([
+    supabase.rpc("opcoes_filtro_producao"),
+    supabase.from("imobiliarias").select("id, nome, apelido, grupo_id").order("nome"),
+  ]);
+  const opcoes = (opcoesData ?? []) as OpcaoImob[];
+  const jaListadas = new Set(opcoes.map((o) => o.id));
+  for (const f of fichas ?? [])
+    if (!jaListadas.has(f.id)) opcoes.push({ id: f.id, nome: f.apelido || f.nome, tipo: "imobiliaria", tipo_grupo: null, grupo_id: f.grupo_id, premio: 0, n: 0 });
+  return opcoes;
 }
 
 function motivoSemFonte(m: string) {

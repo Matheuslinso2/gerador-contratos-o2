@@ -75,7 +75,7 @@ export default async function AdminImobiliariaDetalhePage({
               {contratos ?? 0} contrato(s) · {auditorias ?? 0} auditoria(s)
             </p>
             <Link
-              href={`/producao/imobiliaria?i=${id}`}
+              href={`/producao?i=${id}`}
               className="mt-2 inline-block rounded-full border border-o2-navy px-3 py-1 text-xs font-medium text-o2-navy hover:bg-o2-navy hover:text-white"
             >
               Ver 360 (cotações, apólices, sinistros e ferramentas)
