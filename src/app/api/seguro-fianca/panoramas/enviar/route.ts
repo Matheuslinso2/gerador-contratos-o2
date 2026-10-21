@@ -4,6 +4,7 @@ import { enviarEmail, type AnexoEmail } from "@/lib/email";
 import { ENTITY_TYPE_ID_SEGURO_FIANCA, gerarEnderecoRespostaCard } from "@/lib/bitrix/entidadesCard";
 import { registrarAtividadeEmail } from "@/lib/bitrix/atividades";
 import { BUCKET_ANEXOS } from "@/lib/bitrix/emailNoCard";
+import { nomeExibidoRemetente } from "@/lib/campanhas/remetente";
 import { buscarCardPanorama } from "@/lib/bitrix/panoramaFianca";
 import { createServiceClient } from "@/lib/supabase/service";
 import {
@@ -46,6 +47,11 @@ type Corpo = {
   assunto?: string;
   observacoes?: string;
   cartas?: { caminho: string; nome: string }[];
+  // Outros arquivos (qualquer tipo) que a equipe queira mandar junto, além
+  // das cartas -- não mudam o texto do e-mail (21/10/2026).
+  anexosExtras?: { caminho: string; nome: string }[];
+  // Nome da pessoa que aparece na caixa de entrada ("Nome | O2 Seguros").
+  remetenteNome?: string;
   passeBitrix?: string;
   // aprovado
   versao?: number;
@@ -98,6 +104,8 @@ export async function POST(request: NextRequest) {
   const cartas = (corpo.cartas ?? []).slice(0, LIMITE_CARTAS);
   if (cartas.some((c) => !c?.caminho?.startsWith(`${ENTITY_TYPE_ID_SEGURO_FIANCA}-${cardId}/`))) return erro("Anexo inválido.");
   if (tipo !== "aprovado" && !cartas.length) return erro("Anexe as cartas das seguradoras.");
+  const anexosExtras = (corpo.anexosExtras ?? []).slice(0, LIMITE_CARTAS);
+  if (anexosExtras.some((c) => !c?.caminho?.startsWith(`${ENTITY_TYPE_ID_SEGURO_FIANCA}-${cardId}/`))) return erro("Anexo inválido.");
 
   let html: string;
   let anexos: AnexoEmail[] = [];
@@ -172,6 +180,16 @@ export async function POST(request: NextRequest) {
     anexos.push({ nome: carta.nome, conteudo: Buffer.from(await data.arrayBuffer()), tipo: data.type || "application/pdf" });
   }
 
+  for (const extra of anexosExtras) {
+    const { data, error } = await storage.download(extra.caminho);
+    if (error || !data) {
+      console.error("Falha ao baixar anexo do Storage:", extra.caminho, error);
+      return erro(`Falha ao processar o anexo "${extra.nome}". Anexe de novo.`, 502);
+    }
+    anexos.push({ nome: extra.nome, conteudo: Buffer.from(await data.arrayBuffer()), tipo: data.type || "application/octet-stream" });
+  }
+  const todosAnexosDoStorage = [...cartas, ...anexosExtras];
+
   let resendId: string | null = null;
   try {
     const r = await enviarEmail({
@@ -181,7 +199,7 @@ export async function POST(request: NextRequest) {
       html,
       anexos,
       replyTo: gerarEnderecoRespostaCard(ENTITY_TYPE_ID_SEGURO_FIANCA, cardId),
-      remetente: "O2 Seguros",
+      remetente: nomeExibidoRemetente(corpo.remetenteNome),
       throwSeFalhar: true,
     });
     resendId = r.id;
@@ -191,9 +209,9 @@ export async function POST(request: NextRequest) {
   }
 
   // E-mail já saiu -- daqui pra baixo nada desfaz o envio, só registra/limpa.
-  if (cartas.length) {
+  if (todosAnexosDoStorage.length) {
     try {
-      await storage.remove(cartas.map((c) => c.caminho));
+      await storage.remove(todosAnexosDoStorage.map((c) => c.caminho));
     } catch (e) {
       console.warn("Falha ao limpar cartas temporárias do Storage:", e);
     }
@@ -208,7 +226,7 @@ export async function POST(request: NextRequest) {
       // A imagem inline (cid) não abre dentro do Bitrix -- troca por aviso.
       corpo:
         html.replace(/<img [^>]*src="cid:panorama"[^>]*\/>/, `<b>[Panorama v${versao} anexo ao e-mail]</b>`) +
-        (cartas.length ? `<p><i>Anexos: ${cartas.map((c) => c.nome).join(", ")}</i></p>` : ""),
+        (todosAnexosDoStorage.length ? `<p><i>Anexos: ${todosAnexosDoStorage.map((c) => c.nome).join(", ")}</i></p>` : ""),
       direcao: "enviado",
       enderecoEnvolvido: para[0],
     });
@@ -226,7 +244,7 @@ export async function POST(request: NextRequest) {
     para,
     cc,
     assunto: assunto.trim(),
-    anexos: cartas.map((c) => c.nome),
+    anexos: todosAnexosDoStorage.map((c) => c.nome),
     enviado_por_email: autor.email,
     registrado_no_card: registradoNoCard,
     resend_id: resendId,

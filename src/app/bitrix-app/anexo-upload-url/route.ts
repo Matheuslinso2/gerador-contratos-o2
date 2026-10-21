@@ -36,7 +36,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, erro: "Arquivo maior que 15 MB." }, { status: 400 });
   }
 
-  const caminho = `${entityTypeId}-${itemId}/${crypto.randomUUID()}-${nomeArquivo}`;
+  // O Storage recusa chave com acento, ç, espaço e outros símbolos ("Invalid key",
+  // achado em 21/10/2026 com "BRASILCAP - CONDIÇÕES GERAIS 12 MESES.pdf" -- as
+  // meninas não conseguiam anexar nos cards de Capitalização). O nome original
+  // continua indo pro e-mail (o navegador manda em "nome"); só a chave do
+  // arquivo guardado é simplificada.
+  const nomeSeguro =
+    nomeArquivo
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/[^A-Za-z0-9._-]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(-120) || "arquivo";
+  const caminho = `${entityTypeId}-${itemId}/${crypto.randomUUID()}-${nomeSeguro}`;
 
   const supabase = createServiceClient();
   const { data, error } = await supabase.storage.from(BUCKET_ANEXOS).createSignedUploadUrl(caminho);

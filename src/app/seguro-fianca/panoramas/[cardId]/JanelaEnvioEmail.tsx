@@ -86,6 +86,22 @@ export default function JanelaEnvioEmail({
   const [documentos, setDocumentos] = useState("");
   const [observacoes, setObservacoes] = useState("");
   const [cartas, setCartas] = useState<Carta[]>([]);
+  // Outros arquivos (qualquer tipo), além das cartas -- 21/10/2026.
+  const [anexosExtras, setAnexosExtras] = useState<Carta[]>([]);
+  // Nome que a imobiliária vê na caixa de entrada ("Nome | O2 Seguros"),
+  // lembrado neste navegador -- mesmo campo do E-mail no card.
+  const [remetente, setRemetente] = useState("");
+  useEffect(() => {
+    try {
+      setRemetente(localStorage.getItem("o2_remetente_nome") || "");
+    } catch {}
+  }, []);
+  function trocarRemetente(valor: string) {
+    setRemetente(valor);
+    try {
+      localStorage.setItem("o2_remetente_nome", valor);
+    } catch {}
+  }
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [copiado, setCopiado] = useState(false);
@@ -113,8 +129,10 @@ export default function JanelaEnvioEmail({
     setAssunto(assuntoPorTipo(novo, card.inquilino, card.imobiliaria, status));
   }
 
-  // Cartas sobem direto do navegador pro Storage (URL assinada por carta).
-  async function anexarCartas(arquivos: FileList | null) {
+  // Cartas e anexos sobem direto do navegador pro Storage (URL assinada por arquivo).
+  const anexarCartas = (arquivos: FileList | null) => subirArquivos(arquivos, setCartas);
+  const anexarExtras = (arquivos: FileList | null) => subirArquivos(arquivos, setAnexosExtras);
+  async function subirArquivos(arquivos: FileList | null, setCartas: React.Dispatch<React.SetStateAction<Carta[]>>) {
     if (!arquivos?.length) return;
     const supabase = criarSupabaseNavegador();
     for (const arquivo of Array.from(arquivos)) {
@@ -139,7 +157,8 @@ export default function JanelaEnvioEmail({
   const destinatarios = [...Object.keys(para).filter((e) => para[e]), ...listaExtras.filter((e) => EMAIL_REGEX.test(e))];
   const copias = Object.keys(cc).filter((e) => cc[e]);
   const cartasProntas = cartas.filter((c) => c.caminho) as { nome: string; caminho: string }[];
-  const subindo = cartas.some((c) => !c.caminho && !c.erro);
+  const extrasProntos = anexosExtras.filter((c) => c.caminho) as { nome: string; caminho: string }[];
+  const subindo = [...cartas, ...anexosExtras].some((c) => !c.caminho && !c.erro);
 
   const biometrias = seguradoras
     .filter((s) => (precisaLinkBiometria(s) ? biometria[s]?.trim() : biometria[s] === "x"))
@@ -181,6 +200,8 @@ export default function JanelaEnvioEmail({
           assunto,
           observacoes,
           cartas: cartasProntas,
+          anexosExtras: extrasProntos,
+          remetenteNome: remetente,
           passeBitrix,
           ...(tipo === "aprovado" && dados
             ? {
@@ -415,6 +436,42 @@ export default function JanelaEnvioEmail({
             </div>
 
             <div>
+              <span className={rotulo}>Outros anexos (opcional, qualquer arquivo)</span>
+              <input type="file" multiple onChange={(e) => anexarExtras(e.target.files).then(() => (e.target.value = ""))} className="text-sm" />
+              {anexosExtras.length > 0 && (
+                <ul className="mt-2 space-y-1 text-sm">
+                  {anexosExtras.map((c, i) => (
+                    <li key={`${c.nome}-${i}`} className="flex items-center gap-2">
+                      <span className={c.erro ? "text-red-600" : "text-o2-navy"}>
+                        📎 {c.nome} {c.erro ? `— ${c.erro}` : c.caminho ? "✓" : "— subindo…"}
+                      </span>
+                      <button type="button" className="text-xs text-gray-500 underline" onClick={() => setAnexosExtras(anexosExtras.filter((_, j) => j !== i))}>
+                        remover
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div>
+              <label className={rotulo} htmlFor="remetente">Remetente (seu nome)</label>
+              <input
+                id="remetente"
+                type="text"
+                maxLength={40}
+                placeholder="Ex: Henrique Guterres"
+                autoComplete="off"
+                className={caixa}
+                value={remetente}
+                onChange={(e) => trocarRemetente(e.target.value)}
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Aparece na caixa de entrada como: {remetente.replace(/[^\p{L}\p{N} '\-]/gu, "").replace(/\s+/g, " ").trim() ? `${remetente.replace(/[^\p{L}\p{N} '\-]/gu, "").replace(/\s+/g, " ").trim()} | O2 Seguros` : "O2 Seguros"}
+              </p>
+            </div>
+
+            <div>
               <label className={rotulo} htmlFor="obs">Observações (opcional)</label>
               <textarea id="obs" rows={2} className={caixa} value={observacoes} onChange={(e) => setObservacoes(e.target.value)} />
             </div>
@@ -458,6 +515,7 @@ export default function JanelaEnvioEmail({
             <span className={rotulo}>
               Prévia do e-mail{tipo === "aprovado" ? " (o PDF alta qualidade vai anexo)" : ""}
               {cartasProntas.length ? ` · ${cartasProntas.length} carta(s) anexa(s)` : ""}
+              {extrasProntos.length ? ` · ${extrasProntos.length} anexo(s) extra(s)` : ""}
             </span>
             <iframe title="Prévia do e-mail" srcDoc={previa} className="h-[640px] w-full rounded-lg border border-gray-200 bg-white" />
           </div>
