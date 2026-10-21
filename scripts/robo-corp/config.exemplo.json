@@ -1,0 +1,58 @@
+{
+  "_leia": "Copie este arquivo para C:\\Users\\<seu usuário>\\.robo-corp\\config.json e preencha. NUNCA coloque senhas dentro do projeto.",
+  "url": "http://corpnuvem-7.ddns.net/",
+  "corretora": {
+    "usuario": "o2",
+    "senha": "PREENCHER"
+  },
+  "unidade": {
+    "usuario": "robo",
+    "senha": "PREENCHER"
+  },
+  "pastaSaida": "C:\\Users\\O2-Grupo\\.robo-corp\\saida",
+  "pastaSharepoint": null,
+  "relatorios": [
+    {
+      "id": "grade_prods_2020-2021",
+      "tipo": "grade",
+      "de": "01/01/2020",
+      "ate": "31/12/2021",
+      "pasta": "CORP_01.02 - Propostas Grade por Produtor"
+    },
+    {
+      "id": "grade_prods_2022-2023",
+      "tipo": "grade",
+      "de": "01/01/2022",
+      "ate": "31/12/2023",
+      "pasta": "CORP_01.02 - Propostas Grade por Produtor"
+    },
+    {
+      "id": "grade_prods_2024-2025",
+      "tipo": "grade",
+      "de": "01/01/2024",
+      "ate": "31/12/2025",
+      "pasta": "CORP_01.02 - Propostas Grade por Produtor"
+    },
+    {
+      "id": "grade_prods_2026",
+      "tipo": "grade",
+      "de": "01/01/2026",
+      "ate": "31/12/2026",
+      "pasta": "CORP_01.02 - Propostas Grade por Produtor"
+    },
+    {
+      "id": "Clientes Com Documentos",
+      "tipo": "clientes",
+      "pasta": "CORP_02.05 - Clientes com Documentos",
+      "de": "01/01/2020",
+      "ate": "hoje"
+    },
+    {
+      "id": "sinistros_grade",
+      "tipo": "sinistros",
+      "de": "01/01/2020",
+      "ate": "hoje",
+      "pasta": "CORP_05.02 - Sinistros Geral Grade"
+    }
+  ]
+}
