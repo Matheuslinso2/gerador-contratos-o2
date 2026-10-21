@@ -95,7 +95,8 @@ export const MODELOS_EMAIL: ModeloEmail[] = [
       "<p>" + dest("RECUSADO! 😓") + "</p>",
       "<p>Infelizmente o " + laranja("[NOME DO PRETENDENTE]") + ", foi recusado.</p>",
       "<p>Seguem cartas recusas.</p>",
-      "<p><b>Para maiores esclarecimentos, por gentileza, entrar em contato com a </b>" + laranjaSub("[SEGURADORA]") + "<b> através do telefone [TELEFONE DA SEGURADORA].</b></p>",
+      // Só a Porto informa telefone pra consultar o motivo da recusa (22/10/2026).
+      "<p><b>Para maiores esclarecimentos, por gentileza, entrar em contato com a </b>" + laranjaSub("Porto Seguro") + "<b> através do telefone 0800 727 0901.</b> " + laranja("[APAGUE ESTE PARÁGRAFO SE A RECUSA NÃO FOR DA PORTO]") + "</p>",
       "<p>De modo a orientar e viabilizar a locação, mediante a recusa, sugerimos o " + laranjaSub("Título de Capitalização") + ".</p>",
       "<p>Garantia sem perda pecuniária para o locatário, pois, o mesmo resgata o valor corrigido ao fim da locação.</p>",
       "<p>Vale ressaltar que a partir de R$ 6.000,00, a Seguradora atua com seu jurídico, no tocante à ação de despejo. O que de certa forma é muito conveniente para a imobiliária e locador, que não se preocuparão com a demanda judicial.</p>",

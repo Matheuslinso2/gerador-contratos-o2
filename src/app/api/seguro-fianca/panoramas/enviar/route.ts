@@ -61,9 +61,6 @@ type Corpo = {
   biometrias?: BiometriaSeguradora[];
   pngBase64?: string;
   pdfBase64?: string;
-  // recusado
-  contatoSeguradora?: string;
-  telefoneSeguradora?: string;
   // pendencias
   seguradoraPendente?: string;
   documentos?: string;
@@ -155,8 +152,7 @@ export async function POST(request: NextRequest) {
   } else if (tipo === "recusado") {
     html = montarHtmlEmailRecusa({
       inquilino: card.cabecalho.inquilino,
-      contatoSeguradora: corpo.contatoSeguradora ?? "",
-      telefoneSeguradora: corpo.telefoneSeguradora ?? "",
+      recusadas,
       observacoes,
     });
   } else {

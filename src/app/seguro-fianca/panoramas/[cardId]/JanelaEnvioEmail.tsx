@@ -6,6 +6,8 @@ import { createClient as criarSupabaseNavegador } from "@/lib/supabase/browser";
 import type { LinhaPanorama, LinhaStatus } from "@/lib/panoramaFiancaConstantes";
 import {
   EMAIL_FIANCA,
+  TELEFONE_PORTO,
+  temRecusaDaPorto,
   assuntoPorTipo,
   montarHtmlEmailPanorama,
   montarHtmlEmailPendencias,
@@ -80,8 +82,6 @@ export default function JanelaEnvioEmail({
   );
   const [validade, setValidade] = useState("");
   const [biometria, setBiometria] = useState<Record<string, string>>({}); // seguradora -> link ("x" = Tokio marcada)
-  const [contatoSeguradora, setContatoSeguradora] = useState("");
-  const [telefoneSeguradora, setTelefoneSeguradora] = useState("");
   const [seguradoraPendente, setSeguradoraPendente] = useState("");
   const [documentos, setDocumentos] = useState("");
   const [observacoes, setObservacoes] = useState("");
@@ -184,7 +184,7 @@ export default function JanelaEnvioEmail({
           recusadasComCarta: cartasProntas.length ? recusadas : [],
         })
       : tipo === "recusado"
-        ? montarHtmlEmailRecusa({ inquilino: card.inquilino, contatoSeguradora, telefoneSeguradora, observacoes })
+        ? montarHtmlEmailRecusa({ inquilino: card.inquilino, recusadas, observacoes })
         : montarHtmlEmailPendencias({ inquilino: card.inquilino, seguradoraPendente, documentos, recusadas, observacoes });
 
   async function enviar() {
@@ -221,7 +221,6 @@ export default function JanelaEnvioEmail({
                 pdfBase64: dados.pdfBase64,
               }
             : {}),
-          ...(tipo === "recusado" ? { contatoSeguradora, telefoneSeguradora } : {}),
           ...(tipo === "pendencias" ? { seguradoraPendente, documentos } : {}),
         }),
       });
@@ -402,19 +401,12 @@ export default function JanelaEnvioEmail({
             )}
 
             {tipo === "recusado" && (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <label className={rotulo} htmlFor="contato">Seguradora para contato (opcional)</label>
-                  <input id="contato" className={caixa} placeholder="ex.: Porto Seguro" value={contatoSeguradora} onChange={(e) => setContatoSeguradora(e.target.value)} />
-                </div>
-                <div>
-                  <label className={rotulo} htmlFor="tel">Telefone da seguradora</label>
-                  <input id="tel" className={caixa} placeholder="ex.: 0800 727 0901" value={telefoneSeguradora} onChange={(e) => setTelefoneSeguradora(e.target.value)} />
-                </div>
-                <p className="text-xs text-gray-500 sm:col-span-2">
-                  A frase &ldquo;Para maiores esclarecimentos…&rdquo; só entra se os dois forem preenchidos. O link da ficha de Capitalização entra sempre.
-                </p>
-              </div>
+              <p className="text-xs text-gray-500">
+                {temRecusaDaPorto(recusadas)
+                  ? `Como a Porto está entre as recusadas, o e-mail já traz a frase com o telefone dela (${TELEFONE_PORTO}) — é a única seguradora que informa telefone para consultar o motivo. `
+                  : "Sem recusa da Porto, o e-mail não leva frase de telefone (só a Porto informa telefone para consultar o motivo). "}
+                O link da ficha de Capitalização entra sempre.
+              </p>
             )}
 
             {tipo === "pendencias" && (

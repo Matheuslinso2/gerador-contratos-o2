@@ -129,16 +129,20 @@ export function seguradorasRecusadas(linhas: { chave: string; status: string }[]
   return resultado;
 }
 
+// A Porto é a única seguradora que fornece telefone para consultar o motivo
+// da recusa (informado pelo Matheus em 22/10/2026) -- a frase só entra quando
+// a Porto está entre as recusadas, e já vem pronta.
+export const TELEFONE_PORTO = "0800 727 0901";
+export const temRecusaDaPorto = (recusadas: string[]) => recusadas.some((s) => s.startsWith("Porto"));
+
 export function montarHtmlEmailRecusa(p: {
   inquilino: string;
-  contatoSeguradora: string; // ex. "Porto Seguro" -- vazio = frase sai
-  telefoneSeguradora: string;
+  recusadas: string[]; // seguradoras recusadas no card (ver seguradorasRecusadas)
   observacoes: string;
 }): string {
-  const contato =
-    p.contatoSeguradora.trim() && p.telefoneSeguradora.trim()
-      ? `<p><b>Para maiores esclarecimentos, por gentileza, entrar em contato com a </b><b style="${LARANJA}">${escaparHtml(p.contatoSeguradora.trim())}</b><b> através do telefone ${escaparHtml(p.telefoneSeguradora.trim())}.</b></p>`
-      : "";
+  const contato = temRecusaDaPorto(p.recusadas)
+    ? `<p><b>Para maiores esclarecimentos, por gentileza, entrar em contato com a </b><b style="${LARANJA}">Porto Seguro</b><b> através do telefone ${TELEFONE_PORTO}.</b></p>`
+    : "";
   return envolver(`
       <p>Prezados, tudo bem?</p>
       <p><b style="${LARANJA}">RECUSADO! 😓</b></p>
