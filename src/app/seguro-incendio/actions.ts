@@ -5,6 +5,8 @@ import { createServiceClient } from "@/lib/supabase/service";
 import {
   criarCardSeguroIncendio,
   montarEmailSeguroIncendio,
+  coberturasDaModalidade,
+  type CoberturaSelecionada,
   type SeguroIncendioPayload,
   type ModalidadeIncendio,
 } from "@/lib/integracoes/seguroIncendio";
@@ -62,9 +64,22 @@ export async function enviarFichaSeguroIncendio(
     ? (modalidadeBruta as ModalidadeIncendio)
     : "Residencial";
 
+  // Coberturas opcionais: entra a que tem valor OU "tenho interesse". Só as
+  // da modalidade (um POST forjado não injeta cobertura de outra).
+  const coberturas: CoberturaSelecionada[] = [];
+  for (const c of coberturasDaModalidade(modalidade)) {
+    const valor = campo(formData, `cobertura_${c.chave}_valor`);
+    const interesse = campo(formData, `cobertura_${c.chave}_interesse`) !== "";
+    if (valor && paraNumero(valor) <= 0) {
+      return { ok: false, erro: `Informe um valor maior que zero para "${c.label}" (ou deixe em branco).` };
+    }
+    if (valor || interesse) coberturas.push({ chave: c.chave, label: c.label, valor });
+  }
+
   const payload: SeguroIncendioPayload = {
     responseId,
     modalidade,
+    coberturas,
     email: campo(formData, "email"),
     solicitante: campo(formData, "solicitante"),
     finsLocacao: campo(formData, "fins_locacao"),

@@ -57,9 +57,73 @@ const PRODUTO_POR_MODALIDADE: Record<ModalidadeIncendio, string> = {
   Imobiliario: "Incêndio Imobiliário",
 };
 
+// Coberturas que a pessoa pode marcar na ficha Individual (Residencial e
+// Empresarial -- o Imobiliário segue só com a planilha). Tudo opcional: a
+// pessoa informa um valor OU marca "tenho interesse" sem valor, e a equipe
+// orienta depois. A "dica" é o texto do ⓘ ensinando como chegar no valor.
+export const COBERTURAS_INCENDIO = [
+  {
+    chave: "incendio",
+    label: "Incêndio, raio e explosão",
+    dica: "É a cobertura principal. Sugerimos informar o valor de reconstrução do imóvel (quanto custaria reconstruí-lo do zero, sem contar o terreno).",
+  },
+  {
+    chave: "danosEletricos",
+    label: "Danos elétricos",
+    dica: "Cobre a queima de aparelhos por curto-circuito ou variação de tensão. Some o valor de todos os equipamentos elétricos e eletrônicos do imóvel e informe o total.",
+  },
+  {
+    chave: "rouboFurto",
+    label: "Roubo e furto de bens",
+    dica: "Some o valor dos móveis, eletrodomésticos e pertences que ficam no imóvel e informe o total.",
+  },
+  {
+    chave: "vendavalFumaca",
+    label: "Vendaval e fumaça",
+    dica: "Danos causados por ventos fortes e fumaça. Normalmente acompanha o mesmo valor da cobertura de incêndio (valor de reconstrução).",
+  },
+  {
+    chave: "responsabilidadeCivil",
+    label: "Responsabilidade civil",
+    dica: "Cobre danos que o imóvel cause a terceiros (por exemplo, um incêndio que atinja o vizinho). Informe o valor máximo de proteção que você gostaria de ter.",
+  },
+  {
+    chave: "perdaAluguel",
+    label: "Perda/pagamento de aluguel",
+    dica: "Se o imóvel ficar inabitável após um sinistro, cobre o aluguel no período. Sugerimos multiplicar o valor do aluguel pelos meses que você quer cobrir (ex.: 12).",
+  },
+  {
+    chave: "lucrosCessantes",
+    label: "Lucros cessantes",
+    apenasEmpresarial: true,
+    dica: "Cobre o lucro que a empresa deixa de ter enquanto o imóvel está parado após um sinistro. Estime o lucro bruto mensal e multiplique pelos meses de paralisação que quer cobrir.",
+  },
+  {
+    chave: "equipamentosMercadorias",
+    label: "Equipamentos eletrônicos e mercadorias",
+    apenasEmpresarial: true,
+    dica: "Some o valor dos equipamentos eletrônicos e do estoque de mercadorias da empresa e informe o total.",
+  },
+] as const;
+
+type CoberturaIncendioDef = (typeof COBERTURAS_INCENDIO)[number];
+
+export function coberturasDaModalidade(modalidade: ModalidadeIncendio): CoberturaIncendioDef[] {
+  if (modalidade === "Imobiliario") return [];
+  return COBERTURAS_INCENDIO.filter((c) => !("apenasEmpresarial" in c) || modalidade === "Empresarial");
+}
+
+// valor "" = "tenho interesse", sem valor informado (equipe orienta depois)
+export type CoberturaSelecionada = { chave: string; label: string; valor: string };
+
+function textoCobertura(c: CoberturaSelecionada): string {
+  return c.valor ? `R$ ${c.valor}` : "tenho interesse, sem valor informado (orientar)";
+}
+
 export type SeguroIncendioPayload = {
   responseId: string;
   modalidade: ModalidadeIncendio;
+  coberturas: CoberturaSelecionada[]; // só Residencial/Empresarial
   // Individual (Residencial ou Empresarial)
   email: string;
   solicitante: string; // "Proprietário" | "Inquilino" | "Imobiliária/Administradora"
@@ -198,6 +262,7 @@ function montarObservacoes(p: SeguroIncendioPayload): string {
     `Administrado por imobiliária: ${p.administradoPorImobiliaria}${
       p.administradoPorImobiliaria === "Sim" && p.nomeImobiliaria ? ` (${p.nomeImobiliaria})` : ""
     }`,
+    p.coberturas.length ? `Coberturas de interesse:\n${p.coberturas.map((c) => `- ${c.label}: ${textoCobertura(c)}`).join("\n")}` : "",
     p.preferencias ? `Preferências: ${p.preferencias}` : "",
     `Telefone: ${p.telefone}`,
   ]
@@ -314,6 +379,10 @@ export function montarEmailSeguroIncendio(p: SeguroIncendioPayload, resultado: {
               linhaCampo("Metragem", p.metragem ? `${p.metragem} m²` : ""),
               linhaCampo("Valor do aluguel", p.valorAluguel ? `R$ ${p.valorAluguel}` : ""),
             ].join("")
+          ),
+          blocoSecao(
+            "Coberturas de interesse",
+            p.coberturas.map((c) => linhaCampo(c.label, textoCobertura(c))).join("")
           ),
           blocoSecao(
             "Administração",

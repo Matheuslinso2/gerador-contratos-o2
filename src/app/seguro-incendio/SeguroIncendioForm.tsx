@@ -11,7 +11,7 @@ import {
   formatarMoedaDigitada,
 } from "@/lib/validacoesBr";
 import { enviarFichaSeguroIncendio, type EstadoEnvioSeguroIncendio } from "./actions";
-import type { ModalidadeIncendio } from "@/lib/integracoes/seguroIncendio";
+import { coberturasDaModalidade, type ModalidadeIncendio } from "@/lib/integracoes/seguroIncendio";
 
 const O2_LARANJA = "#F8540D";
 const O2_NAVY = "#01192e";
@@ -111,6 +111,38 @@ function CampoMoeda({
         required={required}
         className={inputClass}
       />
+    </div>
+  );
+}
+
+// Cobertura opcional: valor em R$ OU "tenho interesse, não sei o valor". O ⓘ
+// abre (clique, funciona no celular) a dica de como chegar no valor.
+function CampoCobertura({ chave, label, dica }: { chave: string; label: string; dica: string }) {
+  const [aberto, setAberto] = useState(false);
+  return (
+    <div className="space-y-2 rounded-lg border border-gray-200 p-3">
+      <div className="flex items-center gap-1.5">
+        <span className="text-sm font-medium" style={{ color: O2_NAVY }}>
+          {label}
+        </span>
+        <button
+          type="button"
+          onClick={() => setAberto((v) => !v)}
+          aria-expanded={aberto}
+          aria-label={`Como calcular: ${label}`}
+          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-gray-300 text-[11px] font-bold text-gray-500 transition hover:border-[#F8540D] hover:text-[#F8540D]"
+        >
+          i
+        </button>
+      </div>
+      {aberto && <p className="rounded-md bg-orange-50 p-2 text-xs text-gray-600">{dica}</p>}
+      <div className="grid items-end gap-2 sm:grid-cols-2">
+        <CampoMoeda name={`cobertura_${chave}_valor`} label="Valor (opcional)" exigirMaiorQueZero />
+        <label className="flex items-center gap-2 pb-2.5 text-sm text-gray-700">
+          <input type="checkbox" name={`cobertura_${chave}_interesse`} className="accent-[#F8540D]" />
+          Tenho interesse, não sei o valor
+        </label>
+      </div>
     </div>
   );
 }
@@ -442,7 +474,19 @@ function SeguroIncendioFormInterno({ aoConcluirNova }: { aoConcluirNova: () => v
             )}
           </Secao>
 
-          <Secao numero={5} titulo="Administração">
+          <Secao
+            numero={5}
+            titulo="Coberturas"
+            subtitulo="Opcional — informe o valor que tiver em mente ou marque que tem interesse e nossa equipe te orienta a chegar no valor (toque no “i” para ver como calcular)."
+          >
+            <div className="space-y-2">
+              {coberturasDaModalidade(modalidade).map((c) => (
+                <CampoCobertura key={c.chave} chave={c.chave} label={c.label} dica={c.dica} />
+              ))}
+            </div>
+          </Secao>
+
+          <Secao numero={6} titulo="Administração">
             <SeletorUnico
               name="administrado_por_imobiliaria"
               label="Será administrado por imobiliária?"
