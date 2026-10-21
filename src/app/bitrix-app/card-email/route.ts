@@ -161,6 +161,15 @@ export async function POST(request: NextRequest) {
     #btn-anexar:disabled { opacity: 0.6; cursor: default; }
     #dica-remetente { font-size: 12px; color: #8d8683; margin-top: 4px; }
     #dica-conversa { font-size: 12px; color: #8d8683; margin-top: 4px; }
+    #bloco-vincular { margin-top: 14px; padding: 10px 12px; border: 1px solid #f3d9a4; background: #fff8e8; border-radius: 10px; font-size: 12px; color: #6b4e0a; }
+    #bloco-vincular button { background: #fff; color: #01192e; border: 1px solid #d9c18a; border-radius: 999px; padding: 5px 12px; font-size: 12px; font-weight: 600; cursor: pointer; margin-top: 8px; }
+    #bloco-vincular button:disabled { opacity: 0.6; cursor: default; }
+    #erro-gmail { color: #b42318; margin-top: 6px; }
+    .conversa-gmail { display: flex; gap: 8px; align-items: flex-start; background: #fff; border: 1px solid #f3d9a4; border-radius: 8px; padding: 8px; margin-top: 6px; cursor: pointer; }
+    .conversa-gmail .detalhe { display: block; color: #8d8683; }
+    #bloco-endereco { margin-top: 16px; padding: 10px 12px; background: #f4f4f4; border-radius: 10px; font-size: 12px; color: #6b6663; }
+    #bloco-endereco code { background: #fff; padding: 2px 6px; border-radius: 4px; color: #01192e; }
+    #bloco-endereco button { background: none; border: none; color: #01192e; text-decoration: underline; cursor: pointer; font-size: 12px; }
     #assunto:disabled { background: #f4f4f4; color: #6b6663; }
   </style>
 </head>
@@ -183,6 +192,13 @@ export async function POST(request: NextRequest) {
     </select>
     <div id="dica-modelo">Escolha um modelo para preencher assunto e mensagem. Depois é só editar o que precisar.</div>
 
+    <div id="bloco-vincular" style="display:none;">
+      <div id="aviso-sem-conversa">Este card ainda não tem conversa por e-mail registrada. Se o cliente já conversa com a equipe pelo Gmail, vincule essa conversa para este e-mail entrar nela (em vez de abrir outra).</div>
+      <button type="button" id="btn-procurar-gmail">Procurar conversa no Gmail</button>
+      <div id="erro-gmail"></div>
+      <div id="lista-gmail"></div>
+    </div>
+
     <label for="assunto">Assunto</label>
     <input id="assunto" type="text" required />
     <div id="dica-conversa" style="display:none;">Este card já tem uma conversa por e-mail: o envio entra nela automaticamente, junto com as mensagens anteriores.</div>
@@ -202,6 +218,12 @@ export async function POST(request: NextRequest) {
 
     <button class="enviar" id="botao-enviar" type="submit">Enviar</button>
     <div id="mensagem"></div>
+
+    <div id="bloco-endereco">
+      <b>Vincular conversas do Gmail a este card:</b> ao responder o cliente pelo Gmail, coloque este endereço em cópia.
+      <div><code id="endereco-card"></code> <button type="button" id="btn-copiar-endereco">Copiar</button></div>
+      As respostas a e-mails enviados por aqui já voltam para o card automaticamente.
+    </div>
   </form>
 
   <script>
@@ -308,11 +330,124 @@ export async function POST(request: NextRequest) {
       })
         .then(function (resp) { return resp.json(); })
         .then(function (resultado) {
-          if (!resultado.ok || !resultado.conversas || !resultado.conversas.length) return;
+          if (!resultado.ok || !resultado.conversas || !resultado.conversas.length) {
+            // Card sem conversa registrada: oferece vincular a do Gmail.
+            document.getElementById("bloco-vincular").style.display = "block";
+            return;
+          }
           conversaDoCard = resultado.conversas[0].assuntoBase;
           aplicarConversa();
         })
         .catch(function () {}); // só informativo: o servidor decide a conversa de qualquer forma
+    }
+
+    // Card sem conversa registrada: procura no Gmail a que a equipe já tem
+    // com o cliente e vincula (uma vez só -- depois todo envio entra nela).
+    function chamarConversasGmail(corpo) {
+      var auth = BX24.getAuth();
+      corpo.authId = auth && auth.access_token;
+      corpo.entityTypeId = entityTypeId;
+      corpo.itemId = Number(itemId);
+      return fetch("/bitrix-app/conversas-gmail", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(corpo),
+      }).then(function (resp) { return resp.json(); });
+    }
+
+    function procurarNoGmail() {
+      var erroEl = document.getElementById("erro-gmail");
+      var listaEl = document.getElementById("lista-gmail");
+      var botao = document.getElementById("btn-procurar-gmail");
+      erroEl.textContent = "";
+      listaEl.textContent = "";
+      var para = document.getElementById("para").value.trim();
+      if (!para) {
+        erroEl.textContent = "Preencha o destinatário (Para) primeiro.";
+        return;
+      }
+      botao.disabled = true;
+      botao.textContent = "Procurando…";
+      chamarConversasGmail({ acao: "buscar", enderecos: [para] })
+        .then(function (r) {
+          botao.disabled = false;
+          botao.textContent = "Procurar conversa no Gmail";
+          if (!r.ok) { erroEl.textContent = r.erro || "Falha ao consultar o Gmail."; return; }
+          if (!r.conversas.length) {
+            listaEl.textContent = "Nenhuma conversa dos últimos 45 dias com " + para + ". Este e-mail abrirá uma conversa nova.";
+            return;
+          }
+          var escolhida = "";
+          r.conversas.forEach(function (c) {
+            var linha = document.createElement("label");
+            linha.className = "conversa-gmail";
+            var radio = document.createElement("input");
+            radio.type = "radio";
+            radio.name = "conversa-gmail";
+            radio.addEventListener("change", function () { escolhida = c.threadId; vincular.disabled = false; });
+            var texto = document.createElement("span");
+            var titulo = document.createElement("b");
+            titulo.textContent = c.assunto;
+            var detalhe = document.createElement("span");
+            detalhe.className = "detalhe";
+            detalhe.textContent = c.mensagens + (c.mensagens === 1 ? " mensagem" : " mensagens") + " · último em " + new Date(c.ultimaEm).toLocaleString("pt-BR") + " · " + c.participantes;
+            var trecho = document.createElement("span");
+            trecho.className = "detalhe";
+            trecho.textContent = c.trecho;
+            texto.appendChild(titulo);
+            texto.appendChild(detalhe);
+            texto.appendChild(trecho);
+            linha.appendChild(radio);
+            linha.appendChild(texto);
+            listaEl.appendChild(linha);
+          });
+          var vincular = document.createElement("button");
+          vincular.type = "button";
+          vincular.textContent = "Vincular ao card (o e-mail sai nela)";
+          vincular.disabled = true;
+          vincular.addEventListener("click", function () {
+            vincular.disabled = true;
+            vincular.textContent = "Vinculando…";
+            chamarConversasGmail({ acao: "vincular", threadId: escolhida }).then(function (v) {
+              if (!v.ok) {
+                erroEl.textContent = v.erro || "Falha ao vincular.";
+                vincular.disabled = false;
+                vincular.textContent = "Vincular ao card (o e-mail sai nela)";
+                return;
+              }
+              conversaDoCard = v.assuntoBase;
+              aplicarConversa();
+              document.getElementById("bloco-vincular").style.display = "none";
+            }).catch(function () {
+              erroEl.textContent = "Falha de conexão. Tente de novo.";
+              vincular.disabled = false;
+              vincular.textContent = "Vincular ao card (o e-mail sai nela)";
+            });
+          });
+          var aviso = document.createElement("div");
+          aviso.textContent = "Nenhuma é a conversa certa? Não vincule: o e-mail abre uma conversa nova.";
+          listaEl.appendChild(vincular);
+          listaEl.appendChild(aviso);
+        })
+        .catch(function () {
+          botao.disabled = false;
+          botao.textContent = "Procurar conversa no Gmail";
+          erroEl.textContent = "Falha de conexão. Tente de novo.";
+        });
+    }
+    document.getElementById("btn-procurar-gmail").addEventListener("click", procurarNoGmail);
+
+    function mostrarEnderecoCard() {
+      var endereco = "card-" + entityTypeId + "-" + itemId + "@notificacoes.o2seguros.com.br";
+      document.getElementById("endereco-card").textContent = endereco;
+      document.getElementById("btn-copiar-endereco").addEventListener("click", function () {
+        var botao = this;
+        try {
+          navigator.clipboard.writeText(endereco).then(function () { botao.textContent = "Copiado ✓"; });
+        } catch (e) {
+          botao.textContent = "Selecione e copie acima";
+        }
+      });
     }
 
     function mostrarStatus(texto) {
@@ -469,6 +604,7 @@ export async function POST(request: NextRequest) {
         var authInicial = BX24.getAuth();
         if (itemId && entityTypeId) carregarPreviaCard(authInicial && authInicial.access_token);
         if (itemId && entityTypeId) carregarConversas(authInicial && authInicial.access_token);
+        if (itemId && entityTypeId) mostrarEnderecoCard();
 
         // Nome que a imobiliária vê como remetente. Lembrado no navegador de
         // quem usa (só conveniência -- sem isso o campo só fica vazio).

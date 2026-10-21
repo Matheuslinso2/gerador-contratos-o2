@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
       in_reply_to: corpo.inReplyTo ?? null,
       referencias: corpo.references ?? null,
     },
-    { onConflict: "message_id", ignoreDuplicates: true }
+    { onConflict: "entity_type_id,item_id,message_id", ignoreDuplicates: true }
   );
   if (erroConversa) console.error("Falha ao guardar mensagem da conversa:", erroConversa);
   if (eco) return NextResponse.json({ ok: true, eco: true });

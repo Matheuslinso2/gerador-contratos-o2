@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { buscarContatosEnvio, buscarConversasEnvio, prepararUploadCarta } from "../actions";
+import { buscarContatosEnvio, buscarConversasEnvio, prepararUploadCarta, procurarConversasGmail, vincularConversaDoGmail } from "../actions";
 import { createClient as criarSupabaseNavegador } from "@/lib/supabase/browser";
 import type { LinhaPanorama, LinhaStatus } from "@/lib/panoramaFiancaConstantes";
 import {
@@ -113,6 +113,39 @@ export default function JanelaEnvioEmail({
       if (r.ok && r.conversas.length) setConversa(r.conversas[0].assuntoBase);
     });
   }, [cardId, passeBitrix]);
+
+  // Card sem conversa registrada: procurar no Gmail a que a equipe já tem com
+  // o cliente e vincular (uma vez só -- depois todo envio entra nela).
+  type ConversaGmailTela = { threadId: string; assunto: string; ultimaEm: string; mensagens: number; participantes: string; trecho: string };
+  const [conversasGmail, setConversasGmail] = useState<ConversaGmailTela[] | null>(null);
+  const [escolhidaGmail, setEscolhidaGmail] = useState("");
+  const [buscandoGmail, setBuscandoGmail] = useState(false);
+  const [vinculando, setVinculando] = useState(false);
+  const [erroGmail, setErroGmail] = useState<string | null>(null);
+  async function procurarNoGmail() {
+    setErroGmail(null);
+    setBuscandoGmail(true);
+    try {
+      const r = await procurarConversasGmail(cardId, destinatarios, passeBitrix);
+      if (!r.ok) return setErroGmail(r.erro);
+      setConversasGmail(r.conversas);
+      setEscolhidaGmail("");
+    } finally {
+      setBuscandoGmail(false);
+    }
+  }
+  async function vincularEscolhida() {
+    setErroGmail(null);
+    setVinculando(true);
+    try {
+      const r = await vincularConversaDoGmail(cardId, escolhidaGmail, passeBitrix);
+      if (!r.ok) return setErroGmail(r.erro);
+      setConversa(r.assuntoBase);
+      setConversasGmail(null);
+    } finally {
+      setVinculando(false);
+    }
+  }
 
   useEffect(() => {
     buscarContatosEnvio(cardId, passeBitrix).then((r) => {
@@ -323,6 +356,53 @@ export default function JanelaEnvioEmail({
                   ))}
                 </div>
               </>
+            )}
+
+            {!conversa && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                <b>Este card ainda não tem conversa por e-mail registrada.</b> Se o cliente já está conversando com a equipe pelo Gmail,
+                vincule essa conversa para este e-mail entrar nela (em vez de abrir outra).
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    onClick={procurarNoGmail}
+                    disabled={buscandoGmail || !destinatarios.length}
+                    className="rounded-full border border-amber-400 bg-white px-3 py-1 font-semibold text-amber-900 disabled:opacity-50"
+                  >
+                    {buscandoGmail ? "Procurando…" : "Procurar conversa no Gmail"}
+                  </button>
+                  {!destinatarios.length && <span className="ml-2">Escolha o destinatário primeiro.</span>}
+                </div>
+                {erroGmail && <p className="mt-2 text-red-700">{erroGmail}</p>}
+                {conversasGmail && conversasGmail.length === 0 && (
+                  <p className="mt-2">Nenhuma conversa dos últimos 45 dias com {destinatarios.join(", ")}. Este e-mail abrirá uma conversa nova.</p>
+                )}
+                {conversasGmail && conversasGmail.length > 0 && (
+                  <div className="mt-2 space-y-1.5">
+                    {conversasGmail.map((c) => (
+                      <label key={c.threadId} className="flex cursor-pointer items-start gap-2 rounded border border-amber-200 bg-white p-2">
+                        <input type="radio" name="conversa-gmail" className="mt-0.5" checked={escolhidaGmail === c.threadId} onChange={() => setEscolhidaGmail(c.threadId)} />
+                        <span>
+                          <b className="text-o2-navy">{c.assunto}</b>
+                          <span className="block text-gray-500">
+                            {c.mensagens} {c.mensagens === 1 ? "mensagem" : "mensagens"} · último em {new Date(c.ultimaEm).toLocaleString("pt-BR")} · {c.participantes}
+                          </span>
+                          <span className="block text-gray-500">{c.trecho}</span>
+                        </span>
+                      </label>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={vincularEscolhida}
+                      disabled={!escolhidaGmail || vinculando}
+                      className="rounded-full bg-o2-navy px-3 py-1 font-semibold text-white disabled:opacity-50"
+                    >
+                      {vinculando ? "Vinculando…" : "Vincular ao card (o e-mail sai nela)"}
+                    </button>
+                    <p className="text-gray-500">Nenhuma é a conversa certa? Não vincule: o e-mail abre uma conversa nova.</p>
+                  </div>
+                )}
+              </div>
             )}
 
             <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">

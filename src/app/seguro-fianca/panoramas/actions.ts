@@ -6,6 +6,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { BUCKET_ANEXOS } from "@/lib/bitrix/emailNoCard";
 import { ENTITY_TYPE_ID_SEGURO_FIANCA } from "@/lib/bitrix/entidadesCard";
 import { listarConversas, type Conversa } from "@/lib/bitrix/conversasEmail";
+import { buscarConversasGmail, vincularConversaGmail, type ConversaGmail } from "@/lib/bitrix/conversasGmail";
 import {
   buscarCardPanorama,
   buscarContatosEnvioPanorama,
@@ -108,6 +109,34 @@ export async function buscarConversasEnvio(
 ): Promise<{ ok: true; conversas: Conversa[] } | { ok: false; erro: string }> {
   if (!(await autorizarPanorama(cardId, passeBitrix))) return { ok: false, erro: "Sem permissão." };
   return { ok: true, conversas: await listarConversas(ENTITY_TYPE_ID_SEGURO_FIANCA, cardId) };
+}
+
+// Conversas do Gmail com o destinatário (últimos 45 dias) pra vincular ao
+// card quando ele ainda não tem conversa registrada, e o vínculo em si.
+export async function procurarConversasGmail(
+  cardId: number,
+  enderecos: string[],
+  passeBitrix?: string | null
+): Promise<{ ok: true; conversas: ConversaGmail[] } | { ok: false; erro: string }> {
+  if (!(await autorizarPanorama(cardId, passeBitrix))) return { ok: false, erro: "Sem permissão." };
+  try {
+    return { ok: true, conversas: await buscarConversasGmail(enderecos) };
+  } catch (e) {
+    return { ok: false, erro: `Não consegui consultar o Gmail: ${(e as Error).message}` };
+  }
+}
+
+export async function vincularConversaDoGmail(
+  cardId: number,
+  threadId: string,
+  passeBitrix?: string | null
+): Promise<{ ok: true; assuntoBase: string } | { ok: false; erro: string }> {
+  if (!(await autorizarPanorama(cardId, passeBitrix))) return { ok: false, erro: "Sem permissão." };
+  try {
+    return { ok: true, ...(await vincularConversaGmail(ENTITY_TYPE_ID_SEGURO_FIANCA, cardId, threadId)) };
+  } catch (e) {
+    return { ok: false, erro: (e as Error).message };
+  }
 }
 
 // Cartas das seguradoras (recusa/pendência) anexadas ao e-mail: o navegador

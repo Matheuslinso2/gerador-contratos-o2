@@ -3,10 +3,13 @@
 -- tanto os recebidos (resposta do cliente, cópia da equipe) quanto os nossos
 -- (chegam por cópia oculta ao mesmo endereço). Serve pra o próximo envio
 -- (Panorama, E-mail no card) continuar a conversa certa em vez de abrir outra.
+-- Chave por card: o mesmo e-mail pode estar vinculado a mais de um card
+-- (ex: conversa do Gmail que cobre dois inquilinos da mesma imobiliária).
 create table if not exists public.bitrix_email_mensagens (
-  message_id text primary key,
+  message_id text not null,
   entity_type_id int not null,
   item_id int not null,
+  primary key (entity_type_id, item_id, message_id),
   direcao text not null check (direcao in ('enviado', 'recebido')),
   remetente text,
   assunto text not null,
