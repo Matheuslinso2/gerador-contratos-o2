@@ -27,6 +27,21 @@ import { lerFonteRamosElementaresBitrix } from "./fonteBitrix";
 // Bitrix, que já traz novos, renovações E endossos. Qualquer outro erro do
 // Google (autenticação, duplicidade de planilha) continua falhando alto, pra
 // não mostrar número parcial sem avisar.
+// Decisão do Matheus (21/10/2026): até outubro/2026 novos e renovações estão
+// 100% migrados pro Bitrix (funis "Seguros Novos" e "Renovações") e a
+// conferência vale por card/negociação (um card = uma negociação por
+// imobiliária; os itens ficam numa planilha anexa), não por item como nas
+// planilhas. Só as renovações com vigência de novembro/2026 em diante ainda
+// vêm da planilha. Por isso a planilha de renovação só entra nas
+// competências desta data em diante.
+const PRIMEIRA_COMPETENCIA_RENOVACAO_NA_PLANILHA = "2026-11";
+
+function mesSeguinte(competencia: string): string {
+  const [ano, mes] = competencia.split("-").map(Number);
+  const data = new Date(Date.UTC(ano, mes, 1));
+  return `${data.getUTCFullYear()}-${String(data.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
 export async function lerFonteRamosElementaresHibrida(competencia: string): Promise<FonteRamosBruta> {
   const [google, bitrix] = await Promise.all([
     lerFonteRamosElementares(competencia).catch((erro) => {
@@ -60,8 +75,14 @@ export async function lerFonteRamosElementaresHibrida(competencia: string): Prom
     abas: {
       novosPendentes: bitrix.abas.novosPendentes,
       novosMes: bitrix.abas.novosMes,
-      renovacoesAtual: [...bitrix.abas.renovacoesAtual, ...google.abas.renovacoesAtual],
-      renovacoesFutura: [...bitrix.abas.renovacoesFutura, ...google.abas.renovacoesFutura],
+      renovacoesAtual:
+        competencia >= PRIMEIRA_COMPETENCIA_RENOVACAO_NA_PLANILHA
+          ? [...bitrix.abas.renovacoesAtual, ...google.abas.renovacoesAtual]
+          : bitrix.abas.renovacoesAtual,
+      renovacoesFutura:
+        mesSeguinte(competencia) >= PRIMEIRA_COMPETENCIA_RENOVACAO_NA_PLANILHA
+          ? [...bitrix.abas.renovacoesFutura, ...google.abas.renovacoesFutura]
+          : bitrix.abas.renovacoesFutura,
       endossos: google.nomesAbas.endossos ? google.abas.endossos : bitrix.abas.endossos,
     },
     nomesAbas: {

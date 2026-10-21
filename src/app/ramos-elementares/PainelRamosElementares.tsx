@@ -1759,7 +1759,7 @@ export default function PainelRamosElementares({
             <>
               {tituloCompetencia} — Fonte:{" "}
               {tipoFonte === "hibrida"
-                ? "Bitrix24 (novos) + Planilha (renovações/endossos)"
+                ? "Bitrix24 (novos e renovações) + Planilha (renovações de novembro em diante e endossos)"
                 : tipoFonte === "bitrix"
                   ? "CRM Bitrix24"
                   : "Google Sheets"}
