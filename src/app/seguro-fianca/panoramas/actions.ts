@@ -31,7 +31,10 @@ export async function gerarVersaoPanorama(
   cardId: number,
   formaPagamento: FormaPagamento,
   precos: Partial<Record<ChaveLinha, PrecosLinha>>,
-  passeBitrix?: string | null // aba "Panorama" dentro do card do Bitrix
+  passeBitrix?: string | null, // aba "Panorama" dentro do card do Bitrix
+  // Seguradoras que não aceitam a forma de pagamento escolhida: saem
+  // "INDISPONÍVEL" (sem preços) mesmo estando aprovadas no Bitrix.
+  indisponiveis: ChaveLinha[] = []
 ): Promise<ResultadoGerar> {
   const autor = await autorizarPanorama(cardId, passeBitrix);
   if (!autor) return { ok: false, erro: "Sem permissão (se estiver no Bitrix, reabra a aba Panorama)." };
@@ -45,7 +48,9 @@ export async function gerarVersaoPanorama(
     return { ok: false, erro: `Não consegui ler o card no Bitrix: ${(e as Error).message}` };
   }
 
-  const linhas: LinhaPanorama[] = card.linhas.map((l) => {
+  const linhas: LinhaPanorama[] = card.linhas.map((linhaBitrix) => {
+    const indisponivel = statusEditavel(linhaBitrix.status) && indisponiveis.includes(linhaBitrix.chave);
+    const l = indisponivel ? { ...linhaBitrix, status: "indisponivel" as const } : linhaBitrix;
     const p = statusEditavel(l.status) ? precos[l.chave] : undefined;
     const limpo: PrecosLinha = { basico: {}, completo: {} };
     for (const lmi of LMI_BASICO) if (celulaPreenchida(p?.basico?.[lmi])) limpo.basico[lmi] = p!.basico[lmi];

@@ -23,7 +23,10 @@ export type ChaveLinha = (typeof LINHAS_PANORAMA)[number]["chave"];
 export const LMI_BASICO = ["18", "24", "30"] as const;
 export const LMI_COMPLETO = ["18", "20", "24", "30"] as const;
 
-export type StatusPanorama = "aprovado" | "pre_aprovado" | "em_analise" | "recusado" | "limite_insuficiente" | "oculto";
+// "indisponivel" nunca vem do Bitrix: é aplicado na montagem quando a
+// seguradora não aceita a forma de pagamento escolhida (ex: Pottencial não
+// aceita cartão). Só existe no panorama, não altera o status do card.
+export type StatusPanorama = "aprovado" | "pre_aprovado" | "em_analise" | "recusado" | "limite_insuficiente" | "indisponivel" | "oculto";
 
 export const ROTULO_STATUS: Record<StatusPanorama, string> = {
   aprovado: "APROVADO",
@@ -31,6 +34,7 @@ export const ROTULO_STATUS: Record<StatusPanorama, string> = {
   em_analise: "EM ANÁLISE",
   recusado: "RECUSADO",
   limite_insuficiente: "LIMITE INSUFICIENTE",
+  indisponivel: "INDISPONÍVEL",
   oculto: "",
 };
 
@@ -78,6 +82,18 @@ export const ROTULO_PAGAMENTO: Record<FormaPagamento, string> = {
   boleto: "BOLETO",
   cartao: "CARTÃO DE CRÉDITO",
 };
+
+// Seguradoras que NÃO aceitam certa forma de pagamento (pedido do Matheus,
+// 22/10/2026): ao escolher a forma, essas linhas já saem "INDISPONÍVEL" no
+// panorama. É só o ponto de partida -- a equipe marca/desmarca qualquer
+// seguradora na grade (ex: uma seguradora que passe a aceitar cartão).
+export const PAGAMENTO_NAO_ACEITO: Partial<Record<ChaveLinha, FormaPagamento[]>> = {
+  pottencial_taxa_fixa: ["cartao"],
+  pottencial_tradicional: ["cartao"],
+};
+
+export const indisponiveisPorPadrao = (forma: FormaPagamento): ChaveLinha[] =>
+  LINHAS_PANORAMA.map((l) => l.chave).filter((chave) => PAGAMENTO_NAO_ACEITO[chave]?.includes(forma));
 
 export const DESCRICAO_PLANO = {
   basico: "(Aluguel, Condomínio e IPTU)",

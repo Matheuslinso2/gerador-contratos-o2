@@ -12,6 +12,7 @@ import {
   LMI_COMPLETO,
   ROTULO_PAGAMENTO,
   ROTULO_STATUS,
+  indisponiveisPorPadrao,
   celulaPreenchida,
   precoNumero,
   statusEditavel,
@@ -126,6 +127,11 @@ export default function Montador({
     Object.fromEntries((ultima?.linhas ?? []).map((l) => [l.chave, l.precos]))
   );
   const [formaPagamento, setFormaPagamento] = useState<FormaPagamento | null>(ultima?.formaPagamento ?? null);
+  // Seguradoras marcadas "INDISPONÍVEL" na forma de pagamento escolhida (ex:
+  // Pottencial no cartão). Parte da regra padrão e a equipe ajusta na grade.
+  const [indisponiveis, setIndisponiveis] = useState<ChaveLinha[]>(() =>
+    (ultima?.linhas ?? []).filter((l) => l.status === "indisponivel").map((l) => l.chave)
+  );
   // null = rascunho atual. Card que já tem versão abre nela, com os botões
   // de download à mão (antes abria no rascunho e o colaborador não achava
   // os downloads -- relato do Matheus 16/10/2026). Editar qualquer campo
@@ -138,8 +144,13 @@ export default function Montador({
   const statusMudou = !!ultima && ultima.assinaturaStatus !== card.assinaturaStatus;
 
   const rascunho: LinhaPanorama[] = useMemo(
-    () => card.linhas.map((l) => ({ ...l, precos: precos[l.chave] ?? { basico: {}, completo: {} } })),
-    [card.linhas, precos]
+    () =>
+      card.linhas.map((l) => ({
+        ...l,
+        status: statusEditavel(l.status) && indisponiveis.includes(l.chave) ? ("indisponivel" as const) : l.status,
+        precos: precos[l.chave] ?? { basico: {}, completo: {} },
+      })),
+    [card.linhas, precos, indisponiveis]
   );
 
   const versaoExibida = versaoAberta !== null ? versoes.find((v) => v.versao === versaoAberta) : undefined;
@@ -176,7 +187,7 @@ export default function Montador({
       return;
     }
     iniciarGeracao(async () => {
-      const r = await gerarVersaoPanorama(card.id, formaPagamento, precos, passeBitrix);
+      const r = await gerarVersaoPanorama(card.id, formaPagamento, precos, passeBitrix, indisponiveis);
       if (!r.ok) {
         setMensagem({ tipo: "erro", texto: r.erro });
         return;
@@ -209,7 +220,7 @@ export default function Montador({
       ultima.formaPagamento === formaPagamento &&
       assinaturaPrecos(ultima.linhas) === assinaturaPrecos(rascunho);
     if (igualUltima) return { versao: ultima.versao, nova: false };
-    const r = await gerarVersaoPanorama(card.id, formaPagamento, precos, passeBitrix);
+    const r = await gerarVersaoPanorama(card.id, formaPagamento, precos, passeBitrix, indisponiveis);
     if (!r.ok) {
       setMensagem({ tipo: "erro", texto: r.erro });
       return null;
@@ -324,6 +335,7 @@ export default function Montador({
         <h2 className="mb-1 font-semibold text-o2-navy">2. Preços dos portais</h2>
         <p className="mb-3 text-xs text-gray-500">
           Colunas = LMI (múltiplos do aluguel). Em cada célula: nº de parcelas e valor da parcela. Deixe vazio o LMI que a seguradora não oferece.
+          Marque &ldquo;indisponível&rdquo; na seguradora que não aceita a forma de pagamento escolhida (a Pottencial já vem marcada no cartão).
         </p>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1100px] border-separate border-spacing-1 text-sm">
@@ -342,7 +354,9 @@ export default function Montador({
             <tbody>
               {visiveis.map((l) => {
                 const def = LINHAS_PANORAMA.find((d) => d.chave === l.chave)!;
-                const editavel = statusEditavel(l.status);
+                const aprovadaNoBitrix = statusEditavel(l.status);
+                const indisponivel = aprovadaNoBitrix && indisponiveis.includes(l.chave);
+                const editavel = aprovadaNoBitrix && !indisponivel;
                 const celula = (plano: Plano, lmi: string) => {
                   const c = (precos[l.chave]?.[plano] as Record<string, CelulaPreco> | undefined)?.[lmi];
                   if (!editavel) return <td key={`${plano}${lmi}`} className="rounded bg-gray-100" />;
@@ -376,7 +390,22 @@ export default function Montador({
                       {def.seguradora} {def.plano && <span className="text-xs text-gray-500">{def.plano}</span>}
                     </td>
                     <td className={`whitespace-nowrap px-2 text-center text-xs font-semibold ${editavel ? "text-o2-coral" : "text-gray-400"}`}>
-                      {ROTULO_STATUS[l.status]}
+                      {indisponivel ? ROTULO_STATUS.indisponivel : ROTULO_STATUS[l.status]}
+                      {aprovadaNoBitrix && (
+                        <label className="mt-0.5 flex items-center justify-center gap-1 text-[11px] font-normal text-gray-500">
+                          <input
+                            type="checkbox"
+                            checked={indisponivel}
+                            onChange={(e) => {
+                              setVersaoAberta(null);
+                              setIndisponiveis((atual) =>
+                                e.target.checked ? [...atual, l.chave] : atual.filter((c) => c !== l.chave)
+                              );
+                            }}
+                          />
+                          indisponível
+                        </label>
+                      )}
                     </td>
                     {LMI_BASICO.map((lmi) => celula("basico", lmi))}
                     {LMI_COMPLETO.map((lmi) => celula("completo", lmi))}
@@ -412,6 +441,7 @@ export default function Montador({
               onChange={() => {
                 setVersaoAberta(null);
                 setFormaPagamento(f);
+                setIndisponiveis(indisponiveisPorPadrao(f));
               }}
             />
             {ROTULO_PAGAMENTO[f]}
