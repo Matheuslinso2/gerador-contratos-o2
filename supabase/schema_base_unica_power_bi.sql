@@ -68,3 +68,16 @@ create or replace view producao_resolvida with (security_invoker = true) as
 -- novos (ADJUVE, RENASCENÇA, CANALE, MONTE ALEGRE…), Giullia no Grupo Teruszkin,
 -- Ribas-HP/Pintas fora do grupo, MARTINELLI (BASE) como Venda direta O2.
 -- Pendente de decisão: Max Brokers (o PBI separa as duas fichas do grupo).
+
+-- 21/10/2026: reaplicação automática (aprovada pelo Matheus) no fim do cron
+-- /api/cron/corp-sharepoint, via src/lib/baseUnica/aplicarPowerBi.ts. Pares
+-- distintos produtor × código da grade, sem ler as 136 mil linhas. Função SQL
+-- comum (não "atomic") para não criar dependência sobre corp_grade.
+create or replace function base_unica_produtor_codigos()
+returns table (produtor text, codigo_produtor text)
+language sql stable set search_path = public as $$
+  select distinct produtor, codigo_produtor::text from corp_grade
+  where produtor is not null and codigo_produtor is not null
+$$;
+revoke all on function base_unica_produtor_codigos() from anon, public, authenticated;
+grant execute on function base_unica_produtor_codigos() to service_role;
