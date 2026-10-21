@@ -23,6 +23,7 @@ export type DadosContrato = {
   locatario_telefone?: string | null;
   locatario_email?: string | null;
   nosso_numero?: string | null;
+  data_ocorrencia?: string | null;
   imovel_cep?: string | null;
   imovel_logradouro?: string | null;
   imovel_numero?: string | null;
@@ -57,6 +58,9 @@ export default function FormContrato({
     cidade: d.imovel_cidade ?? "",
     uf: d.imovel_uf ?? "",
   });
+  // Reunião 21/10/2026: ocorrência logo no passo 1, para validar a apólice no início.
+  const [vig, setVig] = useState({ ini: d.vigencia_inicio ?? "", fim: d.vigencia_fim ?? "", ocorrencia: d.data_ocorrencia ?? "" });
+  const foraDaVigencia = !!vig.ocorrencia && ((!!vig.ini && vig.ocorrencia < vig.ini) || (!!vig.fim && vig.ocorrencia > vig.fim));
   const seguradoraConhecida = !d.seguradora || SEGURADORAS.includes(d.seguradora);
 
   async function aoMudarCep(valor: string) {
@@ -72,8 +76,7 @@ export default function FormContrato({
     <form action={action} className="space-y-6">
       {d.id && <input type="hidden" name="id" value={d.id} />}
       {extras}
-      <input type="hidden" name="nosso_numero" defaultValue={d.nosso_numero ?? ""} />
-      <BuscaApolice />
+      <BuscaApolice nossoNumeroInicial={d.nosso_numero} />
 
       {imobiliarias && (
         <section className="space-y-2 rounded-xl border border-blue-200 bg-blue-50 p-4">
@@ -134,12 +137,21 @@ export default function FormContrato({
           </div>
           <div className="sm:col-span-2">
             <label className={labelClass}>Início da vigência</label>
-            <input type="date" name="vigencia_inicio" defaultValue={d.vigencia_inicio ?? ""} className={inputClass} />
+            <input type="date" name="vigencia_inicio" defaultValue={d.vigencia_inicio ?? ""} onChange={(e) => setVig({ ...vig, ini: e.target.value })} className={inputClass} />
           </div>
           <div className="sm:col-span-2">
             <label className={labelClass}>Fim da vigência</label>
-            <input type="date" name="vigencia_fim" defaultValue={d.vigencia_fim ?? ""} className={inputClass} />
+            <input type="date" name="vigencia_fim" defaultValue={d.vigencia_fim ?? ""} onChange={(e) => setVig({ ...vig, fim: e.target.value })} className={inputClass} />
           </div>
+          <div className="sm:col-span-2">
+            <label className={labelClass}>Data da ocorrência</label>
+            <input type="date" name="data_ocorrencia" defaultValue={d.data_ocorrencia ?? ""} onChange={(e) => setVig({ ...vig, ocorrencia: e.target.value })} className={inputClass} />
+          </div>
+          {foraDaVigencia && (
+            <p className="rounded-lg border border-orange-300 bg-orange-50 p-2 text-xs text-orange-900 sm:col-span-4">
+              A data da ocorrência está fora da vigência da apólice. Confira se é a apólice certa (ou a renovação) antes de seguir.
+            </p>
+          )}
         </div>
       </section>
 

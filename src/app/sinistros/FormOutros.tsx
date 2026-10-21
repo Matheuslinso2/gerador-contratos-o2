@@ -32,8 +32,7 @@ export default function FormOutros({
     <form action={action} className="space-y-6">
       {d.id && <input type="hidden" name="id" value={d.id} />}
       {extras}
-      <input type="hidden" name="nosso_numero" defaultValue={d.nosso_numero ?? ""} />
-      <BuscaApolice />
+      <BuscaApolice nossoNumeroInicial={d.nosso_numero} />
 
       <section className="space-y-3">
         <h2 className={secao}>Caso</h2>
@@ -85,6 +84,10 @@ export default function FormOutros({
           <div>
             <label className={labelClass}>Valor avisado (R$)</label>
             <input name="valor_avisado" inputMode="decimal" defaultValue={d.valor_avisado ?? ""} placeholder="0,00" className={inputClass} />
+          </div>
+          <div>
+            <label className={labelClass}>LMI da apólice (R$)</label>
+            <input name="lmi" inputMode="decimal" defaultValue={d.lmi ?? ""} placeholder="0,00" className={inputClass} />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>

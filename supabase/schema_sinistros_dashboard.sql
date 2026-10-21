@@ -86,14 +86,14 @@ returns text language sql immutable as $$
     when p_produto = 'capitalizacao' then 'capitalizacao'
     when p_produto = 'automovel' then 'automovel'
     when p_ramo = 'Incêndio Imobiliário' then 'incendio'
-    when p_ramo = 'Residencial' then 'residencial'
+    -- "Conteúdo" não é produto: é cobertura dentro de Residencial/Incêndio (21/10/2026).
+    when p_ramo in ('Residencial', 'Conteúdo residencial/comercial') then 'residencial'
     when p_ramo = 'Condomínio' then 'condominio'
     when p_ramo = 'Empresarial' then 'empresarial'
     when p_ramo = 'Vida' then 'vida'
     when p_ramo = 'Equipamentos portáteis' then 'portateis'
     when p_ramo = 'RC' then 'rc'
     when p_ramo = 'Viagem' then 'viagem'
-    when p_ramo = 'Conteúdo residencial/comercial' then 'conteudo'
     else 'outros' end
 $$;
 

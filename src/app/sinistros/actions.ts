@@ -119,6 +119,7 @@ function camposContrato(fd: FormData) {
     imovel_cidade: texto(fd, "cidade"),
     imovel_uf: texto(fd, "uf"),
     nosso_numero: texto(fd, "nosso_numero"),
+    data_ocorrencia: texto(fd, "data_ocorrencia"),
   };
 }
 
@@ -191,9 +192,11 @@ export async function salvarContrato(fd: FormData) {
 export async function salvarSituacao(fd: FormData) {
   const { supabase } = await contexto();
   const id = texto(fd, "id")!;
-  const { data: s } = await supabase.from("sinistros").select("tipo").eq("id", id).single();
+  const { data: s } = await supabase.from("sinistros").select("tipo, data_entrega_chaves").eq("id", id).single();
   if (!s) voltar(id, 2, "Sinistro não encontrado.");
-  const tipo = (s.tipo ?? null) as TipoSinistro | null;
+  // Passo 2 pergunta "ocupado ou desocupado" (+ danos) e manda o tipo pronto.
+  const tipoForm = texto(fd, "tipo");
+  const tipo = (fd.has("tipo") ? (["ocupado", "chaves_sem_danos", "chaves_com_danos"].includes(tipoForm ?? "") ? tipoForm : null) : s.tipo ?? null) as TipoSinistro | null;
   const coberturasValidas = new Set(COBERTURAS.map((c) => c.chave));
   const coberturas = fd.getAll("coberturas").filter((c): c is string => typeof c === "string" && coberturasValidas.has(c as never));
 
@@ -211,9 +214,18 @@ export async function salvarSituacao(fd: FormData) {
   const prazo = calcularPrazoAviso({ tipo, ...dados });
   const { error } = await supabase
     .from("sinistros")
-    .update({ ...dados, prazo_aviso: prazo.prazo, aviso_fora_prazo: prazo.foraDoPrazo })
+    .update({ ...dados, tipo, prazo_aviso: prazo.prazo, aviso_fora_prazo: prazo.foraDoPrazo })
     .eq("id", id);
   if (error) voltar(id, 2, error.message);
+  // Imóvel desocupado: a entrega das chaves vira demanda da emissão/controle (reunião 21/10/2026).
+  if (dados.data_entrega_chaves && dados.data_entrega_chaves !== s.data_entrega_chaves) {
+    await registrar(supabase, id, {
+      autor_tipo: "sistema",
+      referente: "interno",
+      visivel_imobiliaria: false,
+      texto: `Demanda para emissão e controle: imóvel desocupado, chaves entregues em ${formatarData(dados.data_entrega_chaves)}. Verificar endosso/cancelamento da apólice.`,
+    });
+  }
   // O aviso do prazo aparece nos passos 2 e 5; não impede seguir.
   voltar(id, 3);
 }
@@ -381,7 +393,8 @@ export async function analisarDocumento(fd: FormData) {
     .from("sinistro_documentos")
     .update({
       situacao: decisao === "aprovado" ? "aprovado" : decisao === "recusado" ? "recusado" : "enviado",
-      motivo_recusa: decisao === "recusado" ? motivo : null,
+      // Recusado: motivo; aprovado: observação opcional (lista padronizada, reunião 21/10/2026).
+      motivo_recusa: decisao === "recusado" ? motivo : decisao === "aprovado" ? texto(fd, "observacao") : null,
       analisado_por: user.email,
       analisado_em: new Date().toISOString(),
     })

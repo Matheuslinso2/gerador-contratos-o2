@@ -107,6 +107,20 @@ export async function mudarEtapa(fd: FormData) {
     if (para === "pre_analise") dados.pre_analise_desde = new Date().toISOString();
     if (para === "na_seguradora" && !s.data_abertura_seguradora) dados.data_abertura_seguradora = hoje;
   }
+  // Reunião 21/10/2026: no encerramento, apólice vencida = alerta imediato;
+  // encerrou sem entrega das chaves = verificar a renovação da apólice.
+  const alertas: string[] = [];
+  if (para === "encerrado") {
+    const fimVig = s.vigencia_fim as string | null;
+    const enc = dados.encerrado_em as string;
+    if (fimVig && fimVig < enc) alertas.push(`Apólice vencida em ${fimVig.split("-").reverse().join("/")}: verificar a renovação com a imobiliária.`);
+    if ((s.produto ?? "fianca") === "fianca" && !s.data_entrega_chaves)
+      alertas.push("Sinistro encerrado sem entrega das chaves: o locatário segue no imóvel, verificar a renovação da apólice.");
+    if (alertas.length && !s.proxima_acao_em) {
+      dados.proxima_acao_em = hoje;
+      dados.proxima_acao_descricao = "Verificar renovação da apólice";
+    }
+  }
   const { error } = await supabase.from("sinistros").update(dados).eq("id", id);
   if (error) voltar(id, { erro: error.message, ctx });
   await registrar(supabase, id, {
@@ -116,6 +130,7 @@ export async function mudarEtapa(fd: FormData) {
     etapa_de: s.etapa,
     etapa_para: para,
   });
+  for (const a of alertas) await registrar(supabase, id, { autor_tipo: "sistema", referente: "interno", visivel_imobiliaria: false, texto: `⚠ ${a}` });
 
   if (fd.get("avisar") === "on") {
     const destinos = destinosImobiliaria(s);
@@ -127,7 +142,49 @@ export async function mudarEtapa(fd: FormData) {
     );
   }
   revalidatePath("/sinistros/gestao");
+  if (alertas.length) voltar(id, { erro: `Etapa: ${ETAPAS[para].titulo}. Atenção — ${alertas.join(" ")}`, ctx });
   voltar(id, { sucesso: `Etapa: ${ETAPAS[para].titulo}.`, ctx });
+}
+
+// Acordo / judicial: nº interno, datas do acordo e das parcelas (reunião 21/10/2026).
+// O cron de alertas avisa todo mês, 1 dia útil depois do vencimento da parcela.
+export async function salvarAcordo(fd: FormData) {
+  const { supabase } = await exigirInterno();
+  const id = texto(fd, "id")!;
+  const ctx = texto(fd, "ctx");
+  const s = await carregar(supabase, id);
+  if (!s) voltar(id, { erro: "Sinistro não encontrado.", ctx });
+  const dados: Record<string, unknown> = {
+    acordo_numero: texto(fd, "acordo_numero"),
+    acordo_data: texto(fd, "acordo_data"),
+    acordo_efetivacao: texto(fd, "acordo_efetivacao"),
+    acordo_primeira_parcela: texto(fd, "acordo_primeira_parcela"),
+    acordo_ultima_parcela: texto(fd, "acordo_ultima_parcela"),
+  };
+  const mudaEtapa = s.etapa !== "acordo_judicial" && s.etapa !== "encerrado";
+  if (mudaEtapa) dados.etapa = "acordo_judicial";
+  const { error } = await supabase.from("sinistros").update(dados).eq("id", id);
+  if (error) voltar(id, { erro: error.message, ctx });
+  const br = (d: unknown) => (typeof d === "string" ? d.split("-").reverse().join("/") : "—");
+  await registrar(supabase, id, {
+    autor_tipo: "o2",
+    referente: "seguradora",
+    texto: `Acordo${dados.acordo_numero ? ` nº ${dados.acordo_numero}` : ""}: feito em ${br(dados.acordo_data)}, efetivado em ${br(dados.acordo_efetivacao)}, parcelas de ${br(dados.acordo_primeira_parcela)} a ${br(dados.acordo_ultima_parcela)}.`,
+    etapa_de: mudaEtapa ? s.etapa : null,
+    etapa_para: mudaEtapa ? "acordo_judicial" : null,
+  });
+  revalidatePath("/sinistros/gestao");
+  voltar(id, { sucesso: "Acordo salvo.", ctx });
+}
+
+export async function salvarLmi(fd: FormData) {
+  const { supabase } = await exigirInterno();
+  const id = texto(fd, "id")!;
+  const ctx = texto(fd, "ctx");
+  const lmi = valor(fd, "lmi");
+  await supabase.from("sinistros").update({ lmi }).eq("id", id);
+  await registrar(supabase, id, { autor_tipo: "o2", referente: "interno", visivel_imobiliaria: false, texto: `LMI da apólice: ${lmi != null ? formatarReais(lmi) : "removido"}.` });
+  voltar(id, { sucesso: "LMI salvo.", aba: "financeiro", ctx });
 }
 
 export async function registrarIndenizacao(fd: FormData) {
@@ -157,6 +214,12 @@ export async function registrarIndenizacao(fd: FormData) {
     etapa_para: mudaEtapa ? "em_indenizacao" : null,
   });
   revalidatePath("/sinistros/gestao");
+  if (s.lmi) {
+    const { data: todas } = await supabase.from("sinistro_indenizacoes").select("valor").eq("sinistro_id", id);
+    const usado = (todas ?? []).reduce((acc, x) => acc + Number(x.valor), 0);
+    if (usado > Number(s.lmi))
+      voltar(id, { erro: `Indenização registrada, mas o total (${formatarReais(usado)}) passou do LMI (${formatarReais(Number(s.lmi))}).`, aba: "financeiro", ctx });
+  }
   voltar(id, { sucesso: "Indenização registrada.", aba: "financeiro", ctx });
 }
 
@@ -189,6 +252,7 @@ function camposCaso(fd: FormData) {
   if (fd.has("produto")) c.produto = texto(fd, "produto") ?? "fianca";
   if (fd.has("imobiliaria_id")) c.imobiliaria_id = texto(fd, "imobiliaria_id");
   if (fd.has("valor_avisado")) c.valor_avisado = valor(fd, "valor_avisado");
+  if (fd.has("lmi")) c.lmi = valor(fd, "lmi");
   return c;
 }
 
@@ -326,6 +390,7 @@ export type ApoliceEncontrada = {
   produto: string;
   ramo: string | null;
   seguradora: string | null;
+  numero_apolice: string | null;
   vigencia_inicio: string | null;
   vigencia_fim: string | null;
   imobiliaria_texto: string | null;

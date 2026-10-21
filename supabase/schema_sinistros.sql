@@ -320,12 +320,15 @@ alter table sinistros add column if not exists nosso_numero text;   -- apólice 
 alter table sinistros add column if not exists data_ocorrencia date; -- produtos que não são Fiança
 create index if not exists sinistros_nosso_numero_idx on sinistros(nosso_numero);
 
--- Busca de apólice para preencher o sinistro (Nosso Nº, CPF/CNPJ ou nome do
--- locatário). Equipe O2 vê tudo; a imobiliária só as apólices dela (vínculo
--- confirmado do produtor do Corp). Lê só por índice (Nosso Nº / locatário).
+-- Busca de apólice para preencher o sinistro: Nosso Nº, código de cliente do
+-- Corp ("número interno"), CPF/CNPJ ou nome do locatário. Traz o nº da apólice
+-- na seguradora (grade do espelho do SharePoint) e a imobiliária pelo código
+-- do produtor da apólice (texto do produtor só como fallback). Equipe O2 vê
+-- tudo; a imobiliária só as apólices dela. Lê só por índice.
+drop function if exists buscar_apolices_sinistro(text);
 create or replace function buscar_apolices_sinistro(p_q text)
 returns table (
-  nosso_numero text, produto text, ramo text, seguradora text, vigencia_inicio date, vigencia_fim date,
+  nosso_numero text, produto text, ramo text, seguradora text, numero_apolice text, vigencia_inicio date, vigencia_fim date,
   imobiliaria_texto text, imobiliaria_id uuid, locatario_nome text, locatario_documento text,
   locatario_email text, locatario_telefone text, data_efetivacao date, status text
 )
@@ -341,6 +344,7 @@ begin
   with alvo_loc as (
     select l.id from locatarios l
     where (length(dig) in (11, 14) and l.cpf = dig)
+       or (termo ~ '^\d{1,9}$' and l.codigo_corp_cliente = termo)
        or (termo ~ '[A-Za-zÀ-ú]' and length(termo) >= 4 and l.nome ilike '%' || termo || '%')
     limit 30
   ),
@@ -356,17 +360,35 @@ begin
     where v.fonte = 'corp_produtor' and v.situacao = 'confirmado' and v.imobiliaria_id is not null
       and trim(v.nome_original) in (select distinct trim(c.imobiliaria_texto) from cand c)
     order by trim(v.nome_original), v.confirmado_em desc nulls last
+  ),
+  res as (
+    select c.*, coalesce(imobiliaria_por_apolice_corp(c.origem_corp_numero), vi.imobiliaria_id) imob,
+      (select g.numero_apolice from corp_grade g
+        where c.origem_corp_numero ~ '^\d{1,18}$' and g.nosso_numero = c.origem_corp_numero::bigint and g.numero_apolice is not null
+        order by g.incluir_corretora desc, g.id limit 1) apolice
+    from cand c left join vinc vi on vi.nome = trim(c.imobiliaria_texto)
   )
-  select c.origem_corp_numero, produto_sinistro_de_ramo(c.produto, c.ramo_padrao), c.ramo_padrao, c.seguradora,
-    (c.extras ->> 'vigencia_inicio')::date, (c.extras ->> 'vigencia_fim')::date,
-    trim(c.imobiliaria_texto), vi.imobiliaria_id, l.nome, l.cpf, l.email, l.telefone, c.data_efetivacao, c.status_padrao
-  from cand c
-  left join vinc vi on vi.nome = trim(c.imobiliaria_texto)
-  left join locatarios l on l.id = c.locatario_id
-  where o2 or vi.imobiliaria_id in (select imobiliarias_do_usuario())
-  order by c.data_efetivacao desc nulls last
+  select r.origem_corp_numero, produto_sinistro_de_ramo(r.produto, r.ramo_padrao), r.ramo_padrao, r.seguradora, r.apolice,
+    (r.extras ->> 'vigencia_inicio')::date, (r.extras ->> 'vigencia_fim')::date,
+    trim(r.imobiliaria_texto), r.imob, l.nome, l.cpf, l.email, l.telefone, r.data_efetivacao, r.status_padrao
+  from res r
+  left join locatarios l on l.id = r.locatario_id
+  where o2 or r.imob in (select imobiliarias_do_usuario())
+  order by r.data_efetivacao desc nulls last
   limit 15;
 end;
 $$;
 revoke execute on function buscar_apolices_sinistro(text) from anon, public;
 grant execute on function buscar_apolices_sinistro(text) to authenticated;
+
+-- Reunião da equipe de sinistros (21/10/2026): acordo/judicial, LMI e alertas
+-- automáticos (cron /api/cron/alertas-sinistros, dias úteis às 8h).
+alter table sinistros add column if not exists acordo_numero text;              -- nº interno do acordo
+alter table sinistros add column if not exists acordo_data date;                -- data do acordo
+alter table sinistros add column if not exists acordo_efetivacao date;          -- data de efetivação
+alter table sinistros add column if not exists acordo_primeira_parcela date;
+alter table sinistros add column if not exists acordo_ultima_parcela date;
+alter table sinistros add column if not exists acordo_alerta_ultimo date;       -- último alerta mensal de adimplência
+alter table sinistros add column if not exists lmi numeric(14,2);               -- limite máximo de indenização da apólice
+alter table sinistros add column if not exists alerta_renovacao_em date;        -- quando avisou do vencimento da apólice
+update sinistros set produto = 'residencial' where produto = 'conteudo';         -- "Conteúdo" é cobertura, não produto

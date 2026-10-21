@@ -141,3 +141,21 @@ export async function emailAtualizacaoParaImobiliaria(s: SinistroEmail, destinos
   });
   await enviar(destinos, `${titulo} — SIN-${s.codigo} — ${s.locatario_nome ?? "locatário não informado"}`, html);
 }
+
+// Resumo diário dos alertas automáticos (vencimento da apólice e parcelas de
+// acordo) para a caixa do Setor de Garantias -- reunião 21/10/2026.
+export async function emailAlertasParaO2(itens: { id: string; codigo: number; texto: string }[]) {
+  if (!itens.length) return;
+  const base = (process.env.NEXT_PUBLIC_SITE_URL || "https://gerador-contratos-o2.vercel.app").replace(/\/$/, "");
+  const html = envolverEmailO2({
+    badge: "Alertas de sinistros",
+    titulo: `${itens.length} alerta(s) para hoje`,
+    introducao: "Vencimento de apólice e parcelas de acordo para conferir. Cada item já entrou na agenda do responsável.",
+    corpoHtml:
+      listaHtml(itens.map((i) => `SIN-${i.codigo}: ${i.texto}`)) +
+      botaoPill(`${base}/sinistros/gestao?ordem=agenda`, "Abrir a agenda na Gestão"),
+    protocolo: "Alertas",
+    origem: "Módulo Sinistro",
+  });
+  await enviar([EMAIL_O2], `Sinistros — ${itens.length} alerta(s) para hoje`, html);
+}

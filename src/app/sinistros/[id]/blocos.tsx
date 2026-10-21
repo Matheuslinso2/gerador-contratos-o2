@@ -109,14 +109,19 @@ export function ChecklistDocumentos({
                         </form>
                       )}
                     </div>
-                    {d.situacao === "recusado" && d.motivo_recusa && <p className="mt-0.5 text-red-700">Motivo: {d.motivo_recusa}</p>}
+                    {d.motivo_recusa && (d.situacao === "recusado" || d.situacao === "aprovado") && (
+                      <p className={`mt-0.5 ${d.situacao === "recusado" ? "text-red-700" : "text-green-800"}`}>
+                        {d.situacao === "recusado" ? "Recusado" : "Aprovado"} — {d.motivo_recusa}
+                      </p>
+                    )}
                     {modo === "o2" && (
                       <div className="mt-1 flex flex-wrap items-center gap-2">
                         {d.situacao !== "aprovado" && (
-                          <form action={analisarDocumento}>
+                          <form action={analisarDocumento} className="flex flex-wrap items-center gap-1">
                             <input type="hidden" name="id" value={id} />
                             <input type="hidden" name="documento_id" value={d.id} />
                             <input type="hidden" name="decisao" value="aprovado" />
+                            <input name="observacao" placeholder="observação (opcional)" className="w-40 rounded border border-gray-300 px-1 py-0.5" />
                             <button className="rounded-full bg-green-600 px-3 py-0.5 font-semibold text-white hover:opacity-90">Aprovar</button>
                           </form>
                         )}
@@ -171,6 +176,7 @@ function dataHora(iso: string) {
 }
 
 const AUTOR: Record<string, string> = { imobiliaria: "Imobiliária", o2: "O2", sistema: "Sistema" };
+const COR_AUTOR: Record<string, string> = { imobiliaria: "bg-orange-100 text-orange-800", o2: "bg-blue-100 text-blue-800", sistema: "bg-gray-100 text-gray-600" };
 
 export function Historico({ id, registros, modo }: { id: string; registros: RegistroHistorico[]; modo: "imobiliaria" | "o2" }) {
   return (
@@ -207,21 +213,30 @@ export function Historico({ id, registros, modo }: { id: string; registros: Regi
       {registros.length === 0 ? (
         <p className="text-sm text-gray-500">Nenhum registro ainda.</p>
       ) : (
-        <ol className="space-y-3 border-l-2 border-o2-coral pl-4">
-          {registros.map((r) => (
-            <li key={r.id} className="text-sm">
-              <p className="text-xs text-gray-500">
-                <b className="text-o2-navy">{dataHora(r.criado_em)}</b> · {AUTOR[r.autor_tipo] ?? r.autor_tipo}
-                {modo === "o2" && r.autor_email ? ` (${r.autor_email})` : ""}
-                {modo === "o2" && (
-                  <span className={`ml-2 rounded-full px-2 py-0.5 font-semibold ${r.visivel_imobiliaria ? "bg-blue-100 text-blue-800" : "bg-gray-200 text-gray-600"}`}>
-                    {r.visivel_imobiliaria ? "visível à imobiliária" : "interno"}
-                  </span>
+        <ol className="max-h-[32rem] divide-y divide-gray-100 overflow-y-auto rounded-xl border border-gray-200 bg-white">
+          {registros.map((r) => {
+            const longo = r.texto.length > 240;
+            return (
+              <li key={r.id} className="px-3 py-2 text-sm">
+                <p className="flex flex-wrap items-center gap-x-2 text-xs text-gray-500">
+                  <span className={`rounded px-1.5 py-0.5 font-semibold ${COR_AUTOR[r.autor_tipo] ?? "bg-gray-100 text-gray-600"}`}>{AUTOR[r.autor_tipo] ?? r.autor_tipo}</span>
+                  <span>{dataHora(r.criado_em)}</span>
+                  {modo === "o2" && r.autor_email && <span>{r.autor_email}</span>}
+                  {modo === "o2" && !r.visivel_imobiliaria && <span className="text-gray-400">· interno</span>}
+                </p>
+                {longo ? (
+                  <details className="mt-0.5">
+                    <summary className="cursor-pointer list-none text-gray-800">
+                      {r.texto.slice(0, 240).trimEnd()}… <span className="text-xs text-o2-blue">ver tudo</span>
+                    </summary>
+                    <p className="mt-1 whitespace-pre-wrap text-gray-800">{r.texto}</p>
+                  </details>
+                ) : (
+                  <p className="mt-0.5 whitespace-pre-wrap text-gray-800">{r.texto}</p>
                 )}
-              </p>
-              <p className="whitespace-pre-wrap text-gray-800">{r.texto}</p>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ol>
       )}
     </div>

@@ -12,7 +12,6 @@ export const PRODUTOS: { chave: string; rotulo: string }[] = [
   { chave: "condominio", rotulo: "Condomínio" },
   { chave: "empresarial", rotulo: "Empresarial" },
   { chave: "automovel", rotulo: "Automóvel" },
-  { chave: "conteudo", rotulo: "Conteúdo" },
   { chave: "portateis", rotulo: "Equipamentos portáteis" },
   { chave: "rc", rotulo: "Responsabilidade civil" },
   { chave: "vida", rotulo: "Vida" },

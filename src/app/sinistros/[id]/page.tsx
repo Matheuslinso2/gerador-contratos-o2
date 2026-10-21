@@ -20,6 +20,7 @@ import {
   formatarReais,
   hojeSP,
   montarChecklist,
+  somarDias,
   validarEnvio,
   type Debito,
   type EtapaSinistro,
@@ -31,11 +32,12 @@ import {
   devolverComPendencia,
   enviarSinistro,
   marcarAbertoNaSeguradora,
+  registrarNoHistorico,
   salvarContrato,
   salvarProximaAcao,
 } from "../actions";
 import FormContrato from "../FormContrato";
-import { atribuirResponsavel, duplicarSinistro, mudarEtapa, registrarIndenizacao, removerIndenizacao } from "../operacao";
+import { atribuirResponsavel, duplicarSinistro, mudarEtapa, registrarIndenizacao, removerIndenizacao, salvarAcordo, salvarLmi } from "../operacao";
 import { listarSinistros } from "@/lib/sinistros/consulta";
 import AtalhosNavegacao from "./AtalhosNavegacao";
 import { rotuloProduto } from "@/lib/sinistros/produtos";
@@ -673,7 +675,15 @@ function VisaoO2({
           </span>
         )}
         {totalIndenizado > 0 && <span className="rounded-full bg-green-100 px-3 py-1 font-semibold text-green-800">indenizado {formatarReais(totalIndenizado)}</span>}
+        {s.lmi != null && (
+          <span className={`rounded-full px-3 py-1 font-semibold ${Number(s.lmi) - totalIndenizado < 0 ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-800"}`}>
+            saldo LMI {formatarReais(Number(s.lmi) - totalIndenizado)}
+          </span>
+        )}
+        <SeloVigencia s={s} />
       </div>
+
+      <MensagensImobiliaria s={s} historico={historico} ctx={nav.ctx} />
 
       <AcaoDoMomento s={s} docs={docs} checklist={checklist} ctx={nav.ctx} />
 
@@ -719,6 +729,7 @@ function VisaoO2({
 
       {abaAtual === "financeiro" && (
         <div className="space-y-6">
+          <QuadroLmi s={s} indenizacoes={indenizacoes} ctx={nav.ctx} />
           <section className="space-y-2">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Indenizações recebidas</h2>
             <Indenizacoes s={s} indenizacoes={indenizacoes} ctx={nav.ctx} editavel />
@@ -803,7 +814,7 @@ function AcaoDoMomento({ s, docs, checklist, ctx }: { s: any; docs: Documento[];
         <div className="grid gap-2 md:grid-cols-2">
           <FormIndenizacao base={base} />
           <MoverEtapa base={base} para="em_indenizacao" rotulo="A seguradora começou a indenizar (sem valor ainda)" />
-          <MoverEtapa base={base} para="acordo_judicial" rotulo="Foi para acordo / judicial" />
+          <FormAcordo base={base} s={s} />
           <FormEncerrar base={base} />
         </div>
       )}
@@ -813,13 +824,22 @@ function AcaoDoMomento({ s, docs, checklist, ctx }: { s: any; docs: Documento[];
           <div className="md:col-span-2">
             <FormIndenizacao base={base} principal />
           </div>
-          <MoverEtapa base={base} para="acordo_judicial" rotulo="Foi para acordo / judicial" />
+          <FormAcordo base={base} s={s} />
           <FormEncerrar base={base} />
         </div>
       )}
 
       {etapa === "acordo_judicial" && (
         <div className="grid gap-2 md:grid-cols-2">
+          <div className="md:col-span-2">
+            <FormAcordo base={base} s={s} aberto={!s.acordo_primeira_parcela} />
+            {s.acordo_primeira_parcela && (
+              <p className="mt-1 text-xs text-gray-600">
+                Próxima parcela: {formatarData(proximaParcelaAcordo(s, hoje))}
+                {s.acordo_ultima_parcela ? ` · última em ${formatarData(s.acordo_ultima_parcela)}` : ""}
+              </p>
+            )}
+          </div>
           <FormIndenizacao base={base} />
           <MoverEtapa base={base} para="em_indenizacao" rotulo="Voltou para indenização" />
           <FormEncerrar base={base} />
@@ -930,6 +950,153 @@ function FormEncerrar({ base }: { base: BaseAcao }) {
         </SubmitButton>
       </form>
     </details>
+  );
+}
+
+// ---------- Reunião 21/10/2026: acordo, LMI, vencimento da apólice e mensagens ----------
+
+function proximaParcelaAcordo(s: any, hoje: string): string | null {
+  const ini = s.acordo_primeira_parcela as string | null;
+  if (!ini) return null;
+  const fim = (s.acordo_ultima_parcela as string | null) ?? "9999-12-31";
+  const dia = Number(ini.slice(8, 10));
+  let [ano, mes] = [Number(hoje.slice(0, 4)), Number(hoje.slice(5, 7))];
+  for (let i = 0; i < 3; i++) {
+    const ultimo = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+    const data = `${ano}-${String(mes).padStart(2, "0")}-${String(Math.min(dia, ultimo)).padStart(2, "0")}`;
+    if (data >= hoje && data >= ini) return data <= fim ? data : null;
+    mes += 1;
+    if (mes > 12) {
+      mes = 1;
+      ano += 1;
+    }
+  }
+  return null;
+}
+
+function FormAcordo({ base, s, aberto }: { base: BaseAcao; s: any; aberto?: boolean }) {
+  return (
+    <details className={`${cartao} p-3`} open={aberto}>
+      <summary className={`cursor-pointer list-none text-sm font-semibold ${aberto ? "text-o2-coral" : "text-o2-navy"}`}>
+        {s.etapa === "acordo_judicial" ? "Dados do acordo / processo" : "Foi para acordo / judicial"}
+      </summary>
+      <form action={salvarAcordo} className="mt-2 grid gap-2 sm:grid-cols-5 sm:items-end">
+        <Ocultos base={base} />
+        <div>
+          <label className={labelClass}>Nº interno do acordo</label>
+          <input name="acordo_numero" defaultValue={s.acordo_numero ?? ""} className={inputClass} />
+        </div>
+        <div>
+          <label className={labelClass}>Data do acordo</label>
+          <input type="date" name="acordo_data" defaultValue={s.acordo_data ?? ""} className={inputClass} />
+        </div>
+        <div>
+          <label className={labelClass}>Efetivação</label>
+          <input type="date" name="acordo_efetivacao" defaultValue={s.acordo_efetivacao ?? ""} className={inputClass} />
+        </div>
+        <div>
+          <label className={labelClass}>1ª parcela</label>
+          <input type="date" name="acordo_primeira_parcela" defaultValue={s.acordo_primeira_parcela ?? ""} className={inputClass} />
+        </div>
+        <div>
+          <label className={labelClass}>Última parcela</label>
+          <input type="date" name="acordo_ultima_parcela" defaultValue={s.acordo_ultima_parcela ?? ""} className={inputClass} />
+        </div>
+        <p className="text-xs text-gray-500 sm:col-span-4">
+          Todo mês, 1 dia útil depois do vencimento da parcela, o sistema lembra o responsável de conferir se o locatário pagou.
+        </p>
+        <SubmitButton className={botaoPrimario} textoCarregando="Salvando…">
+          Salvar acordo
+        </SubmitButton>
+      </form>
+    </details>
+  );
+}
+
+function QuadroLmi({ s, indenizacoes, ctx }: { s: any; indenizacoes: Indenizacao[]; ctx: string | null }) {
+  const usado = indenizacoes.reduce((t, i) => t + Number(i.valor), 0);
+  const lmi = s.lmi != null ? Number(s.lmi) : null;
+  const saldo = lmi != null ? lmi - usado : null;
+  const pctUso = lmi ? Math.min(100, Math.round((usado / lmi) * 100)) : 0;
+  return (
+    <section className={`${cartao} space-y-3`}>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Limite da apólice (LMI)</h2>
+          {lmi != null ? (
+            <p className="text-sm text-gray-600">
+              LMI {formatarReais(lmi)} · usado {formatarReais(usado)} ·{" "}
+              <b className={saldo! < 0 ? "text-red-700" : "text-green-800"}>saldo {formatarReais(saldo)}</b>
+            </p>
+          ) : (
+            <p className="text-sm text-gray-500">Informe o LMI da apólice para acompanhar o saldo a cada indenização.</p>
+          )}
+        </div>
+        <form action={salvarLmi} className="flex items-end gap-2">
+          <input type="hidden" name="id" value={s.id} />
+          {ctx && <input type="hidden" name="ctx" value={ctx} />}
+          <div>
+            <label className={labelClass}>LMI (R$)</label>
+            <input name="lmi" inputMode="decimal" defaultValue={lmi ?? ""} placeholder="0,00" className={`${inputClass} w-36`} />
+          </div>
+          <SubmitButton className={botaoSecundario} textoCarregando="…">
+            Salvar
+          </SubmitButton>
+        </form>
+      </div>
+      {lmi != null && (
+        <div className="h-2.5 w-full overflow-hidden rounded-full bg-gray-100" role="progressbar" aria-valuenow={pctUso} aria-valuemin={0} aria-valuemax={100}>
+          <div className={`h-full ${pctUso >= 100 ? "bg-red-600" : pctUso >= 80 ? "bg-orange-500" : "bg-o2-blue"}`} style={{ width: `${pctUso}%` }} />
+        </div>
+      )}
+    </section>
+  );
+}
+
+// Selo do vencimento da apólice (vencida / vence em até 15 dias).
+function SeloVigencia({ s }: { s: any }) {
+  const fim = s.vigencia_fim as string | null;
+  if (!fim || s.etapa === "encerrado" || s.etapa === "cancelado") return null;
+  const dias = diasEntre(hojeSP(), fim);
+  if (dias < 0) return <span className="rounded-full bg-red-100 px-3 py-1 font-semibold text-red-700">apólice vencida em {formatarData(fim)} — verificar renovação</span>;
+  if (dias <= 15) return <span className="rounded-full bg-orange-100 px-3 py-1 font-semibold text-orange-800">apólice vence em {dias} dia(s) ({formatarData(fim)})</span>;
+  return null;
+}
+
+// Mensagens recentes da imobiliária, em destaque na visão da O2 (antes só
+// apareciam no histórico, no meio dos registros).
+function MensagensImobiliaria({ s, historico, ctx }: { s: any; historico: RegistroHistorico[]; ctx: string | null }) {
+  const limite = somarDias(hojeSP(), -30);
+  const msgs = historico.filter((h) => h.autor_tipo === "imobiliaria" && h.criado_em.slice(0, 10) >= limite).slice(0, 3);
+  if (!msgs.length) return null;
+  return (
+    <section className="space-y-2 rounded-xl border border-orange-200 bg-orange-50 p-4">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Mensagens da imobiliária (últimos 30 dias)</h2>
+      <ul className="space-y-2">
+        {msgs.map((m) => (
+          <li key={m.id} className="rounded-lg bg-white p-2 text-sm">
+            <p className="text-xs text-gray-500">
+              {new Date(m.criado_em).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })}
+              {m.autor_email ? ` · ${m.autor_email}` : ""}
+            </p>
+            <p className="whitespace-pre-wrap text-gray-800">{m.texto}</p>
+          </li>
+        ))}
+      </ul>
+      <form action={registrarNoHistorico} className="flex flex-wrap items-end gap-2">
+        <input type="hidden" name="id" value={s.id} />
+        <input type="hidden" name="referente" value="imobiliaria" />
+        <input type="hidden" name="visivel_imobiliaria" value="on" />
+        {ctx && <input type="hidden" name="ctx" value={ctx} />}
+        <textarea name="texto" rows={1} placeholder="Responder à imobiliária" className={`${inputClass} min-w-64 flex-1`} />
+        <label className="flex items-center gap-1 text-xs text-gray-600">
+          <input type="checkbox" name="enviar_email" defaultChecked className="accent-o2-coral" /> enviar e-mail
+        </label>
+        <SubmitButton className="rounded-full bg-o2-navy px-4 py-1.5 text-sm font-semibold text-white" textoCarregando="Enviando…">
+          Responder
+        </SubmitButton>
+      </form>
+    </section>
   );
 }
 

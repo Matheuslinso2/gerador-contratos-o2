@@ -65,7 +65,7 @@ export default async function EditarSinistroPage({
             extras={
               <>
                 {ocultos}
-                <section className="grid gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4 sm:grid-cols-3">
+                <section className="grid gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4 sm:grid-cols-4">
                   <div>
                     <label className={labelClass}>Nº do sinistro na seguradora</label>
                     <input name="numero_sinistro_seguradora" defaultValue={s.numero_sinistro_seguradora ?? ""} className={inputClass} />
@@ -75,8 +75,8 @@ export default async function EditarSinistroPage({
                     <input name="valor_avisado" inputMode="decimal" defaultValue={s.valor_avisado ?? ""} className={inputClass} />
                   </div>
                   <div>
-                    <label className={labelClass}>Data da ocorrência</label>
-                    <input type="date" name="data_ocorrencia" defaultValue={s.data_ocorrencia ?? ""} className={inputClass} />
+                    <label className={labelClass}>LMI da apólice (R$)</label>
+                    <input name="lmi" inputMode="decimal" defaultValue={s.lmi ?? ""} className={inputClass} />
                   </div>
                 </section>
               </>
