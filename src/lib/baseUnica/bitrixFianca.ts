@@ -58,11 +58,11 @@ export async function lerBitrixFianca() {
     soma(l.dataPerda, "perdidos");
     soma(l.dataConversao, "convertidos");
   }
-  return { linhas, empresaPorCard, porMes };
+  return { linhas, empresaPorCard, porMes, empresas };
 }
 
 export async function gravarBitrixFianca(supabase: SupabaseClient, dados: Awaited<ReturnType<typeof lerBitrixFianca>>) {
-  const { linhas, empresaPorCard, porMes } = dados;
+  const { linhas, empresaPorCard, porMes, empresas } = dados;
   const num = (v: number | "") => (typeof v === "number" ? v : null);
 
   const { data: imp, error: e1 } = await supabase
@@ -122,6 +122,17 @@ export async function gravarBitrixFianca(supabase: SupabaseClient, dados: Awaite
       ...(l.motivoRecusaPerda ? { motivo: l.motivoRecusaPerda } : {}),
     },
   }));
+
+  // Empresa nova nos cards entra na base única como registro a identificar; a
+  // rotina /api/cron/base-unica-vinculos liga à ficha (mesmas regras de sempre).
+  const idsEmpresa = [...new Set([...empresaPorCard.values()].filter((v): v is string => !!v))];
+  if (idsEmpresa.length) {
+    const { error: eReg } = await supabase.from("imobiliaria_registros_fonte").upsert(
+      idsEmpresa.map((id) => ({ fonte: "bitrix_empresa", chave_externa: id, nome_original: empresas[Number(id)] ?? null })),
+      { onConflict: "fonte,chave_externa", ignoreDuplicates: true }
+    );
+    if (eReg) throw new Error("registros bitrix_empresa: " + eReg.message);
+  }
 
   // Atualiza card a card (upsert pelo ID do Bitrix) em vez de apagar e regravar:
   // se o cron cair no meio, o que já estava gravado continua lá.

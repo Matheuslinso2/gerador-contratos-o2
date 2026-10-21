@@ -8,7 +8,7 @@ import type { Sugestao } from "@/lib/baseUnica/revisao";
 
 // Ações da revisão uma a uma da Base Única (Fase 2). Toda decisão aqui é
 // do Matheus/equipe e fica registrada com quem fez e quando; os scripts
-// automáticos (scripts/base-unica/vincular.mjs) nunca desfazem uma decisão
+// automáticos (src/lib/baseUnica/vinculosAutomaticos.ts) nunca desfazem uma decisão
 // de pessoa. O cadastro em si continua sendo só `imobiliarias`.
 
 async function exigirEquipe() {
