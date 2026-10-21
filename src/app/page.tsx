@@ -149,8 +149,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ a
   }[] = [
     {
       href: "/producao",
-      titulo: "Produção",
-      descricao: "Dashboard de prêmio, comissão e volume da produção da corretora",
+      titulo: "Power BI - O2 Seguros",
+      descricao: "Produção, Flash Report, histórico e sinistros do Corp — o painel do Power BI dentro do Workspace",
       icone: (
         <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
           <path d="M4 20V4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />

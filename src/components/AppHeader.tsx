@@ -71,7 +71,7 @@ export default function AppHeader({
                   {
                     titulo: "Ferramentas de controle",
                     items: [
-                      { href: "/producao", label: "Produção" },
+                      { href: "/producao", label: "Power BI - O2 Seguros" },
                       { href: "/faturas", label: "Faturas" },
                       { href: "/repasses", label: "Repasses" },
                     ],

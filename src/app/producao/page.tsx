@@ -12,6 +12,7 @@ import { IconChart } from "@/components/icons";
 import BarrasMensais from "./BarrasMensais";
 import { signOut } from "../actions";
 import FiltrosProducao, { type Filtros, type OpcaoImob } from "./FiltrosProducao";
+import { Abas } from "./_corp/comum";
 
 export const dynamic = "force-dynamic";
 
@@ -188,8 +189,8 @@ export default async function ProducaoPage({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <PageHeader
             icon={<IconChart />}
-            titulo="Produção"
-            subtitulo={`${rotuloMes(de)} a ${rotuloMes(ate)}${filtroImob ? ` · só ${nomesSelecionados.join(", ") || "imobiliárias selecionadas"}` : " · visão macro"}`}
+            titulo="Power BI - O2 Seguros"
+            subtitulo={`Cotações e apólices · ${rotuloMes(de)} a ${rotuloMes(ate)}${filtroImob ? ` · só ${nomesSelecionados.join(", ") || "imobiliárias selecionadas"}` : " · visão macro"}`}
           />
           <div className="flex items-center gap-3 text-xs text-gray-500">
             {kpis?.atualizado_em && <span>resumo de {dataHora(kpis.atualizado_em)}</span>}
@@ -199,6 +200,8 @@ export default async function ProducaoPage({
             </Link>
           </div>
         </div>
+
+        <Abas ativa="/producao" />
 
         {/* key: remonta a barra quando o recorte muda por link (ex.: clique numa imobiliária da tabela). */}
         <FiltrosProducao key={JSON.stringify(filtros)} filtros={filtros} mesAtual={mesAtual} opcoesImob={opcoes} seguradoras={SEGURADORAS} />
