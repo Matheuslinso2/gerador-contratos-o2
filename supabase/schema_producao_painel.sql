@@ -82,7 +82,9 @@ plan_linhas as (
 ),
 plan_casos as (
   select produto,
-         coalesce(min(competencia_arquivo) filter (where not herdada), min(competencia_arquivo)) as entrada,
+         -- Herdada de mês não importado (extras.sem_entrada): a entrada foi antes, não conta aqui.
+         coalesce(min(competencia_arquivo) filter (where not herdada),
+                  case when bool_or(coalesce((extras ->> 'sem_entrada')::boolean, false)) then null else min(competencia_arquivo) end) as entrada,
          (array_agg(status_padrao order by rank_etapa desc, competencia_arquivo desc))[1] as etapa,
          (array_agg(imobiliaria_id order by herdada, competencia_arquivo))[1] as imobiliaria_id,
          (array_agg(grupo_id order by herdada, competencia_arquivo))[1] as grupo_id,
@@ -90,8 +92,9 @@ plan_casos as (
          (array_agg(seguradora order by rank_etapa desc, competencia_arquivo desc))[1] as seguradora,
          (array_agg(premio order by rank_etapa desc, competencia_arquivo desc))[1] as premio,
          (array_agg(comissao order by rank_etapa desc, competencia_arquivo desc))[1] as comissao,
-         min(competencia_arquivo) filter (where status_padrao in ('Aprovado', 'Perdido', 'Convertido')) as m_aprovacao,
-         min(competencia_arquivo) filter (where status_padrao = 'Recusado') as m_recusa,
+         -- Aprovação/recusa da seguradora só existem no processo da Fiança.
+         case when produto = 'fianca' then min(competencia_arquivo) filter (where status_padrao in ('Aprovado', 'Perdido', 'Convertido')) end as m_aprovacao,
+         case when produto = 'fianca' then min(competencia_arquivo) filter (where status_padrao = 'Recusado') end as m_recusa,
          min(competencia_arquivo) filter (where status_padrao = 'Perdido') as m_perda,
          min(competencia_arquivo) filter (where status_padrao = 'Convertido') as m_conversao
   from plan_linhas
@@ -100,7 +103,8 @@ plan_casos as (
 -- Bitrix: 1 card = 1 linha; as datas dos eventos vêm do histórico de etapas
 -- (gravadas pelo scripts/base-unica/sincronizar-bitrix-fianca.ts).
 bitrix_casos as (
-  select produto, competencia_arquivo as entrada, status_padrao as etapa, imobiliaria_id, grupo_id, canal as canal_resolvido,
+  select produto, case when coalesce((extras ->> 'sem_entrada')::boolean, false) then null else competencia_arquivo end as entrada,
+         status_padrao as etapa, imobiliaria_id, grupo_id, canal as canal_resolvido,
          seguradora, premio, comissao,
          left(extras ->> 'data_aprovacao', 7) as m_aprovacao,
          left(extras ->> 'data_recusa', 7) as m_recusa,
@@ -284,6 +288,26 @@ begin
         from fun_per f left join nomes nm on nm.id = f.entidade
         where f.entidade is not null
         group by f.entidade, nm.nome, nm.tipo) x),
+    -- Cotações por produto (21/10/2026: Fiança, RE, Capitalização e Automóvel,
+    -- cada um com a regra do painel do produto) e mês a mês por produto.
+    'funil_por_produto', (select coalesce(jsonb_agg(x order by x.produto), '[]') from (
+        select f.produto,
+               coalesce(sum(f.n) filter (where f.evento = 'entrada'), 0) as entradas,
+               coalesce(sum(f.n) filter (where f.evento = 'aprovacao'), 0) as aprovacoes,
+               coalesce(sum(f.n) filter (where f.evento = 'recusa'), 0) as recusas,
+               coalesce(sum(f.n) filter (where f.evento = 'perda'), 0) as perdas,
+               coalesce(sum(f.n) filter (where f.evento = 'conversao'), 0) as conversoes,
+               coalesce(sum(f.premio) filter (where f.evento = 'conversao'), 0) as premio_convertido,
+               coalesce(sum(f.comissao) filter (where f.evento = 'conversao'), 0) as comissao_convertida,
+               (select coalesce(sum(a.n), 0) from fun_ant a where a.produto = f.produto and a.evento = 'entrada') as entradas_ano_anterior,
+               (select coalesce(sum(a.n), 0) from fun_ant a where a.produto = f.produto and a.evento = 'conversao') as conversoes_ano_anterior,
+               (select min(m.competencia) from producao_painel_mensal m where m.origem = 'funil' and m.produto = f.produto and m.evento = 'entrada') as historico_desde
+        from fun_per f group by f.produto) x),
+    'funil_mensal_produto', (select coalesce(jsonb_agg(x order by x.competencia), '[]') from (
+        select competencia, jsonb_object_agg(produto, eventos) as produtos
+        from (select competencia, produto, jsonb_object_agg(evento, n) as eventos
+              from (select competencia, produto, evento, sum(n) n from fun_per group by 1, 2, 3) a group by 1, 2) b
+        group by competencia) x),
     'funil_meses_com_planilha', (select coalesce(jsonb_agg(distinct competencia order by competencia), '[]')
         from base_unica_importacoes where produto = 'fianca' and layout <> 'corp_relatorio_propostas' and competencia between p_de and p_ate),
     'atualizado_em', (select atualizado_em from producao_painel_estado where id = 1)

@@ -90,6 +90,18 @@
     {
       "path": "/api/cron/base-unica-vinculos",
       "schedule": "50 * * * *"
+    },
+    {
+      "path": "/api/cron/base-unica-bitrix?produto=capitalizacao",
+      "schedule": "42 * * * *"
+    },
+    {
+      "path": "/api/cron/base-unica-bitrix?produto=automovel",
+      "schedule": "44 * * * *"
+    },
+    {
+      "path": "/api/cron/base-unica-bitrix?produto=re",
+      "schedule": "46 * * * *"
     }
   ]
 }

@@ -18,13 +18,12 @@ export const dynamic = "force-dynamic";
 
 // Painel Produção (Base Única — Fase 5). Dois universos que se conectam mas
 // têm fontes diferentes (Matheus, 20/10/2026), cada um no seu bloco:
-//  - COTAÇÕES (funil): tomadas de preço — análise → aprovação/recusa →
-//    negociação → conversão ou negativação. Planilhas de análise até
-//    jul/2026 e SPA do Bitrix a partir de ago/2026, com os MESMOS KPIs ("quando
-//    a fonte muda, só a fonte muda"): entradas pelo mês em que a cotação
-//    entrou; aprovação/recusa/negativação/conversão pelo mês em que aconteceu
-//    (regra do painel /seguro-fianca). Bitrix lido de hora em hora pelo cron
-//    /api/cron/base-unica-bitrix.
+//  - COTAÇÕES (funil): tomadas de preço de TODOS os produtos (21/10/2026):
+//    Fiança (planilhas jul/2020–jul/2026 + Bitrix), RE (planilha jul–ago/2026
+//    + Bitrix), Capitalização e Automóvel (Bitrix), cada um com a régua do
+//    painel do produto ("quando a fonte muda, só a fonte muda"): entradas pelo
+//    mês em que a cotação entrou; conversão/perda pelo mês em que aconteceu.
+//    Bitrix lido de hora em hora pelo cron /api/cron/base-unica-bitrix.
 //  - APÓLICES (Corp): o que foi efetivado — propostas, prêmio líquido,
 //    comissão —, pelo mês da data da proposta.
 // O filtro de período e de imobiliária/grupo recorta os dois blocos; o de
@@ -51,10 +50,20 @@ type Kpis = {
   funil_ano_anterior: Eventos;
   funil_mensal: { competencia: string; eventos: Partial<Record<"entrada" | "aprovacao" | "recusa" | "perda" | "conversao", number>> }[];
   funil_por_entidade: (Eventos & Entidade & { premio_convertido: number })[];
+  funil_por_produto: CotacaoProduto[];
+  funil_mensal_produto: { competencia: string; produtos: Record<string, Partial<Record<"entrada" | "aprovacao" | "recusa" | "perda" | "conversao", number>>> }[];
   funil_meses_com_planilha: string[];
   atualizado_em: string | null;
 };
 type Fontes = { bitrix: string | null; corp: string | null };
+type CotacaoProduto = Eventos & {
+  produto: string;
+  premio_convertido: number;
+  comissao_convertida: number;
+  entradas_ano_anterior: number;
+  conversoes_ano_anterior: number;
+  historico_desde: string | null;
+};
 
 const PRODUTOS: Record<string, { rotulo: string; cor: string }> = {
   capitalizacao: { rotulo: "Capitalização", cor: "#2E6FB7" },
@@ -74,12 +83,6 @@ const CANAIS: Record<string, { rotulo: string; legenda: string }> = {
   so_canal: { rotulo: "Só canal (Segimob, Base, Superlógica…)", legenda: "proposta sem imobiliária, só com canal ou marcador do Corp" },
   automovel: { rotulo: "Automóvel", legenda: "Automóvel não tem vínculo com imobiliária (entra só no macro)" },
 };
-const COR_ENTRADA = "#2E6FB7";
-const DESFECHOS = [
-  { chave: "conversao", rotulo: "Convertidas", cor: "#2E6FB7" },
-  { chave: "perda", rotulo: "Negativadas", cor: "#F8540D" },
-  { chave: "recusa", rotulo: "Recusadas", cor: "#01192e" },
-] as const;
 // Cotações de Seguro Fiança: planilhas de análise jul/2020 → jul/2026, Bitrix
 // de ago/2026 em diante. Meses sem planilha confirmados pelo Matheus em
 // 19/10/2026 (não existem no Drive) ou ainda não importáveis.
@@ -120,11 +123,6 @@ function variacao(atual: number, anterior: number): Variacao {
   const t = `${v >= 0 ? "+" : "−"}${Math.abs(v).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
   if (Math.abs(v) < 2) return { texto: t, cls: "bg-gray-100 text-gray-600" };
   return { texto: t, cls: v > 0 ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700" };
-}
-// Diferença de taxa em pontos percentuais (ex.: conversão 22% → 24% = +2 p.p.).
-function variacaoPp(atual: number, anterior: number): Variacao {
-  const d = (atual - anterior) * 100;
-  return { texto: `${d >= 0 ? "+" : "−"}${Math.abs(d).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} p.p.`, cls: d >= 0 ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700" };
 }
 
 export default async function ProducaoPage({
@@ -303,6 +301,24 @@ function motivoSemFonte(m: string) {
   return "sem planilha";
 }
 
+// Conversão de cada produto com a régua do painel do produto (21/10/2026):
+// Fiança e RE = convertidas ÷ recebidas; Capitalização e Automóvel =
+// convertidas ÷ (convertidas + perdidas), como /painel-capitalizacao e
+// /painel-seguro-auto.
+const REGUA_CONVERSAO: Record<string, { texto: string; calc: (p: CotacaoProduto) => [number, number] }> = {
+  fianca: { texto: "convertidas ÷ recebidas", calc: (p) => [p.conversoes, p.entradas] },
+  re: { texto: "efetivadas ÷ recebidas", calc: (p) => [p.conversoes, p.entradas] },
+  capitalizacao: { texto: "emitidos ÷ (emitidos + perdidos)", calc: (p) => [p.conversoes, p.conversoes + p.perdas] },
+  automovel: { texto: "convertidas ÷ (convertidas + perdidas)", calc: (p) => [p.conversoes, p.conversoes + p.perdas] },
+};
+const ROTULO_CURTO: Record<string, string> = { fianca: "Fiança", re: "RE", capitalizacao: "Cap", automovel: "Auto" };
+const FONTE_COTACOES: Record<string, string> = {
+  fianca: "planilhas de análise (jul/2020 a jul/2026) e Bitrix (ago/2026 →)",
+  re: "planilha Cotação diária RE (jul e ago/2026) e Bitrix (set/2026 →); negócio novo",
+  capitalizacao: "Bitrix (ago/2026 →); planilhas de títulos ainda não importadas",
+  automovel: "planilha de RE (jul e ago/2026) e Bitrix (ago/2026 →); sem imobiliária",
+};
+
 // ---------------------------------------------------------------- Cotações
 
 function BlocoCotacoes({
@@ -323,13 +339,18 @@ function BlocoCotacoes({
   const f = kpis.funil;
   const fa = kpis.funil_ano_anterior;
   const meses = listaMeses(kpis.de, kpis.ate);
-  const compara = kpis.meses <= 24 && fa.entradas > 0;
-  const porMes = new Map(kpis.funil_mensal.map((m) => [m.competencia, m.eventos]));
-  const andamento = (f.etapa_atual_das_entradas["Em análise"] ?? 0) + (f.etapa_atual_das_entradas["Aprovado"] ?? 0);
-  const comFonte = new Set([...kpis.funil_meses_com_planilha, ...meses.filter((m) => m >= INICIO_BITRIX_FIANCA)]);
-  const semFonte = meses.filter((m) => !comFonte.has(m));
+  // Comparação com o ano anterior só quando todos os produtos na tela já têm
+  // cotações no ano anterior nesta base (RE, Cap e Auto começam em 2026).
+  const compara = kpis.meses <= 24 && fa.entradas > 0 && kpis.funil_por_produto.every((p) => !p.entradas || p.entradas_ano_anterior > 0);
+  const naoConvertidas = f.perdas + f.recusas;
+  const produtos = ORDEM_PRODUTOS.map((p) => kpis.funil_por_produto.find((x) => x.produto === p)).filter((x): x is CotacaoProduto => !!x);
+  const produtosNaTela = produtos.map((p) => p.produto);
+  const porMes = new Map(kpis.funil_mensal_produto.map((m) => [m.competencia, m.produtos]));
   const entidades = todas ? kpis.funil_por_entidade : kpis.funil_por_entidade.slice(0, 30);
-  const soOutrosProdutos = filtros.produtos.length > 0 && !filtros.produtos.includes("fianca");
+  const mostraFianca = !filtros.produtos.length || filtros.produtos.includes("fianca");
+  const comFonte = new Set([...kpis.funil_meses_com_planilha, ...meses.filter((m) => m >= INICIO_BITRIX_FIANCA)]);
+  const semFonteFianca = mostraFianca ? meses.filter((m) => !comFonte.has(m)) : [];
+  const entradasComImob = f.entradas - (produtos.find((p) => p.produto === "automovel")?.entradas ?? 0);
 
   return (
     <Bloco
@@ -337,17 +358,12 @@ function BlocoCotacoes({
       cor="#F8540D"
       fonte={
         <>
-          Tomadas de preço: análise → aprovação ou recusa → negociação → conversão ou negativação. Fontes: planilhas de análise (jul/2020 a jul/2026) e Bitrix (ago/2026
-          em diante{fontes.bitrix ? `, lido em ${dataHora(fontes.bitrix)}` : ""}) — os indicadores são os mesmos nas duas fontes. Por enquanto só Seguro Fiança; Ramos
-          Elementares, Capitalização e Automóvel entram em seguida.
+          Tomadas de preço de todos os produtos: a cotação conta no mês em que entrou; a conversão (efetivação, emissão) e a perda, no mês em que aconteceram — a mesma
+          régua do painel de cada produto, lida das mesmas fontes{fontes.bitrix ? ` (Bitrix lido em ${dataHora(fontes.bitrix)})` : ""}.
         </>
       }
     >
-      {soOutrosProdutos ? (
-        <p className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-600">
-          As cotações dos produtos selecionados ainda não foram ligadas a este painel (por enquanto só Seguro Fiança).
-        </p>
-      ) : filtroImob && f.entradas === 0 ? (
+      {filtroImob && f.entradas === 0 ? (
         <p className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-600">
           Nenhuma cotação ligada a essa seleção no período. O nome da imobiliária na planilha (ou a empresa do card no Bitrix) só conta depois que o vínculo é confirmado em{" "}
           <Link href="/admin/imobiliarias" className="text-o2-blue underline">
@@ -357,59 +373,114 @@ function BlocoCotacoes({
         </p>
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Cartao
               rotulo="Cotações recebidas"
               valor={num(f.entradas)}
-              linhas={[`${num(andamento)} ainda em andamento`]}
+              linhas={[produtos.map((p) => `${ROTULO_CURTO[p.produto] ?? p.produto} ${num(p.entradas)}`).join(" · ")]}
               variacaoAno={compara ? variacao(f.entradas, fa.entradas) : null}
-              legenda="Cotações (análises) que entraram no período — na planilha, a linha do mês em que a análise foi recebida (a herança para o mês seguinte não conta de novo); no Bitrix, o card criado no mês."
-            />
-            <Cartao
-              rotulo="Aprovadas"
-              valor={num(f.aprovacoes)}
-              linhas={[`aprovação ${pct(f.aprovacoes, f.aprovacoes + f.recusas)}`]}
-              variacaoAno={compara ? variacao(f.aprovacoes, fa.aprovacoes) : null}
-              legenda="Aprovadas pela seguradora no período (pelo mês da aprovação), incluindo as que depois converteram ou negativaram. Aprovação = aprovadas ÷ (aprovadas + recusadas)."
-            />
-            <Cartao
-              rotulo="Recusadas"
-              valor={num(f.recusas)}
-              linhas={[`${pct(f.recusas, f.aprovacoes + f.recusas)} das decididas`]}
-              variacaoAno={compara ? variacao(f.recusas, fa.recusas) : null}
-              legenda="Recusadas pela seguradora no período (pelo mês da recusa). RECUSA ENVIADA é a mesma recusa, já comunicada ao cliente."
-            />
-            <Cartao
-              rotulo="Negativadas"
-              valor={num(f.perdas)}
-              linhas={[`${pct(f.perdas, f.aprovacoes)} das aprovadas`]}
-              variacaoAno={compara ? variacao(f.perdas, fa.perdas) : null}
-              legenda="Aprovadas em que o cliente não fechou (NEGATIVADO/DESISTÊNCIA; no Bitrix, PERDIDO em Negociação e Contrato), pelo mês em que aconteceu."
+              legenda="Cotações que entraram no período, somando os produtos (cada uma contada uma vez, no mês em que entrou — a herança da planilha para o mês seguinte não conta de novo)."
             />
             <Cartao
               rotulo="Convertidas"
               valor={num(f.conversoes)}
-              linhas={[`conversão ${pct(f.conversoes, f.entradas)} das recebidas`]}
-              variacaoAno={compara ? variacaoPp(f.conversoes / Math.max(1, f.entradas), fa.conversoes / Math.max(1, fa.entradas)) : null}
-              legenda="Cotações convertidas (contrato fechado) no período, pelo mês da conversão. Conversão = convertidas ÷ cotações recebidas no mesmo período; a variação é em pontos percentuais."
+              linhas={[`${compacto(f.premio_convertido)} de prêmio/valor nas convertidas`]}
+              variacaoAno={compara ? variacao(f.conversoes, fa.conversoes) : null}
+              legenda="Cotações convertidas no período, pelo mês da conversão: Fiança convertida, RE efetivado, título de Capitalização pago/emitido, Automóvel finalizado."
+            />
+            <Cartao
+              rotulo="Não convertidas"
+              valor={num(naoConvertidas)}
+              linhas={[mostraFianca && f.recusas ? `${num(f.recusas)} recusadas pela seguradora (Fiança) · ${num(f.perdas)} perdidas` : `${num(f.perdas)} perdidas`]}
+              variacaoAno={compara ? variacao(naoConvertidas, fa.perdas + fa.recusas) : null}
+              legenda="Cotações que terminaram sem fechar no período, pelo mês em que aconteceu: recusa da seguradora (só no processo da Fiança), cliente desistiu/negativou, não efetivado, pagamento não realizado."
+            />
+            <Cartao
+              rotulo="Conversão geral"
+              valor={pct(f.conversoes, f.conversoes + naoConvertidas)}
+              linhas={["convertidas ÷ (convertidas + não convertidas)"]}
+              legenda="Das cotações que tiveram desfecho no período, quantas converteram. A conversão de cada produto, com a régua do painel dele, está na tabela abaixo."
             />
           </div>
+
+          <div className="space-y-2">
+            <Titulo legenda="Cada produto com a régua do painel dele (/seguro-fianca, /ramos-elementares, /painel-capitalizacao, /painel-seguro-auto). 'Desde' = primeiro mês com cotações nesta base.">
+              Por produto
+            </Titulo>
+            <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+              <table className="w-full text-sm">
+                <thead className="bg-o2-navy text-left text-xs text-white">
+                  <tr>
+                    <th className="px-3 py-2">Produto</th>
+                    <th className="px-3 py-2 text-right">Recebidas</th>
+                    <th className="px-3 py-2 text-right">Convertidas</th>
+                    <th className="px-3 py-2 text-right">Não convertidas</th>
+                    <th className="px-3 py-2 text-right">Conversão</th>
+                    <th className="px-3 py-2 text-right">Prêmio/valor convertido</th>
+                    {kpis.meses <= 24 && <th className="px-3 py-2 text-right">Recebidas vs ano anterior</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {produtos.map((p) => {
+                    const [a, b] = REGUA_CONVERSAO[p.produto]?.calc(p) ?? [p.conversoes, p.entradas];
+                    const v = variacao(p.entradas, p.entradas_ano_anterior);
+                    return (
+                      <tr key={p.produto} className="border-t border-gray-100 align-top">
+                        <td className="px-3 py-2">
+                          <p className="font-medium text-o2-navy">
+                            <span className="mr-2 inline-block h-2.5 w-2.5 rounded-sm" style={{ background: PRODUTOS[p.produto]?.cor }} />
+                            {PRODUTOS[p.produto]?.rotulo ?? p.produto}
+                          </p>
+                          <p className="text-[11px] text-gray-400">
+                            {FONTE_COTACOES[p.produto]}
+                            {p.historico_desde ? ` · desde ${rotuloMes(p.historico_desde)}` : ""}
+                          </p>
+                          {p.produto === "fianca" && (
+                            <p className="text-[11px] text-gray-500">
+                              aprovadas {num(p.aprovacoes)} (aprovação {pct(p.aprovacoes, p.aprovacoes + p.recusas)}) · recusadas {num(p.recusas)} · negativadas {num(p.perdas)}
+                            </p>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-right">{num(p.entradas)}</td>
+                        <td className="px-3 py-2 text-right">{num(p.conversoes)}</td>
+                        <td className="px-3 py-2 text-right">{num(p.perdas + p.recusas)}</td>
+                        <td className="px-3 py-2 text-right">
+                          <span className="font-semibold">{pct(a, b)}</span>
+                          <p className="text-[10px] text-gray-400">{REGUA_CONVERSAO[p.produto]?.texto}</p>
+                        </td>
+                        <td className="px-3 py-2 text-right">{p.premio_convertido ? compacto(p.premio_convertido) : "—"}</td>
+                        {kpis.meses <= 24 && <td className="px-3 py-2 text-right">{v ? <span className={`rounded-full px-2 py-0.5 text-xs ${v.cls}`}>{v.texto}</span> : <span className="text-xs text-gray-400">sem base</span>}</td>}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-gray-500">
+              Só o Seguro Fiança tem a etapa de aprovação/recusa pela seguradora; nos outros produtos a cotação vai direto para a negociação com o cliente.
+            </p>
+          </div>
+
           <div className="grid gap-6 lg:grid-cols-2">
             <Grafico titulo="Cotações recebidas por mês">
-              <BarrasMensais pontos={meses.map((m) => ({ mes: m, valores: { e: porMes.get(m)?.entrada ?? 0 } }))} series={[{ chave: "e", rotulo: "Recebidas", cor: COR_ENTRADA }]} altura={170} />
-            </Grafico>
-            <Grafico titulo="Desfechos por mês">
               <BarrasMensais
-                pontos={meses.map((m) => ({ mes: m, valores: Object.fromEntries(DESFECHOS.map((d) => [d.chave, porMes.get(m)?.[d.chave] ?? 0])) }))}
-                series={DESFECHOS.map((d) => ({ chave: d.chave, rotulo: d.rotulo, cor: d.cor }))}
+                pontos={meses.map((m) => ({ mes: m, valores: Object.fromEntries(produtosNaTela.map((p) => [p, porMes.get(m)?.[p]?.entrada ?? 0])) }))}
+                series={produtosNaTela.map((p) => ({ chave: p, rotulo: PRODUTOS[p].rotulo, cor: PRODUTOS[p].cor }))}
+                altura={170}
+              />
+            </Grafico>
+            <Grafico titulo="Convertidas por mês">
+              <BarrasMensais
+                pontos={meses.map((m) => ({ mes: m, valores: Object.fromEntries(produtosNaTela.map((p) => [p, porMes.get(m)?.[p]?.conversao ?? 0])) }))}
+                series={produtosNaTela.map((p) => ({ chave: p, rotulo: PRODUTOS[p].rotulo, cor: PRODUTOS[p].cor }))}
                 altura={170}
               />
             </Grafico>
           </div>
-          {semFonte.length > 0 && (
+          {semFonteFianca.length > 0 && (
             <p className="text-xs text-gray-500">
-              Meses sem fonte de cotação neste período (aparecem vazios, não são zero):{" "}
-              {semFonte
+              Seguro Fiança — meses sem fonte de cotação neste período (aparecem vazios, não são zero):{" "}
+              {semFonteFianca
                 .reduce<{ motivo: string; meses: string[] }[]>((acc, m) => {
                   const motivo = motivoSemFonte(m);
                   const ult = acc[acc.length - 1];
@@ -420,7 +491,7 @@ function BlocoCotacoes({
                 }, [])
                 .map((g) => `${g.meses.length > 2 ? `${rotuloMes(g.meses[0])} a ${rotuloMes(g.meses[g.meses.length - 1])}` : g.meses.map(rotuloMes).join(", ")} (${g.motivo})`)
                 .join(" · ")}
-              .
+              . Os outros produtos só têm cotações a partir do mês indicado em &quot;desde&quot; na tabela.
             </p>
           )}
 
@@ -428,8 +499,8 @@ function BlocoCotacoes({
             <Titulo
               legenda={
                 <>
-                  Cotações de cada imobiliária/grupo no período, com a mesma regra dos cartões acima. Clique no nome para ver o painel inteiro só daquela imobiliária. Só
-                  aparece quem já tem vínculo confirmado no cadastro.
+                  Cotações de cada imobiliária/grupo no período, somando os produtos (Automóvel não tem imobiliária). Clique no nome para ver o painel inteiro só daquela
+                  imobiliária — e use o filtro de produto para ver um produto só. Só aparece quem já tem vínculo confirmado no cadastro.
                 </>
               }
             >
@@ -442,11 +513,10 @@ function BlocoCotacoes({
                     <th className="px-3 py-2">#</th>
                     <th className="px-3 py-2">Imobiliária / grupo</th>
                     <th className="px-3 py-2 text-right">Recebidas</th>
-                    <th className="px-3 py-2 text-right">Aprovadas</th>
-                    <th className="px-3 py-2 text-right">Recusadas</th>
-                    <th className="px-3 py-2 text-right">Negativadas</th>
                     <th className="px-3 py-2 text-right">Convertidas</th>
+                    <th className="px-3 py-2 text-right">Não convertidas</th>
                     <th className="px-3 py-2 text-right">Conversão</th>
+                    <th className="px-3 py-2 text-right">Prêmio/valor convertido</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -457,16 +527,15 @@ function BlocoCotacoes({
                         <NomeEntidade e={x} sp={sp} />
                       </td>
                       <td className="px-3 py-2 text-right">{num(x.entradas)}</td>
-                      <td className="px-3 py-2 text-right">{num(x.aprovacoes)}</td>
-                      <td className="px-3 py-2 text-right">{num(x.recusas)}</td>
-                      <td className="px-3 py-2 text-right">{num(x.perdas)}</td>
                       <td className="px-3 py-2 text-right">{num(x.conversoes)}</td>
-                      <td className="px-3 py-2 text-right font-semibold">{pct(x.conversoes, x.entradas)}</td>
+                      <td className="px-3 py-2 text-right">{num(x.perdas + x.recusas)}</td>
+                      <td className="px-3 py-2 text-right font-semibold">{pct(x.conversoes, x.conversoes + x.perdas + x.recusas)}</td>
+                      <td className="px-3 py-2 text-right">{x.premio_convertido ? compacto(x.premio_convertido) : "—"}</td>
                     </tr>
                   ))}
                   {!entidades.length && (
                     <tr>
-                      <td colSpan={8} className="px-3 py-6 text-center text-gray-500">
+                      <td colSpan={7} className="px-3 py-6 text-center text-gray-500">
                         Nenhuma cotação com imobiliária confirmada no período.
                       </td>
                     </tr>
@@ -479,10 +548,10 @@ function BlocoCotacoes({
                 Ver todas as {kpis.funil_por_entidade.length}
               </Link>
             )}
-            {!filtroImob && f.entradas > 0 && (
+            {!filtroImob && entradasComImob > 0 && (
               <p className="text-xs text-gray-500">
-                {pct(f.identificados, f.entradas, 0)} das cotações recebidas no período já têm a imobiliária confirmada no cadastro; o restante ainda é sugestão por nome e
-                não entra nesta tabela nem no filtro por imobiliária.
+                {pct(f.identificados, entradasComImob, 0)} das cotações recebidas no período (sem contar Automóvel) já têm a imobiliária confirmada no cadastro; o restante
+                ainda é sugestão por nome e não entra nesta tabela nem no filtro por imobiliária.
               </p>
             )}
           </div>

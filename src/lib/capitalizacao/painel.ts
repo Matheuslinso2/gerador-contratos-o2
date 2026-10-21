@@ -179,7 +179,7 @@ export type PainelCapitalizacao = {
 
 // Última entrada de cada card numa etapa de pagamento (um card que volta de
 // "Pagamento não realizado" e paga depois fica com o pagamento novo).
-function pagamentoPorCard(historico: BitrixStageHistoryEvent[]): Map<number, Date> {
+export function pagamentoPorCard(historico: BitrixStageHistoryEvent[]): Map<number, Date> {
   const pagoEm = new Map<number, Date>();
   for (const evento of historico) {
     if (!ETAPAS_PAGAMENTO.has(texto(evento.STAGE_ID))) continue;
@@ -191,7 +191,7 @@ function pagamentoPorCard(historico: BitrixStageHistoryEvent[]): Map<number, Dat
   return pagoEm;
 }
 
-function mapearCard(item: BitrixItemRaw, agora: Date, pagoEm: Map<number, Date>): CardCapitalizacao | null {
+export function mapearCard(item: BitrixItemRaw, agora: Date, pagoEm: Map<number, Date>): CardCapitalizacao | null {
   const criadoEm = dataValida(item.createdTime);
   if (!criadoEm) return null;
   const etapa = etapaPorStatusId.get(texto(item.stageId));

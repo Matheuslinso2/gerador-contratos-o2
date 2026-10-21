@@ -183,7 +183,7 @@ export type PainelSeguroAuto = {
   atualizadoEm: string;
 };
 
-function mapearCard(
+export function mapearCard(
   item: BitrixItemRaw,
   defs: Record<string, BitrixDefinicaoCampo>,
   agora: Date

@@ -408,7 +408,7 @@ function linhaRenovacaoTemDados(linha: CelulaGoogle[]): boolean {
   });
 }
 
-function mapearNovos(linhas: CelulaGoogle[][], aba: string, competencia?: string): RegistroNovo[] {
+export function mapearNovos(linhas: CelulaGoogle[][], aba: string, competencia?: string): RegistroNovo[] {
   return linhas
     .map((linha, indice): RegistroNovo | null => {
       const statusRaw = texto(linha[0]);
