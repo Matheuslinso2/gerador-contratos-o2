@@ -167,6 +167,8 @@ export async function POST(request: NextRequest) {
     #erro-gmail { color: #b42318; margin-top: 6px; }
     .conversa-gmail { display: flex; gap: 8px; align-items: flex-start; background: #fff; border: 1px solid #f3d9a4; border-radius: 8px; padding: 8px; margin-top: 6px; cursor: pointer; }
     .conversa-gmail .detalhe { display: block; color: #8d8683; }
+    .conversa-gmail input[type="radio"] { width: auto; flex: none; margin: 3px 0 0; padding: 0; }
+    .conversa-gmail > span { flex: 1; text-align: left; }
     #bloco-endereco { margin-top: 16px; padding: 10px 12px; background: #f4f4f4; border-radius: 10px; font-size: 12px; color: #6b6663; }
     #bloco-endereco code { background: #fff; padding: 2px 6px; border-radius: 4px; color: #01192e; }
     #bloco-endereco button { background: none; border: none; color: #01192e; text-decoration: underline; cursor: pointer; font-size: 12px; }

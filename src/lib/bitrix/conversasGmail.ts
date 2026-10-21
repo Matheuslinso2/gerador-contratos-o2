@@ -28,6 +28,17 @@ const DIAS_BUSCA = 45;
 const MAX_CONVERSAS = 8;
 const EMAIL_REGEX = /^[^\s@()"']+@[^\s@()"']+\.[^\s@()"']+$/;
 
+// O snippet do Gmail vem com entidades HTML ("&lt;", "&#39;"): a tela mostra
+// como texto puro, então desfaz aqui.
+function desescaparHtml(texto: string): string {
+  return texto
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
 function cabecalho(headers: { name?: string | null; value?: string | null }[] | undefined, nome: string): string {
   return headers?.find((h) => h.name?.toLowerCase() === nome.toLowerCase())?.value ?? "";
 }
@@ -67,7 +78,7 @@ export async function buscarConversasGmail(enderecos: string[]): Promise<Convers
       ultimaEm: new Date(Number(ultima.internalDate ?? Date.now())).toISOString(),
       mensagens: msgs.length,
       participantes: [...nomes].slice(0, 4).join(", "),
-      trecho: (ultima.snippet ?? "").slice(0, 140),
+      trecho: desescaparHtml(ultima.snippet ?? "").slice(0, 140),
     });
   }
   return resultado.sort((a, b) => b.ultimaEm.localeCompare(a.ultimaEm));
