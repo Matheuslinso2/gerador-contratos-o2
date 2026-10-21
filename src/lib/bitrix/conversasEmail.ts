@@ -39,25 +39,29 @@ export async function listarConversas(entityTypeId: number, itemId: number): Pro
   return [...porBase.values()];
 }
 
-// Assunto e cabeçalhos pra continuar a conversa. Null se a conversa não
-// existe mais (aí quem chama envia como conversa nova).
+// Todo e-mail sobre um card entra SEMPRE na conversa mais recente desse card
+// (regra do Matheus, 21/10/2026: não é opcional). Devolve o assunto e os
+// cabeçalhos de resposta; null só quando o card ainda não tem nenhuma
+// conversa registrada (primeiro e-mail dele -- aí abre a conversa nova).
 export async function continuarConversa(
   entityTypeId: number,
-  itemId: number,
-  base: string
-): Promise<{ assunto: string; headers: Record<string, string> } | null> {
+  itemId: number
+): Promise<{ assunto: string; assuntoBase: string; headers: Record<string, string> } | null> {
   const { data } = await createServiceClient()
     .from("bitrix_email_mensagens")
-    .select("message_id, referencias")
+    .select("message_id, referencias, assunto_base")
     .eq("entity_type_id", entityTypeId)
     .eq("item_id", itemId)
-    .eq("assunto_base", base)
     .order("criado_em", { ascending: false })
     .limit(1)
     .maybeSingle();
   if (!data) return null;
   const cadeia = [data.referencias, data.message_id].filter(Boolean).join(" ").trim();
-  return { assunto: `Re: ${base}`, headers: { "In-Reply-To": data.message_id, References: cadeia } };
+  return {
+    assunto: `Re: ${data.assunto_base}`,
+    assuntoBase: data.assunto_base,
+    headers: { "In-Reply-To": data.message_id, References: cadeia },
+  };
 }
 
 // Cópia oculta pro endereço do card: é assim que o Worker recebe o nosso

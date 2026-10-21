@@ -183,14 +183,9 @@ export async function POST(request: NextRequest) {
     </select>
     <div id="dica-modelo">Escolha um modelo para preencher assunto e mensagem. Depois é só editar o que precisar.</div>
 
-    <div id="bloco-conversa" style="display:none;">
-      <label for="conversa">Conversa por e-mail</label>
-      <select id="conversa"></select>
-      <div id="dica-conversa">O e-mail vai como resposta nessa conversa e aparece junto com as mensagens anteriores na caixa do cliente.</div>
-    </div>
-
     <label for="assunto">Assunto</label>
     <input id="assunto" type="text" required />
+    <div id="dica-conversa" style="display:none;">Este card já tem uma conversa por e-mail: o envio entra nela automaticamente, junto com as mensagens anteriores.</div>
 
     <label for="corpo">Mensagem</label>
     <div id="barra-formatacao">
@@ -293,25 +288,17 @@ export async function POST(request: NextRequest) {
     }
     popularModelos();
 
-    // Conversa de e-mail existente neste card: quando escolhida, o assunto
-    // vira "Re: <assunto da conversa>" (travado) e o servidor manda os
-    // cabeçalhos de resposta pra cair na mesma conversa do cliente.
+    // Todo e-mail sobre este card entra na conversa mais recente dele (o
+    // servidor garante: assunto "Re: ..." + cabeçalhos de resposta). Aqui só
+    // mostramos o assunto travado pra ficar claro pra quem está escrevendo.
+    var conversaDoCard = "";
     function aplicarConversa() {
-      var conversaEl = document.getElementById("conversa");
+      if (!conversaDoCard) return;
       var assuntoEl = document.getElementById("assunto");
-      if (!conversaEl || document.getElementById("bloco-conversa").style.display === "none") return;
-      if (conversaEl.value) {
-        assuntoEl.value = "Re: " + conversaEl.value;
-        assuntoEl.disabled = true;
-        document.getElementById("dica-conversa").style.display = "block";
-      } else {
-        assuntoEl.disabled = false;
-        if (assuntoEl.value.indexOf("Re: ") === 0 && assuntoEl.value === ultimoAssuntoConversa) assuntoEl.value = "";
-        document.getElementById("dica-conversa").style.display = "none";
-      }
-      ultimoAssuntoConversa = conversaEl.value ? assuntoEl.value : "";
+      assuntoEl.value = "Re: " + conversaDoCard;
+      assuntoEl.disabled = true;
+      document.getElementById("dica-conversa").style.display = "block";
     }
-    var ultimoAssuntoConversa = "";
 
     function carregarConversas(authId) {
       fetch("/bitrix-app/conversas", {
@@ -322,24 +309,10 @@ export async function POST(request: NextRequest) {
         .then(function (resp) { return resp.json(); })
         .then(function (resultado) {
           if (!resultado.ok || !resultado.conversas || !resultado.conversas.length) return;
-          var select = document.getElementById("conversa");
-          resultado.conversas.forEach(function (c) {
-            var opcao = document.createElement("option");
-            opcao.value = c.assuntoBase;
-            var data = new Date(c.ultimaEm).toLocaleDateString("pt-BR");
-            opcao.textContent = "Continuar: " + c.assuntoBase + " (" + c.mensagens + (c.mensagens === 1 ? " e-mail" : " e-mails") + ", último em " + data + ")";
-            select.appendChild(opcao);
-          });
-          var nova = document.createElement("option");
-          nova.value = "";
-          nova.textContent = "Nova conversa (usa o assunto abaixo)";
-          select.appendChild(nova);
-          select.value = resultado.conversas[0].assuntoBase;
-          select.addEventListener("change", aplicarConversa);
-          document.getElementById("bloco-conversa").style.display = "block";
+          conversaDoCard = resultado.conversas[0].assuntoBase;
           aplicarConversa();
         })
-        .catch(function () {}); // opcional: sem a lista, o envio segue como conversa nova
+        .catch(function () {}); // só informativo: o servidor decide a conversa de qualquer forma
     }
 
     function mostrarStatus(texto) {
@@ -538,7 +511,6 @@ export async function POST(request: NextRequest) {
               entityTypeId: entityTypeId,
               itemId: Number(itemId),
               remetenteNome: remetenteEl.value,
-              conversa: document.getElementById("conversa").value || null,
               para: document.getElementById("para").value,
               assunto: document.getElementById("assunto").value,
               corpo: corpoEl.innerHTML,

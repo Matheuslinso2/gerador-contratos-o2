@@ -61,7 +61,6 @@ export async function POST(request: NextRequest) {
     itemId?: number;
     para?: string;
     remetenteNome?: string;
-    conversa?: string | null;
     assunto?: string;
     corpo?: string;
     anexos?: { caminho: string; nome: string }[];
@@ -113,16 +112,14 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Continuar uma conversa já existente com o cliente: assunto "Re: ..." e
-  // cabeçalhos de resposta, pra cair na mesma conversa no e-mail dele.
+  // Sempre na conversa mais recente do card: assunto "Re: ..." e cabeçalhos
+  // de resposta, pra cair na mesma conversa no e-mail do cliente.
   let assuntoFinal = assunto.trim();
   let headers: Record<string, string> | undefined;
-  if (body.conversa) {
-    const continuacao = await continuarConversa(entityTypeId, itemId, body.conversa);
-    if (continuacao) {
-      assuntoFinal = continuacao.assunto;
-      headers = continuacao.headers;
-    }
+  const continuacao = await continuarConversa(entityTypeId, itemId);
+  if (continuacao) {
+    assuntoFinal = continuacao.assunto;
+    headers = continuacao.headers;
   }
 
   try {

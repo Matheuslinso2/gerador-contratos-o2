@@ -53,8 +53,6 @@ type Corpo = {
   anexosExtras?: { caminho: string; nome: string }[];
   // Nome da pessoa que aparece na caixa de entrada ("Nome | O2 Seguros").
   remetenteNome?: string;
-  // Assunto-base da conversa existente a continuar (null = conversa nova).
-  conversa?: string | null;
   passeBitrix?: string;
   // aprovado
   versao?: number;
@@ -193,16 +191,14 @@ export async function POST(request: NextRequest) {
   }
   const todosAnexosDoStorage = [...cartas, ...anexosExtras];
 
-  // Continuar uma conversa que já existe com o cliente (assunto "Re: ..." +
-  // cabeçalhos de resposta) em vez de abrir outra tratativa por e-mail.
+  // Sempre na conversa mais recente do card (assunto "Re: ..." + cabeçalhos
+  // de resposta) -- nunca abre outra tratativa por e-mail pro mesmo card.
   let assuntoFinal = assunto.trim();
   let headers: Record<string, string> | undefined;
-  if (corpo.conversa) {
-    const continuacao = await continuarConversa(ENTITY_TYPE_ID_SEGURO_FIANCA, cardId, corpo.conversa);
-    if (continuacao) {
-      assuntoFinal = continuacao.assunto;
-      headers = continuacao.headers;
-    }
+  const continuacao = await continuarConversa(ENTITY_TYPE_ID_SEGURO_FIANCA, cardId);
+  if (continuacao) {
+    assuntoFinal = continuacao.assunto;
+    headers = continuacao.headers;
   }
 
   let resendId: string | null = null;
