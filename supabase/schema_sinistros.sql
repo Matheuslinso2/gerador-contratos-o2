@@ -279,3 +279,94 @@ alter table sinistros add column if not exists sinistro_corp_id uuid unique refe
 alter table sinistros drop constraint if exists sinistros_origem_check;
 alter table sinistros add constraint sinistros_origem_check check (origem in ('workspace', 'email', 'corp'));
 create index if not exists sinistros_etapa_idx on sinistros(etapa);
+
+-- 21/10/2026: operação do sinistro no Workspace (ciclo completo, equipe,
+-- multiproduto, busca de apólice). Aplicado via MCP.
+
+-- Equipe que responde pelos sinistros (responsavel_o2 guarda a "chave").
+create table if not exists sinistros_equipe (
+  chave text primary key,                 -- e-mail @o2seguros quando existe; senão um apelido
+  nome text not null,
+  email text unique,
+  ativo boolean not null default true,
+  created_at timestamptz not null default now()
+);
+alter table sinistros_equipe enable row level security;
+drop policy if exists "sinistros_equipe o2" on sinistros_equipe;
+create policy "sinistros_equipe o2" on sinistros_equipe for all to authenticated using (is_colaborador_o2()) with check (is_colaborador_o2());
+-- Carga inicial (responsáveis que vieram do Corp + Matheus); nomes do Corp
+-- convertidos: NATALIA, VINICIUS MAIA, PATRICIA DA SILVA (com login),
+-- BRENDA OLIVEIRA e BEATRIZ SILVA MARTINS (sem login @o2seguros em 21/10).
+
+-- Indenizações pagas pela seguradora (várias por sinistro, normalmente 1 por mês).
+create table if not exists sinistro_indenizacoes (
+  id uuid primary key default gen_random_uuid(),
+  sinistro_id uuid not null references sinistros(id) on delete cascade,
+  referencia date,                         -- mês a que se refere (1º dia)
+  pago_em date,
+  valor numeric(14,2) not null default 0,
+  observacao text,
+  criado_por_email text default (auth.jwt() ->> 'email'),
+  created_at timestamptz not null default now()
+);
+create index if not exists sinistro_indenizacoes_sinistro_idx on sinistro_indenizacoes(sinistro_id);
+alter table sinistro_indenizacoes enable row level security;
+drop policy if exists "sinistro_indenizacoes o2" on sinistro_indenizacoes;
+create policy "sinistro_indenizacoes o2" on sinistro_indenizacoes for all to authenticated using (is_colaborador_o2()) with check (is_colaborador_o2());
+drop policy if exists "sinistro_indenizacoes imob select" on sinistro_indenizacoes;
+create policy "sinistro_indenizacoes imob select" on sinistro_indenizacoes for select to authenticated using (sinistro_da_imobiliaria_do_usuario(sinistro_id));
+
+alter table sinistros add column if not exists nosso_numero text;   -- apólice no Corp (vínculo com a produção)
+alter table sinistros add column if not exists data_ocorrencia date; -- produtos que não são Fiança
+create index if not exists sinistros_nosso_numero_idx on sinistros(nosso_numero);
+
+-- Busca de apólice para preencher o sinistro (Nosso Nº, CPF/CNPJ ou nome do
+-- locatário). Equipe O2 vê tudo; a imobiliária só as apólices dela (vínculo
+-- confirmado do produtor do Corp). Lê só por índice (Nosso Nº / locatário).
+create or replace function buscar_apolices_sinistro(p_q text)
+returns table (
+  nosso_numero text, produto text, ramo text, seguradora text, vigencia_inicio date, vigencia_fim date,
+  imobiliaria_texto text, imobiliaria_id uuid, locatario_nome text, locatario_documento text,
+  locatario_email text, locatario_telefone text, data_efetivacao date, status text
+)
+language plpgsql stable security definer set search_path to 'public'
+as $$
+declare
+  termo text := trim(coalesce(p_q, ''));
+  dig text := regexp_replace(coalesce(p_q, ''), '\D', '', 'g');
+  o2 boolean := is_colaborador_o2();
+begin
+  if length(termo) < 3 then return; end if;
+  return query
+  with alvo_loc as (
+    select l.id from locatarios l
+    where (length(dig) in (11, 14) and l.cpf = dig)
+       or (termo ~ '[A-Za-zÀ-ú]' and length(termo) >= 4 and l.nome ilike '%' || termo || '%')
+    limit 30
+  ),
+  cand as (
+    select p.* from producao_unificada p
+    where p.fonte = 'corp' and p.produto in ('fianca', 'capitalizacao', 'automovel', 're') and p.origem_corp_numero = termo
+    union all
+    select p.* from producao_unificada p join alvo_loc a on a.id = p.locatario_id where p.fonte = 'corp'
+  ),
+  vinc as (
+    select distinct on (trim(v.nome_original)) trim(v.nome_original) nome, v.imobiliaria_id
+    from imobiliaria_registros_fonte v
+    where v.fonte = 'corp_produtor' and v.situacao = 'confirmado' and v.imobiliaria_id is not null
+      and trim(v.nome_original) in (select distinct trim(c.imobiliaria_texto) from cand c)
+    order by trim(v.nome_original), v.confirmado_em desc nulls last
+  )
+  select c.origem_corp_numero, produto_sinistro_de_ramo(c.produto, c.ramo_padrao), c.ramo_padrao, c.seguradora,
+    (c.extras ->> 'vigencia_inicio')::date, (c.extras ->> 'vigencia_fim')::date,
+    trim(c.imobiliaria_texto), vi.imobiliaria_id, l.nome, l.cpf, l.email, l.telefone, c.data_efetivacao, c.status_padrao
+  from cand c
+  left join vinc vi on vi.nome = trim(c.imobiliaria_texto)
+  left join locatarios l on l.id = c.locatario_id
+  where o2 or vi.imobiliaria_id in (select imobiliarias_do_usuario())
+  order by c.data_efetivacao desc nulls last
+  limit 15;
+end;
+$$;
+revoke execute on function buscar_apolices_sinistro(text) from anon, public;
+grant execute on function buscar_apolices_sinistro(text) to authenticated;

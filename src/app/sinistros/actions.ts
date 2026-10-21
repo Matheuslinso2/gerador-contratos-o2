@@ -118,6 +118,7 @@ function camposContrato(fd: FormData) {
     imovel_bairro: texto(fd, "bairro"),
     imovel_cidade: texto(fd, "cidade"),
     imovel_uf: texto(fd, "uf"),
+    nosso_numero: texto(fd, "nosso_numero"),
   };
 }
 
@@ -512,16 +513,18 @@ export async function cancelarSinistroO2(fd: FormData) {
 // ---------- O2: agenda de próxima ação ----------
 
 export async function salvarProximaAcao(fd: FormData) {
-  const { supabase, user } = await exigirInterno();
+  const { supabase } = await exigirInterno();
   const id = texto(fd, "id")!;
   const voltarPara = texto(fd, "voltar");
+  const ctx = texto(fd, "ctx");
   const limpar = fd.get("limpar") === "1";
   const dados = limpar
     ? { proxima_acao_em: null, proxima_acao_descricao: null, proxima_acao_responsavel: null }
     : {
         proxima_acao_em: texto(fd, "proxima_acao_em"),
         proxima_acao_descricao: texto(fd, "proxima_acao_descricao"),
-        proxima_acao_responsavel: texto(fd, "proxima_acao_responsavel") ?? user.email ?? null,
+        // O dono da agenda é o responsável do caso (21/10/2026).
+        proxima_acao_responsavel: null,
       };
   const { error } = await supabase.from("sinistros").update(dados).eq("id", id);
   if (error) voltar(id, null, error.message);
@@ -532,10 +535,10 @@ export async function salvarProximaAcao(fd: FormData) {
       ? "Próxima ação concluída/removida da agenda."
       : `Próxima ação agendada${dados.proxima_acao_em ? ` para ${formatarData(dados.proxima_acao_em)}` : ""}${
           dados.proxima_acao_descricao ? `: ${dados.proxima_acao_descricao}` : ""
-        }${dados.proxima_acao_responsavel ? ` (${dados.proxima_acao_responsavel})` : ""}.`,
+        }.`,
     visivel_imobiliaria: false,
   });
   revalidatePath("/sinistros/gestao");
   if (voltarPara === "gestao") redirect("/sinistros/gestao?sucesso=" + encodeURIComponent("Agenda atualizada."));
-  redirect(`/sinistros/${id}?sucesso=${encodeURIComponent("Agenda atualizada.")}`);
+  redirect(`/sinistros/${id}?${ctx ? `ctx=${encodeURIComponent(ctx)}&` : ""}sucesso=${encodeURIComponent("Agenda atualizada.")}`);
 }

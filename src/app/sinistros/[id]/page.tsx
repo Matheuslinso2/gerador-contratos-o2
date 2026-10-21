@@ -26,7 +26,6 @@ import {
 } from "@/lib/sinistros/regras";
 import { signOut } from "../../actions";
 import {
-  assumirSinistro,
   cancelarRascunho,
   cancelarSinistroO2,
   devolverComPendencia,
@@ -36,6 +35,9 @@ import {
   salvarProximaAcao,
 } from "../actions";
 import FormContrato from "../FormContrato";
+import { atribuirResponsavel, duplicarSinistro, mudarEtapa, registrarIndenizacao, removerIndenizacao } from "../operacao";
+import { listarSinistros } from "@/lib/sinistros/consulta";
+import AtalhosNavegacao from "./AtalhosNavegacao";
 import { rotuloProduto } from "@/lib/sinistros/produtos";
 import Abas from "../Abas";
 import Passos from "../Passos";
@@ -51,10 +53,10 @@ export default async function SinistroPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ passo?: string; erro?: string; sucesso?: string; como?: string }>;
+  searchParams: Promise<{ passo?: string; erro?: string; sucesso?: string; como?: string; aba?: string; ctx?: string }>;
 }) {
   const { id } = await params;
-  const { passo: passoParam, erro, sucesso, como } = await searchParams;
+  const { passo: passoParam, erro, sucesso, como, aba, ctx } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -83,6 +85,61 @@ export default async function SinistroPage({
       3600
     );
     docs.forEach((d, i) => (d.url = urls?.[i]?.signedUrl ?? null));
+  }
+
+  // Indenizações e equipe (O2); anterior/próximo pela mesma lista da Gestão.
+  const [{ data: indenizacoesBrutas }, { data: equipeBruta }] = await Promise.all([
+    supabase.from("sinistro_indenizacoes").select("id, referencia, pago_em, valor, observacao, criado_por_email").eq("sinistro_id", id).order("pago_em"),
+    interno ? supabase.from("sinistros_equipe").select("chave, nome, ativo").order("nome") : Promise.resolve({ data: [] }),
+  ]);
+  const indenizacoes = (indenizacoesBrutas ?? []) as Indenizacao[];
+  const nav: Navegacao = { anterior: null, proximo: null, posicao: 0, total: 0, ctx: ctx ?? null };
+  if (interno && ctx !== undefined) {
+    const parametrosLista: Record<string, string | string[]> = {};
+    for (const [k, v] of new URLSearchParams(ctx)) {
+      const atual = parametrosLista[k];
+      parametrosLista[k] = atual === undefined ? v : Array.isArray(atual) ? [...atual, v] : [atual, v];
+    }
+    const { sinistros: lista } = await listarSinistros(supabase, parametrosLista, { interno, userEmail: user.email });
+    const pos = lista.findIndex((x) => x.id === id);
+    if (pos >= 0) {
+      nav.posicao = pos + 1;
+      nav.total = lista.length;
+      nav.anterior = lista[pos - 1]?.id ?? null;
+      nav.proximo = lista[pos + 1]?.id ?? null;
+    }
+  }
+
+  // Reaproveitamento da mesma imobiliária: último documento "fixo" (contrato
+  // de administração) e últimos dados bancários do favorecido.
+  const reaproveitaveis: Reaproveitaveis = {};
+  let favorecidoPadrao: Record<string, unknown> | null = null;
+  if (s.imobiliaria_id) {
+    const [{ data: docsImob }, { data: anterior }] = await Promise.all([
+      supabase
+        .from("sinistro_documentos")
+        .select("id, tipo, nome_arquivo, enviado_em, sinistros!inner(codigo, imobiliaria_id)")
+        .eq("sinistros.imobiliaria_id", s.imobiliaria_id)
+        .neq("sinistro_id", id)
+        .in("tipo", TIPOS_REAPROVEITAVEIS)
+        .in("situacao", ["enviado", "aprovado"])
+        .order("enviado_em", { ascending: false })
+        .limit(10),
+      supabase
+        .from("sinistros")
+        .select("codigo, favorecido_eh_segurado, favorecido_nome, favorecido_documento, favorecido_banco, favorecido_agencia, favorecido_conta")
+        .eq("imobiliaria_id", s.imobiliaria_id)
+        .neq("id", id)
+        .not("favorecido_banco", "is", null)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+    type DocImob = { id: string; tipo: string; nome_arquivo: string; enviado_em: string; sinistros: { codigo?: number } | null };
+    for (const d of (docsImob ?? []) as unknown as DocImob[]) {
+      if (!reaproveitaveis[d.tipo]) reaproveitaveis[d.tipo] = { id: d.id, nome_arquivo: d.nome_arquivo, enviado_em: d.enviado_em, codigo: d.sinistros?.codigo };
+    }
+    favorecidoPadrao = anterior ?? null;
   }
 
   // Equipe O2 pode definir/trocar a imobiliária no passo 1.
@@ -133,14 +190,35 @@ export default async function SinistroPage({
         {erro && <Aviso tipo="erro">{erro}</Aviso>}
         {sucesso && <Aviso tipo="sucesso">{sucesso}</Aviso>}
 
-        {interno && modoAssistente && <ProximaAcao s={s} />}
+        {interno && modoAssistente && <ProximaAcao s={s} ctx={ctx ?? null} />}
 
         {modoAssistente ? (
-          <Assistente s={s} passo={passo} debitos={listaDebitos} docs={docs} checklist={checklist} historico={historico ?? []} imobiliarias={imobiliarias} />
+          <Assistente
+            s={s}
+            passo={passo}
+            debitos={listaDebitos}
+            docs={docs}
+            checklist={checklist}
+            historico={historico ?? []}
+            imobiliarias={imobiliarias}
+            reaproveitaveis={reaproveitaveis}
+            favorecidoPadrao={favorecidoPadrao}
+          />
         ) : interno ? (
-          <VisaoO2 s={s} debitos={listaDebitos} docs={docs} checklist={checklist} historico={historico ?? []} />
+          <VisaoO2
+            s={s}
+            debitos={listaDebitos}
+            docs={docs}
+            checklist={checklist}
+            historico={historico ?? []}
+            equipe={(equipeBruta ?? []) as Membro[]}
+            indenizacoes={indenizacoes}
+            aba={aba ?? "dados"}
+            nav={nav}
+            reaproveitaveis={reaproveitaveis}
+          />
         ) : (
-          <VisaoImobiliaria s={s} debitos={listaDebitos} docs={docs} checklist={checklist} historico={historico ?? []} />
+          <VisaoImobiliaria s={s} debitos={listaDebitos} docs={docs} checklist={checklist} historico={historico ?? []} indenizacoes={indenizacoes} />
         )}
       </main>
     </>
@@ -148,6 +226,10 @@ export default async function SinistroPage({
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- linha do Supabase sem tipos gerados */
+// Documento que é o mesmo para todos os sinistros da imobiliária.
+const TIPOS_REAPROVEITAVEIS = ["contrato_administracao"];
+type Reaproveitaveis = Record<string, { id: string; nome_arquivo: string; enviado_em: string; codigo?: number }>;
+
 type Props = {
   s: any;
   debitos: Debito[];
@@ -158,7 +240,20 @@ type Props = {
 
 // ---------- Assistente (rascunho / pendência) ----------
 
-function Assistente({ s, passo, debitos, docs, checklist, historico, imobiliarias }: Props & { passo: number; imobiliarias?: { id: string; nome: string }[] }) {
+function Assistente({
+  s,
+  passo,
+  debitos,
+  docs,
+  checklist,
+  historico,
+  imobiliarias,
+  reaproveitaveis,
+  favorecidoPadrao,
+}: Props & { passo: number; imobiliarias?: { id: string; nome: string }[]; reaproveitaveis: Reaproveitaveis; favorecidoPadrao: Record<string, unknown> | null }) {
+  // Favorecido vazio: sugere o usado no último sinistro da mesma imobiliária.
+  const usarPadrao = !!favorecidoPadrao && !s.favorecido_banco && !s.favorecido_nome;
+  const sEnvio = usarPadrao ? { ...s, ...favorecidoPadrao, codigo: s.codigo } : s;
   const pendencia = s.etapa === "pendencia_imobiliaria";
   const ultimaPendencia = historico.find((h) => h.texto.startsWith("Pendência para a imobiliária"));
   return (
@@ -191,7 +286,7 @@ function Assistente({ s, passo, debitos, docs, checklist, historico, imobiliaria
             Lista montada a partir do tipo de sinistro e do que está sendo cobrado. Pode enviar PDF, foto ou planilha (até 50 MB cada). Os modelos de
             Declaração de Débitos e Procuração Ad Judicia de cada seguradora estão com a equipe de sinistro da O2.
           </p>
-          <ChecklistDocumentos id={s.id} itens={checklist} documentos={docs} modo="imobiliaria" editavel passo={4} />
+          <ChecklistDocumentos id={s.id} itens={checklist} documentos={docs} modo="imobiliaria" editavel passo={4} reaproveitaveis={reaproveitaveis} />
           <div className="flex justify-end">
             <Link href={`/sinistros/${s.id}?passo=5`} className={botaoPrimario}>
               Continuar →
@@ -200,7 +295,16 @@ function Assistente({ s, passo, debitos, docs, checklist, historico, imobiliaria
         </div>
       )}
 
-      {passo === 5 && <PassoEnviar s={s} debitos={debitos} docs={docs} />}
+      {passo === 5 && (
+        <>
+          {usarPadrao && (
+            <Aviso tipo="info">
+              Os dados de quem recebe a indenização vieram do SIN-{String(favorecidoPadrao?.codigo ?? "")} desta imobiliária. Confira antes de enviar.
+            </Aviso>
+          )}
+          <PassoEnviar s={sEnvio} debitos={debitos} docs={docs} />
+        </>
+      )}
     </div>
   );
 }
@@ -359,7 +463,13 @@ function Dados({ s, interno }: { s: any; interno: boolean }) {
           rotulo="Imóvel"
           valor={`${enderecoCurto(s)}${s.imovel_bairro ? ` — ${s.imovel_bairro}` : ""}${s.imovel_cidade ? `, ${s.imovel_cidade}/${s.imovel_uf ?? ""}` : ""}`}
         />
-        {s.tipo === "ocupado" ? (
+        {(s.produto ?? "fianca") !== "fianca" ? (
+          <>
+            <Item rotulo="Produto" valor={rotuloProduto(s.produto)} />
+            <Item rotulo="Data da ocorrência" valor={formatarData(s.data_ocorrencia)} />
+            <Item rotulo="Nosso Nº (Corp)" valor={s.nosso_numero} />
+          </>
+        ) : s.tipo === "ocupado" ? (
           <Item rotulo="Vencimentos em aberto" valor={`1º ${formatarData(s.data_primeiro_vencimento)} · 2º ${formatarData(s.data_segundo_vencimento)}`} />
         ) : (
           <Item
@@ -376,8 +486,10 @@ function Dados({ s, interno }: { s: any; interno: boolean }) {
             </>
           }
         />
-        <Item rotulo="Cobranças" valor={COBERTURAS.filter((c) => s.coberturas.includes(c.chave)).map((c) => c.titulo).join(", ")} />
-        {s.coberturas.includes("pintura") && (
+        {(s.produto ?? "fianca") === "fianca" && (
+          <Item rotulo="Cobranças" valor={COBERTURAS.filter((c) => s.coberturas.includes(c.chave)).map((c) => c.titulo).join(", ")} />
+        )}
+        {(s.produto ?? "fianca") === "fianca" && s.coberturas.includes("pintura") && (
           <Item
             rotulo="Pintura na vistoria inicial"
             valor={`"pintura nova" sem ressalva: ${s.pintura_vistoria_nova ? "sim" : "não/não informado"} · assinada: ${
@@ -404,7 +516,7 @@ function Dados({ s, interno }: { s: any; interno: boolean }) {
 
 // ---------- Imobiliária: acompanhamento ----------
 
-function VisaoImobiliaria({ s, debitos, docs, checklist, historico }: Props) {
+function VisaoImobiliaria({ s, debitos, docs, checklist, historico, indenizacoes }: Props & { indenizacoes: Indenizacao[] }) {
   const etapa = s.etapa as EtapaSinistro;
   const explicacao: Partial<Record<EtapaSinistro, string>> = {
     pre_analise: "A equipe de sinistro da O2 está conferindo os dados e os documentos antes de abrir na seguradora.",
@@ -433,6 +545,12 @@ function VisaoImobiliaria({ s, debitos, docs, checklist, historico }: Props) {
         <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Andamento</h2>
         <Historico id={s.id} registros={historico} modo="imobiliaria" />
       </section>
+      {indenizacoes.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Indenizações recebidas</h2>
+          <Indenizacoes s={s} indenizacoes={indenizacoes} ctx={null} editavel={false} />
+        </section>
+      )}
       <section className="space-y-2">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Débitos avisados</h2>
         <EditorDebitos id={s.id} iniciais={debitos} coberturas={s.coberturas} editavel={false} />
@@ -445,92 +563,214 @@ function VisaoImobiliaria({ s, debitos, docs, checklist, historico }: Props) {
   );
 }
 
-// ---------- O2: pré-análise / ficha ----------
+// ---------- O2: ficha do caso ----------
+// Topo: navegação + "o que fazer agora" (a ação da etapa) + agenda. Embaixo,
+// abas: Dados · Documentos · Débitos e indenizações · Histórico (21/10/2026).
 
-function VisaoO2({ s, debitos, docs, checklist, historico }: Props) {
+type Membro = { chave: string; nome: string; ativo: boolean };
+type Indenizacao = { id: string; referencia: string | null; pago_em: string | null; valor: number; observacao: string | null; criado_por_email: string | null };
+type Navegacao = { anterior: string | null; proximo: string | null; posicao: number; total: number; ctx: string | null };
+
+const ABAS_O2 = [
+  { chave: "dados", rotulo: "Dados" },
+  { chave: "documentos", rotulo: "Documentos" },
+  { chave: "financeiro", rotulo: "Débitos e indenizações" },
+  { chave: "historico", rotulo: "Histórico" },
+] as const;
+
+function VisaoO2({
+  s,
+  debitos,
+  docs,
+  checklist,
+  historico,
+  equipe,
+  indenizacoes,
+  aba,
+  nav,
+  reaproveitaveis,
+}: Props & { equipe: Membro[]; indenizacoes: Indenizacao[]; aba: string; nav: Navegacao; reaproveitaveis: Reaproveitaveis }) {
   const etapa = s.etapa as EtapaSinistro;
   const hoje = hojeSP();
-  // Item com arquivo recusado conta como "recusado", não como "faltando".
+  const ctxQs = nav.ctx ? `ctx=${encodeURIComponent(nav.ctx)}` : "";
+  const link = (extra: string) => `/sinistros/${s.id}?${[extra, ctxQs].filter(Boolean).join("&")}`;
+  const atrasoPre = etapa === "pre_analise" && s.pre_analise_desde ? diasUteisDesde(s.pre_analise_desde) : 0;
+  const diasSeguradora = etapa === "na_seguradora" && s.documentacao_completa_em ? diasEntre(s.documentacao_completa_em, hoje) : null;
+  const abaAtual = ABAS_O2.some((a) => a.chave === aba) ? aba : "dados";
+  const totalIndenizado = indenizacoes.reduce((t, i) => t + Number(i.valor), 0);
+
+  return (
+    <div className="space-y-5">
+      {nav.ctx !== null && <AtalhosNavegacao anterior={nav.anterior ? `/sinistros/${nav.anterior}?${ctxQs}` : null} proximo={nav.proximo ? `/sinistros/${nav.proximo}?${ctxQs}` : null} />}
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <Link href={`/sinistros/gestao${nav.ctx ? `?${nav.ctx}` : ""}`} className="text-o2-blue hover:underline">
+          ← Lista
+        </Link>
+        {nav.total > 0 && (
+          <span className="flex items-center gap-1 text-xs text-gray-500">
+            {nav.anterior ? (
+              <Link href={`/sinistros/${nav.anterior}?${ctxQs}`} className="rounded border border-gray-300 px-2 py-0.5 text-o2-navy hover:bg-gray-50" title="Anterior (←)">
+                ‹ anterior
+              </Link>
+            ) : (
+              <span className="rounded border border-gray-200 px-2 py-0.5 text-gray-300">‹ anterior</span>
+            )}
+            <span>
+              {nav.posicao} de {nav.total}
+            </span>
+            {nav.proximo ? (
+              <Link href={`/sinistros/${nav.proximo}?${ctxQs}`} className="rounded border border-gray-300 px-2 py-0.5 text-o2-navy hover:bg-gray-50" title="Próximo (→)">
+                próximo ›
+              </Link>
+            ) : (
+              <span className="rounded border border-gray-200 px-2 py-0.5 text-gray-300">próximo ›</span>
+            )}
+          </span>
+        )}
+        <form action={atribuirResponsavel} className="ml-auto flex items-center gap-1">
+          <input type="hidden" name="id" value={s.id} />
+          {nav.ctx && <input type="hidden" name="ctx" value={nav.ctx} />}
+          <span className="text-xs text-gray-500">Responsável</span>
+          <select name="responsavel" defaultValue={s.responsavel_o2 ?? ""} className="rounded border border-gray-300 px-2 py-1 text-sm">
+            <option value="">— ninguém —</option>
+            {equipe
+              .filter((m) => m.ativo || m.chave === s.responsavel_o2)
+              .map((m) => (
+                <option key={m.chave} value={m.chave}>
+                  {m.nome}
+                </option>
+              ))}
+            {s.responsavel_o2 && !equipe.some((m) => m.chave === s.responsavel_o2) && <option value={s.responsavel_o2}>{s.responsavel_o2}</option>}
+          </select>
+          <SubmitButton className="rounded-full border border-o2-navy px-3 py-1 text-xs font-semibold text-o2-navy" textoCarregando="…">
+            Salvar
+          </SubmitButton>
+        </form>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <Link href={`/sinistros/${s.id}/editar${nav.ctx ? `?ctx=${encodeURIComponent(nav.ctx)}` : ""}`} className="rounded-full border border-gray-300 px-3 py-1 font-semibold text-o2-navy hover:bg-gray-50">
+          ✎ Editar dados do caso
+        </Link>
+        <form action={duplicarSinistro}>
+          <input type="hidden" name="id" value={s.id} />
+          <button className="rounded-full border border-gray-300 px-3 py-1 font-semibold text-o2-navy hover:bg-gray-50">+ Outro sinistro deste contrato</button>
+        </form>
+        <Link href={`/sinistros/${s.id}?como=imobiliaria`} className="text-o2-blue underline">
+          Ver como a imobiliária vê
+        </Link>
+        {etapa === "pre_analise" && atrasoPre > SLA_PRE_ANALISE_DIAS_UTEIS && (
+          <span className="rounded-full bg-red-100 px-3 py-1 font-semibold text-red-700">pré-análise há {atrasoPre} dias úteis (SLA {SLA_PRE_ANALISE_DIAS_UTEIS})</span>
+        )}
+        {etapa === "pendencia_imobiliaria" && s.pendencia_prazo && (
+          <span className={`rounded-full px-3 py-1 font-semibold ${diasEntre(hoje, s.pendencia_prazo) < 0 ? "bg-red-100 text-red-700" : "bg-orange-100 text-orange-800"}`}>
+            imobiliária responde até {formatarData(s.pendencia_prazo)}
+          </span>
+        )}
+        {diasSeguradora !== null && (
+          <span className={`rounded-full px-3 py-1 font-semibold ${diasSeguradora > PRAZO_SEGURADORA_DIAS ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-700"}`}>
+            seguradora: dia {diasSeguradora} de {PRAZO_SEGURADORA_DIAS}
+          </span>
+        )}
+        {totalIndenizado > 0 && <span className="rounded-full bg-green-100 px-3 py-1 font-semibold text-green-800">indenizado {formatarReais(totalIndenizado)}</span>}
+      </div>
+
+      <AcaoDoMomento s={s} docs={docs} checklist={checklist} ctx={nav.ctx} />
+
+      <ProximaAcao s={s} ctx={nav.ctx} />
+
+      <nav className="flex flex-wrap gap-1 border-b border-gray-200">
+        {ABAS_O2.map((a) => (
+          <Link
+            key={a.chave}
+            href={link(`aba=${a.chave}`)}
+            className={`-mb-px rounded-t-lg border px-4 py-2 text-sm font-semibold ${
+              abaAtual === a.chave ? "border-gray-200 border-b-white bg-white text-o2-navy" : "border-transparent text-gray-500 hover:text-o2-navy"
+            }`}
+          >
+            {a.rotulo}
+            {a.chave === "documentos" && docs.length > 0 && <span className="ml-1 text-xs text-gray-400">({docs.length})</span>}
+            {a.chave === "historico" && <span className="ml-1 text-xs text-gray-400">({historico.length})</span>}
+          </Link>
+        ))}
+      </nav>
+
+      {abaAtual === "dados" && (
+        <div className="space-y-4">
+          <Dados s={s} interno />
+          {etapa !== "cancelado" && etapa !== "encerrado" && (
+            <details className="text-sm">
+              <summary className="cursor-pointer text-red-600">Cancelar sinistro</summary>
+              <form action={cancelarSinistroO2} className="mt-2 flex gap-2">
+                <input type="hidden" name="id" value={s.id} />
+                <input name="motivo" placeholder="Motivo (ex.: imobiliária desistiu, duplicado)" className={`${inputClass} max-w-md`} />
+                <SubmitButton className="rounded-full bg-red-600 px-4 py-1.5 text-sm font-semibold text-white" textoCarregando="…">
+                  Cancelar
+                </SubmitButton>
+              </form>
+            </details>
+          )}
+        </div>
+      )}
+
+      {abaAtual === "documentos" && (
+        <ChecklistDocumentos id={s.id} itens={checklist} documentos={docs} modo="o2" editavel reaproveitaveis={reaproveitaveis} />
+      )}
+
+      {abaAtual === "financeiro" && (
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Indenizações recebidas</h2>
+            <Indenizacoes s={s} indenizacoes={indenizacoes} ctx={nav.ctx} editavel />
+          </section>
+          <section className="space-y-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Débitos avisados (Declaração)</h2>
+            <EditorDebitos id={s.id} iniciais={debitos} coberturas={s.coberturas} editavel={false} />
+          </section>
+        </div>
+      )}
+
+      {abaAtual === "historico" && <Historico id={s.id} registros={historico} modo="o2" />}
+    </div>
+  );
+}
+
+// O que a etapa pede agora, com a ação no topo da ficha.
+function AcaoDoMomento({ s, docs, checklist, ctx }: { s: any; docs: Documento[]; checklist: ReturnType<typeof montarChecklist>; ctx: string | null }) {
+  const etapa = s.etapa as EtapaSinistro;
+  const hoje = hojeSP();
+  const avisarPadrao = s.origem !== "corp";
   const comArquivo = new Set(docs.map((d) => d.tipo));
   const faltando = checklist.filter((c) => c.obrigatorio && !comArquivo.has(c.chave));
   const recusados = docs.filter((d) => d.situacao === "recusado");
   const emAnalise = docs.filter((d) => d.situacao === "enviado");
   const tudoAprovado = faltando.length === 0 && recusados.length === 0 && emAnalise.length === 0;
-  const atrasoPre = etapa === "pre_analise" && s.pre_analise_desde ? diasUteisDesde(s.pre_analise_desde) : 0;
-  const diasSeguradora = etapa === "na_seguradora" && s.documentacao_completa_em ? diasEntre(s.documentacao_completa_em, hoje) : null;
-  const podeTriar = etapa === "pre_analise" || etapa === "pendencia_imobiliaria";
+  const base: BaseAcao = { id: s.id, ctx, avisarPadrao };
+
+  const titulo: Partial<Record<EtapaSinistro, string>> = {
+    pre_analise: "Conferir dados e documentos e abrir na seguradora",
+    pendencia_imobiliaria: "Aguardando a imobiliária resolver a pendência",
+    na_seguradora: "Acompanhar a seguradora até começar a indenizar",
+    em_indenizacao: "Registrar cada indenização recebida",
+    acordo_judicial: "Acompanhar o acordo / processo",
+    encerrado: "Caso encerrado",
+    cancelado: "Caso cancelado",
+  };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-3 text-sm">
-        <form action={assumirSinistro} className="flex items-center gap-2">
-          <input type="hidden" name="id" value={s.id} />
-          <span className="text-gray-500">Responsável:</span>
-          <input name="responsavel" defaultValue={s.responsavel_o2 ?? ""} placeholder="e-mail @o2seguros" className="w-56 rounded border border-gray-300 px-2 py-1" />
-          <SubmitButton className="rounded-full border border-o2-navy px-3 py-1 text-xs font-semibold text-o2-navy" textoCarregando="…">
-            {s.responsavel_o2 ? "Trocar" : "Assumir"}
-          </SubmitButton>
-        </form>
-        <Link href={`/sinistros/${s.id}?como=imobiliaria`} className="text-xs text-o2-blue underline">
-          Ver como a imobiliária vê
-        </Link>
-        {etapa === "pre_analise" && atrasoPre > SLA_PRE_ANALISE_DIAS_UTEIS && (
-          <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">pré-análise há {atrasoPre} dias úteis (SLA {SLA_PRE_ANALISE_DIAS_UTEIS})</span>
-        )}
-        {etapa === "pendencia_imobiliaria" && s.pendencia_prazo && (
-          <span
-            className={`rounded-full px-3 py-1 text-xs font-semibold ${diasEntre(hoje, s.pendencia_prazo) < 0 ? "bg-red-100 text-red-700" : "bg-orange-100 text-orange-800"}`}
-          >
-            imobiliária responde até {formatarData(s.pendencia_prazo)}
-          </span>
-        )}
-        {diasSeguradora !== null && (
-          <span
-            className={`rounded-full px-3 py-1 text-xs font-semibold ${diasSeguradora > PRAZO_SEGURADORA_DIAS ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-700"}`}
-          >
-            seguradora: dia {diasSeguradora} de {PRAZO_SEGURADORA_DIAS}
-          </span>
-        )}
-      </div>
+    <section className="space-y-3 rounded-xl border-2 border-o2-coral/40 bg-orange-50/40 p-4">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">O que fazer agora · {titulo[etapa] ?? ETAPAS[etapa]?.titulo}</h2>
 
-      <ProximaAcao s={s} />
-
-      <Dados s={s} interno />
-
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">
-          Documentos <span className="font-normal normal-case text-gray-500">— {emAnalise.length} para revisar · {recusados.length} recusado(s) · {faltando.length} faltando</span>
-        </h2>
-        <ChecklistDocumentos id={s.id} itens={checklist} documentos={docs} modo="o2" editavel={false} />
-      </section>
-
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Débitos (Declaração)</h2>
-        <EditorDebitos id={s.id} iniciais={debitos} coberturas={s.coberturas} editavel={false} />
-      </section>
-
-      {podeTriar && (
-        <section className="grid gap-4 md:grid-cols-2">
-          <form action={devolverComPendencia} className={`${cartao} space-y-2`}>
+      {(etapa === "pre_analise" || etapa === "pendencia_imobiliaria") && (
+        <div className="grid gap-3 md:grid-cols-2">
+          <form action={marcarAbertoNaSeguradora} className={`${cartao} space-y-2 p-3`}>
             <input type="hidden" name="id" value={s.id} />
-            <h3 className="font-semibold text-o2-navy">Devolver com pendências</h3>
-            <p className="text-xs text-gray-500">
-              Vai para a imobiliária a lista automática: {recusados.length} recusado(s) e {faltando.length} faltando, com prazo de 5 dias. Escreva abaixo o que
-              mais precisar.
-            </p>
-            <textarea name="mensagem" rows={3} className={inputClass} placeholder="Ex.: o valor do condomínio de setembro não bate com o boleto." />
-            <SubmitButton className={botaoSecundario} textoCarregando="Devolvendo…">
-              Devolver à imobiliária
-            </SubmitButton>
-          </form>
-          <form action={marcarAbertoNaSeguradora} className={`${cartao} space-y-2`}>
-            <input type="hidden" name="id" value={s.id} />
-            <h3 className="font-semibold text-o2-navy">Aberto na seguradora</h3>
+            <h3 className="text-sm font-semibold text-o2-coral">Aberto na seguradora</h3>
             {!tudoAprovado && <p className="text-xs text-orange-700">Ainda há documentos sem aprovação. Pode abrir assim mesmo se a seguradora aceitar.</p>}
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className={labelClass}>Nº do sinistro</label>
-                <input name="numero_sinistro_seguradora" className={inputClass} />
+                <input name="numero_sinistro_seguradora" defaultValue={s.numero_sinistro_seguradora ?? ""} className={inputClass} />
               </div>
               <div>
                 <label className={labelClass}>Data da abertura</label>
@@ -545,33 +785,204 @@ function VisaoO2({ s, debitos, docs, checklist, historico }: Props) {
               Marcar como aberto
             </SubmitButton>
           </form>
-        </section>
-      )}
-
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Histórico</h2>
-        <Historico id={s.id} registros={historico} modo="o2" />
-      </section>
-
-      {etapa !== "cancelado" && etapa !== "encerrado" && (
-        <details className="text-sm">
-          <summary className="cursor-pointer text-red-600">Cancelar sinistro</summary>
-          <form action={cancelarSinistroO2} className="mt-2 flex gap-2">
+          <form action={devolverComPendencia} className={`${cartao} space-y-2 p-3`}>
             <input type="hidden" name="id" value={s.id} />
-            <input name="motivo" required placeholder="Motivo (ex.: imobiliária desistiu, duplicado)" className={`${inputClass} max-w-md`} />
-            <SubmitButton className="rounded-full bg-red-600 px-4 py-1.5 text-sm font-semibold text-white" textoCarregando="…">
-              Cancelar
+            <h3 className="text-sm font-semibold text-o2-navy">Devolver com pendências</h3>
+            <p className="text-xs text-gray-500">
+              Vai para a imobiliária a lista automática: {recusados.length} recusado(s) e {faltando.length} faltando, com prazo de 5 dias.
+            </p>
+            <textarea name="mensagem" rows={2} className={inputClass} placeholder="O que mais a imobiliária precisa fazer" />
+            <SubmitButton className={botaoSecundario} textoCarregando="Devolvendo…">
+              Devolver à imobiliária
             </SubmitButton>
           </form>
-        </details>
+        </div>
       )}
+
+      {etapa === "na_seguradora" && (
+        <div className="grid gap-2 md:grid-cols-2">
+          <FormIndenizacao base={base} />
+          <MoverEtapa base={base} para="em_indenizacao" rotulo="A seguradora começou a indenizar (sem valor ainda)" />
+          <MoverEtapa base={base} para="acordo_judicial" rotulo="Foi para acordo / judicial" />
+          <FormEncerrar base={base} />
+        </div>
+      )}
+
+      {etapa === "em_indenizacao" && (
+        <div className="grid gap-2 md:grid-cols-2">
+          <div className="md:col-span-2">
+            <FormIndenizacao base={base} principal />
+          </div>
+          <MoverEtapa base={base} para="acordo_judicial" rotulo="Foi para acordo / judicial" />
+          <FormEncerrar base={base} />
+        </div>
+      )}
+
+      {etapa === "acordo_judicial" && (
+        <div className="grid gap-2 md:grid-cols-2">
+          <FormIndenizacao base={base} />
+          <MoverEtapa base={base} para="em_indenizacao" rotulo="Voltou para indenização" />
+          <FormEncerrar base={base} />
+        </div>
+      )}
+
+      {etapa === "encerrado" && (
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <span>
+            {s.desfecho === "indenizado" ? "Indenizado" : s.desfecho === "sem_indenizacao" ? "Sem indenização" : "Encerrado"}
+            {s.encerrado_em ? ` em ${formatarData(s.encerrado_em)}` : ""}
+            {s.motivo_encerramento ? ` — ${s.motivo_encerramento}` : ""}
+          </span>
+          <MoverEtapa base={base} para="na_seguradora" rotulo="Reabrir o caso" />
+        </div>
+      )}
+    </section>
+  );
+}
+
+type BaseAcao = { id: string; ctx: string | null; avisarPadrao: boolean };
+
+function Ocultos({ base }: { base: BaseAcao }) {
+  return (
+    <>
+      <input type="hidden" name="id" value={base.id} />
+      {base.ctx && <input type="hidden" name="ctx" value={base.ctx} />}
+    </>
+  );
+}
+
+function CheckAvisar({ base }: { base: BaseAcao }) {
+  return (
+    <label className="flex items-center gap-1.5 text-xs text-gray-600">
+      <input type="checkbox" name="avisar" defaultChecked={base.avisarPadrao} className="accent-o2-coral" /> avisar a imobiliária por e-mail
+    </label>
+  );
+}
+
+function MoverEtapa({ base, para, rotulo, principal }: { base: BaseAcao; para: EtapaSinistro; rotulo: string; principal?: boolean }) {
+  return (
+    <details className={`${cartao} space-y-2 p-3`}>
+      <summary className={`cursor-pointer list-none text-sm font-semibold ${principal ? "text-o2-coral" : "text-o2-navy"}`}>{rotulo}</summary>
+      <form action={mudarEtapa} className="mt-2 space-y-2">
+        <Ocultos base={base} />
+        <input type="hidden" name="para" value={para} />
+        <textarea name="mensagem" rows={2} placeholder="Observação (opcional)" className={inputClass} />
+        <CheckAvisar base={base} />
+        <SubmitButton className={principal ? botaoPrimario : botaoSecundario} textoCarregando="Salvando…">
+          Confirmar
+        </SubmitButton>
+      </form>
+    </details>
+  );
+}
+
+function FormIndenizacao({ base, principal }: { base: BaseAcao; principal?: boolean }) {
+  const hoje = hojeSP();
+  return (
+    <details className={`${cartao} p-3`} open={principal}>
+      <summary className={`cursor-pointer list-none text-sm font-semibold ${principal ? "text-o2-coral" : "text-o2-navy"}`}>Registrar indenização recebida</summary>
+      <form action={registrarIndenizacao} className="mt-2 grid gap-2 sm:grid-cols-4 sm:items-end">
+        <Ocultos base={base} />
+        <div>
+          <label className={labelClass}>Valor (R$)</label>
+          <input name="valor" inputMode="decimal" placeholder="0,00" className={inputClass} />
+        </div>
+        <div>
+          <label className={labelClass}>Mês de referência</label>
+          <input type="month" name="referencia" defaultValue={hoje.slice(0, 7)} className={inputClass} />
+        </div>
+        <div>
+          <label className={labelClass}>Pago em</label>
+          <input type="date" name="pago_em" defaultValue={hoje} className={inputClass} />
+        </div>
+        <SubmitButton className={botaoPrimario} textoCarregando="Salvando…">
+          Registrar
+        </SubmitButton>
+        <input name="observacao" placeholder="Observação (opcional)" className={`${inputClass} sm:col-span-4`} />
+      </form>
+    </details>
+  );
+}
+
+function FormEncerrar({ base }: { base: BaseAcao }) {
+  return (
+    <details className={`${cartao} p-3`}>
+      <summary className="cursor-pointer list-none text-sm font-semibold text-o2-navy">Encerrar o sinistro</summary>
+      <form action={mudarEtapa} className="mt-2 space-y-2">
+        <Ocultos base={base} />
+        <input type="hidden" name="para" value="encerrado" />
+        <fieldset className="flex flex-wrap gap-4 text-sm">
+          <label className="flex items-center gap-1.5">
+            <input type="radio" name="desfecho" value="indenizado" className="accent-o2-coral" /> Indenizado
+          </label>
+          <label className="flex items-center gap-1.5">
+            <input type="radio" name="desfecho" value="sem_indenizacao" className="accent-o2-coral" /> Sem indenização
+          </label>
+        </fieldset>
+        <div className="grid gap-2 sm:grid-cols-[1fr_10rem]">
+          <input name="motivo" placeholder="Motivo / como terminou (ex.: locatário quitou, acordo, desocupação)" className={inputClass} />
+          <input type="date" name="data" defaultValue={hojeSP()} className={inputClass} />
+        </div>
+        <textarea name="mensagem" rows={2} placeholder="Mensagem para a imobiliária (opcional)" className={inputClass} />
+        <CheckAvisar base={base} />
+        <SubmitButton className={botaoSecundario} textoCarregando="Encerrando…">
+          Encerrar
+        </SubmitButton>
+      </form>
+    </details>
+  );
+}
+
+function Indenizacoes({ s, indenizacoes, ctx, editavel }: { s: any; indenizacoes: Indenizacao[]; ctx: string | null; editavel: boolean }) {
+  const total = indenizacoes.reduce((t, i) => t + Number(i.valor), 0);
+  if (!indenizacoes.length) return <p className="text-sm text-gray-500">Nenhuma indenização registrada ainda.</p>;
+  return (
+    <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+      <table className="w-full text-sm">
+        <thead className="bg-gray-50 text-left text-xs text-gray-500">
+          <tr>
+            <th className="px-3 py-2">Referência</th>
+            <th className="px-3 py-2">Pago em</th>
+            <th className="px-3 py-2 text-right">Valor</th>
+            <th className="px-3 py-2">Observação</th>
+            {editavel && <th className="px-3 py-2" />}
+          </tr>
+        </thead>
+        <tbody>
+          {indenizacoes.map((i) => (
+            <tr key={i.id} className="border-t border-gray-100">
+              <td className="px-3 py-2">{i.referencia ? i.referencia.slice(0, 7).split("-").reverse().join("/") : "—"}</td>
+              <td className="px-3 py-2">{formatarData(i.pago_em)}</td>
+              <td className="px-3 py-2 text-right font-semibold">{formatarReais(Number(i.valor))}</td>
+              <td className="px-3 py-2 text-xs text-gray-600">{i.observacao ?? ""}</td>
+              {editavel && (
+                <td className="px-3 py-2 text-right">
+                  <form action={removerIndenizacao}>
+                    <input type="hidden" name="id" value={s.id} />
+                    <input type="hidden" name="indenizacao_id" value={i.id} />
+                    {ctx && <input type="hidden" name="ctx" value={ctx} />}
+                    <button className="text-xs text-red-600 hover:underline">remover</button>
+                  </form>
+                </td>
+              )}
+            </tr>
+          ))}
+          <tr className="border-t border-gray-200 bg-gray-50 font-semibold">
+            <td className="px-3 py-2" colSpan={2}>
+              Total
+            </td>
+            <td className="px-3 py-2 text-right">{formatarReais(total)}</td>
+            <td colSpan={editavel ? 2 : 1} />
+          </tr>
+        </tbody>
+      </table>
     </div>
   );
 }
 
-// ---------- O2: agenda de próxima ação ----------
+// ---------- O2: agenda de próxima ação (o dono é o responsável do caso) ----------
 
-function ProximaAcao({ s }: { s: any }) {
+function ProximaAcao({ s, ctx }: { s: any; ctx?: string | null }) {
   const hoje = hojeSP();
   const quando: string | null = s.proxima_acao_em;
   const atrasada = !!quando && quando < hoje;
@@ -580,7 +991,7 @@ function ProximaAcao({ s }: { s: any }) {
   return (
     <section className={`rounded-xl border p-4 ${cor} space-y-3`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Próxima ação (agenda O2)</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Próxima ação (agenda do responsável)</h2>
         {quando && (
           <span
             className={`rounded-full px-3 py-1 text-xs font-semibold ${
@@ -591,8 +1002,9 @@ function ProximaAcao({ s }: { s: any }) {
           </span>
         )}
       </div>
-      <form action={salvarProximaAcao} className="grid gap-3 sm:grid-cols-[10rem_1fr_14rem_auto] sm:items-end">
+      <form action={salvarProximaAcao} className="grid gap-3 sm:grid-cols-[10rem_1fr_auto] sm:items-end">
         <input type="hidden" name="id" value={s.id} />
+        {ctx && <input type="hidden" name="ctx" value={ctx} />}
         <div>
           <label className={labelClass}>Data</label>
           <input type="date" name="proxima_acao_em" defaultValue={quando ?? ""} className={inputClass} />
@@ -605,10 +1017,6 @@ function ProximaAcao({ s }: { s: any }) {
             placeholder="Ex.: cobrar boleto de outubro da imobiliária"
             className={inputClass}
           />
-        </div>
-        <div>
-          <label className={labelClass}>Responsável</label>
-          <input name="proxima_acao_responsavel" defaultValue={s.proxima_acao_responsavel ?? s.responsavel_o2 ?? ""} placeholder="e-mail @o2seguros" className={inputClass} />
         </div>
         <div className="flex gap-2">
           <SubmitButton className={botaoPrimario} textoCarregando="Salvando…">

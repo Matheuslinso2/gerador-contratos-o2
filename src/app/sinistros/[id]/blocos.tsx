@@ -1,6 +1,8 @@
 import SubmitButton from "@/components/SubmitButton";
 import { MOTIVOS_RECUSA, type ItemChecklist } from "@/lib/sinistros/regras";
 import { analisarDocumento, registrarNoHistorico, removerDocumento } from "../actions";
+import { reaproveitarDocumento } from "../operacao";
+import { formatarData } from "@/lib/sinistros/regras";
 import UploadDocumento from "./UploadDocumento";
 import { inputClass, labelClass } from "../ui";
 
@@ -22,7 +24,9 @@ const PILULA: Record<string, string> = {
 const ROTULO: Record<string, string> = { enviado: "enviado", aprovado: "aprovado", recusado: "recusado" };
 
 // Checklist de documentos (R4) -- cada item com os arquivos já enviados.
-// modo "imobiliaria": envia/remove; modo "o2": aprova/recusa cada arquivo.
+// modo "imobiliaria": envia/remove; modo "o2": aprova/recusa cada arquivo
+// (e também anexa, quando editavel). "reaproveitaveis": documento que a
+// mesma imobiliária já mandou noutro sinistro -- um clique e ele é copiado.
 export function ChecklistDocumentos({
   id,
   itens,
@@ -30,6 +34,7 @@ export function ChecklistDocumentos({
   modo,
   editavel,
   passo,
+  reaproveitaveis,
 }: {
   id: string;
   itens: ItemChecklist[];
@@ -37,6 +42,7 @@ export function ChecklistDocumentos({
   modo: "imobiliaria" | "o2";
   editavel: boolean;
   passo?: number;
+  reaproveitaveis?: Record<string, { id: string; nome_arquivo: string; enviado_em: string; codigo?: number }>;
 }) {
   // Documento de um tipo que saiu do checklist (ex.: cobertura desmarcada)
   // continua visível em "Outros".
@@ -65,8 +71,22 @@ export function ChecklistDocumentos({
                   {item.ajuda && <p className="text-xs text-gray-500">{item.ajuda}</p>}
                 </div>
               </div>
-              {editavel && modo === "imobiliaria" && <UploadDocumento id={id} tipo={item.chave} rotulo={docs.length ? "+ Arquivo" : "Enviar"} />}
+              {editavel && <UploadDocumento id={id} tipo={item.chave} rotulo={docs.length ? "+ Arquivo" : "Enviar"} />}
             </div>
+            {editavel && !ativo && reaproveitaveis?.[item.chave] && (
+              <form action={reaproveitarDocumento} className="mt-2 pl-7 text-xs">
+                <input type="hidden" name="id" value={id} />
+                <input type="hidden" name="documento_id" value={reaproveitaveis[item.chave].id} />
+                {passo && <input type="hidden" name="passo" value={passo} />}
+                <button className="rounded-full border border-o2-blue px-3 py-0.5 font-semibold text-o2-blue hover:bg-blue-50">
+                  ↺ Usar o arquivo já enviado
+                </button>
+                <span className="ml-2 text-gray-500">
+                  {reaproveitaveis[item.chave].nome_arquivo}
+                  {reaproveitaveis[item.chave].codigo ? ` · SIN-${reaproveitaveis[item.chave].codigo}` : ""} · {formatarData(reaproveitaveis[item.chave].enviado_em.slice(0, 10))}
+                </span>
+              </form>
+            )}
             {docs.length > 0 && (
               <ul className="mt-2 space-y-1.5 pl-7">
                 {docs.map((d) => (
@@ -80,7 +100,7 @@ export function ChecklistDocumentos({
                         <span className="font-medium">{d.nome_arquivo}</span>
                       )}
                       <span className={`rounded-full px-2 py-0.5 font-semibold ${PILULA[d.situacao] ?? ""}`}>{ROTULO[d.situacao] ?? d.situacao}</span>
-                      {editavel && modo === "imobiliaria" && d.situacao === "enviado" && (
+                      {editavel && d.situacao === "enviado" && (
                         <form action={removerDocumento}>
                           <input type="hidden" name="id" value={id} />
                           <input type="hidden" name="documento_id" value={d.id} />

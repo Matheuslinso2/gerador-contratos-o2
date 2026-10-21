@@ -5,6 +5,7 @@ import SubmitButton from "@/components/SubmitButton";
 import { buscarEnderecoPorCep, formatarCEP } from "@/lib/validacoesBr";
 import { SEGURADORAS, TIPOS, type TipoSinistro } from "@/lib/sinistros/regras";
 import { botaoPrimario, inputClass, labelClass } from "./ui";
+import BuscaApolice from "./BuscaApolice";
 
 export type DadosContrato = {
   id?: string;
@@ -21,6 +22,7 @@ export type DadosContrato = {
   locatario_documento?: string | null;
   locatario_telefone?: string | null;
   locatario_email?: string | null;
+  nosso_numero?: string | null;
   imovel_cep?: string | null;
   imovel_logradouro?: string | null;
   imovel_numero?: string | null;
@@ -39,11 +41,13 @@ export default function FormContrato({
   dados,
   imobiliarias,
   textoBotao,
+  extras,
 }: {
   action: (fd: FormData) => Promise<void>;
   dados?: DadosContrato;
   imobiliarias?: { id: string; nome: string }[];
   textoBotao: string;
+  extras?: React.ReactNode;
 }) {
   const d = dados ?? {};
   const [cep, setCep] = useState(d.imovel_cep ?? "");
@@ -67,6 +71,9 @@ export default function FormContrato({
   return (
     <form action={action} className="space-y-6">
       {d.id && <input type="hidden" name="id" value={d.id} />}
+      {extras}
+      <input type="hidden" name="nosso_numero" defaultValue={d.nosso_numero ?? ""} />
+      <BuscaApolice />
 
       {imobiliarias && (
         <section className="space-y-2 rounded-xl border border-blue-200 bg-blue-50 p-4">

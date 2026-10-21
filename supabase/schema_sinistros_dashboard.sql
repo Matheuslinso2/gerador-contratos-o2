@@ -269,14 +269,17 @@ begin
   delete from sinistros_kpi_fato where origem = 'workspace';
   insert into sinistros_kpi_fato (id, origem, produto, nosso_numero, numero_sinistro, seguradora, grupo_chave,
     tipo_sinistro, situacao, dt_aviso, dt_encerramento, vl_avisado, vl_indenizado, segurado)
-  select s.id, 'workspace', s.produto, sc.nosso_numero, coalesce(s.numero_sinistro_seguradora, sc.numero_sinistro), s.seguradora,
+  select s.id, 'workspace', s.produto, coalesce(s.nosso_numero, sc.nosso_numero), coalesce(s.numero_sinistro_seguradora, sc.numero_sinistro), s.seguradora,
     coalesce('g:' || i.grupo_id::text, 'i:' || i.id::text,
              case when sc.id is not null then coalesce(vi.chave, 't:' || trim(ap.texto)) end),
     case when s.tipo = 'ocupado' then 'ocupado' when s.tipo like 'chaves%' then 'chaves' else sc.subtipo end,
     case when s.etapa = 'encerrado' and s.desfecho = 'indenizado' then 'INDENIZADO'
          when s.etapa = 'encerrado' then 'ENCERRADO SEM INDENIZAÇÃO' else 'EM ANDAMENTO' end,
     coalesce(s.enviado_em::date, s.created_at::date), case when s.etapa = 'encerrado' then coalesce(s.encerrado_em, s.updated_at::date) end,
-    s.valor_avisado, sc.vl_indenizado, coalesce(s.locador_nome, s.locatario_nome)
+    s.valor_avisado,
+    -- Indenizado = soma das indenizações registradas (ou o valor trazido do Corp).
+    coalesce((select nullif(sum(x.valor), 0) from sinistro_indenizacoes x where x.sinistro_id = s.id), sc.vl_indenizado),
+    coalesce(s.locador_nome, s.locatario_nome)
   from sinistros s
   left join imobiliarias i on i.id = s.imobiliaria_id
   left join sinistros_corp sc on sc.id = s.sinistro_corp_id
@@ -309,8 +312,13 @@ as $ begin perform sinistros_kpi_fato_cards(); return null; end; $;
 drop trigger if exists sinistros_kpi_fato_cards on sinistros;
 create trigger sinistros_kpi_fato_cards
   after insert or delete or update of etapa, desfecho, encerrado_em, produto, seguradora, imobiliaria_id, enviado_em,
-    valor_avisado, tipo, locador_nome, locatario_nome, numero_sinistro_seguradora
+    valor_avisado, tipo, locador_nome, locatario_nome, numero_sinistro_seguradora, nosso_numero
   on sinistros for each statement execute function sinistros_kpi_fato_cards_gatilho();
+
+drop trigger if exists sinistros_kpi_fato_indenizacoes on sinistro_indenizacoes;
+create trigger sinistros_kpi_fato_indenizacoes
+  after insert or delete or update on sinistro_indenizacoes
+  for each statement execute function sinistros_kpi_fato_cards_gatilho();
 
 revoke execute on function atualizar_base_kpis_sinistros() from anon, public;
 grant execute on function atualizar_base_kpis_sinistros() to authenticated, service_role;
