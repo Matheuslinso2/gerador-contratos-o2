@@ -19,8 +19,8 @@ export const dynamic = "force-dynamic";
 // Painel Produção (Base Única — Fase 5). Dois universos que se conectam mas
 // têm fontes diferentes (Matheus, 20/10/2026), cada um no seu bloco:
 //  - COTAÇÕES (funil): tomadas de preço de TODOS os produtos (21/10/2026):
-//    Fiança (planilhas jul/2020–jul/2026 + Bitrix), RE (planilha jul–ago/2026
-//    + Bitrix), Capitalização e Automóvel (Bitrix), cada um com a régua do
+//    Fiança (planilhas jul/2020–jul/2026 + Bitrix), RE (planilhas jul/2025–ago/2026
+//    + Bitrix), Capitalização (planilhas de títulos jul/2021–jul/2026 + Bitrix) e Automóvel (planilhas de RE + Bitrix), cada um com a régua do
 //    painel do produto ("quando a fonte muda, só a fonte muda"): entradas pelo
 //    mês em que a cotação entrou; conversão/perda pelo mês em que aconteceu.
 //    Bitrix lido de hora em hora pelo cron /api/cron/base-unica-bitrix.
@@ -314,9 +314,9 @@ const REGUA_CONVERSAO: Record<string, { texto: string; calc: (p: CotacaoProduto)
 const ROTULO_CURTO: Record<string, string> = { fianca: "Fiança", re: "RE", capitalizacao: "Cap", automovel: "Auto" };
 const FONTE_COTACOES: Record<string, string> = {
   fianca: "planilhas de análise (jul/2020 a jul/2026) e Bitrix (ago/2026 →)",
-  re: "planilha Cotação diária RE (jul e ago/2026) e Bitrix (set/2026 →); negócio novo",
-  capitalizacao: "Bitrix (ago/2026 →); planilhas de títulos ainda não importadas",
-  automovel: "planilha de RE (jul e ago/2026) e Bitrix (ago/2026 →); sem imobiliária",
+  re: "planilhas Cotação diária RE (jul/2025 a ago/2026) e Bitrix (set/2026 →); negócio novo",
+  capitalizacao: "planilhas de títulos novos (jul/2021 a jul/2026) e Bitrix (ago/2026 →)",
+  automovel: "planilhas de RE (jul/2025 a ago/2026) e Bitrix (ago/2026 →); sem imobiliária",
 };
 
 // ---------------------------------------------------------------- Cotações

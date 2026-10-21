@@ -233,7 +233,7 @@ function chave(valor: string): string {
     .toUpperCase();
 }
 
-function statusCanonico(valor: string): string {
+export function statusCanonico(valor: string): string {
   const normal = chave(valor);
   if (normal === "CANCELADA" || normal === "CANCELADO") return "CANCELADO";
   if (normal === "LIB P NEGOCIACAO" || normal === "LIBERADO P NEGOCIACAO") return "LIBERADO P/ NEGOCIAÇÃO";
@@ -251,7 +251,7 @@ function statusCanonico(valor: string): string {
   return conhecidos[normal] || texto(valor).toUpperCase();
 }
 
-function ramoCanonico(valor: string): string {
+export function ramoCanonico(valor: string): string {
   let normal = chave(valor);
   if (normal === "2IMO") normal = "IMO";
   if (normal === "2POR") normal = "POR";
@@ -345,7 +345,7 @@ function cotadorCanonico(valor: string): string {
   return texto(valor).toUpperCase() || "NÃO INFORMADO";
 }
 
-function imobiliariaCanonica(valor: string): string {
+export function imobiliariaCanonica(valor: string): string {
   const normal = chave(valor);
   const mapa: Record<string, string> = {
     "PIRES E GAMA IMOBILIARIA": "PIRES E GAMA IMOBILIÁRIA",

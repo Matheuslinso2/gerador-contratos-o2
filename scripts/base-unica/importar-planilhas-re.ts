@@ -2,9 +2,11 @@
 // que o setor de RE controlava na mesma planilha) das planilhas mensais
 // "COTAÇÃO DIÁRIA RE", jul/2025 → ago/2026 (a partir de set/2026 os negócios
 // novos estão no Bitrix — ver bitrixProdutos.ts).
-// Mesma leitura do painel /ramos-elementares: lerFonteRamosElementares (Google)
-// + mapearNovos (analise.ts). Cada mês confere com o próprio cálculo do painel
-// (montarAnaliseRamosElementares) sobre a mesma planilha.
+// jul/2026 → ago/2026: mesma leitura do painel /ramos-elementares
+// (lerFonteRamosElementares + mapearNovos), conferida com o próprio cálculo do
+// painel. jul/2025 → jun/2026: formatos antigos que o painel não lê, pelas
+// cópias congeladas (_re-planilhas-antigas.ts), com as mesmas normalizações;
+// conferidos com o quadro de totais da própria planilha.
 // Linha do tempo: aba NOVOS MÊS = entrada; NOVOS PENDENTES = a mesma cotação
 // herdada do mês anterior (herança, como nas planilhas de Fiança). O caso é
 // ligado entre os meses por imobiliária + segurado + data recebida + ramo.
@@ -14,9 +16,10 @@ import crypto from "node:crypto";
 import { createServiceClient } from "@/lib/supabase/service";
 import { lerFonteRamosElementares } from "@/lib/ramos-elementares/fonteGoogle";
 import { mapearNovos, montarAnaliseRamosElementares } from "@/lib/ramos-elementares/analise";
+import { lerPlanilhasAntigasRE } from "./_re-planilhas-antigas";
 
 const gravar = process.argv.includes("--gravar");
-const INICIO = "2025-07";
+const INICIO = "2026-07"; // daqui em diante pelo leitor do painel; antes, planilhas antigas
 const FIM = "2026-08";
 const somarMes = (m: string, n: number) => {
   const [a, mm] = m.split("-").map(Number);
@@ -35,6 +38,53 @@ async function main() {
   const conferencia: string[] = [];
   const porMes: { comp: string; arquivoId: string; arquivoNome: string; linhas: Record<string, unknown>[]; ref: { novas: number; efetivados: number } }[] = [];
   const primeiraConversao = new Map<string, string>();
+  type Reg = { status: string; imobiliaria: string; segurado: string; dataRecebida: number | null; ramo: string; seguradora: string; premioTotal: number; comissao: number; dataEfetivacao: number | null; aba: string; linha: number; cotador: string; origem?: string; negociador?: string };
+  const montar = (r: Reg, herdada: boolean, comp: string, arquivoId: string, vistos: Map<string, number>) => {
+    const base = [r.imobiliaria, r.segurado, r.dataRecebida, r.ramo].join("|").toUpperCase();
+    const n = (vistos.get(`${herdada}|${base}`) ?? 0) + 1;
+    vistos.set(`${herdada}|${base}`, n);
+    const chave = crypto.createHash("sha1").update(`re|${base}|${n}`).digest("hex");
+    const produto = r.ramo === "AUTOMÓVEL" ? "automovel" : "re";
+    const sp = statusPadrao(r.status);
+    if (sp === "Convertido" && !primeiraConversao.has(chave)) primeiraConversao.set(chave, comp);
+    return {
+      produto,
+      tipo: "novo",
+      fonte: "planilha",
+      origem_arquivo_id: arquivoId,
+      origem_aba: r.aba,
+      origem_linha: r.linha,
+      competencia_arquivo: comp,
+      herdada,
+      chave_caso: chave,
+      data_recebimento: isoSerial(r.dataRecebida),
+      data_efetivacao: isoSerial(r.dataEfetivacao),
+      status_original: r.status,
+      status_padrao: sp,
+      ramo_original: r.ramo,
+      ramo_padrao: r.ramo,
+      seguradora: r.seguradora && r.seguradora !== "NÃO INFORMADA" ? r.seguradora : null,
+      imobiliaria_texto: produto === "re" && r.imobiliaria && r.imobiliaria !== "NÃO INFORMADA" ? r.imobiliaria : null,
+      fonte_vinculo: produto === "re" ? "planilha_re" : null,
+      responsavel: r.cotador || null,
+      premio: sp === "Convertido" && r.premioTotal ? r.premioTotal : null,
+      comissao: sp === "Convertido" && r.comissao ? r.comissao : null,
+      extras: { origem: r.origem ?? null, negociador: r.negociador || null } as Record<string, unknown>,
+    } as Record<string, unknown>;
+  };
+  // jul/2025 → jun/2026: formatos antigos (cópias congeladas). Herdada = data de
+  // recebimento em mês anterior ao da planilha.
+  for (const p of await lerPlanilhasAntigasRE(INICIO)) {
+    const vistos = new Map<string, number>();
+    const linhas = p.linhas.map((r) => {
+      const mesRecebida = r.dataRecebida == null ? null : isoSerial(r.dataRecebida)?.slice(0, 7) ?? null;
+      return montar(r, !!mesRecebida && mesRecebida < p.comp, p.comp, p.arquivoId, vistos);
+    });
+    const st: Record<string, number> = {};
+    for (const l of p.linhas) st[l.status] = (st[l.status] ?? 0) + 1;
+    conferencia.push(`${p.comp}: ${linhas.length} linhas (${linhas.filter((l) => l.herdada).length} herdadas) ${JSON.stringify(st)} | totais da planilha: ${p.totais.join("; ") || "—"} | ${p.nome.trim()}`);
+    porMes.push({ comp: p.comp, arquivoId: p.arquivoId, arquivoNome: p.nome.trim(), linhas, ref: { novas: -1, efetivados: -1 } });
+  }
   for (let comp = INICIO; comp <= FIM; comp = somarMes(comp, 1)) {
     let fonte;
     try {
@@ -56,39 +106,7 @@ async function main() {
     const mes = mapearNovos(fonte.abas.novosMes, fonte.nomesAbas.novosMes || "NOVOS MÊS", comp);
     const vistos = new Map<string, number>();
     const linhas: Record<string, unknown>[] = [];
-    for (const [r, herdada] of [...mes.map((r) => [r, false] as const), ...pend.map((r) => [r, true] as const)]) {
-      const base = [r.imobiliaria, r.segurado, r.dataRecebida, r.ramo].join("|").toUpperCase();
-      const n = (vistos.get(`${herdada}|${base}`) ?? 0) + 1;
-      vistos.set(`${herdada}|${base}`, n);
-      const chave = crypto.createHash("sha1").update(`re|${base}|${n}`).digest("hex");
-      const produto = r.ramo === "AUTOMÓVEL" ? "automovel" : "re";
-      const sp = statusPadrao(r.status);
-      if (sp === "Convertido" && !primeiraConversao.has(chave)) primeiraConversao.set(chave, comp);
-      linhas.push({
-        produto,
-        tipo: "novo",
-        fonte: "planilha",
-        origem_arquivo_id: fonte.planilha.id,
-        origem_aba: r.aba,
-        origem_linha: r.linha,
-        competencia_arquivo: comp,
-        herdada,
-        chave_caso: chave,
-        data_recebimento: isoSerial(r.dataRecebida),
-        data_efetivacao: isoSerial(r.dataEfetivacao),
-        status_original: r.status,
-        status_padrao: sp,
-        ramo_original: r.ramo,
-        ramo_padrao: r.ramo,
-        seguradora: r.seguradora && r.seguradora !== "NÃO INFORMADA" ? r.seguradora : null,
-        imobiliaria_texto: produto === "re" && r.imobiliaria && r.imobiliaria !== "NÃO INFORMADA" ? r.imobiliaria : null,
-        fonte_vinculo: produto === "re" ? "planilha_re" : null,
-        responsavel: r.cotador,
-        premio: sp === "Convertido" && r.premioTotal ? r.premioTotal : null,
-        comissao: sp === "Convertido" && r.comissao ? r.comissao : null,
-        extras: { origem: r.origem, negociador: r.negociador || null },
-      });
-    }
+    for (const [r, herdada] of [...mes.map((r) => [r, false] as const), ...pend.map((r) => [r, true] as const)]) linhas.push(montar(r, herdada, comp, fonte.planilha.id, vistos));
     const efetivadosMes = linhas.filter((l) => l.status_padrao === "Convertido").length;
     conferencia.push(
       `${comp}: novos ${mes.length} (painel ${ref?.novas ?? "—"}) | pendentes ${pend.length} (painel ${ref?.pendentes ?? "—"}) | efetivados na planilha ${efetivadosMes} (painel ${ref?.efetivados ?? "—"}) | ${fonte.planilha.titulo}`

@@ -8,11 +8,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // "arquivo de provas" de cada ficha (como cada fonte escreve o nome e os
 // contatos dela). Ver base-unica-imobiliarias/Desenho-Base-Unica-Imobiliarias.pdf.
 
-export const FONTES_PRODUCAO = ["planilha_fianca", "planilha_re", "bitrix_empresa", "bitrix_cap_texto"] as const;
+export const FONTES_PRODUCAO = ["planilha_fianca", "planilha_re", "planilha_cap", "bitrix_empresa", "bitrix_cap_texto"] as const;
 
 export const ROTULO_FONTE: Record<string, string> = {
   planilha_fianca: "Planilha Fiança",
   planilha_re: "Planilha RE",
+  planilha_cap: "Planilha Capitalização",
   bitrix_empresa: "Bitrix (Empresa)",
   bitrix_cap_texto: "Bitrix Capitalização",
   corp_produtor: "Corp",

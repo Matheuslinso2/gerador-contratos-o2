@@ -56,6 +56,7 @@ create table if not exists imobiliaria_registros_fonte (
     'imobiliarias_conhecidas',
     'planilha_fianca',       -- coluna IMOBILIÁRIA das planilhas de análises
     'planilha_re',           -- coluna IMOBILIÁRIA da cotação diária RE
+    'planilha_cap',          -- coluna IMOBILIÁRIA das planilhas de títulos de Capitalização (21/10/2026)
     'email'                  -- remetente/destinatário no e-mail do Matheus
   )),
   chave_externa text not null,
@@ -161,3 +162,12 @@ alter table base_unica_planilhas_congeladas add column if not exists copia_stora
 alter table base_unica_planilhas_congeladas add column if not exists copia_tamanho_bytes bigint;
 alter table base_unica_planilhas_congeladas add column if not exists copia_md5 text;
 alter table base_unica_planilhas_congeladas add column if not exists copiado_em timestamptz;
+
+-- Atualização 2026-10-21: planilhas de títulos de Capitalização (jul/2021 →
+-- jul/2026) entram na produção unificada; o nome da imobiliária vira registro
+-- da fonte 'planilha_cap' (scripts/base-unica/importar-planilhas-cap.ts).
+alter table imobiliaria_registros_fonte drop constraint if exists imobiliaria_registros_fonte_fonte_check;
+alter table imobiliaria_registros_fonte add constraint imobiliaria_registros_fonte_fonte_check check (fonte in (
+  'bitrix_empresa', 'bitrix_cap_texto', 'corp_produtor', 'receita_cnpj', 'imobiliarias_conhecidas',
+  'planilha_fianca', 'planilha_re', 'planilha_cap', 'email'
+));

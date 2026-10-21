@@ -23,7 +23,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // automático, rejeitado, ignorar). Toda confirmação por nome vai para
 // imobiliaria_historico. Só grava as linhas que mudaram.
 
-const FONTES_CONFIRMAR_NOME = new Set(["planilha_fianca", "planilha_re", "bitrix_empresa", "bitrix_cap_texto", "corp_produtor"]);
+const FONTES_CONFIRMAR_NOME = new Set(["planilha_fianca", "planilha_re", "planilha_cap", "bitrix_empresa", "bitrix_cap_texto", "corp_produtor"]);
 
 // Mesma normalização de scripts/base-unica/_comum.mjs (tira acento, caixa,
 // o que está entre parênteses e as palavras que só dizem o tipo da empresa).
