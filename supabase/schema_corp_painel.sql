@@ -10,14 +10,15 @@ alter table corp_regra_produtor add column if not exists nome_no_sharepoint text
 
 create index if not exists corp_grade_incluir_nosso_idx on corp_grade(nosso_numero) where incluir_corretora;
 
+-- O motor do Power BI ignora espaço no fim ao agrupar ("RAMIRO SÁ " = "RAMIRO SÁ"): o espelho faz igual (rtrim).
 create or replace view corp_retrato_producao_dim with (security_invoker = true) as
 select p.*,
-  coalesce(r.agrupamento_pai, 'SEM GRUPO') as grupo_ramo,
-  coalesce(r.agrupamento_filho, nullif(p.ramo, ''), 'SEM RAMO') as ramo_filho,
-  coalesce(r.agrupamento_flash, 'OUTROS') as ramo_flash,
-  coalesce(s.abreviado, nullif(p.seg, ''), 'SEM SEGURADORA') as seguradora,
-  coalesce(c.centralizador, nullif(p.produtor, ''), 'SEM PRODUTOR') as centralizador,
-  coalesce(c.origem, 'SEM ORIGEM') as origem
+  coalesce(rtrim(r.agrupamento_pai), 'SEM GRUPO') as grupo_ramo,
+  coalesce(rtrim(r.agrupamento_filho), nullif(p.ramo, ''), 'SEM RAMO') as ramo_filho,
+  coalesce(rtrim(r.agrupamento_flash), 'OUTROS') as ramo_flash,
+  coalesce(rtrim(s.abreviado), nullif(p.seg, ''), 'SEM SEGURADORA') as seguradora,
+  coalesce(rtrim(c.centralizador), nullif(p.produtor, ''), 'SEM PRODUTOR') as centralizador,
+  coalesce(rtrim(c.origem), 'SEM ORIGEM') as origem
 from corp_retrato_producao p
 left join corp_regra_ramo r on r.id_ramo = p.ramo
 left join corp_regra_seguradora s on s.id_seguradora = p.seg
@@ -25,9 +26,9 @@ left join corp_regra_produtor c on c.produtor = p.produtor;
 
 create or replace view corp_retrato_sinistros_dim with (security_invoker = true) as
 select p.*,
-  coalesce(r.agrupamento_pai, 'SEM GRUPO') as grupo_ramo,
-  coalesce(r.agrupamento_filho, nullif(p.ramo, ''), 'SEM RAMO') as ramo_filho,
-  coalesce(s.abreviado, nullif(p.seg, ''), 'SEM SEGURADORA') as seguradora
+  coalesce(rtrim(r.agrupamento_pai), 'SEM GRUPO') as grupo_ramo,
+  coalesce(rtrim(r.agrupamento_filho), nullif(p.ramo, ''), 'SEM RAMO') as ramo_filho,
+  coalesce(rtrim(s.abreviado), nullif(p.seg, ''), 'SEM SEGURADORA') as seguradora
 from corp_retrato_sinistros p
 left join corp_regra_ramo r on r.id_ramo = p.ramo
 left join corp_regra_seguradora s on s.id_seguradora = p.seg;
