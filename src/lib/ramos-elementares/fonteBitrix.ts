@@ -16,6 +16,10 @@ import type { CelulaGoogle, FonteRamosBruta } from "./fonteGoogle";
 
 const ENTITY_TYPE_ID = 1046;
 const CATEGORIA_CONTRATACOES = 22;
+// Funil próprio de renovações ("Renovações", criado em 21/10/2026) -- antes as
+// renovações ficavam no funil de novos, marcadas só pelo campo Tipo de
+// Processo. Agora novos = categoria 22 e renovações = categoria 34.
+const CATEGORIA_RENOVACOES = 34;
 const CATEGORIA_MOVIMENTACOES = 24;
 const URL_SPA = "https://o2seguros.bitrix24.com.br/crm/type/1046/list/category/22/";
 
@@ -366,7 +370,10 @@ export async function lerFonteRamosElementaresBitrix(
     const eventos = historicoPorItem.get(Number(item.id)) || [];
     const dataCompetenciaInformada = dataValida(item[CAMPOS.competencia]);
     const dataCriacao = dataValida(item.createdTime);
-    const dataCompetencia = dataCompetenciaInformada || dataCriacao;
+    // Renovação sem competência informada: usa o mês do fim da vigência (a
+    // cotação é enviada antes do vencimento, então o mês de criação erraria).
+    const ehFunilRenovacoes = Number(item.categoryId) === CATEGORIA_RENOVACOES;
+    const dataCompetencia = dataCompetenciaInformada || (ehFunilRenovacoes ? dataValida(item[CAMPOS.fimVigencia]) : null) || dataCriacao;
     if (!dataCompetencia) continue;
     if (!dataCompetenciaInformada) semCompetencia++;
 
@@ -397,7 +404,7 @@ export async function lerFonteRamosElementaresBitrix(
       continue;
     }
 
-    if (Number(item.categoryId) !== CATEGORIA_CONTRATACOES) continue;
+    if (Number(item.categoryId) !== CATEGORIA_CONTRATACOES && !ehFunilRenovacoes) continue;
     const statusAtual = etapaNovo(item);
     const terminal = statusAtual === "EFETIVADO" || statusAtual === "NÃO EFETIVADO";
     // Mês do desfecho (efetivado/perdido), em Brasília. Só vale se o card está
@@ -410,7 +417,7 @@ export async function lerFonteRamosElementaresBitrix(
     const desfechoNoMes = terminal && mesDesfecho !== null && mesDesfecho <= competencia;
     const desfechoDesteMes = mesDesfecho === competencia;
 
-    if (tipoProcesso === "RENOVACAO") {
+    if (ehFunilRenovacoes || tipoProcesso === "RENOVACAO") {
       const linha = linhaRenovacao({ item, status, origem, produto, seguradora, imobiliaria, responsavel, eventos, desfechoNoMes });
       if (competenciaItem === competencia) abas.renovacoesAtual.push(linha);
       // Renovação de outra competência efetivada/perdida neste mês (antecipada
@@ -468,4 +475,69 @@ export async function lerFonteRamosElementaresBitrix(
     },
     avisos,
   };
+}
+
+// Cards de NEGÓCIO NOVO (categoria Contratações, sem os de renovação), um por
+// card, com as mesmas regras de lerFonteRamosElementaresBitrix: competência =
+// campo "Competência operacional" (ou a criação do card); desfecho
+// (EFETIVADO / NÃO EFETIVADO) no mês em que o card chegou nele. Usado pela
+// Base Única (src/lib/baseUnica/bitrixProdutos.ts) para pôr as cotações de RE
+// na mesma linha do tempo das planilhas -- não muda nada no painel.
+export type CardNovoRamosElementares = {
+  id: number;
+  competencia: string;
+  status: string;
+  desfecho: "EFETIVADO" | "NÃO EFETIVADO" | null;
+  dataDesfecho: string | null; // AAAA-MM-DD (Brasília)
+  produto: string;
+  seguradora: string;
+  companyId: number | null;
+  empresa: string | null;
+  premioTotal: number;
+  comissao: number;
+  criadoEm: string | null;
+};
+export async function listarNovosRamosElementares(): Promise<CardNovoRamosElementares[]> {
+  const [itens, historico, definicoes] = await Promise.all([
+    listarItensSpa(ENTITY_TYPE_ID),
+    listarHistoricoEtapas(ENTITY_TYPE_ID),
+    buscarDefinicaoCampos(ENTITY_TYPE_ID),
+  ]);
+  const empresas = await buscarEmpresas(itens.map((item) => Number(item.companyId || 0)));
+  const historicoPorItem = new Map<number, BitrixStageHistoryEvent[]>();
+  for (const evento of historico) {
+    const lista = historicoPorItem.get(Number(evento.OWNER_ID)) || [];
+    lista.push(evento);
+    historicoPorItem.set(Number(evento.OWNER_ID), lista);
+  }
+  for (const lista of historicoPorItem.values()) lista.sort((a, b) => new Date(a.CREATED_TIME).getTime() - new Date(b.CREATED_TIME).getTime());
+  const diaBrasilia = (d: Date) => d.toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
+
+  const cards: CardNovoRamosElementares[] = [];
+  for (const item of itens) {
+    if (Number(item.categoryId) !== CATEGORIA_CONTRATACOES) continue;
+    if (normalizar(valorEnum(item, CAMPOS.tipoProcesso, definicoes)) === "RENOVACAO") continue;
+    const dataCompetencia = dataValida(item[CAMPOS.competencia]) || dataValida(item.createdTime);
+    if (!dataCompetencia) continue;
+    const status = etapaNovo(item);
+    const terminal = status === "EFETIVADO" || status === "NÃO EFETIVADO";
+    const dataDesfecho = terminal ? dataTerminal(historicoPorItem.get(Number(item.id)) || []) : null;
+    const premioTotal = dinheiro(item[CAMPOS.premioTotal]);
+    const criadoEm = dataValida(item.createdTime);
+    cards.push({
+      id: Number(item.id),
+      competencia: competenciaData(dataCompetencia),
+      status,
+      desfecho: terminal && dataDesfecho ? (status as "EFETIVADO" | "NÃO EFETIVADO") : null,
+      dataDesfecho: dataDesfecho ? diaBrasilia(dataDesfecho) : null,
+      produto: valorEnum(item, CAMPOS.produto, definicoes) || "NÃO INFORMADO",
+      seguradora: valorEnum(item, CAMPOS.seguradoraSelecao, definicoes) || texto(item[CAMPOS.seguradora]),
+      companyId: item.companyId ? Number(item.companyId) : null,
+      empresa: item.companyId ? (empresas[Number(item.companyId)] ?? null) : null,
+      premioTotal,
+      comissao: valorComissao(item, premioTotal),
+      criadoEm: criadoEm ? diaBrasilia(criadoEm) : null,
+    });
+  }
+  return cards;
 }
