@@ -27,14 +27,22 @@ import { lerFonteRamosElementaresBitrix } from "./fonteBitrix";
 // Bitrix, que já traz novos, renovações E endossos. Qualquer outro erro do
 // Google (autenticação, duplicidade de planilha) continua falhando alto, pra
 // não mostrar número parcial sem avisar.
-// Decisão do Matheus (21/10/2026): até outubro/2026 novos e renovações estão
-// 100% migrados pro Bitrix (funis "Seguros Novos" e "Renovações") e a
-// conferência vale por card/negociação (um card = uma negociação por
-// imobiliária; os itens ficam numa planilha anexa), não por item como nas
-// planilhas. Só as renovações com vigência de novembro/2026 em diante ainda
-// vêm da planilha. Por isso a planilha de renovação só entra nas
-// competências desta data em diante.
-const PRIMEIRA_COMPETENCIA_RENOVACAO_NA_PLANILHA = "2026-11";
+// Linha histórica de Ramos Elementares (Matheus, 21/10/2026): de 2015 a
+// set/2026 o controle de cotações (inclusive Automóvel) foi feito em planilhas
+// mensais; a partir de out/2026 tudo vive no Bitrix, em 2 funis da SPA 1046
+// ("Seguros Novos" e "Renovações"); de novembro em diante é só o Bitrix.
+// Unidades diferentes dos dois lados: na planilha cada linha é um ITEM; no
+// Bitrix 1 card = 1 negociação por imobiliária (os itens ficam numa planilha
+// anexa) -- por isso set e out NÃO são comparáveis (ver aviso abaixo).
+//  - Renovações da competência: planilha até 2026-09; Bitrix a partir de 2026-10.
+//  - Renovações da competência SEGUINTE (visão "próxima competência"): planilha
+//    só para novembro/2026 (ainda não migradas) e para meses até set/2026;
+//    out/2026 já vem só do Bitrix.
+// (Novos seguem Bitrix desde 2026-09, decisão de 01/09/2026.)
+const ULTIMA_COMPETENCIA_RENOVACAO_NA_PLANILHA = "2026-09";
+const COMPETENCIA_RENOVACAO_AINDA_NA_PLANILHA = "2026-11";
+const AVISO_TRANSICAO =
+  "Transição planilha → Bitrix: até set/2026 as renovações são contadas por item (linhas das planilhas); a partir de out/2026, por card (1 card = 1 negociação por imobiliária, com os itens em planilha anexa). Set e out não são comparáveis; de novembro em diante, só Bitrix.";
 
 function mesSeguinte(competencia: string): string {
   const [ano, mes] = competencia.split("-").map(Number);
@@ -76,11 +84,12 @@ export async function lerFonteRamosElementaresHibrida(competencia: string): Prom
       novosPendentes: bitrix.abas.novosPendentes,
       novosMes: bitrix.abas.novosMes,
       renovacoesAtual:
-        competencia >= PRIMEIRA_COMPETENCIA_RENOVACAO_NA_PLANILHA
+        competencia <= ULTIMA_COMPETENCIA_RENOVACAO_NA_PLANILHA
           ? [...bitrix.abas.renovacoesAtual, ...google.abas.renovacoesAtual]
           : bitrix.abas.renovacoesAtual,
       renovacoesFutura:
-        mesSeguinte(competencia) >= PRIMEIRA_COMPETENCIA_RENOVACAO_NA_PLANILHA
+        mesSeguinte(competencia) <= ULTIMA_COMPETENCIA_RENOVACAO_NA_PLANILHA ||
+        mesSeguinte(competencia) === COMPETENCIA_RENOVACAO_AINDA_NA_PLANILHA
           ? [...bitrix.abas.renovacoesFutura, ...google.abas.renovacoesFutura]
           : bitrix.abas.renovacoesFutura,
       endossos: google.nomesAbas.endossos ? google.abas.endossos : bitrix.abas.endossos,
@@ -96,6 +105,7 @@ export async function lerFonteRamosElementaresHibrida(competencia: string): Prom
     // endossos caem no Bitrix quando a planilha não tem a aba -- então o aviso
     // "aba não encontrada" dessas abas seria só ruído.
     avisos: [
+      ...(competencia >= "2026-09" ? [AVISO_TRANSICAO] : []),
       ...bitrix.avisos,
       ...google.avisos.filter(
         (aviso) =>
