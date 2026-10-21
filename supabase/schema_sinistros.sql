@@ -268,3 +268,14 @@ alter table sinistros add column if not exists proxima_acao_em date;
 alter table sinistros add column if not exists proxima_acao_descricao text;
 alter table sinistros add column if not exists proxima_acao_responsavel text;
 create index if not exists sinistros_proxima_acao_idx on sinistros(proxima_acao_em) where proxima_acao_em is not null;
+
+-- 21/10/2026: o Workspace passa a ser onde a O2 gere os sinistros (sai o Corp).
+-- Os abertos do Corp com aviso nos últimos 2 anos e 1 dia viraram cards
+-- (origem = 'corp', sinistro_corp_id); os mais antigos foram zerados
+-- (sinistros_corp.baixado_em) -- ver schema_sinistros_corp.sql. Migração única,
+-- aplicada via MCP; o importador do Corp não mexe nos cards.
+alter table sinistros add column if not exists produto text not null default 'fianca';
+alter table sinistros add column if not exists sinistro_corp_id uuid unique references sinistros_corp(id) on delete set null;
+alter table sinistros drop constraint if exists sinistros_origem_check;
+alter table sinistros add constraint sinistros_origem_check check (origem in ('workspace', 'email', 'corp'));
+create index if not exists sinistros_etapa_idx on sinistros(etapa);

@@ -23,22 +23,28 @@ import {
 import { signOut } from "../../actions";
 import { Aviso, EtiquetaEtapa, enderecoCurto } from "../ui";
 import Abas from "../Abas";
-import { filtrosDashboard } from "@/lib/sinistros/periodo";
+import { filtrosDashboard, lista } from "@/lib/sinistros/periodo";
+import { PRODUTOS, rotuloProduto } from "@/lib/sinistros/produtos";
 
 export const dynamic = "force-dynamic";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- linhas do Supabase sem tipos gerados */
 
 const CAMPOS =
-  "id, codigo, tipo, etapa, seguradora, numero_apolice, locatario_nome, imovel_logradouro, imovel_numero, imovel_complemento, data_primeiro_vencimento, data_segundo_vencimento, data_entrega_chaves, prazo_aviso, aviso_fora_prazo, valor_avisado, responsavel_o2, pre_analise_desde, pendencia_prazo, documentacao_completa_em, numero_sinistro_seguradora, proxima_acao_em, proxima_acao_descricao, proxima_acao_responsavel, updated_at, imobiliarias(nome, apelido)";
+  "id, codigo, produto, origem, locador_nome, data_abertura_seguradora, tipo, etapa, seguradora, numero_apolice, locatario_nome, imovel_logradouro, imovel_numero, imovel_complemento, data_primeiro_vencimento, data_segundo_vencimento, data_entrega_chaves, prazo_aviso, aviso_fora_prazo, valor_avisado, responsavel_o2, pre_analise_desde, pendencia_prazo, documentacao_completa_em, numero_sinistro_seguradora, proxima_acao_em, proxima_acao_descricao, proxima_acao_responsavel, updated_at, imobiliarias(nome, apelido)";
 
 export default async function SinistrosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ sucesso?: string; resp?: string; q?: string; encerrados?: string; como?: string; imob?: string; [k: string]: string | undefined }>;
+  searchParams: Promise<{ sucesso?: string; resp?: string; q?: string; encerrados?: string; como?: string; imob?: string; [k: string]: string | string[] | undefined }>;
 }) {
   const parametros = await searchParams;
-  const { sucesso, resp, q, encerrados, como, imob } = parametros;
+  const um = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+  const [sucesso, resp, q, encerrados, como, imob] = [parametros.sucesso, parametros.resp, parametros.q, parametros.encerrados, parametros.como, parametros.imob].map(um);
+  // Mesmos filtros do dashboard (produto, seguradora, imobiliária): a contagem
+  // de abertos aqui = "Em aberto" do dashboard (21/10/2026).
+  const produtos = lista(parametros.prod);
+  const seguradoras = lista(parametros.seg);
   const supabase = await createClient();
   const {
     data: { user },
@@ -55,6 +61,8 @@ export default async function SinistrosPage({
 
   let consulta = supabase.from("sinistros").select(CAMPOS).order("updated_at", { ascending: false }).limit(500);
   if (encerrados !== "1") consulta = consulta.neq("etapa", "cancelado");
+  if (interno && produtos.length) consulta = consulta.in("produto", produtos);
+  if (interno && seguradoras.length) consulta = consulta.in("seguradora", seguradoras);
   // Filtro de imobiliária/grupo vindo do dashboard (chave de sinistros_kpi_grupos):
   // i:<imobiliaria_id> · g:<grupo_id> · t:<texto do Corp> (sem sinistro no módulo).
   let nomeFiltroImob: string | null = null;
@@ -78,6 +86,9 @@ export default async function SinistrosPage({
     );
   }
   if (interno && resp === "meus") sinistros = sinistros.filter((s) => s.responsavel_o2 === user.email);
+  const opcoesSeguradoras = [...new Set(sinistros.map((s) => s.seguradora).filter(Boolean))].sort() as string[];
+  const abertos = sinistros.filter((s) => COLUNAS.includes(s.etapa)).length;
+  const filtros = filtrosDashboard(parametros);
 
   return (
     <>
@@ -89,7 +100,7 @@ export default async function SinistrosPage({
           titulo={interno ? "Sinistros — gestão" : "Sinistros"}
           subtitulo={interno ? "Fila do Setor de Garantias · sinistros abertos pelo Workspace" : "Seguro Fiança"}
         />
-        <Abas atual="gestao" interno={interno} filtros={filtrosDashboard(parametros)} />
+        <Abas atual="gestao" interno={interno} filtros={filtros} />
         {nomeFiltroImob && (
           <div className="flex items-center gap-2 text-sm">
             <span className="rounded-full bg-blue-100 px-3 py-1 font-semibold text-blue-800">Imobiliária: {nomeFiltroImob}</span>
@@ -105,6 +116,27 @@ export default async function SinistrosPage({
             placeholder={interno ? "Buscar locatário, apólice, nº, imobiliária…" : "Buscar locatário, endereço, apólice ou nº do sinistro…"}
             className="min-w-64 flex-1 rounded-lg border border-gray-300 px-3 py-2"
           />
+          {imob && <input type="hidden" name="imob" value={imob} />}
+          {interno && (
+            <select name="prod" defaultValue={produtos[0] ?? ""} className="rounded-lg border border-gray-300 px-2 py-2">
+              <option value="">Todos os produtos</option>
+              {PRODUTOS.map((p) => (
+                <option key={p.chave} value={p.chave}>
+                  {p.rotulo}
+                </option>
+              ))}
+            </select>
+          )}
+          {interno && (
+            <select name="seg" defaultValue={seguradoras[0] ?? ""} className="rounded-lg border border-gray-300 px-2 py-2">
+              <option value="">Todas as seguradoras</option>
+              {opcoesSeguradoras.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          )}
           {interno && (
             <select name="resp" defaultValue={resp ?? ""} className="rounded-lg border border-gray-300 px-2 py-2">
               <option value="">Todos os responsáveis</option>
@@ -117,6 +149,16 @@ export default async function SinistrosPage({
           <button className="rounded-full bg-o2-navy px-4 py-2 font-semibold text-white">Filtrar</button>
         </form>
 
+        {interno && (
+          <p className="text-sm text-gray-600">
+            <b className="text-o2-navy">{abertos} em aberto</b> nas colunas abaixo
+            {produtos.length ? ` · ${produtos.map(rotuloProduto).join(", ")}` : " · todos os produtos"} — o mesmo número do card &quot;Em aberto&quot; do{" "}
+            <Link href={`/sinistros?${filtros}`} className="text-o2-blue underline">
+              dashboard
+            </Link>{" "}
+            com estes filtros.
+          </p>
+        )}
         {interno ? <Fila sinistros={sinistros} /> : <ListaImobiliaria sinistros={sinistros} />}
       </main>
     </>
@@ -188,7 +230,7 @@ function ListaImobiliaria({ sinistros }: { sinistros: any[] }) {
                   <tr key={s.id} className="border-t border-gray-100 hover:bg-gray-50">
                     <td className="px-3 py-2">
                       <Link href={`/sinistros/${s.id}`} className="font-semibold text-o2-navy hover:underline">
-                        {s.locatario_nome || "Locatário não informado"}
+                        {s.locatario_nome || s.locador_nome || "Locatário não informado"}
                       </Link>
                       <div className="text-xs text-gray-500">
                         SIN-{s.codigo} · {enderecoCurto(s)}
@@ -239,6 +281,7 @@ function alertaDo(s: any): { texto: string; nivel: "vermelho" | "laranja" | null
     return { texto: `imob. responde em ${r} dia(s)`, nivel: r <= 2 ? "laranja" : null };
   }
   if (s.etapa === "na_seguradora") {
+    if (!s.documentacao_completa_em && s.origem === "corp") return { texto: `aviso em ${formatarData(s.data_abertura_seguradora)}`, nivel: null };
     if (!s.documentacao_completa_em) return { texto: "doc. incompleta na seguradora", nivel: "laranja" };
     const d = diasEntre(s.documentacao_completa_em, hoje);
     return { texto: `seguradora dia ${d}/${PRAZO_SEGURADORA_DIAS}`, nivel: d > PRAZO_SEGURADORA_DIAS ? "vermelho" : null };
@@ -304,7 +347,7 @@ function Fila({ sinistros }: { sinistros: any[] }) {
                       <td className="px-3 py-2 text-xs">{s.proxima_acao_descricao || "—"}</td>
                       <td className="px-3 py-2 text-xs">
                         <Link href={`/sinistros/${s.id}`} className="font-semibold text-o2-navy hover:underline">
-                          {s.locatario_nome || "Locatário não informado"}
+                          {s.locatario_nome || s.locador_nome || "Locatário não informado"}
                         </Link>
                         <span className="text-gray-500"> · SIN-{s.codigo} · {s.imobiliarias?.apelido || s.imobiliarias?.nome || "imob. não definida"}</span>
                       </td>
@@ -334,7 +377,7 @@ function Fila({ sinistros }: { sinistros: any[] }) {
             .filter(({ s }) => s.etapa === etapa)
             .sort((x, y) => (x.a.nivel === "vermelho" ? -1 : 0) - (y.a.nivel === "vermelho" ? -1 : 0));
           return (
-            <div key={etapa} className="rounded-xl bg-gray-100 p-2">
+            <div key={etapa} className="max-h-[75vh] overflow-y-auto rounded-xl bg-gray-100 p-2">
               <p className="mb-2 px-1 text-xs font-semibold text-o2-navy">
                 {ETAPAS[etapa].titulo} ({lista.length})
               </p>
@@ -347,11 +390,12 @@ function Fila({ sinistros }: { sinistros: any[] }) {
                       a.nivel === "vermelho" ? "border-red-600" : a.nivel === "laranja" ? "border-o2-coral" : "border-o2-blue"
                     }`}
                   >
-                    <p className="font-semibold text-o2-navy">{s.locatario_nome || "Locatário não informado"}</p>
+                    <p className="font-semibold text-o2-navy">{s.locatario_nome || s.locador_nome || "Locatário não informado"}</p>
                     <p className="text-gray-500">{s.imobiliarias?.apelido || s.imobiliarias?.nome}</p>
                     <p className="text-gray-500">
-                      {s.seguradora || "seguradora?"} · {tituloTipo(s.tipo).split(" — ")[0]}
-                      {s.tipo && s.tipo !== "ocupado" ? " (chaves)" : ""}
+                      {rotuloProduto(s.produto)} · {s.seguradora || "seguradora?"}
+                      {s.produto === "fianca" && s.tipo ? ` · ${tituloTipo(s.tipo).split(" — ")[0]}` : ""}
+                      {s.origem === "corp" && <span className="ml-1 rounded bg-gray-200 px-1 text-[10px] text-gray-600">Corp</span>}
                     </p>
                     {a.texto && <p className={a.nivel === "vermelho" ? "font-semibold text-red-700" : a.nivel === "laranja" ? "font-semibold text-orange-700" : "text-gray-500"}>{a.texto}</p>}
                     {s.proxima_acao_em && (
@@ -376,7 +420,7 @@ function Fila({ sinistros }: { sinistros: any[] }) {
             {rascunhos.map((s) => (
               <li key={s.id}>
                 <Link href={`/sinistros/${s.id}`} className="text-o2-blue hover:underline">
-                  {s.locatario_nome || "Locatário não informado"}
+                  {s.locatario_nome || s.locador_nome || "Locatário não informado"}
                 </Link>{" "}
                 · {s.imobiliarias?.apelido || s.imobiliarias?.nome || "imob. não definida"} · prazo {formatarData(s.prazo_aviso)}
               </li>
@@ -391,7 +435,7 @@ function Fila({ sinistros }: { sinistros: any[] }) {
             {encerrados.map((s) => (
               <li key={s.id}>
                 <Link href={`/sinistros/${s.id}`} className="text-o2-blue hover:underline">
-                  {s.locatario_nome || "Locatário não informado"}
+                  {s.locatario_nome || s.locador_nome || "Locatário não informado"}
                 </Link>{" "}
                 · {s.imobiliarias?.apelido || s.imobiliarias?.nome} · {ETAPAS[s.etapa as EtapaSinistro].titulo}
               </li>

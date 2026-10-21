@@ -60,3 +60,9 @@ alter table sinistros_corp add column if not exists produto text;
 alter table sinistros_corp add column if not exists subtipo text;
 update sinistros_corp set produto = 'fianca' where produto is null;
 create index if not exists sinistros_corp_produto_idx on sinistros_corp(produto);
+
+-- 21/10/2026: pendente com aviso há mais de 2 anos e 1 dia foi zerado na
+-- migração para o Workspace. Zerado não é encerramento: sai do "em aberto" e
+-- não entra em mês nenhum como encerrado.
+alter table sinistros_corp add column if not exists baixado_em date;
+alter table sinistros_corp add column if not exists baixado_motivo text;

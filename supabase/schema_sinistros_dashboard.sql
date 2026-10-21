@@ -177,14 +177,20 @@ begin
 
   perform calcular_carteira_sinistros(desde);
 
-  -- Sinistros (tabela pequena): imobiliária e seguradora pela apólice, via índice
-  -- (produto, Nosso Nº) da produção -- sem varrer a produção.
+  -- Sinistros (tabelas pequenas). Cada sinistro conta uma vez (21/10/2026):
+  --   * histórico do Corp SEM card no Workspace (encerrados e zerados);
+  --   * todo card do Workspace (abertos pelo módulo e os trazidos do Corp) --
+  --     a gestão é feita aqui, então o card manda.
+  -- Zerado (baixado_em) não é encerramento: situação BAIXADO, sem data de
+  -- encerramento -> não entra em "em aberto" nem em encerrados de mês nenhum.
+  -- Imobiliária/seguradora do Corp pela apólice, via índice (produto, Nosso Nº).
   delete from sinistros_kpi_fato where true;
   insert into sinistros_kpi_fato (id, origem, produto, nosso_numero, numero_sinistro, seguradora, grupo_chave,
     tipo_sinistro, situacao, dt_aviso, dt_encerramento, vl_avisado, vl_indenizado, segurado)
   select sc.id, 'corp', coalesce(sc.produto, 'fianca'), sc.nosso_numero, sc.numero_sinistro, coalesce(ap.seguradora, sc.seguradora),
     case when ap.texto is not null then 't:' || ap.texto end,
-    coalesce(sc.tipo_sinistro, sc.subtipo), sc.situacao, coalesce(sc.dt_aviso, sc.dt_ocorrencia), sc.dt_encerramento,
+    coalesce(sc.tipo_sinistro, sc.subtipo), case when sc.baixado_em is not null then 'BAIXADO' else sc.situacao end,
+    coalesce(sc.dt_aviso, sc.dt_ocorrencia), case when sc.baixado_em is null then sc.dt_encerramento end,
     sc.vl_avisado, sc.vl_indenizado, sc.segurado
   from sinistros_corp sc
   left join lateral (
@@ -193,7 +199,10 @@ begin
     where p.fonte = 'corp' and p.origem_corp_numero = sc.nosso_numero
       and p.produto = case when coalesce(sc.produto, 'fianca') in ('fianca', 'capitalizacao', 'automovel') then coalesce(sc.produto, 'fianca') else 're' end
     limit 1
-  ) ap on true;
+  ) ap on true
+  where not exists (select 1 from sinistros s where s.sinistro_corp_id = sc.id);
+
+  -- Cards do Workspace: mesma rotina do gatilho (fica depois do vínculo, abaixo).
 
   -- Vínculo texto -> imobiliária/grupo: grupo da imobiliária > imobiliária
   -- confirmada > texto do Corp. Só os textos que aparecem na base.
@@ -223,6 +232,17 @@ begin
   left join imobiliarias i on vi.chave = 'i:' || i.id::text
   left join imobiliaria_grupos g on vi.chave = 'g:' || g.id::text
   order by vi.chave;
+  -- Imobiliária/grupo de card do Workspace que não aparece na carteira do Corp.
+  insert into sinistros_kpi_grupos (chave, nome, tipo)
+  select distinct on (f.grupo_chave) f.grupo_chave, coalesce(g.nome, nullif(i.apelido, ''), i.nome, f.grupo_chave),
+    case when g.id is not null then 'grupo' else 'imobiliaria' end
+  from sinistros_kpi_fato f
+  left join imobiliarias i on f.grupo_chave = 'i:' || i.id::text
+  left join imobiliaria_grupos g on f.grupo_chave = 'g:' || g.id::text
+  where f.grupo_chave ~ '^[ig]:' and not exists (select 1 from sinistros_kpi_grupos k where k.chave = f.grupo_chave)
+  order by f.grupo_chave;
+
+  perform sinistros_kpi_fato_cards();
 
   -- Reaponta só o que mudou de vínculo (meses fechados não são recalculados).
   update sinistros_kpi_carteira_mes c set grupo_chave = vi.chave
@@ -237,6 +257,60 @@ begin
   return agora;
 end;
 $$;
+
+-- Parte do dashboard que vem dos cards do Workspace (21/10/2026): refeita na
+-- hora a cada mudança nos cards (tabela pequena), para Gestão e KPIs nunca
+-- divergirem. A atualização completa chama a mesma rotina.
+create or replace function sinistros_kpi_fato_cards()
+returns void
+language plpgsql security definer set search_path to 'public'
+as $
+begin
+  delete from sinistros_kpi_fato where origem = 'workspace';
+  insert into sinistros_kpi_fato (id, origem, produto, nosso_numero, numero_sinistro, seguradora, grupo_chave,
+    tipo_sinistro, situacao, dt_aviso, dt_encerramento, vl_avisado, vl_indenizado, segurado)
+  select s.id, 'workspace', s.produto, sc.nosso_numero, coalesce(s.numero_sinistro_seguradora, sc.numero_sinistro), s.seguradora,
+    coalesce('g:' || i.grupo_id::text, 'i:' || i.id::text,
+             case when sc.id is not null then coalesce(vi.chave, 't:' || trim(ap.texto)) end),
+    case when s.tipo = 'ocupado' then 'ocupado' when s.tipo like 'chaves%' then 'chaves' else sc.subtipo end,
+    case when s.etapa = 'encerrado' and s.desfecho = 'indenizado' then 'INDENIZADO'
+         when s.etapa = 'encerrado' then 'ENCERRADO SEM INDENIZAÇÃO' else 'EM ANDAMENTO' end,
+    coalesce(s.enviado_em::date, s.created_at::date), case when s.etapa = 'encerrado' then coalesce(s.encerrado_em, s.updated_at::date) end,
+    s.valor_avisado, sc.vl_indenizado, coalesce(s.locador_nome, s.locatario_nome)
+  from sinistros s
+  left join imobiliarias i on i.id = s.imobiliaria_id
+  left join sinistros_corp sc on sc.id = s.sinistro_corp_id
+  left join lateral (
+    select p.imobiliaria_texto texto from producao_unificada p
+    where sc.id is not null and s.imobiliaria_id is null and p.fonte = 'corp' and p.origem_corp_numero = sc.nosso_numero
+      and p.produto = case when sc.produto in ('fianca', 'capitalizacao', 'automovel') then sc.produto else 're' end
+    limit 1
+  ) ap on true
+  left join sinistros_kpi_vinculo vi on vi.texto = trim(ap.texto)
+  where s.etapa not in ('rascunho', 'cancelado');
+
+  insert into sinistros_kpi_grupos (chave, nome, tipo)
+  select distinct on (f.grupo_chave) f.grupo_chave, coalesce(g.nome, nullif(i.apelido, ''), i.nome, f.grupo_chave),
+    case when g.id is not null then 'grupo' else 'imobiliaria' end
+  from sinistros_kpi_fato f
+  left join imobiliarias i on f.grupo_chave = 'i:' || i.id::text
+  left join imobiliaria_grupos g on f.grupo_chave = 'g:' || g.id::text
+  where f.origem = 'workspace' and f.grupo_chave ~ '^[ig]:'
+    and not exists (select 1 from sinistros_kpi_grupos k where k.chave = f.grupo_chave)
+  order by f.grupo_chave;
+end;
+$;
+revoke execute on function sinistros_kpi_fato_cards() from anon, public, authenticated;
+
+create or replace function sinistros_kpi_fato_cards_gatilho()
+returns trigger language plpgsql security definer set search_path to 'public'
+as $ begin perform sinistros_kpi_fato_cards(); return null; end; $;
+
+drop trigger if exists sinistros_kpi_fato_cards on sinistros;
+create trigger sinistros_kpi_fato_cards
+  after insert or delete or update of etapa, desfecho, encerrado_em, produto, seguradora, imobiliaria_id, enviado_em,
+    valor_avisado, tipo, locador_nome, locatario_nome, numero_sinistro_seguradora
+  on sinistros for each statement execute function sinistros_kpi_fato_cards_gatilho();
 
 revoke execute on function atualizar_base_kpis_sinistros() from anon, public;
 grant execute on function atualizar_base_kpis_sinistros() to authenticated, service_role;
@@ -453,7 +527,7 @@ begin
   mods as (
     select m.* from sinistros m
     left join imobiliarias i on i.id = m.imobiliaria_id
-    where m.enviado_em is not null and m.etapa <> 'cancelado'
+    where m.enviado_em is not null and m.etapa <> 'cancelado' and m.origem <> 'corp'
       and (p_produtos is null or 'fianca' = any(p_produtos))
       and m.enviado_em::date between p_inicio and fim_dia
       and (p_grupo is null or p_grupo = coalesce('g:' || i.grupo_id::text, 'i:' || i.id::text))

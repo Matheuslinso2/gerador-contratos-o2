@@ -36,6 +36,7 @@ import {
   salvarProximaAcao,
 } from "../actions";
 import FormContrato from "../FormContrato";
+import { rotuloProduto } from "@/lib/sinistros/produtos";
 import Abas from "../Abas";
 import Passos from "../Passos";
 import { Aviso, EtiquetaEtapa, botaoPrimario, botaoSecundario, cartao, enderecoCurto, inputClass, labelClass } from "../ui";
@@ -93,7 +94,8 @@ export default async function SinistroPage({
 
   const etapa = s.etapa as EtapaSinistro;
   const imobNome = s.imobiliarias?.apelido || s.imobiliarias?.nome || (s.imobiliaria_id ? "Imobiliária" : "Imobiliária não definida");
-  const checklist = montarChecklist(s);
+  // Checklist de documentos é o da Fiança; nos demais produtos só "outros" (opcional).
+  const checklist = (s.produto ?? "fianca") === "fianca" ? montarChecklist(s) : montarChecklist(s).filter((c) => !c.obrigatorio);
   const listaDebitos = (debitos ?? []) as Debito[];
 
   const modoAssistente = etapa === "rascunho" || (etapa === "pendencia_imobiliaria" && !interno);
@@ -108,10 +110,11 @@ export default async function SinistroPage({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <PageHeader
             icon={<IconShield />}
-            titulo={s.locatario_nome || "Locatário não informado"}
+            titulo={s.locatario_nome || s.locador_nome || "Locatário não informado"}
             subtitulo={
               <>
-                SIN-{s.codigo} · {tituloTipo(s.tipo)} · {s.seguradora || "seguradora não informada"}
+                SIN-{s.codigo} · {(s.produto ?? "fianca") === "fianca" ? tituloTipo(s.tipo) : rotuloProduto(s.produto)} · {s.seguradora || "seguradora não informada"}
+                {s.origem === "corp" && <> · trazido do Corp</>}
                 {interno && <> · {imobNome}</>}
               </>
             }
