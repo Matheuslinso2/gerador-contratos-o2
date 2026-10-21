@@ -45,10 +45,12 @@ export default async function AdminImobiliariaDetalhePage({
 
   // Base Única — revisão uma a uma (Fase 2): fontes, sugestões e grupo.
   const buscaTermo = (buscar_nome ?? "").trim();
-  const [{ ligados, sugeridos }, { data: grupos }, buscaResultados] = await Promise.all([
+  const [{ ligados, sugeridos }, { data: grupos }, buscaResultados, { data: historico }] = await Promise.all([
     buscarFontesDaFicha(supabase, id),
     supabase.from("imobiliaria_grupos").select("id, nome").order("nome"),
     buscarNomesSoltos(supabase, buscaTermo),
+    // Alterações automáticas na ficha (ex.: Power BI, 21/10/2026) — nada muda sem rastro.
+    supabase.from("imobiliaria_historico").select("campo, motivo, origem, criado_em").eq("imobiliaria_id", id).order("criado_em", { ascending: false }).limit(20),
   ]);
   const idsCitados = [...new Set([...sugeridos, ...buscaResultados].flatMap((r: RegistroFonte) => r.sugestoes.map((x) => x.imobiliaria_id)))];
   const { data: fichasCitadas } = idsCitados.length
@@ -88,10 +90,33 @@ export default async function AdminImobiliariaDetalhePage({
           voltarPara={voltarPara}
         />
 
+        {(imobiliaria.origem_comercial || imobiliaria.tipo_pessoa || imobiliaria.centralizador_power_bi) && (
+          <section className="space-y-1 rounded-lg border border-gray-200 bg-white p-3 text-sm">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Power BI — Cadastro de Produtores</h2>
+            <p className="text-gray-700">
+              Origem: <b>{imobiliaria.origem_comercial || "—"}</b> · Tipo de pessoa: <b>{imobiliaria.tipo_pessoa || "—"}</b> · Centralizador:{" "}
+              <b>{imobiliaria.centralizador_power_bi || "—"}</b>
+            </p>
+            <p className="text-xs text-gray-500">Vem da lista do SharePoint usada pelo Power BI, que prevalece sobre o cadastro do Workspace (decisão de 21/10/2026).</p>
+          </section>
+        )}
+        {(historico ?? []).length > 0 && (
+          <details className="rounded-lg border border-gray-200 bg-white p-3 text-sm">
+            <summary className="cursor-pointer font-semibold text-o2-navy">Histórico de alterações automáticas ({historico!.length})</summary>
+            <ul className="mt-2 space-y-1 text-xs text-gray-600">
+              {historico!.map((h, i) => (
+                <li key={i}>
+                  {new Date(h.criado_em).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })} · {h.origem === "power_bi" ? "Power BI" : h.origem} · {h.motivo}
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+
         {imobiliaria.cadastro_incompleto && (
           <p className="rounded-lg border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800">
-            ⚠️ Registro criado automaticamente pelo Faturas — ainda não tem contrato-base/índice de reajuste
-            configurados por completo.
+            ⚠️ Cadastro incompleto — ficha criada automaticamente (Faturas ou Base Única); ainda não tem contrato-base/índice de
+            reajuste configurados por completo.
           </p>
         )}
 
