@@ -106,6 +106,14 @@
     {
       "path": "/api/cron/base-unica-bitrix?produto=re",
       "schedule": "46 * * * *"
+    },
+    {
+      "path": "/api/cron/base-unica-bitrix?produto=fianca-renovacao",
+      "schedule": "48 * * * *"
+    },
+    {
+      "path": "/api/cron/base-unica-bitrix?produto=re-renovacao",
+      "schedule": "52 * * * *"
     }
   ]
 }

@@ -54,10 +54,12 @@ export function competenciaDoNome(nome: string, pasta = ""): string | null {
 }
 const txt = (v: unknown) => (v == null ? "" : String(v).replace(/\s+/g, " ").trim());
 // Datas da cópia xlsx vêm como Date (meia-noite de Brasília) ou texto d/m/aaaa.
+// Ano fora de 2000–2100 (digitação, ex.: 20255) vira vazio.
+const anoOk = (iso: string | null) => (iso && /^20[0-9][0-9]-/.test(iso) ? iso : null);
 function data(v: unknown, anoRef?: string): string | null {
   if (v == null || v === "") return null;
-  if (v instanceof Date && !isNaN(v.getTime())) return new Date(v.getTime() - 3 * 3600_000).toISOString().slice(0, 10);
-  if (typeof v === "number" && v > 20000 && v < 80000) return new Date(Math.round((v - 25569) * 86400e3)).toISOString().slice(0, 10);
+  if (v instanceof Date && !isNaN(v.getTime())) return anoOk(new Date(v.getTime() - 3 * 3600_000).toISOString().slice(0, 10));
+  if (typeof v === "number" && v > 20000 && v < 80000) return anoOk(new Date(Math.round((v - 25569) * 86400e3)).toISOString().slice(0, 10));
   const m = String(v).trim().match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/);
   if (!m) return null;
   let [, d, mes, a] = m;
