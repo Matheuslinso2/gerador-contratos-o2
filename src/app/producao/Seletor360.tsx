@@ -41,6 +41,7 @@ export default function Seletor360({
 
   const anoAtual = mesAtual.slice(0, 4);
   const atalhos = [
+    { rotulo: "Mês atual", de: mesAtual, ate: mesAtual },
     { rotulo: "Últimos 12 meses", de: somarMeses(mesAtual, -11), ate: mesAtual },
     { rotulo: `${anoAtual} até agora`, de: `${anoAtual}-01`, ate: mesAtual },
     { rotulo: String(Number(anoAtual) - 1), de: `${Number(anoAtual) - 1}-01`, ate: `${Number(anoAtual) - 1}-12` },

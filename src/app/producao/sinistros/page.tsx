@@ -32,7 +32,8 @@ export default async function SinistrosCorpPage({ searchParams }: { searchParams
   const { supabase, user, opcoes } = await abrirPainel();
   const mesAtual = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }).slice(0, 7);
   const meses = (opcoes.meses ?? []).filter((m) => m <= mesAtual);
-  let de = mesValido(sp.de) ?? meses[0] ?? "2020-01";
+  // Regra do Matheus (21/10/2026): toda aba do Power BI abre no mês vigente.
+  let de = mesValido(sp.de) ?? mesAtual;
   let ate = mesValido(sp.ate) ?? mesAtual;
   if (de > ate) [de, ate] = [ate, de];
   const situacoes = opcoes.situacoes ?? [];

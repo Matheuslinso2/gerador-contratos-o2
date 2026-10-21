@@ -2,7 +2,7 @@ import AppHeader from "@/components/AppHeader";
 import PageHeader from "@/components/PageHeader";
 import { IconChart } from "@/components/icons";
 import { signOut } from "../../actions";
-import { Abas, ah, Alternador, BarrasH, Cartao, compacto, div, FonteDados, mesValido, num, pct, Quadro, reais, rotuloMesLongo, somarMeses, Variacao } from "../_corp/comum";
+import { Abas, ah, Alternador, BarrasH, Cartao, compacto, div, FonteDados, mesValido, num, pct, Quadro, reais, rotuloMesLongo, Variacao } from "../_corp/comum";
 import { abrirPainel, camposProducao, filtrosProducao, prontoOuCalcula, ROTULO_CANCELADO, ROTULO_TIPO, temFiltro } from "../_corp/dados";
 import FiltrosCorp from "../_corp/FiltrosCorp";
 
@@ -37,7 +37,8 @@ export default async function ProducaoGeralPage({ searchParams }: { searchParams
   const { supabase, user, opcoes } = await abrirPainel();
   const meses = opcoes.meses ?? [];
   const mesAtual = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }).slice(0, 7);
-  const padrao = meses.includes(somarMeses(mesAtual, -1)) ? somarMeses(mesAtual, -1) : (meses.at(-1) ?? mesAtual);
+  // Regra do Matheus (21/10/2026): toda aba do Power BI abre no mês vigente.
+  const padrao = meses.includes(mesAtual) ? mesAtual : (meses.filter((m) => m <= mesAtual).at(-1) ?? mesAtual);
   const mes = mesValido(sp.mes) && meses.includes(sp.mes!) ? sp.mes! : padrao;
   const metrica = METRICAS.some((m) => m.valor === sp.met) ? sp.met! : "docs";
   const janela = sp.jan === "ytd" ? "ytd" : "mes";

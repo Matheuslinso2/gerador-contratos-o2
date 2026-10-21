@@ -143,11 +143,10 @@ export default async function ProducaoPage({
   if (!isAdmin(user.email) && !isColaboradorO2(user.email)) redirect("/");
 
   const mesAtual = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }).slice(0, 7);
-  const ultimoFechado = somarMeses(mesAtual, -1);
   const umAlvo = lista(sp.g).filter(uuid).length + lista(sp.i).filter(uuid).length === 1;
-  // 360: o mês atual entra (uso das ferramentas e sinistros abertos são recentes).
-  let de = mesValido(sp.de) ?? somarMeses(umAlvo ? mesAtual : ultimoFechado, -11);
-  let ate = mesValido(sp.ate) ?? (umAlvo ? mesAtual : ultimoFechado);
+  // Regra do Matheus (21/10/2026): toda aba do Power BI abre no mês vigente.
+  let de = mesValido(sp.de) ?? mesAtual;
+  let ate = mesValido(sp.ate) ?? mesAtual;
   if (de < "2015-01") de = "2015-01";
   if (ate > mesAtual) ate = mesAtual;
   if (de > ate) [de, ate] = [ate, de];

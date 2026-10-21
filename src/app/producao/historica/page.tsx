@@ -56,8 +56,9 @@ export default async function ProducaoHistoricaPage({ searchParams }: { searchPa
   const meses = opcoes.meses ?? [];
   const mesAtual = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }).slice(0, 7);
   const ultimo = meses.filter((m) => m <= mesAtual).at(-1) ?? mesAtual;
-  let de = mesValido(sp.de) ?? meses[0] ?? "2020-01";
-  let ate = mesValido(sp.ate) ?? somarMeses(mesAtual, -1);
+  // Regra do Matheus (21/10/2026): toda aba do Power BI abre no mês vigente.
+  let de = mesValido(sp.de) ?? ultimo;
+  let ate = mesValido(sp.ate) ?? ultimo;
   if (ate > ultimo) ate = ultimo;
   if (de > ate) [de, ate] = [ate, de];
   const visao = VISOES.some((v) => v.valor === sp.visao) ? sp.visao! : "ano";

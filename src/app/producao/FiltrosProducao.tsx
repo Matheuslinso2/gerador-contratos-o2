@@ -49,6 +49,7 @@ export default function FiltrosProducao({
   const ultimoFechado = somarMeses(mesAtual, -1);
   const anoAtual = mesAtual.slice(0, 4);
   const atalhos: { rotulo: string; de: string; ate: string }[] = [
+    { rotulo: "Mês atual", de: mesAtual, ate: mesAtual },
     { rotulo: "Últimos 12 meses", de: somarMeses(ultimoFechado, -11), ate: ultimoFechado },
     { rotulo: `${anoAtual} até agora`, de: `${anoAtual}-01`, ate: mesAtual },
     { rotulo: `1º sem/${anoAtual}`, de: `${anoAtual}-01`, ate: `${anoAtual}-06` },
