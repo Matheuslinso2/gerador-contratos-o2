@@ -23,8 +23,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // produtor da ficha para Venda direta O2) só é aplicado quando o Matheus já
 // aprovou aquele caso (listas abaixo). Caso novo fica só em `pendentes`.
 
-// Aprovados pelo Matheus em 21/10/2026.
-const GRUPOS_DESFAZER_APROVADOS = new Set(["Ribas-HP / Pintas / HC Consultoria"]);
+// Aprovados pelo Matheus em 21/10/2026 (Max Brokers na resposta direta dele, no mesmo dia).
+const GRUPOS_DESFAZER_APROVADOS = new Set(["Ribas-HP / Pintas / HC Consultoria", "Max Brokers"]);
 const VENDA_DIRETA_DESLIGAR_APROVADOS = new Set(["MARTINELLI (BASE)"]);
 
 const ENTRA = new Set(["ENTRA", "TRATAR N1", "TRATAR N2"]);
