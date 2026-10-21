@@ -41,21 +41,26 @@ const COLUNAS_PRODUTOR = new Set([
   "filial", "corretor", "tipo_pessoa", "Title", "Título", "__id",
 ]);
 
+// Texto EXATO, sem limpar espaços: o Power BI é a referência (o Workspace é
+// espelho dele) e ele compara o nome do produtor e as classes exatamente como
+// estão escritos na lista — nome com espaço sobrando não casa com o Corp e a
+// produção dele fica fora, lá e aqui (aparece em Inconsistências).
+const exato = (v: unknown): string | null => (v === null || v === undefined || v === "" ? null : String(v));
+
 export function regrasProdutor(lista: ListaBruta) {
   const porNome = new Map<string, Record<string, unknown>>();
   for (const o of porNomeDeExibicao(lista)) {
-    const produtor = t(o.produtor);
+    const produtor = exato(o.produtor);
     if (!produtor) continue;
     const sistemas: Record<string, string> = {};
     for (const [k, v] of Object.entries(o)) if (!COLUNAS_PRODUTOR.has(k) && t(v)) sistemas[k] = t(v)!;
     porNome.set(produtor, {
       produtor,
-      // como está escrito na lista (o Power BI compara este texto exato; espaço sobrando = produção fora do PBI)
-      nome_no_sharepoint: typeof o.produtor === "string" ? o.produtor : produtor,
-      entra_base_com_corretora: t(o.entra_base_com_corretora),
-      entra_base_com_produtor: t(o.entra_base_com_produtor),
+      nome_no_sharepoint: produtor,
+      entra_base_com_corretora: exato(o.entra_base_com_corretora),
+      entra_base_com_produtor: exato(o.entra_base_com_produtor),
       origem: t(o.origem),
-      centralizador_parceiro: t(o.centralizador_parceiro),
+      centralizador_parceiro: exato(o.centralizador_parceiro),
       filial: t(o.filial),
       corretor: t(o.corretor),
       tipo_pessoa: t(o.tipo_pessoa),
