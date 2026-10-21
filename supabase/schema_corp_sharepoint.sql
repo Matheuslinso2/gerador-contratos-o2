@@ -116,7 +116,8 @@ create table if not exists corp_regra_produtor (
   origem text,
   centralizador_parceiro text,
   centralizador text generated always as (
-    case when centralizador_parceiro is null or btrim(centralizador_parceiro) in ('', 'SEM CENTRALIZADOR', 'RETIRAR', 'N/A')
+    -- texto exato, como o Power BI (o Workspace é espelho dele)
+    case when centralizador_parceiro is null or centralizador_parceiro in ('', 'SEM CENTRALIZADOR', 'RETIRAR', 'N/A')
          then produtor else centralizador_parceiro end) stored,
   filial text,
   corretor text,
