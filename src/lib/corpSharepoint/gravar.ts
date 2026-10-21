@@ -128,11 +128,16 @@ export async function sincronizarListas(sb: SupabaseClient, l: ListasCorp) {
   };
 }
 
-// Depois de importar: reaplica a regra de deduplicação e atualiza os retratos mensais.
+// Depois de importar: reaplica a regra de deduplicação, atualiza os retratos
+// mensais e regera as telas prontas (corp_painel_pronto, ~20 s) — o site só
+// lê essas telas quando não há filtro. Regera todas porque uma regra do
+// cadastro (centralizador, ramo…) pode ter mudado mesmo sem arquivo novo.
 export async function finalizarImportacao(sb: SupabaseClient, arquivoId: string | null) {
   const dedup = await sb.rpc("corp_marcar_deduplicacao");
   checar(dedup.error, "deduplicação");
   const retratos = await sb.rpc("corp_atualizar_retratos", { p_arquivo_id: arquivoId });
   checar(retratos.error, "retratos mensais");
-  return { deduplicacao: dedup.data, retratos: retratos.data };
+  const telas = await sb.rpc("corp_gerar_telas_prontas", { p_desde: null });
+  checar(telas.error, "telas prontas");
+  return { deduplicacao: dedup.data, retratos: retratos.data, telas: telas.data };
 }

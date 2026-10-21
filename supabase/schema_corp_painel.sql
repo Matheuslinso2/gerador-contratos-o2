@@ -282,3 +282,54 @@ revoke all on function corp_painel_inconsistencias() from public, anon;
 grant execute on function corp_opcoes_filtro(), corp_painel_geral(date, text[], text[], text[], text[], text[], text[], text[], text[]),
   corp_painel_historico(text[], text[], text[], text[], text[], text[], text[], text[]), corp_painel_flash(date, text[]),
   corp_painel_sinistros(date, date, text[], text[], text[], text[]), corp_painel_inconsistencias() to authenticated;
+
+-- ---------- Desempenho (21/10) ----------
+-- 1) RLS com (select is_colaborador_o2()): a checagem roda 1 vez por consulta
+--    (initPlan), não 1 vez por linha — as telas caíram de ~5 s para < 1 s.
+do $$
+declare t text;
+begin
+  foreach t in array array['corp_sp_arquivos','corp_grade','corp_sinistros','corp_documentos','corp_regra_produtor',
+    'corp_regra_ramo','corp_regra_seguradora','corp_meta_comissao','corp_analise_recusado','corp_cidade_padrao',
+    'corp_dominio','corp_retrato_producao','corp_retrato_sinistros','corp_retrato_meses','corp_alteracoes_pos_fechamento']
+  loop
+    execute format('drop policy if exists %I on %I', t || '_o2', t);
+    execute format('create policy %I on %I for all to authenticated using ((select is_colaborador_o2())) with check ((select is_colaborador_o2()))', t || '_o2', t);
+  end loop;
+end $$;
+
+-- 2) Telas prontas (sem filtro): o site só lê 1 linha. Regeradas a cada
+--    importação por finalizarImportacao() (~20 s, ~2 MB).
+create table if not exists corp_painel_pronto (
+  chave text primary key,            -- 'opcoes' | 'historico' | 'sinistros' | 'geral:AAAA-MM' | 'flash:AAAA-MM'
+  dados jsonb not null,
+  gerado_em timestamptz not null default now()
+);
+alter table corp_painel_pronto enable row level security;
+drop policy if exists corp_painel_pronto_o2 on corp_painel_pronto;
+create policy corp_painel_pronto_o2 on corp_painel_pronto for all to authenticated
+  using ((select is_colaborador_o2())) with check ((select is_colaborador_o2()));
+
+create or replace function corp_gerar_telas_prontas(p_desde date default null)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_mes date; v_n int := 0;
+begin
+  if coalesce(auth.role(), '') <> 'service_role' and current_user <> 'postgres' and not is_colaborador_o2() then
+    raise exception 'sem permissão';
+  end if;
+  insert into corp_painel_pronto (chave, dados, gerado_em) values
+    ('opcoes', corp_opcoes_filtro(), now()),
+    ('historico', corp_painel_historico(), now()),
+    ('sinistros', corp_painel_sinistros(), now())
+  on conflict (chave) do update set dados = excluded.dados, gerado_em = excluded.gerado_em;
+  for v_mes in select mes from corp_retrato_meses where assunto = 'producao' and (p_desde is null or mes >= p_desde) order by mes loop
+    insert into corp_painel_pronto (chave, dados, gerado_em) values
+      ('geral:' || to_char(v_mes, 'YYYY-MM'), corp_painel_geral(v_mes), now()),
+      ('flash:' || to_char(v_mes, 'YYYY-MM'), corp_painel_flash(v_mes), now())
+    on conflict (chave) do update set dados = excluded.dados, gerado_em = excluded.gerado_em;
+    v_n := v_n + 1;
+  end loop;
+  return jsonb_build_object('meses', v_n);
+end $$;
+revoke all on function corp_gerar_telas_prontas(date) from public, anon;
+grant execute on function corp_gerar_telas_prontas(date) to authenticated, service_role;

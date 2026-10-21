@@ -4,7 +4,7 @@ import PageHeader from "@/components/PageHeader";
 import { IconChart } from "@/components/icons";
 import { signOut } from "../../actions";
 import { Abas, ah, Cartao, compacto, div, FonteDados, mesValido, num, pct, Quadro, rotuloMesLongo, somarMeses, Variacao } from "../_corp/comum";
-import { abrirPainel } from "../_corp/dados";
+import { abrirPainel, prontoOuCalcula } from "../_corp/dados";
 import FiltrosCorp from "../_corp/FiltrosCorp";
 
 export const dynamic = "force-dynamic";
@@ -87,8 +87,9 @@ export default async function FlashPage({ searchParams }: { searchParams: Promis
   const mes = mesValido(sp.mes) && meses.includes(sp.mes!) ? sp.mes! : (meses.at(-1) ?? mesAtual);
   const ramos = (sp.rflash ?? "").split("|").filter(Boolean);
 
-  const { data, error } = await supabase.rpc("corp_painel_flash", { p_mes: `${mes}-01`, p_ramo_flash: ramos.length ? ramos : null });
-  const f = data as Flash | null;
+  const { data: f, error } = await prontoOuCalcula<Flash>(supabase, ramos.length ? null : `flash:${mes}`, () =>
+    supabase.rpc("corp_painel_flash", { p_mes: `${mes}-01`, p_ramo_flash: ramos.length ? ramos : null })
+  );
   const c = f?.cartoes ?? {};
   const linhas = f?.por_ramo ?? [];
   const metaMes = linhas.reduce((t, l) => t + n0(l.meta_mes), 0);

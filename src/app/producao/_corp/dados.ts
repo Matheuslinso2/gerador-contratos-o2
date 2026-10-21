@@ -25,9 +25,34 @@ export async function abrirPainel() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
   if (!isAdmin(user.email) && !isColaboradorO2(user.email)) redirect("/");
+  const pronto = await lerPronto(supabase, "opcoes");
+  if (pronto) return { supabase, user, opcoes: pronto as Opcoes };
   const { data, error } = await supabase.rpc("corp_opcoes_filtro");
   if (error) throw new Error(`não foi possível ler as opções do painel: ${error.message}`);
   return { supabase, user, opcoes: data as Opcoes };
+}
+
+type Cliente = Awaited<ReturnType<typeof createClient>>;
+
+// Tela pronta (gerada a cada importação em corp_painel_pronto): sem filtro, o
+// site só lê uma linha em vez de calcular. null = ainda não gerada.
+export async function lerPronto(supabase: Cliente, chave: string): Promise<unknown | null> {
+  const { data } = await supabase.from("corp_painel_pronto").select("dados").eq("chave", chave).maybeSingle();
+  return data?.dados ?? null;
+}
+
+// Usa a tela pronta quando não há filtro; senão (ou se faltar) calcula na hora.
+export async function prontoOuCalcula<T>(
+  supabase: Cliente,
+  chave: string | null,
+  calcular: () => PromiseLike<{ data: unknown; error: { message: string } | null }>
+): Promise<{ data: T | null; error: { message: string } | null }> {
+  if (chave) {
+    const p = await lerPronto(supabase, chave);
+    if (p) return { data: p as T, error: null };
+  }
+  const r = await calcular();
+  return { data: (r.data as T) ?? null, error: r.error };
 }
 
 const TIPOS = [

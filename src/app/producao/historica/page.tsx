@@ -3,7 +3,7 @@ import PageHeader from "@/components/PageHeader";
 import { IconChart } from "@/components/icons";
 import { signOut } from "../../actions";
 import { Abas, Alternador, Cartao, Colunas, compacto, div, FonteDados, mesValido, num, pct, Quadro, reais, rotuloMes, somarMeses } from "../_corp/comum";
-import { abrirPainel, camposProducao, filtrosProducao, temFiltro } from "../_corp/dados";
+import { abrirPainel, camposProducao, filtrosProducao, prontoOuCalcula, temFiltro } from "../_corp/dados";
 import FiltrosCorp from "../_corp/FiltrosCorp";
 
 export const dynamic = "force-dynamic";
@@ -63,8 +63,10 @@ export default async function ProducaoHistoricaPage({ searchParams }: { searchPa
   const visao = VISOES.some((v) => v.valor === sp.visao) ? sp.visao! : "ano";
   const filtros = filtrosProducao(sp);
 
-  const { data, error } = await supabase.rpc("corp_painel_historico", filtros);
-  const serie = ((data ?? []) as Mes[]).filter((m) => m.mes <= ultimo);
+  const { data, error } = await prontoOuCalcula<Mes[]>(supabase, temFiltro(filtros) ? null : "historico", () =>
+    supabase.rpc("corp_painel_historico", filtros)
+  );
+  const serie = (data ?? []).filter((m) => m.mes <= ultimo);
   const porMes = new Map(serie.map((m) => [m.mes, m]));
   const noPeriodo = serie.filter((m) => m.mes >= de && m.mes <= ate);
   const total = somar(noPeriodo);

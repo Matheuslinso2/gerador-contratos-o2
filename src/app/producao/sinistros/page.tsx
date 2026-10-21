@@ -4,7 +4,7 @@ import PageHeader from "@/components/PageHeader";
 import { IconChart } from "@/components/icons";
 import { signOut } from "../../actions";
 import { Abas, Alternador, BarrasH, Cartao, Colunas, compacto, div, FonteDados, lista, mesValido, num, pct, Quadro, rotuloMes } from "../_corp/comum";
-import { abrirPainel } from "../_corp/dados";
+import { abrirPainel, prontoOuCalcula } from "../_corp/dados";
 import FiltrosCorp from "../_corp/FiltrosCorp";
 
 export const dynamic = "force-dynamic";
@@ -42,15 +42,17 @@ export default async function SinistrosCorpPage({ searchParams }: { searchParams
     return l.length ? l : null;
   };
 
-  const { data, error } = await supabase.rpc("corp_painel_sinistros", {
-    p_de: `${de}-01`,
-    p_ate: `${ate}-01`,
-    p_seg: v("seg"),
-    p_ramo: v("ramo"),
-    p_situacao: v("sit"),
-    p_faixa: v("faixa"),
-  });
-  const s = data as Sin | null;
+  const semFiltro = !v("seg") && !v("ramo") && !v("sit") && !v("faixa") && de === (meses[0] ?? de) && ate === mesAtual;
+  const { data: s, error } = await prontoOuCalcula<Sin>(supabase, semFiltro ? "sinistros" : null, () =>
+    supabase.rpc("corp_painel_sinistros", {
+      p_de: `${de}-01`,
+      p_ate: `${ate}-01`,
+      p_seg: v("seg"),
+      p_ramo: v("ramo"),
+      p_situacao: v("sit"),
+      p_faixa: v("faixa"),
+    })
+  );
   const t = s?.totais;
   const base = "/producao/sinistros";
   const g1 = sp.g1 === "faixa" ? "faixa" : "sit";

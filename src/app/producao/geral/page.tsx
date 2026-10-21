@@ -3,7 +3,7 @@ import PageHeader from "@/components/PageHeader";
 import { IconChart } from "@/components/icons";
 import { signOut } from "../../actions";
 import { Abas, ah, Alternador, BarrasH, Cartao, compacto, div, FonteDados, mesValido, num, pct, Quadro, reais, rotuloMesLongo, somarMeses, Variacao } from "../_corp/comum";
-import { abrirPainel, camposProducao, filtrosProducao, ROTULO_CANCELADO, ROTULO_TIPO, temFiltro } from "../_corp/dados";
+import { abrirPainel, camposProducao, filtrosProducao, prontoOuCalcula, ROTULO_CANCELADO, ROTULO_TIPO, temFiltro } from "../_corp/dados";
 import FiltrosCorp from "../_corp/FiltrosCorp";
 
 export const dynamic = "force-dynamic";
@@ -43,8 +43,9 @@ export default async function ProducaoGeralPage({ searchParams }: { searchParams
   const janela = sp.jan === "ytd" ? "ytd" : "mes";
   const filtros = filtrosProducao(sp);
 
-  const { data, error } = await supabase.rpc("corp_painel_geral", { p_mes: `${mes}-01`, ...filtros });
-  const g = data as Geral | null;
+  const { data: g, error } = await prontoOuCalcula<Geral>(supabase, temFiltro(filtros) ? null : `geral:${mes}`, () =>
+    supabase.rpc("corp_painel_geral", { p_mes: `${mes}-01`, ...filtros })
+  );
   const c = g?.cartoes;
 
   // valor da métrica escolhida para um item (documentos, comissão ou ticket médio)
