@@ -10,10 +10,13 @@
 --                                (pro rata por dia da vigência);
 --   sinistros_kpi_grupos         opções do filtro de imobiliária/grupo.
 -- Refeita por atualizar_base_kpis_sinistros() (importador do Corp, cron da
--- madrugada e o botão "Atualizar base"; ~3 s, só o mês aberto -- a
--- reconstrução completa leva ~30 s, por isso service_role tem
+-- madrugada e o botão "Atualizar base"; ~15 s, só o mês aberto -- a
+-- reconstrução completa leva ~45 s, por isso service_role tem
 -- statement_timeout de 120 s). Fase B (20/10/2026): todos os ramos do Corp --
 -- produto = chave de produto_sinistro_de_ramo(). Só equipe O2. Aplicado via MCP.
+-- 21/10/2026: imobiliária de cada sinistro do Corp pelo CÓDIGO do produtor da
+-- apólice (grade do espelho do SharePoint), como a produção e a Imobiliária
+-- 360; o texto do produtor do relatório PDF (cortado) fica só como fallback.
 
 create table if not exists sinistros_kpi_fato (
   id uuid primary key,
@@ -113,6 +116,13 @@ notify pgrst, 'reload config';
 
 create index if not exists producao_unificada_corp_vig_fim_idx
   on producao_unificada ((extras ->> 'vigencia_fim')) where fonte = 'corp';
+-- Vínculo por código do produtor (21/10/2026): índices que cobrem as leituras
+-- de producao_unificada (texto do PDF x apólice) e de corp_grade (apólice x
+-- código; só leitura do espelho do SharePoint), sem varrer as tabelas.
+create index if not exists producao_unificada_corp_texto_idx
+  on producao_unificada (origem_corp_numero, imobiliaria_texto) where fonte = 'corp';
+create index if not exists corp_grade_apolice_produtor_idx
+  on corp_grade (nosso_numero, incluir_corretora desc, id) include (codigo_produtor) where codigo_produtor is not null;
 
 create table if not exists sinistros_kpi_vinculo (
   texto text primary key,               -- texto do produtor no Corp
@@ -160,6 +170,30 @@ end;
 $$;
 revoke execute on function calcular_carteira_sinistros(date) from anon, public, authenticated;
 
+-- Ficha da apólice do Corp pelo CÓDIGO do produtor (21/10/2026, mesma regra
+-- da produção e da Imobiliária 360): Nosso Nº -> grade do espelho do
+-- SharePoint (corp_grade, só leitura; vale a linha que conta para a
+-- corretora) -> código -> vínculo confirmado em imobiliaria_registros_fonte
+-- (chave_externa = "código#nome"). Sem código ou sem vínculo: nulo, e quem
+-- chama cai no texto do produtor do relatório PDF (que vem cortado, ex.
+-- "WALKER CORR. E ADM DE COND").
+create or replace function imobiliaria_por_apolice_corp(p_nosso_numero text)
+returns uuid
+language sql stable security definer set search_path to 'public'
+as $$
+  with g as (
+    select x.codigo_produtor::text codigo from corp_grade x
+    where p_nosso_numero ~ '^\d{1,18}$' and x.nosso_numero = p_nosso_numero::bigint and x.codigo_produtor is not null
+    order by x.incluir_corretora desc, x.id limit 1
+  )
+  select r.imobiliaria_id
+  from g join imobiliaria_registros_fonte r
+    on r.fonte = 'corp_produtor' and r.situacao = 'confirmado' and r.imobiliaria_id is not null
+   and split_part(r.chave_externa, '#', 1) = g.codigo
+  order by r.confirmado_em desc nulls last limit 1
+$$;
+revoke execute on function imobiliaria_por_apolice_corp(text) from anon, public, authenticated;
+
 create or replace function atualizar_base_kpis_sinistros()
 returns timestamptz
 language plpgsql security definer set search_path to 'public'
@@ -183,16 +217,19 @@ begin
   --     a gestão é feita aqui, então o card manda.
   -- Zerado (baixado_em) não é encerramento: situação BAIXADO, sem data de
   -- encerramento -> não entra em "em aberto" nem em encerrados de mês nenhum.
-  -- Imobiliária/seguradora do Corp pela apólice, via índice (produto, Nosso Nº).
+  -- Imobiliária do Corp pela apólice: CÓDIGO do produtor na grade do espelho
+  -- (imobiliaria_por_apolice_corp) > texto do produtor do relatório PDF
+  -- (reapontado pelo vínculo abaixo). Seguradora pela apólice do PDF.
   delete from sinistros_kpi_fato where true;
   insert into sinistros_kpi_fato (id, origem, produto, nosso_numero, numero_sinistro, seguradora, grupo_chave,
     tipo_sinistro, situacao, dt_aviso, dt_encerramento, vl_avisado, vl_indenizado, segurado)
   select sc.id, 'corp', coalesce(sc.produto, 'fianca'), sc.nosso_numero, sc.numero_sinistro, coalesce(ap.seguradora, sc.seguradora),
-    case when ap.texto is not null then 't:' || ap.texto end,
+    coalesce('g:' || ic.grupo_id::text, 'i:' || ic.id::text, case when ap.texto is not null then 't:' || ap.texto end),
     coalesce(sc.tipo_sinistro, sc.subtipo), case when sc.baixado_em is not null then 'BAIXADO' else sc.situacao end,
     coalesce(sc.dt_aviso, sc.dt_ocorrencia), case when sc.baixado_em is null then sc.dt_encerramento end,
     sc.vl_avisado, sc.vl_indenizado, sc.segurado
   from sinistros_corp sc
+  left join imobiliarias ic on ic.id = imobiliaria_por_apolice_corp(sc.nosso_numero)
   left join lateral (
     select trim(p.imobiliaria_texto) texto, p.seguradora
     from producao_unificada p
@@ -204,8 +241,11 @@ begin
 
   -- Cards do Workspace: mesma rotina do gatilho (fica depois do vínculo, abaixo).
 
-  -- Vínculo texto -> imobiliária/grupo: grupo da imobiliária > imobiliária
-  -- confirmada > texto do Corp. Só os textos que aparecem na base.
+  -- Vínculo texto -> imobiliária/grupo (carteira e sinistros sem código):
+  -- grupo da imobiliária > imobiliária > texto do Corp. A imobiliária do texto
+  -- vem (1) pelo CÓDIGO do produtor das apólices que o PDF dá a esse texto
+  -- (a ficha mais frequente; empate: a que tem o mesmo nome), (2) pelo nome
+  -- confirmado igual ao texto. Só os textos que aparecem na base.
   delete from sinistros_kpi_vinculo where true;
   insert into sinistros_kpi_vinculo (texto, chave)
   with textos as (
@@ -217,11 +257,36 @@ begin
     from imobiliaria_registros_fonte
     where fonte = 'corp_produtor' and situacao = 'confirmado' and imobiliaria_id is not null
     order by trim(nome_original), confirmado_em desc nulls last
+  ),
+  grade_apolice as (
+    select distinct on (x.nosso_numero) x.nosso_numero, x.codigo_produtor::text codigo
+    from corp_grade x where x.codigo_produtor is not null
+    order by x.nosso_numero, x.incluir_corretora desc, x.id
+  ),
+  codigo_imob as (
+    select distinct on (split_part(r.chave_externa, '#', 1)) split_part(r.chave_externa, '#', 1) codigo, r.imobiliaria_id
+    from imobiliaria_registros_fonte r
+    where r.fonte = 'corp_produtor' and r.situacao = 'confirmado' and r.imobiliaria_id is not null
+    order by split_part(r.chave_externa, '#', 1), r.confirmado_em desc nulls last
+  ),
+  por_codigo as (
+    select distinct on (q.texto) q.texto, q.imobiliaria_id
+    from (
+      select trim(p.imobiliaria_texto) texto, k.imobiliaria_id, count(*) n
+      from producao_unificada p
+      join grade_apolice g on p.origem_corp_numero ~ '^\d{1,18}$' and g.nosso_numero = p.origem_corp_numero::bigint
+      join codigo_imob k on k.codigo = g.codigo
+      where p.fonte = 'corp' and trim(p.imobiliaria_texto) in (select texto from textos)
+      group by 1, 2
+    ) q
+    left join vinc v on v.nome = q.texto
+    order by q.texto, q.n desc, (q.imobiliaria_id = v.imobiliaria_id) desc nulls last, q.imobiliaria_id
   )
   select t.texto, coalesce('g:' || i.grupo_id::text, 'i:' || i.id::text, 't:' || t.texto)
   from textos t
+  left join por_codigo c on c.texto = t.texto
   left join vinc v on v.nome = t.texto
-  left join imobiliarias i on i.id = v.imobiliaria_id;
+  left join imobiliarias i on i.id = coalesce(c.imobiliaria_id, v.imobiliaria_id);
 
   delete from sinistros_kpi_grupos where true;
   insert into sinistros_kpi_grupos (chave, nome, tipo)
@@ -264,14 +329,15 @@ $$;
 create or replace function sinistros_kpi_fato_cards()
 returns void
 language plpgsql security definer set search_path to 'public'
-as $
+as $$
 begin
   delete from sinistros_kpi_fato where origem = 'workspace';
   insert into sinistros_kpi_fato (id, origem, produto, nosso_numero, numero_sinistro, seguradora, grupo_chave,
     tipo_sinistro, situacao, dt_aviso, dt_encerramento, vl_avisado, vl_indenizado, segurado)
   select s.id, 'workspace', s.produto, coalesce(s.nosso_numero, sc.nosso_numero), coalesce(s.numero_sinistro_seguradora, sc.numero_sinistro), s.seguradora,
+    -- ficha do card > (card vindo do Corp sem ficha) código do produtor da apólice > texto do PDF
     coalesce('g:' || i.grupo_id::text, 'i:' || i.id::text,
-             case when sc.id is not null then coalesce(vi.chave, 't:' || trim(ap.texto)) end),
+             case when sc.id is not null then coalesce('g:' || ic.grupo_id::text, 'i:' || ic.id::text, vi.chave, 't:' || trim(ap.texto)) end),
     case when s.tipo = 'ocupado' then 'ocupado' when s.tipo like 'chaves%' then 'chaves' else sc.subtipo end,
     case when s.etapa = 'encerrado' and s.desfecho = 'indenizado' then 'INDENIZADO'
          when s.etapa = 'encerrado' then 'ENCERRADO SEM INDENIZAÇÃO' else 'EM ANDAMENTO' end,
@@ -283,6 +349,7 @@ begin
   from sinistros s
   left join imobiliarias i on i.id = s.imobiliaria_id
   left join sinistros_corp sc on sc.id = s.sinistro_corp_id
+  left join imobiliarias ic on sc.id is not null and s.imobiliaria_id is null and ic.id = imobiliaria_por_apolice_corp(sc.nosso_numero)
   left join lateral (
     select p.imobiliaria_texto texto from producao_unificada p
     where sc.id is not null and s.imobiliaria_id is null and p.fonte = 'corp' and p.origem_corp_numero = sc.nosso_numero
@@ -302,12 +369,12 @@ begin
     and not exists (select 1 from sinistros_kpi_grupos k where k.chave = f.grupo_chave)
   order by f.grupo_chave;
 end;
-$;
+$$;
 revoke execute on function sinistros_kpi_fato_cards() from anon, public, authenticated;
 
 create or replace function sinistros_kpi_fato_cards_gatilho()
 returns trigger language plpgsql security definer set search_path to 'public'
-as $ begin perform sinistros_kpi_fato_cards(); return null; end; $;
+as $$ begin perform sinistros_kpi_fato_cards(); return null; end; $$;
 
 drop trigger if exists sinistros_kpi_fato_cards on sinistros;
 create trigger sinistros_kpi_fato_cards
