@@ -44,6 +44,14 @@ function referenciaDeImagemConfiavel(src: string): boolean {
   return src.startsWith(baseStorage);
 }
 
+// Emoji desenhado como imagem (Gmail, Outlook web, WhatsApp Web): devolve o
+// caractere do emoji, ou null se for uma imagem de verdade.
+function emojiDaImagem(img: HTMLImageElement): string | null {
+  const candidato = (img.getAttribute("data-emoji") || img.getAttribute("alt") || "").trim();
+  if (!candidato || candidato.length > 16) return null;
+  return /\p{Extended_Pictographic}|\p{Regional_Indicator}/u.test(candidato) ? candidato : null;
+}
+
 export function EditorCorpo({ name, corpoInicialHtml }: { name: string; corpoInicialHtml?: string }) {
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -310,6 +318,19 @@ export function EditorCorpo({ name, corpoInicialHtml }: { name: string; corpoIni
   function removerImagensSemReferenciaValida() {
     const editor = editorRef.current;
     if (!editor) return;
+    // Achado 22/10/2026 (texto do ChatGPT colado a partir do Gmail): o
+    // Gmail desenha cada emoji como <img alt="🚨" src="fonts.gstatic.com/
+    // .../notoemoji/...">. Não é imagem de verdade -- vira o próprio emoji
+    // em texto (que todo cliente de e-mail mostra) em vez de ser removido
+    // junto com as imagens quebradas.
+    let emojisConvertidos = 0;
+    editor.querySelectorAll("img").forEach((img) => {
+      const emoji = emojiDaImagem(img);
+      if (!emoji) return;
+      img.replaceWith(document.createTextNode(emoji));
+      emojisConvertidos++;
+    });
+    if (emojisConvertidos) sincronizar();
     const imagensQuebradas = [...editor.querySelectorAll("img")].filter(
       (img) => !referenciaDeImagemConfiavel(img.getAttribute("src") ?? "")
     );
