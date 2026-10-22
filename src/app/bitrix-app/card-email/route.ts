@@ -211,6 +211,9 @@ export async function POST(request: NextRequest) {
       <button type="button" data-cmd="italic" title="Itálico">I</button>
       <button type="button" data-cmd="insertUnorderedList" title="Lista">•—</button>
       <button type="button" data-cmd="createLink" title="Link">🔗</button>
+      <button type="button" data-destaque="fundo" title="Destaque: fundo laranja, letra branca (igual aos modelos)" style="background:#ff9900;color:#fff;border-color:#ff9900;">A</button>
+      <button type="button" data-destaque="texto" title="Texto laranja em negrito (igual aos modelos)" style="color:#ff9900;">A</button>
+      <button type="button" data-destaque="limpar" title="Tirar cor/destaque do trecho selecionado" style="font-weight:400;">⌫</button>
     </div>
     <div id="corpo" contenteditable="true" role="textbox" aria-multiline="true"></div>
 
@@ -500,7 +503,7 @@ export async function POST(request: NextRequest) {
     // todos os browsers modernos pra formatação simples dentro de um iframe
     // interno -- suficiente aqui sem adicionar uma lib de editor rich text
     // só pra negrito/itálico/lista/link.
-    document.querySelectorAll("#barra-formatacao button").forEach(function (botao) {
+    document.querySelectorAll("#barra-formatacao button[data-cmd]").forEach(function (botao) {
       botao.addEventListener("click", function () {
         document.getElementById("corpo").focus();
         var cmd = botao.getAttribute("data-cmd");
@@ -512,6 +515,44 @@ export async function POST(request: NextRequest) {
           document.execCommand(cmd, false, null);
         }
       });
+    });
+
+    // Destaques iguais aos dos modelos (modelosEmail.ts: dest() e laranja()).
+    // A pessoa troca o "[MÊS/ANO]" do modelo pelo dado do card e quer que o
+    // dado novo fique com a mesma cara do resto do e-mail.
+    var MARCACAO_DESTAQUE = {
+      fundo: ['<b><span style="background-color:#ff9900;color:#ffffff;">', "</span></b>"],
+      texto: ['<b><span style="color:#ff9900;">', "</span></b>"],
+    };
+    document.querySelectorAll("#barra-formatacao button[data-destaque]").forEach(function (botao) {
+      botao.addEventListener("mousedown", function (evento) { evento.preventDefault(); }); // não perde a seleção
+      botao.addEventListener("click", function () {
+        var corpoEl = document.getElementById("corpo");
+        var selecao = window.getSelection();
+        if (!selecao || selecao.isCollapsed || !corpoEl.contains(selecao.anchorNode)) {
+          window.alert("Selecione no texto o trecho que quer formatar.");
+          return;
+        }
+        var texto = escaparHtml(selecao.toString()).split("\\n").join("<br>");
+        var tipo = botao.getAttribute("data-destaque");
+        var html = tipo === "limpar"
+          ? '<span style="color:#073763;">' + texto + "</span>"
+          : MARCACAO_DESTAQUE[tipo][0] + texto + MARCACAO_DESTAQUE[tipo][1];
+        corpoEl.focus();
+        document.execCommand("insertHTML", false, html);
+      });
+    });
+
+    // Colar sempre como texto puro: o que vem copiado do Bitrix/planilha traz
+    // cor e fonte de lá (o "preto simples" no meio do e-mail colorido) e
+    // texto puro herda a formatação do trecho onde foi colado.
+    document.getElementById("corpo").addEventListener("paste", function (evento) {
+      var dados = evento.clipboardData || window.clipboardData;
+      if (!dados) return;
+      var texto = dados.getData("text/plain");
+      if (!texto) return; // ex.: colar imagem -- deixa o padrão do navegador
+      evento.preventDefault();
+      document.execCommand("insertText", false, texto);
     });
 
     function renderizarAnexos() {
