@@ -45,6 +45,27 @@ export default function BarrasMensais({
 
   return (
     <div className="relative">
+      {/* Só para o Excel do quadro (ExportarEste); não aparece na tela. */}
+      <table hidden data-export-tabela="Por mês">
+        <tbody>
+          <tr>
+            <th>Mês</th>
+            {series.map((s) => (
+              <th key={s.chave}>{s.rotulo}</th>
+            ))}
+            {series.length > 1 && <th>Total</th>}
+          </tr>
+          {pontos.map((p) => (
+            <tr key={p.mes}>
+              <td>{rotuloMes(p.mes)}</td>
+              {series.map((s) => (
+                <td key={s.chave}>{formatar(p.valores[s.chave] ?? 0)}</td>
+              ))}
+              {series.length > 1 && <td>{formatar(total(p))}</td>}
+            </tr>
+          ))}
+        </tbody>
+      </table>
       {series.length > 1 && (
         <div className="mb-1 flex gap-4 text-xs text-gray-600">
           {series.map((s) => (

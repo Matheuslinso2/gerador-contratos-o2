@@ -37,6 +37,7 @@ import { duplicarCampanha } from "../actions";
 import { cancelarAgendamentoCampanha } from "./actions";
 import ProducaoCampanha from "./metas/ProducaoCampanha";
 import EmailsDaCampanha, { type EmailFilho } from "./metas/EmailsDaCampanha";
+import ExportarEste from "@/components/ExportarEste";
 
 export const dynamic = "force-dynamic";
 
@@ -324,7 +325,7 @@ export default async function CampanhaDetalhePage({
             fluxo, e a tela principal não pode trocar de cara conforme o
             status -- só o conteúdo dentro desta seção muda). */}
         <section className="space-y-3">
-          <h2 className="text-sm font-semibold text-o2-navy">Resumo do envio</h2>
+          <h2 className="flex flex-wrap items-center gap-2 text-sm font-semibold text-o2-navy">Resumo do envio<ExportarEste /></h2>
 
           {rascunho && (
             <GerenciarDestinatarios
@@ -525,7 +526,7 @@ export default async function CampanhaDetalhePage({
 
         {outrosDestinatarios.length > 0 && (
           <section className="space-y-3">
-            <h2 className="text-sm font-semibold text-o2-navy">Outros destinatários</h2>
+            <h2 className="flex flex-wrap items-center gap-2 text-sm font-semibold text-o2-navy">Outros destinatários<ExportarEste /></h2>
             <p className="text-xs text-gray-500">
               Contatos de prospecção e equipe da O2 — não têm cadastro de imobiliária, então ficam fora do quadro de produção. As aberturas da equipe
               O2 não entram no painel &quot;Abriram&quot; acima, só aqui.

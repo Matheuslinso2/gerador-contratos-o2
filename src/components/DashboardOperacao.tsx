@@ -1,5 +1,6 @@
 import { montarDashboardOperacao, type ParMeses } from "@/lib/dashboardOperacao";
 import { Cartao, variacaoRitmo, type Tom } from "./kpiUi";
+import ExportarEste from "@/components/ExportarEste";
 
 // "Operação e marketing do mês" -- 2º quadro da aba Painel de KPIs (pedido
 // do Matheus, 09/10/2026). Origem dos números: lib/dashboardOperacao.ts.
@@ -69,7 +70,7 @@ export default async function DashboardOperacao() {
   return (
     <section className="space-y-4 rounded-2xl border border-gray-200 bg-white p-5">
       <div>
-        <h2 className="text-base font-semibold text-o2-navy">Operação e marketing do mês</h2>
+        <h2 className="flex flex-wrap items-center gap-2 text-base font-semibold text-o2-navy">Operação e marketing do mês<ExportarEste /></h2>
         <p className="text-xs text-o2-cinza-medio">
           {mesAtual} (até {String(d.diaAtual).padStart(2, "0")}/{d.competenciaAtual.slice(5)}) comparado a {mesAnt} (fechado)
         </p>

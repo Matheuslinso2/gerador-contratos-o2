@@ -13,6 +13,10 @@ const COR_FUNDO_PADRAO = "#f7f8fa"; // --paper do tema claro padrão (10/09/2026
 async function capturarQuadroComoPdf(quadroId: string, nomeArquivo: string, corFundo: string) {
   const elemento = document.getElementById(quadroId);
   if (!elemento) return;
+  await capturarElementoComoPdf(elemento, nomeArquivo, corFundo);
+}
+
+export async function capturarElementoComoPdf(elemento: HTMLElement, nomeArquivo: string, corFundo: string = COR_FUNDO_PADRAO) {
 
   const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([import("html2canvas-pro"), import("jspdf")]);
 

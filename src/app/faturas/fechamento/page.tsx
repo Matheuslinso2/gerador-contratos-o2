@@ -6,6 +6,7 @@ import AppHeader from "@/components/AppHeader";
 import FaturasSubHeader from "../FaturasSubHeader";
 import SeletorCompetencia from "../SeletorCompetencia";
 import { IconReport } from "@/components/icons";
+import ExportarEste from "@/components/ExportarEste";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -142,7 +143,7 @@ export default async function FechamentoFaturasPage({
 
         {porSeguradora.size > 0 && (
           <div className="rounded-xl border border-o2-navy/10 bg-quadro p-4 shadow-sm">
-            <h2 className="mb-3 text-sm font-semibold text-o2-navy">Por seguradora</h2>
+            <h2 className="flex flex-wrap items-center gap-2 mb-3 text-sm font-semibold text-o2-navy">Por seguradora<ExportarEste /></h2>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -167,7 +168,7 @@ export default async function FechamentoFaturasPage({
         )}
 
         <div className="rounded-xl border border-o2-navy/10 bg-quadro p-4 shadow-sm">
-          <h2 className="mb-3 text-sm font-semibold text-o2-navy">Envios ({envios.length})</h2>
+          <h2 className="flex flex-wrap items-center gap-2 mb-3 text-sm font-semibold text-o2-navy">Envios ({envios.length})<ExportarEste /></h2>
           {!envios.length ? (
             <p className="py-6 text-center text-sm text-gray-500">Nenhum envio registrado nessa competência.</p>
           ) : (

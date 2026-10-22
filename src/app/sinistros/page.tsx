@@ -16,6 +16,7 @@ import Abas from "./Abas";
 import Filtros, { type OpcaoGrupo } from "./dashboard/Filtros";
 import BarrasMensais from "./dashboard/BarrasMensais";
 import { atualizarBaseSinistros } from "./dashboard/actions";
+import ExportarEste from "@/components/ExportarEste";
 
 export const dynamic = "force-dynamic";
 
@@ -349,11 +350,11 @@ function Conteudo({ d, periodoRotulo, filtros, meses, produtos }: { d: Dashboard
 
       <section className="grid gap-4 lg:grid-cols-3">
         <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="mb-2 text-sm font-semibold text-o2-navy">Avisados por mês</h2>
+          <h2 className="flex flex-wrap items-center gap-2 mb-2 text-sm font-semibold text-o2-navy">Avisados por mês<ExportarEste /></h2>
           <BarrasMensais pontos={d.mensal.map((m) => ({ mes: m.mes, valores: { a: m.avisados } }))} series={[{ chave: "a", rotulo: "Avisados", cor: AZUL }]} />
         </div>
         <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="mb-2 text-sm font-semibold text-o2-navy">Encerrados por mês</h2>
+          <h2 className="flex flex-wrap items-center gap-2 mb-2 text-sm font-semibold text-o2-navy">Encerrados por mês<ExportarEste /></h2>
           <BarrasMensais
             pontos={d.mensal.map((m) => ({ mes: m.mes, valores: { ind: m.indenizados, sem: m.sem_indenizacao } }))}
             series={[
@@ -363,7 +364,7 @@ function Conteudo({ d, periodoRotulo, filtros, meses, produtos }: { d: Dashboard
           />
         </div>
         <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="mb-2 text-sm font-semibold text-o2-navy">Indenizado por mês do encerramento</h2>
+          <h2 className="flex flex-wrap items-center gap-2 mb-2 text-sm font-semibold text-o2-navy">Indenizado por mês do encerramento<ExportarEste /></h2>
           <BarrasMensais pontos={d.mensal.map((m) => ({ mes: m.mes, valores: { v: m.valor_indenizado } }))} series={[{ chave: "v", rotulo: "Indenizado", cor: AZUL }]} formato="reais" />
         </div>
       </section>
@@ -377,7 +378,7 @@ function Conteudo({ d, periodoRotulo, filtros, meses, produtos }: { d: Dashboard
               produção do Corp. Na Capitalização todo resgate registrado no Corp conta como sinistro, e o valor é o do título resgatado — use o Tipo para separar
               execução, acordo e resgate simples.
             </InfoLegenda>
-          </h2>
+          <ExportarEste /></h2>
           <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
             <table className="w-full text-sm">
               <thead className="bg-o2-navy text-left text-xs text-white">
@@ -420,7 +421,7 @@ function Conteudo({ d, periodoRotulo, filtros, meses, produtos }: { d: Dashboard
 
       <section className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-2 lg:col-span-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Por seguradora</h2>
+          <h2 className="flex flex-wrap items-center gap-2 text-sm font-semibold uppercase tracking-wide text-o2-navy">Por seguradora<ExportarEste /></h2>
           <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
             <table className="w-full text-sm">
               <thead className="bg-o2-navy text-left text-xs text-white">
@@ -461,7 +462,7 @@ function Conteudo({ d, periodoRotulo, filtros, meses, produtos }: { d: Dashboard
           </div>
         </div>
         <div className="space-y-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Por tipo de sinistro</h2>
+          <h2 className="flex flex-wrap items-center gap-2 text-sm font-semibold uppercase tracking-wide text-o2-navy">Por tipo de sinistro<ExportarEste /></h2>
           <div className="rounded-xl border border-gray-200 bg-white">
             <table className="w-full text-sm">
               <tbody>
@@ -485,9 +486,9 @@ function Conteudo({ d, periodoRotulo, filtros, meses, produtos }: { d: Dashboard
       {d.grupo ? (
         <section className="space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">
+            <h2 className="flex flex-wrap items-center gap-2 text-sm font-semibold uppercase tracking-wide text-o2-navy">
               Sinistros de {d.grupo.nome} no período ({d.sinistros.length})
-            </h2>
+            <ExportarEste /></h2>
             <Link href={`/sinistros/gestao?${filtros}`} className="text-sm text-o2-blue underline">
               Ver na gestão
             </Link>
@@ -535,7 +536,7 @@ function Conteudo({ d, periodoRotulo, filtros, meses, produtos }: { d: Dashboard
               ainda não ligado a uma imobiliária do cadastro. Risco: atenção = frequência acima de 1,5× a da carteira ou sinistralidade acima de 35%; acompanhar =
               frequência acima da carteira ou sinistralidade de 20% a 35%. Taxas e risco só com {BASE_MINIMA}+ apólices.
             </InfoLegenda>
-          </h2>
+          <ExportarEste /></h2>
           <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
             <table className="w-full text-sm">
               <thead className="bg-o2-navy text-left text-xs text-white">
@@ -593,7 +594,7 @@ function Conteudo({ d, periodoRotulo, filtros, meses, produtos }: { d: Dashboard
         <h2 className="flex items-center gap-1 text-sm font-semibold uppercase tracking-wide text-o2-navy">
           Processo — avisos pelo Workspace
           <InfoLegenda titulo="Processo">Sinistros enviados pelo módulo novo no período (no ar desde 19/10/2026). Ficam significativos conforme as imobiliárias passarem a avisar por aqui.</InfoLegenda>
-        </h2>
+        <ExportarEste /></h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Cartao rotulo="Enviados" valor={num(d.processo.enviados)} linhas={[`${d.processo.abertos_na_seguradora} já abertos na seguradora`]} legenda="Avisos enviados pelo Workspace (sem rascunhos e cancelados)." />
           <Cartao rotulo="No prazo" valor={pct(razao(d.processo.no_prazo, d.processo.enviados))} legenda="Avisos dentro do prazo calculado pelo sistema (10 dias do 2º vencimento / 15 da entrega das chaves)." />

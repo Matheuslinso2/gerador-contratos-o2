@@ -28,6 +28,7 @@ import Abas from "../Abas";
 import { filtrosDashboard } from "@/lib/sinistros/periodo";
 import { PRODUTOS, rotuloProduto } from "@/lib/sinistros/produtos";
 import { ETAPAS_ABERTAS, ORDENS, dataDoAviso, listarSinistros } from "@/lib/sinistros/consulta";
+import ExportarEste from "@/components/ExportarEste";
 
 export const dynamic = "force-dynamic";
 
@@ -467,7 +468,7 @@ function Fila({ sinistros, nomes, ctx }: { sinistros: any[]; nomes: Record<strin
     <div className="space-y-6">
       <section className="space-y-2">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Agenda de próximas ações</h2>
+          <h2 className="flex flex-wrap items-center gap-2 text-sm font-semibold uppercase tracking-wide text-o2-navy">Agenda de próximas ações<ExportarEste /></h2>
           <p className="text-xs text-gray-500">
             <span className={acoesVencidas ? "font-semibold text-red-700" : ""}>{acoesVencidas} para hoje ou atrasada(s)</span> · {semAgenda} em andamento sem
             próxima ação

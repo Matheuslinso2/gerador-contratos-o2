@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { ORDEM_ETAPAS_LEAD_ABERTAS, ETAPAS_LEAD, CAMINHOS_LEAD, type LinhaLead } from "@/lib/bitrix/crmLeadsConstantes";
 import styles from "../../app/painel-comercial/painel-comercial.module.css";
 import tabStyles from "./painel-crm-leads.module.css";
+import ExportarEste from "@/components/ExportarEste";
 
 function fmtData(iso: string): string {
   return new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -102,9 +103,10 @@ function AbaPrioridades({ linhas, expandido, setExpandido }: { linhas: LinhaLead
         <Kpi label="Sem atividade com prazo" value={String(semPrazo)} sub="Sem vencida e sem atividade futura" />
         <Kpi label="Com atividade programada" value={String(programadas)} sub="Sem pendência vencida registrada" />
       </div>
-      <section className={styles.section}>
+      <section className={styles.section} data-quadro="">
         <div className={styles.sectionHead}>
           <h2>Quem atender primeiro</h2>
+          <ExportarEste />
         </div>
         <div className={styles.panel}>
           <div className={styles.tableWrap}>
@@ -172,9 +174,10 @@ function AbaProspeccao({ linhas }: { linhas: LinhaLead[] }) {
         <Kpi label="E-mail inicial marcado como enviado" value={String(emailEnviado)} sub="Contagem do campo, não do Gmail" />
         <Kpi label="Conversão entre etapas" value="Não apurado" sub="Depende do histórico de entradas e saídas" />
       </div>
-      <section className={styles.section}>
+      <section className={styles.section} data-quadro="">
         <div className={styles.sectionHead}>
           <h2>Distribuição por etapa</h2>
+          <ExportarEste />
         </div>
         <div className={styles.panel}>
           <div className={styles.barlist}>
@@ -210,9 +213,10 @@ function AbaCadastro({ linhas }: { linhas: LinhaLead[] }) {
         <Kpi label="Proposta marcada como enviada" value="Não apurado" sub="Sem campo confiável no Bitrix ainda" />
         <Kpi label="Parceiros ativados" value="Não apurado" sub="Leads convertidos e emissões não consultados" />
       </div>
-      <section className={styles.section}>
+      <section className={styles.section} data-quadro="">
         <div className={styles.sectionHead}>
           <h2>Caminho de atendimento</h2>
+          <ExportarEste />
         </div>
         <div className={styles.panel}>
           <div className={styles.barlist}>

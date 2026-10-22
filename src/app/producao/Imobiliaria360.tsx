@@ -16,6 +16,7 @@ import BarrasMensais from "./BarrasMensais";
 import type { OpcaoImob } from "./FiltrosProducao";
 import Seletor360 from "./Seletor360";
 import { ProdutoresCorp, buscarProdutoresCorp, type LinhaProdutorCorp } from "../admin/imobiliarias/ProdutoresCorp";
+import ExportarEste from "@/components/ExportarEste";
 
 type Valores = { propostas: number; premio: number; comissao: number };
 type CotacaoProduto = {
@@ -197,7 +198,7 @@ function Bloco({ titulo, legenda, cor = "#01192e", children }: { titulo: string;
       <h2 className="flex items-center gap-1 text-lg font-bold text-o2-navy">
         {titulo}
         {legenda && <InfoLegenda titulo={titulo}>{legenda}</InfoLegenda>}
-      </h2>
+      <ExportarEste /></h2>
       {children}
     </section>
   );
@@ -223,7 +224,7 @@ function Cartao({ rotulo, valor, linhas = [], legenda }: { rotulo: string; valor
 function Grafico({ titulo, children }: { titulo: string; children: ReactNode }) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4">
-      <h4 className="mb-2 text-sm font-semibold text-o2-navy">{titulo}</h4>
+      <h4 className="flex flex-wrap items-center gap-2 mb-2 text-sm font-semibold text-o2-navy">{titulo}<ExportarEste /></h4>
       {children}
     </div>
   );
@@ -331,7 +332,7 @@ function Visao360({
 
       {produtoresCorp.length > 1 && (
         <section className="space-y-2">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Produtores no Corp · {produtoresCorp.length}</h3>
+          <h3 className="flex flex-wrap items-center gap-2 text-sm font-semibold uppercase tracking-wide text-o2-navy">Produtores no Corp · {produtoresCorp.length}<ExportarEste /></h3>
           <ProdutoresCorp
             linhas={produtoresCorp}
             mostrarFicha={ehGrupo}
@@ -418,7 +419,7 @@ function Visao360({
               RE: mês do vencimento) e como renovada ou não renovada no mês em que isso aconteceu. Fontes: planilhas de nov/2025 a set/2026 e funis de renovação do
               Bitrix (Fiança a partir de out/2026; RE a partir de set/2026).
             </InfoLegenda>
-          </h3>
+          <ExportarEste /></h3>
           {ren.length === 0 ? (
             <p className="text-sm text-gray-500">Nenhuma renovação ligada a esta imobiliária no período.</p>
           ) : (

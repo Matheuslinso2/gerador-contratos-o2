@@ -8,6 +8,7 @@ import AppHeader from "@/components/AppHeader";
 import PageHeader from "@/components/PageHeader";
 import AtualizarAgora from "@/components/AtualizarAgora";
 import InfoLegenda from "@/components/InfoLegenda";
+import ExportarEste from "@/components/ExportarEste";
 import { IconChart } from "@/components/icons";
 import BarrasMensais from "./BarrasMensais";
 import { signOut } from "../actions";
@@ -280,9 +281,12 @@ export default async function ProducaoPage({
 function Bloco({ titulo, fonte, cor, children }: { titulo: string; fonte: ReactNode; cor: string; children: ReactNode }) {
   return (
     <section className="space-y-6 rounded-2xl border border-gray-200 bg-gray-50/60 p-5" style={{ borderTop: `4px solid ${cor}` }}>
-      <div>
-        <h2 className="text-lg font-bold text-o2-navy">{titulo}</h2>
-        <p className="text-xs text-gray-500">{fonte}</p>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-bold text-o2-navy">{titulo}</h2>
+          <p className="text-xs text-gray-500">{fonte}</p>
+        </div>
+        <ExportarEste titulo={titulo} />
       </div>
       {children}
     </section>
@@ -312,6 +316,7 @@ function Titulo({ children, legenda }: { children: ReactNode; legenda?: ReactNod
     <h3 className="flex items-center gap-1 text-sm font-semibold uppercase tracking-wide text-o2-navy">
       {children}
       {legenda && <InfoLegenda titulo={typeof children === "string" ? children : undefined}>{legenda}</InfoLegenda>}
+      <ExportarEste titulo={typeof children === "string" ? children : undefined} />
     </h3>
   );
 }
@@ -319,7 +324,10 @@ function Titulo({ children, legenda }: { children: ReactNode; legenda?: ReactNod
 function Grafico({ titulo, children }: { titulo: string; children: ReactNode }) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4">
-      <h4 className="mb-2 text-sm font-semibold text-o2-navy">{titulo}</h4>
+      <div className="mb-2 flex items-center gap-2">
+        <h4 className="text-sm font-semibold text-o2-navy">{titulo}</h4>
+        <ExportarEste titulo={titulo} />
+      </div>
       {children}
     </div>
   );
@@ -671,6 +679,7 @@ function Renovacoes({ kpis, filtroImob, todas, sp, meses }: { kpis: Kpis; filtro
             (Fiança: primeira planilha em que aparece ou criação do card; RE: mês do vencimento da apólice) e como renovada ou não renovada no mês em que isso
             aconteceu, a mesma régua da aba Renovação do /seguro-fianca e do /ramos-elementares.
           </InfoLegenda>
+          <ExportarEste titulo="Renovações" />
         </h3>
         <p className="text-xs text-gray-500">
           Fiança: {FONTE_RENOVACOES.fianca}. RE: {FONTE_RENOVACOES.re}.

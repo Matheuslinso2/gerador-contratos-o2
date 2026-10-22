@@ -21,6 +21,7 @@ import {
 } from "@/lib/bitrix/comercial";
 import { buscarLeadsAoVivo, type DadosLeadsAoVivo } from "@/lib/bitrix/crmLeads";
 import PainelCrmLeads from "@/components/painel-comercial/PainelCrmLeads";
+import ExportarEste from "@/components/ExportarEste";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -352,9 +353,10 @@ export default async function PainelComercialPage({
                 <Kpi label="Ganhos c/ Valor Preenchido (S15)" value={fmtPct(kpis.sucesso.s15_ganhosComValorPreenchidoPct)} sub="dos ganhos do mês (S4)" />
               </div>
 
-              <section className={styles.section}>
+              <section className={styles.section} data-quadro="">
                 <div className={styles.sectionHead}>
                   <h2>Distribuição por etapa (S10)</h2>
+                  <ExportarEste />
                   <div className={styles.note}>só cards abertos agora, neste funil</div>
                 </div>
                 <div className={styles.panel}>
@@ -362,9 +364,10 @@ export default async function PainelComercialPage({
                 </div>
               </section>
 
-              <section className={styles.section}>
+              <section className={styles.section} data-quadro="">
                 <div className={styles.sectionHead}>
                   <h2>Gargalo por etapa — % do estoque (S11)</h2>
+                  <ExportarEste />
                   <div className={styles.note}>onde a carteira aberta está concentrada agora</div>
                 </div>
                 <div className={styles.panel}>
@@ -379,9 +382,10 @@ export default async function PainelComercialPage({
                 </div>
               </section>
 
-              <section className={styles.section}>
+              <section className={styles.section} data-quadro="">
                 <div className={styles.sectionHead}>
                   <h2>Cards vencidos e cobertura de valor</h2>
+                  <ExportarEste />
                 </div>
                 <div className={styles.grid2}>
                   <div className={styles.panel}>
@@ -416,9 +420,10 @@ export default async function PainelComercialPage({
                 </div>
               </section>
 
-              <section className={styles.section}>
+              <section className={styles.section} data-quadro="">
                 <div className={styles.sectionHead}>
                   <h2>Carteira e resultado por responsável — Sucesso (S16)</h2>
+                  <ExportarEste />
                   <div className={styles.note}>responsável atual do card, não quem executou a ação</div>
                 </div>
                 <div className={styles.panel}>
@@ -459,9 +464,10 @@ export default async function PainelComercialPage({
               {/* ---------------------------------------------------------- */}
               {/* Empresas do Sucesso do Cliente (Fase B)                    */}
               {/* ---------------------------------------------------------- */}
-              <section className={styles.section}>
+              <section className={styles.section} data-quadro="">
                 <div className={styles.sectionHead}>
                   <h2>Perfil das empresas — Sucesso do Cliente</h2>
+                  <ExportarEste />
                   <div className={styles.note}>campos do card da EMPRESA (não do card/negócio) — uma vez por empresa com card ativo</div>
                 </div>
                 <div className={styles.grid3}>
@@ -496,9 +502,10 @@ export default async function PainelComercialPage({
                 </div>
               </section>
 
-              <section className={styles.section}>
+              <section className={styles.section} data-quadro="">
                 <div className={styles.sectionHead}>
                   <h2>Resultado financeiro do Sucesso</h2>
+                  <ExportarEste />
                   <div className={styles.note}>soma por empresa com card ativo em Sucesso, uma vez cada — nunca por card duplicado</div>
                 </div>
                 <div className={styles.kpis}>
@@ -512,9 +519,10 @@ export default async function PainelComercialPage({
               {/* ---------------------------------------------------------- */}
               {/* Tempos entre etapas (Fase C)                               */}
               {/* ---------------------------------------------------------- */}
-              <section className={styles.section}>
+              <section className={styles.section} data-quadro="">
                 <div className={styles.sectionHead}>
                   <h2>Tempos entre etapas</h2>
+                  <ExportarEste />
                   <div className={styles.note}>dias corridos, só cards com as duas datas do par preenchidas (abertos e fechados)</div>
                 </div>
                 <div className={styles.kpis}>
@@ -539,9 +547,10 @@ export default async function PainelComercialPage({
               {/* ---------------------------------------------------------- */}
               {/* Reciclagem (Fase C)                                        */}
               {/* ---------------------------------------------------------- */}
-              <section className={styles.section}>
+              <section className={styles.section} data-quadro="">
                 <div className={styles.sectionHead}>
                   <h2>Reciclagem</h2>
+                  <ExportarEste />
                   <div className={styles.note}>{kpis.sucesso.reciclagem.empresas.length} cards na etapa Reciclagem agora</div>
                 </div>
                 <div className={styles.grid2}>
@@ -590,9 +599,10 @@ export default async function PainelComercialPage({
               {/* ---------------------------------------------------------- */}
               {/* Negócio encerrado (Fase C)                                 */}
               {/* ---------------------------------------------------------- */}
-              <section className={styles.section}>
+              <section className={styles.section} data-quadro="">
                 <div className={styles.sectionHead}>
                   <h2>Negócio encerrado no mês</h2>
+                  <ExportarEste />
                   <div className={styles.note}>fora do total ativo — o documento pedia 4 categorias (Em Produção/Declinado/Contratou/Cancelado) que não existem no Bitrix; mostrando os 3 estados reais de fechamento</div>
                 </div>
                 <div className={styles.panel}>
@@ -607,9 +617,10 @@ export default async function PainelComercialPage({
               {/* ---------------------------------------------------------- */}
               {/* Empresas nos cards ativos (Fase C)                         */}
               {/* ---------------------------------------------------------- */}
-              <section className={styles.section}>
+              <section className={styles.section} data-quadro="">
                 <div className={styles.sectionHead}>
                   <h2>Empresas nos cards ativos</h2>
+                  <ExportarEste />
                   <div className={styles.note}>clique numa empresa pra ver o card de detalhe (somente leitura)</div>
                 </div>
                 <div className={styles.panel}>
@@ -650,9 +661,10 @@ export default async function PainelComercialPage({
               {/* ---------------------------------------------------------- */}
               {/* Por responsável (R1-R11)                                   */}
               {/* ---------------------------------------------------------- */}
-              <section className={styles.section}>
+              <section className={styles.section} data-quadro="">
                 <div className={styles.sectionHead}>
                   <h2>Por responsável — Sucesso do Cliente (R1-R11)</h2>
+                  <ExportarEste />
                   <div className={styles.note}>
                     R8 (ligações) usa um TYPE_ID de atividade ainda não confirmado contra dados reais — tratar como estimativa. R9 (tarefas) depende de
                     escopo do webhook ainda não liberado (tasks.task.list) — hoje sempre 0. Ver nota completa no rodapé.
@@ -666,9 +678,10 @@ export default async function PainelComercialPage({
               {/* ---------------------------------------------------------- */}
               {/* Qualidade / Auditoria                                      */}
               {/* ---------------------------------------------------------- */}
-              <section className={styles.section}>
+              <section className={styles.section} data-quadro="">
                 <div className={styles.sectionHead}>
                   <h2>Qualidade / Auditoria</h2>
+                  <ExportarEste />
                 </div>
                 <div className={styles.panel}>
                   <div className={styles.kpis} style={{ marginBottom: 18 }}>

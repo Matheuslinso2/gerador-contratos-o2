@@ -1,5 +1,6 @@
 import { Cartao, variacaoRitmo, type Tom } from "./kpiUi";
 import { montarDashboardProducao, somarMes, type LinhaProduto, type NumerosMes } from "@/lib/dashboardProducao";
+import ExportarEste from "@/components/ExportarEste";
 
 // Dashboard "Produção do mês" da página inicial -- só pra login
 // @o2seguros.com.br (a página decide). Ver lib/dashboardProducao.ts pra
@@ -72,7 +73,7 @@ export default async function DashboardProducao() {
   if (!atual) {
     return (
       <section className="rounded-2xl border border-gray-200 bg-white p-5">
-        <h2 className="text-base font-semibold text-o2-navy">Produção do mês</h2>
+        <h2 className="flex flex-wrap items-center gap-2 text-base font-semibold text-o2-navy">Produção do mês<ExportarEste /></h2>
         <p className="mt-2 text-sm text-o2-cinza-medio">Ainda não há retrato dos painéis em {rotuloAtual}. Abra um painel (ou aguarde a atualização das 6h) e volte aqui.</p>
       </section>
     );
@@ -105,7 +106,7 @@ export default async function DashboardProducao() {
     <section className="space-y-4 rounded-2xl border border-gray-200 bg-white p-5">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h2 className="text-base font-semibold text-o2-navy">Produção do mês</h2>
+          <h2 className="flex flex-wrap items-center gap-2 text-base font-semibold text-o2-navy">Produção do mês<ExportarEste /></h2>
           <p className="text-xs text-o2-cinza-medio">
             {rotuloAtual} (até {diaTexto}) comparado a {rotuloAnterior} (fechado)
           </p>
@@ -161,9 +162,9 @@ export default async function DashboardProducao() {
       </div>
 
       <div>
-        <h3 className="mb-2 text-[13px] font-semibold text-o2-navy">
+        <h3 className="flex flex-wrap items-center gap-2 mb-2 text-[13px] font-semibold text-o2-navy">
           Por produto — {rotuloAtual.split("/")[0]} (até {diaTexto}) vs {rotuloAnterior.split("/")[0]}
-        </h3>
+        <ExportarEste /></h3>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-[12.5px]">
             <thead>
@@ -187,7 +188,7 @@ export default async function DashboardProducao() {
 
       {mix.length > 0 && (
         <div>
-          <h3 className="mb-1.5 text-[13px] font-semibold text-o2-navy">De onde vêm as cotações de {rotuloAtual.split("/")[0].toLowerCase()}</h3>
+          <h3 className="flex flex-wrap items-center gap-2 mb-1.5 text-[13px] font-semibold text-o2-navy">De onde vêm as cotações de {rotuloAtual.split("/")[0].toLowerCase()}<ExportarEste /></h3>
           <div className="flex h-2.5 overflow-hidden rounded-full bg-gray-100">
             {mix.map((p) => (
               <div key={p.produto} style={{ width: `${(p.atual!.cotacoes / totalCotacoes) * 100}%`, background: CORES_MIX[p.produto] }} />

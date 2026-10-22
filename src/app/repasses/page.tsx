@@ -14,6 +14,7 @@ import { GRUPOS_VISUAIS } from "@/lib/gruposVisuaisImobiliarias";
 import { IconCalendar, IconUpload, IconReceipt, IconTrash, IconMail, IconReport } from "@/components/icons";
 import { SubmitButton } from "../faturas/SubmitButton";
 import { SelecionarTodas } from "../faturas/LinhaInterativa";
+import ExportarEste from "@/components/ExportarEste";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -316,7 +317,7 @@ export default async function RepassesPage({
 
         {pendentes.length > 0 && (
           <div className="space-y-3">
-            <h2 className="text-sm font-semibold text-o2-navy">Precisa de conferência ({pendentes.length})</h2>
+            <h2 className="flex flex-wrap items-center gap-2 text-sm font-semibold text-o2-navy">Precisa de conferência ({pendentes.length})<ExportarEste /></h2>
             {pendentes.map((r) => (
               <div key={r.id} className="rounded-xl border border-yellow-200 bg-yellow-50/50 p-4 shadow-sm">
                 <div className="mb-2 flex items-center justify-between">

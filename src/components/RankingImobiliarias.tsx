@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { competenciasAtualEAnterior, montarRankingImobiliarias } from "@/lib/dashboardProducao";
 import type { NumerosProduto } from "@/lib/rankingImobiliarias";
+import ExportarEste from "@/components/ExportarEste";
 
 // Quadro "Ranking de imobiliárias" da aba de KPIs (pedido do Matheus,
 // 09/10/2026). Top 10 por comissão efetivada somando Fiança + Capitalização +
@@ -56,7 +57,7 @@ export default async function RankingImobiliarias({ mes }: { mes: "atual" | "ant
     <section className="space-y-3 rounded-2xl border border-gray-200 bg-white p-5">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h2 className="text-base font-semibold text-o2-navy">Ranking de imobiliárias</h2>
+          <h2 className="flex flex-wrap items-center gap-2 text-base font-semibold text-o2-navy">Ranking de imobiliárias<ExportarEste /></h2>
           <p className="text-xs text-o2-cinza-medio">
             As 10 que mais geraram comissão efetivada em {nomeMes(competencia)} — Fiança + Capitalização + Ramos Elementares
           </p>

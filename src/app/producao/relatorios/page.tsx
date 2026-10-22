@@ -7,6 +7,7 @@ import AppHeader from "@/components/AppHeader";
 import PageHeader from "@/components/PageHeader";
 import { IconChart } from "@/components/icons";
 import { RAMOS_PRODUCAO, rotuloRamo } from "@/lib/producaoRamos";
+import ExportarEste from "@/components/ExportarEste";
 
 export const dynamic = "force-dynamic";
 
@@ -320,9 +321,9 @@ export default async function ProducaoPage({
             </div>
 
             <section className="rounded-xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
-              <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-400">
+              <h2 className="flex flex-wrap items-center gap-2 mb-4 text-sm font-semibold uppercase tracking-wide text-gray-400">
                 Evolução mensal {ramoSelecionado ? `— ${rotuloRamo(ramoSelecionado)}` : ""}
-              </h2>
+              <ExportarEste /></h2>
               {evolucaoMensal.length ? (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm">
@@ -353,7 +354,7 @@ export default async function ProducaoPage({
 
             {!ramoSelecionado && (attachRateAuto !== null || cestaProdutos.length > 0) ? (
               <section className="rounded-xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
-                <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-gray-400">Cross-sell</h2>
+                <h2 className="flex flex-wrap items-center gap-2 mb-1 text-sm font-semibold uppercase tracking-wide text-gray-400">Cross-sell<ExportarEste /></h2>
                 <p className="mb-4 text-xs text-gray-500">
                   Cruzamento por CPF/CNPJ do cliente entre ramos — só números agregados, sem nomes.
                 </p>
@@ -407,7 +408,7 @@ export default async function ProducaoPage({
 
             {!ramoSelecionado && dispersaoOrdenada.length ? (
               <section className="rounded-xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
-                <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-gray-400">Dispersão de prêmio por ramo</h2>
+                <h2 className="flex flex-wrap items-center gap-2 mb-1 text-sm font-semibold uppercase tracking-wide text-gray-400">Dispersão de prêmio por ramo<ExportarEste /></h2>
                 <p className="mb-4 text-xs text-gray-500">
                   Quanto maior o coeficiente de variação, mais inconsistente é a precificação dentro do produto — muita
                   apólice barata misturada com pouca muito cara (ou o contrário).
@@ -462,7 +463,7 @@ export default async function ProducaoPage({
             <div className={`grid grid-cols-1 gap-4 ${ramoSelecionado ? "" : "lg:grid-cols-2"}`}>
               {!ramoSelecionado ? (
                 <section className="rounded-xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
-                  <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-400">Ticket médio por ramo</h2>
+                  <h2 className="flex flex-wrap items-center gap-2 mb-4 text-sm font-semibold uppercase tracking-wide text-gray-400">Ticket médio por ramo<ExportarEste /></h2>
                   {ticketPorRamo.length ? (
                     <div className="space-y-2">
                       {ticketPorRamo.map((r) => (
@@ -487,7 +488,7 @@ export default async function ProducaoPage({
               ) : null}
 
               <section className="rounded-xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
-                <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-gray-400">Mix por seguradora</h2>
+                <h2 className="flex flex-wrap items-center gap-2 mb-1 text-sm font-semibold uppercase tracking-wide text-gray-400">Mix por seguradora<ExportarEste /></h2>
                 <p className="mb-4 text-xs text-gray-500">Ticket médio do prêmio e da comissão, por seguradora.</p>
                 {mixSeguradoras.length ? (
                   <div className="space-y-2">
@@ -516,9 +517,9 @@ export default async function ProducaoPage({
             </div>
 
             <section className="rounded-xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
-              <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-gray-400">
+              <h2 className="flex flex-wrap items-center gap-2 mb-1 text-sm font-semibold uppercase tracking-wide text-gray-400">
                 Por bairro {ramoSelecionado ? `— ${rotuloRamo(ramoSelecionado)}` : ""}
-              </h2>
+              <ExportarEste /></h2>
               <p className="mb-2 text-xs text-gray-500">
                 Vem dos relatórios de endereço carregados — cobertura parcial, cresce conforme mais
                 relatórios forem enviados.

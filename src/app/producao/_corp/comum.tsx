@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import InfoLegenda from "@/components/InfoLegenda";
+import ExportarEste from "@/components/ExportarEste";
 
 // Peças comuns das abas "Power BI - O2 Seguros" (mesmas páginas do Power BI
 // "PBI O2 SEGUROS - PRODUÇÃO CORP", lendo as tabelas corp_* — ver
@@ -94,13 +95,16 @@ export function Cartao({ rotulo, valor, legenda, children }: { rotulo: string; v
 
 export function Quadro({ titulo, legenda, acoes, children }: { titulo: string; legenda?: ReactNode; acoes?: ReactNode; children: ReactNode }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4">
+    <div data-quadro={titulo} className="rounded-xl border border-gray-200 bg-white p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h3 className="flex items-center gap-1 text-sm font-semibold text-o2-navy">
           {titulo}
           {legenda && <InfoLegenda titulo={titulo}>{legenda}</InfoLegenda>}
         </h3>
-        {acoes}
+        <div className="flex flex-wrap items-center gap-2">
+          {acoes}
+          <ExportarEste titulo={titulo} />
+        </div>
       </div>
       {children}
     </div>
@@ -126,6 +130,23 @@ export function BarrasH({
   if (!linhas.length) return <p className="text-sm text-gray-400">Sem dados no recorte.</p>;
   return (
     <div className="space-y-1.5">
+      {/* Só para o Excel do quadro (ExportarEste); não aparece na tela. */}
+      <table hidden data-export-tabela="Dados">
+        <tbody>
+          <tr>
+            <th>Item</th>
+            <th>Valor</th>
+            <th>Participação</th>
+          </tr>
+          {linhas.map((i) => (
+            <tr key={i.k}>
+              <td>{i.k}</td>
+              <td>{formato === "reais" ? `R$ ${i.v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : i.v.toLocaleString("pt-BR")}</td>
+              <td>{pct(div(i.v, total))}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
       {linhas.map((i) => (
         <div key={i.k} className="grid grid-cols-[minmax(0,10rem)_1fr_auto] items-center gap-2 text-xs" title={`${i.k}: ${fmt(i.v)} (${pct(div(i.v, total))})`}>
           <span className="truncate text-gray-700">{i.k}</span>
@@ -157,6 +178,23 @@ export function Colunas({
   const passo = poucos ? 1 : Math.ceil(itens.length / 16);
   return (
     <div className="flex items-end gap-[2px]" style={{ height: altura + 34 }}>
+      {/* Só para o Excel do quadro (ExportarEste); não aparece na tela. */}
+      <table hidden data-export-tabela="Dados">
+        <tbody>
+          <tr>
+            <th>Período</th>
+            <th>Valor</th>
+            <th>Variação</th>
+          </tr>
+          {itens.map((i) => (
+            <tr key={i.rotulo}>
+              <td>{i.rotulo}</td>
+              <td>{formato === "reais" ? `R$ ${i.v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : i.v.toLocaleString("pt-BR")}</td>
+              <td>{i.cresc != null ? `${(i.cresc * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%` : ""}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
       {itens.map((i, n) => (
         <div key={i.rotulo} className="flex min-w-0 flex-1 flex-col items-center justify-end" title={`${i.rotulo}: ${fmt(i.v)}${i.cresc != null ? ` (${pct(i.cresc)} vs período anterior)` : ""}`}>
           {poucos && i.cresc != null && (
