@@ -15,7 +15,9 @@ import {
 } from "@/lib/campanhas/desempenho";
 import { participantesDaCampanha } from "@/lib/campanhas/metasCampanha";
 import { imobiliariasDaCampanha } from "@/lib/campanhas/imobiliariasDaCampanha";
-import { ROTULO_STATUS_ENVIO, type ResumoStatusEnvio } from "@/lib/campanhas/producaoStatus";
+import { ROTULO_STATUS_ENVIO, normalizarBusca, type ResumoStatusEnvio } from "@/lib/campanhas/producaoStatus";
+import { DIAS_SEM_CONTATO_ALERTA, juntarContatos, ultimosContatosPorImobiliaria, type UltimosContatos } from "@/lib/campanhas/contatosBitrix";
+import { FiltroProducao } from "../FiltroProducao";
 import { salvarConfigMetas } from "./actions";
 import LinhaMeta from "./LinhaMeta";
 import ModoGrupo from "./ModoGrupo";
@@ -83,6 +85,28 @@ export default async function ProducaoCampanha({
         })
       : null;
   const t = desempenho?.totais;
+
+  // Últimos contatos (Bitrix: ligações, WhatsApp, e-mails, reuniões + e-mails
+  // da campanha enviados pelo Workspace). Falha no Bitrix não derruba o quadro.
+  const idsContato = [...new Set((desempenho?.linhas ?? []).flatMap((l) => l.unidadeIds))];
+  const emailsCampanha = new Map<string, string>();
+  for (const id of idsContato) {
+    const ultimo = (statusPorImobiliaria.get(id)?.emails ?? [])
+      .map((e) => e.enviadoEm)
+      .filter((d): d is string => !!d)
+      .sort()
+      .pop();
+    if (ultimo) emailsCampanha.set(id, ultimo);
+  }
+  const contatosPorImob: Map<string, UltimosContatos> | null = idsContato.length
+    ? await ultimosContatosPorImobiliaria(db, idsContato, emailsCampanha).catch(() => null)
+    : null;
+  const contatosDaLinha = (unidadeIds: string[]) =>
+    contatosPorImob ? juntarContatos(unidadeIds.map((id) => contatosPorImob.get(id)).filter((c): c is UltimosContatos => !!c)) : null;
+  const semContato = (desempenho?.linhas ?? []).filter((l) => {
+    const c = contatosDaLinha(l.unidadeIds);
+    return c && (c.diasSemContato === null || c.diasSemContato > DIAS_SEM_CONTATO_ALERTA);
+  }).length;
 
   const formConfig = (
     <details open={!campanha.meta_metrica} className="rounded-xl border border-o2-navy/10 bg-quadro p-4" data-export-ignore="true">
@@ -167,6 +191,8 @@ export default async function ProducaoCampanha({
     Imobiliária: l.nome,
     "Status do e-mail": l.imobiliariaId ? ROTULO_STATUS_ENVIO[statusPorImobiliaria.get(l.imobiliariaId)?.chave ?? "aguardando"] : "—",
     Responsável: l.responsavelEmail ?? "",
+    "Último contato": contatosDaLinha(l.unidadeIds)?.ultimo?.slice(0, 10) ?? "",
+    "Dias sem contato": contatosDaLinha(l.unidadeIds)?.diasSemContato ?? "",
     "Base/mês": Number(l.base.toFixed(1)),
     Meta: l.meta ?? "",
     Realizado: l.realizado,
@@ -205,7 +231,7 @@ export default async function ProducaoCampanha({
             <Cartao
               rotulo="No ritmo"
               valor={`${t.noRitmoOuAtingida} de ${t.participantesComMeta}`}
-              linhas={[`${t.participantesComAlerta} com alerta`, `${inteiro.format(t.oportunidades)} cotação(ões) em aberto`]}
+              linhas={[`${t.participantesComAlerta} com alerta`, contatosPorImob ? `${semContato} sem contato há ${DIAS_SEM_CONTATO_ALERTA}+ dias` : "contatos do Bitrix indisponíveis agora", `${inteiro.format(t.oportunidades)} cotação(ões) em aberto`]}
             />
             <Cartao rotulo="Conferência Corp" valor={`${inteiro.format(t.corp.documentos)} doc.`} linhas={[`Prêmio líquido: ${brl.format(t.corp.premio)}`, `Funil: ${inteiro.format(t.funil.contratacoes)} contratação(ões)`]} />
             <Cartao
@@ -227,12 +253,34 @@ export default async function ProducaoCampanha({
             <ExportarQuadro quadroId="quadro-producao-campanha" nomeArquivo={`producao-${campanha.nome}`} dadosExcel={dadosExcel} nomeAbaExcel="Produção" />
           </div>
 
+          <FiltroProducao
+            quadroId="producao-filtravel"
+            linhas={desempenho.linhas.map((l) => ({
+              nomeNormalizado: normalizarBusca(`${l.nome} ${l.unidades.join(" ")}`),
+              status: (l.imobiliariaId ? statusPorImobiliaria.get(l.imobiliariaId)?.chave : undefined) ?? "aguardando",
+            }))}
+            opcoesStatus={(Object.keys(ROTULO_STATUS_ENVIO) as (keyof typeof ROTULO_STATUS_ENVIO)[])
+              .map((chave) => ({
+                valor: chave,
+                rotulo: ROTULO_STATUS_ENVIO[chave],
+                total: desempenho.linhas.filter((l) => ((l.imobiliariaId ? statusPorImobiliaria.get(l.imobiliariaId)?.chave : undefined) ?? "aguardando") === chave).length,
+              }))
+              .filter((o) => o.total > 0)}
+          />
+
+          <div id="producao-filtravel" className="space-y-4">
           <div id="quadro-producao-campanha" className="overflow-x-auto rounded-2xl border border-o2-navy/10 bg-white shadow-sm">
             <table className="w-full min-w-[1400px] text-sm">
               <thead>
                 <tr className="border-b border-o2-navy/10 bg-quadro text-left text-xs uppercase tracking-wide text-o2-navy">
                   <th className="p-2">Imobiliária</th>
                   <th className="p-2">E-mail</th>
+                  <th className="p-2">
+                    Último contato
+                    <InfoLegenda titulo="Último contato">
+                      Último registro de contato com a imobiliária nos últimos 90 dias: ligações e WhatsApp registrados no Bitrix (na empresa e nos negócios dela), e-mails e reuniões do Bitrix e os e-mails desta campanha. Fica vermelho quando passa de {DIAS_SEM_CONTATO_ALERTA} dias sem contato.
+                    </InfoLegenda>
+                  </th>
                   <th className="p-2">Responsável O2</th>
                   <th className="p-2 text-right">Base/mês</th>
                   <th className="p-2 text-right">Meta</th>
@@ -260,6 +308,7 @@ export default async function ProducaoCampanha({
                     moeda={metrica.moeda}
                     statusEnvio={l.imobiliariaId ? (statusPorImobiliaria.get(l.imobiliariaId) ?? null) : null}
                     responsaveis={responsaveis}
+                    contatos={contatosDaLinha(l.unidadeIds)}
                   />
                 ))}
               </tbody>
@@ -277,7 +326,12 @@ export default async function ProducaoCampanha({
               {desempenho.linhas
                 .filter((l) => l.oportunidades.length > 0)
                 .map((l) => (
-                  <details key={l.participanteId} className="rounded-lg border border-o2-navy/10 bg-white px-3 py-2">
+                  <details
+                    key={l.participanteId}
+                    data-filtro-nome={normalizarBusca(`${l.nome} ${l.unidades.join(" ")}`)}
+                    data-filtro-status={(l.imobiliariaId ? statusPorImobiliaria.get(l.imobiliariaId)?.chave : undefined) ?? "aguardando"}
+                    className="rounded-lg border border-o2-navy/10 bg-white px-3 py-2"
+                  >
                     <summary className="cursor-pointer text-sm text-o2-navy">
                       <b>{l.nome}</b> — {l.oportunidades.length} em aberto ({l.oportunidades.filter((o) => o.status === "Aprovado").length} aprovada(s))
                       {l.faltam !== null && l.faltam > 0 && <span className="ml-2 text-xs text-gray-500">faltam {fmt(l.faltam)} para a meta</span>}
@@ -322,6 +376,7 @@ export default async function ProducaoCampanha({
                 ))}
             </div>
           )}
+          </div>
         </>
       )}
       <p className="text-xs text-gray-400">Faltou alguma imobiliária? Ela entra no quadro ao ser incluída nos destinatários da campanha ou de um e-mail desta campanha.</p>

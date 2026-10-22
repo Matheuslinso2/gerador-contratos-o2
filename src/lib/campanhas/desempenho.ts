@@ -153,6 +153,7 @@ export type LinhaDesempenho = {
   tipo: "imobiliaria" | "grupo";
   nome: string;
   unidades: string[]; // nomes das imobiliárias contadas
+  unidadeIds: string[];
   meta: number | null;
   observacao: string | null;
   responsavelEmail: string | null;
@@ -509,6 +510,7 @@ export async function montarDesempenhoCampanha(
       tipo: p.grupo_id ? "grupo" : "imobiliaria",
       nome,
       unidades: unidades.map((u) => u.apelido || u.nome),
+      unidadeIds: unidades.map((u) => u.id),
       meta,
       observacao: p.observacao,
       responsavelEmail: p.responsavel_email,

@@ -45,7 +45,13 @@ export default function EmailsDaCampanha({
       </div>
 
       {filhos.length > 0 && (
-        <div className="overflow-x-auto">
+        <details className="rounded-lg bg-white px-3 py-2">
+          <summary className="cursor-pointer text-sm text-o2-navy">
+            Ver os {filhos.length} e-mail(s): {filhos.filter((f) => f.status === "concluida").length} enviado(s), {filhos.reduce((s, f) => s + f.abertos, 0)} abertura(s)
+            {filhos.some((f) => f.status === "rascunho") ? `, ${filhos.filter((f) => f.status === "rascunho").length} rascunho(s)` : ""}
+            {filhos.some((f) => f.status === "agendada") ? `, ${filhos.filter((f) => f.status === "agendada").length} agendado(s)` : ""}
+          </summary>
+        <div className="mt-2 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b text-left text-xs text-gray-500">
@@ -79,6 +85,7 @@ export default function EmailsDaCampanha({
             </tbody>
           </table>
         </div>
+        </details>
       )}
 
       {podeGerarParcial && (

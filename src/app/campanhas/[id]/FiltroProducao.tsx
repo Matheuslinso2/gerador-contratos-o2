@@ -38,7 +38,8 @@ export function FiltroProducao({
   useEffect(() => {
     const quadro = document.getElementById(quadroId);
     if (!quadro) return;
-    quadro.querySelectorAll<HTMLElement>("tr[data-filtro-nome]").forEach((linha) => {
+    // Qualquer elemento marcado (linhas de tabela e blocos recolhíveis).
+    quadro.querySelectorAll<HTMLElement>("[data-filtro-nome]").forEach((linha) => {
       const bateNome = !termo || (linha.dataset.filtroNome ?? "").includes(termo);
       const bateStatus = !status || linha.dataset.filtroStatus === status;
       linha.hidden = !(bateNome && bateStatus);

@@ -4,12 +4,14 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { salvarMetaParticipante } from "./actions";
 import { COR_FAROL, ROTULO_FAROL, type LinhaDesempenho } from "@/lib/campanhas/desempenho";
-import { COR_STATUS_ENVIO, ROTULO_STATUS_ENVIO, type ResumoStatusEnvio } from "@/lib/campanhas/producaoStatus";
+import { COR_STATUS_ENVIO, ROTULO_STATUS_ENVIO, normalizarBusca, type ResumoStatusEnvio } from "@/lib/campanhas/producaoStatus";
+import { DIAS_SEM_CONTATO_ALERTA, type UltimosContatos } from "@/lib/campanhas/contatosBitrix";
 import { EmailsEnviados } from "../../EmailsEnviados";
 
 const inteiro = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
 const umaCasa = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 });
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+const ddmm = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit" }) : null);
 const paraCampo = (n: number | null) => (n === null || n === undefined || n === 0 ? "" : String(n).replace(".", ","));
 
 export const nomeResponsavel = (email: string) => {
@@ -25,12 +27,14 @@ export default function LinhaMeta({
   moeda,
   statusEnvio,
   responsaveis,
+  contatos,
 }: {
   campanhaId: string;
   linha: LinhaDesempenho;
   moeda: boolean;
   statusEnvio: ResumoStatusEnvio | null;
   responsaveis: string[];
+  contatos: UltimosContatos | null;
 }) {
   const router = useRouter();
   const [meta, setMeta] = useState(paraCampo(linha.meta));
@@ -64,11 +68,18 @@ export default function LinhaMeta({
   const campo = "w-20 rounded border border-gray-300 px-2 py-1 text-right text-sm tabular-nums focus:border-o2-coral focus:outline-none";
 
   return (
-    <tr className="border-b align-top last:border-0" data-filtro-nome={linha.nome.toLowerCase()} data-filtro-status={statusEnvio?.chave ?? "aguardando"}>
+    <tr className="border-b align-top last:border-0" data-filtro-nome={normalizarBusca(`${linha.nome} ${linha.unidades.join(" ")}`)} data-filtro-status={statusEnvio?.chave ?? "aguardando"}>
       <td className="p-2">
         <div className="max-w-[260px] font-semibold text-o2-navy">{linha.nome}</div>
         {linha.tipo === "grupo" && <div className="text-xs text-gray-500">{linha.unidades.length} unidade(s): {linha.unidades.join(", ")}</div>}
-        {statusEnvio && <EmailsEnviados emails={statusEnvio.emails} />}
+        {statusEnvio && statusEnvio.emails.length > 0 && (
+          <details className="mt-0.5">
+            <summary className="cursor-pointer text-[11px] text-gray-500">
+              {statusEnvio.totalEmails} e-mail(s) da campanha · {statusEnvio.emailsAbertos} aberto(s)
+            </summary>
+            <EmailsEnviados emails={statusEnvio.emails} />
+          </details>
+        )}
         {linha.alertas.map((a) => (
           <div key={a.texto} className="text-xs font-medium text-red-700">
             🔔 {a.texto}
@@ -90,6 +101,27 @@ export default function LinhaMeta({
         )}
       </td>
       <td className="p-2">
+        {contatos === null ? (
+          <span className="text-xs text-gray-400">—</span>
+        ) : contatos.semEmpresaNoBitrix && !contatos.ultimo ? (
+          <span className="text-[11px] text-amber-700">sem empresa ligada no Bitrix</span>
+        ) : (
+          <div className="space-y-0.5 text-[11px] leading-tight text-gray-600">
+            <span
+              className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${
+                contatos.diasSemContato === null || contatos.diasSemContato > DIAS_SEM_CONTATO_ALERTA ? "bg-red-100 text-red-700" : "bg-green-100 text-green-800"
+              }`}
+            >
+              {contatos.diasSemContato === null ? "sem contato em 90 dias" : contatos.diasSemContato === 0 ? "hoje" : `há ${contatos.diasSemContato} dia(s)`}
+            </span>
+            {contatos.ligacao && <div className="whitespace-nowrap">☎ ligação {ddmm(contatos.ligacao)}</div>}
+            {contatos.whatsapp && <div className="whitespace-nowrap">💬 WhatsApp {ddmm(contatos.whatsapp)}</div>}
+            {contatos.email && <div className="whitespace-nowrap">✉ e-mail {ddmm(contatos.email)}</div>}
+            {contatos.reuniao && <div className="whitespace-nowrap">🤝 reunião {ddmm(contatos.reuniao)}</div>}
+          </div>
+        )}
+      </td>
+      <td className="p-2">
         <select value={resp} onChange={(e) => setResp(e.target.value)} className="w-28 rounded border border-gray-300 px-1 py-1 text-xs focus:border-o2-coral focus:outline-none">
           <option value="">—</option>
           {opcoes.map((e) => (
@@ -104,7 +136,18 @@ export default function LinhaMeta({
         <input value={meta} onChange={(e) => setMeta(e.target.value)} inputMode="decimal" placeholder="—" className={campo} />
       </td>
       <td className="p-2 text-right font-semibold tabular-nums text-o2-navy">{fmt(linha.realizado)}</td>
-      <td className="p-2 text-right tabular-nums">{linha.percentual === null ? "—" : `${inteiro.format(linha.percentual)}%`}</td>
+      <td className="p-2 text-right tabular-nums">
+        {linha.percentual === null ? (
+          "—"
+        ) : (
+          <div className="min-w-[56px]">
+            <div className="font-semibold">{inteiro.format(linha.percentual)}%</div>
+            <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
+              <div className={`h-full rounded-full ${linha.percentual >= 100 ? "bg-green-600" : "bg-o2-coral"}`} style={{ width: `${Math.min(100, Math.max(2, linha.percentual))}%` }} />
+            </div>
+          </div>
+        )}
+      </td>
       <td className="p-2 text-right tabular-nums">{fmt(linha.faltam)}</td>
       <td className="p-2 text-right tabular-nums">{linha.ritmoSemana === null ? "—" : fmt(linha.ritmoSemana)}</td>
       <td className="p-2 text-right tabular-nums">{fmt(linha.projecao)}</td>
