@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import { createServiceClient } from "@/lib/supabase/service";
 import {
   criarCardSeguroIncendio,
+  baixarPlanilhaIncendio,
   montarEmailSeguroIncendio,
   coberturasDaModalidade,
   type CoberturaSelecionada,
@@ -145,17 +146,31 @@ export async function enviarFichaSeguroIncendio(
     await auditar(payload, "processando");
     const supabase = createServiceClient();
     const resultado = await criarCardSeguroIncendio(payload, supabase);
-    await auditar(payload, resultado.created ? "criado" : "duplicado", resultado.item.id);
+    // Se a planilha não entrou no card, o status continua "criado" (o card
+    // existe), mas o motivo fica registrado em "erro" pra dar pra achar depois.
+    await auditar(
+      payload,
+      resultado.created ? "criado" : "duplicado",
+      resultado.item.id,
+      resultado.anexo && !resultado.anexo.noCard ? `Planilha não anexada ao card: ${resultado.anexo.motivo ?? "motivo desconhecido"}` : undefined
+    );
 
     // Best-effort: o card já foi criado, uma falha aqui não deve derrubar o
     // envio nem confundir quem preencheu a ficha.
     try {
       const { assunto, html } = montarEmailSeguroIncendio(payload, resultado);
+      // A planilha segue em anexo no e-mail (antes só aparecia o nome do
+      // arquivo em texto). Se o download falhou, tenta de novo uma vez aqui.
+      let arquivoEmail = resultado.anexo?.arquivo;
+      if (!arquivoEmail && payload.modalidade === "Imobiliario" && payload.anexoPlanilha) {
+        arquivoEmail = await baixarPlanilhaIncendio(supabase, payload).catch(() => undefined);
+      }
       await enviarEmail({
         para: EMAIL_DESTINO_SEGURO_INCENDIO,
         cc: [EMAIL_COMERCIAL_O2],
         assunto,
         html,
+        anexos: arquivoEmail ? [{ nome: arquivoEmail.nome, conteudo: arquivoEmail.conteudo, tipo: arquivoEmail.tipo }] : undefined,
         remetente: "Plataforma O2 — Seguro Incêndio",
       });
     } catch (erroEmail) {

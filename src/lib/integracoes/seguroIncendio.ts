@@ -198,22 +198,77 @@ function set(fields: Record<string, unknown>, name: string, value: unknown) {
   if (value !== undefined && value !== null && value !== "") fields[name] = value;
 }
 
-// Baixa o arquivo do Storage (service role) e converte pro formato que a
-// API do Bitrix espera num campo de arquivo: [nomeDoArquivo, base64].
-async function arquivoParaCampoBitrix(
-  supabase: SupabaseClient,
-  path: string,
-  nomeExibicao: string
-): Promise<[string, string] | undefined> {
-  if (!path) return undefined;
-  const { data, error } = await supabase.storage.from(BUCKET_ANEXOS).download(path);
+export type ArquivoBaixado = {
+  /** Nome original que a pessoa enviou (vai pro e-mail). */
+  nome: string;
+  /** Nome só com caracteres seguros (vai pro Bitrix). */
+  nomeBitrix: string;
+  conteudo: Buffer;
+  tipo: string;
+};
+
+const TIPO_POR_EXTENSAO: Record<string, string> = {
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  xls: "application/vnd.ms-excel",
+  csv: "text/csv",
+  ods: "application/vnd.oasis.opendocument.spreadsheet",
+  pdf: "application/pdf",
+};
+
+// Baixa a planilha do Storage (service role). Quem chama decide o que fazer
+// com ela (campo do card e/ou anexo do e-mail). Se o download falhar, LANÇA
+// erro com o motivo -- antes isso era engolido e o card saía sem arquivo, sem
+// ninguém saber.
+export async function baixarPlanilhaIncendio(supabase: SupabaseClient, payload: SeguroIncendioPayload): Promise<ArquivoBaixado | undefined> {
+  if (!payload.anexoPlanilha) return undefined;
+  const { data, error } = await supabase.storage.from(BUCKET_ANEXOS).download(payload.anexoPlanilha);
   if (error || !data) {
-    console.error(`Falha ao baixar planilha do Storage (${path}) pra enviar ao Bitrix:`, error);
-    return undefined;
+    throw new Error(`Não foi possível baixar a planilha do Storage (${payload.anexoPlanilha}): ${error?.message ?? "arquivo vazio"}`);
   }
-  const buffer = Buffer.from(await data.arrayBuffer());
-  const extensao = path.split(".").pop() || "bin";
-  return [`${nomeExibicao}.${extensao}`, buffer.toString("base64")];
+  const conteudo = Buffer.from(await data.arrayBuffer());
+  const extensao = (payload.anexoPlanilha.split(".").pop() || "bin").toLowerCase();
+  return {
+    nome: payload.anexoPlanilhaNome || `planilha-incendio-imobiliario.${extensao}`,
+    nomeBitrix: `planilha-incendio-imobiliario.${extensao}`,
+    conteudo,
+    tipo: TIPO_POR_EXTENSAO[extensao] ?? "application/octet-stream",
+  };
+}
+
+type BitrixGetResponse = { result: { item: Record<string, unknown> } };
+
+function campoTemArquivo(valor: unknown): boolean {
+  if (Array.isArray(valor)) return valor.length > 0;
+  return Boolean(valor);
+}
+
+// "Planilha de itens" é um campo de arquivo MÚLTIPLO. O Bitrix pode aceitar a
+// chamada sem erro e mesmo assim deixar o campo vazio quando o formato do
+// valor não é o esperado (foi o que fez o card sair sem a planilha). Por isso
+// cada tentativa é conferida lendo o card de volta (crm.item.get), e só vale se
+// o campo realmente ficou preenchido.
+async function anexarPlanilhaAoCard(itemId: number, arquivo: ArquivoBaixado): Promise<{ ok: boolean; motivo?: string }> {
+  const par: [string, string] = [arquivo.nomeBitrix, arquivo.conteudo.toString("base64")];
+  const tentativas: Array<{ formato: string; valor: unknown }> = [
+    { formato: "lista de objetos fileData", valor: [{ fileData: par }] },
+    { formato: "lista de pares [nome, base64]", valor: [par] },
+  ];
+  let ultimoMotivo = "";
+  for (const tentativa of tentativas) {
+    try {
+      await bitrix("crm.item.update", {
+        entityTypeId: ENTITY_TYPE_ID,
+        id: itemId,
+        fields: { [FIELD.planilhaItens]: tentativa.valor },
+      });
+      const lido = await bitrix<BitrixGetResponse>("crm.item.get", { entityTypeId: ENTITY_TYPE_ID, id: itemId });
+      if (campoTemArquivo(lido.result.item[FIELD.planilhaItens])) return { ok: true };
+      ultimoMotivo = `o Bitrix aceitou o formato "${tentativa.formato}" mas o campo continuou vazio`;
+    } catch (erro) {
+      ultimoMotivo = `formato "${tentativa.formato}": ${erro instanceof Error ? erro.message : String(erro)}`;
+    }
+  }
+  return { ok: false, motivo: ultimoMotivo };
 }
 
 // Combina bairro+cidade+UF no mesmo texto que vai pro campo único
@@ -270,7 +325,21 @@ function montarObservacoes(p: SeguroIncendioPayload): string {
     .join("\n");
 }
 
-export async function criarCardSeguroIncendio(payload: SeguroIncendioPayload, supabase: SupabaseClient) {
+export type ResultadoAnexoPlanilha = {
+  /** Arquivo baixado do Storage (para anexar também ao e-mail). Ausente se o download falhou. */
+  arquivo?: ArquivoBaixado;
+  /** true só quando o campo "Planilha de itens" do card ficou realmente preenchido. */
+  noCard: boolean;
+  motivo?: string;
+};
+
+export type ResultadoCardIncendio = {
+  created: boolean;
+  item: { id: number; title?: string };
+  anexo?: ResultadoAnexoPlanilha;
+};
+
+export async function criarCardSeguroIncendio(payload: SeguroIncendioPayload, supabase: SupabaseClient): Promise<ResultadoCardIncendio> {
   // Dedup por xmlId ("ID externo") -- mesmo padrão do Seguro Auto: essa SPA
   // não tem campo de responseId próprio pra usar como chave de dedup.
   const duplicata = await bitrix<BitrixListResponse>("crm.item.list", {
@@ -305,8 +374,8 @@ export async function criarCardSeguroIncendio(payload: SeguroIncendioPayload, su
   if (payload.modalidade === "Imobiliario") {
     set(fields, FIELD.qtdEnderecos, payload.qtdEnderecos ? Number(payload.qtdEnderecos) : undefined);
     set(fields, FIELD.referenciaPlanilha, payload.anexoPlanilhaNome);
-    const planilha = await arquivoParaCampoBitrix(supabase, payload.anexoPlanilha, "planilha-incendio-imobiliario");
-    if (planilha) fields[FIELD.planilhaItens] = [planilha];
+    // A planilha em si é anexada DEPOIS de criar o card (ver mais abaixo), com
+    // conferência de que o campo realmente ficou preenchido.
   } else {
     set(fields, FIELD.imovelCep, payload.imovelCep);
     set(fields, FIELD.imovelLogradouro, payload.imovelLogradouro);
@@ -318,7 +387,25 @@ export async function criarCardSeguroIncendio(payload: SeguroIncendioPayload, su
   }
 
   const added = await bitrix<BitrixAddResponse>("crm.item.add", { entityTypeId: ENTITY_TYPE_ID, fields });
-  return { created: true, item: added.result.item };
+
+  // Planilha do fluxo Imobiliário: o card já existe, então qualquer falha aqui
+  // NÃO derruba o envio -- vira um aviso (no log, no e-mail e na resposta).
+  let anexo: ResultadoAnexoPlanilha | undefined;
+  if (payload.modalidade === "Imobiliario" && payload.anexoPlanilha) {
+    try {
+      const arquivo = await baixarPlanilhaIncendio(supabase, payload);
+      if (arquivo) {
+        const resultadoCard = await anexarPlanilhaAoCard(added.result.item.id, arquivo);
+        anexo = { arquivo, noCard: resultadoCard.ok, motivo: resultadoCard.motivo };
+      }
+    } catch (erro) {
+      anexo = { noCard: false, motivo: erro instanceof Error ? erro.message : String(erro) };
+    }
+    if (anexo && !anexo.noCard) {
+      console.error(`Seguro Incêndio: planilha NÃO anexada ao card ${added.result.item.id}: ${anexo.motivo}`);
+    }
+  }
+  return { created: true, item: added.result.item, anexo };
 }
 
 const BITRIX_BASE_URL = "https://o2seguros.bitrix24.com.br";
@@ -326,7 +413,7 @@ const BITRIX_BASE_URL = "https://o2seguros.bitrix24.com.br";
 // Notifica incendio@o2seguros.com.br a cada envio de /seguro-incendio -- o
 // card já é criado na SPA "Ramos Elementares" (acima), mas essa caixa de
 // e-mail é o jeito de alguém saber na hora que chegou uma ficha nova.
-export function montarEmailSeguroIncendio(p: SeguroIncendioPayload, resultado: { created: boolean; item: { id: number } }): { assunto: string; html: string } {
+export function montarEmailSeguroIncendio(p: SeguroIncendioPayload, resultado: ResultadoCardIncendio): { assunto: string; html: string } {
   const linkCard = `${BITRIX_BASE_URL}/crm/type/${ENTITY_TYPE_ID}/details/${resultado.item.id}/`;
   const nomePrincipal = p.modalidade === "Imobiliario" ? p.nomeImobiliaria : p.nomeProprietario;
 
@@ -346,6 +433,14 @@ export function montarEmailSeguroIncendio(p: SeguroIncendioPayload, resultado: {
             [
               linhaCampo("Quantidade de endereços", p.qtdEnderecos),
               linhaCampo("Arquivo enviado", p.anexoPlanilhaNome ? `📎 ${p.anexoPlanilhaNome}` : "— Não enviado"),
+              resultado.anexo
+                ? linhaCampo(
+                    "Anexo no card do Bitrix",
+                    resultado.anexo.noCard
+                      ? "✅ Anexada ao card"
+                      : `⚠️ NÃO foi anexada ao card automaticamente${resultado.anexo.arquivo ? " — a planilha segue anexada neste e-mail, é só subir no card" : " e não foi possível anexá-la a este e-mail; peça o arquivo ao cliente"}.`
+                  )
+                : "",
             ].join("")
           ),
         ].join("")
