@@ -18,14 +18,23 @@ const inputClass =
 export default async function NovaCampanhaPage({
   searchParams,
 }: {
-  searchParams: Promise<{ erro?: string }>;
+  searchParams: Promise<{ erro?: string; programa?: string }>;
 }) {
-  const { erro } = await searchParams;
+  const { erro, programa: programaPedido } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!isAdmin(user?.email) && !isColaboradorO2(user?.email)) redirect("/");
+
+  // Programa de campanha (22/10/2026): o e-mail pode pertencer a um programa
+  // (boas-vindas, parcial, encerramento) -- aparece na tela do programa.
+  const { data: programasData } = await supabase
+    .from("campanhas_programas")
+    .select("id, nome")
+    .is("arquivado_em", null)
+    .order("inicio", { ascending: false });
+  const programas = (programasData ?? []) as { id: string; nome: string }[];
 
   return (
     <>
@@ -58,6 +67,23 @@ export default async function NovaCampanhaPage({
           <p className="-mt-2 text-xs text-gray-400">O período aparece destacado no e-mail, separado do texto do corpo.</p>
 
           <SeletorProdutos />
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-600">
+              Programa (opcional)
+              <InfoLegenda titulo="Programa de campanha">
+                Se este e-mail faz parte de um programa com metas (ex: boas-vindas ou parcial do Clube Elite), escolha aqui: ele passa a aparecer na tela do programa.
+              </InfoLegenda>
+            </label>
+            <select name="programa_id" defaultValue={programas.some((p) => p.id === programaPedido) ? programaPedido : ""} className={inputClass}>
+              <option value="">Nenhum</option>
+              {programas.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nome}
+                </option>
+              ))}
+            </select>
+          </div>
 
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">Modelo</label>

@@ -28,6 +28,7 @@ export async function criarCampanha(formData: FormData) {
   const ctaTexto = String(formData.get("cta_texto") ?? "").trim();
   const ctaHref = String(formData.get("cta_href") ?? "").trim();
   const remetenteNome = limparNomeRemetente(formData.get("remetente_nome"));
+  const programaId = String(formData.get("programa_id") ?? "").trim() || null;
 
   // corpo_html vem do editor com formatação (EditorCorpo) já reembrulhado em
   // <tr><td> -- checa se sobra texto de verdade removendo as tags antes de
@@ -56,6 +57,7 @@ export async function criarCampanha(formData: FormData) {
       titulo,
       introducao: introducao || null,
       valido_de: validoDe || null,
+      programa_id: programaId,
       valido_ate: validoAte || null,
       produto: produtos[0],
       produtos,
