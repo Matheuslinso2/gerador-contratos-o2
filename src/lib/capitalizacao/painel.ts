@@ -141,11 +141,36 @@ export type KpisNovidades = {
   ticketMedioPremio: number;
 };
 
+// Quadros "Geral do mês" e "Herança" (pedido do Matheus, 22/10/2026): os
+// mesmos indicadores por origem do card. Novos = criados no mês; herança =
+// criados antes e ainda em aberto no começo do mês (concluídos neste mês ou
+// depois, ou abertos até hoje). Geral = novos + herança. Emitidos/perdidos
+// pelo mês do pagamento/perda (então emitidos geral = emitidos do mês);
+// potencial = soma de todos os cards do grupo; em andamento = do grupo, sem
+// conclusão até o fim do mês.
+export type KpisGrupo = {
+  total: number;
+  emitidos: number;
+  perdidos: number;
+  emAndamento: number;
+  taxaConversao: number | null;
+  valorTotalEmitido: number;
+  comissaoEfetivada: number;
+  comissaoPotencial: number;
+  premioPotencial: number;
+  numeroImobiliarias: number;
+  ticketMedioPremio: number;
+};
+export type KpisPorOrigem = { novos: KpisGrupo; heranca: KpisGrupo; geral: KpisGrupo };
+
 export type PainelCapitalizacao = {
   competencia: string;
   // Mês anterior completo, calculado dos mesmos cards (sem chamada extra ao
   // Bitrix). Opcional: retratos salvos antes de 05/10/2026 não têm.
   kpisAnterior?: KpisNovidades & { competencia: string };
+  // Opcional: retratos salvos antes de 22/10/2026 não têm.
+  porOrigem?: KpisPorOrigem;
+  porOrigemAnterior?: KpisPorOrigem;
   kpis: {
     total: number; // "novidades" -- só cards criados nesta competência
     emitidos: number; // pagos nesta competência e já Emitidos (qualquer mês de criação)
@@ -307,6 +332,35 @@ function kpisDoMes(cards: CardCapitalizacao[], competencia: string): KpisNovidad
   };
 }
 
+function kpisDoGrupo(grupo: CardCapitalizacao[], competencia: string): KpisGrupo {
+  const noMes = (c: CardCapitalizacao) => !!c.concluidoEm && competenciaData(c.concluidoEm) === competencia;
+  const emitidosLista = grupo.filter((c) => noMes(c) && efetivado(c));
+  const perdidos = grupo.filter((c) => noMes(c) && c.semantica === "F").length;
+  const emitidos = emitidosLista.length;
+  const premioPotencial = grupo.reduce((soma, c) => soma + c.valorTitulo, 0);
+  return {
+    total: grupo.length,
+    emitidos,
+    perdidos,
+    emAndamento: grupo.filter((c) => !c.concluidoEm || competenciaData(c.concluidoEm) > competencia).length,
+    taxaConversao: emitidos + perdidos > 0 ? emitidos / (emitidos + perdidos) : null,
+    valorTotalEmitido: emitidosLista.reduce((soma, c) => soma + c.valorTitulo, 0),
+    comissaoEfetivada: emitidosLista.reduce((soma, c) => soma + c.comissao, 0),
+    comissaoPotencial: grupo.reduce((soma, c) => soma + c.comissao, 0),
+    premioPotencial,
+    numeroImobiliarias: new Set(grupo.filter((c) => c.imobiliaria !== "—").map((c) => c.imobiliaria)).size,
+    ticketMedioPremio: grupo.length > 0 ? premioPotencial / grupo.length : 0,
+  };
+}
+
+function kpisPorOrigem(cards: CardCapitalizacao[], competencia: string): KpisPorOrigem {
+  const novos = cards.filter((c) => competenciaData(c.criadoEm) === competencia);
+  const heranca = cards.filter(
+    (c) => competenciaData(c.criadoEm) < competencia && (!c.concluidoEm || competenciaData(c.concluidoEm) >= competencia)
+  );
+  return { novos: kpisDoGrupo(novos, competencia), heranca: kpisDoGrupo(heranca, competencia), geral: kpisDoGrupo([...novos, ...heranca], competencia) };
+}
+
 function contagemPorOrigem(itens: CardCapitalizacao[], competencia: string): ContagemPorOrigem {
   let mesAtual = 0;
   let herdado = 0;
@@ -427,6 +481,8 @@ export async function montarPainelCapitalizacao(
   return {
     competencia,
     kpisAnterior,
+    porOrigem: kpisPorOrigem(cards, competencia),
+    porOrigemAnterior: kpisPorOrigem(cards, competenciaAnt),
     kpis: {
       total: novidades.length,
       emitidos,
