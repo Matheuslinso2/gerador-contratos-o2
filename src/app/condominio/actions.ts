@@ -6,6 +6,7 @@ import { enviarEmail } from "@/lib/email";
 import { criarCardCondominio, montarEmailCondominio, type CondominioPayload } from "@/lib/integracoes/condominio";
 import { registrarNaPlanilhaCondominio } from "@/lib/integracoes/planilhaCondominio";
 import { EMAIL_COMERCIAL_O2 } from "@/lib/integracoes/emailO2";
+import { anexosParaEmail, resumoFalhasAnexo } from "@/lib/integracoes/anexosFormulario";
 
 export type EstadoEnvioCondominio = { ok: boolean; erro?: string; pendente?: boolean } | null;
 
@@ -84,13 +85,21 @@ export async function enviarFichaCondominio(_estadoAnterior: EstadoEnvioCondomin
     await auditar(payload, "processando");
     const supabase = createServiceClient();
     const resultado = await criarCardCondominio(payload, supabase);
-    await auditar(payload, resultado.created ? "criado" : "duplicado", resultado.item.id);
+    // Arquivo que não foi baixado do Storage não derruba o envio (o card
+    // existe), mas o motivo fica em "erro" pra dar pra achar depois.
+    await auditar(payload, resultado.created ? "criado" : "duplicado", resultado.item.id, resumoFalhasAnexo(resultado.falhas));
 
     // Best-effort: o card já foi criado, uma falha aqui não deve derrubar o
     // envio nem confundir quem preencheu a ficha.
     try {
       const { assunto, html } = montarEmailCondominio(payload, resultado);
-      await enviarEmail({ para: EMAIL_DESTINO_CONDOMINIO, assunto, html, remetente: "Plataforma O2 — Condomínio" });
+      await enviarEmail({
+        para: EMAIL_DESTINO_CONDOMINIO,
+        assunto,
+        html,
+        anexos: anexosParaEmail(resultado.anexos),
+        remetente: "Plataforma O2 — Condomínio",
+      });
     } catch (erroEmail) {
       console.warn("Condomínio: falha ao enviar e-mail:", erroEmail);
     }

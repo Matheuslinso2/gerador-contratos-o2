@@ -18,6 +18,7 @@
 // mesmo sendo pensado originalmente pra planilha do Incêndio Imobiliário.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { envolverEmailO2, linhaCampo, blocoSecao, botaoPill } from "./emailO2";
+import { baixarAnexoFormulario, separarResultados, type AnexoBaixado, type AnexoFalha } from "./anexosFormulario";
 
 const ENTITY_TYPE_ID = 1046;
 const CATEGORY_ID = 22;
@@ -91,17 +92,7 @@ function set(fields: Record<string, unknown>, name: string, value: unknown) {
   if (value !== undefined && value !== null && value !== "") fields[name] = value;
 }
 
-async function arquivoParaCampoBitrix(supabase: SupabaseClient, path: string, nomeExibicao: string): Promise<[string, string] | undefined> {
-  if (!path) return undefined;
-  const { data, error } = await supabase.storage.from(BUCKET_ANEXOS).download(path);
-  if (error || !data) {
-    console.error(`Falha ao baixar anexo do Storage (${path}) pra enviar ao Bitrix:`, error);
-    return undefined;
-  }
-  const buffer = Buffer.from(await data.arrayBuffer());
-  const extensao = path.split(".").pop() || "bin";
-  return [`${nomeExibicao}.${extensao}`, buffer.toString("base64")];
-}
+export type ResultadoCardCelular = { created: boolean; item: { id: number; title?: string }; anexos?: AnexoBaixado[]; falhas?: AnexoFalha[] };
 
 function montarObservacoes(p: SeguroCelularPayload): string {
   return [
@@ -118,7 +109,7 @@ function montarObservacoes(p: SeguroCelularPayload): string {
     .join("\n");
 }
 
-export async function criarCardSeguroCelular(payload: SeguroCelularPayload, supabase: SupabaseClient) {
+export async function criarCardSeguroCelular(payload: SeguroCelularPayload, supabase: SupabaseClient): Promise<ResultadoCardCelular> {
   // Dedup por xmlId ("ID externo") -- mesmo padrão de seguroIncendio.ts.
   const duplicata = await bitrix<BitrixListResponse>("crm.item.list", {
     entityTypeId: ENTITY_TYPE_ID,
@@ -142,19 +133,18 @@ export async function criarCardSeguroCelular(payload: SeguroCelularPayload, supa
   set(fields, FIELD.origemProducao, enumId(defs, FIELD.origemProducao, "Ficha"));
   set(fields, FIELD.observacoes, montarObservacoes(payload));
 
-  const notaFiscal = await arquivoParaCampoBitrix(supabase, payload.anexoNotaFiscal, "nota-fiscal");
-  if (notaFiscal) fields[FIELD.planilhaItens] = [notaFiscal];
+  const notaFiscal = await baixarAnexoFormulario(supabase, BUCKET_ANEXOS, payload.anexoNotaFiscal, "Nota fiscal", "nota-fiscal");
+  const { anexos, falhas } = separarResultados([notaFiscal]);
+  if (notaFiscal && "anexo" in notaFiscal) fields[FIELD.planilhaItens] = [notaFiscal.anexo.paraBitrix];
+  if (falhas.length) console.error("Seguro Celular: anexo(s) NÃO baixado(s) do Storage:", falhas);
 
   const added = await bitrix<BitrixAddResponse>("crm.item.add", { entityTypeId: ENTITY_TYPE_ID, fields });
-  return { created: true, item: added.result.item };
+  return { created: true, item: added.result.item, anexos, falhas };
 }
 
 const BITRIX_BASE_URL = "https://o2seguros.bitrix24.com.br";
 
-export function montarEmailSeguroCelular(
-  p: SeguroCelularPayload,
-  resultado: { created: boolean; item: { id: number } }
-): { assunto: string; html: string } {
+export function montarEmailSeguroCelular(p: SeguroCelularPayload, resultado: ResultadoCardCelular): { assunto: string; html: string } {
   const linkCard = `${BITRIX_BASE_URL}/crm/type/${ENTITY_TYPE_ID}/details/${resultado.item.id}/`;
 
   const corpoHtml = [
@@ -166,6 +156,7 @@ export function montarEmailSeguroCelular(
         linhaCampo("Número de telefone utilizado no aparelho", p.numeroLinha),
         linhaCampo("Idade do aparelho", p.idadeAparelho),
         linhaCampo("Nota fiscal", p.anexoNotaFiscal ? "✅ Enviada" : "— Não enviada"),
+        ...(resultado.falhas ?? []).map((f) => linhaCampo(`⚠️ ${f.rotulo}`, "NÃO foi anexada ao card nem a este e-mail (falha ao baixar o arquivo) — peça de novo ao cliente")),
       ].join("")
     ),
     botaoPill(linkCard, resultado.created ? "Ver card no Bitrix →" : "Ver card existente no Bitrix →"),

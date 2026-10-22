@@ -17,6 +17,7 @@
 // sendo pensado originalmente pra planilha do Incêndio Imobiliário.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { envolverEmailO2, linhaCampo, blocoSecao, botaoPill } from "./emailO2";
+import { baixarAnexoFormulario, separarResultados, type AnexoBaixado, type AnexoFalha } from "./anexosFormulario";
 
 const ENTITY_TYPE_ID = 1046;
 const CATEGORY_ID = 22;
@@ -92,17 +93,7 @@ function set(fields: Record<string, unknown>, name: string, value: unknown) {
   if (value !== undefined && value !== null && value !== "") fields[name] = value;
 }
 
-async function arquivoParaCampoBitrix(supabase: SupabaseClient, path: string, nomeExibicao: string): Promise<[string, string] | undefined> {
-  if (!path) return undefined;
-  const { data, error } = await supabase.storage.from(BUCKET_ANEXOS).download(path);
-  if (error || !data) {
-    console.error(`Falha ao baixar anexo do Storage (${path}) pra enviar ao Bitrix:`, error);
-    return undefined;
-  }
-  const buffer = Buffer.from(await data.arrayBuffer());
-  const extensao = path.split(".").pop() || "bin";
-  return [`${nomeExibicao}.${extensao}`, buffer.toString("base64")];
-}
+export type ResultadoCardCondominio = { created: boolean; item: { id: number; title?: string }; anexos?: AnexoBaixado[]; falhas?: AnexoFalha[] };
 
 function montarObservacoes(p: CondominioPayload): string {
   return [
@@ -120,7 +111,7 @@ function montarObservacoes(p: CondominioPayload): string {
     .join("\n");
 }
 
-export async function criarCardCondominio(payload: CondominioPayload, supabase: SupabaseClient) {
+export async function criarCardCondominio(payload: CondominioPayload, supabase: SupabaseClient): Promise<ResultadoCardCondominio> {
   // Dedup por xmlId ("ID externo") -- mesmo padrão de seguroIncendio.ts.
   const duplicata = await bitrix<BitrixListResponse>("crm.item.list", {
     entityTypeId: ENTITY_TYPE_ID,
@@ -144,19 +135,18 @@ export async function criarCardCondominio(payload: CondominioPayload, supabase: 
   set(fields, FIELD.origemProducao, enumId(defs, FIELD.origemProducao, "Ficha"));
   set(fields, FIELD.observacoes, montarObservacoes(payload));
 
-  const apolice = await arquivoParaCampoBitrix(supabase, payload.anexoApoliceAnterior, "apolice-anterior");
-  if (apolice) fields[FIELD.planilhaItens] = [apolice];
+  const apolice = await baixarAnexoFormulario(supabase, BUCKET_ANEXOS, payload.anexoApoliceAnterior, "Apólice anterior", "apolice-anterior");
+  const { anexos, falhas } = separarResultados([apolice]);
+  if (apolice && "anexo" in apolice) fields[FIELD.planilhaItens] = [apolice.anexo.paraBitrix];
+  if (falhas.length) console.error("Condomínio: anexo(s) NÃO baixado(s) do Storage:", falhas);
 
   const added = await bitrix<BitrixAddResponse>("crm.item.add", { entityTypeId: ENTITY_TYPE_ID, fields });
-  return { created: true, item: added.result.item };
+  return { created: true, item: added.result.item, anexos, falhas };
 }
 
 const BITRIX_BASE_URL = "https://o2seguros.bitrix24.com.br";
 
-export function montarEmailCondominio(
-  p: CondominioPayload,
-  resultado: { created: boolean; item: { id: number } }
-): { assunto: string; html: string } {
+export function montarEmailCondominio(p: CondominioPayload, resultado: ResultadoCardCondominio): { assunto: string; html: string } {
   const linkCard = `${BITRIX_BASE_URL}/crm/type/${ENTITY_TYPE_ID}/details/${resultado.item.id}/`;
 
   const corpoHtml = [
@@ -172,7 +162,13 @@ export function montarEmailCondominio(
       ].join("")
     ),
     blocoSecao("Contato do síndico", [linhaCampo("Telefone", p.sindicoTelefone), linhaCampo("E-mail", p.sindicoEmail)].join("")),
-    blocoSecao("Apólice anterior", linhaCampo("Anexo", p.anexoApoliceAnterior ? "✅ Enviada" : "— Não enviada")),
+    blocoSecao(
+      "Apólice anterior",
+      [
+        linhaCampo("Anexo", p.anexoApoliceAnterior ? "✅ Enviada" : "— Não enviada"),
+        ...(resultado.falhas ?? []).map((f) => linhaCampo(`⚠️ ${f.rotulo}`, "NÃO foi anexada ao card nem a este e-mail (falha ao baixar o arquivo) — peça de novo ao síndico")),
+      ].join("")
+    ),
     botaoPill(linkCard, resultado.created ? "Ver card no Bitrix →" : "Ver card existente no Bitrix →"),
   ].join("");
 

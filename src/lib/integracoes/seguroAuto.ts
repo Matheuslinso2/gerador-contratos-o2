@@ -13,6 +13,7 @@
 // aceita 1 arquivo por campo agora.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { envolverEmailO2, linhaCampo, blocoSecao, botaoPill } from "./emailO2";
+import { baixarAnexoFormulario, separarResultados, type AnexoBaixado, type AnexoFalha } from "./anexosFormulario";
 
 const ENTITY_TYPE_ID = 1050;
 const CATEGORY_ID = 30;
@@ -98,22 +99,9 @@ function set(fields: Record<string, unknown>, name: string, value: unknown) {
   if (value !== undefined && value !== null && value !== "") fields[name] = value;
 }
 
-// Baixa o arquivo do Storage (service role, já que o bucket não libera
-// SELECT pro anon) e converte pro formato que a API do Bitrix espera num
-// campo de arquivo: [nomeDoArquivo, conteúdoBase64].
-async function arquivoParaCampoBitrix(supabase: SupabaseClient, path: string, nomeExibicao: string): Promise<[string, string] | undefined> {
-  if (!path) return undefined;
-  const { data, error } = await supabase.storage.from(BUCKET_ANEXOS).download(path);
-  if (error || !data) {
-    console.error(`Falha ao baixar anexo do Storage (${path}) pra enviar ao Bitrix:`, error);
-    return undefined;
-  }
-  const buffer = Buffer.from(await data.arrayBuffer());
-  const extensao = path.split(".").pop() || "bin";
-  return [`${nomeExibicao}.${extensao}`, buffer.toString("base64")];
-}
+export type ResultadoCardAuto = { created: boolean; item: { id: number; title?: string }; anexos?: AnexoBaixado[]; falhas?: AnexoFalha[] };
 
-export async function criarCardSeguroAuto(payload: SeguroAutoPayload, supabase: SupabaseClient) {
+export async function criarCardSeguroAuto(payload: SeguroAutoPayload, supabase: SupabaseClient): Promise<ResultadoCardAuto> {
   // Dedup por xmlId ("ID externo") -- essa SPA não tem campo de observações
   // livre como Fiança/Capitalização, então usa o campo padrão do Bitrix
   // feito exatamente pra referenciar um ID de sistema externo.
@@ -150,17 +138,20 @@ export async function criarCardSeguroAuto(payload: SeguroAutoPayload, supabase: 
   // CRLV, e o campo de CNH fica vazio. Revisitar se um dia a SPA ganhar um
   // campo de arquivo dedicado.
   const ehBicicleta = payload.tipoVeiculo === "Bicicleta Elétrica";
+  const baixar = (caminho: string, rotulo: string, nomeBase: string) => baixarAnexoFormulario(supabase, BUCKET_ANEXOS, caminho, rotulo, nomeBase);
   const [cnh, crlv, apolice] = await Promise.all([
-    ehBicicleta ? Promise.resolve(undefined) : arquivoParaCampoBitrix(supabase, payload.anexoCnh, "cnh"),
-    ehBicicleta ? arquivoParaCampoBitrix(supabase, payload.anexoNotaFiscal, "nota-fiscal") : arquivoParaCampoBitrix(supabase, payload.anexoCrlv, "crlv"),
-    arquivoParaCampoBitrix(supabase, payload.anexoApolice, "apolice-anterior"),
+    ehBicicleta ? Promise.resolve(undefined) : baixar(payload.anexoCnh, "CNH", "cnh"),
+    ehBicicleta ? baixar(payload.anexoNotaFiscal, "Nota fiscal", "nota-fiscal") : baixar(payload.anexoCrlv, "CRLV", "crlv"),
+    baixar(payload.anexoApolice, "Apólice anterior", "apolice-anterior"),
   ]);
-  set(fields, FIELD.cnh, cnh);
-  set(fields, FIELD.crlv, crlv);
-  set(fields, FIELD.apolice, apolice);
+  const { anexos, falhas } = separarResultados([cnh, crlv, apolice]);
+  set(fields, FIELD.cnh, cnh && "anexo" in cnh ? cnh.anexo.paraBitrix : undefined);
+  set(fields, FIELD.crlv, crlv && "anexo" in crlv ? crlv.anexo.paraBitrix : undefined);
+  set(fields, FIELD.apolice, apolice && "anexo" in apolice ? apolice.anexo.paraBitrix : undefined);
+  if (falhas.length) console.error("Seguro Auto: anexo(s) NÃO baixado(s) do Storage:", falhas);
 
   const added = await bitrix<BitrixAddResponse>("crm.item.add", { entityTypeId: ENTITY_TYPE_ID, fields });
-  return { created: true, item: added.result.item };
+  return { created: true, item: added.result.item, anexos, falhas };
 }
 
 const BITRIX_BASE_URL = "https://o2seguros.bitrix24.com.br";
@@ -168,7 +159,7 @@ const BITRIX_BASE_URL = "https://o2seguros.bitrix24.com.br";
 // Notifica auto@o2seguros.com.br a cada envio de /seguro-auto -- o card já
 // é criado na SPA (acima), mas a caixa de e-mail é o jeito de alguém saber
 // na hora que chegou uma ficha nova, sem precisar ficar checando o Bitrix.
-export function montarEmailSeguroAuto(payload: SeguroAutoPayload, resultado: { created: boolean; item: { id: number } }): { assunto: string; html: string } {
+export function montarEmailSeguroAuto(payload: SeguroAutoPayload, resultado: ResultadoCardAuto): { assunto: string; html: string } {
   const linkCard = `${BITRIX_BASE_URL}/crm/type/${ENTITY_TYPE_ID}/details/${resultado.item.id}/`;
   const ehBicicleta = payload.tipoVeiculo === "Bicicleta Elétrica";
 
@@ -203,6 +194,9 @@ export function montarEmailSeguroAuto(payload: SeguroAutoPayload, resultado: { c
           ]
       )
         .concat([linhaCampo("Apólice anterior", payload.anexoApolice ? "✅ Enviada" : "— Não enviada")])
+        .concat(
+          (resultado.falhas ?? []).map((f) => linhaCampo(`⚠️ ${f.rotulo}`, "NÃO foi anexado ao card nem a este e-mail (falha ao baixar o arquivo) — peça de novo ao cliente"))
+        )
         .join("")
     ),
     botaoPill(linkCard, resultado.created ? "Ver card no Bitrix →" : "Ver card existente no Bitrix →"),

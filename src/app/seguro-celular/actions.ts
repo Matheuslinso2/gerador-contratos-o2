@@ -6,6 +6,7 @@ import { enviarEmail } from "@/lib/email";
 import { criarCardSeguroCelular, montarEmailSeguroCelular, type SeguroCelularPayload } from "@/lib/integracoes/seguroCelular";
 import { registrarNaPlanilhaSeguroCelular } from "@/lib/integracoes/planilhaSeguroCelular";
 import { EMAIL_COMERCIAL_O2 } from "@/lib/integracoes/emailO2";
+import { anexosParaEmail, resumoFalhasAnexo } from "@/lib/integracoes/anexosFormulario";
 
 export type EstadoEnvioSeguroCelular = { ok: boolean; erro?: string; pendente?: boolean } | null;
 
@@ -67,13 +68,21 @@ export async function enviarFichaSeguroCelular(_estadoAnterior: EstadoEnvioSegur
     await auditar(payload, "processando");
     const supabase = createServiceClient();
     const resultado = await criarCardSeguroCelular(payload, supabase);
-    await auditar(payload, resultado.created ? "criado" : "duplicado", resultado.item.id);
+    // Arquivo que não foi baixado do Storage não derruba o envio (o card
+    // existe), mas o motivo fica em "erro" pra dar pra achar depois.
+    await auditar(payload, resultado.created ? "criado" : "duplicado", resultado.item.id, resumoFalhasAnexo(resultado.falhas));
 
     // Best-effort: o card já foi criado, uma falha aqui não deve derrubar o
     // envio nem confundir quem preencheu a ficha.
     try {
       const { assunto, html } = montarEmailSeguroCelular(payload, resultado);
-      await enviarEmail({ para: EMAIL_DESTINO_SEGURO_CELULAR, assunto, html, remetente: "Plataforma O2 — Seguro Celular" });
+      await enviarEmail({
+        para: EMAIL_DESTINO_SEGURO_CELULAR,
+        assunto,
+        html,
+        anexos: anexosParaEmail(resultado.anexos),
+        remetente: "Plataforma O2 — Seguro Celular",
+      });
     } catch (erroEmail) {
       console.warn("Seguro Celular: falha ao enviar e-mail:", erroEmail);
     }

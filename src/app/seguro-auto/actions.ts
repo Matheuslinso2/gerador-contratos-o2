@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import { createServiceClient } from "@/lib/supabase/service";
 import { criarCardSeguroAuto, montarEmailSeguroAuto, type SeguroAutoPayload } from "@/lib/integracoes/seguroAuto";
 import { EMAIL_COMERCIAL_O2 } from "@/lib/integracoes/emailO2";
+import { anexosParaEmail, resumoFalhasAnexo } from "@/lib/integracoes/anexosFormulario";
 import { enviarEmail } from "@/lib/email";
 
 export type EstadoEnvioSeguroAuto = { ok: boolean; erro?: string; pendente?: boolean } | null;
@@ -67,7 +68,9 @@ export async function enviarFichaSeguroAuto(
     await auditar(payload, "processando");
     const supabase = createServiceClient();
     const resultado = await criarCardSeguroAuto(payload, supabase);
-    await auditar(payload, resultado.created ? "criado" : "duplicado", resultado.item.id);
+    // Arquivo que não foi baixado do Storage não derruba o envio (o card
+    // existe), mas o motivo fica em "erro" pra dar pra achar depois.
+    await auditar(payload, resultado.created ? "criado" : "duplicado", resultado.item.id, resumoFalhasAnexo(resultado.falhas));
 
     // Best-effort: o card já foi criado, uma falha aqui não deve derrubar o
     // envio nem confundir quem preencheu a ficha.
@@ -78,6 +81,7 @@ export async function enviarFichaSeguroAuto(
         cc: [EMAIL_COMERCIAL_O2],
         assunto,
         html,
+        anexos: anexosParaEmail(resultado.anexos),
         remetente: "Plataforma O2 — Seguro Auto",
       });
     } catch (erroEmail) {
