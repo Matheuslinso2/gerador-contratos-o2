@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { atualizarParticipante, removerParticipante } from "../actions";
 import { COR_FAROL, ROTULO_FAROL, type LinhaDesempenho } from "@/lib/campanhas/programas";
@@ -19,28 +19,30 @@ export default function LinhaParticipante({ linha, moeda }: { linha: LinhaDesemp
   const [custo, setCusto] = useState(paraCampo(linha.custoPremiacao || null));
   const [obs, setObs] = useState(linha.observacao ?? "");
   const [erro, setErro] = useState<string | null>(null);
-  const [pendente, iniciar] = useTransition();
+  const [pendente, setPendente] = useState(false);
   const alterado = meta !== paraCampo(linha.meta) || custo !== paraCampo(linha.custoPremiacao || null) || obs !== (linha.observacao ?? "");
   const fmt = (n: number | null) => (n === null ? "—" : moeda ? brl.format(n) : umaCasa.format(n));
 
-  function salvar() {
+  async function salvar() {
     setErro(null);
-    iniciar(async () => {
-      try {
-        await atualizarParticipante(linha.participanteId, { meta, custo, observacao: obs });
-        router.refresh();
-      } catch (e) {
-        setErro(e instanceof Error ? e.message : "Não consegui salvar.");
-      }
-    });
+    setPendente(true);
+    try {
+      await atualizarParticipante(linha.participanteId, { meta, custo, observacao: obs });
+      router.refresh();
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Não consegui salvar.");
+    } finally {
+      setPendente(false);
+    }
   }
 
   function remover() {
     if (!confirm(`Tirar "${linha.nome}" do programa? A meta e as anotações dela serão apagadas.`)) return;
-    iniciar(async () => {
-      await removerParticipante(linha.participanteId);
-      router.refresh();
-    });
+    setPendente(true);
+    removerParticipante(linha.participanteId)
+      .then(() => router.refresh())
+      .catch((e) => setErro(e instanceof Error ? e.message : "Não consegui tirar."))
+      .finally(() => setPendente(false));
   }
 
   const campo = "w-24 rounded border border-gray-300 px-2 py-1 text-right text-sm tabular-nums focus:border-o2-coral focus:outline-none";

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { adicionarParticipante } from "../actions";
 
@@ -29,7 +29,7 @@ export default function AdicionarParticipante({
   const router = useRouter();
   const [busca, setBusca] = useState("");
   const [erro, setErro] = useState<string | null>(null);
-  const [pendente, iniciar] = useTransition();
+  const [pendente, setPendente] = useState(false);
   const jaTem = useMemo(() => new Set(incluidas), [incluidas]);
 
   const termo = normalizar(busca);
@@ -38,14 +38,11 @@ export default function AdicionarParticipante({
 
   function adicionar(tipo: "imobiliaria" | "grupo", id: string) {
     setErro(null);
-    iniciar(async () => {
-      try {
-        await adicionarParticipante(programaId, tipo, id);
-        router.refresh();
-      } catch (e) {
-        setErro(e instanceof Error ? e.message : "Não consegui adicionar.");
-      }
-    });
+    setPendente(true);
+    adicionarParticipante(programaId, tipo, id)
+      .then(() => router.refresh())
+      .catch((e) => setErro(e instanceof Error ? e.message : "Não consegui adicionar."))
+      .finally(() => setPendente(false));
   }
 
   return (

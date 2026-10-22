@@ -132,7 +132,6 @@ export async function adicionarParticipante(programaId: string, tipo: "imobiliar
     .from("campanhas_programas_participantes")
     .insert({ programa_id: programaId, imobiliaria_id: tipo === "imobiliaria" ? alvoId : null, grupo_id: tipo === "grupo" ? alvoId : null });
   if (error) throw new Error("Não consegui adicionar. Tente de novo.");
-  revalidatePath(`/campanhas/programas/${programaId}`);
 }
 
 export async function atualizarParticipante(
@@ -144,23 +143,17 @@ export async function atualizarParticipante(
   const custo = numero(dados.custo) ?? 0;
   if (meta !== null && meta < 0) throw new Error("A meta não pode ser negativa.");
   if (custo < 0) throw new Error("O custo não pode ser negativo.");
-  const { data, error } = await supabase
+  // Sem revalidatePath: a tela chama router.refresh() (mesmo padrão de
+  // GerenciarDestinatarios) -- com os dois juntos a atualização travava.
+  const { error } = await supabase
     .from("campanhas_programas_participantes")
     .update({ meta, custo_premiacao: custo, observacao: dados.observacao.trim() || null, updated_at: new Date().toISOString() })
-    .eq("id", participanteId)
-    .select("programa_id")
-    .single();
-  if (error || !data) throw new Error("Não consegui salvar. Tente de novo.");
-  revalidatePath(`/campanhas/programas/${data.programa_id}`);
+    .eq("id", participanteId);
+  if (error) throw new Error("Não consegui salvar. Tente de novo.");
 }
 
 export async function removerParticipante(participanteId: string) {
   const { supabase } = await exigirEquipe();
-  const { data } = await supabase
-    .from("campanhas_programas_participantes")
-    .delete()
-    .eq("id", participanteId)
-    .select("programa_id")
-    .maybeSingle();
-  if (data) revalidatePath(`/campanhas/programas/${data.programa_id}`);
+  const { error } = await supabase.from("campanhas_programas_participantes").delete().eq("id", participanteId);
+  if (error) throw new Error("Não consegui tirar. Tente de novo.");
 }
