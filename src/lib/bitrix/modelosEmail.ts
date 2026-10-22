@@ -189,6 +189,17 @@ export const MODELOS_EMAIL: ModeloEmail[] = [
     ].join(""),
   },
   {
+    id: "fianca-em-analise",
+    nome: "Fiança — Em análise",
+    entidades: FIANCA,
+    assunto: "ANÁLISE FIANÇA - [NOME DO PRETENDENTE] - EM ANÁLISE",
+    corpoHtml: [
+      "<p>Prezados, bom dia!<br>Tudo bem? 😄</p>",
+      "<p>" + laranja("EM ANÁLISE ⏳") + "</p>",
+      "<p>O cadastro de <b>[NOME DO PRETENDENTE]</b> está " + laranja("em análise") + " na <b>[SEGURADORA]</b>.<br>Em breve retornaremos com o parecer. 😉</p>",
+    ].join(""),
+  },
+  {
     id: "cap-proposta-transmitida",
     nome: "Capitalização — Proposta transmitida",
     entidades: CAPITALIZACAO,
