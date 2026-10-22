@@ -111,7 +111,7 @@ function CampoUpload({
     const { error } = await supabase.storage.from(BUCKET).upload(novoPath, corpo, { contentType: tipo });
     if (error) {
       console.error("Seguro Celular: falha ao enviar o arquivo pro Storage:", error);
-      setArquivo({ nome: selecionado.name, estado: "erro", mensagem: "Falha no envio — tente de novo ou envie o arquivo em PDF ou foto (JPG/PNG)" });
+      setArquivo({ nome: selecionado.name, estado: "erro", mensagem: `Falha no envio — tente de novo ou envie o arquivo em PDF ou foto (JPG/PNG). (Detalhe técnico: ${error.message || "sem detalhe"})` });
       return;
     }
     setArquivo({ nome: selecionado.name, estado: "ok" });

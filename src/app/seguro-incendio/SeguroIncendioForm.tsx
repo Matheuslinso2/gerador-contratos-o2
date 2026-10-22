@@ -346,7 +346,7 @@ function CampoUploadPlanilha({ responseId, path, setPath, nome, setNome }: { res
       setArquivo({
         nome: selecionado.name,
         estado: "erro",
-        mensagem: "Falha no envio — tente de novo ou, se persistir, salve a planilha como .xlsx ou .csv e envie outra vez",
+        mensagem: `Falha no envio — tente de novo ou, se persistir, salve a planilha como .xlsx ou .csv e envie outra vez. (Detalhe técnico: ${error.message || "sem detalhe"}; ${(selecionado.size / 1024 / 1024).toFixed(1)} MB)`,
       });
       return;
     }
