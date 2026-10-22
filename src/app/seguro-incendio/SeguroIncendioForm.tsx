@@ -324,9 +324,27 @@ function CampoUploadPlanilha({ responseId, path, setPath, nome, setNome }: { res
     const extensao = selecionado.name.split(".").pop()?.toLowerCase() || "bin";
     const novoPath = `${responseId}/planilha/${crypto.randomUUID()}.${extensao}`;
     const supabase = createClient();
-    const { error } = await supabase.storage.from(BUCKET).upload(novoPath, selecionado, { contentType: selecionado.type || "application/octet-stream" });
+    // O tipo vem da extensão, não do navegador: em muitos computadores (Windows
+    // sem Excel, por exemplo) o navegador não informa o tipo de um .xlsx, o
+    // código caía em "application/octet-stream" e o bucket recusava o arquivo
+    // ("mime type application/octet-stream is not supported", 22/10/2026).
+    const tipoPorExtensao: Record<string, string> = {
+      xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      xls: "application/vnd.ms-excel",
+      csv: "text/csv",
+      ods: "application/vnd.oasis.opendocument.spreadsheet",
+      pdf: "application/pdf",
+    };
+    const { error } = await supabase.storage
+      .from(BUCKET)
+      .upload(novoPath, selecionado, { contentType: tipoPorExtensao[extensao] ?? (selecionado.type || "application/octet-stream") });
     if (error) {
-      setArquivo({ nome: selecionado.name, estado: "erro", mensagem: "Falha no envio" });
+      console.error("Seguro Incêndio: falha ao enviar a planilha pro Storage:", error);
+      setArquivo({
+        nome: selecionado.name,
+        estado: "erro",
+        mensagem: "Falha no envio — tente de novo ou, se persistir, salve a planilha como .xlsx ou .csv e envie outra vez",
+      });
       return;
     }
     setArquivo({ nome: selecionado.name, estado: "ok" });
