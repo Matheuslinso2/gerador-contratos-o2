@@ -486,7 +486,7 @@ export function mapearNovos(linhas: CelulaGoogle[][], aba: string, competencia?:
         negociador: texto(linha[35]),
         ultimoContato: numeroOpcional(linha[36]),
         observacoes: texto(linha[37]),
-        ...dadosCard(linha, COLUNA_CARD_NOVO, status === "EFETIVADO"),
+        ...dadosCard(linha, COLUNA_CARD_NOVO, status === "EFETIVADO", ramoCanonico(texto(linha[25]))),
       };
     })
     .filter((registro): registro is RegistroNovo => registro !== null);
@@ -519,7 +519,7 @@ function mapearRenovacoes(linhas: CelulaGoogle[][], aba: string): RegistroRenova
         dataEfetivacao: numeroOpcional(linha[25]),
         efetivado: status === "EFETIVADO",
         ultimoContato: numeroOpcional(linha[23]),
-        ...dadosCard(linha, COLUNA_CARD_RENOVACAO, status === "EFETIVADO"),
+        ...dadosCard(linha, COLUNA_CARD_RENOVACAO, status === "EFETIVADO", ramoCanonico(texto(linha[7]))),
       };
     })
     .filter((registro): registro is RegistroRenovacao => registro !== null);
@@ -548,20 +548,34 @@ function mapearEndossos(linhas: CelulaGoogle[][], aba: string): RegistroEndosso[
     .filter((registro): registro is RegistroEndosso => registro !== null);
 }
 
-function dadosCard(linha: CelulaGoogle[], coluna: number, efetivado: boolean) {
+// Só o produto Imobiliário tem lote (vários itens num card). Os demais --
+// Residencial, Empresarial, Condomínio, Automóvel, Seguro Celular, RC Obras
+// etc. -- são sempre 1 item por card, mesmo com os campos vazios ou
+// preenchidos com outro número (regra do Matheus, 22/10/2026). Card sem
+// produto informado fica com o que estiver no campo (pode ser lote de
+// Imobiliário sem o produto marcado) e vira alerta.
+export const RAMO_COM_LOTE = "IMOBILIÁRIO";
+export const ramoInformado = (ramo: string) => !!ramo && ramo !== "NÃO INFORMADO" && ramo !== "0";
+
+function dadosCard(linha: CelulaGoogle[], coluna: number, efetivado: boolean, ramo: string) {
   const id = numeroOpcional(linha[coluna]);
   if (id === null) {
     return { idCard: null, tituloCard: "", itensCotados: 1, itensCotadosInformado: true, itensContratados: efetivado ? 1 : null, companyId: null };
   }
+  const base = { idCard: id, tituloCard: texto(linha[coluna + 1]), companyId: numeroOpcional(linha[coluna + 4]) };
+  if (ramoInformado(ramo) && ramo !== RAMO_COM_LOTE) {
+    return { ...base, itensCotados: 1, itensCotadosInformado: true, itensContratados: efetivado ? 1 : null };
+  }
   const cotados = numeroOpcional(linha[coluna + 2]);
   const contratados = numeroOpcional(linha[coluna + 3]);
+  const itensCotados = cotados !== null && cotados > 0 ? cotados : 1;
   return {
-    idCard: id,
-    tituloCard: texto(linha[coluna + 1]),
-    itensCotados: cotados !== null && cotados > 0 ? cotados : 1,
+    ...base,
+    itensCotados,
     itensCotadosInformado: cotados !== null && cotados > 0,
-    itensContratados: efetivado ? contratados : null,
-    companyId: numeroOpcional(linha[coluna + 4]),
+    // Card individual (1 item) efetivado sem "Endereços contratados" só pode
+    // ter contratado 1; lote sem o campo continua como alerta (pode ser parcial).
+    itensContratados: efetivado ? (contratados ?? (itensCotados === 1 ? 1 : null)) : null,
   };
 }
 
@@ -819,6 +833,7 @@ export function montarAnaliseRamosElementares(fonte: FonteRamosBruta, agora = ne
     (registro) => registro.idCard !== null && registro.itensCotadosInformado && (registro.itensContratados ?? 0) > registro.itensCotados
   );
   const semQtdEnderecos = todosComerciais.filter((registro) => registro.idCard !== null && !registro.itensCotadosInformado);
+  const cardsSemProduto = todosComerciais.filter((registro) => registro.idCard !== null && !ramoInformado(registro.ramo));
 
   const qualidade = [
     {
@@ -850,6 +865,16 @@ export function montarAnaliseRamosElementares(fonte: FonteRamosBruta, agora = ne
         "media"
       ),
       cards: cardsDoAlerta(semQtdEnderecos),
+    },
+    {
+      ...alerta(
+        "card-sem-produto",
+        "Card sem produto",
+        "Sem o produto não dá para saber se é Imobiliário (que pode ter lote) ou outro ramo (sempre 1 item). Os itens ficam como estão no campo até a equipe marcar o produto.",
+        cardsSemProduto.length,
+        "media"
+      ),
+      cards: cardsDoAlerta(cardsSemProduto),
     },
     alerta("segimob-sem-seguradora", "SEGIMOB — Seguradora não informada", "Produção mantida com o canal Segimob identificado.", segimobSemSeguradora, "baixa"),
     alerta("sem-cotador", "Cotador não informado", "Somente registros que já avançaram e não são produção direta.", semCotadorAvancado, "media"),
