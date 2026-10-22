@@ -48,14 +48,16 @@ export default function LinhaMeta({
   const fmt = (n: number | null) => (n === null ? "—" : moeda ? brl.format(n) : umaCasa.format(n));
   const opcoes = [...new Set([...responsaveis, ...(linha.responsavelEmail ? [linha.responsavelEmail] : [])])].sort();
 
-  async function salvar() {
+  // `responsavel` explícito: a troca do responsável salva na hora (o botão
+  // Salvar fica no fim da tabela, fora da tela -- pedido do Matheus 22/10).
+  async function salvar(responsavel = resp) {
     setErro(null);
     setPendente(true);
     try {
       await salvarMetaParticipante(
         campanhaId,
         linha.grupoId ? { tipo: "grupo", id: linha.grupoId } : { tipo: "imobiliaria", id: linha.imobiliariaId as string },
-        { meta, custo, observacao: obs, responsavel: resp }
+        { meta, custo, observacao: obs, responsavel }
       );
       router.refresh();
     } catch (e) {
@@ -91,6 +93,11 @@ export default function LinhaMeta({
           </div>
         ))}
         <input value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Observação da parceria" className="mt-1 w-56 rounded border border-gray-200 px-2 py-1 text-xs focus:border-o2-coral focus:outline-none" />
+        {alterado && (
+          <button type="button" onClick={() => salvar()} disabled={pendente} className="mt-1 block rounded-full bg-o2-coral px-3 py-1 text-xs font-medium text-white disabled:opacity-40" data-export-ignore="true">
+            {pendente ? "Salvando…" : "Salvar alterações"}
+          </button>
+        )}
         {erro && <div className="mt-1 text-xs text-red-700">{erro}</div>}
       </td>
       <td className="p-2">
@@ -109,7 +116,15 @@ export default function LinhaMeta({
         />
       </td>
       <td className="p-2">
-        <select value={resp} onChange={(e) => setResp(e.target.value)} className="w-28 rounded border border-gray-300 px-1 py-1 text-xs focus:border-o2-coral focus:outline-none">
+        <select
+          value={resp}
+          disabled={pendente}
+          title="Salva na hora ao escolher"
+          onChange={(e) => {
+            setResp(e.target.value);
+            salvar(e.target.value);
+          }}
+          className="w-28 rounded border border-gray-300 px-1 py-1 text-xs focus:border-o2-coral focus:outline-none">
           <option value="">—</option>
           {opcoes.map((e) => (
             <option key={e} value={e} title={e}>
@@ -152,7 +167,7 @@ export default function LinhaMeta({
       </td>
       <td className={`p-2 text-right font-semibold tabular-nums ${linha.resultado < 0 ? "text-red-700" : "text-o2-navy"}`}>{brl.format(linha.resultado)}</td>
       <td className="p-2" data-export-ignore="true">
-        <button type="button" onClick={salvar} disabled={!alterado || pendente} className="rounded-full bg-o2-coral px-3 py-1 text-xs font-medium text-white disabled:opacity-40">
+        <button type="button" onClick={() => salvar()} disabled={!alterado || pendente} className="rounded-full bg-o2-coral px-3 py-1 text-xs font-medium text-white disabled:opacity-40">
           {pendente ? "…" : "Salvar"}
         </button>
       </td>
