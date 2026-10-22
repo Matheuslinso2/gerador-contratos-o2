@@ -26,6 +26,7 @@ const rotuloResponsavel = (email: string) => {
 };
 import { salvarConfigMetas } from "./actions";
 import LinhaMeta from "./LinhaMeta";
+import RolagemSuperior from "@/components/RolagemSuperior";
 import ModoGrupo from "./ModoGrupo";
 
 const inteiro = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
@@ -290,6 +291,7 @@ export default async function ProducaoCampanha({
           />
 
           <div id="producao-filtravel" className="space-y-4">
+          <RolagemSuperior alvoId="quadro-producao-campanha" />
           <div id="quadro-producao-campanha" className="overflow-x-auto rounded-2xl border border-o2-navy/10 bg-white shadow-sm">
             <table className="w-full min-w-[1400px] text-sm">
               <thead>
