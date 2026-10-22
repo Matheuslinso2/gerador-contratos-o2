@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { ItemAgrupado } from "@/lib/ramos-elementares/analise";
+import type { ImobiliariaUnificada } from "@/lib/ramos-elementares/imobiliariasUnificadas";
 import styles from "./ramos-elementares.module.css";
 
 // Quadro "status de todos os cards" por imobiliária, inspirado no da aba
@@ -99,7 +100,7 @@ export default function ImobiliariasRamosTabela({
   imobiliarias,
   totalMesAnterior,
 }: {
-  imobiliarias: ItemAgrupado[];
+  imobiliarias: ImobiliariaUnificada[];
   // Cards por imobiliária no mês anterior (mesmo recorte); null = sem retrato.
   totalMesAnterior: Record<string, number> | null;
 }) {
@@ -171,7 +172,14 @@ export default function ImobiliariasRamosTabela({
             {visiveis.map((i, posicao) => (
               <tr key={i.nome}>
                 <td className={`${styles.numCol} ${styles.posicao}`}>{ordenacao ? "" : posicao + 1}</td>
-                <td className={styles.nomeImob}>{i.nome}</td>
+                <td className={styles.nomeImob}>
+                  {i.nome}
+                  {i.semVinculo && (
+                    <small className={styles.avisoCelula} title="Nome ainda sem vínculo confirmado na base unificada de imobiliárias (Admin › Imobiliárias)">
+                      {" "}ⓥ
+                    </small>
+                  )}
+                </td>
                 <td className={styles.numCol} style={{ fontWeight: 700 }}>{i.total}</td>
                 <td className={styles.numCol}>
                   {totalMesAnterior ? <Tendencia atual={i.total} anterior={totalMesAnterior[i.nome] ?? 0} /> : "—"}

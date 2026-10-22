@@ -12,7 +12,13 @@ import {
   montarAnaliseRamosElementares,
   type AnaliseRamosElementares,
 } from "@/lib/ramos-elementares/analise";
-import PainelRamosElementares, { type ImobsMesAnterior } from "./PainelRamosElementares";
+import PainelRamosElementares from "./PainelRamosElementares";
+import {
+  montarResolvedorImobiliarias,
+  unificarImobiliarias,
+  unificarPorNome,
+  type ImobiliariaUnificada,
+} from "@/lib/ramos-elementares/imobiliariasUnificadas";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -146,26 +152,32 @@ export default async function RamosElementaresPage({
   }
   }
 
-  // Tendência do quadro de imobiliárias: cards por imobiliária no retrato
-  // salvo do mês anterior (mesmos recortes). Sem retrato, a coluna fica "—".
+  // Quadro de imobiliárias da Visão geral: novos + renovações pela base
+  // unificada de imobiliárias (ver imobiliariasUnificadas.ts). Tendência =
+  // cards por imobiliária no retrato salvo do mês anterior.
   const { data: retratoAnterior } = await supabase
     .from("ramos_elementares_snapshots")
     .select("payload")
     .eq("competencia", mesAnterior(competencia))
     .maybeSingle();
   const anterior = retratoAnterior?.payload as AnaliseRamosElementares | undefined;
-  const porNome = (lista: { nome: string; total: number }[] | undefined) =>
-    Object.fromEntries((lista ?? []).map((item) => [item.nome, item.total]));
-  const imobsMesAnterior: ImobsMesAnterior = anterior?.novos
-    ? {
-        novos: {
-          consolidado: porNome(anterior.novos.consolidado?.porImobiliaria),
-          mes: porNome(anterior.novos.mes?.porImobiliaria),
-          pendentes: porNome(anterior.novos.pendentes?.porImobiliaria),
-        },
-        renovacoes: porNome(anterior.renovacoes?.atual?.porImobiliaria),
-      }
-    : null;
+  let imobiliariasVisao: ImobiliariaUnificada[] = [];
+  let imobiliariasMesAnterior: Record<string, number> | null = null;
+  try {
+    const resolvedor = await montarResolvedorImobiliarias(supabase);
+    const unificar = (a: AnaliseRamosElementares) =>
+      a.imobiliariasConsolidado
+        ? unificarImobiliarias(a.imobiliariasConsolidado, resolvedor)
+        : unificarPorNome([a.novos?.consolidado?.porImobiliaria ?? [], a.renovacoes?.atual?.porImobiliaria ?? []], resolvedor);
+    imobiliariasVisao = unificar(analise);
+    // Out/2026 contra set/2026 não compara: até set as renovações eram contadas
+    // por item (linhas da planilha), de out em diante por card (ver
+    // fonteHibrida.ts). Nessa virada a tendência fica "—".
+    const viradaItemCard = competencia === "2026-10";
+    if (anterior?.novos && !viradaItemCard) imobiliariasMesAnterior = Object.fromEntries(unificar(anterior).map((i) => [i.nome, i.total]));
+  } catch (erro) {
+    console.error("Ramos Elementares: falha ao ler a base unificada de imobiliárias:", erro);
+  }
 
   return (
     <>
@@ -176,7 +188,8 @@ export default async function RamosElementaresPage({
         origem={origem}
         erroFonte={erroFonte}
         emailsConfirmacao={emailsConfirmacao}
-        imobsMesAnterior={imobsMesAnterior}
+        imobiliariasVisao={imobiliariasVisao}
+        imobiliariasMesAnterior={imobiliariasMesAnterior}
       />
     </>
   );

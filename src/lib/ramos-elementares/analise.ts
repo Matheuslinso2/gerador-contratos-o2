@@ -42,6 +42,12 @@ export type ResumoPopulacao = {
   efetivadosSemItensContratados?: number;
 };
 
+// Quadro de imobiliárias da Visão geral (novos + renovações juntos). A chave
+// é a da base unificada de imobiliárias (imobiliaria_registros_fonte):
+// "bitrix_empresa:<companyId>" ou "planilha_re:<nome>". A página troca a
+// chave pela ficha/grupo confirmado.
+export type ItemImobiliariaFonte = ItemAgrupado & { chave: string };
+
 // Posição, nas linhas montadas por fonteBitrix.ts, dos dados do card que não
 // existem na planilha (id, título e quantidades de endereços). Ficam depois da
 // última coluna lida da planilha (AR nos novos, AD nas renovações) pra nunca
@@ -122,6 +128,9 @@ export type AnaliseRamosElementares = {
   alertasOperacionais: AlertaRamos[];
   qualidade: AlertaRamos[];
   negociacoes: RegistroNegociacao[];
+  // Novos (mês + pendências) e renovações da competência, por imobiliária da
+  // fonte (ver ItemImobiliariaFonte). Retratos antigos não têm o campo.
+  imobiliariasConsolidado?: ItemImobiliariaFonte[];
 };
 
 type RegistroBase = {
@@ -146,6 +155,7 @@ type RegistroBase = {
   itensCotados: number;
   itensCotadosInformado: boolean;
   itensContratados: number | null;
+  companyId: number | null;
 };
 
 type RegistroNovo = RegistroBase & {
@@ -541,7 +551,7 @@ function mapearEndossos(linhas: CelulaGoogle[][], aba: string): RegistroEndosso[
 function dadosCard(linha: CelulaGoogle[], coluna: number, efetivado: boolean) {
   const id = numeroOpcional(linha[coluna]);
   if (id === null) {
-    return { idCard: null, tituloCard: "", itensCotados: 1, itensCotadosInformado: true, itensContratados: efetivado ? 1 : null };
+    return { idCard: null, tituloCard: "", itensCotados: 1, itensCotadosInformado: true, itensContratados: efetivado ? 1 : null, companyId: null };
   }
   const cotados = numeroOpcional(linha[coluna + 2]);
   const contratados = numeroOpcional(linha[coluna + 3]);
@@ -551,7 +561,26 @@ function dadosCard(linha: CelulaGoogle[], coluna: number, efetivado: boolean) {
     itensCotados: cotados !== null && cotados > 0 ? cotados : 1,
     itensCotadosInformado: cotados !== null && cotados > 0,
     itensContratados: efetivado ? contratados : null,
+    companyId: numeroOpcional(linha[coluna + 4]),
   };
+}
+
+function chaveImobiliariaFonte(registro: RegistroBase): string {
+  if (registro.companyId) return `bitrix_empresa:${registro.companyId}`;
+  if (registro.idCard === null && registro.imobiliaria !== "NÃO INFORMADA") return `planilha_re:${registro.imobiliaria}`;
+  return "";
+}
+
+function agruparPorImobiliariaFonte(registros: RegistroBase[]): ItemImobiliariaFonte[] {
+  const nomes = new Map<string, string>();
+  for (const registro of registros) {
+    const chave = chaveImobiliariaFonte(registro);
+    if (!nomes.has(chave)) nomes.set(chave, registro.imobiliaria);
+  }
+  return agrupar(registros, chaveImobiliariaFonte).map((item) => {
+    const chave = item.nome === "NÃO INFORMADO" ? "" : item.nome;
+    return { ...item, chave, nome: nomes.get(chave) || "NÃO INFORMADA" };
+  });
 }
 
 function agrupar(registros: RegistroBase[], obterNome: (registro: RegistroBase) => string): ItemAgrupado[] {
@@ -980,6 +1009,7 @@ export function montarAnaliseRamosElementares(fonte: FonteRamosBruta, agora = ne
     alertasOperacionais,
     qualidade,
     negociacoes,
+    imobiliariasConsolidado: agruparPorImobiliariaFonte(todosComerciais),
   };
 }
 

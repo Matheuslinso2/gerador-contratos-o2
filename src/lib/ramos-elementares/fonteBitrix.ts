@@ -251,6 +251,9 @@ function gravarDadosCard(linha: CelulaGoogle[], coluna: number, item: BitrixItem
   linha[coluna + 1] = texto(item.title);
   linha[coluna + 2] = quantidade(item[CAMPOS.qtdEnderecos]);
   linha[coluna + 3] = quantidade(item[CAMPOS.qtdEnderecosContratados]);
+  // Empresa do card: chave do vínculo com a base unificada de imobiliárias
+  // (imobiliaria_registros_fonte, fonte bitrix_empresa).
+  linha[coluna + 4] = Number(item.companyId) || null;
 }
 
 function linhaNovo(params: {
@@ -267,7 +270,7 @@ function linhaNovo(params: {
   desfechoNoMes: boolean;
 }): CelulaGoogle[] {
   const { item, status, origem, produto, seguradora, imobiliaria, responsavel, competencia, eventos, agora, desfechoNoMes } = params;
-  const linha: CelulaGoogle[] = Array(COLUNA_CARD_NOVO + 4).fill(null);
+  const linha: CelulaGoogle[] = Array(COLUNA_CARD_NOVO + 5).fill(null);
   const criadaEm = dataValida(item.createdTime);
   const duracao = duracaoEmDias(item, eventos, agora);
   linha[0] = status;
@@ -304,7 +307,7 @@ function linhaRenovacao(params: {
   desfechoNoMes: boolean;
 }): CelulaGoogle[] {
   const { item, status, origem, produto, seguradora, imobiliaria, responsavel, eventos, desfechoNoMes } = params;
-  const linha: CelulaGoogle[] = Array(COLUNA_CARD_RENOVACAO + 4).fill(null);
+  const linha: CelulaGoogle[] = Array(COLUNA_CARD_RENOVACAO + 5).fill(null);
   linha[0] = status;
   linha[1] = origem;
   linha[2] = texto(item[CAMPOS.numeroApolice]);

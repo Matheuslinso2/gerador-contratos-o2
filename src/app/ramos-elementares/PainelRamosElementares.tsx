@@ -17,13 +17,7 @@ import InfoLegenda from "@/components/InfoLegenda";
 import AtualizarAgora from "@/components/AtualizarAgora";
 import { IconFlame } from "@/components/icons";
 import ImobiliariasRamosTabela from "./ImobiliariasRamosTabela";
-
-// Cards por imobiliária no mês anterior, por recorte -- base da coluna de
-// tendência do quadro de imobiliárias (vem do retrato salvo do mês anterior).
-export type ImobsMesAnterior = {
-  novos: Record<"consolidado" | "mes" | "pendentes", Record<string, number>>;
-  renovacoes: Record<string, number>;
-} | null;
+import type { ImobiliariaUnificada } from "@/lib/ramos-elementares/imobiliariasUnificadas";
 
 // Itens (endereços) de uma população: cotados e contratados, com o aviso de
 // efetivados sem "Endereços contratados". Retrato antigo sem os campos = nada.
@@ -265,9 +259,13 @@ function ResumoStatus({ resumo }: { resumo: ResumoPopulacao }) {
 function PainelVisao({
   analise,
   competencia,
+  imobiliariasVisao,
+  imobiliariasMesAnterior,
 }: {
   analise: AnaliseRamosElementares;
   competencia: string;
+  imobiliariasVisao: ImobiliariaUnificada[];
+  imobiliariasMesAnterior: Record<string, number> | null;
 }) {
   const atencao = [...analise.alertasOperacionais, ...analise.qualidade]
     .filter((item) => item.quantidade > 0)
@@ -503,6 +501,28 @@ function PainelVisao({
           </div>
         </section>
       </div>
+      <section id="quadro-ramos-imobiliarias" className={styles.panel}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "baseline",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <h2>Imobiliárias — status de todos os cards<InfoLegenda titulo="Imobiliárias">Ranking de todas as imobiliárias com produção no setor no mês: negócios novos (do mês e pendências) mais renovações da competência, juntos. A imobiliária vem da base unificada (mesmo cadastro do Power BI): nomes diferentes da mesma imobiliária no Bitrix e nas planilhas viram uma linha só, e CNPJs da mesma empresa (ex.: Ramiro Sá) somam juntos. Mostra cards, tendência contra o mês anterior, em andamento, encerrados sem emissão e efetivados (com % sobre os cards da imobiliária), itens cotados e contratados, prêmio e comissão efetivados. ⓥ = nome ainda sem vínculo confirmado na base unificada (revisar em Admin › Imobiliárias). Clique no cabeçalho para ordenar.</InfoLegenda></h2>
+          <ExportarQuadro
+            quadroId="quadro-ramos-imobiliarias"
+            corFundo="#f7f8fa"
+            nomeArquivo={`ramos-elementares-imobiliarias-` + competencia}
+            dadosExcel={linhasItemAgrupado(imobiliariasVisao).map((linha, i) => ({ ...linha, sem_vinculo_base_unificada: imobiliariasVisao[i].semVinculo ? "sim" : "" }))}
+            nomeAbaExcel="Imobiliárias"
+          />
+        </div>
+        <p>Novos + renovações · base unificada de imobiliárias</p>
+        <ImobiliariasRamosTabela imobiliarias={imobiliariasVisao} totalMesAnterior={imobiliariasMesAnterior} />
+      </section>
     </>
   );
 }
@@ -510,11 +530,9 @@ function PainelVisao({
 function PainelNovos({
   analise,
   competencia,
-  imobsMesAnterior,
 }: {
   analise: AnaliseRamosElementares;
   competencia: string;
-  imobsMesAnterior: ImobsMesAnterior;
 }) {
   const [recorte, setRecorte] = useState<RecorteNovos>("consolidado");
   const resumo = analise.novos[recorte];
@@ -683,7 +701,7 @@ function PainelNovos({
             flexWrap: "wrap",
           }}
         >
-          <h2>Imobiliárias — status de todos os cards<InfoLegenda titulo="Imobiliárias">Ranking de todas as imobiliárias com pelo menos um card na carteira selecionada: cards, tendência contra o mês anterior, em andamento, encerrados sem emissão e efetivados (com % sobre os cards da imobiliária), itens cotados e contratados, prêmio e comissão efetivados. Clique no cabeçalho para ordenar. As 10 maiores aparecem primeiro; o botão mostra as demais.</InfoLegenda></h2>
+          <h2>Imobiliárias — 100% da produção<InfoLegenda titulo="Imobiliárias">Todas as imobiliárias com pelo menos um registro na carteira selecionada, com Total, Efetivados e Conversão. As 10 maiores aparecem primeiro; o botão mostra as demais.</InfoLegenda></h2>
           <ExportarQuadro
             quadroId="quadro-ramos-novos-imobiliarias"
             corFundo="#f7f8fa"
@@ -692,9 +710,13 @@ function PainelNovos({
             nomeAbaExcel="Imobiliárias"
           />
         </div>
-        <ImobiliariasRamosTabela
-          imobiliarias={resumo.porImobiliaria}
-          totalMesAnterior={imobsMesAnterior?.novos[recorte] ?? null}
+        <p>
+          As 10 maiores aparecem primeiro; o botão revela todas com pelo menos
+          um registro
+        </p>
+        <ListaAgrupada
+          dados={resumo.porImobiliaria}
+          tituloVazio="Nenhuma imobiliária"
         />
       </section>
     </>
@@ -790,11 +812,9 @@ function ControleRenovacaoQuadro({ controle, competencia }: { controle: NonNulla
 function PainelRenovacoes({
   analise,
   competencia,
-  imobsMesAnterior,
 }: {
   analise: AnaliseRamosElementares;
   competencia: string;
-  imobsMesAnterior: ImobsMesAnterior;
 }) {
   const [recorte, setRecorte] = useState<RecorteRenovacao>("atual");
   const resumo = analise.renovacoes[recorte];
@@ -972,7 +992,7 @@ function PainelRenovacoes({
             flexWrap: "wrap",
           }}
         >
-          <h2>Imobiliárias — status de todos os cards<InfoLegenda titulo="Imobiliárias">Ranking de todas as imobiliárias com renovação na competência selecionada: cards, tendência contra o mês anterior, em andamento, encerrados sem emissão e efetivados (com % sobre os cards da imobiliária), itens cotados e contratados, prêmio e comissão efetivados. Clique no cabeçalho para ordenar. As 10 maiores aparecem primeiro; o botão mostra as demais.</InfoLegenda></h2>
+          <h2>Imobiliárias — carteira completa<InfoLegenda titulo="Imobiliárias">Todas as imobiliárias com renovação na competência selecionada, com Total, Efetivados e Conversão. As 10 maiores aparecem primeiro; o botão mostra as demais.</InfoLegenda></h2>
           <ExportarQuadro
             quadroId="quadro-ramos-renov-imobiliarias"
             corFundo="#f7f8fa"
@@ -981,9 +1001,9 @@ function PainelRenovacoes({
             nomeAbaExcel="Imobiliárias"
           />
         </div>
-        <ImobiliariasRamosTabela
-          imobiliarias={resumo.porImobiliaria}
-          totalMesAnterior={recorte === "atual" ? (imobsMesAnterior?.renovacoes ?? null) : null}
+        <ListaAgrupada
+          dados={resumo.porImobiliaria}
+          tituloVazio="Nenhuma imobiliária"
         />
       </section>
     </>
@@ -1818,14 +1838,16 @@ export default function PainelRamosElementares({
   origem,
   erroFonte,
   emailsConfirmacao,
-  imobsMesAnterior = null,
+  imobiliariasVisao = [],
+  imobiliariasMesAnterior = null,
 }: {
   analise: AnaliseRamosElementares;
   competencia: string;
   origem: "planilha" | "hibrida" | "snapshot" | "indisponivel";
   erroFonte: string | null;
   emailsConfirmacao: EmailConfirmacao[];
-  imobsMesAnterior?: ImobsMesAnterior;
+  imobiliariasVisao?: ImobiliariaUnificada[];
+  imobiliariasMesAnterior?: Record<string, number> | null;
 }) {
   const router = useRouter();
   const [aba, setAba] = useState<AbaPainel>("visao");
@@ -1847,10 +1869,10 @@ export default function PainelRamosElementares({
   }, [competencia]);
 
   const conteudo = {
-    visao: <PainelVisao analise={analise} competencia={competencia} />,
-    novos: <PainelNovos analise={analise} competencia={competencia} imobsMesAnterior={imobsMesAnterior} />,
+    visao: <PainelVisao analise={analise} competencia={competencia} imobiliariasVisao={imobiliariasVisao} imobiliariasMesAnterior={imobiliariasMesAnterior} />,
+    novos: <PainelNovos analise={analise} competencia={competencia} />,
     renovacoes: (
-      <PainelRenovacoes analise={analise} competencia={competencia} imobsMesAnterior={imobsMesAnterior} />
+      <PainelRenovacoes analise={analise} competencia={competencia} />
     ),
     financeiro: (
       <PainelFinanceiro analise={analise} competencia={competencia} />
