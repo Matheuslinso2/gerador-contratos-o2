@@ -335,9 +335,12 @@ function CampoUploadPlanilha({ responseId, path, setPath, nome, setNome }: { res
       ods: "application/vnd.oasis.opendocument.spreadsheet",
       pdf: "application/pdf",
     };
-    const { error } = await supabase.storage
-      .from(BUCKET)
-      .upload(novoPath, selecionado, { contentType: tipoPorExtensao[extensao] ?? (selecionado.type || "application/octet-stream") });
+    // Com um File, o Supabase envia o arquivo num formulário e usa o tipo do
+    // PRÓPRIO arquivo (a opção contentType é ignorada) -- por isso o tipo certo
+    // precisa estar embutido num Blob novo (testado: File com tipo vazio é
+    // recusado, Blob com o tipo da extensão é aceito).
+    const tipo = tipoPorExtensao[extensao] ?? (selecionado.type || "application/octet-stream");
+    const { error } = await supabase.storage.from(BUCKET).upload(novoPath, new Blob([selecionado], { type: tipo }), { contentType: tipo });
     if (error) {
       console.error("Seguro Incêndio: falha ao enviar a planilha pro Storage:", error);
       setArquivo({
