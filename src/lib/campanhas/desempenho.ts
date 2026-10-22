@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { buscarEmLotes } from "@/lib/supabase/emLotes";
 import { buscarCodigosCorp } from "@/lib/baseUnica/codigosCorp";
 
 // Metas e produção automática da CAMPANHA (22/10/2026). A campanha comercial
@@ -393,8 +394,7 @@ export async function montarDesempenhoCampanha(
   const idsGrupo = participantes.filter((p) => p.grupo_id).map((p) => p.grupo_id!);
   const imobs: Imob[] = [];
   if (idsImob.length) {
-    const { data } = await db.from("imobiliarias").select("id, nome, apelido, codigo_produtor_corp, grupo_id").in("id", idsImob);
-    imobs.push(...((data ?? []) as Imob[]));
+    imobs.push(...(await buscarEmLotes<Imob>(idsImob, (lote) => db.from("imobiliarias").select("id, nome, apelido, codigo_produtor_corp, grupo_id").in("id", lote))));
   }
   const grupos = new Map<string, string>();
   if (idsGrupo.length) {

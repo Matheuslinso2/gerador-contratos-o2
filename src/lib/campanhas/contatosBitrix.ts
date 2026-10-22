@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buscarTodasPaginasFlat, chamarBitrix } from "@/lib/bitrix/client";
+import { buscarEmLotes } from "@/lib/supabase/emLotes";
 import type { CanalContato, ContatosImobiliaria, EventoContato, UltimosContatos } from "./contatosTipos";
 
 export { DIAS_SEM_CONTATO_ALERTA } from "./contatosTipos";
@@ -63,21 +64,20 @@ export async function ultimosContatosPorImobiliaria(
   const desde = new Date(Date.now() - JANELA_DIAS * 86_400_000).toISOString().slice(0, 10);
 
   // Imobiliária -> empresas no Bitrix (vínculos confirmados da base única).
-  const [{ data: registros }, { data: manuais }] = await Promise.all([
-    db
-      .from("imobiliaria_registros_fonte")
-      .select("imobiliaria_id, chave_externa")
-      .eq("fonte", "bitrix_empresa")
-      .eq("situacao", "confirmado")
-      .in("imobiliaria_id", idsImobiliarias),
-    db
-      .from("imobiliaria_contatos")
-      .select("id, imobiliaria_id, canal, data_contato, feito_por_email, observacao")
-      .in("imobiliaria_id", idsImobiliarias)
-      .gte("data_contato", desde),
+  const [registros, manuais] = await Promise.all([
+    buscarEmLotes<{ imobiliaria_id: string; chave_externa: string | null }>(idsImobiliarias, (lote) =>
+      db.from("imobiliaria_registros_fonte").select("imobiliaria_id, chave_externa").eq("fonte", "bitrix_empresa").eq("situacao", "confirmado").in("imobiliaria_id", lote)
+    ),
+    buscarEmLotes<{ id: string; imobiliaria_id: string; canal: CanalContato; data_contato: string; feito_por_email: string; observacao: string | null }>(idsImobiliarias, (lote) =>
+      db
+        .from("imobiliaria_contatos")
+        .select("id, imobiliaria_id, canal, data_contato, feito_por_email, observacao")
+        .in("imobiliaria_id", lote)
+        .gte("data_contato", desde)
+    ),
   ]);
   const empresasPorImob = new Map<string, number[]>();
-  for (const r of (registros ?? []) as { imobiliaria_id: string; chave_externa: string | null }[]) {
+  for (const r of registros) {
     const id = Number(r.chave_externa);
     if (!Number.isFinite(id) || id <= 0) continue;
     empresasPorImob.set(r.imobiliaria_id, [...(empresasPorImob.get(r.imobiliaria_id) ?? []), id]);
@@ -140,7 +140,7 @@ export async function ultimosContatosPorImobiliaria(
       observacao: null,
     });
   }
-  for (const m of (manuais ?? []) as { id: string; imobiliaria_id: string; canal: CanalContato; data_contato: string; feito_por_email: string; observacao: string | null }[]) {
+  for (const m of manuais) {
     resultado.get(m.imobiliaria_id)?.eventos.push({
       id: m.id,
       // Só a data é informada: meio-dia de Brasília para não cair no dia anterior.

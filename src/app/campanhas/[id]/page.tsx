@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
@@ -493,6 +494,15 @@ export default async function CampanhaDetalhePage({
               .
             </p>
           ) : (
+            // A produção (funil + Corp + contatos do Bitrix) chega depois: o
+            // resto da campanha abre na hora (22/10/2026, lentidão ao abrir).
+            <Suspense
+              fallback={
+                <div className="animate-pulse rounded-xl border border-o2-navy/10 bg-quadro p-6 text-sm text-gray-500">
+                  Calculando a produção da campanha (funil, Corp e últimos contatos)…
+                </div>
+              }
+            >
             <ProducaoCampanha
               campanha={{
                 id,
@@ -509,6 +519,7 @@ export default async function CampanhaDetalhePage({
               statusPorImobiliaria={statusPorImobiliaria}
               responsaveis={responsaveis}
             />
+            </Suspense>
           )}
         </section>
 

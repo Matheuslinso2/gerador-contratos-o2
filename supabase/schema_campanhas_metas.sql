@@ -31,3 +31,7 @@ create policy "colaborador O2 gerencia metas de campanha" on public.campanhas_me
 -- Ver migração campanha_programa_funil_com_card (mesmo nome mantido).
 -- create function public.campanha_programa_funil(p_imobs uuid[], p_produtos text[], p_desde date) ...
 create index if not exists corp_grade_produtor_proposta_idx on public.corp_grade (codigo_produtor, dt_proposta) where incluir_produtor;
+
+-- Funil mais rápido (22/10/2026): produto e fonte na chave, para ler só as
+-- linhas certas por imobiliária (3,5 s -> 0,05 s no Clube Elite).
+create index if not exists producao_unificada_imob_produto_idx on public.producao_unificada (fonte_vinculo, imobiliaria_texto, produto, fonte);

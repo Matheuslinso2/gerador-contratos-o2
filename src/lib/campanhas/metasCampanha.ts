@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ParticipanteRow } from "./desempenho";
+import { buscarEmLotes } from "@/lib/supabase/emLotes";
 
 // Participantes da campanha para o quadro de metas (22/10/2026): as
 // imobiliárias destinatárias, cada uma com sua linha -- a não ser que o
@@ -23,12 +24,12 @@ export async function participantesDaCampanha(
   campanhaId: string,
   idsImobiliarias: string[]
 ): Promise<{ participantes: ParticipanteRow[]; grupos: GrupoNaCampanha[] }> {
-  const [{ data: metasData }, { data: imobsData }] = await Promise.all([
+  const [{ data: metasData }, imobsData] = await Promise.all([
     db.from("campanhas_metas").select("id, imobiliaria_id, grupo_id, meta, custo_premiacao, observacao, responsavel_email").eq("campanha_id", campanhaId),
-    idsImobiliarias.length ? db.from("imobiliarias").select("id, grupo_id").in("id", idsImobiliarias) : Promise.resolve({ data: [] }),
+    buscarEmLotes<{ id: string; grupo_id: string | null }>(idsImobiliarias, (lote) => db.from("imobiliarias").select("id, grupo_id").in("id", lote)),
   ]);
   const metas = (metasData ?? []) as LinhaMeta[];
-  const imobs = (imobsData ?? []) as { id: string; grupo_id: string | null }[];
+  const imobs = imobsData;
   const gruposEmModoGrupo = new Set(metas.filter((m) => m.grupo_id).map((m) => m.grupo_id as string));
 
   const linha = (m: LinhaMeta | undefined, base: Pick<ParticipanteRow, "id" | "imobiliaria_id" | "grupo_id">): ParticipanteRow => ({
