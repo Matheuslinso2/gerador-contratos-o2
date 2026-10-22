@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-export const PASSOS = ["Contrato", "Situação", "Débitos", "Documentos", "Conferir e enviar"];
+export const PASSOS = ["Identificação", "Coberturas", "Documentos", "Favorecido", "Validação"];
 
 // Barra dos 5 passos do assistente de abertura. Com `id`, os passos já
 // liberados viram link (dá pra voltar e corrigir).

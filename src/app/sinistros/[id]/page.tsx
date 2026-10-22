@@ -19,8 +19,8 @@ import {
   formatarData,
   formatarReais,
   hojeSP,
+  modelosDeclaracao,
   montarChecklist,
-  somarDias,
   validarEnvio,
   type Debito,
   type EtapaSinistro,
@@ -32,8 +32,8 @@ import {
   devolverComPendencia,
   enviarSinistro,
   marcarAbertoNaSeguradora,
-  registrarNoHistorico,
   salvarContrato,
+  salvarFavorecido,
   salvarProximaAcao,
 } from "../actions";
 import FormContrato from "../FormContrato";
@@ -46,7 +46,8 @@ import Passos from "../Passos";
 import { Aviso, EtiquetaEtapa, botaoPrimario, botaoSecundario, cartao, enderecoCurto, inputClass, labelClass } from "../ui";
 import PassoSituacao from "./PassoSituacao";
 import EditorDebitos from "./EditorDebitos";
-import { ChecklistDocumentos, Historico, type Documento, type RegistroHistorico } from "./blocos";
+import { ChecklistDocumentos, type Documento, type RegistroHistorico } from "./blocos";
+import { AnexosPorPasta, CabecalhoSinistro, ChatLateral, HistoricoInterno } from "./visualizacao";
 
 export const dynamic = "force-dynamic";
 
@@ -91,10 +92,17 @@ export default async function SinistroPage({
 
   // Indenizações e equipe (O2); anterior/próximo pela mesma lista da Gestão.
   const [{ data: indenizacoesBrutas }, { data: equipeBruta }] = await Promise.all([
-    supabase.from("sinistro_indenizacoes").select("id, referencia, pago_em, valor, observacao, criado_por_email").eq("sinistro_id", id).order("pago_em"),
+    supabase.from("sinistro_indenizacoes").select("id, referencia, pago_em, valor, observacao, criado_por_email, anexo_path, anexo_nome").eq("sinistro_id", id).order("pago_em"),
     interno ? supabase.from("sinistros_equipe").select("chave, nome, ativo").order("nome") : Promise.resolve({ data: [] }),
   ]);
   const indenizacoes = (indenizacoesBrutas ?? []) as Indenizacao[];
+  const comAnexo = indenizacoes.filter((i) => i.anexo_path);
+  if (comAnexo.length) {
+    const { data: urls } = await supabase.storage.from("sinistros").createSignedUrls(comAnexo.map((i) => i.anexo_path!), 3600);
+    comAnexo.forEach((i, k) => (i.url = urls?.[k]?.signedUrl ?? null));
+  }
+  // A equipe O2 abriu a ficha: zera os selos de novidade da imobiliária na Gestão.
+  if (interno) await supabase.from("sinistros").update({ visto_o2_em: new Date().toISOString() }).eq("id", id);
   const nav: Navegacao = { anterior: null, proximo: null, posicao: 0, total: 0, ctx: ctx ?? null };
   if (interno && ctx !== undefined) {
     const parametrosLista: Record<string, string | string[]> = {};
@@ -158,7 +166,7 @@ export default async function SinistroPage({
   const listaDebitos = (debitos ?? []) as Debito[];
 
   const modoAssistente = etapa === "rascunho" || (etapa === "pendencia_imobiliaria" && !interno);
-  const passoPadrao = etapa === "pendencia_imobiliaria" ? 4 : 2;
+  const passoPadrao = etapa === "pendencia_imobiliaria" ? 3 : 2;
   const passo = Math.min(5, Math.max(1, Number(passoParam) || passoPadrao));
 
   return (
@@ -255,7 +263,7 @@ function Assistente({
 }: Props & { passo: number; imobiliarias?: { id: string; nome: string }[]; reaproveitaveis: Reaproveitaveis; favorecidoPadrao: Record<string, unknown> | null }) {
   // Favorecido vazio: sugere o usado no último sinistro da mesma imobiliária.
   const usarPadrao = !!favorecidoPadrao && !s.favorecido_banco && !s.favorecido_nome;
-  const sEnvio = usarPadrao ? { ...s, ...favorecidoPadrao, codigo: s.codigo } : s;
+  const sFavorecido = usarPadrao ? { ...s, ...favorecidoPadrao, codigo: s.codigo } : s;
   const pendencia = s.etapa === "pendencia_imobiliaria";
   const ultimaPendencia = historico.find((h) => h.texto.startsWith("Pendência para a imobiliária"));
   return (
@@ -264,7 +272,7 @@ function Assistente({
         <Aviso tipo="alerta">
           <p className="font-semibold">A O2 pediu ajustes — responda até {formatarData(s.pendencia_prazo)}.</p>
           {ultimaPendencia && <p className="mt-1 whitespace-pre-wrap">{ultimaPendencia.texto.replace(/^Pendência para a imobiliária[^:]*:\n?/, "")}</p>}
-          <p className="mt-2 text-xs">Corrija o que for preciso nos passos abaixo e, no passo 5, clique em &quot;Responder pendência&quot;.</p>
+          <p className="mt-2 text-xs">Corrija o que for preciso nas etapas abaixo e, na etapa 5, clique em &quot;Responder pendência&quot;.</p>
         </Aviso>
       )}
       <Passos atual={passo} id={s.id} />
@@ -274,68 +282,129 @@ function Assistente({
       {passo === 2 && <PassoSituacao dados={s} />}
 
       {passo === 3 && (
-        <EditorDebitos
-          id={s.id}
-          iniciais={debitos.map((d) => ({ ...d, valor: Number(d.valor), multa: Number(d.multa), acrescimos: Number(d.acrescimos) }))}
-          coberturas={s.coberturas}
-          editavel
-        />
-      )}
-
-      {passo === 4 && (
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
-            Lista montada a partir do tipo de sinistro e do que está sendo cobrado. Pode enviar PDF, foto ou planilha (até 50 MB cada). Os modelos de
-            Declaração de Débitos e Procuração Ad Judicia de cada seguradora estão com a equipe de sinistro da O2.
+            Lista montada a partir da situação do imóvel e das coberturas acionadas. Pode enviar PDF, foto ou planilha (até 50 MB cada). Cada
+            documento é validado pela O2 — o que for recusado volta para você como <b className="text-red-700">Pendente</b>, com a observação.
           </p>
-          <ChecklistDocumentos id={s.id} itens={checklist} documentos={docs} modo="imobiliaria" editavel passo={4} reaproveitaveis={reaproveitaveis} />
+          <ChecklistDocumentos
+            id={s.id}
+            itens={checklist}
+            documentos={docs}
+            modo="imobiliaria"
+            editavel
+            passo={3}
+            reaproveitaveis={reaproveitaveis}
+            modelos={modelosDeclaracao(s.seguradora, s.tipo)}
+          />
           <div className="flex justify-end">
-            <Link href={`/sinistros/${s.id}?passo=5`} className={botaoPrimario}>
+            <Link href={`/sinistros/${s.id}?passo=4`} className={botaoPrimario}>
               Continuar →
             </Link>
           </div>
         </div>
       )}
 
-      {passo === 5 && (
+      {passo === 4 && (
         <>
           {usarPadrao && (
             <Aviso tipo="info">
-              Os dados de quem recebe a indenização vieram do SIN-{String(favorecidoPadrao?.codigo ?? "")} desta imobiliária. Confira antes de enviar.
+              Os dados bancários vieram do SIN-{String(favorecidoPadrao?.codigo ?? "")} desta imobiliária. Confira antes de seguir.
             </Aviso>
           )}
-          <PassoEnviar s={sEnvio} debitos={debitos} docs={docs} />
+          <PassoFavorecido s={sFavorecido} />
         </>
       )}
+
+      {passo === 5 && <PassoEnviar s={s} debitos={debitos} docs={docs} />}
     </div>
   );
 }
 
+// Etapa 4 -- dados bancários do favorecido (segurado ou representante).
+function PassoFavorecido({ s }: { s: any }) {
+  return (
+    <form action={salvarFavorecido} className="space-y-6">
+      <input type="hidden" name="id" value={s.id} />
+      <section className={`${cartao} space-y-3`}>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Dados bancários do favorecido</h2>
+        <fieldset className="flex flex-wrap gap-4 text-sm">
+          <label className="flex items-center gap-1.5">
+            <input type="radio" name="favorecido_eh_segurado" value="sim" defaultChecked={s.favorecido_eh_segurado === true} className="accent-o2-coral" />
+            Segurado (locador)
+          </label>
+          <label className="flex items-center gap-1.5">
+            <input type="radio" name="favorecido_eh_segurado" value="nao" defaultChecked={s.favorecido_eh_segurado === false} className="accent-o2-coral" />
+            Representante (imobiliária ou procurador)
+          </label>
+        </fieldset>
+        <p className="text-xs text-gray-500">
+          Se for o representante, a seguradora exige o contrato de administração ou a procuração (pedidos na etapa 3).
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Campo nome="favorecido_nome" rotulo="Nome do favorecido" valor={s.favorecido_nome} />
+          <Campo nome="favorecido_documento" rotulo="CPF/CNPJ do favorecido" valor={s.favorecido_documento} />
+          <Campo nome="favorecido_banco" rotulo="Banco" valor={s.favorecido_banco} />
+          <div className="grid grid-cols-2 gap-3">
+            <Campo nome="favorecido_agencia" rotulo="Agência" valor={s.favorecido_agencia} />
+            <Campo nome="favorecido_conta" rotulo="Conta" valor={s.favorecido_conta} />
+          </div>
+        </div>
+      </section>
+      <div className="flex justify-end">
+        <SubmitButton className={botaoPrimario} textoCarregando="Salvando…">
+          Salvar e continuar →
+        </SubmitButton>
+      </div>
+    </form>
+  );
+}
+
+// Etapa 5 -- validação da documentação e envio. A resposta "Acionamento
+// autorizado?" é da O2, depois do envio (ficha da equipe).
 function PassoEnviar({ s, debitos, docs }: { s: any; debitos: Debito[]; docs: Documento[] }) {
   const pendencia = s.etapa === "pendencia_imobiliaria";
   const validacao = validarEnvio(s, debitos, docs, true);
   const prazo = calcularPrazoAviso(s);
   // Fase de testes: nada impede o envio; o que faltar aparece como aviso e
   // vai pro histórico do sinistro.
-  const bloqueiosDeOutrosPassos = validacao.bloqueios.filter((b) => !b.includes("favorecido") && !b.includes("fora do prazo"));
+  const bloqueiosDeOutrosPassos = validacao.bloqueios.filter((b) => !b.includes("fora do prazo"));
+  const recusados = docs.filter((d) => d.situacao === "recusado");
 
   return (
     <form action={enviarSinistro} className="space-y-6">
       <input type="hidden" name="id" value={s.id} />
 
       <section className={cartao}>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-o2-navy">Resumo</h2>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-o2-navy">Validação da documentação</h2>
         <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
-          <Item rotulo="Tipo" valor={tituloTipo(s.tipo)} />
           <Item rotulo="Seguradora / apólice" valor={[s.seguradora, s.numero_apolice].filter(Boolean).join(" · ")} />
-          <Item rotulo="Locador" valor={s.locador_nome} />
-          <Item rotulo="Imóvel" valor={enderecoCurto(s)} />
-          <Item rotulo="Cobranças" valor={COBERTURAS.filter((c) => s.coberturas.includes(c.chave)).map((c) => c.titulo).join(", ") || "—"} />
-          <Item rotulo="Total avisado" valor={formatarReais(debitos.reduce((t, d) => t + Number(d.valor) + Number(d.multa) + Number(d.acrescimos), 0))} />
+          <Item rotulo="Data da ocorrência (1ª inadimplência)" valor={formatarData(s.data_ocorrencia)} />
+          <Item rotulo="Imóvel" valor={`${s.tipo === "ocupado" ? "Ocupado" : s.tipo ? `Desocupado${s.data_entrega_chaves ? ` — chaves em ${formatarData(s.data_entrega_chaves)}` : ""}` : "—"}`} />
+          <Item rotulo="Endereço" valor={enderecoCurto(s)} />
+          <Item
+            rotulo="Coberturas acionadas"
+            valor={`${COBERTURAS.filter((c) => s.coberturas.includes(c.chave)).map((c) => c.titulo).join(", ") || "—"}${s.incluir_parcelas_fianca ? " (incluindo o seguro fiança)" : ""}`}
+          />
+          <Item rotulo="Favorecido" valor={[s.favorecido_nome, s.favorecido_banco].filter(Boolean).join(" · ")} />
+          <Item rotulo="Documentos" valor={`${docs.filter((d) => d.situacao !== "recusado").length} enviado(s)${recusados.length ? ` · ${recusados.length} pendente(s)` : ""}`} />
           <Item rotulo="Prazo de aviso" valor={prazo.prazo ? `${formatarData(prazo.prazo)}${prazo.foraDoPrazo ? " (encerrado)" : ""}` : "—"} />
         </dl>
       </section>
 
+      {recusados.length > 0 && (
+        <Aviso tipo="erro">
+          <p className="font-semibold">Documentos pendentes (recusados pela O2):</p>
+          <ul className="ml-5 list-disc">
+            {recusados.map((d) => (
+              <li key={d.id}>
+                {d.nome_arquivo}
+                {d.motivo_recusa ? ` — ${d.motivo_recusa}` : ""}
+              </li>
+            ))}
+          </ul>
+        </Aviso>
+      )}
       {bloqueiosDeOutrosPassos.length > 0 && (
         <Aviso tipo="alerta">
           <p className="font-semibold">Ainda incompleto (dá pra enviar assim mesmo — fica registrado no histórico):</p>
@@ -366,32 +435,6 @@ function PassoEnviar({ s, debitos, docs }: { s: any; debitos: Debito[]; docs: Do
         </section>
       )}
 
-      <section className={`${cartao} space-y-3`}>
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Quem recebe a indenização</h2>
-        <fieldset className="flex flex-wrap gap-4 text-sm">
-          <label className="flex items-center gap-1.5">
-            <input type="radio" name="favorecido_eh_segurado" value="sim" defaultChecked={s.favorecido_eh_segurado === true} className="accent-o2-coral" />
-            O próprio locador (segurado)
-          </label>
-          <label className="flex items-center gap-1.5">
-            <input type="radio" name="favorecido_eh_segurado" value="nao" defaultChecked={s.favorecido_eh_segurado === false} className="accent-o2-coral" />
-            A imobiliária ou outra pessoa
-          </label>
-        </fieldset>
-        <p className="text-xs text-gray-500">
-          Se não for o locador, a seguradora exige o contrato de administração ou a procuração ao favorecido (já pedidos no passo 4).
-        </p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Campo nome="favorecido_nome" rotulo="Nome do favorecido" valor={s.favorecido_nome} />
-          <Campo nome="favorecido_documento" rotulo="CPF/CNPJ do favorecido" valor={s.favorecido_documento} />
-          <Campo nome="favorecido_banco" rotulo="Banco" valor={s.favorecido_banco} />
-          <div className="grid grid-cols-2 gap-3">
-            <Campo nome="favorecido_agencia" rotulo="Agência" valor={s.favorecido_agencia} />
-            <Campo nome="favorecido_conta" rotulo="Conta" valor={s.favorecido_conta} />
-          </div>
-        </div>
-      </section>
-
       {!s.ciencia_aceita_em ? (
         <section className={`${cartao} space-y-3 border-orange-200 bg-orange-50`}>
           <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Atenção às regras do sinistro</h2>
@@ -416,6 +459,11 @@ function PassoEnviar({ s, debitos, docs }: { s: any; debitos: Debito[]; docs: Do
         <textarea name="mensagem" rows={2} className={inputClass} />
       </section>
 
+      <p className="text-xs text-gray-500">
+        Depois do envio, a O2 valida a documentação e responde se o acionamento está autorizado. Autorizado, o sistema gera o número do aviso e
+        abre o chat do sinistro; não autorizado, o caso volta para você como pendência.
+      </p>
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         {!pendencia ? (
           <button formAction={cancelarRascunho} formNoValidate className="text-sm text-red-600 hover:underline">
@@ -425,7 +473,7 @@ function PassoEnviar({ s, debitos, docs }: { s: any; debitos: Debito[]; docs: Do
           <span />
         )}
         <SubmitButton className={botaoPrimario} textoCarregando="Enviando…">
-          {pendencia ? "Responder pendência" : "Enviar aviso de sinistro à O2"}
+          {pendencia ? "Responder pendência" : "Enviar para validação da O2"}
         </SubmitButton>
       </div>
     </form>
@@ -504,7 +552,7 @@ function Dados({ s, interno }: { s: any; interno: boolean }) {
         {interno && (
           <Item
             rotulo="Favorecido"
-            valor={[s.favorecido_nome, s.favorecido_documento, s.favorecido_banco && `${s.favorecido_banco} ag ${s.favorecido_agencia} cc ${s.favorecido_conta}`]
+            valor={[s.favorecido_nome, s.favorecido_documento, s.favorecido_banco && [s.favorecido_banco, s.favorecido_agencia && `ag ${s.favorecido_agencia}`, s.favorecido_conta && `cc ${s.favorecido_conta}`].filter(Boolean).join(" ")]
               .filter(Boolean)
               .join(" · ")}
           />
@@ -528,8 +576,12 @@ function VisaoImobiliaria({ s, debitos, docs, checklist, historico, indenizacoes
     encerrado: `Sinistro encerrado${s.motivo_encerramento ? `: ${s.motivo_encerramento}` : "."}`,
     cancelado: `Cancelado${s.motivo_encerramento ? `: ${s.motivo_encerramento}` : "."}`,
   };
+  const totalIndenizado = indenizacoes.reduce((t, i) => t + Number(i.valor), 0);
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+      <CabecalhoSinistro s={s} totalIndenizado={totalIndenizado} primeiraIndenizacao={indenizacoes[0]?.pago_em ?? null} interno={false} ctx={null} />
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="min-w-0 space-y-6">
       <Aviso tipo="info">
         <b>{ETAPAS[etapa].tituloImobiliaria}.</b> {explicacao[etapa]}
       </Aviso>
@@ -543,24 +595,26 @@ function VisaoImobiliaria({ s, debitos, docs, checklist, historico, indenizacoes
         </Aviso>
       )}
       <Dados s={s} interno={false} />
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Andamento</h2>
-        <Historico id={s.id} registros={historico} modo="imobiliaria" />
-      </section>
       {indenizacoes.length > 0 && (
         <section className="space-y-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Indenizações recebidas</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Histórico de pagamento</h2>
           <Indenizacoes s={s} indenizacoes={indenizacoes} ctx={null} editavel={false} />
         </section>
       )}
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Débitos avisados</h2>
-        <EditorDebitos id={s.id} iniciais={debitos} coberturas={s.coberturas} editavel={false} />
-      </section>
+      {debitos.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Débitos avisados</h2>
+          <EditorDebitos id={s.id} iniciais={debitos} coberturas={s.coberturas} editavel={false} />
+        </section>
+      )}
       <section className="space-y-2">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Documentos</h2>
-        <ChecklistDocumentos id={s.id} itens={checklist} documentos={docs} modo="imobiliaria" editavel={false} />
+        <ChecklistDocumentos id={s.id} itens={checklist} documentos={docs} modo="imobiliaria" editavel={false} modelos={modelosDeclaracao(s.seguradora, s.tipo)} />
       </section>
+      <AnexosPorPasta s={s} docs={docs} interno={false} />
+      </div>
+      <ChatLateral s={s} historico={historico} interno={false} ctx={null} />
+      </div>
     </div>
   );
 }
@@ -570,15 +624,27 @@ function VisaoImobiliaria({ s, debitos, docs, checklist, historico, indenizacoes
 // abas: Dados · Documentos · Débitos e indenizações · Histórico (21/10/2026).
 
 type Membro = { chave: string; nome: string; ativo: boolean };
-type Indenizacao = { id: string; referencia: string | null; pago_em: string | null; valor: number; observacao: string | null; criado_por_email: string | null };
+type Indenizacao = {
+  id: string;
+  referencia: string | null;
+  pago_em: string | null;
+  valor: number;
+  observacao: string | null;
+  criado_por_email: string | null;
+  anexo_path?: string | null;
+  anexo_nome?: string | null;
+  url?: string | null;
+};
 type Navegacao = { anterior: string | null; proximo: string | null; posicao: number; total: number; ctx: string | null };
 
 const ABAS_O2 = [
   { chave: "dados", rotulo: "Dados" },
-  { chave: "documentos", rotulo: "Documentos" },
-  { chave: "financeiro", rotulo: "Débitos e indenizações" },
-  { chave: "historico", rotulo: "Histórico" },
+  { chave: "anexos", rotulo: "Anexos" },
+  { chave: "interno", rotulo: "Andamento interno" },
+  { chave: "pagamentos", rotulo: "Histórico de pagamento" },
 ] as const;
+// Links antigos (?aba=documentos/financeiro/historico) caem na aba nova.
+const ABA_ANTIGA: Record<string, string> = { documentos: "anexos", financeiro: "pagamentos", historico: "interno" };
 
 function VisaoO2({
   s,
@@ -598,7 +664,9 @@ function VisaoO2({
   const link = (extra: string) => `/sinistros/${s.id}?${[extra, ctxQs].filter(Boolean).join("&")}`;
   const atrasoPre = etapa === "pre_analise" && s.pre_analise_desde ? diasUteisDesde(s.pre_analise_desde) : 0;
   const diasSeguradora = etapa === "na_seguradora" && s.documentacao_completa_em ? diasEntre(s.documentacao_completa_em, hoje) : null;
-  const abaAtual = ABAS_O2.some((a) => a.chave === aba) ? aba : "dados";
+  const abaNova = ABA_ANTIGA[aba] ?? aba;
+  const abaAtual = ABAS_O2.some((a) => a.chave === abaNova) ? abaNova : "dados";
+  const primeiraIndenizacao = indenizacoes[0]?.pago_em ?? null;
   const totalIndenizado = indenizacoes.reduce((t, i) => t + Number(i.valor), 0);
 
   return (
@@ -675,16 +743,12 @@ function VisaoO2({
           </span>
         )}
         {totalIndenizado > 0 && <span className="rounded-full bg-green-100 px-3 py-1 font-semibold text-green-800">indenizado {formatarReais(totalIndenizado)}</span>}
-        {s.lmi != null && (
-          <span className={`rounded-full px-3 py-1 font-semibold ${Number(s.lmi) - totalIndenizado < 0 ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-800"}`}>
-            saldo LMI {formatarReais(Number(s.lmi) - totalIndenizado)}
-          </span>
-        )}
-        <SeloVigencia s={s} />
       </div>
 
-      <MensagensImobiliaria s={s} historico={historico} ctx={nav.ctx} />
+      <CabecalhoSinistro s={s} totalIndenizado={totalIndenizado} primeiraIndenizacao={primeiraIndenizacao} interno ctx={nav.ctx} />
 
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="min-w-0 space-y-5">
       <AcaoDoMomento s={s} docs={docs} checklist={checklist} ctx={nav.ctx} />
 
       <ProximaAcao s={s} ctx={nav.ctx} />
@@ -699,8 +763,8 @@ function VisaoO2({
             }`}
           >
             {a.rotulo}
-            {a.chave === "documentos" && docs.length > 0 && <span className="ml-1 text-xs text-gray-400">({docs.length})</span>}
-            {a.chave === "historico" && <span className="ml-1 text-xs text-gray-400">({historico.length})</span>}
+            {a.chave === "anexos" && docs.length > 0 && <span className="ml-1 text-xs text-gray-400">({docs.length})</span>}
+            {a.chave === "pagamentos" && indenizacoes.length > 0 && <span className="ml-1 text-xs text-gray-400">({indenizacoes.length})</span>}
           </Link>
         ))}
       </nav>
@@ -723,25 +787,37 @@ function VisaoO2({
         </div>
       )}
 
-      {abaAtual === "documentos" && (
-        <ChecklistDocumentos id={s.id} itens={checklist} documentos={docs} modo="o2" editavel reaproveitaveis={reaproveitaveis} />
-      )}
-
-      {abaAtual === "financeiro" && (
-        <div className="space-y-6">
-          <QuadroLmi s={s} indenizacoes={indenizacoes} ctx={nav.ctx} />
+      {abaAtual === "anexos" && (
+        <div className="space-y-5">
           <section className="space-y-2">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Indenizações recebidas</h2>
-            <Indenizacoes s={s} indenizacoes={indenizacoes} ctx={nav.ctx} editavel />
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Validação dos documentos</h2>
+            <ChecklistDocumentos id={s.id} itens={checklist} documentos={docs} modo="o2" editavel reaproveitaveis={reaproveitaveis} modelos={modelosDeclaracao(s.seguradora, s.tipo)} />
           </section>
-          <section className="space-y-2">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Débitos avisados (Declaração)</h2>
-            <EditorDebitos id={s.id} iniciais={debitos} coberturas={s.coberturas} editavel={false} />
-          </section>
+          <AnexosPorPasta s={s} docs={docs} interno />
         </div>
       )}
 
-      {abaAtual === "historico" && <Historico id={s.id} registros={historico} modo="o2" />}
+      {abaAtual === "pagamentos" && (
+        <div className="space-y-6">
+          <QuadroLmi s={s} indenizacoes={indenizacoes} ctx={nav.ctx} />
+          <section className="space-y-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Histórico de pagamento</h2>
+            <FormIndenizacao base={{ id: s.id, ctx: nav.ctx, avisarPadrao: s.origem !== "corp" }} />
+            <Indenizacoes s={s} indenizacoes={indenizacoes} ctx={nav.ctx} editavel />
+          </section>
+          {debitos.length > 0 && (
+            <section className="space-y-2">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Débitos avisados (Declaração)</h2>
+              <EditorDebitos id={s.id} iniciais={debitos} coberturas={s.coberturas} editavel={false} />
+            </section>
+          )}
+        </div>
+      )}
+
+      {abaAtual === "interno" && <HistoricoInterno s={s} historico={historico} ctx={nav.ctx} />}
+      </div>
+      <ChatLateral s={s} historico={historico} interno ctx={nav.ctx} />
+      </div>
     </div>
   );
 }
@@ -759,7 +835,7 @@ function AcaoDoMomento({ s, docs, checklist, ctx }: { s: any; docs: Documento[];
   const base: BaseAcao = { id: s.id, ctx, avisarPadrao };
 
   const titulo: Partial<Record<EtapaSinistro, string>> = {
-    pre_analise: "Conferir dados e documentos e abrir na seguradora",
+    pre_analise: "Validar a documentação — acionamento autorizado?",
     pendencia_imobiliaria: "Aguardando a imobiliária resolver a pendência",
     na_seguradora: "Acompanhar a seguradora até começar a indenizar",
     em_indenizacao: "Registrar cada indenização recebida",
@@ -776,8 +852,9 @@ function AcaoDoMomento({ s, docs, checklist, ctx }: { s: any; docs: Documento[];
         <div className="grid gap-3 md:grid-cols-2">
           <form action={marcarAbertoNaSeguradora} className={`${cartao} space-y-2 p-3`}>
             <input type="hidden" name="id" value={s.id} />
-            <h3 className="text-sm font-semibold text-o2-coral">Aberto na seguradora</h3>
-            {!tudoAprovado && <p className="text-xs text-orange-700">Ainda há documentos sem aprovação. Pode abrir assim mesmo se a seguradora aceitar.</p>}
+            <h3 className="text-sm font-semibold text-o2-coral">Acionamento autorizado? SIM</h3>
+            <p className="text-xs text-gray-500">Gera o número do aviso, inicia o chat com a imobiliária e o caso segue para a seguradora.</p>
+            {!tudoAprovado && <p className="text-xs text-orange-700">Ainda há documentos sem aceite. Pode autorizar assim mesmo se a seguradora aceitar.</p>}
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className={labelClass}>Nº do sinistro</label>
@@ -793,18 +870,18 @@ function AcaoDoMomento({ s, docs, checklist, ctx }: { s: any; docs: Documento[];
               Documentação completa enviada (começa o prazo de 30 dias)
             </label>
             <SubmitButton className={botaoPrimario} textoCarregando="Salvando…">
-              Marcar como aberto
+              Sim, autorizar acionamento
             </SubmitButton>
           </form>
           <form action={devolverComPendencia} className={`${cartao} space-y-2 p-3`}>
             <input type="hidden" name="id" value={s.id} />
-            <h3 className="text-sm font-semibold text-o2-navy">Devolver com pendências</h3>
+            <h3 className="text-sm font-semibold text-o2-navy">Acionamento autorizado? NÃO</h3>
             <p className="text-xs text-gray-500">
               Vai para a imobiliária a lista automática: {recusados.length} recusado(s) e {faltando.length} faltando, com prazo de 5 dias.
             </p>
             <textarea name="mensagem" rows={2} className={inputClass} placeholder="O que mais a imobiliária precisa fazer" />
             <SubmitButton className={botaoSecundario} textoCarregando="Devolvendo…">
-              Devolver à imobiliária
+              Não — devolver como pendência
             </SubmitButton>
           </form>
         </div>
@@ -918,7 +995,11 @@ function FormIndenizacao({ base, principal }: { base: BaseAcao; principal?: bool
         <SubmitButton className={botaoPrimario} textoCarregando="Salvando…">
           Registrar
         </SubmitButton>
-        <input name="observacao" placeholder="Observação (opcional)" className={`${inputClass} sm:col-span-4`} />
+        <input name="observacao" placeholder="Observação (opcional)" className={`${inputClass} sm:col-span-2`} />
+        <div className="sm:col-span-2">
+          <label className={labelClass}>Anexo (planilha da seguradora, opcional)</label>
+          <input type="file" name="anexo" accept=".xls,.xlsx,.pdf,.png,.jpg,.jpeg" className="block w-full text-xs" />
+        </div>
       </form>
     </details>
   );
@@ -1053,53 +1134,6 @@ function QuadroLmi({ s, indenizacoes, ctx }: { s: any; indenizacoes: Indenizacao
   );
 }
 
-// Selo do vencimento da apólice (vencida / vence em até 15 dias).
-function SeloVigencia({ s }: { s: any }) {
-  const fim = s.vigencia_fim as string | null;
-  if (!fim || s.etapa === "encerrado" || s.etapa === "cancelado") return null;
-  const dias = diasEntre(hojeSP(), fim);
-  if (dias < 0) return <span className="rounded-full bg-red-100 px-3 py-1 font-semibold text-red-700">apólice vencida em {formatarData(fim)} — verificar renovação</span>;
-  if (dias <= 15) return <span className="rounded-full bg-orange-100 px-3 py-1 font-semibold text-orange-800">apólice vence em {dias} dia(s) ({formatarData(fim)})</span>;
-  return null;
-}
-
-// Mensagens recentes da imobiliária, em destaque na visão da O2 (antes só
-// apareciam no histórico, no meio dos registros).
-function MensagensImobiliaria({ s, historico, ctx }: { s: any; historico: RegistroHistorico[]; ctx: string | null }) {
-  const limite = somarDias(hojeSP(), -30);
-  const msgs = historico.filter((h) => h.autor_tipo === "imobiliaria" && h.criado_em.slice(0, 10) >= limite).slice(0, 3);
-  if (!msgs.length) return null;
-  return (
-    <section className="space-y-2 rounded-xl border border-orange-200 bg-orange-50 p-4">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Mensagens da imobiliária (últimos 30 dias)</h2>
-      <ul className="space-y-2">
-        {msgs.map((m) => (
-          <li key={m.id} className="rounded-lg bg-white p-2 text-sm">
-            <p className="text-xs text-gray-500">
-              {new Date(m.criado_em).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })}
-              {m.autor_email ? ` · ${m.autor_email}` : ""}
-            </p>
-            <p className="whitespace-pre-wrap text-gray-800">{m.texto}</p>
-          </li>
-        ))}
-      </ul>
-      <form action={registrarNoHistorico} className="flex flex-wrap items-end gap-2">
-        <input type="hidden" name="id" value={s.id} />
-        <input type="hidden" name="referente" value="imobiliaria" />
-        <input type="hidden" name="visivel_imobiliaria" value="on" />
-        {ctx && <input type="hidden" name="ctx" value={ctx} />}
-        <textarea name="texto" rows={1} placeholder="Responder à imobiliária" className={`${inputClass} min-w-64 flex-1`} />
-        <label className="flex items-center gap-1 text-xs text-gray-600">
-          <input type="checkbox" name="enviar_email" defaultChecked className="accent-o2-coral" /> enviar e-mail
-        </label>
-        <SubmitButton className="rounded-full bg-o2-navy px-4 py-1.5 text-sm font-semibold text-white" textoCarregando="Enviando…">
-          Responder
-        </SubmitButton>
-      </form>
-    </section>
-  );
-}
-
 function Indenizacoes({ s, indenizacoes, ctx, editavel }: { s: any; indenizacoes: Indenizacao[]; ctx: string | null; editavel: boolean }) {
   const total = indenizacoes.reduce((t, i) => t + Number(i.valor), 0);
   if (!indenizacoes.length) return <p className="text-sm text-gray-500">Nenhuma indenização registrada ainda.</p>;
@@ -1108,9 +1142,10 @@ function Indenizacoes({ s, indenizacoes, ctx, editavel }: { s: any; indenizacoes
       <table className="w-full text-sm">
         <thead className="bg-gray-50 text-left text-xs text-gray-500">
           <tr>
-            <th className="px-3 py-2">Referência</th>
-            <th className="px-3 py-2">Pago em</th>
+            <th className="px-3 py-2">Data</th>
             <th className="px-3 py-2 text-right">Valor</th>
+            <th className="px-3 py-2">Anexos (planilhas)</th>
+            <th className="px-3 py-2">Referência</th>
             <th className="px-3 py-2">Observação</th>
             {editavel && <th className="px-3 py-2" />}
           </tr>
@@ -1118,9 +1153,18 @@ function Indenizacoes({ s, indenizacoes, ctx, editavel }: { s: any; indenizacoes
         <tbody>
           {indenizacoes.map((i) => (
             <tr key={i.id} className="border-t border-gray-100">
-              <td className="px-3 py-2">{i.referencia ? i.referencia.slice(0, 7).split("-").reverse().join("/") : "—"}</td>
               <td className="px-3 py-2">{formatarData(i.pago_em)}</td>
               <td className="px-3 py-2 text-right font-semibold">{formatarReais(Number(i.valor))}</td>
+              <td className="px-3 py-2 text-xs">
+                {i.url ? (
+                  <a href={i.url} target="_blank" rel="noreferrer" className="text-o2-blue underline">
+                    {i.anexo_nome ?? "anexo"}
+                  </a>
+                ) : (
+                  "—"
+                )}
+              </td>
+              <td className="px-3 py-2">{i.referencia ? i.referencia.slice(0, 7).split("-").reverse().join("/") : "—"}</td>
               <td className="px-3 py-2 text-xs text-gray-600">{i.observacao ?? ""}</td>
               {editavel && (
                 <td className="px-3 py-2 text-right">
@@ -1135,11 +1179,9 @@ function Indenizacoes({ s, indenizacoes, ctx, editavel }: { s: any; indenizacoes
             </tr>
           ))}
           <tr className="border-t border-gray-200 bg-gray-50 font-semibold">
-            <td className="px-3 py-2" colSpan={2}>
-              Total
-            </td>
+            <td className="px-3 py-2">Total</td>
             <td className="px-3 py-2 text-right">{formatarReais(total)}</td>
-            <td colSpan={editavel ? 2 : 1} />
+            <td colSpan={editavel ? 4 : 3} />
           </tr>
         </tbody>
       </table>

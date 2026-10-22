@@ -392,3 +392,75 @@ alter table sinistros add column if not exists acordo_alerta_ultimo date;       
 alter table sinistros add column if not exists lmi numeric(14,2);               -- limite máximo de indenização da apólice
 alter table sinistros add column if not exists alerta_renovacao_em date;        -- quando avisou do vencimento da apólice
 update sinistros set produto = 'residencial' where produto = 'conteudo';         -- "Conteúdo" é cobertura, não produto
+
+-- Telas da equipe de sinistros (22/10/2026): "Tela de abertura do sinistro"
+-- (5 etapas, sem tabela de débitos, "Acionamento autorizado?" da O2 gera o nº
+-- do aviso) e "Tela de visualização de sinistro acionado" (despejo, acordo,
+-- vigência com alerta de renovação, eventos internos, pagamentos com anexo,
+-- pastas de anexos, chat e notificações para sinistro@).
+alter table sinistros add column if not exists incluir_parcelas_fianca boolean;     -- "Aluguel: incluir seguro fiança?"
+alter table sinistros add column if not exists despejo boolean;                     -- há ação de despejo em andamento?
+alter table sinistros add column if not exists despejo_processo text;               -- nº do processo judicial
+alter table sinistros add column if not exists acordo_em_andamento boolean;         -- há acordo em andamento?
+alter table sinistros add column if not exists acordo_tratativa text;               -- tratativa com o escritório
+alter table sinistros add column if not exists renovacao_sinalizada_em timestamptz; -- "Setor de renovação foi sinalizado?"
+alter table sinistros add column if not exists renovacao_sinalizada_por text;
+alter table sinistros add column if not exists renovacao_alerta_ultimo date;        -- alerta diário pós-vencimento (10 dias)
+alter table sinistros add column if not exists numero_aviso text unique;            -- AV-AAAA-00001
+alter table sinistros add column if not exists autorizado_em timestamptz;           -- acionamento autorizado pela O2
+alter table sinistros add column if not exists ultima_msg_imob_em timestamptz;      -- selos da Gestão
+alter table sinistros add column if not exists ultimo_doc_imob_em timestamptz;
+alter table sinistros add column if not exists visto_o2_em timestamptz;
+alter table sinistro_historico add column if not exists data_evento date;           -- evento interno: data obrigatória
+alter table sinistro_historico add column if not exists editado_em timestamptz;
+alter table sinistro_historico add column if not exists editado_por text;
+alter table sinistro_indenizacoes add column if not exists anexo_path text;         -- planilha do pagamento
+alter table sinistro_indenizacoes add column if not exists anexo_nome text;
+alter table sinistro_documentos add column if not exists pasta text;                -- Contratos, Boletos — Aluguel...
+
+create sequence if not exists sinistros_numero_aviso_seq;
+create or replace function gerar_numero_aviso_sinistro()
+returns text language sql volatile security definer set search_path to 'public' as $$
+  select 'AV-' || to_char(now() at time zone 'America/Sao_Paulo', 'YYYY') || '-' || lpad(nextval('sinistros_numero_aviso_seq')::text, 5, '0');
+$$;
+revoke execute on function gerar_numero_aviso_sinistro() from anon, public;
+grant execute on function gerar_numero_aviso_sinistro() to authenticated;
+
+-- Novidade da imobiliária (mensagem no chat / documento para validação).
+create or replace function sinistros_marca_novidade_imob()
+returns trigger language plpgsql security definer set search_path to 'public' as $$
+begin
+  if tg_table_name = 'sinistro_historico' then
+    if new.autor_tipo = 'imobiliaria' then
+      update sinistros set ultima_msg_imob_em = now() where id = new.sinistro_id;
+    end if;
+  elsif not is_colaborador_o2() then
+    update sinistros set ultimo_doc_imob_em = now() where id = new.sinistro_id;
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists sinistro_historico_novidade on sinistro_historico;
+create trigger sinistro_historico_novidade after insert on sinistro_historico for each row execute function sinistros_marca_novidade_imob();
+drop trigger if exists sinistro_documentos_novidade on sinistro_documentos;
+create trigger sinistro_documentos_novidade after insert on sinistro_documentos for each row execute function sinistros_marca_novidade_imob();
+
+-- A imobiliária inclui novos anexos em qualquer etapa aberta.
+create or replace function sinistro_aberto_da_imobiliaria(sid uuid)
+returns boolean language sql stable security definer set search_path to 'public' as $$
+  select exists (
+    select 1 from sinistros s
+    where s.id = sid
+      and s.imobiliaria_id in (select imobiliarias_do_usuario())
+      and s.etapa not in ('encerrado', 'cancelado')
+  );
+$$;
+revoke execute on function sinistro_aberto_da_imobiliaria(uuid) from anon, public;
+grant execute on function sinistro_aberto_da_imobiliaria(uuid) to authenticated;
+drop policy if exists "sinistro_documentos imob anexo" on sinistro_documentos;
+create policy "sinistro_documentos imob anexo" on sinistro_documentos for insert to authenticated
+  with check (sinistro_aberto_da_imobiliaria(sinistro_id) and situacao = 'enviado');
+drop policy if exists "sinistro_documentos imob substituir aberto" on sinistro_documentos;
+create policy "sinistro_documentos imob substituir aberto" on sinistro_documentos for update to authenticated
+  using (sinistro_aberto_da_imobiliaria(sinistro_id) and situacao = 'recusado')
+  with check (sinistro_aberto_da_imobiliaria(sinistro_id) and situacao = 'substituido');

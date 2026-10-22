@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { DOMINIO_O2 } from "@/lib/admin";
-import { diasEntre, formatarData, hojeSP, somarDias } from "@/lib/sinistros/regras";
+import { DIAS_ALERTA_POS_VENCIMENTO, DIAS_ALERTA_RENOVACAO, alertaRenovacao, formatarData, hojeSP, somarDias } from "@/lib/sinistros/regras";
 import { emailAlertasParaO2, emailAtualizacaoParaImobiliaria, type SinistroEmail } from "@/lib/sinistros/emails";
 
 export const dynamic = "force-dynamic";
@@ -9,13 +9,15 @@ export const maxDuration = 60;
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- linhas do Supabase sem tipos gerados */
 
-// Alertas automáticos dos sinistros (reunião da equipe, 21/10/2026), dias úteis às 8h:
-//  1. Apólice vencida ou vencendo em até 15 dias, com sinistro em andamento:
-//     histórico + agenda do responsável ("verificar renovação") e e-mail para a
-//     imobiliária mandar o boleto da renovação (janela de 10 a 15 dias antes).
-//     Um alerta por sinistro (sinistros.alerta_renovacao_em).
-//  2. Acordo / judicial: 1 dia útil depois do vencimento de cada parcela,
-//     lembra de conferir se o locatário pagou (sinistros.acordo_alerta_ultimo).
+// Alertas automáticos dos sinistros, todo dia às 8h:
+//  1. Vigência (especificação da tela de visualização, 22/10/2026): sinistro de
+//     imóvel OCUPADO em andamento -> um alerta 20 dias antes do vencimento da
+//     apólice (histórico, agenda, e-mail à imobiliária pelo boleto da
+//     renovação) e, depois do encerramento da vigência SEM entrega das chaves,
+//     um alerta por dia durante 10 dias seguidos -- até a O2 marcar "Setor de
+//     renovação foi sinalizado?" na ficha (regra em alertaRenovacao()).
+//  2. Acordo / judicial (dias úteis): 1 dia útil depois do vencimento de cada
+//     parcela, lembra de conferir se o locatário pagou (acordo_alerta_ultimo).
 // Lê só sinistros em andamento (tabela pequena). Protegida por CRON_SECRET.
 
 function proximoDiaUtil(data: string) {
@@ -57,34 +59,44 @@ export async function GET(request: NextRequest) {
   const itensEquipe: { id: string; codigo: number; texto: string }[] = [];
   let emailsImobiliaria = 0;
 
-  // 1. vencimento da apólice
+  // 1. vigência da apólice (só ocupados, sem entrega das chaves)
   const { data: vencendo, error: e1 } = await supabase
     .from("sinistros")
     .select("*, imobiliarias(nome, apelido, email)")
+    .eq("tipo", "ocupado")
+    .is("data_entrega_chaves", null)
     .not("etapa", "in", "(rascunho,cancelado,encerrado)")
-    .is("alerta_renovacao_em", null)
-    .not("vigencia_fim", "is", null)
-    .lte("vigencia_fim", somarDias(hoje, 15));
+    .gte("vigencia_fim", somarDias(hoje, -DIAS_ALERTA_POS_VENCIMENTO))
+    .lte("vigencia_fim", somarDias(hoje, DIAS_ALERTA_RENOVACAO));
   if (e1) return NextResponse.json({ erro: e1.message }, { status: 500 });
   for (const s of (vencendo ?? []) as any[]) {
-    const dias = diasEntre(hoje, s.vigencia_fim);
-    const texto = dias < 0 ? `apólice vencida em ${formatarData(s.vigencia_fim)} — verificar a renovação` : `apólice vence em ${formatarData(s.vigencia_fim)} (${dias} dia(s)) — verificar a renovação`;
-    const atualizar: Record<string, unknown> = { alerta_renovacao_em: hoje };
-    if (!s.proxima_acao_em) {
+    const alerta = alertaRenovacao(s, hoje);
+    if (!alerta) continue;
+    const atualizar: Record<string, unknown> = {};
+    if (alerta.fase === "vence") {
+      // Um alerta por vencimento.
+      if (s.alerta_renovacao_em && s.alerta_renovacao_em >= somarDias(s.vigencia_fim, -DIAS_ALERTA_RENOVACAO)) continue;
+      atualizar.alerta_renovacao_em = hoje;
+    } else {
+      // Depois do encerramento: um por dia, 10 dias seguidos.
+      if (s.renovacao_alerta_ultimo === hoje) continue;
+      atualizar.renovacao_alerta_ultimo = hoje;
+    }
+    if (!s.proxima_acao_em || s.proxima_acao_em > hoje) {
       atualizar.proxima_acao_em = hoje;
-      atualizar.proxima_acao_descricao = "Verificar renovação da apólice";
+      atualizar.proxima_acao_descricao = "Sinalizar o setor de renovação (vigência da apólice)";
     }
     await supabase.from("sinistros").update(atualizar).eq("id", s.id);
-    await supabase.from("sinistro_historico").insert({ sinistro_id: s.id, autor_tipo: "sistema", referente: "interno", visivel_imobiliaria: false, texto: `⚠ Alerta automático: ${texto}.` });
-    itensEquipe.push({ id: s.id, codigo: s.codigo, texto });
-    if (dias >= 0) {
+    await supabase.from("sinistro_historico").insert({ sinistro_id: s.id, autor_tipo: "sistema", referente: "interno", visivel_imobiliaria: false, texto: `⚠ Alerta automático: ${alerta.texto}` });
+    itensEquipe.push({ id: s.id, codigo: s.codigo, texto: alerta.texto });
+    if (alerta.fase === "vence") {
       const destinos = destinosImobiliaria(s);
       if (destinos.length) {
         await emailAtualizacaoParaImobiliaria(
           s as SinistroEmail,
           destinos,
           "Apólice perto do vencimento",
-          `A apólice deste sinistro vence em ${formatarData(s.vigencia_fim)}. Para não perder a cobertura durante o processo, envie o boleto da renovação à O2 nos próximos dias.`
+          `A apólice deste sinistro vence em ${formatarData(s.vigencia_fim)} e o imóvel segue ocupado. Para não perder a cobertura durante o processo, envie o boleto da renovação à O2 nos próximos dias.`
         );
         emailsImobiliaria++;
       }
@@ -98,7 +110,9 @@ export async function GET(request: NextRequest) {
     .eq("etapa", "acordo_judicial")
     .not("acordo_primeira_parcela", "is", null);
   if (e2) return NextResponse.json({ erro: e2.message }, { status: 500 });
-  for (const s of (acordos ?? []) as any[]) {
+  const diaSemana = new Date(`${hoje}T12:00:00Z`).getUTCDay();
+  const diaUtil = diaSemana !== 0 && diaSemana !== 6;
+  for (const s of (diaUtil ? acordos ?? [] : []) as any[]) {
     const venc = vencimentoDoMes(s, hoje);
     if (!venc || hoje < proximoDiaUtil(venc)) continue;
     if (s.acordo_alerta_ultimo && s.acordo_alerta_ultimo >= venc) continue;

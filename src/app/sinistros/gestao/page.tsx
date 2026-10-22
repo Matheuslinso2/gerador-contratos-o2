@@ -27,7 +27,7 @@ import { Aviso, EtiquetaEtapa, enderecoCurto } from "../ui";
 import Abas from "../Abas";
 import { filtrosDashboard } from "@/lib/sinistros/periodo";
 import { PRODUTOS, rotuloProduto } from "@/lib/sinistros/produtos";
-import { ETAPAS_ABERTAS, ORDENS, dataDoAviso, listarSinistros } from "@/lib/sinistros/consulta";
+import { ETAPAS_ABERTAS, ORDENS, dataDoAviso, listarSinistros, novidadesImobiliaria } from "@/lib/sinistros/consulta";
 import ExportarEste from "@/components/ExportarEste";
 
 export const dynamic = "force-dynamic";
@@ -257,8 +257,9 @@ function ListaO2({ sinistros, nomes, equipe, ctx, volta }: { sinistros: any[]; n
                       {s.locatario_nome || s.locador_nome || "Sem nome"}
                     </Link>
                     <div className="text-xs text-gray-500">
-                      SIN-{s.codigo} · {s.imobiliarias?.apelido || s.imobiliarias?.nome || "imob. não definida"}
+                      {s.numero_aviso ? `${s.numero_aviso} · ` : ""}SIN-{s.codigo} · {s.imobiliarias?.apelido || s.imobiliarias?.nome || "imob. não definida"}
                       {s.origem === "corp" && <span className="ml-1 rounded bg-gray-200 px-1 text-[10px] text-gray-600">Corp</span>}
+                      <SelosNovidade s={s} />
                     </div>
                   </td>
                   <td className="px-3 py-2 text-xs">
@@ -549,7 +550,10 @@ function Fila({ sinistros, nomes, ctx }: { sinistros: any[]; nomes: Record<strin
                     }`}
                   >
                     <p className="font-semibold text-o2-navy">{s.locatario_nome || s.locador_nome || "Locatário não informado"}</p>
-                    <p className="text-gray-500">{s.imobiliarias?.apelido || s.imobiliarias?.nome}</p>
+                    <p className="text-gray-500">
+                      {s.imobiliarias?.apelido || s.imobiliarias?.nome}
+                      <SelosNovidade s={s} />
+                    </p>
                     <p className="text-gray-500">
                       {rotuloProduto(s.produto)} · {s.seguradora || "seguradora?"}
                       {s.produto === "fianca" && s.tipo ? ` · ${tituloTipo(s.tipo).split(" — ")[0]}` : ""}
@@ -602,5 +606,15 @@ function Fila({ sinistros, nomes, ctx }: { sinistros: any[]; nomes: Record<strin
         </details>
       )}
     </div>
+  );
+}
+
+function SelosNovidade({ s }: { s: any }) {
+  const n = novidadesImobiliaria(s);
+  return (
+    <>
+      {n.mensagem && <span className="ml-1 rounded bg-orange-500 px-1.5 text-[10px] font-semibold text-white">💬 mensagem nova</span>}
+      {n.documento && <span className="ml-1 rounded bg-blue-600 px-1.5 text-[10px] font-semibold text-white">📎 doc. p/ validar</span>}
+    </>
   );
 }

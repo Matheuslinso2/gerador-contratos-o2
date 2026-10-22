@@ -74,7 +74,7 @@ export const COBERTURAS: { chave: Cobertura; titulo: string; soChaves?: boolean;
   { chave: "condominio", titulo: "Condomínio" },
   { chave: "iptu", titulo: "IPTU" },
   { chave: "agua", titulo: "Água" },
-  { chave: "luz", titulo: "Luz" },
+  { chave: "luz", titulo: "Energia elétrica" },
   { chave: "gas", titulo: "Gás" },
   { chave: "multa_rescisoria", titulo: "Multa rescisória", soChaves: true },
   { chave: "danos", titulo: "Danos ao imóvel", soDanos: true },
@@ -109,6 +109,35 @@ function deDia(dia: number): string {
 }
 export function somarDias(data: string, dias: number) {
   return deDia(paraDia(data) + dias);
+}
+// "2026-03-10" -> "2026-04-10" (último dia do mês quando não existe o dia).
+export function maisUmMes(data: string | null | undefined) {
+  const m = (data ?? "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return "";
+  const [ano, mes, dia] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const ultimo = new Date(Date.UTC(ano, mes + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(ano, mes, Math.min(dia, ultimo))).toISOString().slice(0, 10);
+}
+// Etapa 1 (Identificação): "ocupado ou desocupado" + data da ocorrência
+// (primeira inadimplência) viram o tipo e as datas que contam o prazo de
+// aviso. Ocupado: 1º vencimento = ocorrência, 2º = um mês depois. Desocupado
+// mantém "com danos" se a Etapa 2 já marcou danos/pintura.
+export function situacaoDoFormulario(
+  situacao: string | null,
+  dataOcorrencia: string | null,
+  dataChaves: string | null,
+  tipoAtual: string | null | undefined
+): { tipo: TipoSinistro; data_primeiro_vencimento: string | null; data_segundo_vencimento: string | null; data_entrega_chaves: string | null } | null {
+  if (situacao === "ocupado")
+    return { tipo: "ocupado", data_primeiro_vencimento: dataOcorrencia, data_segundo_vencimento: maisUmMes(dataOcorrencia) || null, data_entrega_chaves: null };
+  if (situacao === "desocupado")
+    return {
+      tipo: tipoAtual === "chaves_com_danos" ? "chaves_com_danos" : "chaves_sem_danos",
+      data_primeiro_vencimento: dataOcorrencia,
+      data_segundo_vencimento: null,
+      data_entrega_chaves: dataChaves,
+    };
+  return null;
 }
 export function diasEntre(de: string, ate: string) {
   return paraDia(ate) - paraDia(de);
@@ -382,15 +411,9 @@ export function validarEnvio(
     bloqueios.push("Informe ao menos um contato atualizado do locatário (telefone ou e-mail).");
 
   if (s.coberturas.length === 0) bloqueios.push("Marque ao menos uma cobertura reclamada.");
-  if (debitos.length === 0) bloqueios.push("Preencha a tabela de débitos (ela vira a Declaração de Débitos).");
-  if (debitos.some((d) => !(Number(d.valor) > 0))) bloqueios.push("Há linha de débito sem valor.");
-
-  // R6: cobertura marcada sem linha correspondente na declaração.
-  const titulosDebitos = new Set(debitos.map((d) => d.discriminacao));
-  for (const c of COBERTURAS) {
-    if (s.coberturas.includes(c.chave) && !titulosDebitos.has(c.titulo))
-      alertas.push(`"${c.titulo}" está marcado como cobertura reclamada, mas não aparece na tabela de débitos.`);
-  }
+  // Especificação da tela de abertura (22/10/2026): sem tabela de débitos -- os
+  // valores vão na Declaração de Débitos assinada (modelo da seguradora).
+  void debitos; // mantido na assinatura: casos antigos ainda têm linhas de débito
 
   // R8: portão da pintura.
   if (s.coberturas.includes("pintura") && (s.pintura_vistoria_nova !== true || s.pintura_vistoria_assinada !== true))
@@ -398,8 +421,6 @@ export function validarEnvio(
       "Pintura: a seguradora só indeniza se a vistoria inicial registrar \"pintura nova\" sem nenhuma ressalva e estiver assinada pelas duas partes."
     );
 
-  if (s.tipo === "ocupado" && debitos.filter((d) => d.discriminacao === "Aluguel").length < 2 && s.coberturas.includes("aluguel"))
-    alertas.push("Imóvel ocupado normalmente tem ao menos 2 meses de aluguel em aberto na declaração.");
 
   if (!s.favorecido_nome?.trim() || !s.favorecido_banco?.trim() || !s.favorecido_agencia?.trim() || !s.favorecido_conta?.trim())
     bloqueios.push("Preencha os dados do favorecido da indenização (nome, banco, agência e conta).");
@@ -424,3 +445,56 @@ export const MOTIVOS_RECUSA = [
   "Vencido ou desatualizado",
   "Fora do modelo da seguradora",
 ];
+
+// Modelos de Declaração de Débitos por seguradora (public/modelos-sinistro,
+// achados no Drive/e-mails da equipe em 22/10/2026). Etapa 3 da abertura.
+export function modelosDeclaracao(seguradora: string | null | undefined, tipo: TipoSinistro | null | undefined) {
+  const s = (seguradora ?? "").toLowerCase();
+  const base = "/modelos-sinistro/";
+  const chaves = tipo === "chaves_sem_danos" || tipo === "chaves_com_danos";
+  if (s.includes("pottencial")) {
+    const iniciais = { rotulo: "Modelo Pottencial — Declaração de Débitos Iniciais", href: `${base}pottencial-declaracao-de-debitos-iniciais.pdf` };
+    const finais = { rotulo: "Modelo Pottencial — Declaração de Débitos Finais", href: `${base}pottencial-declaracao-de-debitos-finais.pdf` };
+    return chaves ? [finais, iniciais] : [iniciais, finais];
+  }
+  if (s.includes("porto")) return [{ rotulo: "Modelo Porto Seguro — Declaração de Débitos", href: `${base}porto-declaracao-de-debitos.pdf` }];
+  if (s.includes("liberty") || s.includes("yelum"))
+    return [{ rotulo: "Modelo Liberty/Yelum — Declaração de Débitos Finais (com entrega das chaves)", href: `${base}liberty-declaracao-de-debitos-finais-com-entrega-das-chaves.pdf` }];
+  if (s.includes("bradesco")) return [{ rotulo: "Modelo Bradesco — Declaração de Débitos Finais", href: `${base}bradesco-declaracao-de-debitos-finais.pdf` }];
+  if (s.includes("tokio")) return [{ rotulo: "Modelo Tokio Marine — Declaração de Débitos", href: `${base}tokio-declaracao-de-debitos.pdf` }];
+  return [];
+}
+
+// Tela de visualização (22/10/2026), verificação automática da vigência: com
+// sinistro de imóvel OCUPADO em andamento, alerta 20 dias antes do vencimento
+// da apólice e, depois do encerramento da vigência SEM entrega das chaves,
+// alerta por 10 dias seguidos -- até a O2 marcar "Setor de renovação foi
+// sinalizado?". Usado na ficha e no cron /api/cron/alertas-sinistros.
+export const DIAS_ALERTA_RENOVACAO = 20;
+export const DIAS_ALERTA_POS_VENCIMENTO = 10;
+const ETAPAS_EM_ANDAMENTO = ["pre_analise", "pendencia_imobiliaria", "na_seguradora", "em_indenizacao", "acordo_judicial"];
+export function alertaRenovacao(
+  s: {
+    tipo?: string | null;
+    etapa?: string | null;
+    vigencia_fim?: string | null;
+    data_entrega_chaves?: string | null;
+    renovacao_sinalizada_em?: string | null;
+  },
+  hoje = hojeSP()
+): { fase: "vence" | "encerrada"; dias: number; texto: string } | null {
+  const fim = s.vigencia_fim;
+  if (s.tipo !== "ocupado" || s.data_entrega_chaves || !fim || !ETAPAS_EM_ANDAMENTO.includes(s.etapa ?? "")) return null;
+  // Sinalização vale para este vencimento (feita a partir da janela de 20 dias).
+  if (s.renovacao_sinalizada_em && s.renovacao_sinalizada_em.slice(0, 10) >= somarDias(fim, -DIAS_ALERTA_RENOVACAO)) return null;
+  const dias = diasEntre(hoje, fim);
+  if (dias >= 0 && dias <= DIAS_ALERTA_RENOVACAO)
+    return { fase: "vence", dias, texto: `A apólice vence em ${dias === 0 ? "hoje" : `${dias} dia(s)`} (${formatarData(fim)}) e o imóvel segue ocupado. Sinalize o setor de renovação.` };
+  if (dias < 0 && -dias <= DIAS_ALERTA_POS_VENCIMENTO)
+    return {
+      fase: "encerrada",
+      dias: -dias,
+      texto: `A vigência encerrou em ${formatarData(fim)} sem entrega das chaves (dia ${-dias} de ${DIAS_ALERTA_POS_VENCIMENTO}). Sinalize o setor de renovação.`,
+    };
+  return null;
+}

@@ -13,6 +13,7 @@ import {
   formatarData,
   hojeSP,
   montarChecklist,
+  situacaoDoFormulario,
   somarDias,
   totalDebitos,
   validarEnvio,
@@ -21,6 +22,7 @@ import {
 } from "@/lib/sinistros/regras";
 import {
   emailAtualizacaoParaImobiliaria,
+  emailNovidadeParaO2,
   emailNovoSinistroParaO2,
   emailPendenciaParaImobiliaria,
   emailRespostaPendenciaParaO2,
@@ -123,11 +125,29 @@ function camposContrato(fd: FormData) {
   };
 }
 
+// Imóvel desocupado: a entrega das chaves vira demanda da emissão/controle (reunião 21/10/2026).
+async function demandaChaves(supabase: Supa, id: string, nova: string | null | undefined, anterior: string | null | undefined) {
+  if (!nova || nova === anterior) return;
+  await registrar(supabase, id, {
+    autor_tipo: "sistema",
+    referente: "interno",
+    visivel_imobiliaria: false,
+    texto: `Demanda para emissão e controle: imóvel desocupado, chaves entregues em ${formatarData(nova)}. Verificar endosso/cancelamento da apólice.`,
+  });
+}
+
+// Etapa 1: ocupado/desocupado + ocorrência -> tipo, datas e prazo de aviso.
+function situacaoComPrazo(fd: FormData, tipoAtual: string | null | undefined) {
+  const sit = situacaoDoFormulario(texto(fd, "situacao_imovel"), texto(fd, "data_ocorrencia"), texto(fd, "data_entrega_chaves"), tipoAtual);
+  if (!sit) return {};
+  const prazo = calcularPrazoAviso(sit);
+  return { ...sit, prazo_aviso: prazo.prazo, aviso_fora_prazo: prazo.foraDoPrazo };
+}
+
 export async function criarRascunho(fd: FormData) {
   const { supabase, user, interno } = await contexto();
-  const tipo = texto(fd, "tipo") as TipoSinistro | null;
   // Fase de testes (19/10/2026): nenhum campo obrigatório -- salva o que vier.
-  const campos = camposContrato(fd);
+  const campos = { ...camposContrato(fd), ...situacaoComPrazo(fd, null) };
 
   let imobiliariaId: string | null = null;
   let origem = "workspace";
@@ -165,68 +185,63 @@ export async function criarRascunho(fd: FormData) {
 
   const { data, error } = await supabase
     .from("sinistros")
-    .insert({ ...campos, tipo, imobiliaria_id: imobiliariaId, origem })
+    .insert({ ...campos, imobiliaria_id: imobiliariaId, origem })
     .select("id")
     .single();
   if (error || !data) redirect("/sinistros/novo?erro=" + encodeURIComponent("Não foi possível criar o sinistro: " + (error?.message ?? "")));
+  await demandaChaves(supabase, data.id, (campos as { data_entrega_chaves?: string | null }).data_entrega_chaves, null);
   redirect(`/sinistros/${data.id}?passo=2`);
 }
 
 export async function salvarContrato(fd: FormData) {
   const { supabase, interno } = await contexto();
   const id = texto(fd, "id")!;
-  const tipo = texto(fd, "tipo") as TipoSinistro | null;
-  const campos = camposContrato(fd);
+  const { data: atual } = await supabase.from("sinistros").select("tipo, data_entrega_chaves").eq("id", id).maybeSingle();
+  const situacao = situacaoComPrazo(fd, atual?.tipo);
+  const campos = { ...camposContrato(fd), ...situacao };
   // Equipe O2 pode definir/trocar a imobiliária no próprio passo 1.
   const extra =
     interno && fd.has("imobiliaria_id")
       ? { imobiliaria_id: texto(fd, "imobiliaria_id"), origem: texto(fd, "origem") === "email" ? "email" : "workspace" }
       : {};
-  const { error } = await supabase.from("sinistros").update({ ...campos, tipo, ...extra }).eq("id", id);
+  const { error } = await supabase.from("sinistros").update({ ...campos, ...extra }).eq("id", id);
   if (error) voltar(id, 1, error.message);
+  await demandaChaves(supabase, id, (situacao as { data_entrega_chaves?: string | null }).data_entrega_chaves, atual?.data_entrega_chaves);
   voltar(id, 2);
 }
 
-// ---------- passo 2 (situação) ----------
+// ---------- Etapa 2 (coberturas) ----------
 
 export async function salvarSituacao(fd: FormData) {
   const { supabase } = await contexto();
   const id = texto(fd, "id")!;
-  const { data: s } = await supabase.from("sinistros").select("tipo, data_entrega_chaves").eq("id", id).single();
+  const { data: s } = await supabase
+    .from("sinistros")
+    .select("tipo, data_primeiro_vencimento, data_segundo_vencimento, data_entrega_chaves")
+    .eq("id", id)
+    .single();
   if (!s) voltar(id, 2, "Sinistro não encontrado.");
-  // Passo 2 pergunta "ocupado ou desocupado" (+ danos) e manda o tipo pronto.
+  // Ocupado/desocupado vem da Etapa 1; aqui o desocupado vira "com danos" se
+  // danos ao imóvel ou pintura forem marcados.
   const tipoForm = texto(fd, "tipo");
-  const tipo = (fd.has("tipo") ? (["ocupado", "chaves_sem_danos", "chaves_com_danos"].includes(tipoForm ?? "") ? tipoForm : null) : s.tipo ?? null) as TipoSinistro | null;
+  const tipo = (["ocupado", "chaves_sem_danos", "chaves_com_danos"].includes(tipoForm ?? "") ? tipoForm : s.tipo ?? null) as TipoSinistro | null;
   const coberturasValidas = new Set(COBERTURAS.map((c) => c.chave));
   const coberturas = fd.getAll("coberturas").filter((c): c is string => typeof c === "string" && coberturasValidas.has(c as never));
 
   const dados = {
-    // Sem tipo escolhido, guarda as datas que vierem.
-    data_primeiro_vencimento: tipo !== "chaves_sem_danos" && tipo !== "chaves_com_danos" ? texto(fd, "data_primeiro_vencimento") : null,
-    data_segundo_vencimento: tipo !== "chaves_sem_danos" && tipo !== "chaves_com_danos" ? texto(fd, "data_segundo_vencimento") : null,
-    data_entrega_chaves: tipo !== "ocupado" ? texto(fd, "data_entrega_chaves") : null,
     locatario_assinou_documentos: tipo !== "ocupado" ? bool(fd, "locatario_assinou_documentos") : null,
     pintura_vistoria_nova: coberturas.includes("pintura") ? bool(fd, "pintura_vistoria_nova") : null,
     pintura_vistoria_assinada: coberturas.includes("pintura") ? bool(fd, "pintura_vistoria_assinada") : null,
+    incluir_parcelas_fianca: coberturas.includes("aluguel") && fd.get("incluir_parcelas_fianca") === "on",
     coberturas,
     observacoes: texto(fd, "observacoes"),
   };
-  const prazo = calcularPrazoAviso({ tipo, ...dados });
+  const prazo = calcularPrazoAviso({ ...s, tipo });
   const { error } = await supabase
     .from("sinistros")
     .update({ ...dados, tipo, prazo_aviso: prazo.prazo, aviso_fora_prazo: prazo.foraDoPrazo })
     .eq("id", id);
   if (error) voltar(id, 2, error.message);
-  // Imóvel desocupado: a entrega das chaves vira demanda da emissão/controle (reunião 21/10/2026).
-  if (dados.data_entrega_chaves && dados.data_entrega_chaves !== s.data_entrega_chaves) {
-    await registrar(supabase, id, {
-      autor_tipo: "sistema",
-      referente: "interno",
-      visivel_imobiliaria: false,
-      texto: `Demanda para emissão e controle: imóvel desocupado, chaves entregues em ${formatarData(dados.data_entrega_chaves)}. Verificar endosso/cancelamento da apólice.`,
-    });
-  }
-  // O aviso do prazo aparece nos passos 2 e 5; não impede seguir.
   voltar(id, 3);
 }
 
@@ -264,16 +279,23 @@ export async function registrarDocumento(
   tipo: string,
   arquivoPath: string,
   nomeArquivo: string,
-  tamanho: number
+  tamanho: number,
+  pasta: string | null = null
 ): Promise<{ ok: boolean; erro?: string }> {
-  const { supabase } = await contexto();
+  const { supabase, interno } = await contexto();
   if (!arquivoPath.startsWith(`${id}/`)) return { ok: false, erro: "Caminho de arquivo inválido." };
   // Reenvio de um documento recusado: o recusado sai da lista ativa.
   await supabase.from("sinistro_documentos").update({ situacao: "substituido" }).eq("sinistro_id", id).eq("tipo", tipo).eq("situacao", "recusado");
   const { error } = await supabase
     .from("sinistro_documentos")
-    .insert({ sinistro_id: id, tipo, arquivo_path: arquivoPath, nome_arquivo: nomeArquivo, tamanho });
+    .insert({ sinistro_id: id, tipo, arquivo_path: arquivoPath, nome_arquivo: nomeArquivo, tamanho, pasta });
   if (error) return { ok: false, erro: error.message };
+  // Notificação de novo documento anexado para validação (fora do rascunho).
+  if (!interno) {
+    const s = await carregar(supabase, id);
+    if (s && s.etapa !== "rascunho")
+      await emailNovidadeParaO2(s as SinistroEmail, nomeImobiliaria(s), "documento", `${nomeArquivo}${pasta ? ` (pasta ${pasta})` : ""}`);
+  }
   revalidatePath(`/sinistros/${id}`);
   return { ok: true };
 }
@@ -287,25 +309,37 @@ export async function removerDocumento(fd: FormData) {
   voltar(id, passo);
 }
 
-// ---------- passo 5 (favorecido + ciência + envio) ----------
+// ---------- Etapa 4 (dados bancários do favorecido) ----------
+
+export async function salvarFavorecido(fd: FormData) {
+  const { supabase } = await contexto();
+  const id = texto(fd, "id")!;
+  const { error } = await supabase
+    .from("sinistros")
+    .update({
+      favorecido_eh_segurado: bool(fd, "favorecido_eh_segurado"),
+      favorecido_nome: texto(fd, "favorecido_nome"),
+      favorecido_documento: texto(fd, "favorecido_documento"),
+      favorecido_banco: texto(fd, "favorecido_banco"),
+      favorecido_agencia: texto(fd, "favorecido_agencia"),
+      favorecido_conta: texto(fd, "favorecido_conta"),
+    })
+    .eq("id", id);
+  if (error) voltar(id, 4, error.message);
+  voltar(id, 5);
+}
+
+// ---------- Etapa 5 (validação + ciência + envio) ----------
 
 export async function enviarSinistro(fd: FormData) {
   const { supabase, user } = await contexto();
   const id = texto(fd, "id")!;
-  const favorecido = {
-    favorecido_eh_segurado: bool(fd, "favorecido_eh_segurado"),
-    favorecido_nome: texto(fd, "favorecido_nome"),
-    favorecido_documento: texto(fd, "favorecido_documento"),
-    favorecido_banco: texto(fd, "favorecido_banco"),
-    favorecido_agencia: texto(fd, "favorecido_agencia"),
-    favorecido_conta: texto(fd, "favorecido_conta"),
-    justificativa_fora_prazo: texto(fd, "justificativa_fora_prazo"),
-  };
+  const favorecido = fd.has("justificativa_fora_prazo") ? { justificativa_fora_prazo: texto(fd, "justificativa_fora_prazo") } : {};
   const ciencia = fd.get("ciencia") === "on";
   const mensagem = texto(fd, "mensagem");
 
   // Salva o que foi digitado mesmo se o envio for barrado, pra não perder.
-  await supabase.from("sinistros").update(favorecido).eq("id", id);
+  if (Object.keys(favorecido).length) await supabase.from("sinistros").update(favorecido).eq("id", id);
 
   const s = await carregar(supabase, id);
   if (!s) voltar(id, 5, "Sinistro não encontrado.");
@@ -319,7 +353,8 @@ export async function enviarSinistro(fd: FormData) {
   const pendenciasEnvio = validacao.bloqueios;
 
   const agora = new Date().toISOString();
-  const valorAvisado = totalDebitos((debitos ?? []) as Debito[]);
+  // Sem tabela de débitos (22/10/2026): só recalcula o valor avisado se houver linhas antigas.
+  const valorAvisado = (debitos ?? []).length ? totalDebitos((debitos ?? []) as Debito[]) : s.valor_avisado;
   const eraRascunho = s.etapa === "rascunho";
   const prazo = calcularPrazoAviso(s);
 
@@ -399,7 +434,8 @@ export async function analisarDocumento(fd: FormData) {
       analisado_em: new Date().toISOString(),
     })
     .eq("id", docId);
-  voltar(id, null);
+  // Volta para a aba Anexos (a validação fica lá).
+  redirect(`/sinistros/${id}?aba=anexos`);
 }
 
 export async function assumirSinistro(fd: FormData) {
@@ -444,17 +480,28 @@ export async function devolverComPendencia(fd: FormData) {
   voltar(id, null, destinos.length ? undefined : SEM_EMAIL);
 }
 
+// Etapa 5 da abertura, lado O2: "Acionamento autorizado? SIM" -- gera o
+// número do aviso, inicia o chat e o caso segue para a seguradora. (O "NÃO"
+// é devolverComPendencia.)
 export async function marcarAbertoNaSeguradora(fd: FormData) {
-  const { supabase } = await exigirInterno();
+  const { supabase, user } = await exigirInterno();
   const id = texto(fd, "id")!;
   const numero = texto(fd, "numero_sinistro_seguradora");
   const data = texto(fd, "data_abertura_seguradora") ?? hojeSP();
   const docCompleta = fd.get("documentacao_completa") === "on";
   const s = await carregar(supabase, id);
   if (!s) voltar(id, null, "Sinistro não encontrado.");
+  let numeroAviso: string | null = s.numero_aviso ?? null;
+  if (!numeroAviso) {
+    const { data: gerado, error: erroAviso } = await supabase.rpc("gerar_numero_aviso_sinistro");
+    if (erroAviso || !gerado) voltar(id, null, "Não foi possível gerar o número do aviso: " + (erroAviso?.message ?? ""));
+    numeroAviso = gerado as string;
+  }
   await supabase
     .from("sinistros")
     .update({
+      numero_aviso: numeroAviso,
+      autorizado_em: s.autorizado_em ?? new Date().toISOString(),
       etapa: "na_seguradora",
       numero_sinistro_seguradora: numero,
       data_abertura_seguradora: data,
@@ -464,10 +511,16 @@ export async function marcarAbertoNaSeguradora(fd: FormData) {
       pendencia_prazo: null,
     })
     .eq("id", id);
+  if (!s.numero_aviso)
+    await registrar(supabase, id, {
+      autor_tipo: "o2",
+      referente: "imobiliaria",
+      texto: `Acionamento autorizado pela O2 (${user.email}). Número do aviso: ${numeroAviso}. A partir de agora a conversa sobre este sinistro fica neste chat.`,
+    });
   await registrar(supabase, id, {
     autor_tipo: "o2",
     referente: "seguradora",
-    texto: `Sinistro aberto na ${s.seguradora} — nº ${numero}.${
+    texto: `Sinistro aberto na ${s.seguradora ?? "seguradora"}${numero ? ` — nº ${numero}` : " (nº do sinistro ainda não informado)"}.${
       docCompleta ? " Documentação completa: o prazo de análise da seguradora (até 30 dias) começa agora." : ""
     }`,
     etapa_de: s.etapa,
@@ -477,8 +530,8 @@ export async function marcarAbertoNaSeguradora(fd: FormData) {
   await emailAtualizacaoParaImobiliaria(
     { ...s, etapa: "na_seguradora", numero_sinistro_seguradora: numero } as SinistroEmail,
     destinos,
-    "Sinistro aberto na seguradora",
-    `O sinistro foi aberto na ${s.seguradora} com o número ${numero}. A partir de agora, atenção às regras:`,
+    `Acionamento autorizado — aviso ${numeroAviso}`,
+    `A O2 autorizou o acionamento. Número do aviso: ${numeroAviso}.${numero ? ` Sinistro aberto na ${s.seguradora} com o número ${numero}.` : ""} A partir de agora, atenção às regras:`,
     TEXTO_CIENCIA.slice(0, 3)
   );
   voltar(id, null, destinos.length ? undefined : SEM_EMAIL);
@@ -491,6 +544,9 @@ export async function registrarNoHistorico(fd: FormData) {
   if (!msg) voltar(id, null, "Escreva o texto do registro.");
   if (!interno) {
     await registrar(supabase, id, { autor_tipo: "imobiliaria", referente: "imobiliaria", texto: msg });
+    // Notificação de mensagem recebida no chat.
+    const s = await carregar(supabase, id);
+    if (s) await emailNovidadeParaO2(s as SinistroEmail, nomeImobiliaria(s), "mensagem", msg);
     voltar(id, null);
   }
   const visivel = fd.get("visivel_imobiliaria") === "on";

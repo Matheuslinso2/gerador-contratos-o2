@@ -159,3 +159,25 @@ export async function emailAlertasParaO2(itens: { id: string; codigo: number; te
   });
   await enviar([EMAIL_O2], `Sinistros — ${itens.length} alerta(s) para hoje`, html);
 }
+
+// Tela de visualização (22/10/2026): notificação de mensagem recebida no chat
+// e de novo documento anexado para validação, sempre para sinistro@ com a
+// identidade O2 (nº do aviso ou SIN no protocolo).
+export async function emailNovidadeParaO2(
+  s: SinistroEmail & { numero_aviso?: string | null },
+  imobiliariaNome: string,
+  tipo: "mensagem" | "documento",
+  detalhe: string
+) {
+  const protocolo = s.numero_aviso || `SIN-${s.codigo}`;
+  const mensagem = tipo === "mensagem";
+  const html = envolverEmailO2({
+    badge: mensagem ? "Mensagem no chat" : "Novo documento para validação",
+    titulo: mensagem ? `${imobiliariaNome} enviou uma mensagem` : `${imobiliariaNome} anexou um documento para validação`,
+    introducao: mensagem ? "Nova mensagem no chat do sinistro." : "Um novo documento aguarda aceite ou recusa da O2.",
+    corpoHtml: resumo(s, imobiliariaNome) + paragrafo(detalhe) + botaoPill(urlSinistro(s.id), mensagem ? "Responder no chat" : "Validar documento"),
+    protocolo,
+    origem: "Módulo Sinistro",
+  });
+  await enviar([EMAIL_O2], `${mensagem ? "Mensagem no chat" : "Novo documento para validação"} — ${protocolo} — ${imobiliariaNome}`, html);
+}

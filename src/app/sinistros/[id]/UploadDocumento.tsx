@@ -15,7 +15,7 @@ function nomeSeguro(nome: string) {
 // Sobe o arquivo direto do navegador pro bucket privado `sinistros` (o
 // corpo de Server Action na Vercel tem teto de ~4,5 MB) e só depois
 // registra a linha em sinistro_documentos. Mesmo padrão das Faturas.
-export default function UploadDocumento({ id, tipo, rotulo = "Enviar arquivo" }: { id: string; tipo: string; rotulo?: string }) {
+export default function UploadDocumento({ id, tipo, rotulo = "Enviar arquivo", pasta = null }: { id: string; tipo: string; rotulo?: string; pasta?: string | null }) {
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
   const [estado, setEstado] = useState<string | null>(null);
@@ -40,7 +40,7 @@ export default function UploadDocumento({ id, tipo, rotulo = "Enviar arquivo" }:
         setErro(`${arquivo.name}: ${error.message}`);
         continue;
       }
-      const r = await registrarDocumento(id, tipo, caminho, arquivo.name, arquivo.size);
+      const r = await registrarDocumento(id, tipo, caminho, arquivo.name, arquivo.size, pasta);
       if (!r.ok) setErro(`${arquivo.name}: ${r.erro}`);
     }
     setEstado(null);

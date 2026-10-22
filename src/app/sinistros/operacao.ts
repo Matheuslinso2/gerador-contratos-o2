@@ -9,7 +9,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2, DOMINIO_O2 } from "@/lib/admin";
-import { ETAPAS, formatarReais, hojeSP, type EtapaSinistro, type TipoSinistro } from "@/lib/sinistros/regras";
+import { ETAPAS, calcularPrazoAviso, formatarReais, hojeSP, situacaoDoFormulario, type EtapaSinistro, type TipoSinistro } from "@/lib/sinistros/regras";
 import { emailAtualizacaoParaImobiliaria, type SinistroEmail } from "@/lib/sinistros/emails";
 
 type Supa = Awaited<ReturnType<typeof createClient>>;
@@ -184,7 +184,7 @@ export async function salvarLmi(fd: FormData) {
   const lmi = valor(fd, "lmi");
   await supabase.from("sinistros").update({ lmi }).eq("id", id);
   await registrar(supabase, id, { autor_tipo: "o2", referente: "interno", visivel_imobiliaria: false, texto: `LMI da apólice: ${lmi != null ? formatarReais(lmi) : "removido"}.` });
-  voltar(id, { sucesso: "LMI salvo.", aba: "financeiro", ctx });
+  voltar(id, { sucesso: "LMI salvo.", aba: "pagamentos", ctx });
 }
 
 export async function registrarIndenizacao(fd: FormData) {
@@ -196,14 +196,25 @@ export async function registrarIndenizacao(fd: FormData) {
   const pagoEm = texto(fd, "pago_em") ?? hojeSP();
   const s = await carregar(supabase, id);
   if (!s) voltar(id, { erro: "Sinistro não encontrado.", ctx });
+  // Histórico de pagamento (22/10/2026): anexo opcional (planilha da seguradora).
+  let anexo: { anexo_path: string; anexo_nome: string } | null = null;
+  const arquivo = fd.get("anexo");
+  if (arquivo instanceof File && arquivo.size > 0) {
+    const nome = arquivo.name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^\w.\-]+/g, "_").slice(-120);
+    const caminho = `${id}/pagamentos/${Date.now()}-${nome}`;
+    const { error: erroUp } = await supabase.storage.from("sinistros").upload(caminho, arquivo, { contentType: arquivo.type || "application/octet-stream" });
+    if (erroUp) voltar(id, { erro: "Não foi possível anexar o arquivo: " + erroUp.message, aba: "pagamentos", ctx });
+    anexo = { anexo_path: caminho, anexo_nome: arquivo.name };
+  }
   const { error } = await supabase.from("sinistro_indenizacoes").insert({
     sinistro_id: id,
     valor: v,
     pago_em: pagoEm,
     referencia: mes ? `${mes}-01` : null,
     observacao: texto(fd, "observacao"),
+    ...anexo,
   });
-  if (error) voltar(id, { erro: error.message, aba: "financeiro", ctx });
+  if (error) voltar(id, { erro: error.message, aba: "pagamentos", ctx });
   const mudaEtapa = ["pre_analise", "pendencia_imobiliaria", "na_seguradora"].includes(s.etapa);
   if (mudaEtapa) await supabase.from("sinistros").update({ etapa: "em_indenizacao" }).eq("id", id);
   await registrar(supabase, id, {
@@ -218,9 +229,9 @@ export async function registrarIndenizacao(fd: FormData) {
     const { data: todas } = await supabase.from("sinistro_indenizacoes").select("valor").eq("sinistro_id", id);
     const usado = (todas ?? []).reduce((acc, x) => acc + Number(x.valor), 0);
     if (usado > Number(s.lmi))
-      voltar(id, { erro: `Indenização registrada, mas o total (${formatarReais(usado)}) passou do LMI (${formatarReais(Number(s.lmi))}).`, aba: "financeiro", ctx });
+      voltar(id, { erro: `Indenização registrada, mas o total (${formatarReais(usado)}) passou do LMI (${formatarReais(Number(s.lmi))}).`, aba: "pagamentos", ctx });
   }
-  voltar(id, { sucesso: "Indenização registrada.", aba: "financeiro", ctx });
+  voltar(id, { sucesso: "Indenização registrada.", aba: "pagamentos", ctx });
 }
 
 export async function removerIndenizacao(fd: FormData) {
@@ -230,7 +241,7 @@ export async function removerIndenizacao(fd: FormData) {
   const { data: ind } = await supabase.from("sinistro_indenizacoes").select("valor, pago_em").eq("id", texto(fd, "indenizacao_id")!).maybeSingle();
   await supabase.from("sinistro_indenizacoes").delete().eq("id", texto(fd, "indenizacao_id")!);
   if (ind) await registrar(supabase, id, { autor_tipo: "o2", referente: "interno", texto: `Indenização de ${formatarReais(Number(ind.valor))} removida.`, visivel_imobiliaria: false });
-  voltar(id, { aba: "financeiro", ctx });
+  voltar(id, { aba: "pagamentos", ctx });
 }
 
 // ---------- dados do caso (editáveis em qualquer etapa pela O2) ----------
@@ -249,6 +260,9 @@ function camposCaso(fd: FormData) {
   ];
   for (const [de, para] of endereco) if (fd.has(de)) c[para] = texto(fd, de);
   if (fd.has("tipo")) c.tipo = texto(fd, "tipo") as TipoSinistro | null;
+  // Etapa 1 da Fiança (ocupado/desocupado + 1ª inadimplência).
+  const sit = situacaoDoFormulario(texto(fd, "situacao_imovel"), texto(fd, "data_ocorrencia"), texto(fd, "data_entrega_chaves"), texto(fd, "tipo_atual"));
+  if (sit) Object.assign(c, sit, (({ prazo, foraDoPrazo }) => ({ prazo_aviso: prazo, aviso_fora_prazo: foraDoPrazo }))(calcularPrazoAviso(sit)));
   if (fd.has("produto")) c.produto = texto(fd, "produto") ?? "fianca";
   if (fd.has("imobiliaria_id")) c.imobiliaria_id = texto(fd, "imobiliaria_id");
   if (fd.has("valor_avisado")) c.valor_avisado = valor(fd, "valor_avisado");
@@ -434,4 +448,72 @@ export async function reaproveitarDocumento(fd: FormData) {
     tamanho: origem.tamanho,
   });
   redirect(destinoUrl);
+}
+
+// ---------- Tela de visualização do sinistro acionado (22/10/2026) ----------
+
+// "Há ação de despejo em andamento?" (nº do processo) e "Há acordo em
+// andamento?" (tratativa com o escritório).
+export async function salvarDespejoAcordo(fd: FormData) {
+  const { supabase } = await exigirInterno();
+  const id = texto(fd, "id")!;
+  const ctx = texto(fd, "ctx");
+  const simNao = (k: string) => (fd.get(k) === "sim" ? true : fd.get(k) === "nao" ? false : null);
+  const despejo = simNao("despejo");
+  const acordo = simNao("acordo_em_andamento");
+  const { error } = await supabase
+    .from("sinistros")
+    .update({
+      despejo,
+      despejo_processo: despejo ? texto(fd, "despejo_processo") : null,
+      acordo_em_andamento: acordo,
+      acordo_tratativa: acordo ? texto(fd, "acordo_tratativa") : null,
+    })
+    .eq("id", id);
+  if (error) voltar(id, { erro: error.message, ctx });
+  voltar(id, { sucesso: "Despejo/acordo salvos.", ctx });
+}
+
+// Caixa "Setor de renovação foi sinalizado?" -- encerra os alertas da vigência.
+export async function marcarRenovacaoSinalizada(fd: FormData) {
+  const { supabase, user } = await exigirInterno();
+  const id = texto(fd, "id")!;
+  const ctx = texto(fd, "ctx");
+  await supabase.from("sinistros").update({ renovacao_sinalizada_em: new Date().toISOString(), renovacao_sinalizada_por: user.email }).eq("id", id);
+  await registrar(supabase, id, { autor_tipo: "o2", referente: "interno", texto: "Setor de renovação sinalizado sobre o vencimento da apólice.", visivel_imobiliaria: false });
+  voltar(id, { sucesso: "Renovação sinalizada — alertas encerrados.", ctx });
+}
+
+// Histórico do andamento INTERNO: todo evento tem data e descrição obrigatórias.
+export async function salvarEventoInterno(fd: FormData) {
+  const { supabase, user } = await exigirInterno();
+  const id = texto(fd, "id")!;
+  const ctx = texto(fd, "ctx");
+  const eventoId = texto(fd, "evento_id");
+  const data = texto(fd, "data_evento");
+  const descricao = texto(fd, "texto");
+  if (!data || !descricao) voltar(id, { erro: "Informe a data e a descrição do evento.", aba: "interno", ctx });
+  if (eventoId) {
+    const { error } = await supabase
+      .from("sinistro_historico")
+      .update({ data_evento: data, texto: descricao, editado_em: new Date().toISOString(), editado_por: user.email })
+      .eq("id", eventoId)
+      .eq("sinistro_id", id)
+      .eq("visivel_imobiliaria", false);
+    if (error) voltar(id, { erro: error.message, aba: "interno", ctx });
+  } else {
+    const { error } = await supabase
+      .from("sinistro_historico")
+      .insert({ sinistro_id: id, autor_tipo: "o2", referente: "interno", visivel_imobiliaria: false, data_evento: data, texto: descricao });
+    if (error) voltar(id, { erro: error.message, aba: "interno", ctx });
+  }
+  voltar(id, { aba: "interno", ctx });
+}
+
+export async function excluirEventoInterno(fd: FormData) {
+  const { supabase } = await exigirInterno();
+  const id = texto(fd, "id")!;
+  const ctx = texto(fd, "ctx");
+  await supabase.from("sinistro_historico").delete().eq("id", texto(fd, "evento_id")!).eq("sinistro_id", id).eq("visivel_imobiliaria", false);
+  voltar(id, { aba: "interno", ctx });
 }

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import SubmitButton from "@/components/SubmitButton";
 import { buscarEnderecoPorCep, formatarCEP } from "@/lib/validacoesBr";
-import { SEGURADORAS, TIPOS, type TipoSinistro } from "@/lib/sinistros/regras";
+import { SEGURADORAS } from "@/lib/sinistros/regras";
 import { botaoPrimario, inputClass, labelClass } from "./ui";
 import BuscaApolice from "./BuscaApolice";
 
@@ -24,6 +24,7 @@ export type DadosContrato = {
   locatario_email?: string | null;
   nosso_numero?: string | null;
   data_ocorrencia?: string | null;
+  data_entrega_chaves?: string | null;
   imovel_cep?: string | null;
   imovel_logradouro?: string | null;
   imovel_numero?: string | null;
@@ -33,10 +34,10 @@ export type DadosContrato = {
   imovel_uf?: string | null;
 };
 
-// Passo 1 do assistente: tipo do sinistro + dados do contrato/apólice. Na
-// Fase 1 tudo é digitado (a base de apólices ainda não tem nº de apólice,
-// LMI nem endereço do imóvel -- ver plano, decisão 2); a O2 confere contra
-// o contrato anexado no passo 4.
+// Etapa 1 do assistente -- Identificação (especificação "Tela de abertura do
+// sinistro", 22/10/2026): Seguradora > Apólice, data da ocorrência (primeira
+// inadimplência) com conferência automática da vigência, e imóvel ocupado ou
+// desocupado (desocupado abre a data da entrega das chaves).
 export default function FormContrato({
   action,
   dados,
@@ -61,6 +62,10 @@ export default function FormContrato({
   // Reunião 21/10/2026: ocorrência logo no passo 1, para validar a apólice no início.
   const [vig, setVig] = useState({ ini: d.vigencia_inicio ?? "", fim: d.vigencia_fim ?? "", ocorrencia: d.data_ocorrencia ?? "" });
   const foraDaVigencia = !!vig.ocorrencia && ((!!vig.ini && vig.ocorrencia < vig.ini) || (!!vig.fim && vig.ocorrencia > vig.fim));
+  const vigenciaConferida = !!vig.ocorrencia && !!vig.ini && !!vig.fim && !foraDaVigencia;
+  const [situacao, setSituacao] = useState<"" | "ocupado" | "desocupado">(
+    d.tipo === "ocupado" ? "ocupado" : d.tipo ? "desocupado" : ""
+  );
   const seguradoraConhecida = !d.seguradora || SEGURADORAS.includes(d.seguradora);
 
   async function aoMudarCep(valor: string) {
@@ -75,6 +80,7 @@ export default function FormContrato({
   return (
     <form action={action} className="space-y-6">
       {d.id && <input type="hidden" name="id" value={d.id} />}
+      <input type="hidden" name="tipo_atual" value={d.tipo ?? ""} />
       {extras}
       <BuscaApolice nossoNumeroInicial={d.nosso_numero} />
 
@@ -105,21 +111,6 @@ export default function FormContrato({
       )}
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Qual é a situação?</h2>
-        <div className="grid gap-2 sm:grid-cols-3">
-          {(Object.keys(TIPOS) as TipoSinistro[]).map((t) => (
-            <label key={t} className="flex cursor-pointer gap-2 rounded-xl border border-gray-200 bg-white p-3 text-sm has-[:checked]:border-o2-coral has-[:checked]:bg-orange-50">
-              <input type="radio" name="tipo" value={t} defaultChecked={d.tipo === t} className="mt-1 accent-o2-coral" />
-              <span>
-                <span className="block font-semibold text-o2-navy">{TIPOS[t].titulo}</span>
-                <span className="text-xs text-gray-500">{TIPOS[t].descricao}</span>
-              </span>
-            </label>
-          ))}
-        </div>
-      </section>
-
-      <section className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Apólice</h2>
         <div className="grid gap-3 sm:grid-cols-4">
           <div className="sm:col-span-2">
@@ -144,7 +135,7 @@ export default function FormContrato({
             <input type="date" name="vigencia_fim" defaultValue={d.vigencia_fim ?? ""} onChange={(e) => setVig({ ...vig, fim: e.target.value })} className={inputClass} />
           </div>
           <div className="sm:col-span-2">
-            <label className={labelClass}>Data da ocorrência</label>
+            <label className={labelClass}>Data da ocorrência – primeira inadimplência</label>
             <input type="date" name="data_ocorrencia" defaultValue={d.data_ocorrencia ?? ""} onChange={(e) => setVig({ ...vig, ocorrencia: e.target.value })} className={inputClass} />
           </div>
           {foraDaVigencia && (
@@ -152,7 +143,41 @@ export default function FormContrato({
               A data da ocorrência está fora da vigência da apólice. Confira se é a apólice certa (ou a renovação) antes de seguir.
             </p>
           )}
+          {vigenciaConferida && (
+            <p className="rounded-lg border border-green-300 bg-green-50 p-2 text-xs text-green-900 sm:col-span-4">
+              ✓ A data da ocorrência está dentro da vigência da apólice.
+            </p>
+          )}
         </div>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">O imóvel está ocupado ou desocupado?</h2>
+        <div className="flex flex-wrap gap-2">
+          {(
+            [
+              ["ocupado", "Ocupado", "O locatário continua no imóvel."],
+              ["desocupado", "Desocupado", "O locatário entregou as chaves."],
+            ] as const
+          ).map(([valor, rotulo, ajuda]) => (
+            <label
+              key={valor}
+              className="flex min-w-56 flex-1 cursor-pointer gap-2 rounded-xl border border-gray-200 bg-white p-3 text-sm has-[:checked]:border-o2-coral has-[:checked]:bg-orange-50"
+            >
+              <input type="radio" name="situacao_imovel" value={valor} checked={situacao === valor} onChange={() => setSituacao(valor)} className="mt-1 accent-o2-coral" />
+              <span>
+                <span className="block font-semibold text-o2-navy">{rotulo}</span>
+                <span className="text-xs text-gray-500">{ajuda}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+        {situacao === "desocupado" && (
+          <div className="max-w-xs">
+            <label className={labelClass}>Data da entrega das chaves</label>
+            <input type="date" name="data_entrega_chaves" defaultValue={d.data_entrega_chaves ?? ""} className={inputClass} />
+          </div>
+        )}
       </section>
 
       <section className="space-y-3">

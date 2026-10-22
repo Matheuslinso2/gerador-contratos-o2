@@ -14,6 +14,7 @@ export type Documento = {
   motivo_recusa: string | null;
   enviado_em: string;
   url?: string | null;
+  pasta?: string | null;
 };
 
 const PILULA: Record<string, string> = {
@@ -21,12 +22,15 @@ const PILULA: Record<string, string> = {
   aprovado: "bg-green-100 text-green-800",
   recusado: "bg-red-100 text-red-700",
 };
-const ROTULO: Record<string, string> = { enviado: "enviado", aprovado: "aprovado", recusado: "recusado" };
+const ROTULO: Record<string, string> = { enviado: "aguardando validação", aprovado: "aceito", recusado: "recusado" };
 
-// Checklist de documentos (R4) -- cada item com os arquivos já enviados.
-// modo "imobiliaria": envia/remove; modo "o2": aprova/recusa cada arquivo
-// (e também anexa, quando editavel). "reaproveitaveis": documento que a
-// mesma imobiliária já mandou noutro sinistro -- um clique e ele é copiado.
+/// Documentos do sinistro em tabela -- especificação "Tela de abertura" (Etapa 3,
+// 22/10/2026): Documentos | Visualização | Validação (aceite ou recusa) |
+// Observação. Para a imobiliária, o recusado aparece em vermelho como
+// "Pendente". modo "o2": aceita/recusa cada arquivo (e também anexa, quando
+// editavel). "reaproveitaveis": documento que a mesma imobiliária já mandou
+// noutro sinistro -- um clique e ele é copiado. "modelos": modelo de
+// Declaração de Débitos da seguradora do caso.
 export function ChecklistDocumentos({
   id,
   itens,
@@ -35,6 +39,7 @@ export function ChecklistDocumentos({
   editavel,
   passo,
   reaproveitaveis,
+  modelos,
 }: {
   id: string;
   itens: ItemChecklist[];
@@ -43,54 +48,83 @@ export function ChecklistDocumentos({
   editavel: boolean;
   passo?: number;
   reaproveitaveis?: Record<string, { id: string; nome_arquivo: string; enviado_em: string; codigo?: number }>;
+  modelos?: { rotulo: string; href: string }[];
 }) {
   // Documento de um tipo que saiu do checklist (ex.: cobertura desmarcada)
   // continua visível em "Outros".
   const chaves = new Set(itens.map((i) => i.chave));
   const docsDe = (chave: string) =>
     documentos.filter((d) => d.tipo === chave || (chave === "outros" && !chaves.has(d.tipo)));
+  const th = "px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-o2-navy";
 
   return (
-    <ul className="space-y-2">
-      {itens.map((item) => {
-        const docs = docsDe(item.chave);
-        const ativo = docs.some((d) => d.situacao !== "recusado");
-        const recusado = !ativo && docs.some((d) => d.situacao === "recusado");
-        const marca = ativo ? "✓" : recusado ? "!" : item.obrigatorio ? "○" : "·";
-        const corMarca = ativo ? "bg-green-600" : recusado ? "bg-red-600" : item.obrigatorio ? "bg-gray-300" : "bg-gray-200";
-        return (
-          <li key={item.chave} className={`rounded-xl border bg-white p-3 ${recusado ? "border-red-300" : "border-gray-200"}`}>
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex gap-2">
-                <span className={`mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${corMarca}`}>{marca}</span>
-                <div>
-                  <p className="text-sm font-semibold text-o2-navy">
-                    {item.titulo}
-                    {!item.obrigatorio && <span className="ml-1 text-xs font-normal text-gray-400">(opcional)</span>}
-                  </p>
-                  {item.ajuda && <p className="text-xs text-gray-500">{item.ajuda}</p>}
-                </div>
-              </div>
-              {editavel && <UploadDocumento id={id} tipo={item.chave} rotulo={docs.length ? "+ Arquivo" : "Enviar"} />}
-            </div>
-            {editavel && !ativo && reaproveitaveis?.[item.chave] && (
-              <form action={reaproveitarDocumento} className="mt-2 pl-7 text-xs">
-                <input type="hidden" name="id" value={id} />
-                <input type="hidden" name="documento_id" value={reaproveitaveis[item.chave].id} />
-                {passo && <input type="hidden" name="passo" value={passo} />}
-                <button className="rounded-full border border-o2-blue px-3 py-0.5 font-semibold text-o2-blue hover:bg-blue-50">
-                  ↺ Usar o arquivo já enviado
-                </button>
-                <span className="ml-2 text-gray-500">
-                  {reaproveitaveis[item.chave].nome_arquivo}
-                  {reaproveitaveis[item.chave].codigo ? ` · SIN-${reaproveitaveis[item.chave].codigo}` : ""} · {formatarData(reaproveitaveis[item.chave].enviado_em.slice(0, 10))}
-                </span>
-              </form>
-            )}
-            {docs.length > 0 && (
-              <ul className="mt-2 space-y-1.5 pl-7">
-                {docs.map((d) => (
-                  <li key={d.id} className="text-xs">
+    <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+      <table className="w-full min-w-[44rem] text-sm">
+        <thead className="bg-gray-50">
+          <tr>
+            <th className={`${th} w-[34%]`}>Documentos</th>
+            <th className={th}>Visualização</th>
+            <th className={th}>Validação</th>
+            <th className={th}>Observação</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100">
+          {itens.map((item) => {
+            const docs = docsDe(item.chave);
+            const linhas = docs.length ? docs : [null];
+            const ativo = docs.some((d) => d.situacao !== "recusado");
+            const pendente = !ativo && docs.some((d) => d.situacao === "recusado");
+            return linhas.map((d, i) => (
+              <tr key={`${item.chave}-${d?.id ?? "vazio"}`} className={pendente ? "bg-red-50" : ""}>
+                {i === 0 && (
+                  <td rowSpan={linhas.length} className="px-3 py-2 align-top">
+                    <p className={`font-semibold ${pendente ? "text-red-700" : "text-o2-navy"}`}>
+                      {item.titulo}
+                      {!item.obrigatorio && <span className="ml-1 text-xs font-normal text-gray-400">(opcional)</span>}
+                    </p>
+                    {item.ajuda && <p className="text-xs text-gray-500">{item.ajuda}</p>}
+                    {item.chave === "declaracao_debitos" && (
+                      <div className="mt-1 space-y-1 text-xs">
+                        {modelos && modelos.length > 0 ? (
+                          modelos.map((m) => (
+                            <a key={m.href} href={m.href} target="_blank" rel="noreferrer" className="block font-semibold text-o2-blue underline">
+                              ⬇ {m.rotulo}
+                            </a>
+                          ))
+                        ) : (
+                          <p className="text-gray-600">Modelo desta seguradora: peça à O2 (sinistro@o2seguros.com.br).</p>
+                        )}
+                        <p className="rounded bg-red-100 px-2 py-1 font-semibold text-red-800">
+                          A declaração só vale se estiver ASSINADA. Envie o documento assinado.
+                        </p>
+                      </div>
+                    )}
+                    {editavel && (
+                      <div className="mt-2">
+                        <UploadDocumento id={id} tipo={item.chave} rotulo={docs.length ? "+ Arquivo" : "Enviar"} />
+                      </div>
+                    )}
+                    {editavel && !ativo && reaproveitaveis?.[item.chave] && (
+                      <form action={reaproveitarDocumento} className="mt-2 text-xs">
+                        <input type="hidden" name="id" value={id} />
+                        <input type="hidden" name="documento_id" value={reaproveitaveis[item.chave].id} />
+                        {passo && <input type="hidden" name="passo" value={passo} />}
+                        <button className="rounded-full border border-o2-blue px-3 py-0.5 font-semibold text-o2-blue hover:bg-blue-50">
+                          ↺ Usar o arquivo já enviado
+                        </button>
+                        <span className="ml-2 text-gray-500">
+                          {reaproveitaveis[item.chave].nome_arquivo}
+                          {reaproveitaveis[item.chave].codigo ? ` · SIN-${reaproveitaveis[item.chave].codigo}` : ""} ·{" "}
+                          {formatarData(reaproveitaveis[item.chave].enviado_em.slice(0, 10))}
+                        </span>
+                      </form>
+                    )}
+                  </td>
+                )}
+                <td className="px-3 py-2 align-top text-xs">
+                  {!d ? (
+                    <span className="text-gray-400">{item.obrigatorio ? "não enviado" : "—"}</span>
+                  ) : (
                     <div className="flex flex-wrap items-center gap-2">
                       {d.url ? (
                         <a href={d.url} target="_blank" rel="noreferrer" className="font-medium text-o2-blue underline">
@@ -99,7 +133,6 @@ export function ChecklistDocumentos({
                       ) : (
                         <span className="font-medium">{d.nome_arquivo}</span>
                       )}
-                      <span className={`rounded-full px-2 py-0.5 font-semibold ${PILULA[d.situacao] ?? ""}`}>{ROTULO[d.situacao] ?? d.situacao}</span>
                       {editavel && d.situacao === "enviado" && (
                         <form action={removerDocumento}>
                           <input type="hidden" name="id" value={id} />
@@ -109,55 +142,62 @@ export function ChecklistDocumentos({
                         </form>
                       )}
                     </div>
-                    {d.motivo_recusa && (d.situacao === "recusado" || d.situacao === "aprovado") && (
-                      <p className={`mt-0.5 ${d.situacao === "recusado" ? "text-red-700" : "text-green-800"}`}>
-                        {d.situacao === "recusado" ? "Recusado" : "Aprovado"} — {d.motivo_recusa}
-                      </p>
-                    )}
-                    {modo === "o2" && (
-                      <div className="mt-1 flex flex-wrap items-center gap-2">
-                        {d.situacao !== "aprovado" && (
-                          <form action={analisarDocumento} className="flex flex-wrap items-center gap-1">
-                            <input type="hidden" name="id" value={id} />
-                            <input type="hidden" name="documento_id" value={d.id} />
-                            <input type="hidden" name="decisao" value="aprovado" />
-                            <input name="observacao" placeholder="observação (opcional)" className="w-40 rounded border border-gray-300 px-1 py-0.5" />
-                            <button className="rounded-full bg-green-600 px-3 py-0.5 font-semibold text-white hover:opacity-90">Aprovar</button>
-                          </form>
-                        )}
-                        {d.situacao !== "recusado" && (
-                          <form action={analisarDocumento} className="flex flex-wrap items-center gap-1">
-                            <input type="hidden" name="id" value={id} />
-                            <input type="hidden" name="documento_id" value={d.id} />
-                            <input type="hidden" name="decisao" value="recusado" />
-                            <select name="motivo_lista" defaultValue="" className="rounded border border-gray-300 px-1 py-0.5">
-                              <option value="">Motivo…</option>
-                              {MOTIVOS_RECUSA.map((m) => (
-                                <option key={m}>{m}</option>
-                              ))}
-                            </select>
-                            <input name="motivo_texto" placeholder="detalhe (opcional)" className="w-40 rounded border border-gray-300 px-1 py-0.5" />
-                            <button className="rounded-full bg-red-600 px-3 py-0.5 font-semibold text-white hover:opacity-90">Recusar</button>
-                          </form>
-                        )}
-                        {d.situacao !== "enviado" && (
-                          <form action={analisarDocumento}>
-                            <input type="hidden" name="id" value={id} />
-                            <input type="hidden" name="documento_id" value={d.id} />
-                            <input type="hidden" name="decisao" value="desfazer" />
-                            <button className="text-gray-500 hover:underline">desfazer</button>
-                          </form>
-                        )}
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </li>
-        );
-      })}
-    </ul>
+                  )}
+                </td>
+                <td className="px-3 py-2 align-top text-xs">
+                  {d && (
+                    <>
+                      <span className={`rounded-full px-2 py-0.5 font-semibold ${PILULA[d.situacao] ?? ""}`}>
+                        {modo === "imobiliaria" && d.situacao === "recusado" ? "Pendente" : ROTULO[d.situacao] ?? d.situacao}
+                      </span>
+                      {modo === "o2" && (
+                        <div className="mt-1 flex flex-col gap-1">
+                          {d.situacao !== "aprovado" && (
+                            <form action={analisarDocumento} className="flex flex-wrap items-center gap-1">
+                              <input type="hidden" name="id" value={id} />
+                              <input type="hidden" name="documento_id" value={d.id} />
+                              <input type="hidden" name="decisao" value="aprovado" />
+                              <input name="observacao" placeholder="observação (opcional)" className="w-36 rounded border border-gray-300 px-1 py-0.5" />
+                              <button className="rounded-full bg-green-600 px-3 py-0.5 font-semibold text-white hover:opacity-90">Aceitar</button>
+                            </form>
+                          )}
+                          {d.situacao !== "recusado" && (
+                            <form action={analisarDocumento} className="flex flex-wrap items-center gap-1">
+                              <input type="hidden" name="id" value={id} />
+                              <input type="hidden" name="documento_id" value={d.id} />
+                              <input type="hidden" name="decisao" value="recusado" />
+                              <select name="motivo_lista" defaultValue="" className="w-36 rounded border border-gray-300 px-1 py-0.5">
+                                <option value="">Motivo…</option>
+                                {MOTIVOS_RECUSA.map((m) => (
+                                  <option key={m}>{m}</option>
+                                ))}
+                              </select>
+                              <input name="motivo_texto" placeholder="detalhe (opcional)" className="w-36 rounded border border-gray-300 px-1 py-0.5" />
+                              <button className="rounded-full bg-red-600 px-3 py-0.5 font-semibold text-white hover:opacity-90">Recusar</button>
+                            </form>
+                          )}
+                          {d.situacao !== "enviado" && (
+                            <form action={analisarDocumento}>
+                              <input type="hidden" name="id" value={id} />
+                              <input type="hidden" name="documento_id" value={d.id} />
+                              <input type="hidden" name="decisao" value="desfazer" />
+                              <button className="text-gray-500 hover:underline">desfazer</button>
+                            </form>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </td>
+                <td className={`px-3 py-2 align-top text-xs ${d?.situacao === "recusado" ? "font-semibold text-red-700" : "text-gray-700"}`}>
+                  {d?.motivo_recusa ?? ""}
+                </td>
+              </tr>
+            ));
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -169,6 +209,9 @@ export type RegistroHistorico = {
   referente: string | null;
   texto: string;
   visivel_imobiliaria: boolean;
+  data_evento?: string | null;
+  editado_em?: string | null;
+  editado_por?: string | null;
 };
 
 function dataHora(iso: string) {
