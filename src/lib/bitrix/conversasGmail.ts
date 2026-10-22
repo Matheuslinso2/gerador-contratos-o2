@@ -1,5 +1,5 @@
 import "server-only";
-import { obterClienteGmail } from "@/lib/gestaoEmails/gmail";
+import { obterClienteGmail, REMETENTES_EXCLUIDOS } from "@/lib/gestaoEmails/gmail";
 import { createServiceClient } from "@/lib/supabase/service";
 import { chamarBitrix } from "./client";
 import { assuntoBase } from "./conversasEmail";
@@ -52,7 +52,7 @@ export async function lerTratativaDoCard(entityTypeId: number, itemId: number): 
 }
 
 const DIAS_BUSCA = 45;
-const MAX_CONVERSAS = 8;
+const MAX_CONVERSAS = 12;
 const EMAIL_REGEX = /^[^\s@()"']+@[^\s@()"']+\.[^\s@()"']+$/;
 
 // O snippet do Gmail vem com entidades HTML ("&lt;", "&#39;"): a tela mostra
@@ -75,7 +75,12 @@ export async function buscarConversasGmail(enderecos: string[], tratativa: strin
   // operadores digitados pelo usuário.
   const limpos = [...new Set(enderecos.map((e) => e.trim().toLowerCase()).filter((e) => EMAIL_REGEX.test(e)))].slice(0, 6);
   if (!limpos.length) return [];
-  const q = `(${limpos.map((e) => `from:${e} OR to:${e} OR cc:${e}`).join(" OR ")}) newer_than:${DIAS_BUSCA}d`;
+  // Notificações automáticas (Segimob, seguradoras -- as mesmas que a Gestão
+  // de E-mails já ignora) apareciam em massa e empurravam a conversa de
+  // verdade pra fora da lista (card 994, 22/10/2026: a "Votação seguro
+  // incêndio Ref.128/07" ficou em 10º atrás das "Nova observação no Fiança").
+  const exclusoes = [...REMETENTES_EXCLUIDOS, "cartacobranca@tokiomarine.com.br"].map((r) => `-from:${r}`).join(" ");
+  const q = `(${limpos.map((e) => `from:${e} OR to:${e} OR cc:${e}`).join(" OR ")}) newer_than:${DIAS_BUSCA}d ${exclusoes} -subject:"[Seg Imob]"`;
 
   const gmail = obterClienteGmail();
   const lista = await gmail.users.threads.list({ userId: "me", q, maxResults: MAX_CONVERSAS });
