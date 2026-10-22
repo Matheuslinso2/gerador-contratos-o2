@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
+import { arquivoParaUpload } from "@/lib/tipoArquivoUpload";
 import { formatarCNPJ, validarCNPJ, apenasDigitos } from "@/lib/validacoesBr";
 import { enviarFichaCondominio, type EstadoEnvioCondominio } from "./actions";
 
@@ -143,9 +144,11 @@ function CampoUpload({
     const extensao = selecionado.name.split(".").pop()?.toLowerCase() || "bin";
     const novoPath = `${responseId}/${crypto.randomUUID()}.${extensao}`;
     const supabase = createClient();
-    const { error } = await supabase.storage.from(BUCKET).upload(novoPath, selecionado, { contentType: selecionado.type || "application/octet-stream" });
+    const { corpo, tipo } = arquivoParaUpload(selecionado);
+    const { error } = await supabase.storage.from(BUCKET).upload(novoPath, corpo, { contentType: tipo });
     if (error) {
-      setArquivo({ nome: selecionado.name, estado: "erro", mensagem: "Falha no envio" });
+      console.error("Condomínio: falha ao enviar o arquivo pro Storage:", error);
+      setArquivo({ nome: selecionado.name, estado: "erro", mensagem: "Falha no envio — tente de novo ou envie o arquivo em PDF ou foto (JPG/PNG)" });
       return;
     }
     setArquivo({ nome: selecionado.name, estado: "ok" });
