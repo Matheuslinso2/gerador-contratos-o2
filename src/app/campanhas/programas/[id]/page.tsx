@@ -79,7 +79,7 @@ export default async function ProgramaPage({ params, searchParams }: { params: P
   return (
     <>
       <AppHeader userEmail={user?.email} logoutAction={signOut} />
-      <main className="mx-auto max-w-[1500px] flex-1 space-y-6 p-8">
+      <main className="mx-auto w-full min-w-0 max-w-[1500px] flex-1 space-y-6 p-8">
         <Link href="/campanhas/programas" className="text-sm font-medium text-o2-navy hover:underline">
           ← Voltar para os programas
         </Link>
