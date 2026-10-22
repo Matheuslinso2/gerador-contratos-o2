@@ -1,7 +1,7 @@
 import { FONTE, O2_CINZA_CLARO, O2_CINZA_ESCURO, O2_LARANJA, O2_NAVY, blocoSecao, linhaCampo } from "@/lib/integracoes/emailO2";
-import { metricaInfo, type LinhaDesempenho, type Programa } from "./programas";
+import { metricaInfo, type ConfigDesempenho, type LinhaDesempenho } from "./desempenho";
 
-// E-mail de PARCIAL de um programa de campanha (Fase 2, 22/10/2026): o que
+// E-mail de PARCIAL de uma campanha com metas (22/10/2026): o que
 // antes a equipe montava à mão para cada imobiliária ("🏆 Parcial da
 // Campanha Clube Elite O2 - Intex"). Cada imobiliária recebe só os PRÓPRIOS
 // números. Os valores ficam fixos no momento em que o rascunho é gerado.
@@ -50,7 +50,7 @@ function paragrafo(html: string, alinhar: "left" | "center" = "left"): string {
     </tr>`;
 }
 
-export function montarEmailParcial(programa: Programa, linha: LinhaDesempenho, hoje: string, diasRestantes: number) {
+export function montarEmailParcial(programa: ConfigDesempenho, linha: LinhaDesempenho, hoje: string, diasRestantes: number) {
   const metrica = metricaInfo(programa.metrica);
   const unidade = ROTULO_METRICA_EMAIL[programa.metrica] ?? "resultado";
   const nome = escapar(linha.nome.replace(/ \(grupo\)$/, ""));

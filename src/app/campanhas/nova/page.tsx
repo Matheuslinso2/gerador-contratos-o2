@@ -18,23 +18,20 @@ const inputClass =
 export default async function NovaCampanhaPage({
   searchParams,
 }: {
-  searchParams: Promise<{ erro?: string; programa?: string }>;
+  searchParams: Promise<{ erro?: string; pai?: string }>;
 }) {
-  const { erro, programa: programaPedido } = await searchParams;
+  const { erro, pai } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!isAdmin(user?.email) && !isColaboradorO2(user?.email)) redirect("/");
 
-  // Programa de campanha (22/10/2026): o e-mail pode pertencer a um programa
-  // (boas-vindas, parcial, encerramento) -- aparece na tela do programa.
-  const { data: programasData } = await supabase
-    .from("campanhas_programas")
-    .select("id, nome")
-    .is("arquivado_em", null)
-    .order("inicio", { ascending: false });
-  const programas = (programasData ?? []) as { id: string; nome: string }[];
+  // E-mail de uma campanha existente (22/10/2026): boas-vindas por
+  // imobiliária, parcial, encerramento -- aparece em "E-mails desta campanha".
+  const { data: campanhaPai } = pai
+    ? await supabase.from("campanhas").select("id, nome, valido_de, valido_ate").eq("id", pai).is("campanha_pai_id", null).maybeSingle()
+    : { data: null };
 
   return (
     <>
@@ -57,33 +54,23 @@ export default async function NovaCampanhaPage({
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-medium text-gray-600">Válido de (opcional)</label>
-              <input name="valido_de" type="date" className={inputClass} />
+              <input name="valido_de" type="date" defaultValue={campanhaPai?.valido_de ?? undefined} className={inputClass} />
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-gray-600">Válido até (opcional)</label>
-              <input name="valido_ate" type="date" className={inputClass} />
+              <input name="valido_ate" type="date" defaultValue={campanhaPai?.valido_ate ?? undefined} className={inputClass} />
             </div>
           </div>
           <p className="-mt-2 text-xs text-gray-400">O período aparece destacado no e-mail, separado do texto do corpo.</p>
 
           <SeletorProdutos />
 
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-600">
-              Programa (opcional)
-              <InfoLegenda titulo="Programa de campanha">
-                Se este e-mail faz parte de um programa com metas (ex: boas-vindas ou parcial do Clube Elite), escolha aqui: ele passa a aparecer na tela do programa.
-              </InfoLegenda>
-            </label>
-            <select name="programa_id" defaultValue={programas.some((p) => p.id === programaPedido) ? programaPedido : ""} className={inputClass}>
-              <option value="">Nenhum</option>
-              {programas.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.nome}
-                </option>
-              ))}
-            </select>
-          </div>
+          {campanhaPai && (
+            <p className="rounded-lg border border-o2-navy/10 bg-white p-3 text-sm text-o2-navy">
+              <input type="hidden" name="campanha_pai_id" value={campanhaPai.id} />
+              Este e-mail será da campanha <b>{campanhaPai.nome}</b> e vai aparecer em &quot;E-mails desta campanha&quot;.
+            </p>
+          )}
 
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">Modelo</label>

@@ -1,8 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-// Programas de campanha (22/10/2026) -- a campanha comercial como PROGRAMA:
-// período, produtos, metas individuais por imobiliária (ou grupo), premiação.
-// Os disparos de e-mail (tabela campanhas) podem pertencer a um programa.
+// Metas e produção automática da CAMPANHA (22/10/2026). A campanha comercial
+// tem período, produtos, metas individuais por imobiliária (ou por grupo/rede),
+// responsável da O2 por imobiliária e premiação; e-mails de acompanhamento
+// (parciais) ficam como e-mails filhos dela (campanhas.campanha_pai_id).
 //
 // Regras combinadas com o Matheus (22/10/2026):
 //  - Meta é individual, definida uma a uma (a base histórica aparece só como
@@ -16,35 +17,44 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 //  - Participante pode ser a imobiliária (unidade) ou o grupo/rede inteiro.
 //  - Resultado financeiro = comissão − repasse − custo da premiação (Corp).
 
-export const METRICAS_PROGRAMA = [
+export const METRICAS_META = [
   { valor: "contratacoes", rotulo: "Contratações (efetivadas)", moeda: false },
   { valor: "cotacoes", rotulo: "Cotações recebidas", moeda: false },
   { valor: "premio", rotulo: "Prêmio das contratações (R$)", moeda: true },
   { valor: "comissao", rotulo: "Comissão das contratações (R$)", moeda: true },
 ] as const;
-export type MetricaPrograma = (typeof METRICAS_PROGRAMA)[number]["valor"];
+export type MetricaMeta = (typeof METRICAS_META)[number]["valor"];
 
 export function metricaInfo(valor: string) {
-  return METRICAS_PROGRAMA.find((m) => m.valor === valor) ?? METRICAS_PROGRAMA[0];
+  return METRICAS_META.find((m) => m.valor === valor) ?? METRICAS_META[0];
 }
-
-export const STATUS_PROGRAMA: Record<string, string> = {
-  planejada: "Planejada",
-  ativa: "Ativa",
-  encerrada: "Encerrada",
-  apurada: "Apurada",
-};
 
 // Produtos que dá pra medir por imobiliária. Automóvel não tem imobiliária
 // ligada e fica de fora das metas por imobiliária.
-export const PRODUTOS_PROGRAMA = [
+export const PRODUTOS_BASE = [
   { valor: "fianca", rotulo: "Seguro Fiança" },
   { valor: "capitalizacao", rotulo: "Capitalização" },
-  { valor: "re", rotulo: "Ramos Elementares (Incêndio e demais)" },
+  { valor: "re", rotulo: "Ramos Elementares" },
 ] as const;
 
-export function rotuloProdutoPrograma(valor: string): string {
-  return PRODUTOS_PROGRAMA.find((p) => p.valor === valor)?.rotulo ?? valor;
+export function rotuloProdutoBase(valor: string): string {
+  return PRODUTOS_BASE.find((p) => p.valor === valor)?.rotulo ?? valor;
+}
+
+// Produto da campanha (lista de Campanhas) -> produto da base de produção.
+// Incêndio, RC Obras, RCP, Condomínio e Seguro Celular são Ramos
+// Elementares; Automóvel e Institucional não têm produção por imobiliária.
+const BASE_POR_PRODUTO_CAMPANHA: Record<string, string> = {
+  fianca: "fianca",
+  capitalizacao: "capitalizacao",
+  incendio: "re",
+  rc_obras: "re",
+  rcp: "re",
+  condominio: "re",
+  seguro_celular: "re",
+};
+export function produtosBaseDaCampanha(produtosCampanha: string[]): string[] {
+  return [...new Set(produtosCampanha.map((p) => BASE_POR_PRODUTO_CAMPANHA[p]).filter((p): p is string => !!p))];
 }
 
 // Ramo do Corp -> produto do programa.
@@ -67,30 +77,25 @@ const PRODUTO_POR_RAMO_CORP: Record<string, string> = {
   "2POR": "re",
 };
 
-export type Programa = {
-  id: string;
+// O que o cálculo precisa da campanha.
+export type ConfigDesempenho = {
   nome: string;
-  objetivo: string | null;
-  produtos: string[];
+  produtos: string[]; // produtos da BASE (fianca, capitalizacao, re)
   metrica: string;
   inicio: string; // YYYY-MM-DD
   fim: string;
-  data_apuracao: string | null;
   premiacao_descricao: string | null;
   custo_premiacao_geral: number;
-  status: string;
-  responsavel_email: string | null;
-  criado_por_email: string | null;
-  arquivado_em: string | null;
 };
 
 export type ParticipanteRow = {
-  id: string;
+  id: string; // id da linha de meta, ou "imob:<id>" quando ainda não tem meta salva
   imobiliaria_id: string | null;
   grupo_id: string | null;
   meta: number | null;
   observacao: string | null;
   custo_premiacao: number;
+  responsavel_email: string | null;
 };
 
 export type Farol = "nao_iniciada" | "sem_meta" | "atingida" | "no_ritmo" | "atencao" | "em_risco" | "nao_atingida";
@@ -143,11 +148,14 @@ export type NumerosCorp = { documentos: number; premio: number; comissao: number
 
 export type LinhaDesempenho = {
   participanteId: string;
+  imobiliariaId: string | null;
+  grupoId: string | null;
   tipo: "imobiliaria" | "grupo";
   nome: string;
   unidades: string[]; // nomes das imobiliárias contadas
   meta: number | null;
   observacao: string | null;
+  responsavelEmail: string | null;
   custoPremiacao: number;
   realizado: number;
   base: number; // média mensal da métrica nos 6 meses antes do início
@@ -165,7 +173,7 @@ export type LinhaDesempenho = {
   ultimaCotacao: string | null;
 };
 
-export type DesempenhoPrograma = {
+export type DesempenhoCampanha = {
   hoje: string;
   diasTotais: number;
   diasDecorridos: number;
@@ -363,12 +371,12 @@ function alertasDe(a: {
   return alertas;
 }
 
-export async function montarDesempenhoPrograma(
+export async function montarDesempenhoCampanha(
   db: SupabaseClient,
-  programa: Programa,
+  programa: ConfigDesempenho,
   participantes: ParticipanteRow[],
   agora = new Date()
-): Promise<DesempenhoPrograma> {
+): Promise<DesempenhoCampanha> {
   const hoje = hojeBrasilia(agora);
   const fimEfetivo = hoje < programa.fim ? hoje : programa.fim;
   const diasTotais = diasEntre(programa.inicio, programa.fim) + 1;
@@ -399,7 +407,7 @@ export async function montarDesempenhoPrograma(
   const unidadesDe = (p: ParticipanteRow): Imob[] =>
     p.imobiliaria_id ? [imobPorId.get(p.imobiliaria_id)].filter((i): i is Imob => !!i) : imobs.filter((i) => i.grupo_id === p.grupo_id);
 
-  const produtos = programa.produtos.filter((p) => PRODUTOS_PROGRAMA.some((x) => x.valor === p));
+  const produtos = programa.produtos.filter((p) => PRODUTOS_BASE.some((x) => x.valor === p));
   const todosIds = imobs.map((i) => i.id);
 
   // Funil (planilhas + Bitrix) desde o início da base de comparação.
@@ -496,11 +504,14 @@ export async function montarDesempenhoPrograma(
         : "Imobiliária removida";
     return {
       participanteId: p.id,
+      imobiliariaId: p.imobiliaria_id,
+      grupoId: p.grupo_id,
       tipo: p.grupo_id ? "grupo" : "imobiliaria",
       nome,
       unidades: unidades.map((u) => u.apelido || u.nome),
       meta,
       observacao: p.observacao,
+      responsavelEmail: p.responsavel_email,
       custoPremiacao: Number(p.custo_premiacao) || 0,
       realizado,
       base: valorDaMetrica(base, programa.metrica) / MESES_BASE,

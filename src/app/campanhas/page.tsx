@@ -49,6 +49,9 @@ export default async function CampanhasPage({
   let query = supabase
     .from("campanhas")
     .select("id, nome, status, produto, produtos, total_destinatarios, total_enviados, total_falhas, created_at, agendado_para, criado_por_email")
+    // E-mails de uma campanha (parciais etc.) aparecem dentro dela, não soltos
+    // na lista (22/10/2026).
+    .is("campanha_pai_id", null)
     .order("created_at", { ascending: false });
   query = mostrarArquivadas ? query.not("arquivada_em", "is", null) : query.is("arquivada_em", null);
   // Pedido do Matheus, 01/10/2026: filtro por status/produto/nome na
@@ -58,6 +61,11 @@ export default async function CampanhasPage({
   if (filtroBusca?.trim()) query = query.ilike("nome", `%${filtroBusca.trim()}%`);
   const { data: campanhasData } = await query;
   const todasCampanhas = (campanhasData ?? []) as CampanhaRow[];
+  const { data: filhosData } = todasCampanhas.length
+    ? await supabase.from("campanhas").select("campanha_pai_id").in("campanha_pai_id", todasCampanhas.map((c) => c.id))
+    : { data: [] };
+  const filhosPorCampanha = new Map<string, number>();
+  for (const f of (filhosData ?? []) as { campanha_pai_id: string }[]) filhosPorCampanha.set(f.campanha_pai_id, (filhosPorCampanha.get(f.campanha_pai_id) ?? 0) + 1);
 
   // Pedido do Matheus, 15/09/2026: campanha agendada fica sempre no topo
   // da lista, com destaque -- não dá pra esquecer que tem um disparo
@@ -154,12 +162,6 @@ export default async function CampanhasPage({
                 </Link>
                 <Link href="/campanhas/grupos" className="text-sm font-medium text-o2-navy hover:underline">
                   Grupos de imobiliárias
-                </Link>
-                <Link
-                  href="/campanhas/programas"
-                  className="whitespace-nowrap rounded-full border border-o2-navy px-4 py-1.5 text-sm font-medium text-o2-navy transition hover:bg-o2-navy hover:text-white"
-                >
-                  Programas e metas
                 </Link>
                 <Link
                   href="/campanhas/avisos-internos"
@@ -284,7 +286,12 @@ export default async function CampanhasPage({
                 }
               >
                 <Link href={`/campanhas/${c.id}`} className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-o2-navy">{c.nome}</p>
+                  <p className="truncate text-sm font-semibold text-o2-navy">
+                    {c.nome}
+                    {(filhosPorCampanha.get(c.id) ?? 0) > 0 && (
+                      <span className="ml-2 rounded-full bg-o2-navy/10 px-2 py-0.5 text-xs font-medium text-o2-navy">+{filhosPorCampanha.get(c.id)} e-mail(s)</span>
+                    )}
+                  </p>
                   {agendada && c.agendado_para ? (
                     <p className="text-xs font-semibold text-o2-coral">
                       Campanha agendada para{" "}
