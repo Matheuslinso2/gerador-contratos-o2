@@ -68,7 +68,7 @@ export default function LinhaMeta({
   const campo = "w-20 rounded border border-gray-300 px-2 py-1 text-right text-sm tabular-nums focus:border-o2-coral focus:outline-none";
 
   return (
-    <tr className="border-b align-top last:border-0" data-filtro-nome={normalizarBusca(`${linha.nome} ${linha.unidades.join(" ")}`)} data-filtro-status={statusEnvio?.chave ?? "aguardando"}>
+    <tr className="border-b align-top last:border-0" data-filtro-nome={normalizarBusca(`${linha.nome} ${linha.unidades.join(" ")}`)} data-filtro-status={statusEnvio?.chave ?? "aguardando"} data-filtro-responsavel={linha.responsavelEmail ?? ""}>
       <td className="p-2">
         <div className="max-w-[260px] font-semibold text-o2-navy">{linha.nome}</div>
         {linha.tipo === "grupo" && <div className="text-xs text-gray-500">{linha.unidades.length} unidade(s): {linha.unidades.join(", ")}</div>}

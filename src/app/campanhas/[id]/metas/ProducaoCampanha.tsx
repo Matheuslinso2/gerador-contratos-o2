@@ -18,6 +18,12 @@ import { imobiliariasDaCampanha } from "@/lib/campanhas/imobiliariasDaCampanha";
 import { ROTULO_STATUS_ENVIO, normalizarBusca, type ResumoStatusEnvio } from "@/lib/campanhas/producaoStatus";
 import { DIAS_SEM_CONTATO_ALERTA, juntarContatos, ultimosContatosPorImobiliaria, type UltimosContatos } from "@/lib/campanhas/contatosBitrix";
 import { FiltroProducao } from "../FiltroProducao";
+
+// Mesmo rótulo do seletor de responsável da linha ("livia.x@..." -> "Livia").
+const rotuloResponsavel = (email: string) => {
+  const parte = email.split("@")[0].split(/[._-]/)[0];
+  return parte.charAt(0).toUpperCase() + parte.slice(1);
+};
 import { salvarConfigMetas } from "./actions";
 import LinhaMeta from "./LinhaMeta";
 import ModoGrupo from "./ModoGrupo";
@@ -258,7 +264,16 @@ export default async function ProducaoCampanha({
             linhas={desempenho.linhas.map((l) => ({
               nomeNormalizado: normalizarBusca(`${l.nome} ${l.unidades.join(" ")}`),
               status: (l.imobiliariaId ? statusPorImobiliaria.get(l.imobiliariaId)?.chave : undefined) ?? "aguardando",
+              responsavel: l.responsavelEmail ?? "",
             }))}
+            opcoesResponsavel={[
+              ...[...new Set(desempenho.linhas.map((l) => l.responsavelEmail).filter((e): e is string => !!e))].sort().map((email) => ({
+                valor: email,
+                rotulo: rotuloResponsavel(email),
+                total: desempenho.linhas.filter((l) => l.responsavelEmail === email).length,
+              })),
+              { valor: "__sem__", rotulo: "Sem responsável", total: desempenho.linhas.filter((l) => !l.responsavelEmail).length },
+            ].filter((o) => o.total > 0)}
             opcoesStatus={(Object.keys(ROTULO_STATUS_ENVIO) as (keyof typeof ROTULO_STATUS_ENVIO)[])
               .map((chave) => ({
                 valor: chave,
@@ -330,6 +345,7 @@ export default async function ProducaoCampanha({
                     key={l.participanteId}
                     data-filtro-nome={normalizarBusca(`${l.nome} ${l.unidades.join(" ")}`)}
                     data-filtro-status={(l.imobiliariaId ? statusPorImobiliaria.get(l.imobiliariaId)?.chave : undefined) ?? "aguardando"}
+                    data-filtro-responsavel={l.responsavelEmail ?? ""}
                     className="rounded-lg border border-o2-navy/10 bg-white px-3 py-2"
                   >
                     <summary className="cursor-pointer text-sm text-o2-navy">

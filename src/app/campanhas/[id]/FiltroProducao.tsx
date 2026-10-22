@@ -4,7 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { normalizarBusca } from "@/lib/campanhas/producaoStatus";
 
 type OpcaoStatus = { valor: string; rotulo: string; total: number };
-type LinhaFiltro = { nomeNormalizado: string; status: string };
+type LinhaFiltro = { nomeNormalizado: string; status: string; responsavel?: string };
+
+// Valor do filtro de responsável para "sem responsável definido".
+const SEM_RESPONSAVEL = "__sem__";
+const bateResponsavel = (filtro: string, valor: string) => !filtro || (filtro === SEM_RESPONSAVEL ? !valor : valor === filtro);
 
 // Pedido do Matheus, 07/10/2026: achar uma imobiliária específica no quadro
 // "Produção gerada" e filtrar por quem abriu / não abriu o e-mail. Esconde as
@@ -15,6 +19,7 @@ export function FiltroProducao({
   quadroId,
   linhas,
   opcoesStatus,
+  opcoesResponsavel,
   rotuloBusca = "Buscar imobiliária",
   placeholderBusca = "Nome da imobiliária...",
   textoVazio = "Nenhuma imobiliária encontrada com esse filtro.",
@@ -22,17 +27,22 @@ export function FiltroProducao({
   quadroId: string;
   linhas: LinhaFiltro[];
   opcoesStatus: OpcaoStatus[];
+  // Opcional (campanha com metas, 22/10/2026): filtrar pelo responsável da O2.
+  opcoesResponsavel?: OpcaoStatus[];
   rotuloBusca?: string;
   placeholderBusca?: string;
   textoVazio?: string;
 }) {
   const [busca, setBusca] = useState("");
   const [status, setStatus] = useState("");
+  const [responsavel, setResponsavel] = useState("");
 
   const termo = normalizarBusca(busca);
   const visiveis = useMemo(
-    () => linhas.filter((l) => (!termo || l.nomeNormalizado.includes(termo)) && (!status || l.status === status)).length,
-    [linhas, termo, status]
+    () => linhas.filter(
+        (l) => (!termo || l.nomeNormalizado.includes(termo)) && (!status || l.status === status) && bateResponsavel(responsavel, l.responsavel ?? "")
+      ).length,
+    [linhas, termo, status, responsavel]
   );
 
   useEffect(() => {
@@ -42,9 +52,10 @@ export function FiltroProducao({
     quadro.querySelectorAll<HTMLElement>("[data-filtro-nome]").forEach((linha) => {
       const bateNome = !termo || (linha.dataset.filtroNome ?? "").includes(termo);
       const bateStatus = !status || linha.dataset.filtroStatus === status;
-      linha.hidden = !(bateNome && bateStatus);
+      const bateResp = bateResponsavel(responsavel, linha.dataset.filtroResponsavel ?? "");
+      linha.hidden = !(bateNome && bateStatus && bateResp);
     });
-  }, [quadroId, termo, status]);
+  }, [quadroId, termo, status, responsavel]);
 
   return (
     <div className="space-y-1.5">
@@ -74,12 +85,30 @@ export function FiltroProducao({
             ))}
           </select>
         </div>
-        {(busca || status) && (
+        {opcoesResponsavel && opcoesResponsavel.length > 0 && (
+          <div>
+            <label className="mb-0.5 block text-xs text-gray-500">Responsável O2</label>
+            <select
+              value={responsavel}
+              onChange={(e) => setResponsavel(e.target.value)}
+              className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-o2-coral focus:outline-none"
+            >
+              <option value="">Todos</option>
+              {opcoesResponsavel.map((o) => (
+                <option key={o.valor} value={o.valor}>
+                  {o.rotulo} ({o.total})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        {(busca || status || responsavel) && (
           <button
             type="button"
             onClick={() => {
               setBusca("");
               setStatus("");
+              setResponsavel("");
             }}
             className="pb-1.5 text-sm font-medium text-gray-500 hover:underline"
           >
