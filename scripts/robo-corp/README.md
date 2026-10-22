@@ -50,9 +50,26 @@ pelo cron `corp-sharepoint` — ou, enquanto o acesso ao SharePoint não estiver
 configurado na Vercel, pela carga local:
 `npx tsx scripts/corp-sharepoint/carregar-local.ts <pastaSaida>`.
 
-Agendar: Agendador de Tarefas do Windows → "Robô Corp", diário às 02:00,
-ação `cmd /c cd /d "<pasta do projeto>" && npx tsx scripts/robo-corp/exportar.ts`.
-Fotos de cada execução ficam em `saida/<data>/` para conferir se deu certo.
+Agendado: Agendador de Tarefas do Windows → "Robo Corp", diário às 02:00,
+roda `robo-corp.cmd` (exportar → espelho do Workspace → regra do Power BI →
+conferência do cadastro). Log em `saida/ultimo.log`; fotos de cada execução
+em `saida/<data>/`.
+
+## Alerta: documento fora do Power BI
+
+O último passo (`conferir-cadastro.ts`) lista os documentos do Corp (desde
+2024) que ficaram fora da conta do Power BI ou contados em dobro — na
+prática, produtor cujo nome no Corp não está escrito igual no Cadastro de
+Produtores do SharePoint (espaço no fim, nome incompleto). Se achar algum,
+manda e-mail para o Matheus com o nome do Corp, o nome parecido do cadastro
+e a comissão que some. Só lê; nunca corrige nada sozinho.
+
+```bash
+npx.cmd tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/robo-corp/conferir-cadastro.ts --simular "KARINA MACHADO VIEIRA"
+```
+Teste sem gravar nem enviar: finge que o cadastro tem o nome com espaço no
+fim e salva a prévia do e-mail em `saida/alerta-cadastro.html`
+(`--enviar` manda de verdade).
 
 ## Filtros (deduzidos das próprias planilhas do SharePoint, 21/10/2026)
 

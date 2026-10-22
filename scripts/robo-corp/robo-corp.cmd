@@ -21,5 +21,9 @@ if errorlevel 1 echo carga no Workspace falhou: %errorlevel% >> %LOG%
 rem 3) produtor novo no Corp ganha registro/ficha pela regra do Power BI
 call npx.cmd tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/base-unica/aplicar-power-bi.ts --gravar >> %LOG% 2>&1
 
+rem 4) documento do Corp fora da conta do Power BI (nome do produtor nao casa
+rem    com o Cadastro de Produtores) -> e-mail de alerta para o Matheus
+call npx.cmd tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/robo-corp/conferir-cadastro.ts >> %LOG% 2>&1
+
 echo fim: %date% %time% >> %LOG%
 exit /b 0

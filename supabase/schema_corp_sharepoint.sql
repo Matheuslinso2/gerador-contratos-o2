@@ -477,3 +477,64 @@ begin
     execute format('create policy %I on %I for all to authenticated using (is_colaborador_o2()) with check (is_colaborador_o2())', t || '_o2', t);
   end loop;
 end $$;
+
+-- ---------- Conferência: documento do Corp fora da conta (robô, 22/10/2026) ----------
+-- Lista os documentos (Nosso Nº + tipo + endosso, como o painel do próprio
+-- Corp conta) que ficaram SEM nenhuma linha incluir_corretora — a produção
+-- some do Power BI — ou com mais de uma (contado em dobro). Única causa real
+-- achada em out/2026: nome do produtor no Corp diferente do Cadastro de
+-- Produtores (espaço no fim, nome incompleto). Só lê; quem chama é
+-- scripts/robo-corp/conferir-cadastro.ts, no fim do robo-corp.cmd.
+-- p_simular_sem_cadastro: simula o caso real de out/2026 — o cadastro tem
+-- esse produtor escrito com um espaço no fim, então o nome do Corp não casa
+-- (teste do alerta sem gravar nada).
+create or replace function corp_conferir_documentos_fora(
+  p_desde date default '2024-01-01',
+  p_simular_sem_cadastro text default null
+)
+returns table (
+  nosso_numero bigint, tipo text, numero_endosso text, ini_vig date,
+  seg text, ramo text, numero_apolice text, comissao numeric,
+  motivo text, produtores text, parecidos text
+)
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if coalesce(auth.role(), '') <> 'service_role' and current_user <> 'postgres' and not is_colaborador_o2() then
+    raise exception 'sem permissão';
+  end if;
+  return query
+  with linhas as (
+    select g.nosso_numero, g.tipo, coalesce(g.numero_endosso, '') as endosso, g.ini_vig, g.seg, g.ramo,
+           g.numero_apolice, g.vl_com, g.produtor,
+           case when g.produtor = p_simular_sem_cadastro then null else g.classe_corretora end as classe,
+           g.incluir_corretora and g.produtor is distinct from p_simular_sem_cadastro as inc
+    from corp_grade g
+    where g.ini_vig >= p_desde and g.ramo is not null and g.ramo <> 'Ramo'
+  ),
+  docs as (
+    select l.nosso_numero, l.tipo, l.endosso, min(l.ini_vig) as ini_vig, max(l.seg) as seg, max(l.ramo) as ramo,
+           max(l.numero_apolice) as numero_apolice, max(l.vl_com) as comissao,
+           count(*) filter (where l.inc) as incluidas,
+           array_agg(distinct l.produtor) filter (where l.classe is null) as sem_cadastro,
+           array_agg(distinct l.produtor || ' (' || l.classe || ')') filter (where l.classe is not null) as com_classe
+    from linhas l group by 1, 2, 3
+  )
+  select d.nosso_numero, d.tipo, nullif(d.endosso, ''), d.ini_vig, d.seg, d.ramo, d.numero_apolice, d.comissao,
+    case when d.incluidas > 1 then 'contado em dobro'
+         when d.sem_cadastro is not null then 'produtor sem cadastro'
+         else 'nenhum produtor entra' end,
+    concat_ws('; ', array_to_string(d.sem_cadastro, '; '), array_to_string(d.com_classe, '; ')),
+    (select string_agg(distinct '"' || r.produtor || '"', ', ')
+       from unnest(d.sem_cadastro) s(nome)
+       join (select c.produtor from corp_regra_produtor c where c.produtor is distinct from p_simular_sem_cadastro
+             union all select p_simular_sem_cadastro || ' ' where p_simular_sem_cadastro is not null) r
+         on upper(btrim(r.produtor)) = upper(btrim(s.nome))
+         or (length(btrim(s.nome)) >= 8 and length(btrim(r.produtor)) >= 8
+             and (upper(btrim(r.produtor)) like upper(btrim(s.nome)) || '%'
+                  or upper(btrim(s.nome)) like upper(btrim(r.produtor)) || '%')))
+  from docs d
+  where (d.incluidas = 0 and coalesce(d.comissao, 0) <> 0) or d.incluidas > 1
+  order by d.ini_vig desc, d.nosso_numero;
+end $$;
+revoke all on function corp_conferir_documentos_fora(date, text) from public, anon;
+grant execute on function corp_conferir_documentos_fora(date, text) to authenticated, service_role;
