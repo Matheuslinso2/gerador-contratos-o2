@@ -8,7 +8,7 @@ set LOG=scripts\robo-corp\saida\ultimo.log
 echo ===== %date% %time% ===== >> %LOG%
 
 rem 1) exporta os 6 Excel do Corp (e copia para a pasta sincronizada do SharePoint, se configurada)
-call npx.cmd tsx scripts/robo-corp/exportar.ts %* >> %LOG% 2>&1
+call npx.cmd tsx scripts/robo-corp/exportar.ts --painel %* >> %LOG% 2>&1
 if errorlevel 1 (
   echo exportacao falhou: %errorlevel% >> %LOG%
   exit /b 1

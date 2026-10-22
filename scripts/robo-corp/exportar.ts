@@ -26,6 +26,9 @@ type Config = {
 const args = process.argv.slice(2);
 const MAPEAR = args.includes("--mapear");
 const MANTER = args.includes("--manter");
+// --painel: depois de exportar, fotografa o painel do próprio Corp (Consultas →
+// Gráficos de Análise e Metas), para conferir os números no mesmo instante.
+const PAINEL = args.includes("--painel");
 const SO = args.includes("--so") ? args[args.indexOf("--so") + 1] : null;
 // Rodar a partir da pasta do projeto (ver README).
 const RAIZ = path.resolve(process.cwd(), "scripts", "robo-corp");
@@ -340,6 +343,25 @@ async function fecharRelatorio(page: Page) {
   await espera(1000);
 }
 
+// Painel do Corp: Consultas → Gráficos de Análise e Metas (5º item do menu).
+// Abre em tela cheia, no mês atual. Fotografa "Produção Total" nas três abas
+// do topo (Prêmio Base, Comissão, Qtde de Docs), para conferir os números com
+// o que acabou de ser exportado (mesmo instante).
+async function fotografarPainel(page: Page) {
+  await page.keyboard.press("Alt+c");
+  await espera(900);
+  await page.mouse.click(281, 141);
+  await espera(12_000);
+  await page.mouse.click(64, 99); // sub-aba Produção Total
+  await espera(3000);
+  for (const [x, nome] of [[79, "premio"], [218, "comissao"], [358, "qtde-docs"]] as const) {
+    await page.mouse.click(x, 20);
+    await espera(7000);
+    await foto(page, `painel-corp-${nome}`);
+  }
+  log("painel do Corp fotografado (prêmio, comissão, qtde de docs)");
+}
+
 const slug = (s: string) =>
   s
     .normalize("NFD")
@@ -388,6 +410,7 @@ async function main() {
       }
       await fecharRelatorio(page);
       log(`pronto: ${feitos.length} arquivo(s)`);
+      if (PAINEL) await fotografarPainel(page);
     }
   } finally {
     if (MANTER) log("navegador mantido aberto (--manter); feche à mão quando terminar");
