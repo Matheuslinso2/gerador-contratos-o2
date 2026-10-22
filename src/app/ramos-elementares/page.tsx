@@ -12,7 +12,7 @@ import {
   montarAnaliseRamosElementares,
   type AnaliseRamosElementares,
 } from "@/lib/ramos-elementares/analise";
-import PainelRamosElementares from "./PainelRamosElementares";
+import PainelRamosElementares, { type ImobsMesAnterior } from "./PainelRamosElementares";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -32,6 +32,12 @@ function competenciaAtual(): string {
   const ano = partes.find((parte) => parte.type === "year")?.value;
   const mes = partes.find((parte) => parte.type === "month")?.value;
   return `${ano}-${mes}`;
+}
+
+function mesAnterior(competencia: string): string {
+  const [ano, mes] = competencia.split("-").map(Number);
+  const data = new Date(Date.UTC(ano, mes - 2, 1));
+  return `${data.getUTCFullYear()}-${String(data.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
 function competenciaValida(valor: string | undefined): valor is string {
@@ -140,6 +146,27 @@ export default async function RamosElementaresPage({
   }
   }
 
+  // Tendência do quadro de imobiliárias: cards por imobiliária no retrato
+  // salvo do mês anterior (mesmos recortes). Sem retrato, a coluna fica "—".
+  const { data: retratoAnterior } = await supabase
+    .from("ramos_elementares_snapshots")
+    .select("payload")
+    .eq("competencia", mesAnterior(competencia))
+    .maybeSingle();
+  const anterior = retratoAnterior?.payload as AnaliseRamosElementares | undefined;
+  const porNome = (lista: { nome: string; total: number }[] | undefined) =>
+    Object.fromEntries((lista ?? []).map((item) => [item.nome, item.total]));
+  const imobsMesAnterior: ImobsMesAnterior = anterior?.novos
+    ? {
+        novos: {
+          consolidado: porNome(anterior.novos.consolidado?.porImobiliaria),
+          mes: porNome(anterior.novos.mes?.porImobiliaria),
+          pendentes: porNome(anterior.novos.pendentes?.porImobiliaria),
+        },
+        renovacoes: porNome(anterior.renovacoes?.atual?.porImobiliaria),
+      }
+    : null;
+
   return (
     <>
       <AppHeader userEmail={user?.email} logoutAction={signOut} />
@@ -149,6 +176,7 @@ export default async function RamosElementaresPage({
         origem={origem}
         erroFonte={erroFonte}
         emailsConfirmacao={emailsConfirmacao}
+        imobsMesAnterior={imobsMesAnterior}
       />
     </>
   );

@@ -16,6 +16,44 @@ import PageHeader from "@/components/PageHeader";
 import InfoLegenda from "@/components/InfoLegenda";
 import AtualizarAgora from "@/components/AtualizarAgora";
 import { IconFlame } from "@/components/icons";
+import ImobiliariasRamosTabela from "./ImobiliariasRamosTabela";
+
+// Cards por imobiliária no mês anterior, por recorte -- base da coluna de
+// tendência do quadro de imobiliárias (vem do retrato salvo do mês anterior).
+export type ImobsMesAnterior = {
+  novos: Record<"consolidado" | "mes" | "pendentes", Record<string, number>>;
+  renovacoes: Record<string, number>;
+} | null;
+
+// Itens (endereços) de uma população: cotados e contratados, com o aviso de
+// efetivados sem "Endereços contratados". Retrato antigo sem os campos = nada.
+function ItensKpi({
+  cotados,
+  contratados,
+  semContratados,
+  modo,
+}: {
+  cotados?: number;
+  contratados?: number;
+  semContratados?: number;
+  modo: "cotados" | "contratados";
+}) {
+  if (modo === "cotados") {
+    if (cotados === undefined) return null;
+    return <>{cotados.toLocaleString("pt-BR")} itens cotados</>;
+  }
+  if (contratados === undefined) return null;
+  return (
+    <>
+      {contratados.toLocaleString("pt-BR")} itens contratados
+      {!!semContratados && <small> · {semContratados} sem preencher</small>}
+    </>
+  );
+}
+
+function somarOpcional(...valores: (number | undefined)[]): number | undefined {
+  return valores.some((v) => v === undefined) ? undefined : valores.reduce<number>((a, v) => a + (v ?? 0), 0);
+}
 
 function linhasItemAgrupado(dados: ItemAgrupado[]): Record<string, unknown>[] {
   return dados.map((item) => ({
@@ -25,6 +63,12 @@ function linhasItemAgrupado(dados: ItemAgrupado[]): Record<string, unknown>[] {
     comissao: item.comissao,
     comissao_efetivada: item.comissaoEfetivada,
     conversao: item.conversao ?? "",
+    em_andamento: item.emAndamento ?? "",
+    encerrados_sem_emissao: item.encerrados ?? "",
+    itens_cotados: item.itensCotados ?? "",
+    itens_contratados: item.itensContratados ?? "",
+    efetivados_sem_itens_contratados: item.efetivadosSemItensContratados ?? "",
+    premio_efetivado: item.premioEfetivado ?? "",
   }));
 }
 
@@ -92,12 +136,14 @@ function Kpi({
   note,
   tone,
   legenda,
+  itens,
 }: {
   label: string;
   value: string;
   note: string;
   tone?: "ok" | "warning" | "danger";
   legenda?: string;
+  itens?: React.ReactNode;
 }) {
   return (
     <div className={styles.kpi}>
@@ -108,6 +154,7 @@ function Kpi({
       <div className={`${styles.kpiValue} ${tone ? styles[tone] : ""}`}>
         {value}
       </div>
+      {itens && <div className={styles.kpiItens}>{itens}</div>}
       <div className={styles.kpiNote}>{note}</div>
     </div>
   );
@@ -150,17 +197,21 @@ function ListaAgrupada({
 }) {
   const [expandida, setExpandida] = useState(false);
   const visiveis = expandida ? dados : dados.slice(0, 10);
+  const comItens = dados.some((item) => item.itensCotados !== undefined);
+  const classeGrade = comItens ? ` ${styles.listaComItens}` : "";
   return (
     <div>
-      <div className={styles.listaCabecalho} aria-hidden="true">
+      <div className={styles.listaCabecalho + classeGrade} aria-hidden="true">
         <span>Nome</span>
         <span>Total</span>
         <span>Efetivados</span>
         <span>Conversão</span>
+        {comItens && <span>Itens cot.</span>}
+        {comItens && <span>Itens contr.</span>}
       </div>
       <div className={styles.listaDados}>
         {visiveis.map((item) => (
-          <div className={styles.listaLinha} key={item.nome}>
+          <div className={styles.listaLinha + classeGrade} key={item.nome}>
             <strong>{item.nome}</strong>
             <span>
               <small>Total</small>
@@ -174,6 +225,18 @@ function ListaAgrupada({
               <small>Conversão</small>
               {pct(item.conversao)}
             </span>
+            {comItens && (
+              <span>
+                <small>Itens cotados</small>
+                {item.itensCotados ?? "—"}
+              </span>
+            )}
+            {comItens && (
+              <span>
+                <small>Itens contratados</small>
+                {item.itensContratados ?? "—"}
+              </span>
+            )}
           </div>
         ))}
         {!dados.length && (
@@ -244,6 +307,7 @@ function PainelVisao({
           legenda="Novas entradas mais renovações da competência, somadas. Mostra o tamanho total do trabalho do mês antes de separar por origem."
           value={String(analise.visaoGeral.novasEntradas + analise.visaoGeral.renovacoesCompetencia)}
           note="Novas entradas + renovações da competência"
+          itens={<ItensKpi modo="cotados" cotados={somarOpcional(analise.novos.mes.itensCotados, analise.renovacoes.atual.itensCotados)} />}
         />
         <Kpi
           label="Total efetivados"
@@ -251,6 +315,13 @@ function PainelVisao({
           value={String(analise.visaoGeral.novosEfetivados + analise.visaoGeral.renovacoesEfetivadas)}
           note="Novos efetivados + renovações efetivadas"
           tone="ok"
+          itens={
+            <ItensKpi
+              modo="contratados"
+              contratados={somarOpcional(analise.novos.consolidado.itensContratados, analise.renovacoes.atual.itensContratados)}
+              semContratados={somarOpcional(analise.novos.consolidado.efetivadosSemItensContratados, analise.renovacoes.atual.efetivadosSemItensContratados)}
+            />
+          }
         />
         <Kpi
           label="Comissão dos efetivados"
@@ -264,18 +335,21 @@ function PainelVisao({
           legenda="Negócios novos que entraram neste mês."
           value={String(analise.visaoGeral.novasEntradas)}
           note="NOVOS MÊS"
+          itens={<ItensKpi modo="cotados" cotados={analise.novos.mes.itensCotados} />}
         />
         <Kpi
           label="Pendências anteriores"
           legenda="Negócios novos que entraram em meses anteriores e ainda estavam abertos neste mês ou foram concluídos (efetivados ou perdidos) neste mês. A efetivação conta no mês em que aconteceu, e a origem continua sendo o mês de entrada."
           value={String(analise.visaoGeral.pendenciasAnteriores)}
           note="Carteira de entrada"
+          itens={<ItensKpi modo="cotados" cotados={analise.novos.pendentes.itensCotados} />}
         />
         <Kpi
           label="Renovações da competência"
           legenda="Apólices em renovação na competência selecionada, mais as de outras competências efetivadas ou perdidas neste mês (antecipadas ou atrasadas). Renovação concluída em mês anterior não entra."
           value={String(analise.visaoGeral.renovacoesCompetencia)}
           note="Competência selecionada"
+          itens={<ItensKpi modo="cotados" cotados={analise.renovacoes.atual.itensCotados} />}
         />
         <Kpi
           label="Novos efetivados"
@@ -283,6 +357,13 @@ function PainelVisao({
           value={String(analise.visaoGeral.novosEfetivados)}
           note="Mês + pendências"
           tone="ok"
+          itens={
+            <ItensKpi
+              modo="contratados"
+              contratados={analise.novos.consolidado.itensContratados}
+              semContratados={analise.novos.consolidado.efetivadosSemItensContratados}
+            />
+          }
         />
         <Kpi
           label="Renovações efetivadas"
@@ -290,6 +371,13 @@ function PainelVisao({
           value={String(analise.visaoGeral.renovacoesEfetivadas)}
           note={pct(analise.renovacoes.atual.conversao)}
           tone="ok"
+          itens={
+            <ItensKpi
+              modo="contratados"
+              contratados={analise.renovacoes.atual.itensContratados}
+              semContratados={analise.renovacoes.atual.efetivadosSemItensContratados}
+            />
+          }
         />
       </div>
       <div className={styles.duasColunas}>
@@ -422,9 +510,11 @@ function PainelVisao({
 function PainelNovos({
   analise,
   competencia,
+  imobsMesAnterior,
 }: {
   analise: AnaliseRamosElementares;
   competencia: string;
+  imobsMesAnterior: ImobsMesAnterior;
 }) {
   const [recorte, setRecorte] = useState<RecorteNovos>("consolidado");
   const resumo = analise.novos[recorte];
@@ -454,6 +544,7 @@ function PainelNovos({
           legenda="Quantidade de registros com status na carteira selecionada acima (consolidado, novos do mês ou pendências anteriores)."
           value={String(resumo.total)}
           note="Registros com status"
+          itens={<ItensKpi modo="cotados" cotados={resumo.itensCotados} />}
         />
         <Kpi
           label="Efetivados"
@@ -461,6 +552,7 @@ function PainelNovos({
           value={String(resumo.efetivados)}
           note={pct(resumo.conversao)}
           tone="ok"
+          itens={<ItensKpi modo="contratados" contratados={resumo.itensContratados} semContratados={resumo.efetivadosSemItensContratados} />}
         />
         <Kpi
           label="Comissão potencial"
@@ -591,7 +683,7 @@ function PainelNovos({
             flexWrap: "wrap",
           }}
         >
-          <h2>Imobiliárias — 100% da produção<InfoLegenda titulo="Imobiliárias">Todas as imobiliárias com pelo menos um registro na carteira selecionada, com Total, Efetivados e Conversão. As 10 maiores aparecem primeiro; o botão mostra as demais.</InfoLegenda></h2>
+          <h2>Imobiliárias — status de todos os cards<InfoLegenda titulo="Imobiliárias">Ranking de todas as imobiliárias com pelo menos um card na carteira selecionada: cards, tendência contra o mês anterior, em andamento, encerrados sem emissão e efetivados (com % sobre os cards da imobiliária), itens cotados e contratados, prêmio e comissão efetivados. Clique no cabeçalho para ordenar. As 10 maiores aparecem primeiro; o botão mostra as demais.</InfoLegenda></h2>
           <ExportarQuadro
             quadroId="quadro-ramos-novos-imobiliarias"
             corFundo="#f7f8fa"
@@ -600,13 +692,9 @@ function PainelNovos({
             nomeAbaExcel="Imobiliárias"
           />
         </div>
-        <p>
-          As 10 maiores aparecem primeiro; o botão revela todas com pelo menos
-          um registro
-        </p>
-        <ListaAgrupada
-          dados={resumo.porImobiliaria}
-          tituloVazio="Nenhuma imobiliária"
+        <ImobiliariasRamosTabela
+          imobiliarias={resumo.porImobiliaria}
+          totalMesAnterior={imobsMesAnterior?.novos[recorte] ?? null}
         />
       </section>
     </>
@@ -702,9 +790,11 @@ function ControleRenovacaoQuadro({ controle, competencia }: { controle: NonNulla
 function PainelRenovacoes({
   analise,
   competencia,
+  imobsMesAnterior,
 }: {
   analise: AnaliseRamosElementares;
   competencia: string;
+  imobsMesAnterior: ImobsMesAnterior;
 }) {
   const [recorte, setRecorte] = useState<RecorteRenovacao>("atual");
   const resumo = analise.renovacoes[recorte];
@@ -736,6 +826,7 @@ function PainelRenovacoes({
           note={
             recorte === "atual" ? "Resultado atual" : "Previsão operacional"
           }
+          itens={<ItensKpi modo="cotados" cotados={resumo.itensCotados} />}
         />
         <Kpi
           label="Efetivados"
@@ -747,6 +838,7 @@ function PainelRenovacoes({
               : "Não misturar com o mês atual"
           }
           tone="ok"
+          itens={<ItensKpi modo="contratados" contratados={resumo.itensContratados} semContratados={resumo.efetivadosSemItensContratados} />}
         />
         <Kpi
           label="Comissão anterior"
@@ -880,7 +972,7 @@ function PainelRenovacoes({
             flexWrap: "wrap",
           }}
         >
-          <h2>Imobiliárias — carteira completa<InfoLegenda titulo="Imobiliárias">Todas as imobiliárias com renovação na competência selecionada, com Total, Efetivados e Conversão. As 10 maiores aparecem primeiro; o botão mostra as demais.</InfoLegenda></h2>
+          <h2>Imobiliárias — status de todos os cards<InfoLegenda titulo="Imobiliárias">Ranking de todas as imobiliárias com renovação na competência selecionada: cards, tendência contra o mês anterior, em andamento, encerrados sem emissão e efetivados (com % sobre os cards da imobiliária), itens cotados e contratados, prêmio e comissão efetivados. Clique no cabeçalho para ordenar. As 10 maiores aparecem primeiro; o botão mostra as demais.</InfoLegenda></h2>
           <ExportarQuadro
             quadroId="quadro-ramos-renov-imobiliarias"
             corFundo="#f7f8fa"
@@ -889,9 +981,9 @@ function PainelRenovacoes({
             nomeAbaExcel="Imobiliárias"
           />
         </div>
-        <ListaAgrupada
-          dados={resumo.porImobiliaria}
-          tituloVazio="Nenhuma imobiliária"
+        <ImobiliariasRamosTabela
+          imobiliarias={resumo.porImobiliaria}
+          totalMesAnterior={recorte === "atual" ? (imobsMesAnterior?.renovacoes ?? null) : null}
         />
       </section>
     </>
@@ -1178,6 +1270,31 @@ function PainelEndossos({
   );
 }
 
+function CardsDoAlerta({ cards }: { cards: NonNullable<AnaliseRamosElementares["qualidade"][number]["cards"]> }) {
+  const [todos, setTodos] = useState(false);
+  const visiveis = todos ? cards : cards.slice(0, 12);
+  return (
+    <div className={styles.cardsAlerta}>
+      {visiveis.map((card) => (
+        <a
+          key={card.id}
+          href={`https://o2seguros.bitrix24.com.br/crm/type/1046/details/${card.id}/`}
+          target="_blank"
+          rel="noreferrer"
+          title={card.imobiliaria}
+        >
+          #{card.id} {card.titulo}
+        </a>
+      ))}
+      {cards.length > 12 && (
+        <button type="button" onClick={() => setTodos((v) => !v)}>
+          {todos ? "mostrar menos" : `+ ${cards.length - 12} cards`}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function ListaAlertas({
   titulo,
   itens,
@@ -1215,6 +1332,7 @@ function ListaAlertas({
             descricao: item.descricao,
             quantidade: item.quantidade,
             gravidade: item.gravidade,
+            cards: (item.cards ?? []).map((card) => `#${card.id} ${card.titulo}`).join("; "),
           }))}
           nomeAbaExcel={titulo}
         />
@@ -1225,6 +1343,7 @@ function ListaAlertas({
             <div>
               <strong>{item.titulo}</strong>
               <span>{item.descricao}</span>
+              {!!item.cards?.length && <CardsDoAlerta cards={item.cards} />}
             </div>
             <b
               className={
@@ -1699,12 +1818,14 @@ export default function PainelRamosElementares({
   origem,
   erroFonte,
   emailsConfirmacao,
+  imobsMesAnterior = null,
 }: {
   analise: AnaliseRamosElementares;
   competencia: string;
   origem: "planilha" | "hibrida" | "snapshot" | "indisponivel";
   erroFonte: string | null;
   emailsConfirmacao: EmailConfirmacao[];
+  imobsMesAnterior?: ImobsMesAnterior;
 }) {
   const router = useRouter();
   const [aba, setAba] = useState<AbaPainel>("visao");
@@ -1727,9 +1848,9 @@ export default function PainelRamosElementares({
 
   const conteudo = {
     visao: <PainelVisao analise={analise} competencia={competencia} />,
-    novos: <PainelNovos analise={analise} competencia={competencia} />,
+    novos: <PainelNovos analise={analise} competencia={competencia} imobsMesAnterior={imobsMesAnterior} />,
     renovacoes: (
-      <PainelRenovacoes analise={analise} competencia={competencia} />
+      <PainelRenovacoes analise={analise} competencia={competencia} imobsMesAnterior={imobsMesAnterior} />
     ),
     financeiro: (
       <PainelFinanceiro analise={analise} competencia={competencia} />

@@ -13,6 +13,7 @@ import {
 } from "@/lib/bitrix/client";
 import { diasUteisEquivalentesEntre } from "@/lib/bitrix/horarioComercial";
 import type { CelulaGoogle, FonteRamosBruta } from "./fonteGoogle";
+import { COLUNA_CARD_NOVO, COLUNA_CARD_RENOVACAO } from "./analise";
 
 const ENTITY_TYPE_ID = 1046;
 const CATEGORIA_CONTRATACOES = 22;
@@ -68,6 +69,10 @@ const CAMPOS = {
   comissaoAnterior: "ufCrm12ComissaoAnterior",
   restituicao: "ufCrm12Restituicao",
   tipoMovimentacao: "ufCrm12TipoMovimentacao",
+  // Itens (endereços) do card: individual = 1, lote = nº de itens. Cotados no
+  // campo antigo, contratados no campo criado pela Kamila em out/2026.
+  qtdEnderecos: "ufCrm12QtdEnderecos",
+  qtdEnderecosContratados: "ufCrm12QtdEnderecosContratados",
 } as const;
 
 function texto(valor: unknown): string {
@@ -236,6 +241,18 @@ function dataTerminal(eventos: BitrixStageHistoryEvent[]): Date | null {
   return terminal ? dataValida(terminal.CREATED_TIME) : null;
 }
 
+// Dados do card que a planilha não tem (ver COLUNA_CARD_* em analise.ts).
+function gravarDadosCard(linha: CelulaGoogle[], coluna: number, item: BitrixItemRaw) {
+  const quantidade = (valor: unknown) => {
+    const numero = Number(valor);
+    return valor === null || valor === undefined || valor === "" || !Number.isFinite(numero) ? null : numero;
+  };
+  linha[coluna] = Number(item.id);
+  linha[coluna + 1] = texto(item.title);
+  linha[coluna + 2] = quantidade(item[CAMPOS.qtdEnderecos]);
+  linha[coluna + 3] = quantidade(item[CAMPOS.qtdEnderecosContratados]);
+}
+
 function linhaNovo(params: {
   item: BitrixItemRaw;
   status: string;
@@ -250,7 +267,7 @@ function linhaNovo(params: {
   desfechoNoMes: boolean;
 }): CelulaGoogle[] {
   const { item, status, origem, produto, seguradora, imobiliaria, responsavel, competencia, eventos, agora, desfechoNoMes } = params;
-  const linha: CelulaGoogle[] = Array(42).fill(null);
+  const linha: CelulaGoogle[] = Array(COLUNA_CARD_NOVO + 4).fill(null);
   const criadaEm = dataValida(item.createdTime);
   const duracao = duracaoEmDias(item, eventos, agora);
   linha[0] = status;
@@ -271,6 +288,7 @@ function linhaNovo(params: {
   linha[32] = comissao;
   linha[34] = valorRepasse(item, premioTotal);
   linha[39] = desfechoNoMes ? serialGoogle(dataTerminal(eventos)) : null;
+  gravarDadosCard(linha, COLUNA_CARD_NOVO, item);
   return linha;
 }
 
@@ -286,7 +304,7 @@ function linhaRenovacao(params: {
   desfechoNoMes: boolean;
 }): CelulaGoogle[] {
   const { item, status, origem, produto, seguradora, imobiliaria, responsavel, eventos, desfechoNoMes } = params;
-  const linha: CelulaGoogle[] = Array(27).fill(null);
+  const linha: CelulaGoogle[] = Array(COLUNA_CARD_RENOVACAO + 4).fill(null);
   linha[0] = status;
   linha[1] = origem;
   linha[2] = texto(item[CAMPOS.numeroApolice]);
@@ -303,6 +321,7 @@ function linhaRenovacao(params: {
   linha[20] = normalizar(origem) === "SEGIMOB" ? "IMOBILIARIA" : responsavel;
   linha[21] = serialGoogle(dataValida(item.createdTime));
   linha[25] = desfechoNoMes ? serialGoogle(dataTerminal(eventos)) : null;
+  gravarDadosCard(linha, COLUNA_CARD_RENOVACAO, item);
   return linha;
 }
 

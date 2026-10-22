@@ -7,6 +7,15 @@ export type ItemAgrupado = {
   conversao: number | null;
   comissao: number;
   comissaoEfetivada: number;
+  // Reunião Kamila/Matheus 22/10/2026: medir o trabalho por ITEM (endereço),
+  // não só por card -- lote = 1 card com N itens. Opcionais porque retratos
+  // salvos antes disso não têm os campos.
+  emAndamento?: number;
+  encerrados?: number;
+  premioEfetivado?: number;
+  itensCotados?: number;
+  itensContratados?: number;
+  efetivadosSemItensContratados?: number;
 };
 
 export type ResumoPopulacao = {
@@ -27,7 +36,20 @@ export type ResumoPopulacao = {
   porCotador: ItemAgrupado[];
   porImobiliaria: ItemAgrupado[];
   porSeguradora: ItemAgrupado[];
+  // Ver ItemAgrupado: itens (endereços) cotados e contratados.
+  itensCotados?: number;
+  itensContratados?: number;
+  efetivadosSemItensContratados?: number;
 };
+
+// Posição, nas linhas montadas por fonteBitrix.ts, dos dados do card que não
+// existem na planilha (id, título e quantidades de endereços). Ficam depois da
+// última coluna lida da planilha (AR nos novos, AD nas renovações) pra nunca
+// colidir com uma linha vinda do Google.
+export const COLUNA_CARD_NOVO = 46;
+export const COLUNA_CARD_RENOVACAO = 32;
+
+export type CardAlerta = { id: number; titulo: string; imobiliaria: string };
 
 export type AlertaRamos = {
   codigo: string;
@@ -35,6 +57,8 @@ export type AlertaRamos = {
   descricao: string;
   quantidade: number;
   gravidade: "alta" | "media" | "baixa";
+  // Cards do Bitrix que caem no alerta, pra equipe abrir e corrigir.
+  cards?: CardAlerta[];
 };
 
 export type ControleRenovacao = {
@@ -113,6 +137,15 @@ type RegistroBase = {
   comissao: number;
   repasse: number;
   efetivado: boolean;
+  // Itens (endereços). Planilha: cada linha é 1 item. Bitrix: campos
+  // "Quantidade de endereços" (cotados) e "Endereços contratados" do card;
+  // individual = 1, lote = nº de itens. Contratados só valem p/ efetivado e
+  // ficam null quando o card efetivado está sem o campo (vira alerta).
+  idCard: number | null;
+  tituloCard: string;
+  itensCotados: number;
+  itensCotadosInformado: boolean;
+  itensContratados: number | null;
 };
 
 type RegistroNovo = RegistroBase & {
@@ -443,6 +476,7 @@ export function mapearNovos(linhas: CelulaGoogle[][], aba: string, competencia?:
         negociador: texto(linha[35]),
         ultimoContato: numeroOpcional(linha[36]),
         observacoes: texto(linha[37]),
+        ...dadosCard(linha, COLUNA_CARD_NOVO, status === "EFETIVADO"),
       };
     })
     .filter((registro): registro is RegistroNovo => registro !== null);
@@ -475,6 +509,7 @@ function mapearRenovacoes(linhas: CelulaGoogle[][], aba: string): RegistroRenova
         dataEfetivacao: numeroOpcional(linha[25]),
         efetivado: status === "EFETIVADO",
         ultimoContato: numeroOpcional(linha[23]),
+        ...dadosCard(linha, COLUNA_CARD_RENOVACAO, status === "EFETIVADO"),
       };
     })
     .filter((registro): registro is RegistroRenovacao => registro !== null);
@@ -503,6 +538,22 @@ function mapearEndossos(linhas: CelulaGoogle[][], aba: string): RegistroEndosso[
     .filter((registro): registro is RegistroEndosso => registro !== null);
 }
 
+function dadosCard(linha: CelulaGoogle[], coluna: number, efetivado: boolean) {
+  const id = numeroOpcional(linha[coluna]);
+  if (id === null) {
+    return { idCard: null, tituloCard: "", itensCotados: 1, itensCotadosInformado: true, itensContratados: efetivado ? 1 : null };
+  }
+  const cotados = numeroOpcional(linha[coluna + 2]);
+  const contratados = numeroOpcional(linha[coluna + 3]);
+  return {
+    idCard: id,
+    tituloCard: texto(linha[coluna + 1]),
+    itensCotados: cotados !== null && cotados > 0 ? cotados : 1,
+    itensCotadosInformado: cotados !== null && cotados > 0,
+    itensContratados: efetivado ? contratados : null,
+  };
+}
+
 function agrupar(registros: RegistroBase[], obterNome: (registro: RegistroBase) => string): ItemAgrupado[] {
   const grupos = new Map<string, RegistroBase[]>();
   for (const registro of registros) {
@@ -512,6 +563,7 @@ function agrupar(registros: RegistroBase[], obterNome: (registro: RegistroBase) 
   return [...grupos.entries()]
     .map(([nome, itens]) => {
       const efetivados = itens.filter((item) => item.efetivado);
+      const encerrados = itens.filter((item) => !item.efetivado && STATUS_TERMINAIS.has(item.status)).length;
       return {
         nome,
         total: itens.length,
@@ -519,9 +571,32 @@ function agrupar(registros: RegistroBase[], obterNome: (registro: RegistroBase) 
         conversao: itens.length ? (efetivados.length / itens.length) * 100 : null,
         comissao: itens.reduce((soma, item) => soma + item.comissao, 0),
         comissaoEfetivada: efetivados.reduce((soma, item) => soma + item.comissao, 0),
+        emAndamento: itens.length - efetivados.length - encerrados,
+        encerrados,
+        premioEfetivado: efetivados.reduce((soma, item) => soma + item.premioTotal, 0),
+        ...somarItens(itens),
       };
     })
     .sort((a, b) => b.total - a.total || a.nome.localeCompare(b.nome, "pt-BR"));
+}
+
+function somarItens(registros: RegistroBase[]) {
+  return {
+    itensCotados: registros.reduce((soma, registro) => soma + registro.itensCotados, 0),
+    itensContratados: registros.reduce((soma, registro) => soma + (registro.itensContratados ?? 0), 0),
+    efetivadosSemItensContratados: registros.filter((registro) => registro.efetivado && registro.itensContratados === null).length,
+  };
+}
+
+function cardsDoAlerta(registros: RegistroBase[]): CardAlerta[] {
+  const vistos = new Set<number>();
+  const cards: CardAlerta[] = [];
+  for (const registro of registros) {
+    if (registro.idCard === null || vistos.has(registro.idCard)) continue;
+    vistos.add(registro.idCard);
+    cards.push({ id: registro.idCard, titulo: registro.tituloCard, imobiliaria: registro.imobiliaria });
+  }
+  return cards;
 }
 
 // Mês (YYYY-MM) de uma data serial do Google/Bitrix. Data só com dia (número
@@ -567,6 +642,7 @@ function resumir(registros: (RegistroNovo | RegistroRenovacao)[]): ResumoPopulac
     porCotador: agrupar(registros, (registro) => registro.cotador),
     porImobiliaria: agrupar(registros, (registro) => registro.imobiliaria),
     porSeguradora: agrupar(registros, (registro) => registro.seguradora),
+    ...somarItens(registros),
   };
 }
 
@@ -707,7 +783,45 @@ export function montarAnaliseRamosElementares(fonte: FonteRamosBruta, agora = ne
     contarDuplicados(rnFutura.map((registro) => registro.apolice)) +
     contarDuplicados(novosConsolidados.map((registro) => registro.orcamento));
 
+  // Itens (reunião 22/10/2026): card efetivado conta como efetivado mesmo sem
+  // "Endereços contratados" -- só vira alerta pra equipe preencher.
+  const efetivadosSemContratados = efetivados.filter((registro) => registro.idCard !== null && registro.itensContratados === null);
+  const contratadosAcimaCotados = efetivados.filter(
+    (registro) => registro.idCard !== null && registro.itensCotadosInformado && (registro.itensContratados ?? 0) > registro.itensCotados
+  );
+  const semQtdEnderecos = todosComerciais.filter((registro) => registro.idCard !== null && !registro.itensCotadosInformado);
+
   const qualidade = [
+    {
+      ...alerta(
+        "efetivado-sem-itens-contratados",
+        "Efetivado sem \"Endereços contratados\"",
+        "O card conta como efetivado, mas os itens contratados ficam de fora até a equipe preencher o campo (individual = 1; lote = nº de itens efetivados).",
+        efetivadosSemContratados.length,
+        "alta"
+      ),
+      cards: cardsDoAlerta(efetivadosSemContratados),
+    },
+    {
+      ...alerta(
+        "contratados-acima-cotados",
+        "Mais endereços contratados que cotados",
+        "\"Endereços contratados\" maior que \"Quantidade de endereços\" no mesmo card.",
+        contratadosAcimaCotados.length,
+        "media"
+      ),
+      cards: cardsDoAlerta(contratadosAcimaCotados),
+    },
+    {
+      ...alerta(
+        "sem-quantidade-enderecos",
+        "Card sem \"Quantidade de endereços\"",
+        "Contado como 1 item cotado até a equipe preencher o campo.",
+        semQtdEnderecos.length,
+        "media"
+      ),
+      cards: cardsDoAlerta(semQtdEnderecos),
+    },
     alerta("segimob-sem-seguradora", "SEGIMOB — Seguradora não informada", "Produção mantida com o canal Segimob identificado.", segimobSemSeguradora, "baixa"),
     alerta("sem-cotador", "Cotador não informado", "Somente registros que já avançaram e não são produção direta.", semCotadorAvancado, "media"),
     alerta("sem-seguradora", "Seguradora não informada", "Registro avançado sem seguradora e fora do caso Segimob.", semSeguradoraAvancado, "media"),

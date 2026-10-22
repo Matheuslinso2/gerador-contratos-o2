@@ -230,6 +230,31 @@
 .filtroAtivo { background: var(--re-surface-2); border-color: var(--re-blue); color: var(--re-text); }
 .expandir { margin-top: 11px; color: var(--re-blue); }
 
+/* Itens (endereços) nos KPIs e quadro de imobiliárias estilo Fiança
+   (reunião Kamila/Matheus 22/10/2026). */
+.kpiItens { color: var(--re-text); font-size: 10px; font-weight: 600; margin-top: 4px; }
+.kpiItens small { color: var(--re-amber); font-weight: 600; font-size: 9.5px; }
+.buscaTabela { margin-bottom: 10px; width: 100%; max-width: 320px; border: 1px solid var(--re-line); border-radius: 6px; padding: 6px 10px; font-size: 12px; background: var(--re-input-bg); color: var(--re-text); }
+.tabelaRolagem { overflow-x: auto; }
+.tabelaImobs { width: 100%; border-collapse: collapse; font-size: 11px; }
+.tabelaImobs th { text-align: left; font-size: 9px; text-transform: uppercase; letter-spacing: .04em; color: var(--re-muted); border-bottom: 1px solid var(--re-line); padding: 6px; white-space: nowrap; cursor: pointer; user-select: none; }
+.tabelaImobs th:hover { color: var(--re-text); }
+.tabelaImobs td { padding: 7px 6px; border-bottom: 1px solid var(--re-line); font-variant-numeric: tabular-nums; }
+.tabelaImobs tr:last-child td { border-bottom: 0; }
+.tabelaImobs .numCol { text-align: right; white-space: nowrap; }
+.posicao { color: var(--re-muted); font-size: 9.5px; }
+.nomeImob { font-weight: 600; min-width: 160px; overflow-wrap: anywhere; }
+.ordenacaoAtiva { color: var(--re-accent); }
+.pctCelula { color: var(--re-muted); font-size: 9.5px; font-weight: 400; }
+.tendenciaAlta { color: var(--re-blue); font-weight: 700; }
+.tendenciaBaixa { color: var(--re-red); font-weight: 700; }
+.tendenciaNeutra { color: var(--re-muted); }
+.avisoCelula { color: var(--re-amber); font-weight: 700; cursor: help; }
+.cardsAlerta { display: flex; flex-wrap: wrap; gap: 4px 8px; margin-top: 4px; }
+.cardsAlerta a { color: var(--re-blue); font-size: 9.5px; text-decoration: none; }
+.cardsAlerta a:hover { text-decoration: underline; }
+.cardsAlerta button { color: var(--re-blue); font-size: 9.5px; background: none; border: 0; padding: 0; cursor: pointer; }
+
 .listaCabecalho, .listaLinha {
   display: grid;
   grid-template-columns: minmax(180px, 1.7fr) repeat(3, minmax(90px, .75fr));
@@ -240,6 +265,7 @@
 .listaCabecalho span:not(:first-child) { text-align: right; }
 .listaLinha { padding: 9px 6px; border-bottom: 1px solid var(--re-line); font-size: 10.5px; }
 .listaLinha:last-child { border-bottom: 0; }
+.listaComItens { grid-template-columns: minmax(160px, 1.6fr) repeat(5, minmax(70px, .7fr)); }
 .listaLinha strong { font-weight: 600; overflow-wrap: anywhere; }
 .listaLinha span { text-align: right; font-variant-numeric: tabular-nums; }
 .listaLinha small { display: none; color: var(--re-muted); }
