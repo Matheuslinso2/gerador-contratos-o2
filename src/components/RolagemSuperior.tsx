@@ -26,17 +26,13 @@ export default function RolagemSuperior({ alvoId }: { alvoId: string }) {
     observador.observe(alvo);
     if (alvo.firstElementChild) observador.observe(alvo.firstElementChild);
 
-    // Evita o "eco" (uma rolagem disparando a outra sem parar).
-    let origem: "alvo" | "barra" | null = null;
+    // Só copia quando a posição difere: evita o "eco" (uma rolagem
+    // disparando a outra sem parar) sem precisar de trava.
     const doAlvo = () => {
-      if (origem === "barra") return void (origem = null);
-      origem = "alvo";
-      barra.scrollLeft = alvo.scrollLeft;
+      if (Math.abs(barra.scrollLeft - alvo.scrollLeft) > 1) barra.scrollLeft = alvo.scrollLeft;
     };
     const daBarra = () => {
-      if (origem === "alvo") return void (origem = null);
-      origem = "barra";
-      alvo.scrollLeft = barra.scrollLeft;
+      if (Math.abs(alvo.scrollLeft - barra.scrollLeft) > 1) alvo.scrollLeft = barra.scrollLeft;
     };
     alvo.addEventListener("scroll", doAlvo, { passive: true });
     barra.addEventListener("scroll", daBarra, { passive: true });
