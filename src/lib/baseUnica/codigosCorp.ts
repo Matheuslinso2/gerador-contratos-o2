@@ -15,7 +15,7 @@ export type CodigoCorp = {
 export async function buscarCodigosCorp(db: SupabaseClient, ids?: string[]): Promise<Map<string, CodigoCorp[]>> {
   const porFicha = new Map<string, CodigoCorp[]>();
   if (ids && !ids.length) return porFicha;
-  const LOTE = ids ? 300 : Infinity;
+  const LOTE = ids ? 200 : Infinity; // .in() com muitos ids estoura a URL (ver emLotes.ts)
   const lotes = ids ? Array.from({ length: Math.ceil(ids.length / LOTE) }, (_, n) => ids.slice(n * LOTE, (n + 1) * LOTE)) : [null];
   for (const lote of lotes) {
     for (let de = 0; ; de += 1000) {
