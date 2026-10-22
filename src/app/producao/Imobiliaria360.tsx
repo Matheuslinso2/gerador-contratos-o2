@@ -15,6 +15,7 @@ import InfoLegenda from "@/components/InfoLegenda";
 import BarrasMensais from "./BarrasMensais";
 import type { OpcaoImob } from "./FiltrosProducao";
 import Seletor360 from "./Seletor360";
+import { ProdutoresCorp, buscarProdutoresCorp, type LinhaProdutorCorp } from "../admin/imobiliarias/ProdutoresCorp";
 
 type Valores = { propostas: number; premio: number; comissao: number };
 type CotacaoProduto = {
@@ -170,6 +171,12 @@ export async function Imobiliaria360({
   const visao = v.data as Visao | null;
   const kpis = k.data as Kpis | null;
   const erro = v.error?.message ?? k.error?.message ?? null;
+  // Produtores do Corp de cada ficha (uma imobiliária pode ter mais de um).
+  const [anoAte, mesAte] = ate.split("-").map(Number);
+  const fimAte = new Date(Date.UTC(anoAte, mesAte, 0)).toISOString().slice(0, 10);
+  const produtoresCorp = visao?.unidades?.length
+    ? await buscarProdutoresCorp(supabase, visao.unidades.map((u) => u.id), `${de}-01`, fimAte).catch(() => [] as LinhaProdutorCorp[])
+    : [];
   const linkCom = (troca: Record<string, string>) => `/producao?${new URLSearchParams({ de, ate, ...troca }).toString()}`;
 
   return (
@@ -179,7 +186,7 @@ export async function Imobiliaria360({
         ← Voltar à visão da O2 inteira (todas as imobiliárias e o ranking)
       </Link>
       {erro && <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">Não foi possível montar a visão agora ({erro}).</p>}
-      {visao?.alvo && kpis && <Visao360 visao={visao} kpis={kpis} de={de} ate={ate} linkCom={linkCom} />}
+      {visao?.alvo && kpis && <Visao360 visao={visao} kpis={kpis} de={de} ate={ate} linkCom={linkCom} produtoresCorp={produtoresCorp} />}
     </>
   );
 }
@@ -222,7 +229,21 @@ function Grafico({ titulo, children }: { titulo: string; children: ReactNode }) 
   );
 }
 
-function Visao360({ visao, kpis, de, ate, linkCom }: { visao: Visao; kpis: Kpis; de: string; ate: string; linkCom: (t: Record<string, string>) => string }) {
+function Visao360({
+  visao,
+  kpis,
+  de,
+  ate,
+  linkCom,
+  produtoresCorp,
+}: {
+  visao: Visao;
+  kpis: Kpis;
+  de: string;
+  ate: string;
+  linkCom: (t: Record<string, string>) => string;
+  produtoresCorp: LinhaProdutorCorp[];
+}) {
   const alvo = visao.alvo!;
   const us = visao.unidades;
   const ehGrupo = alvo.tipo === "grupo";
@@ -307,6 +328,17 @@ function Visao360({ visao, kpis, de, ate, linkCom }: { visao: Visao; kpis: Kpis;
           </p>
         )}
       </section>
+
+      {produtoresCorp.length > 1 && (
+        <section className="space-y-2">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Produtores no Corp · {produtoresCorp.length}</h3>
+          <ProdutoresCorp
+            linhas={produtoresCorp}
+            mostrarFicha={ehGrupo}
+            periodo={`${rotuloMes(de)} a ${rotuloMes(ate)}`}
+          />
+        </section>
+      )}
 
       {/* Resumo */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">

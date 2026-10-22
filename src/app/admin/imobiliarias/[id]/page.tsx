@@ -9,6 +9,7 @@ import VinculosRepasse from "../../../faturas/VinculosRepasse";
 import VinculosCampanhas from "../../../campanhas/VinculosCampanhas";
 import VinculosWhatsapp, { type ContatoWhatsappImobiliaria } from "../VinculosWhatsapp";
 import FontesVinculos from "../FontesVinculos";
+import { ProdutoresCorp, buscarProdutoresCorp } from "../ProdutoresCorp";
 import { buscarFontesDaFicha, buscarNomesSoltos, type RegistroFonte } from "@/lib/baseUnica/revisao";
 import { atualizarImobiliariaAdmin, adicionarMembroImobiliariaAdmin, removerMembroImobiliariaAdmin } from "../actions";
 
@@ -59,6 +60,9 @@ export default async function AdminImobiliariaDetalhePage({
   const nomesFichas = Object.fromEntries((fichasCitadas ?? []).map((f) => [f.id, f.nome]));
 
   const voltarPara = `/admin/imobiliarias/${id}`;
+  // Produtores do Corp desta ficha (pode ter mais de um), produção no ano.
+  const hoje = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
+  const produtoresCorp = await buscarProdutoresCorp(supabase, [id], `${hoje.slice(0, 4)}-01-01`, hoje);
 
   return (
     <>
@@ -106,6 +110,14 @@ export default async function AdminImobiliariaDetalhePage({
             <p className="text-xs text-gray-500">Vem da lista do SharePoint usada pelo Power BI, que prevalece sobre o cadastro do Workspace (decisão de 21/10/2026).</p>
           </section>
         )}
+        <section className="space-y-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">
+            Produtores no Corp{" "}
+            {produtoresCorp.length > 1 && <span className="font-normal normal-case text-gray-400">— uma imobiliária, {produtoresCorp.length} produtores</span>}
+          </h2>
+          <ProdutoresCorp linhas={produtoresCorp} periodo={`Produção de 01/01/${hoje.slice(0, 4)} até hoje`} />
+        </section>
+
         {(historico ?? []).length > 0 && (
           <details className="rounded-lg border border-gray-200 bg-white p-3 text-sm">
             <summary className="cursor-pointer font-semibold text-o2-navy">Histórico de alterações automáticas ({historico!.length})</summary>

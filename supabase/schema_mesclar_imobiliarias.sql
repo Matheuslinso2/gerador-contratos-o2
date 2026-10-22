@@ -6,9 +6,10 @@
 --
 -- Regra: TUDO que aponta para a ficha removida passa para a mantida; campos
 -- vazios da mantida são completados com os da removida; listas de e-mail são
--- somadas; a ficha removida fica guardada inteira no histórico. Códigos do
--- Corp diferentes nas duas fichas = recusa (a ficha só guarda um código e
--- Campanhas/Repasses leem esse campo — nesse caso, usar grupo).
+-- somadas; a ficha removida fica guardada inteira no histórico. Fichas em
+-- grupos diferentes = recusa. Códigos do Corp diferentes são aceitos
+-- (22/10/2026, ver schema_codigos_corp_ficha.sql): a ficha passa a ter os dois
+-- produtores; o principal continua o da ficha mantida.
 --
 -- mesclar_imobiliarias_previa(manter, remover): só lê; mostra o que mudaria.
 
@@ -20,6 +21,7 @@ declare
   r imobiliarias%rowtype;
   v jsonb := '{}'::jsonb;
   v_conflitos jsonb := '[]'::jsonb;
+  v_avisos jsonb := '[]'::jsonb;
 begin
   if not (is_admin_o2() or is_equipe_o2() or current_user = 'postgres' or coalesce(auth.role(), '') = 'service_role') then
     raise exception 'não autorizado';
@@ -31,7 +33,7 @@ begin
 
   if nullif(btrim(m.codigo_produtor_corp), '') is not null and nullif(btrim(r.codigo_produtor_corp), '') is not null
      and btrim(m.codigo_produtor_corp) <> btrim(r.codigo_produtor_corp) then
-    v_conflitos := v_conflitos || to_jsonb(format('códigos do Corp diferentes (%s e %s): use grupo em vez de mesclar', m.codigo_produtor_corp, r.codigo_produtor_corp));
+    v_avisos := v_avisos || to_jsonb(format('a ficha fica com 2 produtores do Corp: %s (principal) e %s', btrim(m.codigo_produtor_corp), btrim(r.codigo_produtor_corp)));
   end if;
   if m.grupo_id is not null and r.grupo_id is not null and m.grupo_id <> r.grupo_id then
     v_conflitos := v_conflitos || to_jsonb('as fichas estão em grupos diferentes'::text);
@@ -63,6 +65,7 @@ begin
     ),
     'metas_que_ficam_com_a_mantida', (select count(*) from campanhas_metas a join campanhas_metas b on b.campanha_id = a.campanha_id
                                        where a.imobiliaria_id = r.id and b.imobiliaria_id = m.id),
+    'avisos', v_avisos,
     'conflitos', v_conflitos);
   return v;
 end $$;

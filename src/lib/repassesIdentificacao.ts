@@ -6,6 +6,10 @@ export type ImobiliariaParaRepasse = {
   nome: string;
   cnpj: string | null;
   codigo_produtor_corp: string | null;
+  // Todos os produtores do Corp ligados à ficha (pode haver mais de um, ex.:
+  // Dreher 327 + 356) e o CPF/CNPJ de cada um no Corp — ver buscarCodigosCorp.
+  codigos_corp?: string[];
+  documentos_corp?: string[];
 };
 
 export type ResultadoIdentificacaoRepasse = {
@@ -23,7 +27,10 @@ export function buscarImobiliariaPorCodigoProdutor(
   imobiliarias: ImobiliariaParaRepasse[]
 ): ResultadoIdentificacaoRepasse {
   if (!codigo?.trim()) return { imobiliaria_id: null, confianca: null };
-  const encontrada = imobiliarias.find((i) => i.codigo_produtor_corp && i.codigo_produtor_corp.trim() === codigo.trim());
+  const alvo = codigo.trim();
+  const encontrada = imobiliarias.find(
+    (i) => (i.codigo_produtor_corp && i.codigo_produtor_corp.trim() === alvo) || (i.codigos_corp ?? []).includes(alvo)
+  );
   return encontrada ? { imobiliaria_id: encontrada.id, confianca: "alta" } : { imobiliaria_id: null, confianca: null };
 }
 
@@ -36,7 +43,9 @@ export function buscarImobiliariaPorCpfCnpj(
 ): ResultadoIdentificacaoRepasse {
   const alvo = apenasDigitos(cpfCnpj ?? "");
   if (!alvo) return { imobiliaria_id: null, confianca: null };
-  const encontrada = imobiliarias.find((i) => i.cnpj && apenasDigitos(i.cnpj) === alvo);
+  const encontrada = imobiliarias.find(
+    (i) => (i.cnpj && apenasDigitos(i.cnpj) === alvo) || (i.documentos_corp ?? []).some((d) => apenasDigitos(d) === alvo)
+  );
   return encontrada ? { imobiliaria_id: encontrada.id, confianca: "alta" } : { imobiliaria_id: null, confianca: null };
 }
 
@@ -63,4 +72,30 @@ export function sugerirImobiliariaPorNome(
 export function valoresBatem(valorRelatorio: number | null, valorComprovante: number | null): boolean {
   if (valorRelatorio === null || valorComprovante === null) return false;
   return Math.abs(valorRelatorio - valorComprovante) < 0.01;
+}
+
+// Ficha com mais de um produtor no Corp recebe um relatório + um comprovante
+// por produtor no mês. Casa cada relatório com um comprovante de mesmo valor;
+// o envio (um e-mail por imobiliária, com todos os pares) só fica liberado
+// quando todo relatório tem o seu comprovante e não sobra comprovante solto.
+// Com um produtor só, é exatamente a regra de sempre (1 relatório + 1
+// comprovante com valores batendo).
+export function parearRepassesDaFicha<T extends { tipo_documento: string | null; valor: number | null }>(arquivos: T[]) {
+  const relatorios = arquivos.filter((a) => a.tipo_documento === "relatorio");
+  const comprovantes = arquivos.filter((a) => a.tipo_documento === "comprovante");
+  const sobra = [...comprovantes];
+  const pares: [T, T][] = [];
+  for (const rel of relatorios) {
+    const i = sobra.findIndex((c) => valoresBatem(rel.valor, c.valor));
+    if (i >= 0) pares.push([rel, sobra.splice(i, 1)[0]]);
+  }
+  const soma = (lista: T[]) => (lista.length ? lista.reduce((t, a) => t + (a.valor ?? 0), 0) : null);
+  return {
+    relatorios,
+    comprovantes,
+    pares,
+    completo: relatorios.length > 0 && pares.length === relatorios.length && sobra.length === 0,
+    valorRelatorios: soma(relatorios),
+    valorComprovantes: soma(comprovantes),
+  };
 }

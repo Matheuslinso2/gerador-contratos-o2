@@ -8,7 +8,8 @@ import PageHeader from "@/components/PageHeader";
 import SeletorCompetenciaRepasses from "./SeletorCompetenciaRepasses";
 import SeletorImobiliaria from "../faturas/conferencia/SeletorImobiliaria";
 import { confirmarIdentificacaoRepasse, excluirArquivoRepasse } from "./actions";
-import { valoresBatem } from "@/lib/repassesIdentificacao";
+import { parearRepassesDaFicha } from "@/lib/repassesIdentificacao";
+import { buscarCodigosCorp } from "@/lib/baseUnica/codigosCorp";
 import { GRUPOS_VISUAIS } from "@/lib/gruposVisuaisImobiliarias";
 import { IconCalendar, IconUpload, IconReceipt, IconTrash, IconMail, IconReport } from "@/components/icons";
 import { SubmitButton } from "../faturas/SubmitButton";
@@ -145,43 +146,48 @@ export default async function RepassesPage({
     codigo_produtor_corp: string | null;
   };
   const todasParaListagem: ImobiliariaBasica[] = [...listaMestre, ...(extrasDetalheData ?? [])];
+  // Uma ficha pode ter mais de um produtor no Corp (ex.: Dreher 327 + 356):
+  // aí chegam um relatório + um comprovante por produtor no mês.
+  const codigosCorp = await buscarCodigosCorp(supabase, todasParaListagem.map((i) => i.id));
 
   type Par = {
     imobiliariaId: string;
     nome: string;
     cnpj: string | null;
     emails: string[];
-    codigoProdutor: string | null;
-    relatorio: RepasseRow | null;
-    comprovante: RepasseRow | null;
+    codigosProdutor: string[];
+    arquivos: RepasseRow[];
+    valorRelatorios: number | null;
+    valorComprovantes: number | null;
     estado: "enviado" | "pronto" | "divergente" | "aguardando_comprovante" | "aguardando_relatorio" | "sem_repasse";
   };
   const pares: Par[] = [];
   for (const imob of todasParaListagem) {
     if (busca && !imob.nome.toLowerCase().includes(busca)) continue;
     const linhas = porImobiliaria.get(imob.id) ?? [];
-    const relatorio = linhas.find((l) => l.tipo_documento === "relatorio") ?? null;
-    const comprovante = linhas.find((l) => l.tipo_documento === "comprovante") ?? null;
+    const pareamento = parearRepassesDaFicha(linhas);
     const estado: Par["estado"] =
-      relatorio?.status === "enviada" || comprovante?.status === "enviada"
+      linhas.some((l) => l.status === "enviada")
         ? "enviado"
-        : !relatorio && !comprovante
+        : !linhas.length
           ? "sem_repasse"
-          : !relatorio
+          : !pareamento.relatorios.length
             ? "aguardando_relatorio"
-            : !comprovante
+            : pareamento.comprovantes.length < pareamento.relatorios.length
               ? "aguardando_comprovante"
-              : valoresBatem(relatorio.valor, comprovante.valor)
+              : pareamento.completo
                 ? "pronto"
                 : "divergente";
+    const codigos = (codigosCorp.get(imob.id) ?? []).map((c) => c.codigo);
     pares.push({
       imobiliariaId: imob.id,
       nome: imob.nome,
       cnpj: imob.cnpj,
       emails: imob.email_repasses ?? [],
-      codigoProdutor: imob.codigo_produtor_corp,
-      relatorio,
-      comprovante,
+      codigosProdutor: codigos.length ? codigos : imob.codigo_produtor_corp ? [imob.codigo_produtor_corp] : [],
+      arquivos: [...pareamento.relatorios, ...pareamento.comprovantes],
+      valorRelatorios: pareamento.valorRelatorios,
+      valorComprovantes: pareamento.valorComprovantes,
       estado,
     });
   }
@@ -437,7 +443,7 @@ export default async function RepassesPage({
                   )}
                   <div className="divide-y divide-gray-200">
                     {grupo.membros.map((p) => {
-                      const arquivos = [p.relatorio, p.comprovante].filter(Boolean) as RepasseRow[];
+                      const arquivos = p.arquivos;
                       const podeSelecionar = p.estado === "pronto" && p.emails.length > 0;
                       return (
                         <div key={p.imobiliariaId}>
@@ -449,8 +455,8 @@ export default async function RepassesPage({
                                 <span title="Sem e-mail de repasse cadastrado" className="text-red-500">⚠</span>
                               ) : null}
                               {!multiplosMembros && <span className="text-sm font-semibold text-gray-800">{p.nome}</span>}
-                              {p.codigoProdutor && (
-                                <span className="font-mono text-[10px] text-gray-400">#{p.codigoProdutor}</span>
+                              {p.codigosProdutor.length > 0 && (
+                                <span className="font-mono text-[10px] text-gray-400">{p.codigosProdutor.map((c) => `#${c}`).join(" · ")}</span>
                               )}
                             </div>
                             <span className={`rounded-sm px-2 py-0.5 text-[11px] font-medium ${COR_ESTADO[p.estado]}`}>
@@ -461,10 +467,10 @@ export default async function RepassesPage({
                             {p.estado !== "sem_repasse" && (
                               <>
                                 <span>
-                                  Relatório: {p.relatorio ? formatarValor(p.relatorio.valor) : <span className="text-gray-300">—</span>}
+                                  Relatório: {p.valorRelatorios !== null ? formatarValor(p.valorRelatorios) : <span className="text-gray-300">—</span>}
                                 </span>
                                 <span>
-                                  Comprovante: {p.comprovante ? formatarValor(p.comprovante.valor) : <span className="text-gray-300">—</span>}
+                                  Comprovante: {p.valorComprovantes !== null ? formatarValor(p.valorComprovantes) : <span className="text-gray-300">—</span>}
                                 </span>
                               </>
                             )}

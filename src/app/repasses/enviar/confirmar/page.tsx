@@ -5,7 +5,7 @@ import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../../../actions";
 import AppHeader from "@/components/AppHeader";
 import { confirmarEnvioRepasse } from "../actions";
-import { valoresBatem } from "@/lib/repassesIdentificacao";
+import { parearRepassesDaFicha } from "@/lib/repassesIdentificacao";
 import FaturasSubHeader from "../../../faturas/FaturasSubHeader";
 import { IconSend } from "@/components/icons";
 import { SubmitButton } from "../../../faturas/SubmitButton";
@@ -73,9 +73,7 @@ export default async function ConfirmarEnvioRepassePage({
   const prontas = imobiliarias.filter((i) => {
     if (!(i.email_repasses?.length ?? 0)) return false;
     const arquivos = repassesPorImobiliaria.get(i.id) ?? [];
-    const relatorio = arquivos.find((a) => a.tipo_documento === "relatorio");
-    const comprovante = arquivos.find((a) => a.tipo_documento === "comprovante");
-    return !!relatorio && !!comprovante && valoresBatem(relatorio.valor, comprovante.valor);
+    return parearRepassesDaFicha(arquivos).completo;
   });
 
   return (
@@ -115,7 +113,7 @@ export default async function ConfirmarEnvioRepassePage({
         <div className="space-y-3">
           {prontas.map((i) => {
             const arquivos = repassesPorImobiliaria.get(i.id) ?? [];
-            const relatorio = arquivos.find((a) => a.tipo_documento === "relatorio");
+            const valorLiquido = parearRepassesDaFicha(arquivos).valorRelatorios;
             const paramModoTeste = modoTeste ? "&modo_teste=1" : "";
             const hrefSemEsta = `/repasses/enviar/confirmar?competencia=${competencia}${paramModoTeste}${prontas
               .filter((p) => p.id !== i.id)
@@ -141,7 +139,7 @@ export default async function ConfirmarEnvioRepassePage({
                 ) : (
                   <p className="mb-2 break-all text-xs text-gray-500">{i.email_repasses?.join(", ")}</p>
                 )}
-                <p className="mb-1 text-xs text-gray-500">Valor líquido {formatarValor(relatorio?.valor ?? null)}</p>
+                <p className="mb-1 text-xs text-gray-500">Valor líquido {formatarValor(valorLiquido)}</p>
                 <ul className="text-xs text-gray-600">
                   {arquivos.map((a) => (
                     <li key={a.id}>

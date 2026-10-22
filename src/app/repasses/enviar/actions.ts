@@ -8,7 +8,7 @@ import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { enviarEmail, separarEmails, type AnexoEmail } from "@/lib/email";
 import { montarEmailRepasse, type RepasseParaEmail } from "@/lib/repassesEmail";
 import { nomeParaComunicacao } from "@/lib/nomeParaComunicacao";
-import { valoresBatem } from "@/lib/repassesIdentificacao";
+import { parearRepassesDaFicha } from "@/lib/repassesIdentificacao";
 
 const BUCKET_FINAL = "repasses";
 
@@ -68,13 +68,15 @@ export async function confirmarEnvioRepasse(formData: FormData) {
         .eq("imobiliaria_id", imobiliariaId)
         .eq("competencia", competencia)
         .eq("status", "identificado");
-      const relatorio = repasses?.find((r) => r.tipo_documento === "relatorio") ?? null;
-      const comprovante = repasses?.find((r) => r.tipo_documento === "comprovante") ?? null;
-      if (!relatorio || !comprovante || !valoresBatem(relatorio.valor, comprovante.valor)) {
+      // Um par (relatório + comprovante) por produtor do Corp da ficha — a
+      // Dreher, por exemplo, tem dois produtores (327 e 356) e recebe os dois
+      // pares no mesmo e-mail.
+      const pareamento = parearRepassesDaFicha(repasses ?? []);
+      if (!pareamento.completo) {
         falhas++;
         continue;
       }
-      const par = [relatorio, comprovante];
+      const par = pareamento.pares.flat();
 
       const anexos: AnexoEmail[] = [await anexoLogoO2()];
       for (const r of par) {
@@ -90,7 +92,7 @@ export async function confirmarEnvioRepasse(formData: FormData) {
       const { assunto, html } = montarEmailRepasse({
         nomeImobiliaria: nomeParaComunicacao(imobiliaria),
         competencia,
-        valorLiquido: relatorio.valor,
+        valorLiquido: pareamento.valorRelatorios,
         repasses: par as RepasseParaEmail[],
       });
 

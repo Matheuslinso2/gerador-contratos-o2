@@ -75,11 +75,12 @@ export default function VinculosRepasse({
       </form>
 
       <div className="border-t border-gray-100 pt-4">
-        <label className="mb-0.5 block text-xs text-gray-500">Código do produtor no Corp</label>
+        <label className="mb-0.5 block text-xs text-gray-500">Código principal do produtor no Corp</label>
         <p className="mb-2 text-xs text-gray-500">
           O número que identifica essa imobiliária como &quot;Produtor&quot; no relatório de repasse exportado
           do Corp (ex: 406). Preenchendo aqui, o próximo relatório dela já casa sozinho, sem precisar
-          conferir manual.
+          conferir manual. Se a imobiliária tiver outros produtores no Corp, eles aparecem no quadro
+          &quot;Produtores no Corp&quot; desta ficha e também são reconhecidos.
         </p>
         <form action={salvarCodigoProdutorCorp} className="flex flex-wrap items-end gap-2">
           <input type="hidden" name="imobiliaria_id" value={imobiliariaId} />

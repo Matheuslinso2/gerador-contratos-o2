@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { abrirTextoPdfComSenha } from "@/lib/pdfComSenha";
 import { extrairDadosRepasse } from "@/lib/repassesIA";
+import { buscarCodigosCorp } from "@/lib/baseUnica/codigosCorp";
 import {
   buscarImobiliariaPorCodigoProdutor,
   buscarImobiliariaPorCpfCnpj,
@@ -115,7 +116,13 @@ export async function processarRepasseUpload(formData: FormData): Promise<Result
   const { data: imobiliariasData } = await supabase
     .from("imobiliarias")
     .select("id, nome, cnpj, codigo_produtor_corp");
-  const imobiliarias = (imobiliariasData ?? []) as ImobiliariaParaRepasse[];
+  // Todos os produtores do Corp de cada ficha (uma ficha pode ter mais de um).
+  const codigosCorp = await buscarCodigosCorp(supabase);
+  const imobiliarias = ((imobiliariasData ?? []) as ImobiliariaParaRepasse[]).map((i) => ({
+    ...i,
+    codigos_corp: (codigosCorp.get(i.id) ?? []).map((c) => c.codigo),
+    documentos_corp: (codigosCorp.get(i.id) ?? []).map((c) => c.cpf_cnpj).filter((d): d is string => !!d),
+  }));
 
   // Prioridade: código do produtor no Corp (exato, sem ambiguidade) > CPF/CNPJ
   // de quem recebeu (só no comprovante) > nome (menos confiável, pode ter

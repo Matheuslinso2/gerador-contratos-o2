@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { buscarCodigosCorp } from "@/lib/baseUnica/codigosCorp";
 
 // Metas e produção automática da CAMPANHA (22/10/2026). A campanha comercial
 // tem período, produtos, metas individuais por imobiliária (ou por grupo/rede),
@@ -429,7 +430,15 @@ export async function montarDesempenhoCampanha(
   const daBase = numerosPorImobiliaria(linhasFunil, baseDesde, diaAnterior(baseAte), baseDesde);
 
   // Corp: documentos novos (não cancelados) no período, por código de produtor.
-  const codigos = [...new Set(imobs.map((i) => Number(i.codigo_produtor_corp)).filter((n) => Number.isFinite(n) && n > 0))];
+  // Uma ficha pode ter mais de um produtor no Corp (ex.: Dreher 327 + 356) —
+  // conta todos os códigos ligados a ela, não só o principal (22/10/2026).
+  const codigosCorpPorImob = await buscarCodigosCorp(db, todosIds);
+  const codigosDaUnidade = (u: Imob): number[] => {
+    const lista = (codigosCorpPorImob.get(u.id) ?? []).map((c) => Number(c.codigo));
+    if (!lista.length) lista.push(Number(u.codigo_produtor_corp));
+    return lista.filter((n) => Number.isFinite(n) && n > 0);
+  };
+  const codigos = [...new Set(imobs.flatMap(codigosDaUnidade))];
   type LinhaCorp = { codigo_produtor: number; ramo: string; tipo: string; cancelado: string; pr_liquido: number | null; vl_com: number | null; vl_com_prod: number | null };
   const linhasCorp =
     codigos.length && diasDecorridos > 0
@@ -466,8 +475,8 @@ export async function montarDesempenhoCampanha(
     for (const u of unidades) {
       funil = somarFunil(funil, doPeriodo.get(u.id));
       base = somarFunil(base, daBase.get(u.id));
-      const cod = Number(u.codigo_produtor_corp);
-      if (Number.isFinite(cod) && cod > 0) {
+      const codsUnidade = codigosDaUnidade(u);
+      for (const cod of codsUnidade) {
         if (!codigosVistos.has(cod)) {
           codigosVistos.add(cod);
           const c = corpPorCodigo.get(cod);
@@ -478,7 +487,8 @@ export async function montarDesempenhoCampanha(
             corp.repasse += c.repasse;
           }
         }
-      } else {
+      }
+      if (!codsUnidade.length) {
         avisos.push(`${u.apelido || u.nome} sem código do Corp: a conferência não inclui essa unidade.`);
       }
     }
