@@ -4,7 +4,17 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
-import { METRICAS_PROGRAMA, PRODUTOS_PROGRAMA, STATUS_PROGRAMA } from "@/lib/campanhas/programas";
+import { createServiceClient } from "@/lib/supabase/service";
+import {
+  METRICAS_PROGRAMA,
+  PRODUTOS_PROGRAMA,
+  STATUS_PROGRAMA,
+  montarDesempenhoPrograma,
+  type ParticipanteRow,
+  type Programa,
+} from "@/lib/campanhas/programas";
+import { montarEmailParcial } from "@/lib/campanhas/parcialPrograma";
+import { limparNomeRemetente } from "@/lib/campanhas/remetente";
 
 async function exigirEquipe() {
   const supabase = await createClient();
@@ -156,4 +166,89 @@ export async function removerParticipante(participanteId: string) {
   const { supabase } = await exigirEquipe();
   const { error } = await supabase.from("campanhas_programas_participantes").delete().eq("id", participanteId);
   if (error) throw new Error("Não consegui tirar. Tente de novo.");
+}
+
+// Fase 2 (22/10/2026): gera um rascunho de e-mail de PARCIAL por participante
+// com meta, com os números de hoje, ligado ao programa. Opcionalmente já
+// agenda o disparo (o cron de campanhas envia na hora marcada). A revisão e o
+// disparo seguem o fluxo normal de Campanhas.
+const PRODUTO_CAMPANHA_POR_PROGRAMA: Record<string, string> = { fianca: "fianca", capitalizacao: "capitalizacao", re: "incendio" };
+
+export async function gerarParciais(programaId: string, formData: FormData) {
+  const { supabase, email } = await exigirEquipe();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const remetenteNome = limparNomeRemetente(formData.get("remetente_nome"));
+  const agendarTexto = String(formData.get("agendado_para") ?? "").trim();
+  let agendadoPara: string | null = null;
+  if (agendarTexto) {
+    const data = new Date(`${agendarTexto}:00-03:00`);
+    if (Number.isNaN(data.getTime()) || data.getTime() <= Date.now())
+      redirect(`/campanhas/programas/${programaId}?erro=${encodeURIComponent("O agendamento precisa ser no futuro.")}#parciais`);
+    agendadoPara = data.toISOString();
+  }
+
+  const { data: programa } = await supabase.from("campanhas_programas").select("*").eq("id", programaId).maybeSingle();
+  if (!programa) redirect("/campanhas/programas");
+  const { data: participantes } = await supabase
+    .from("campanhas_programas_participantes")
+    .select("id, imobiliaria_id, grupo_id, meta, observacao, custo_premiacao")
+    .eq("programa_id", programaId);
+  const lista = (participantes ?? []) as ParticipanteRow[];
+  const comMeta = lista.filter((p) => p.meta !== null && Number(p.meta) > 0);
+  if (!comMeta.length)
+    redirect(`/campanhas/programas/${programaId}?erro=${encodeURIComponent("Nenhum participante tem meta: defina as metas antes de gerar as parciais.")}#parciais`);
+
+  const db = createServiceClient();
+  const desempenho = await montarDesempenhoPrograma(db, programa as Programa, comMeta);
+  const gruposIds = comMeta.filter((p) => p.grupo_id).map((p) => p.grupo_id!);
+  const membrosPorGrupo = new Map<string, string[]>();
+  if (gruposIds.length) {
+    const { data: membros } = await db.from("imobiliarias").select("id, grupo_id").in("grupo_id", gruposIds);
+    for (const m of (membros ?? []) as { id: string; grupo_id: string }[]) {
+      const l = membrosPorGrupo.get(m.grupo_id) ?? [];
+      l.push(m.id);
+      membrosPorGrupo.set(m.grupo_id, l);
+    }
+  }
+  const produtos = [...new Set((programa as Programa).produtos.map((p) => PRODUTO_CAMPANHA_POR_PROGRAMA[p]).filter(Boolean))];
+
+  const linhas = comMeta
+    .map((p) => {
+      const linha = desempenho.linhas.find((l) => l.participanteId === p.id);
+      const destinatarios = p.imobiliaria_id ? [p.imobiliaria_id] : (membrosPorGrupo.get(p.grupo_id!) ?? []);
+      if (!linha || !destinatarios.length) return null;
+      const email_ = montarEmailParcial(programa as Programa, linha, desempenho.hoje, desempenho.diasRestantes);
+      return {
+        nome: email_.nome,
+        assunto: email_.assunto,
+        template: "comunicado",
+        personalizacao: "nenhuma",
+        titulo: email_.titulo,
+        introducao: email_.introducao,
+        corpo_html: email_.corpoHtml,
+        valido_de: (programa as Programa).inicio,
+        valido_ate: (programa as Programa).fim,
+        produto: produtos[0] ?? "institucional",
+        produtos: produtos.length ? produtos : ["institucional"],
+        programa_id: programaId,
+        imobiliarias_selecionadas: destinatarios,
+        remetente_nome: remetenteNome,
+        criado_por: user?.id ?? null,
+        criado_por_email: email,
+        status: agendadoPara ? "agendada" : "rascunho",
+        agendado_para: agendadoPara,
+      };
+    })
+    .filter((l): l is NonNullable<typeof l> => !!l);
+
+  const { error } = await supabase.from("campanhas").insert(linhas);
+  if (error) redirect(`/campanhas/programas/${programaId}?erro=${encodeURIComponent(`Não consegui gerar as parciais: ${error.message}`)}#parciais`);
+  const semMeta = lista.length - comMeta.length;
+  const ok =
+    `${linhas.length} parcial(is) ${agendadoPara ? "agendada(s)" : "gerada(s) como rascunho"}` +
+    (semMeta ? ` · ${semMeta} participante(s) sem meta ficaram de fora` : "") +
+    ". Elas aparecem em Comunicações do programa.";
+  redirect(`/campanhas/programas/${programaId}?ok=${encodeURIComponent(ok)}#parciais`);
 }

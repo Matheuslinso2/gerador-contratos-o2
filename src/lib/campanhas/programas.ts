@@ -116,6 +116,29 @@ export const COR_FAROL: Record<Farol, string> = {
 };
 
 export type NumerosFunil = { cotacoes: number; contratacoes: number; premio: number; comissao: number; emAndamento: number };
+
+// Fase 2 (22/10/2026): oportunidades em aberto e alertas por participante.
+export type Oportunidade = {
+  produto: string;
+  status: string;
+  entrada: string; // YYYY-MM-DD
+  dias: number; // desde a entrada
+  valor: number | null; // prêmio cotado (ou valor do título, na Capitalização)
+  link: string | null; // card no Bitrix
+};
+export type Alerta = { tipo: "sem_cotacao" | "aprovada_parada" | "abaixo_base"; texto: string };
+
+export const DIAS_SEM_COTACAO_ALERTA = 15;
+export const DIAS_APROVADA_PARADA = 7;
+const FATOR_ABAIXO_BASE = 0.7;
+const DIAS_MINIMOS_PARA_RITMO = 14;
+
+const ENTIDADE_BITRIX: Record<string, number> = { fianca: 1042, capitalizacao: 1048, re: 1046 };
+function linkBitrix(produto: string, fonte: string | null, id: string | null): string | null {
+  const entidade = ENTIDADE_BITRIX[produto];
+  if (fonte !== "bitrix" || !id || !entidade) return null;
+  return `https://o2seguros.bitrix24.com.br/crm/type/${entidade}/details/${id}/`;
+}
 export type NumerosCorp = { documentos: number; premio: number; comissao: number; repasse: number };
 
 export type LinhaDesempenho = {
@@ -137,6 +160,9 @@ export type LinhaDesempenho = {
   corp: NumerosCorp;
   resultado: number; // comissão Corp − repasse Corp − custo da premiação individual
   avisos: string[];
+  alertas: Alerta[];
+  oportunidades: Oportunidade[];
+  ultimaCotacao: string | null;
 };
 
 export type DesempenhoPrograma = {
@@ -152,6 +178,8 @@ export type DesempenhoPrograma = {
     projecao: number | null;
     participantesComMeta: number;
     noRitmoOuAtingida: number;
+    participantesComAlerta: number;
+    oportunidades: number;
     funil: NumerosFunil;
     corp: NumerosCorp;
     custoPremiacao: number; // geral + individuais
@@ -190,6 +218,9 @@ type LinhaFunil = {
   premio: number | null;
   comissao: number | null;
   herdada: boolean | null;
+  fonte: string | null;
+  origem_bitrix_id: string | null;
+  valor_titulo: number | null;
 };
 
 type Imob = { id: string; nome: string; apelido: string | null; codigo_produtor_corp: string | null; grupo_id: string | null };
@@ -208,7 +239,7 @@ async function lerTodasPaginas<T>(consulta: (de: number, ate: number) => Promise
 // Números do funil por imobiliária: cotação = caso que entrou no período
 // (primeira entrada, sem contar herança); contratação = caso convertido com
 // efetivação no período (sem data de efetivação, vale a de recebimento).
-function numerosPorImobiliaria(linhas: LinhaFunil[], de: string, ate: string, abertosDesde: string) {
+function numerosPorImobiliaria(linhas: LinhaFunil[], de: string, ate: string, abertosDesde: string, oportunidades?: Map<string, Oportunidade[]>) {
   const porCaso = new Map<string, LinhaFunil[]>();
   for (const l of linhas) {
     const chave = l.chave_caso || l.id;
@@ -243,10 +274,32 @@ function numerosPorImobiliaria(linhas: LinhaFunil[], de: string, ate: string, ab
       }
     } else if (!casos.some((c) => STATUS_TERMINAIS.has(c.status_padrao ?? ""))) {
       const recente = casos.map((c) => c.data_recebimento).filter((d): d is string => !!d).sort().pop();
-      if (recente && recente >= abertosDesde && recente <= ate && casos.some((c) => STATUS_ABERTOS.has(c.status_padrao ?? ""))) pegar(imob).emAndamento++;
+      if (recente && recente >= abertosDesde && recente <= ate && casos.some((c) => STATUS_ABERTOS.has(c.status_padrao ?? ""))) {
+        pegar(imob).emAndamento++;
+        if (oportunidades) {
+          // A linha mais recente do caso diz em que pé ele está agora.
+          const atual = [...casos].sort((a, b) => (a.data_recebimento ?? "").localeCompare(b.data_recebimento ?? "")).pop()!;
+          const entrada = entrada_do_caso(casos) ?? recente;
+          const lista = oportunidades.get(imob) ?? [];
+          lista.push({
+            produto: atual.produto,
+            status: casos.some((c) => c.status_padrao === "Aprovado") ? "Aprovado" : "Em análise",
+            entrada,
+            dias: Math.max(0, diasEntre(entrada, ate)),
+            valor: Number(atual.premio) || Number(atual.valor_titulo) || null,
+            link: linkBitrix(atual.produto, atual.fonte, atual.origem_bitrix_id),
+          });
+          oportunidades.set(imob, lista);
+        }
+      }
     }
   }
   return res;
+}
+
+function entrada_do_caso(casos: LinhaFunil[]): string | null {
+  const datas = casos.filter((c) => !c.herdada && c.data_recebimento).map((c) => c.data_recebimento!).sort();
+  return datas[0] ?? null;
 }
 
 function valorDaMetrica(n: NumerosFunil, metrica: string): number {
@@ -278,6 +331,36 @@ function farolDe(meta: number | null, realizado: number, projecao: number | null
   if (projecao !== null && projecao >= meta) return "no_ritmo";
   if (projecao !== null && projecao >= meta * 0.8) return "atencao";
   return "em_risco";
+}
+
+function alertasDe(a: {
+  ultimaCotacao: string | null;
+  hoje: string;
+  oportunidades: Oportunidade[];
+  realizado: number;
+  base: number;
+  diasDecorridos: number;
+  programaEmAndamento: boolean;
+  moeda: boolean;
+}): Alerta[] {
+  if (!a.programaEmAndamento) return [];
+  const alertas: Alerta[] = [];
+  if (!a.ultimaCotacao) alertas.push({ tipo: "sem_cotacao", texto: "Nenhuma cotação nos últimos 6 meses." });
+  else {
+    const dias = diasEntre(a.ultimaCotacao, a.hoje);
+    if (dias >= DIAS_SEM_COTACAO_ALERTA) alertas.push({ tipo: "sem_cotacao", texto: `Sem cotação nova há ${dias} dias.` });
+  }
+  const paradas = a.oportunidades.filter((o) => o.status === "Aprovado" && o.dias >= DIAS_APROVADA_PARADA);
+  if (paradas.length)
+    alertas.push({ tipo: "aprovada_parada", texto: `${paradas.length} cotação(ões) aprovada(s) há ${DIAS_APROVADA_PARADA}+ dias sem fechar.` });
+  if (a.base > 0 && a.diasDecorridos >= DIAS_MINIMOS_PARA_RITMO) {
+    const ritmoMes = (a.realizado / a.diasDecorridos) * 30;
+    if (ritmoMes < a.base * FATOR_ABAIXO_BASE) {
+      const f = (n: number) => (a.moeda ? `R$ ${Math.round(n).toLocaleString("pt-BR")}` : n.toLocaleString("pt-BR", { maximumFractionDigits: 1 }));
+      alertas.push({ tipo: "abaixo_base", texto: `Ritmo de ${f(ritmoMes)}/mês, abaixo da própria base (${f(a.base)}/mês).` });
+    }
+  }
+  return alertas;
 }
 
 export async function montarDesempenhoPrograma(
@@ -326,7 +409,14 @@ export async function montarDesempenhoPrograma(
           db.rpc("campanha_programa_funil", { p_imobs: todosIds, p_produtos: produtos, p_desde: baseDesde }).range(de, ate)
         )
       : [];
-  const doPeriodo = numerosPorImobiliaria(linhasFunil, programa.inicio, fimEfetivo, somarMeses(programa.inicio, -2));
+  const oportunidadesPorImob = new Map<string, Oportunidade[]>();
+  const doPeriodo = numerosPorImobiliaria(linhasFunil, programa.inicio, fimEfetivo, somarMeses(programa.inicio, -2), oportunidadesPorImob);
+  const ultimaEntradaPorImob = new Map<string, string>();
+  for (const l of linhasFunil) {
+    if (!l.data_recebimento || l.herdada || l.data_recebimento > hoje) continue;
+    const atual = ultimaEntradaPorImob.get(l.imobiliaria_id);
+    if (!atual || l.data_recebimento > atual) ultimaEntradaPorImob.set(l.imobiliaria_id, l.data_recebimento);
+  }
   const daBase = numerosPorImobiliaria(linhasFunil, baseDesde, diaAnterior(baseAte), baseDesde);
 
   // Corp: documentos novos (não cancelados) no período, por código de produtor.
@@ -384,6 +474,15 @@ export async function montarDesempenhoPrograma(
       }
     }
     if (!unidades.length) avisos.push("Nenhuma imobiliária encontrada para este participante.");
+    const oportunidades = unidades
+      .flatMap((u) => oportunidadesPorImob.get(u.id) ?? [])
+      .sort((a, b) => (a.status === b.status ? b.dias - a.dias : a.status === "Aprovado" ? -1 : 1));
+    const ultimaCotacao =
+      unidades
+        .map((u) => ultimaEntradaPorImob.get(u.id))
+        .filter((d): d is string => !!d)
+        .sort()
+        .pop() ?? null;
     const realizado = valorDaMetrica(funil, programa.metrica);
     const meta = p.meta === null || p.meta === undefined ? null : Number(p.meta);
     const projecao = diasDecorridos > 0 ? (realizado / diasDecorridos) * diasTotais : null;
@@ -414,6 +513,18 @@ export async function montarDesempenhoPrograma(
       corp,
       resultado: corp.comissao - corp.repasse - (Number(p.custo_premiacao) || 0),
       avisos,
+      alertas: alertasDe({
+        ultimaCotacao,
+        hoje,
+        oportunidades,
+        realizado,
+        base: valorDaMetrica(base, programa.metrica) / MESES_BASE,
+        diasDecorridos,
+        programaEmAndamento: diasDecorridos > 0 && diasRestantes > 0,
+        moeda: metricaInfo(programa.metrica).moeda,
+      }),
+      oportunidades,
+      ultimaCotacao,
     };
   });
 
@@ -440,6 +551,8 @@ export async function montarDesempenhoPrograma(
       projecao: diasDecorridos > 0 ? (realizadoTotal / diasDecorridos) * diasTotais : null,
       participantesComMeta: comMeta.length,
       noRitmoOuAtingida: comMeta.filter((l) => l.farol === "atingida" || l.farol === "no_ritmo").length,
+      participantesComAlerta: linhas.filter((l) => l.alertas.length > 0).length,
+      oportunidades: linhas.reduce((s, l) => s + l.oportunidades.length, 0),
       funil: funilTotal,
       corp: corpTotal,
       custoPremiacao: custoTotal,

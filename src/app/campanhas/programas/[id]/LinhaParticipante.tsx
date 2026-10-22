@@ -52,6 +52,11 @@ export default function LinhaParticipante({ linha, moeda }: { linha: LinhaDesemp
       <td className="py-2 pr-3">
         <div className="font-medium text-o2-navy">{linha.nome}</div>
         {linha.tipo === "grupo" && <div className="text-xs text-gray-500">{linha.unidades.length} unidade(s): {linha.unidades.join(", ")}</div>}
+        {linha.alertas.map((a) => (
+          <div key={a.texto} className="text-xs font-medium text-red-700">
+            🔔 {a.texto}
+          </div>
+        ))}
         {linha.avisos.map((a) => (
           <div key={a} className="text-xs text-amber-700">
             ⚠ {a}

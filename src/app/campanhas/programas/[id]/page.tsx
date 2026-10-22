@@ -11,6 +11,7 @@ import SubmitButton from "@/components/SubmitButton";
 import { Cartao } from "@/components/kpiUi";
 import { IconMail } from "@/components/icons";
 import {
+  DIAS_APROVADA_PARADA,
   STATUS_PROGRAMA,
   metricaInfo,
   montarDesempenhoPrograma,
@@ -20,7 +21,7 @@ import {
 } from "@/lib/campanhas/programas";
 import { ROTULO_STATUS_CAMPANHA } from "@/lib/campanhas/rotulos";
 import CamposPrograma from "../CamposPrograma";
-import { arquivarPrograma, atualizarPrograma } from "../actions";
+import { arquivarPrograma, atualizarPrograma, gerarParciais } from "../actions";
 import ExcluirProgramaButton from "./ExcluirProgramaButton";
 import AdicionarParticipante from "./AdicionarParticipante";
 import LinhaParticipante from "./LinhaParticipante";
@@ -32,9 +33,9 @@ const umaCasa = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 });
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 const dataBr = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}`;
 
-export default async function ProgramaPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ erro?: string }> }) {
+export default async function ProgramaPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ erro?: string; ok?: string }> }) {
   const { id } = await params;
-  const { erro } = await searchParams;
+  const { erro, ok } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -94,6 +95,7 @@ export default async function ProgramaPage({ params, searchParams }: { params: P
         </div>
 
         {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
+        {ok && <p className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-800">{ok}</p>}
         {erroCalculo && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">Não consegui calcular a produção agora: {erroCalculo}</p>}
 
         {(programa.objetivo || programa.premiacao_descricao) && (
@@ -135,7 +137,7 @@ export default async function ProgramaPage({ params, searchParams }: { params: P
               <Cartao
                 rotulo="Participantes no ritmo"
                 valor={`${t.noRitmoOuAtingida} de ${t.participantesComMeta}`}
-                linhas={[`${desempenho.linhas.length} participante(s) no total`, `${inteiro.format(t.funil.emAndamento)} cotação(ões) em andamento`]}
+                linhas={[`${desempenho.linhas.length} participante(s) no total`, `${t.participantesComAlerta} com alerta`, `${inteiro.format(t.oportunidades)} cotação(ões) em aberto`]}
               />
               <Cartao
                 rotulo="Conferência Corp"
@@ -206,6 +208,92 @@ export default async function ProgramaPage({ params, searchParams }: { params: P
               incluidas={incluidas}
             />
           </div>
+        </section>
+
+        {desempenho && desempenho.linhas.length > 0 && (
+          <section className="space-y-3 rounded-2xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
+            <h2 className="text-sm font-semibold text-o2-navy">
+              Oportunidades em aberto
+              <InfoLegenda titulo="Oportunidades em aberto">
+                Cotações das unidades de cada participante que ainda não fecharam: aprovadas (mais perto da contratação) primeiro, depois em análise, das mais antigas para as mais novas. Valor = prêmio cotado (ou valor do título, na Capitalização). O link abre o card no Bitrix. É a lista de onde o comercial pode tirar as contratações que faltam para a meta.
+              </InfoLegenda>
+            </h2>
+            {desempenho.linhas.every((l) => l.oportunidades.length === 0) ? (
+              <p className="text-sm text-gray-500">Nenhuma cotação em aberto nos participantes.</p>
+            ) : (
+              <div className="space-y-2">
+                {desempenho.linhas
+                  .filter((l) => l.oportunidades.length > 0)
+                  .map((l) => (
+                    <details key={l.participanteId} className="rounded-lg bg-white px-3 py-2">
+                      <summary className="cursor-pointer text-sm text-o2-navy">
+                        <b>{l.nome}</b> — {l.oportunidades.length} em aberto ({l.oportunidades.filter((o) => o.status === "Aprovado").length} aprovada(s))
+                        {l.faltam !== null && l.faltam > 0 && <span className="ml-2 text-xs text-gray-500">faltam {fmt(l.faltam)} para a meta</span>}
+                      </summary>
+                      <div className="mt-2 overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b text-left text-xs text-gray-500">
+                              <th className="py-1 pr-3">Produto</th>
+                              <th className="py-1 pr-3">Situação</th>
+                              <th className="py-1 pr-3">Entrou em</th>
+                              <th className="py-1 pr-3 text-right">Dias</th>
+                              <th className="py-1 pr-3 text-right">Valor</th>
+                              <th className="py-1">Card</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {l.oportunidades.map((o, i) => (
+                              <tr key={i} className="border-b last:border-0">
+                                <td className="py-1 pr-3">{rotuloProdutoPrograma(o.produto)}</td>
+                                <td className="py-1 pr-3">
+                                  <span className={`rounded-full px-2 py-0.5 text-xs ${o.status === "Aprovado" ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-700"}`}>{o.status}</span>
+                                </td>
+                                <td className="py-1 pr-3">{dataBr(o.entrada)}</td>
+                                <td className={`py-1 pr-3 text-right tabular-nums ${o.status === "Aprovado" && o.dias >= DIAS_APROVADA_PARADA ? "font-semibold text-red-700" : ""}`}>{o.dias}</td>
+                                <td className="py-1 pr-3 text-right tabular-nums">{o.valor ? brl.format(o.valor) : "—"}</td>
+                                <td className="py-1">
+                                  {o.link ? (
+                                    <a href={o.link} target="_blank" rel="noreferrer" className="text-o2-coral hover:underline">
+                                      abrir no Bitrix
+                                    </a>
+                                  ) : (
+                                    <span className="text-xs text-gray-400">planilha</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </details>
+                  ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        <section id="parciais" className="space-y-3 rounded-2xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
+          <h2 className="text-sm font-semibold text-o2-navy">
+            Parcial por e-mail
+            <InfoLegenda titulo="Parcial automática">
+              Gera um e-mail de parcial para cada participante COM meta, com os números de hoje: meta, realizado, quanto falta, barra de progresso, dias até o fim, cotações em andamento e a premiação. Cada imobiliária recebe só os próprios números (grupo: todas as unidades recebem o do grupo). Os números ficam fixos no momento da geração; para a próxima parcial, gere de novo. Os e-mails vão para Comunicações do programa como rascunho (para revisar e disparar em Campanhas) ou já agendados, se você escolher data e hora.
+            </InfoLegenda>
+          </h2>
+          <form action={gerarParciais.bind(null, id)} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-600">Remetente (nome da pessoa, opcional)</label>
+              <input name="remetente_nome" maxLength={40} placeholder="Ex: Henrique" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-o2-coral focus:outline-none" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-600">Agendar o envio (opcional)</label>
+              <input name="agendado_para" type="datetime-local" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-o2-coral focus:outline-none" />
+            </div>
+            <SubmitButton className="rounded-full bg-o2-coral px-5 py-2 text-sm font-medium text-white" textoCarregando="Gerando...">
+              Gerar parciais
+            </SubmitButton>
+          </form>
+          <p className="text-xs text-gray-500">Sem data: ficam como rascunho para revisar. Com data: são enviadas sozinhas na hora marcada.</p>
         </section>
 
         <section className="space-y-3 rounded-2xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
