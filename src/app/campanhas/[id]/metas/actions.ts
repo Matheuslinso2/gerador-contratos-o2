@@ -188,3 +188,47 @@ export async function gerarParciaisCampanha(campanhaId: string, formData: FormDa
       '. Estão em "E-mails desta campanha".'
   );
 }
+
+// Contato feito por fora do Bitrix (telefone/WhatsApp particular, visita):
+// fica na ficha da imobiliária (imobiliaria_contatos), lançado a partir da
+// campanha. Chamado direto da linha do quadro; a tela faz router.refresh().
+const CANAIS_CONTATO = ["ligacao", "whatsapp", "email", "reuniao", "visita", "outro"];
+
+export async function registrarContatoImobiliaria(
+  campanhaId: string,
+  dados: { imobiliariaId: string; canal: string; data: string; feitoPor: string; observacao: string }
+) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Sessão expirada, recarregue a página.");
+  if (!isAdmin(user.email) && !isColaboradorO2(user.email)) throw new Error("Sem permissão.");
+  if (!CANAIS_CONTATO.includes(dados.canal)) throw new Error("Escolha como foi o contato.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dados.data)) throw new Error("Informe a data do contato.");
+  const hoje = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+  if (dados.data > hoje) throw new Error("A data do contato não pode ser no futuro.");
+  const feitoPor = (dados.feitoPor.trim() || user.email || "").toLowerCase();
+  if (!feitoPor) throw new Error("Informe quem fez o contato.");
+  const { error } = await supabase.from("imobiliaria_contatos").insert({
+    imobiliaria_id: dados.imobiliariaId,
+    campanha_id: campanhaId,
+    canal: dados.canal,
+    data_contato: dados.data,
+    feito_por_email: feitoPor,
+    observacao: dados.observacao.trim().slice(0, 500) || null,
+    registrado_por_email: (user.email ?? "").toLowerCase(),
+  });
+  if (error) throw new Error("Não consegui registrar o contato. Tente de novo.");
+}
+
+export async function excluirContatoImobiliaria(contatoId: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Sessão expirada, recarregue a página.");
+  if (!isAdmin(user.email) && !isColaboradorO2(user.email)) throw new Error("Sem permissão.");
+  const { error } = await supabase.from("imobiliaria_contatos").delete().eq("id", contatoId);
+  if (error) throw new Error("Não consegui apagar o contato.");
+}

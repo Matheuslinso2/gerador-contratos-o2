@@ -5,13 +5,13 @@ import { useRouter } from "next/navigation";
 import { salvarMetaParticipante } from "./actions";
 import { COR_FAROL, ROTULO_FAROL, type LinhaDesempenho } from "@/lib/campanhas/desempenho";
 import { COR_STATUS_ENVIO, ROTULO_STATUS_ENVIO, normalizarBusca, type ResumoStatusEnvio } from "@/lib/campanhas/producaoStatus";
-import { DIAS_SEM_CONTATO_ALERTA, type UltimosContatos } from "@/lib/campanhas/contatosBitrix";
+import type { UltimosContatos } from "@/lib/campanhas/contatosTipos";
+import ContatoImobiliaria from "./ContatoImobiliaria";
 import { EmailsEnviados } from "../../EmailsEnviados";
 
 const inteiro = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
 const umaCasa = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 });
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
-const ddmm = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit" }) : null);
 const paraCampo = (n: number | null) => (n === null || n === undefined || n === 0 ? "" : String(n).replace(".", ","));
 
 export const nomeResponsavel = (email: string) => {
@@ -101,25 +101,12 @@ export default function LinhaMeta({
         )}
       </td>
       <td className="p-2">
-        {contatos === null ? (
-          <span className="text-xs text-gray-400">—</span>
-        ) : contatos.semEmpresaNoBitrix && !contatos.ultimo ? (
-          <span className="text-[11px] text-amber-700">sem empresa ligada no Bitrix</span>
-        ) : (
-          <div className="space-y-0.5 text-[11px] leading-tight text-gray-600">
-            <span
-              className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${
-                contatos.diasSemContato === null || contatos.diasSemContato > DIAS_SEM_CONTATO_ALERTA ? "bg-red-100 text-red-700" : "bg-green-100 text-green-800"
-              }`}
-            >
-              {contatos.diasSemContato === null ? "sem contato em 90 dias" : contatos.diasSemContato === 0 ? "hoje" : `há ${contatos.diasSemContato} dia(s)`}
-            </span>
-            {contatos.ligacao && <div className="whitespace-nowrap">☎ ligação {ddmm(contatos.ligacao)}</div>}
-            {contatos.whatsapp && <div className="whitespace-nowrap">💬 WhatsApp {ddmm(contatos.whatsapp)}</div>}
-            {contatos.email && <div className="whitespace-nowrap">✉ e-mail {ddmm(contatos.email)}</div>}
-            {contatos.reuniao && <div className="whitespace-nowrap">🤝 reunião {ddmm(contatos.reuniao)}</div>}
-          </div>
-        )}
+        <ContatoImobiliaria
+          campanhaId={campanhaId}
+          contatos={contatos}
+          unidades={linha.unidadeIds.map((id, i) => ({ id, nome: linha.unidades[i] ?? linha.nome }))}
+          responsaveis={responsaveis}
+        />
       </td>
       <td className="p-2">
         <select value={resp} onChange={(e) => setResp(e.target.value)} className="w-28 rounded border border-gray-300 px-1 py-1 text-xs focus:border-o2-coral focus:outline-none">

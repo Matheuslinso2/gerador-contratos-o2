@@ -16,7 +16,7 @@ import {
 import { participantesDaCampanha } from "@/lib/campanhas/metasCampanha";
 import { imobiliariasDaCampanha } from "@/lib/campanhas/imobiliariasDaCampanha";
 import { ROTULO_STATUS_ENVIO, normalizarBusca, type ResumoStatusEnvio } from "@/lib/campanhas/producaoStatus";
-import { DIAS_SEM_CONTATO_ALERTA, juntarContatos, ultimosContatosPorImobiliaria, type UltimosContatos } from "@/lib/campanhas/contatosBitrix";
+import { DIAS_SEM_CONTATO_ALERTA, resumirContatos, ultimosContatosPorImobiliaria, type ContatosImobiliaria } from "@/lib/campanhas/contatosBitrix";
 import { FiltroProducao } from "../FiltroProducao";
 
 // Mesmo rótulo do seletor de responsável da linha ("livia.x@..." -> "Livia").
@@ -104,13 +104,19 @@ export default async function ProducaoCampanha({
       .pop();
     if (ultimo) emailsCampanha.set(id, ultimo);
   }
-  const contatosPorImob: Map<string, UltimosContatos> | null = idsContato.length
+  const contatosPorImob: Map<string, ContatosImobiliaria> | null = idsContato.length
     ? await ultimosContatosPorImobiliaria(db, idsContato, emailsCampanha).catch(() => null)
     : null;
-  const contatosDaLinha = (unidadeIds: string[]) =>
-    contatosPorImob ? juntarContatos(unidadeIds.map((id) => contatosPorImob.get(id)).filter((c): c is UltimosContatos => !!c)) : null;
+  // Contador olha primeiro o responsável da imobiliária na campanha.
+  const contatosDaLinha = (l: { unidadeIds: string[]; responsavelEmail: string | null }) =>
+    contatosPorImob
+      ? resumirContatos(
+          l.unidadeIds.map((id) => contatosPorImob.get(id)).filter((c): c is ContatosImobiliaria => !!c),
+          l.responsavelEmail
+        )
+      : null;
   const semContato = (desempenho?.linhas ?? []).filter((l) => {
-    const c = contatosDaLinha(l.unidadeIds);
+    const c = contatosDaLinha(l);
     return c && (c.diasSemContato === null || c.diasSemContato > DIAS_SEM_CONTATO_ALERTA);
   }).length;
 
@@ -197,8 +203,8 @@ export default async function ProducaoCampanha({
     Imobiliária: l.nome,
     "Status do e-mail": l.imobiliariaId ? ROTULO_STATUS_ENVIO[statusPorImobiliaria.get(l.imobiliariaId)?.chave ?? "aguardando"] : "—",
     Responsável: l.responsavelEmail ?? "",
-    "Último contato": contatosDaLinha(l.unidadeIds)?.ultimo?.slice(0, 10) ?? "",
-    "Dias sem contato": contatosDaLinha(l.unidadeIds)?.diasSemContato ?? "",
+    "Último contato": contatosDaLinha(l)?.ultimo?.slice(0, 10) ?? "",
+    "Dias sem contato": contatosDaLinha(l)?.diasSemContato ?? "",
     "Base/mês": Number(l.base.toFixed(1)),
     Meta: l.meta ?? "",
     Realizado: l.realizado,
@@ -293,7 +299,7 @@ export default async function ProducaoCampanha({
                   <th className="p-2">
                     Último contato
                     <InfoLegenda titulo="Último contato">
-                      Último registro de contato com a imobiliária nos últimos 90 dias: ligações e WhatsApp registrados no Bitrix (na empresa e nos negócios dela), e-mails e reuniões do Bitrix e os e-mails desta campanha. Fica vermelho quando passa de {DIAS_SEM_CONTATO_ALERTA} dias sem contato.
+                      Contatos com a imobiliária nos últimos 90 dias: ligações, WhatsApp, e-mails e reuniões registrados no Bitrix (na empresa e nos negócios dela) e os contatos feitos por fora do Bitrix lançados aqui em &quot;+ Registrar contato&quot; (telefone ou WhatsApp particular, visita). O contador de dias olha o último contato do RESPONSÁVEL da imobiliária; sem responsável, o último de qualquer pessoa da equipe. Os contatos do responsável aparecem em destaque. O e-mail automático da campanha aparece à parte e não conta como contato. Fica vermelho quando passa de {DIAS_SEM_CONTATO_ALERTA} dias.
                     </InfoLegenda>
                   </th>
                   <th className="p-2">Responsável O2</th>
@@ -323,7 +329,7 @@ export default async function ProducaoCampanha({
                     moeda={metrica.moeda}
                     statusEnvio={l.imobiliariaId ? (statusPorImobiliaria.get(l.imobiliariaId) ?? null) : null}
                     responsaveis={responsaveis}
-                    contatos={contatosDaLinha(l.unidadeIds)}
+                    contatos={contatosDaLinha(l)}
                   />
                 ))}
               </tbody>
