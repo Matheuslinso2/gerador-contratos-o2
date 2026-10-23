@@ -9,7 +9,7 @@ export const maxDuration = 30;
 // (acao "buscar") e vincula a escolhida ao card (acao "vincular"). Mesma
 // proteção das demais rotas do /bitrix-app: só com token válido do Bitrix.
 export async function POST(request: NextRequest) {
-  let body: { authId?: string; acao?: string; entityTypeId?: number; itemId?: number; enderecos?: string[]; threadId?: string };
+  let body: { authId?: string; acao?: string; entityTypeId?: number; itemId?: number; enderecos?: string[]; threadId?: string; texto?: string };
   try {
     body = await request.json();
   } catch {
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, ...(await vincularConversaGmail(entityTypeId, itemId, body.threadId)) });
     }
     const tratativa = await lerTratativaDoCard(entityTypeId, itemId);
-    return NextResponse.json({ ok: true, conversas: await buscarConversasGmail(Array.isArray(body.enderecos) ? body.enderecos : [], tratativa) });
+    return NextResponse.json({ ok: true, conversas: await buscarConversasGmail(Array.isArray(body.enderecos) ? body.enderecos : [], tratativa, typeof body.texto === "string" ? body.texto : "") });
   } catch (erro) {
     console.error("Falha na conversa do Gmail:", erro);
     return NextResponse.json({ ok: false, erro: `Não consegui consultar o Gmail: ${(erro as Error).message}` }, { status: 502 });

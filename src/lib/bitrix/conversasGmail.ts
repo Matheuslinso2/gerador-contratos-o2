@@ -53,6 +53,9 @@ export async function lerTratativaDoCard(entityTypeId: number, itemId: number): 
 
 const DIAS_BUSCA = 45;
 const MAX_CONVERSAS = 12;
+// Busca por palavra do assunto (campo da tela): vai mais longe no tempo e traz mais conversas.
+const DIAS_BUSCA_TEXTO = 180;
+const MAX_CONVERSAS_TEXTO = 30;
 const EMAIL_REGEX = /^[^\s@()"']+@[^\s@()"']+\.[^\s@()"']+$/;
 
 // O snippet do Gmail vem com entidades HTML ("&lt;", "&#39;"): a tela mostra
@@ -70,7 +73,7 @@ function cabecalho(headers: { name?: string | null; value?: string | null }[] | 
   return headers?.find((h) => h.name?.toLowerCase() === nome.toLowerCase())?.value ?? "";
 }
 
-export async function buscarConversasGmail(enderecos: string[], tratativa: string | null = null): Promise<ConversaGmail[]> {
+export async function buscarConversasGmail(enderecos: string[], tratativa: string | null = null, texto = ""): Promise<ConversaGmail[]> {
   // Só endereços de e-mail "limpos" entram na busca do Gmail -- nada de
   // operadores digitados pelo usuário.
   const limpos = [...new Set(enderecos.map((e) => e.trim().toLowerCase()).filter((e) => EMAIL_REGEX.test(e)))].slice(0, 6);
@@ -80,10 +83,15 @@ export async function buscarConversasGmail(enderecos: string[], tratativa: strin
   // verdade pra fora da lista (card 994, 22/10/2026: a "Votação seguro
   // incêndio Ref.128/07" ficou em 10º atrás das "Nova observação no Fiança").
   const exclusoes = [...REMETENTES_EXCLUIDOS, "cartacobranca@tokiomarine.com.br"].map((r) => `-from:${r}`).join(" ");
-  const q = `(${limpos.map((e) => `from:${e} OR to:${e} OR cc:${e}`).join(" OR ")}) newer_than:${DIAS_BUSCA}d ${exclusoes} -subject:"[Seg Imob]"`;
+  // Texto digitado na tela: só letras, números e pontuação simples, sempre como
+  // frase entre aspas (nada de operador do Gmail) e sempre dentro das conversas
+  // do destinatário.
+  const frase = texto.normalize("NFC").replace(/[^\p{L}\p{N} .,_#/&()-]/gu, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+  const dias = frase ? DIAS_BUSCA_TEXTO : DIAS_BUSCA;
+  const q = `(${limpos.map((e) => `from:${e} OR to:${e} OR cc:${e}`).join(" OR ")}) newer_than:${dias}d ${exclusoes} -subject:"[Seg Imob]"${frase ? ` "${frase}"` : ""}`;
 
   const gmail = obterClienteGmail();
-  const lista = await gmail.users.threads.list({ userId: "me", q, maxResults: MAX_CONVERSAS });
+  const lista = await gmail.users.threads.list({ userId: "me", q, maxResults: frase ? MAX_CONVERSAS_TEXTO : MAX_CONVERSAS });
   const resultado: ConversaGmail[] = [];
   for (const t of lista.data.threads ?? []) {
     if (!t.id) continue;

@@ -196,6 +196,7 @@ export async function POST(request: NextRequest) {
 
     <div id="bloco-vincular" style="display:none;">
       <div id="aviso-sem-conversa">Este card ainda não tem conversa por e-mail registrada. Se o cliente já conversa com a equipe pelo Gmail, vincule essa conversa para este e-mail entrar nela (em vez de abrir outra).</div>
+      <input id="busca-gmail" type="text" placeholder="Palavra do assunto (ex: cancelamento, pasta 345) — opcional" maxlength="80" style="margin-top:8px;" />
       <button type="button" id="btn-procurar-gmail">Procurar conversa no Gmail</button>
       <div id="erro-gmail"></div>
       <div id="lista-gmail"></div>
@@ -374,13 +375,16 @@ export async function POST(request: NextRequest) {
       }
       botao.disabled = true;
       botao.textContent = "Procurando…";
-      chamarConversasGmail({ acao: "buscar", enderecos: [para] })
+      var textoBusca = document.getElementById("busca-gmail").value.trim();
+      chamarConversasGmail({ acao: "buscar", enderecos: [para], texto: textoBusca })
         .then(function (r) {
           botao.disabled = false;
           botao.textContent = "Procurar conversa no Gmail";
           if (!r.ok) { erroEl.textContent = r.erro || "Falha ao consultar o Gmail."; return; }
           if (!r.conversas.length) {
-            listaEl.textContent = "Nenhuma conversa dos últimos 45 dias com " + para + ". Este e-mail abrirá uma conversa nova.";
+            listaEl.textContent = textoBusca
+              ? "Nenhuma conversa dos últimos 180 dias com " + para + " contendo “" + textoBusca + "”. Tente outra palavra ou deixe o campo vazio."
+              : "Nenhuma conversa dos últimos 45 dias com " + para + ". Este e-mail abrirá uma conversa nova.";
             return;
           }
           var escolhida = "";
@@ -445,6 +449,9 @@ export async function POST(request: NextRequest) {
         });
     }
     document.getElementById("btn-procurar-gmail").addEventListener("click", procurarNoGmail);
+    document.getElementById("busca-gmail").addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { e.preventDefault(); procurarNoGmail(); }
+    });
 
     function mostrarEnderecoCard() {
       var endereco = "card-" + entityTypeId + "-" + itemId + "@notificacoes.o2seguros.com.br";
