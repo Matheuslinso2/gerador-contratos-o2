@@ -382,10 +382,16 @@ export async function montarPainelCapitalizacao(
   agora = new Date(),
   retratoCongelado?: PainelCapitalizacao
 ): Promise<PainelCapitalizacao> {
-  const [itens, historico] = await Promise.all([
+  const [itensSpa, historicoSpa] = await Promise.all([
     listarItensSpa(ENTITY_TYPE_ID),
     listarHistoricoEtapas(ENTITY_TYPE_ID),
   ]);
+  // A SPA tem 3 funis (Títulos novos 28, Reaplicações 38, Endossos 40); este
+  // painel mede só Títulos novos. Sem o filtro, cards de renovação e endosso
+  // entrariam nos números de contratação (criado em 23/10/2026).
+  const itens = itensSpa.filter((item) => Number(item.categoryId) === CATEGORIA_TITULO);
+  const idsTitulosNovos = new Set(itens.map((item) => Number(item.id)));
+  const historico = historicoSpa.filter((evento) => idsTitulosNovos.has(Number(evento.OWNER_ID)));
 
   const pagoEm = pagamentoPorCard(historico);
   const cards = itens.map((item) => mapearCard(item, agora, pagoEm)).filter((c): c is CardCapitalizacao => c !== null);

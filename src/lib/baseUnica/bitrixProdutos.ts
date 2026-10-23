@@ -48,7 +48,11 @@ const diaBrasilia = (d: Date | null) => (d ? d.toLocaleDateString("sv-SE", { tim
 const valor = (v: number) => (Number.isFinite(v) && v !== 0 ? v : null);
 
 async function lerCapitalizacao(): Promise<Linha[]> {
-  const [itens, historico] = await Promise.all([listarItensSpa(SPA_CAP), listarHistoricoEtapas(SPA_CAP)]);
+  const [itensSpa, historicoSpa] = await Promise.all([listarItensSpa(SPA_CAP), listarHistoricoEtapas(SPA_CAP)]);
+  // Só o funil Títulos novos (28): Reaplicações (38) e Endossos (40) não são cotação nova.
+  const itens = itensSpa.filter((item) => Number(item.categoryId) === 28);
+  const idsTitulosNovos = new Set(itens.map((item) => Number(item.id)));
+  const historico = historicoSpa.filter((evento) => idsTitulosNovos.has(Number(evento.OWNER_ID)));
   const pagoEm = pagamentoPorCard(historico);
   const agora = new Date();
   const linhas: Linha[] = [];
