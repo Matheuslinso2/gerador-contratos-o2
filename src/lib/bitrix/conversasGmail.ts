@@ -1,7 +1,7 @@
 import "server-only";
 import { obterClienteGmail, REMETENTES_EXCLUIDOS } from "@/lib/gestaoEmails/gmail";
 import { createServiceClient } from "@/lib/supabase/service";
-import { chamarBitrix } from "./client";
+import { buscarItem, chamarBitrix } from "./client";
 import { assuntoBase } from "./conversasEmail";
 
 // Achar, no Gmail, a conversa que a equipe já está tendo com o cliente por
@@ -125,7 +125,6 @@ export async function buscarConversasGmail(enderecos: string[], tratativa: strin
 export async function vincularPorTratativa(entityTypeId: number, itemId: number, destinatarios: string[]): Promise<void> {
   try {
     const tratativa = await lerTratativaDoCard(entityTypeId, itemId);
-    if (!tratativa) return;
     const { data: ultima } = await createServiceClient()
       .from("bitrix_email_mensagens")
       .select("assunto_base")
@@ -134,6 +133,14 @@ export async function vincularPorTratativa(entityTypeId: number, itemId: number,
       .order("criado_em", { ascending: false })
       .limit(1)
       .maybeSingle();
+    if (!tratativa) {
+      // Sem comentário e sem nenhuma conversa registrada: é o 1º e-mail do card.
+      // Se a equipe já conversava por fora (card 3122, 23/10/2026: o comercial
+      // abriu "NOVA COTAÇÃO <nome>" e o 1º envio do card abriu outra), acha a
+      // conversa pelo nome do card.
+      if (!ultima) await vincularPorNomeDoCard(entityTypeId, itemId, destinatarios);
+      return;
+    }
     if (ultima && mesmoAssunto(ultima.assunto_base, tratativa)) return;
     const candidatas = (await buscarConversasGmail(destinatarios, tratativa)).filter((c) => c.sugerida);
     if (!candidatas.length) return;
@@ -141,6 +148,24 @@ export async function vincularPorTratativa(entityTypeId: number, itemId: number,
   } catch (erro) {
     console.warn("Falha ao vincular a conversa pela tratativa do card:", erro);
   }
+}
+
+const semAcento = (t: string) => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+
+// Só roda no 1º e-mail do card. O nome vem do título do card (parte antes de
+// " - " ou "("), precisa ter 2+ palavras (nada de "BOA TARDE" solto) e aparecer
+// no assunto da conversa. Se houver mais de uma conversa assim, não chuta:
+// deixa o envio abrir a conversa nova (a pessoa ainda pode vincular pelo botão).
+async function vincularPorNomeDoCard(entityTypeId: number, itemId: number, destinatarios: string[]): Promise<void> {
+  const item = await buscarItem(entityTypeId, itemId);
+  const nome = semAcento((item.title ?? "").split(/\s+-\s+|\(/)[0]);
+  if (nome.split(" ").filter((p) => p.length >= 2).length < 2) return;
+  const candidatas = (await buscarConversasGmail(destinatarios)).filter((c) => semAcento(c.assunto).includes(nome));
+  if (candidatas.length !== 1) {
+    if (candidatas.length > 1) console.warn(`Card ${itemId}: ${candidatas.length} conversas do Gmail com o nome "${nome}", não vinculei sozinho.`);
+    return;
+  }
+  await vincularConversaGmail(entityTypeId, itemId, candidatas[0].threadId);
 }
 
 // Vincula a conversa do Gmail ao card: guarda o Message-ID da ÚLTIMA mensagem
