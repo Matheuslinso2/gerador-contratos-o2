@@ -61,7 +61,7 @@ function resumo(s: SinistroEmail, imobiliariaNome?: string) {
       linhaCampo("Locatário", s.locatario_nome ?? ""),
       linhaCampo("Imóvel", endereco(s)),
       s.valor_avisado ? linhaCampo("Valor avisado", formatarReais(s.valor_avisado)) : "",
-      s.numero_sinistro_seguradora ? linhaCampo("Nº do sinistro na seguradora", s.numero_sinistro_seguradora) : "",
+      s.numero_sinistro_seguradora ? linhaCampo("Nº do aviso na seguradora", s.numero_sinistro_seguradora) : "",
     ].join("")
   );
 }
@@ -164,12 +164,12 @@ export async function emailAlertasParaO2(itens: { id: string; codigo: number; te
 // e de novo documento anexado para validação, sempre para sinistro@ com a
 // identidade O2 (nº do aviso ou SIN no protocolo).
 export async function emailNovidadeParaO2(
-  s: SinistroEmail & { numero_aviso?: string | null },
+  s: SinistroEmail,
   imobiliariaNome: string,
   tipo: "mensagem" | "documento",
   detalhe: string
 ) {
-  const protocolo = s.numero_aviso || `SIN-${s.codigo}`;
+  const protocolo = s.numero_sinistro_seguradora ? `Aviso ${s.numero_sinistro_seguradora}` : `SIN-${s.codigo}`;
   const mensagem = tipo === "mensagem";
   const html = envolverEmailO2({
     badge: mensagem ? "Mensagem no chat" : "Novo documento para validação",

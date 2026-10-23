@@ -486,21 +486,17 @@ export async function devolverComPendencia(fd: FormData) {
 export async function marcarAbertoNaSeguradora(fd: FormData) {
   const { supabase, user } = await exigirInterno();
   const id = texto(fd, "id")!;
+  // Ajuste da equipe (23/10/2026): o nº do aviso é o que a O2 digita (o da
+  // seguradora); não há mais número gerado pelo sistema.
   const numero = texto(fd, "numero_sinistro_seguradora");
   const data = texto(fd, "data_abertura_seguradora") ?? hojeSP();
   const docCompleta = fd.get("documentacao_completa") === "on";
   const s = await carregar(supabase, id);
   if (!s) voltar(id, null, "Sinistro não encontrado.");
-  let numeroAviso: string | null = s.numero_aviso ?? null;
-  if (!numeroAviso) {
-    const { data: gerado, error: erroAviso } = await supabase.rpc("gerar_numero_aviso_sinistro");
-    if (erroAviso || !gerado) voltar(id, null, "Não foi possível gerar o número do aviso: " + (erroAviso?.message ?? ""));
-    numeroAviso = gerado as string;
-  }
+  const primeiraVez = !s.autorizado_em;
   await supabase
     .from("sinistros")
     .update({
-      numero_aviso: numeroAviso,
       autorizado_em: s.autorizado_em ?? new Date().toISOString(),
       etapa: "na_seguradora",
       numero_sinistro_seguradora: numero,
@@ -511,16 +507,16 @@ export async function marcarAbertoNaSeguradora(fd: FormData) {
       pendencia_prazo: null,
     })
     .eq("id", id);
-  if (!s.numero_aviso)
+  if (primeiraVez)
     await registrar(supabase, id, {
       autor_tipo: "o2",
       referente: "imobiliaria",
-      texto: `Acionamento autorizado pela O2 (${user.email}). Número do aviso: ${numeroAviso}. A partir de agora a conversa sobre este sinistro fica neste chat.`,
+      texto: `Acionamento autorizado pela O2 (${user.email}).${numero ? ` Nº do aviso: ${numero}.` : ""} A partir de agora a conversa sobre este sinistro fica neste chat.`,
     });
   await registrar(supabase, id, {
     autor_tipo: "o2",
     referente: "seguradora",
-    texto: `Sinistro aberto na ${s.seguradora ?? "seguradora"}${numero ? ` — nº ${numero}` : " (nº do sinistro ainda não informado)"}.${
+    texto: `Sinistro aberto na ${s.seguradora ?? "seguradora"}${numero ? ` — aviso nº ${numero}` : " (nº do aviso ainda não informado)"}.${
       docCompleta ? " Documentação completa: o prazo de análise da seguradora (até 30 dias) começa agora." : ""
     }`,
     etapa_de: s.etapa,
@@ -530,8 +526,8 @@ export async function marcarAbertoNaSeguradora(fd: FormData) {
   await emailAtualizacaoParaImobiliaria(
     { ...s, etapa: "na_seguradora", numero_sinistro_seguradora: numero } as SinistroEmail,
     destinos,
-    `Acionamento autorizado — aviso ${numeroAviso}`,
-    `A O2 autorizou o acionamento. Número do aviso: ${numeroAviso}.${numero ? ` Sinistro aberto na ${s.seguradora} com o número ${numero}.` : ""} A partir de agora, atenção às regras:`,
+    `Acionamento autorizado${numero ? ` — aviso ${numero}` : ""}`,
+    `A O2 autorizou o acionamento.${numero ? ` Sinistro aberto na ${s.seguradora} com o aviso nº ${numero}.` : ""} A partir de agora, atenção às regras:`,
     TEXTO_CIENCIA.slice(0, 3)
   );
   voltar(id, null, destinos.length ? undefined : SEM_EMAIL);

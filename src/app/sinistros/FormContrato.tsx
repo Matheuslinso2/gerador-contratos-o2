@@ -128,15 +128,15 @@ export default function FormContrato({
           </div>
           <div className="sm:col-span-2">
             <label className={labelClass}>Início da vigência</label>
-            <input type="date" name="vigencia_inicio" defaultValue={d.vigencia_inicio ?? ""} onChange={(e) => setVig({ ...vig, ini: e.target.value })} className={inputClass} />
+            <input type="date" name="vigencia_inicio" defaultValue={d.vigencia_inicio ?? ""} onChange={(e) => setVig((v0) => ({ ...v0, ini: e.target.value }))} className={inputClass} />
           </div>
           <div className="sm:col-span-2">
             <label className={labelClass}>Fim da vigência</label>
-            <input type="date" name="vigencia_fim" defaultValue={d.vigencia_fim ?? ""} onChange={(e) => setVig({ ...vig, fim: e.target.value })} className={inputClass} />
+            <input type="date" name="vigencia_fim" defaultValue={d.vigencia_fim ?? ""} onChange={(e) => setVig((v0) => ({ ...v0, fim: e.target.value }))} className={inputClass} />
           </div>
           <div className="sm:col-span-2">
             <label className={labelClass}>Data da ocorrência – primeira inadimplência</label>
-            <input type="date" name="data_ocorrencia" defaultValue={d.data_ocorrencia ?? ""} onChange={(e) => setVig({ ...vig, ocorrencia: e.target.value })} className={inputClass} />
+            <input type="date" name="data_ocorrencia" defaultValue={d.data_ocorrencia ?? ""} onChange={(e) => setVig((v0) => ({ ...v0, ocorrencia: e.target.value }))} className={inputClass} />
           </div>
           {foraDaVigencia && (
             <p className="rounded-lg border border-orange-300 bg-orange-50 p-2 text-xs text-orange-900 sm:col-span-4">
@@ -220,7 +220,7 @@ export default function FormContrato({
           </div>
           <div className="sm:col-span-4">
             <label className={labelClass}>Logradouro</label>
-            <input name="logradouro" value={end.logradouro} onChange={(e) => setEnd({ ...end, logradouro: e.target.value })} className={inputClass} />
+            <input name="logradouro" value={end.logradouro} onChange={(e) => setEnd((e0) => ({ ...e0, logradouro: e.target.value }))} className={inputClass} />
           </div>
           <div className="sm:col-span-1">
             <label className={labelClass}>Número</label>
@@ -232,15 +232,15 @@ export default function FormContrato({
           </div>
           <div className="sm:col-span-3">
             <label className={labelClass}>Bairro</label>
-            <input name="bairro" value={end.bairro} onChange={(e) => setEnd({ ...end, bairro: e.target.value })} className={inputClass} />
+            <input name="bairro" value={end.bairro} onChange={(e) => setEnd((e0) => ({ ...e0, bairro: e.target.value }))} className={inputClass} />
           </div>
           <div className="sm:col-span-4">
             <label className={labelClass}>Cidade</label>
-            <input name="cidade" value={end.cidade} onChange={(e) => setEnd({ ...end, cidade: e.target.value })} className={inputClass} />
+            <input name="cidade" value={end.cidade} onChange={(e) => setEnd((e0) => ({ ...e0, cidade: e.target.value }))} className={inputClass} />
           </div>
           <div className="sm:col-span-2">
             <label className={labelClass}>UF</label>
-            <input name="uf" maxLength={2} value={end.uf} onChange={(e) => setEnd({ ...end, uf: e.target.value.toUpperCase() })} className={inputClass} />
+            <input name="uf" maxLength={2} value={end.uf} onChange={(e) => setEnd((e0) => ({ ...e0, uf: e.target.value.toUpperCase() }))} className={inputClass} />
           </div>
         </div>
       </section>

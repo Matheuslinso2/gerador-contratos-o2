@@ -67,7 +67,7 @@ export default async function EditarSinistroPage({
                 {ocultos}
                 <section className="grid gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4 sm:grid-cols-4">
                   <div>
-                    <label className={labelClass}>Nº do sinistro na seguradora</label>
+                    <label className={labelClass}>Nº do aviso (seguradora)</label>
                     <input name="numero_sinistro_seguradora" defaultValue={s.numero_sinistro_seguradora ?? ""} className={inputClass} />
                   </div>
                   <div>

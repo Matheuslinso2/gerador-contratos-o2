@@ -63,13 +63,30 @@ export default function BuscaApolice({ nossoNumeroInicial }: { nossoNumeroInicia
     definir("numero_apolice", a.numero_apolice);
     definir("vigencia_inicio", a.vigencia_inicio?.slice(0, 10));
     definir("vigencia_fim", a.vigencia_fim?.slice(0, 10));
-    definir("locatario_nome", a.locatario_nome);
-    definir("locatario_documento", a.locatario_documento);
-    definir("locatario_email", a.locatario_email);
-    definir("locatario_telefone", a.locatario_telefone);
+    // Ajuste da equipe (23/10/2026): o cliente do Corp é o segurado. Na
+    // Capitalização o cliente é o titular do título (campos de "locatário").
+    if (a.produto === "capitalizacao") {
+      definir("locatario_nome", a.cliente_nome);
+      definir("locatario_documento", a.cliente_documento);
+      definir("locatario_email", a.cliente_email);
+      definir("locatario_telefone", a.cliente_telefone);
+    } else {
+      definir("locador_nome", a.cliente_nome);
+      definir("locador_documento", a.cliente_documento);
+    }
+    // Local de risco.
+    definir("cep", a.imovel_cep);
+    definir("logradouro", a.imovel_logradouro);
+    definir("numero", a.imovel_numero);
+    definir("complemento", a.imovel_complemento);
+    definir("bairro", a.imovel_bairro);
+    definir("cidade", a.imovel_cidade);
+    definir("uf", a.imovel_uf);
     if (a.imobiliaria_id) definir("imobiliaria_id", a.imobiliaria_id);
     setResultados(null);
-    setAviso(`Preenchido a partir do Nosso Nº ${a.nosso_numero} (${preenchidos.length} campo(s)). Confira e complete o resto.`);
+    setAviso(
+      `Preenchido a partir do Nosso Nº ${a.nosso_numero} (${preenchidos.length} campo(s)).${a.produto === "fianca" ? " O garantido (locatário) não vem do Corp: preencha à mão." : ""} Confira e complete o resto.`
+    );
   }
 
   return (
@@ -86,7 +103,7 @@ export default function BuscaApolice({ nossoNumeroInicial }: { nossoNumeroInicia
               buscar();
             }
           }}
-          placeholder="Nosso Nº, código do cliente no Corp, CPF/CNPJ ou nome do locatário"
+          placeholder="Nosso Nº, código do cliente no Corp, CPF/CNPJ ou nome do segurado"
           className="min-w-64 flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
         />
         <button type="button" onClick={buscar} disabled={carregando || termo.trim().length < 3} className="rounded-full bg-o2-navy px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
@@ -99,13 +116,14 @@ export default function BuscaApolice({ nossoNumeroInicial }: { nossoNumeroInicia
           {resultados.map((a) => (
             <li key={`${a.nosso_numero}-${a.produto}`}>
               <button type="button" onClick={() => preencher(a)} className="w-full px-3 py-2 text-left text-sm hover:bg-blue-50">
-                <span className="font-semibold text-o2-navy">{a.locatario_nome ?? "—"}</span>
+                <span className="font-semibold text-o2-navy">{a.cliente_nome ?? "—"}</span>
                 <span className="text-gray-600">
                   {" "}
                   · {rotuloProduto(a.produto)} · {a.seguradora ?? "—"}{a.numero_apolice ? ` · apólice ${a.numero_apolice}` : ""} · Nosso Nº {a.nosso_numero}
                 </span>
                 <span className="block text-xs text-gray-500">
                   Vigência {dataBr(a.vigencia_inicio)} a {dataBr(a.vigencia_fim)} · {a.imobiliaria_texto ?? "sem imobiliária"}
+                  {a.imovel_logradouro ? ` · ${a.imovel_logradouro}${a.imovel_numero ? `, ${a.imovel_numero}` : ""}` : ""}
                   {a.status ? ` · ${a.status}` : ""}
                 </span>
               </button>

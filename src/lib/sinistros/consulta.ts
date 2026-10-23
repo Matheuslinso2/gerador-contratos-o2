@@ -7,7 +7,7 @@ import { lista } from "./periodo";
 /* eslint-disable @typescript-eslint/no-explicit-any -- linhas do Supabase sem tipos gerados */
 
 export const CAMPOS_GESTAO =
-  "id, codigo, produto, origem, locador_nome, data_abertura_seguradora, enviado_em, created_at, tipo, etapa, seguradora, numero_apolice, nosso_numero, locatario_nome, imovel_logradouro, imovel_numero, imovel_complemento, data_primeiro_vencimento, data_segundo_vencimento, data_entrega_chaves, prazo_aviso, aviso_fora_prazo, valor_avisado, responsavel_o2, pre_analise_desde, pendencia_prazo, documentacao_completa_em, numero_sinistro_seguradora, proxima_acao_em, proxima_acao_descricao, updated_at, numero_aviso, ultima_msg_imob_em, ultimo_doc_imob_em, visto_o2_em, imobiliarias(nome, apelido)";
+  "id, codigo, produto, origem, locador_nome, data_abertura_seguradora, enviado_em, created_at, tipo, etapa, seguradora, numero_apolice, nosso_numero, locatario_nome, imovel_logradouro, imovel_numero, imovel_complemento, data_primeiro_vencimento, data_segundo_vencimento, data_entrega_chaves, prazo_aviso, aviso_fora_prazo, valor_avisado, responsavel_o2, pre_analise_desde, pendencia_prazo, documentacao_completa_em, numero_sinistro_seguradora, proxima_acao_em, proxima_acao_descricao, updated_at, ultima_msg_imob_em, ultimo_doc_imob_em, visto_o2_em, imobiliarias(nome, apelido)";
 
 // Selos da Gestão: mensagem no chat / documento novo da imobiliária que a O2
 // ainda não viu (a ficha marca visto_o2_em ao abrir).

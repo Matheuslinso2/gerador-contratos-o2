@@ -8,6 +8,7 @@ import SubmitButton from "@/components/SubmitButton";
 import { IconShield } from "@/components/icons";
 import {
   COBERTURAS,
+  COBERTURAS_LMI,
   ETAPAS,
   PRAZO_SEGURADORA_DIAS,
   SLA_PRE_ANALISE_DIAS_UTEIS,
@@ -20,7 +21,9 @@ import {
   formatarReais,
   hojeSP,
   modelosDeclaracao,
+  proximoVencimentoAluguel,
   montarChecklist,
+  saldoLmi,
   validarEnvio,
   type Debito,
   type EtapaSinistro,
@@ -37,7 +40,7 @@ import {
   salvarProximaAcao,
 } from "../actions";
 import FormContrato from "../FormContrato";
-import { atribuirResponsavel, duplicarSinistro, mudarEtapa, registrarIndenizacao, removerIndenizacao, salvarAcordo, salvarLmi } from "../operacao";
+import { atribuirResponsavel, duplicarSinistro, mudarEtapa, registrarIndenizacao, removerIndenizacao, salvarAcordo } from "../operacao";
 import { listarSinistros } from "@/lib/sinistros/consulta";
 import AtalhosNavegacao from "./AtalhosNavegacao";
 import { rotuloProduto } from "@/lib/sinistros/produtos";
@@ -48,6 +51,8 @@ import PassoSituacao from "./PassoSituacao";
 import EditorDebitos from "./EditorDebitos";
 import { ChecklistDocumentos, type Documento, type RegistroHistorico } from "./blocos";
 import { AnexosPorPasta, CabecalhoSinistro, ChatLateral, HistoricoInterno } from "./visualizacao";
+import { AnexarPagamento, CampoAnexoPagamento } from "./AnexoPagamento";
+import FormLmi from "./FormLmi";
 
 export const dynamic = "force-dynamic";
 
@@ -92,7 +97,7 @@ export default async function SinistroPage({
 
   // Indenizações e equipe (O2); anterior/próximo pela mesma lista da Gestão.
   const [{ data: indenizacoesBrutas }, { data: equipeBruta }] = await Promise.all([
-    supabase.from("sinistro_indenizacoes").select("id, referencia, pago_em, valor, observacao, criado_por_email, anexo_path, anexo_nome").eq("sinistro_id", id).order("pago_em"),
+    supabase.from("sinistro_indenizacoes").select("id, referencia, pago_em, valor, observacao, criado_por_email, anexo_path, anexo_nome, valores_cobertura").eq("sinistro_id", id).order("pago_em"),
     interno ? supabase.from("sinistros_equipe").select("chave, nome, ativo").order("nome") : Promise.resolve({ data: [] }),
   ]);
   const indenizacoes = (indenizacoesBrutas ?? []) as Indenizacao[];
@@ -537,7 +542,7 @@ function Dados({ s, interno }: { s: any; interno: boolean }) {
           }
         />
         {(s.produto ?? "fianca") === "fianca" && (
-          <Item rotulo="Cobranças" valor={COBERTURAS.filter((c) => s.coberturas.includes(c.chave)).map((c) => c.titulo).join(", ")} />
+          <Item rotulo="Coberturas acionadas" valor={COBERTURAS.filter((c) => s.coberturas.includes(c.chave)).map((c) => c.titulo).join(", ")} />
         )}
         {(s.produto ?? "fianca") === "fianca" && s.coberturas.includes("pintura") && (
           <Item
@@ -548,7 +553,7 @@ function Dados({ s, interno }: { s: any; interno: boolean }) {
           />
         )}
         <Item rotulo="Valor avisado" valor={formatarReais(s.valor_avisado)} />
-        {s.numero_sinistro_seguradora && <Item rotulo="Nº na seguradora" valor={`${s.numero_sinistro_seguradora} · ${formatarData(s.data_abertura_seguradora)}`} />}
+        {s.numero_sinistro_seguradora && <Item rotulo="Nº do aviso" valor={`${s.numero_sinistro_seguradora} · ${formatarData(s.data_abertura_seguradora)}`} />}
         {interno && (
           <Item
             rotulo="Favorecido"
@@ -576,10 +581,9 @@ function VisaoImobiliaria({ s, debitos, docs, checklist, historico, indenizacoes
     encerrado: `Sinistro encerrado${s.motivo_encerramento ? `: ${s.motivo_encerramento}` : "."}`,
     cancelado: `Cancelado${s.motivo_encerramento ? `: ${s.motivo_encerramento}` : "."}`,
   };
-  const totalIndenizado = indenizacoes.reduce((t, i) => t + Number(i.valor), 0);
   return (
     <div className="space-y-5">
-      <CabecalhoSinistro s={s} totalIndenizado={totalIndenizado} primeiraIndenizacao={indenizacoes[0]?.pago_em ?? null} interno={false} ctx={null} />
+      <CabecalhoSinistro s={s} saldo={saldoLmi(s, indenizacoes).saldo} primeiraIndenizacao={indenizacoes[0]?.pago_em ?? null} interno={false} ctx={null} />
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
       <div className="min-w-0 space-y-6">
       <Aviso tipo="info">
@@ -633,6 +637,7 @@ type Indenizacao = {
   criado_por_email: string | null;
   anexo_path?: string | null;
   anexo_nome?: string | null;
+  valores_cobertura?: Record<string, number> | null;
   url?: string | null;
 };
 type Navegacao = { anterior: string | null; proximo: string | null; posicao: number; total: number; ctx: string | null };
@@ -745,7 +750,7 @@ function VisaoO2({
         {totalIndenizado > 0 && <span className="rounded-full bg-green-100 px-3 py-1 font-semibold text-green-800">indenizado {formatarReais(totalIndenizado)}</span>}
       </div>
 
-      <CabecalhoSinistro s={s} totalIndenizado={totalIndenizado} primeiraIndenizacao={primeiraIndenizacao} interno ctx={nav.ctx} />
+      <CabecalhoSinistro s={s} saldo={saldoLmi(s, indenizacoes).saldo} primeiraIndenizacao={primeiraIndenizacao} interno ctx={nav.ctx} />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
       <div className="min-w-0 space-y-5">
@@ -802,7 +807,7 @@ function VisaoO2({
           <QuadroLmi s={s} indenizacoes={indenizacoes} ctx={nav.ctx} />
           <section className="space-y-2">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Histórico de pagamento</h2>
-            <FormIndenizacao base={{ id: s.id, ctx: nav.ctx, avisarPadrao: s.origem !== "corp" }} />
+            <FormIndenizacao base={{ id: s.id, ctx: nav.ctx, avisarPadrao: s.origem !== "corp" }} s={s} />
             <Indenizacoes s={s} indenizacoes={indenizacoes} ctx={nav.ctx} editavel />
           </section>
           {debitos.length > 0 && (
@@ -857,7 +862,7 @@ function AcaoDoMomento({ s, docs, checklist, ctx }: { s: any; docs: Documento[];
             {!tudoAprovado && <p className="text-xs text-orange-700">Ainda há documentos sem aceite. Pode autorizar assim mesmo se a seguradora aceitar.</p>}
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className={labelClass}>Nº do sinistro</label>
+                <label className={labelClass}>Nº do aviso (seguradora)</label>
                 <input name="numero_sinistro_seguradora" defaultValue={s.numero_sinistro_seguradora ?? ""} className={inputClass} />
               </div>
               <div>
@@ -889,7 +894,7 @@ function AcaoDoMomento({ s, docs, checklist, ctx }: { s: any; docs: Documento[];
 
       {etapa === "na_seguradora" && (
         <div className="grid gap-2 md:grid-cols-2">
-          <FormIndenizacao base={base} />
+          <FormIndenizacao base={base} s={s} />
           <MoverEtapa base={base} para="em_indenizacao" rotulo="A seguradora começou a indenizar (sem valor ainda)" />
           <FormAcordo base={base} s={s} />
           <FormEncerrar base={base} />
@@ -899,7 +904,7 @@ function AcaoDoMomento({ s, docs, checklist, ctx }: { s: any; docs: Documento[];
       {etapa === "em_indenizacao" && (
         <div className="grid gap-2 md:grid-cols-2">
           <div className="md:col-span-2">
-            <FormIndenizacao base={base} principal />
+            <FormIndenizacao base={base} s={s} principal />
           </div>
           <FormAcordo base={base} s={s} />
           <FormEncerrar base={base} />
@@ -909,15 +914,15 @@ function AcaoDoMomento({ s, docs, checklist, ctx }: { s: any; docs: Documento[];
       {etapa === "acordo_judicial" && (
         <div className="grid gap-2 md:grid-cols-2">
           <div className="md:col-span-2">
-            <FormAcordo base={base} s={s} aberto={!s.acordo_primeira_parcela} />
-            {s.acordo_primeira_parcela && (
+            <FormAcordo base={base} s={s} aberto={!s.acordo_primeira_parcela && !s.acordo_vencimento_aluguel} />
+            {(s.acordo_primeira_parcela || s.acordo_vencimento_aluguel) && (
               <p className="mt-1 text-xs text-gray-600">
-                Próxima parcela: {formatarData(proximaParcelaAcordo(s, hoje))}
+                Próximo vencimento do aluguel: {formatarData(proximoVencimentoAluguel(s, hoje))}
                 {s.acordo_ultima_parcela ? ` · última em ${formatarData(s.acordo_ultima_parcela)}` : ""}
               </p>
             )}
           </div>
-          <FormIndenizacao base={base} />
+          <FormIndenizacao base={base} s={s} />
           <MoverEtapa base={base} para="em_indenizacao" rotulo="Voltou para indenização" />
           <FormEncerrar base={base} />
         </div>
@@ -973,20 +978,18 @@ function MoverEtapa({ base, para, rotulo, principal }: { base: BaseAcao; para: E
   );
 }
 
-function FormIndenizacao({ base, principal }: { base: BaseAcao; principal?: boolean }) {
+function FormIndenizacao({ base, s, principal }: { base: BaseAcao; s: any; principal?: boolean }) {
   const hoje = hojeSP();
+  // LMI individual: rateio por cobertura (interno, a imobiliária só vê o total).
+  const rateio = s.lmi_tipo === "individual" ? COBERTURAS_LMI.filter((c) => s.lmi_coberturas?.[c.chave] != null) : [];
   return (
     <details className={`${cartao} p-3`} open={principal}>
       <summary className={`cursor-pointer list-none text-sm font-semibold ${principal ? "text-o2-coral" : "text-o2-navy"}`}>Registrar indenização recebida</summary>
-      <form action={registrarIndenizacao} className="mt-2 grid gap-2 sm:grid-cols-4 sm:items-end">
+      <form action={registrarIndenizacao} className="mt-2 grid gap-2 sm:grid-cols-3 sm:items-end">
         <Ocultos base={base} />
         <div>
-          <label className={labelClass}>Valor (R$)</label>
-          <input name="valor" inputMode="decimal" placeholder="0,00" className={inputClass} />
-        </div>
-        <div>
-          <label className={labelClass}>Mês de referência</label>
-          <input type="month" name="referencia" defaultValue={hoje.slice(0, 7)} className={inputClass} />
+          <label className={labelClass}>Valor total (R$)</label>
+          <input name="valor" inputMode="decimal" placeholder={rateio.length ? "soma do rateio" : "0,00"} className={inputClass} />
         </div>
         <div>
           <label className={labelClass}>Pago em</label>
@@ -995,10 +998,23 @@ function FormIndenizacao({ base, principal }: { base: BaseAcao; principal?: bool
         <SubmitButton className={botaoPrimario} textoCarregando="Salvando…">
           Registrar
         </SubmitButton>
-        <input name="observacao" placeholder="Observação (opcional)" className={`${inputClass} sm:col-span-2`} />
-        <div className="sm:col-span-2">
+        {rateio.length > 0 && (
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-2 sm:col-span-3">
+            <p className="mb-1 text-xs font-semibold text-gray-600">Valor por cobertura (LMI individual · interno)</p>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {rateio.map((c) => (
+                <div key={c.chave}>
+                  <label className={labelClass}>{c.titulo}</label>
+                  <input name={`cob_${c.chave}`} inputMode="decimal" placeholder="0,00" className={inputClass} />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        <input name="observacao" placeholder="Observação (ex.: ref. 09/2026, parcela do acordo…)" className={`${inputClass} sm:col-span-3`} />
+        <div className="sm:col-span-3">
           <label className={labelClass}>Anexo (planilha da seguradora, opcional)</label>
-          <input type="file" name="anexo" accept=".xls,.xlsx,.pdf,.png,.jpg,.jpeg" className="block w-full text-xs" />
+          <CampoAnexoPagamento id={s.id} />
         </div>
       </form>
     </details>
@@ -1036,24 +1052,6 @@ function FormEncerrar({ base }: { base: BaseAcao }) {
 
 // ---------- Reunião 21/10/2026: acordo, LMI, vencimento da apólice e mensagens ----------
 
-function proximaParcelaAcordo(s: any, hoje: string): string | null {
-  const ini = s.acordo_primeira_parcela as string | null;
-  if (!ini) return null;
-  const fim = (s.acordo_ultima_parcela as string | null) ?? "9999-12-31";
-  const dia = Number(ini.slice(8, 10));
-  let [ano, mes] = [Number(hoje.slice(0, 4)), Number(hoje.slice(5, 7))];
-  for (let i = 0; i < 3; i++) {
-    const ultimo = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
-    const data = `${ano}-${String(mes).padStart(2, "0")}-${String(Math.min(dia, ultimo)).padStart(2, "0")}`;
-    if (data >= hoje && data >= ini) return data <= fim ? data : null;
-    mes += 1;
-    if (mes > 12) {
-      mes = 1;
-      ano += 1;
-    }
-  }
-  return null;
-}
 
 function FormAcordo({ base, s, aberto }: { base: BaseAcao; s: any; aberto?: boolean }) {
   return (
@@ -1064,16 +1062,12 @@ function FormAcordo({ base, s, aberto }: { base: BaseAcao; s: any; aberto?: bool
       <form action={salvarAcordo} className="mt-2 grid gap-2 sm:grid-cols-5 sm:items-end">
         <Ocultos base={base} />
         <div>
-          <label className={labelClass}>Nº interno do acordo</label>
-          <input name="acordo_numero" defaultValue={s.acordo_numero ?? ""} className={inputClass} />
-        </div>
-        <div>
           <label className={labelClass}>Data do acordo</label>
           <input type="date" name="acordo_data" defaultValue={s.acordo_data ?? ""} className={inputClass} />
         </div>
         <div>
-          <label className={labelClass}>Efetivação</label>
-          <input type="date" name="acordo_efetivacao" defaultValue={s.acordo_efetivacao ?? ""} className={inputClass} />
+          <label className={labelClass}>Vencimento do aluguel</label>
+          <input type="date" name="acordo_vencimento_aluguel" defaultValue={s.acordo_vencimento_aluguel ?? ""} className={inputClass} />
         </div>
         <div>
           <label className={labelClass}>1ª parcela</label>
@@ -1084,7 +1078,7 @@ function FormAcordo({ base, s, aberto }: { base: BaseAcao; s: any; aberto?: bool
           <input type="date" name="acordo_ultima_parcela" defaultValue={s.acordo_ultima_parcela ?? ""} className={inputClass} />
         </div>
         <p className="text-xs text-gray-500 sm:col-span-4">
-          Todo mês, 1 dia útil depois do vencimento da parcela, o sistema lembra o responsável de conferir se o locatário pagou.
+          Todo mês, 1 dia útil depois do vencimento do aluguel, o sistema lembra o responsável de conferir se o locatário pagou.
         </p>
         <SubmitButton className={botaoPrimario} textoCarregando="Salvando…">
           Salvar acordo
@@ -1095,41 +1089,54 @@ function FormAcordo({ base, s, aberto }: { base: BaseAcao; s: any; aberto?: bool
 }
 
 function QuadroLmi({ s, indenizacoes, ctx }: { s: any; indenizacoes: Indenizacao[]; ctx: string | null }) {
-  const usado = indenizacoes.reduce((t, i) => t + Number(i.valor), 0);
-  const lmi = s.lmi != null ? Number(s.lmi) : null;
-  const saldo = lmi != null ? lmi - usado : null;
-  const pctUso = lmi ? Math.min(100, Math.round((usado / lmi) * 100)) : 0;
+  const r = saldoLmi(s, indenizacoes);
+  const pctUso = r.lmi ? Math.min(100, Math.round((r.usado / r.lmi) * 100)) : 0;
   return (
     <section className={`${cartao} space-y-3`}>
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Limite da apólice (LMI)</h2>
-          {lmi != null ? (
-            <p className="text-sm text-gray-600">
-              LMI {formatarReais(lmi)} · usado {formatarReais(usado)} ·{" "}
-              <b className={saldo! < 0 ? "text-red-700" : "text-green-800"}>saldo {formatarReais(saldo)}</b>
-            </p>
-          ) : (
-            <p className="text-sm text-gray-500">Informe o LMI da apólice para acompanhar o saldo a cada indenização.</p>
-          )}
-        </div>
-        <form action={salvarLmi} className="flex items-end gap-2">
-          <input type="hidden" name="id" value={s.id} />
-          {ctx && <input type="hidden" name="ctx" value={ctx} />}
-          <div>
-            <label className={labelClass}>LMI (R$)</label>
-            <input name="lmi" inputMode="decimal" defaultValue={lmi ?? ""} placeholder="0,00" className={`${inputClass} w-36`} />
-          </div>
-          <SubmitButton className={botaoSecundario} textoCarregando="…">
-            Salvar
-          </SubmitButton>
-        </form>
+      <div>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Limite da apólice (LMI) · {r.tipo === "individual" ? "individual" : "global"}</h2>
+        {r.lmi != null ? (
+          <p className="text-sm text-gray-600">
+            LMI {formatarReais(r.lmi)} · indenizado {formatarReais(r.usado)} ·{" "}
+            <b className={r.saldo! < 0 ? "text-red-700" : "text-green-800"}>saldo {formatarReais(r.saldo)}</b>
+          </p>
+        ) : (
+          <p className="text-sm text-gray-500">Informe o LMI da apólice para acompanhar o saldo a cada indenização.</p>
+        )}
       </div>
-      {lmi != null && (
+      {r.tipo === "global" && r.lmi != null && (
         <div className="h-2.5 w-full overflow-hidden rounded-full bg-gray-100" role="progressbar" aria-valuenow={pctUso} aria-valuemin={0} aria-valuemax={100}>
           <div className={`h-full ${pctUso >= 100 ? "bg-red-600" : pctUso >= 80 ? "bg-orange-500" : "bg-o2-blue"}`} style={{ width: `${pctUso}%` }} />
         </div>
       )}
+      {r.linhas.length > 0 && (
+        <table className="w-full text-sm">
+          <thead className="text-left text-xs text-gray-500">
+            <tr>
+              <th className="py-1">Cobertura</th>
+              <th className="py-1 text-right">LMI</th>
+              <th className="py-1 text-right">Indenizado</th>
+              <th className="py-1 text-right">Saldo</th>
+            </tr>
+          </thead>
+          <tbody>
+            {r.linhas.map((l) => (
+              <tr key={l.chave} className="border-t border-gray-100">
+                <td className="py-1">{l.titulo}</td>
+                <td className="py-1 text-right">{formatarReais(l.lmi)}</td>
+                <td className="py-1 text-right">{formatarReais(l.usado)}</td>
+                <td className={`py-1 text-right font-semibold ${l.saldo < 0 ? "text-red-700" : "text-green-800"}`}>{formatarReais(l.saldo)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <details className="text-sm">
+        <summary className="cursor-pointer text-o2-blue">Configurar LMI</summary>
+        <div className="mt-2">
+          <FormLmi id={s.id} ctx={ctx} tipoInicial={r.tipo} lmiGlobal={s.lmi != null ? Number(s.lmi) : null} coberturas={s.lmi_coberturas ?? {}} />
+        </div>
+      </details>
     </section>
   );
 }
@@ -1137,6 +1144,7 @@ function QuadroLmi({ s, indenizacoes, ctx }: { s: any; indenizacoes: Indenizacao
 function Indenizacoes({ s, indenizacoes, ctx, editavel }: { s: any; indenizacoes: Indenizacao[]; ctx: string | null; editavel: boolean }) {
   const total = indenizacoes.reduce((t, i) => t + Number(i.valor), 0);
   if (!indenizacoes.length) return <p className="text-sm text-gray-500">Nenhuma indenização registrada ainda.</p>;
+  const tituloCob = (c: string) => COBERTURAS_LMI.find((x) => x.chave === c)?.titulo ?? c;
   return (
     <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
       <table className="w-full text-sm">
@@ -1145,43 +1153,54 @@ function Indenizacoes({ s, indenizacoes, ctx, editavel }: { s: any; indenizacoes
             <th className="px-3 py-2">Data</th>
             <th className="px-3 py-2 text-right">Valor</th>
             <th className="px-3 py-2">Anexos (planilhas)</th>
-            <th className="px-3 py-2">Referência</th>
             <th className="px-3 py-2">Observação</th>
             {editavel && <th className="px-3 py-2" />}
           </tr>
         </thead>
         <tbody>
-          {indenizacoes.map((i) => (
-            <tr key={i.id} className="border-t border-gray-100">
-              <td className="px-3 py-2">{formatarData(i.pago_em)}</td>
-              <td className="px-3 py-2 text-right font-semibold">{formatarReais(Number(i.valor))}</td>
-              <td className="px-3 py-2 text-xs">
-                {i.url ? (
-                  <a href={i.url} target="_blank" rel="noreferrer" className="text-o2-blue underline">
-                    {i.anexo_nome ?? "anexo"}
-                  </a>
-                ) : (
-                  "—"
-                )}
-              </td>
-              <td className="px-3 py-2">{i.referencia ? i.referencia.slice(0, 7).split("-").reverse().join("/") : "—"}</td>
-              <td className="px-3 py-2 text-xs text-gray-600">{i.observacao ?? ""}</td>
-              {editavel && (
+          {indenizacoes.map((i) => {
+            const rateio = Object.entries(i.valores_cobertura ?? {});
+            // Registros antigos tinham o mês de referência num campo próprio.
+            const ref = i.referencia ? `ref. ${i.referencia.slice(0, 7).split("-").reverse().join("/")}` : "";
+            return (
+              <tr key={i.id} className="border-t border-gray-100 align-top">
+                <td className="px-3 py-2">{formatarData(i.pago_em)}</td>
                 <td className="px-3 py-2 text-right">
-                  <form action={removerIndenizacao}>
-                    <input type="hidden" name="id" value={s.id} />
-                    <input type="hidden" name="indenizacao_id" value={i.id} />
-                    {ctx && <input type="hidden" name="ctx" value={ctx} />}
-                    <button className="text-xs text-red-600 hover:underline">remover</button>
-                  </form>
+                  <span className="font-semibold">{formatarReais(Number(i.valor))}</span>
+                  {editavel && rateio.length > 0 && (
+                    <span className="block text-[11px] text-gray-500">
+                      {rateio.map(([c, v]) => `${tituloCob(c)} ${formatarReais(Number(v))}`).join(" · ")}
+                    </span>
+                  )}
                 </td>
-              )}
-            </tr>
-          ))}
+                <td className="px-3 py-2 text-xs">
+                  {i.url ? (
+                    <a href={i.url} target="_blank" rel="noreferrer" className="block text-o2-blue underline">
+                      {i.anexo_nome ?? "ver anexo"}
+                    </a>
+                  ) : (
+                    !editavel && "—"
+                  )}
+                  {editavel && <AnexarPagamento id={s.id} indenizacaoId={i.id} temAnexo={!!i.anexo_path} />}
+                </td>
+                <td className="px-3 py-2 text-xs text-gray-600">{[i.observacao, ref].filter(Boolean).join(" · ")}</td>
+                {editavel && (
+                  <td className="px-3 py-2 text-right">
+                    <form action={removerIndenizacao}>
+                      <input type="hidden" name="id" value={s.id} />
+                      <input type="hidden" name="indenizacao_id" value={i.id} />
+                      {ctx && <input type="hidden" name="ctx" value={ctx} />}
+                      <button className="text-xs text-red-600 hover:underline">remover</button>
+                    </form>
+                  </td>
+                )}
+              </tr>
+            );
+          })}
           <tr className="border-t border-gray-200 bg-gray-50 font-semibold">
             <td className="px-3 py-2">Total</td>
             <td className="px-3 py-2 text-right">{formatarReais(total)}</td>
-            <td colSpan={editavel ? 4 : 3} />
+            <td colSpan={editavel ? 3 : 2} />
           </tr>
         </tbody>
       </table>

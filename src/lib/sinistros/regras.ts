@@ -283,13 +283,9 @@ export function montarChecklist(s: DadosChecklist): ItemChecklist[] {
   if (tem("iptu")) itens.push({ chave: "iptu", titulo: "Guia / espelho do IPTU com as parcelas", obrigatorio: true });
   if (tem("agua") || tem("luz") || tem("gas"))
     itens.push({ chave: "contas_consumo", titulo: "Contas de consumo em aberto (água, luz, gás)", obrigatorio: true });
-  if (ocupado)
-    itens.push({
-      chave: "procuracao_ad_judicia",
-      titulo: "Procuração Ad Judicia",
-      ajuda: "No modelo da seguradora (Pottencial e Too têm modelo próprio).",
-      obrigatorio: true,
-    });
+  // Ajuste da equipe (23/10/2026): a Procuração Ad Judicia não é exigida no
+  // acionamento -- a O2 pede depois, se a seguradora precisar.
+  if (ocupado) itens.push({ chave: "procuracao_ad_judicia", titulo: "Procuração Ad Judicia", obrigatorio: false });
   if (chaves) {
     itens.push({ chave: "termo_entrega_chaves", titulo: "Termo de entrega de chaves assinado", obrigatorio: true });
     if (tem("multa_rescisoria")) itens.push({ chave: "boleto_multa", titulo: "Boleto da multa rescisória", obrigatorio: true });
@@ -328,14 +324,7 @@ export function montarChecklist(s: DadosChecklist): ItemChecklist[] {
       ajuda: "Testemunhas com nome, RG/CPF e endereço. Anexe o e-mail ou WhatsApp em que o locatário foi chamado a assinar.",
       obrigatorio: true,
     });
-  // R12
-  if (s.favorecido_eh_segurado === false)
-    itens.push({
-      chave: "comprovante_bancario",
-      titulo: "Comprovante bancário do favorecido",
-      ajuda: "Necessário na 1ª indenização para esse favorecido ou quando a conta muda.",
-      obrigatorio: false,
-    });
+  // Comprovante bancário do favorecido saiu da lista (ajuste da equipe, 23/10/2026).
   itens.push({ chave: "outros", titulo: "Outros documentos", obrigatorio: false });
   return itens;
 }
@@ -496,5 +485,75 @@ export function alertaRenovacao(
       dias: -dias,
       texto: `A vigência encerrou em ${formatarData(fim)} sem entrega das chaves (dia ${-dias} de ${DIAS_ALERTA_POS_VENCIMENTO}). Sinalize o setor de renovação.`,
     };
+  return null;
+}
+
+// LMI global ou individual por cobertura (ajuste da equipe, 23/10/2026). No
+// individual a O2 marca só as coberturas que a apólice tem, com o limite de
+// cada uma; cada indenização é rateada por cobertura (rateio interno, a
+// imobiliária só vê o total) e o saldo sai por cobertura.
+export const COBERTURAS_LMI: { chave: string; titulo: string }[] = [
+  { chave: "aluguel", titulo: "Aluguel" },
+  { chave: "condominio", titulo: "Condomínio" },
+  { chave: "iptu", titulo: "IPTU" },
+  { chave: "agua", titulo: "Água" },
+  { chave: "luz", titulo: "Energia elétrica" },
+  { chave: "gas", titulo: "Gás" },
+  { chave: "danos", titulo: "Danos ao imóvel" },
+  { chave: "pintura_interna", titulo: "Pintura interna" },
+  { chave: "pintura_externa", titulo: "Pintura externa" },
+  { chave: "multa_rescisoria", titulo: "Multa rescisória" },
+];
+
+export type LinhaLmi = { chave: string; titulo: string; lmi: number; usado: number; saldo: number };
+export function saldoLmi(
+  s: { lmi?: number | string | null; lmi_tipo?: string | null; lmi_coberturas?: Record<string, number> | null },
+  indenizacoes: { valor: number | string; valores_cobertura?: Record<string, number> | null }[]
+): { tipo: "global" | "individual"; lmi: number | null; usado: number; saldo: number | null; linhas: LinhaLmi[] } {
+  const usado = indenizacoes.reduce((t, i) => t + Number(i.valor), 0);
+  if (s.lmi_tipo === "individual") {
+    const limites = s.lmi_coberturas ?? {};
+    const linhas = COBERTURAS_LMI.filter((c) => limites[c.chave] != null).map((c) => {
+      const lmi = Number(limites[c.chave]);
+      const usadoC = indenizacoes.reduce((t, i) => t + Number(i.valores_cobertura?.[c.chave] ?? 0), 0);
+      return { ...c, lmi, usado: usadoC, saldo: lmi - usadoC };
+    });
+    const lmi = linhas.reduce((t, l) => t + l.lmi, 0);
+    return { tipo: "individual", lmi: linhas.length ? lmi : null, usado, saldo: linhas.length ? linhas.reduce((t, l) => t + l.saldo, 0) : null, linhas };
+  }
+  const lmi = s.lmi != null ? Number(s.lmi) : null;
+  return { tipo: "global", lmi, usado, saldo: lmi != null ? lmi - usado : null, linhas: [] };
+}
+
+// Acordo (ajuste da equipe, 23/10/2026): o lembrete mensal é 1 dia útil depois
+// do VENCIMENTO DO ALUGUEL (não da parcela do acordo). O dia do mês vem do
+// campo "Vencimento do aluguel" (casos antigos: da 1ª parcela), dentro do
+// período do acordo (até a última parcela).
+type DadosAcordo = { acordo_vencimento_aluguel?: string | null; acordo_primeira_parcela?: string | null; acordo_ultima_parcela?: string | null };
+function baseAcordo(s: DadosAcordo) {
+  return s.acordo_vencimento_aluguel ?? s.acordo_primeira_parcela ?? null;
+}
+function noMes(base: string, ano: number, mes: number) {
+  const ultimo = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+  return `${ano}-${String(mes).padStart(2, "0")}-${String(Math.min(Number(base.slice(8, 10)), ultimo)).padStart(2, "0")}`;
+}
+export function vencimentoAluguelDoMes(s: DadosAcordo, hoje: string): string | null {
+  const base = baseAcordo(s);
+  if (!base) return null;
+  const venc = noMes(base, Number(hoje.slice(0, 4)), Number(hoje.slice(5, 7)));
+  if (venc < base) return null;
+  if (s.acordo_ultima_parcela && venc > s.acordo_ultima_parcela) return null;
+  return venc;
+}
+export function proximoVencimentoAluguel(s: DadosAcordo, hoje: string): string | null {
+  const base = baseAcordo(s);
+  if (!base) return null;
+  let [ano, mes] = [Number(hoje.slice(0, 4)), Number(hoje.slice(5, 7))];
+  for (let i = 0; i < 3; i++) {
+    const data = noMes(base, ano, mes);
+    if (data >= hoje && data >= base) return !s.acordo_ultima_parcela || data <= s.acordo_ultima_parcela ? data : null;
+    mes += 1;
+    if (mes > 12) [mes, ano] = [1, ano + 1];
+  }
   return null;
 }

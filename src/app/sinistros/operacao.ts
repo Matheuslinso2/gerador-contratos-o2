@@ -9,7 +9,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2, DOMINIO_O2 } from "@/lib/admin";
-import { ETAPAS, calcularPrazoAviso, formatarReais, hojeSP, situacaoDoFormulario, type EtapaSinistro, type TipoSinistro } from "@/lib/sinistros/regras";
+import { COBERTURAS_LMI, ETAPAS, calcularPrazoAviso, formatarReais, hojeSP, saldoLmi, situacaoDoFormulario, type EtapaSinistro, type TipoSinistro } from "@/lib/sinistros/regras";
 import { emailAtualizacaoParaImobiliaria, type SinistroEmail } from "@/lib/sinistros/emails";
 
 type Supa = Awaited<ReturnType<typeof createClient>>;
@@ -155,9 +155,8 @@ export async function salvarAcordo(fd: FormData) {
   const s = await carregar(supabase, id);
   if (!s) voltar(id, { erro: "Sinistro não encontrado.", ctx });
   const dados: Record<string, unknown> = {
-    acordo_numero: texto(fd, "acordo_numero"),
     acordo_data: texto(fd, "acordo_data"),
-    acordo_efetivacao: texto(fd, "acordo_efetivacao"),
+    acordo_vencimento_aluguel: texto(fd, "acordo_vencimento_aluguel"),
     acordo_primeira_parcela: texto(fd, "acordo_primeira_parcela"),
     acordo_ultima_parcela: texto(fd, "acordo_ultima_parcela"),
   };
@@ -169,7 +168,7 @@ export async function salvarAcordo(fd: FormData) {
   await registrar(supabase, id, {
     autor_tipo: "o2",
     referente: "seguradora",
-    texto: `Acordo${dados.acordo_numero ? ` nº ${dados.acordo_numero}` : ""}: feito em ${br(dados.acordo_data)}, efetivado em ${br(dados.acordo_efetivacao)}, parcelas de ${br(dados.acordo_primeira_parcela)} a ${br(dados.acordo_ultima_parcela)}.`,
+    texto: `Acordo feito em ${br(dados.acordo_data)}, parcelas de ${br(dados.acordo_primeira_parcela)} a ${br(dados.acordo_ultima_parcela)}, aluguel vence em ${br(dados.acordo_vencimento_aluguel)}.`,
     etapa_de: mudaEtapa ? s.etapa : null,
     etapa_para: mudaEtapa ? "acordo_judicial" : null,
   });
@@ -181,9 +180,20 @@ export async function salvarLmi(fd: FormData) {
   const { supabase } = await exigirInterno();
   const id = texto(fd, "id")!;
   const ctx = texto(fd, "ctx");
-  const lmi = valor(fd, "lmi");
-  await supabase.from("sinistros").update({ lmi }).eq("id", id);
-  await registrar(supabase, id, { autor_tipo: "o2", referente: "interno", visivel_imobiliaria: false, texto: `LMI da apólice: ${lmi != null ? formatarReais(lmi) : "removido"}.` });
+  const tipo = texto(fd, "lmi_tipo") === "individual" ? "individual" : "global";
+  // Individual: só as coberturas marcadas (as que a apólice tem), cada uma com
+  // o seu limite; o LMI "total" vira a soma.
+  const coberturas: Record<string, number> = {};
+  if (tipo === "individual")
+    for (const c of COBERTURAS_LMI) if (fd.get(`ativa_${c.chave}`) === "on") coberturas[c.chave] = valor(fd, `lmi_${c.chave}`) ?? 0;
+  const lmi = tipo === "individual" ? (Object.keys(coberturas).length ? Object.values(coberturas).reduce((t, v) => t + v, 0) : null) : valor(fd, "lmi");
+  const { error } = await supabase.from("sinistros").update({ lmi, lmi_tipo: tipo, lmi_coberturas: coberturas }).eq("id", id);
+  if (error) voltar(id, { erro: error.message, aba: "pagamentos", ctx });
+  const detalhe =
+    tipo === "individual"
+      ? `individual — ${COBERTURAS_LMI.filter((c) => coberturas[c.chave] != null).map((c) => `${c.titulo} ${formatarReais(coberturas[c.chave])}`).join(", ") || "nenhuma cobertura marcada"}`
+      : `global — ${lmi != null ? formatarReais(lmi) : "removido"}`;
+  await registrar(supabase, id, { autor_tipo: "o2", referente: "interno", visivel_imobiliaria: false, texto: `LMI da apólice: ${detalhe}.` });
   voltar(id, { sucesso: "LMI salvo.", aba: "pagamentos", ctx });
 }
 
@@ -191,27 +201,32 @@ export async function registrarIndenizacao(fd: FormData) {
   const { supabase } = await exigirInterno();
   const id = texto(fd, "id")!;
   const ctx = texto(fd, "ctx");
-  const v = valor(fd, "valor") ?? 0;
-  const mes = texto(fd, "referencia"); // "AAAA-MM"
   const pagoEm = texto(fd, "pago_em") ?? hojeSP();
   const s = await carregar(supabase, id);
   if (!s) voltar(id, { erro: "Sinistro não encontrado.", ctx });
-  // Histórico de pagamento (22/10/2026): anexo opcional (planilha da seguradora).
-  let anexo: { anexo_path: string; anexo_nome: string } | null = null;
-  const arquivo = fd.get("anexo");
-  if (arquivo instanceof File && arquivo.size > 0) {
-    const nome = arquivo.name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^\w.\-]+/g, "_").slice(-120);
-    const caminho = `${id}/pagamentos/${Date.now()}-${nome}`;
-    const { error: erroUp } = await supabase.storage.from("sinistros").upload(caminho, arquivo, { contentType: arquivo.type || "application/octet-stream" });
-    if (erroUp) voltar(id, { erro: "Não foi possível anexar o arquivo: " + erroUp.message, aba: "pagamentos", ctx });
-    anexo = { anexo_path: caminho, anexo_nome: arquivo.name };
+  // LMI individual: rateio por cobertura (interno). Sem valor total digitado,
+  // o total é a soma do rateio.
+  const rateio: Record<string, number> = {};
+  if (s.lmi_tipo === "individual") {
+    for (const c of COBERTURAS_LMI) {
+      const v = valor(fd, `cob_${c.chave}`);
+      if (v) rateio[c.chave] = v;
+    }
   }
+  const somaRateio = Object.values(rateio).reduce((t, v) => t + v, 0);
+  const v = valor(fd, "valor") ?? somaRateio;
+  if (!(v > 0)) voltar(id, { erro: "Informe o valor da indenização.", aba: "pagamentos", ctx });
+  // Anexo (planilha da seguradora): o navegador sobe o arquivo direto pro
+  // bucket e manda só o caminho -- a Server Action na Vercel não aguenta arquivo.
+  const anexoPath = texto(fd, "anexo_path");
+  const anexo = anexoPath && anexoPath.startsWith(`${id}/`) ? { anexo_path: anexoPath, anexo_nome: texto(fd, "anexo_nome") } : {};
   const { error } = await supabase.from("sinistro_indenizacoes").insert({
     sinistro_id: id,
     valor: v,
     pago_em: pagoEm,
-    referencia: mes ? `${mes}-01` : null,
+    // Referência vai na observação (ajuste da equipe, 23/10/2026).
     observacao: texto(fd, "observacao"),
+    valores_cobertura: rateio,
     ...anexo,
   });
   if (error) voltar(id, { erro: error.message, aba: "pagamentos", ctx });
@@ -220,20 +235,33 @@ export async function registrarIndenizacao(fd: FormData) {
   await registrar(supabase, id, {
     autor_tipo: "o2",
     referente: "seguradora",
-    texto: `Indenização registrada: ${formatarReais(v)}${mes ? ` (ref. ${mes.split("-").reverse().join("/")})` : ""}, paga em ${pagoEm.split("-").reverse().join("/")}.`,
+    texto: `Indenização registrada: ${formatarReais(v)}, paga em ${pagoEm.split("-").reverse().join("/")}.`,
     etapa_de: mudaEtapa ? s.etapa : null,
     etapa_para: mudaEtapa ? "em_indenizacao" : null,
   });
   revalidatePath("/sinistros/gestao");
-  if (s.lmi) {
-    const { data: todas } = await supabase.from("sinistro_indenizacoes").select("valor").eq("sinistro_id", id);
-    const usado = (todas ?? []).reduce((acc, x) => acc + Number(x.valor), 0);
-    if (usado > Number(s.lmi))
-      voltar(id, { erro: `Indenização registrada, mas o total (${formatarReais(usado)}) passou do LMI (${formatarReais(Number(s.lmi))}).`, aba: "pagamentos", ctx });
-  }
+  const avisos: string[] = [];
+  if (somaRateio > 0 && Math.abs(somaRateio - v) > 0.009)
+    avisos.push(`o rateio por cobertura (${formatarReais(somaRateio)}) não fecha com o total (${formatarReais(v)})`);
+  const { data: todas } = await supabase.from("sinistro_indenizacoes").select("valor, valores_cobertura").eq("sinistro_id", id);
+  const saldo = saldoLmi(s, todas ?? []);
+  if (saldo.tipo === "global" && saldo.saldo != null && saldo.saldo < 0)
+    avisos.push(`o total indenizado (${formatarReais(saldo.usado)}) passou do LMI (${formatarReais(saldo.lmi)})`);
+  for (const l of saldo.linhas) if (l.saldo < 0) avisos.push(`${l.titulo} passou do LMI da cobertura (${formatarReais(l.usado)} de ${formatarReais(l.lmi)})`);
+  if (avisos.length) voltar(id, { erro: `Indenização registrada, mas ${avisos.join("; ")}.`, aba: "pagamentos", ctx });
   voltar(id, { sucesso: "Indenização registrada.", aba: "pagamentos", ctx });
 }
 
+// Anexa (ou troca) a planilha de um pagamento já registrado. O arquivo já foi
+// enviado pelo navegador para o bucket.
+export async function anexarArquivoPagamento(id: string, indenizacaoId: string, caminho: string, nome: string): Promise<{ ok: boolean; erro?: string }> {
+  const { supabase } = await exigirInterno();
+  if (!caminho.startsWith(`${id}/`)) return { ok: false, erro: "Caminho de arquivo inválido." };
+  const { error } = await supabase.from("sinistro_indenizacoes").update({ anexo_path: caminho, anexo_nome: nome }).eq("id", indenizacaoId).eq("sinistro_id", id);
+  if (error) return { ok: false, erro: error.message };
+  revalidatePath(`/sinistros/${id}`);
+  return { ok: true };
+}
 export async function removerIndenizacao(fd: FormData) {
   const { supabase } = await exigirInterno();
   const id = texto(fd, "id")!;
@@ -409,12 +437,21 @@ export type ApoliceEncontrada = {
   vigencia_fim: string | null;
   imobiliaria_texto: string | null;
   imobiliaria_id: string | null;
-  locatario_nome: string | null;
-  locatario_documento: string | null;
-  locatario_email: string | null;
-  locatario_telefone: string | null;
+  // Cliente do Corp = SEGURADO (na Fiança, o locador). O garantido (locatário) não vem do Corp.
+  cliente_nome: string | null;
+  cliente_documento: string | null;
+  cliente_email: string | null;
+  cliente_telefone: string | null;
   data_efetivacao: string | null;
   status: string | null;
+  // Local de risco (producao_enderecos).
+  imovel_logradouro: string | null;
+  imovel_numero: string | null;
+  imovel_complemento: string | null;
+  imovel_bairro: string | null;
+  imovel_cidade: string | null;
+  imovel_uf: string | null;
+  imovel_cep: string | null;
 };
 
 // Busca a apólice na base de produção (Nosso Nº, CPF/CNPJ ou nome do

@@ -159,26 +159,25 @@ function SimNao({ name, valor }: { name: string; valor: boolean | null }) {
 
 export function CabecalhoSinistro({
   s,
-  totalIndenizado,
+  saldo,
   primeiraIndenizacao,
   interno,
   ctx,
 }: {
   s: any;
-  totalIndenizado: number;
+  saldo: number | null;
   primeiraIndenizacao: string | null;
   interno: boolean;
   ctx: string | null;
 }) {
   const vig = situacaoVigencia(s);
   const alerta = alertaRenovacao(s);
-  const saldo = s.lmi != null ? Number(s.lmi) - totalIndenizado : null;
   const desocupado = s.tipo === "chaves_sem_danos" || s.tipo === "chaves_com_danos";
   return (
     <section className={`${cartao} space-y-4`}>
       <div className="grid gap-4 md:grid-cols-[auto_1fr]">
         <Campo rotulo="Nº do aviso">
-          <span className="text-lg font-bold">{s.numero_aviso ?? "—"}</span>
+          <span className="text-lg font-bold">{s.numero_sinistro_seguradora ?? "—"}</span>
         </Campo>
         <div>
           <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-500">Status</p>
@@ -270,7 +269,7 @@ export function ChatLateral({ s, historico, interno, ctx }: { s: any; historico:
   return (
     <aside className="flex max-h-[44rem] flex-col rounded-xl border border-gray-200 bg-white lg:sticky lg:top-4">
       <h2 className="border-b border-gray-100 px-3 py-2 text-sm font-semibold uppercase tracking-wide text-o2-navy">
-        Chat do sinistro {s.numero_aviso ? `· ${s.numero_aviso}` : ""}
+        Chat do sinistro {s.numero_sinistro_seguradora ? `· aviso ${s.numero_sinistro_seguradora}` : `· SIN-${s.codigo}`}
       </h2>
       <ol className="flex-1 space-y-2 overflow-y-auto p-3">
         {msgs.map((m) => {

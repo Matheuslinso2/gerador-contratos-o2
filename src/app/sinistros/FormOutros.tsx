@@ -74,7 +74,7 @@ export default function FormOutros({
             <input name="numero_apolice" defaultValue={d.numero_apolice ?? ""} className={inputClass} />
           </div>
           <div>
-            <label className={labelClass}>Nº do sinistro na seguradora</label>
+            <label className={labelClass}>Nº do aviso (seguradora)</label>
             <input name="numero_sinistro_seguradora" defaultValue={d.numero_sinistro_seguradora ?? ""} className={inputClass} />
           </div>
           <div>

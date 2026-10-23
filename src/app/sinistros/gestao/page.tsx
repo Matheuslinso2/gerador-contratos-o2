@@ -257,7 +257,7 @@ function ListaO2({ sinistros, nomes, equipe, ctx, volta }: { sinistros: any[]; n
                       {s.locatario_nome || s.locador_nome || "Sem nome"}
                     </Link>
                     <div className="text-xs text-gray-500">
-                      {s.numero_aviso ? `${s.numero_aviso} · ` : ""}SIN-{s.codigo} · {s.imobiliarias?.apelido || s.imobiliarias?.nome || "imob. não definida"}
+                      {s.numero_sinistro_seguradora ? `Aviso ${s.numero_sinistro_seguradora} · ` : ""}SIN-{s.codigo} · {s.imobiliarias?.apelido || s.imobiliarias?.nome || "imob. não definida"}
                       {s.origem === "corp" && <span className="ml-1 rounded bg-gray-200 px-1 text-[10px] text-gray-600">Corp</span>}
                       <SelosNovidade s={s} />
                     </div>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { DOMINIO_O2 } from "@/lib/admin";
-import { DIAS_ALERTA_POS_VENCIMENTO, DIAS_ALERTA_RENOVACAO, alertaRenovacao, formatarData, hojeSP, somarDias } from "@/lib/sinistros/regras";
+import { DIAS_ALERTA_POS_VENCIMENTO, DIAS_ALERTA_RENOVACAO, alertaRenovacao, formatarData, hojeSP, somarDias, vencimentoAluguelDoMes } from "@/lib/sinistros/regras";
 import { emailAlertasParaO2, emailAtualizacaoParaImobiliaria, type SinistroEmail } from "@/lib/sinistros/emails";
 
 export const dynamic = "force-dynamic";
@@ -16,8 +16,8 @@ export const maxDuration = 60;
 //     renovação) e, depois do encerramento da vigência SEM entrega das chaves,
 //     um alerta por dia durante 10 dias seguidos -- até a O2 marcar "Setor de
 //     renovação foi sinalizado?" na ficha (regra em alertaRenovacao()).
-//  2. Acordo / judicial (dias úteis): 1 dia útil depois do vencimento de cada
-//     parcela, lembra de conferir se o locatário pagou (acordo_alerta_ultimo).
+//  2. Acordo / judicial (dias úteis): 1 dia útil depois do vencimento do
+//     ALUGUEL, lembra de conferir se o locatário pagou (acordo_alerta_ultimo).
 // Lê só sinistros em andamento (tabela pequena). Protegida por CRON_SECRET.
 
 function proximoDiaUtil(data: string) {
@@ -29,17 +29,6 @@ function proximoDiaUtil(data: string) {
   }
 }
 
-// Vencimento da parcela no mês de `hoje` (dia da 1ª parcela), dentro do acordo.
-function vencimentoDoMes(s: any, hoje: string): string | null {
-  const ini = s.acordo_primeira_parcela as string;
-  const dia = Number(ini.slice(8, 10));
-  const [ano, mes] = [Number(hoje.slice(0, 4)), Number(hoje.slice(5, 7))];
-  const ultimo = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
-  const venc = `${ano}-${String(mes).padStart(2, "0")}-${String(Math.min(dia, ultimo)).padStart(2, "0")}`;
-  if (venc < ini) return null;
-  if (s.acordo_ultima_parcela && venc > s.acordo_ultima_parcela) return null;
-  return venc;
-}
 
 function destinosImobiliaria(s: any) {
   const lista: string[] = [];
@@ -106,21 +95,21 @@ export async function GET(request: NextRequest) {
   // 2. parcelas de acordo
   const { data: acordos, error: e2 } = await supabase
     .from("sinistros")
-    .select("id, codigo, proxima_acao_em, acordo_primeira_parcela, acordo_ultima_parcela, acordo_alerta_ultimo")
+    .select("id, codigo, proxima_acao_em, acordo_primeira_parcela, acordo_ultima_parcela, acordo_vencimento_aluguel, acordo_alerta_ultimo")
     .eq("etapa", "acordo_judicial")
-    .not("acordo_primeira_parcela", "is", null);
+    .or("acordo_vencimento_aluguel.not.is.null,acordo_primeira_parcela.not.is.null");
   if (e2) return NextResponse.json({ erro: e2.message }, { status: 500 });
   const diaSemana = new Date(`${hoje}T12:00:00Z`).getUTCDay();
   const diaUtil = diaSemana !== 0 && diaSemana !== 6;
   for (const s of (diaUtil ? acordos ?? [] : []) as any[]) {
-    const venc = vencimentoDoMes(s, hoje);
+    const venc = vencimentoAluguelDoMes(s, hoje);
     if (!venc || hoje < proximoDiaUtil(venc)) continue;
     if (s.acordo_alerta_ultimo && s.acordo_alerta_ultimo >= venc) continue;
     const mesRef = `${venc.slice(5, 7)}/${venc.slice(0, 4)}`;
-    const texto = `parcela do acordo vencida em ${formatarData(venc)} — conferir se o locatário pagou`;
+    const texto = `aluguel venceu em ${formatarData(venc)} (acordo em andamento) — conferir se o locatário pagou`;
     await supabase
       .from("sinistros")
-      .update({ acordo_alerta_ultimo: hoje, proxima_acao_em: hoje, proxima_acao_descricao: `Conferir pagamento da parcela de ${mesRef} do acordo` })
+      .update({ acordo_alerta_ultimo: hoje, proxima_acao_em: hoje, proxima_acao_descricao: `Conferir pagamento do aluguel de ${mesRef} (acordo)` })
       .eq("id", s.id);
     await supabase.from("sinistro_historico").insert({ sinistro_id: s.id, autor_tipo: "sistema", referente: "interno", visivel_imobiliaria: false, texto: `⚠ Alerta automático: ${texto}.` });
     itensEquipe.push({ id: s.id, codigo: s.codigo, texto });
