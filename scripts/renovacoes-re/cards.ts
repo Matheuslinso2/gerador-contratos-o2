@@ -57,8 +57,15 @@ const arqJson = path.join(pastaCards, `cards-${mes}.json`);
 const PRODUTO: Record<string, string> = {
   IMOB: "Incêndio Imobiliário", "2IMO": "Incêndio Imobiliário",
   RESI: "Incêndio Individual Residencial", EMPR: "Incêndio Individual Empresarial", COND: "Condomínio",
+  // Vida (Matheus 23/10: criar também, como a Kamila fez em novembro). O campo
+  // Produto não tem opção de vida — fica em branco, igual aos cards dela.
+  VIND: "", VGRP: "", VDCV: "",
 };
-const RAMO_TITULO: Record<string, string> = { RESI: "RESI", EMPR: "EMPR", COND: "COND" };
+const RAMO_TITULO: Record<string, string> = { RESI: "RESI", EMPR: "EMPR", COND: "COND", VIND: "VIND", VGRP: "VGRP", VDCV: "VDCV" };
+// Superlógica é um ERP de imobiliária (como a Segimob é um multicálculo): quando
+// ela é o único produtor, o segurado é a própria imobiliária (Matheus 23/10).
+const SUPERLOGICA = /SUPERLOGICA|SUPERLÓGICA/i;
+const chave = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 // Nome da seguradora no Corp → opção do campo "Seguradora final (seleção)".
 const SEG_CAMPO: Record<string, string> = { YELUM: "YELLUM", SULAMERICA: "SULAMERICA" };
 const segCampo = (s: string) => SEG_CAMPO[s] ?? s;
@@ -256,8 +263,14 @@ async function montar() {
   const sobrou = imobCorp.filter((a) => !usadas.has(a.nossoNumero));
   if (sobrou.length) throw new Error(`${sobrou.length} apólices de Imobiliário do Corp não estão em nenhuma planilha de lote (rode planilhas.ts de novo)`);
 
-  // ---- Residencial, Empresarial e Condomínio: 1 card por apólice
-  for (const a of corp.filter((x) => !(x.ramoCodigo === "IMOB" || x.ramoCodigo === "2IMO"))) {
+  // ---- Residencial, Empresarial, Condomínio e Vida: 1 card por apólice
+  for (const a0 of corp.filter((x) => !(x.ramoCodigo === "IMOB" || x.ramoCodigo === "2IMO"))) {
+    const superlogica = a0.canais.some((c) => SUPERLOGICA.test(c));
+    // Só a Superlógica no Corp: a imobiliária é o próprio segurado.
+    // Usa a grafia de produtor do Corp quando ela existe (ex.: "AMPLACASA SERVICOS
+    // DE ADMINISTRACAO" em vez do nome cortado do segurado).
+    const grafiaProdutor = corp.map((x) => x.imobiliaria).find((n) => n && chave(n).startsWith(chave(a0.cliente).slice(0, 12)));
+    const a = !a0.imobiliaria && superlogica ? { ...a0, imobiliaria: grafiaProdutor ?? a0.cliente } : a0;
     const d = pdfPorNN.get(a.nossoNumero);
     const e = separarEndereco(d?.enderecoRisco ?? null);
     const segimob = a.canais.some((c) => /SEGIMOB/i.test(c));
@@ -266,7 +279,10 @@ async function montar() {
     const ramo = RAMO_TITULO[a.ramoCodigo];
     const emp = a.imobiliaria ? empresaDe(a) : null;
     const alertas = alertasDe(a);
-    const titulo = a.imobiliaria ? `RENOVAÇÃO - ${ramo} - ${a.cliente} - ${a.imobiliaria} - ${mesBr}` : `RENOVAÇÃO - ${ramo} - ${a.cliente} - ${mesBr}`;
+    // Segurado que é a própria imobiliária: o nome aparece uma vez só no título.
+    const mesmaPessoa = !!a.imobiliaria && (chave(a.cliente).startsWith(chave(a.imobiliaria).slice(0, 12)) || chave(a.imobiliaria).startsWith(chave(a.cliente).slice(0, 12)));
+    const titulo = !a.imobiliaria || mesmaPessoa ? `RENOVAÇÃO - ${ramo} - ${a.imobiliaria ?? a.cliente} - ${mesBr}` : `RENOVAÇÃO - ${ramo} - ${a.cliente} - ${a.imobiliaria} - ${mesBr}`;
+    const semNumero = !/[1-9]/.test(a.apolice);
     cards.push({
       chave: `${a.nossoNumero}`,
       titulo,
@@ -274,7 +290,7 @@ async function montar() {
       ramos: a.ramoCodigo,
       imobiliaria: a.imobiliaria,
       seguradora: seg,
-      origem: segimob ? "Segimob" : "Ficha",
+      origem: segimob ? "Segimob" : superlogica ? "Outro" : "Ficha",
       itens: 1,
       fimVigencia: a.fimVigencia!,
       comissaoPct: a.percentualComissao || null,
@@ -285,9 +301,10 @@ async function montar() {
       linkDrive: null,
       observacoes: [
         "Quantidade de itens: 1",
-        `Apólice ${a.apolice} (${a.ramoCodigo}).`,
-        a.imobiliaria ? "" : a.canais.length ? `Sem imobiliária no Corp (só ${a.canais.join("/")}).` : "Venda direta O2 (sem imobiliária).",
+        semNumero ? `Apólice sem número no Corp (${a.ramoCodigo}) e prêmio do ano anterior zerado — conferir.` : `Apólice ${a.apolice} (${a.ramoCodigo}).`,
+        a.imobiliaria ? "" : "Venda direta O2 (sem imobiliária).",
         segimob ? "Renovado pela imobiliária no sistema da Segimob." : "",
+        superlogica ? "Via Superlógica (ERP da imobiliária)." : "",
         `Prêmio total do ano anterior: ${reais(a.premioTotal)}.`,
         d?.enderecoRisco ? "Endereço lido do PDF do Corp (bairro pode vir abreviado, sem CEP)." : "Endereço não encontrado no Corp — preencher.",
         ...alertas.map((x) => `Atenção: ${x}.`),
@@ -296,7 +313,7 @@ async function montar() {
       companyId: emp?.id ?? null,
       empresa: emp?.nome ?? null,
       alertas,
-      apolices: [a.apolice],
+      apolices: semNumero ? [] : [a.apolice],
       responsavelId: kamila,
     });
   }
@@ -370,14 +387,36 @@ async function criar() {
   const hoje = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
   if (hoje < LIBERADO_EM) throw new Error(`criação liberada só a partir de ${dataBr(LIBERADO_EM)} (pedido do Matheus)`);
   const cards = JSON.parse(fs.readFileSync(arqJson, "utf8")) as Card[];
-  const defs = await buscarDefinicaoCampos(ENTITY);
+  let defs = await buscarDefinicaoCampos(ENTITY);
   const opcao = (campo: string, valor: string) => {
     const it = defs[campo]?.items?.find((i) => i.VALUE.toUpperCase() === valor.toUpperCase());
     if (!it) throw new Error(`opção "${valor}" não existe no campo ${campo}`);
     return Number(it.ID);
   };
-  const campoAnterior = Object.entries(defs).find(([, d]) => /pr[eê]mio total anterior/i.test((d as { title?: string }).title ?? ""))?.[0];
-  if (!campoAnterior) throw new Error('falta criar no Bitrix o campo "Prêmio total anterior" (Monetário) na SPA Produção Incêndio');
+  const acharAnterior = () => Object.entries(defs).find(([, d]) => /pr[eê]mio total anterior/i.test((d as { title?: string }).title ?? ""))?.[0];
+  if (!acharAnterior()) {
+    // Campo novo "Prêmio total anterior" (Monetário), autorizado pelo Matheus em
+    // 23/10/2026. Mesma chamada do provisionamento da Capitalização
+    // (scripts/provisionar-integracao-capitalizacao.ps1), webhook de usuários.
+    const base = process.env.BITRIX_WEBHOOK_URL_USUARIOS!.replace(/\/?$/, "/");
+    const r = await fetch(`${base}userfieldconfig.add.json`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        moduleId: "crm",
+        field: {
+          entityId: "CRM_12", fieldName: "UF_CRM_12_PREMIO_ANTERIOR", userTypeId: "money", sort: 905, multiple: "N", mandatory: "N",
+          showFilter: "Y", showInList: "Y", editInList: "Y", isSearchable: "N", editFormLabel: { br: "Prêmio total anterior" }, listColumnLabel: { br: "Prêmio total anterior" },
+        },
+      }),
+    });
+    const j = (await r.json()) as { error?: string; error_description?: string };
+    if (j.error) throw new Error(`não consegui criar o campo "Prêmio total anterior": ${j.error_description ?? j.error}`);
+    console.log('campo "Prêmio total anterior" criado na SPA Produção Incêndio');
+    defs = await buscarDefinicaoCampos(ENTITY);
+  }
+  const campoAnterior = acharAnterior();
+  if (!campoAnterior) throw new Error('o campo "Prêmio total anterior" não apareceu na SPA depois de criado');
   const bloqueados = cards.filter((c) => !c.bitrixId && c.alertas.some((a) => /JÁ EXISTE|já está em card/.test(a)));
   if (bloqueados.length) throw new Error(`${bloqueados.length} card(s) já existem no funil — revise a prévia antes de criar`);
   let criados = 0;
@@ -390,7 +429,7 @@ async function criar() {
       stageId: ETAPA,
       ...(c.companyId ? { companyId: c.companyId } : {}),
       ufCrm12TipoProcesso: opcao("ufCrm12TipoProcesso", "Renovação"),
-      ufCrm12Produto: opcao("ufCrm12Produto", c.produto),
+      ...(c.produto ? { ufCrm12Produto: opcao("ufCrm12Produto", c.produto) } : {}),
       ufCrm12SeguradoraFinalMulti: [opcao("ufCrm12SeguradoraFinalMulti", c.seguradora)],
       ufCrm12OrigemProducao: opcao("ufCrm12OrigemProducao", c.origem),
       ...(c.responsavelId ? { assignedById: c.responsavelId } : {}),
@@ -401,7 +440,7 @@ async function criar() {
       [campoAnterior]: `${c.premioAnterior}|BRL`,
       ufCrm12Observacoes: c.observacoes,
       ...(c.planilha ? { ufCrm12ReferenciaPlanilha: c.planilha } : {}),
-      ufCrm12NumApolice: c.apolices.join("; "),
+      ...(c.apolices.length ? { ufCrm12NumApolice: c.apolices.join("; ") } : {}),
       ...(c.endereco
         ? {
             ufCrm12_1790085424526: c.endereco.logradouro,
@@ -431,7 +470,7 @@ async function main() {
   const arq = gravarPrevia(cards);
   const n = (f: (c: Card) => boolean) => cards.filter(f).length;
   console.log(`${mes}: ${corp} apólices no Corp → ${cards.length} cards (funil Renovações tem hoje ${existentes} cards)`);
-  console.log(`Imobiliário ${n((c) => c.produto === PRODUTO.IMOB)} | Residencial ${n((c) => c.produto === PRODUTO.RESI)} | Empresarial ${n((c) => c.produto === PRODUTO.EMPR)} | Condomínio ${n((c) => c.produto === PRODUTO.COND)}`);
+  console.log(`Imobiliário ${n((c) => c.produto === PRODUTO.IMOB)} | Residencial ${n((c) => c.produto === PRODUTO.RESI)} | Empresarial ${n((c) => c.produto === PRODUTO.EMPR)} | Condomínio ${n((c) => c.produto === PRODUTO.COND)} | Vida ${n((c) => /^V(IND|GRP|DCV)$/.test(c.ramos))}`);
   console.log(`Segimob ${n((c) => c.origem === "Segimob")} | venda direta O2 ${n((c) => !c.imobiliaria)} | 1 item ${n((c) => c.itens === 1)} | sem empresa no Bitrix ${n((c) => !!c.imobiliaria && !c.companyId)} | com alerta ${n((c) => c.alertas.length > 0)} | sem link do Drive ${n((c) => !!c.planilha && !c.linkDrive)}`);
   console.log(`prêmio do ano anterior: ${reais(cards.reduce((s, c) => s + c.premioAnterior, 0))}`);
   console.log(`prévia: ${arq}\n(nada foi criado no Bitrix)`);
