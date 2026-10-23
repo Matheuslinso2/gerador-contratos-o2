@@ -2,11 +2,14 @@
 // O Corp é um programa transmitido como imagem (canvas) no navegador: o robô usa
 // teclado (Alt+letra dos menus, Tab, digitação) e procura modelos de imagem
 // (modelos/*.png) para clicar onde o teclado não alcança.
-// uso: npx tsx scripts/robo-corp/exportar.ts [--mapear] [--so <id>] [--manter]
+// uso: npx tsx scripts/robo-corp/exportar.ts [--mapear] [--so <id>] [--manter] [--todos] [--listar]
 //   --mapear  entra no Corp, abre o Gerenciador de Relatórios e fotografa cada
 //             passo em saida/mapa/ (calibração e diagnóstico); não exporta.
 //   --so id   exporta só o relatório com esse id do config.json.
 //   --manter  deixa o navegador aberto no fim (para olhar).
+//   --todos   exporta também as grades dos anos já fechados (ver gradesEmUso).
+//   --listar  só mostra quais relatórios seriam exportados hoje; não abre o Corp
+//             (com --hoje AAAA-MM-DD simula outra data).
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -30,6 +33,8 @@ const MANTER = args.includes("--manter");
 // Gráficos de Análise e Metas), para conferir os números no mesmo instante.
 const PAINEL = args.includes("--painel");
 const SO = args.includes("--so") ? args[args.indexOf("--so") + 1] : null;
+const TODOS = args.includes("--todos");
+const LISTAR = args.includes("--listar");
 // Rodar a partir da pasta do projeto (ver README).
 const RAIZ = path.resolve(process.cwd(), "scripts", "robo-corp");
 const MODELOS = path.join(RAIZ, "modelos");
@@ -370,8 +375,41 @@ const slug = (s: string) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
 
+// Grades em uso (decisão do Matheus, 23/10/2026): os anos fechados já estão na
+// base e congelados (mês fechado não muda), então o robô só baixa a grade do ano
+// que cobre o período ainda aberto: do mês anterior (só até o dia 15, regra do
+// fechamento do Workspace) até o mês seguinte (renovações com vigência adiantada).
+// Na prática é a grade do ano corrente; em dezembro entra também a do ano
+// seguinte e, de 1º a 15 de janeiro, a do ano anterior. Ano sem linha no
+// config.json ganha uma no padrão do arquivo do ano (grade_prods_AAAA, 01/01 a
+// 31/12, mesma pasta). Com --todos (ou --so) baixa o que o config manda.
+const dataBr = (s: string) => {
+  const [d, m, a] = s.split("/").map(Number);
+  return new Date(Date.UTC(a, m - 1, d));
+};
+export function gradesEmUso(relatorios: Relatorio[], hoje = new Date()): Relatorio[] {
+  const [a, m, d] = hoje.toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }).split("-").map(Number);
+  const inicio = new Date(Date.UTC(a, m - 1 - (d <= 15 ? 1 : 0), 1));
+  const fim = new Date(Date.UTC(a, m + 1, 0)); // último dia do mês seguinte
+  const grades = relatorios.filter((r) => r.tipo === "grade");
+  const pasta = grades[0]?.pasta ?? "CORP_01.02 - Propostas Grade por Produtor";
+  const escolhidas = grades.filter((r) => r.de && r.ate && dataBr(r.de) <= fim && dataBr(r.ate) >= inicio);
+  for (let ano = inicio.getUTCFullYear(); ano <= fim.getUTCFullYear(); ano++) {
+    const coberto = grades.some((r) => r.de && r.ate && dataBr(r.de) <= new Date(Date.UTC(ano, 0, 1)) && dataBr(r.ate) >= new Date(Date.UTC(ano, 11, 31)));
+    if (!coberto) escolhidas.push({ id: `grade_prods_${ano}`, tipo: "grade", de: `01/01/${ano}`, ate: `31/12/${ano}`, pasta });
+  }
+  return [...escolhidas, ...relatorios.filter((r) => r.tipo !== "grade")];
+}
+
 async function main() {
   const cfg = lerConfig();
+  if (LISTAR) {
+    // --hoje AAAA-MM-DD simula outra data (conferir dezembro/janeiro).
+    const hoje = args.includes("--hoje") ? new Date(`${args[args.indexOf("--hoje") + 1]}T12:00:00-03:00`) : new Date();
+    const lista = TODOS ? cfg.relatorios : gradesEmUso(cfg.relatorios, hoje);
+    for (const r of lista) log(`${r.id} (${r.de ?? "—"} a ${r.ate ?? "—"})`);
+    return;
+  }
   fs.mkdirSync(cfg.pastaSaida, { recursive: true });
   pastaFotos = path.join(RAIZ, "saida", MAPEAR ? "mapa" : agora());
   fs.mkdirSync(pastaFotos, { recursive: true });
@@ -397,7 +435,7 @@ async function main() {
       await foto(page, "apos-sair");
       log("mapeamento feito — recorte os modelos a partir das fotos em saida/mapa/ (ver README)");
     } else {
-      const lista = cfg.relatorios.filter((r) => !SO || r.id === SO);
+      const lista = SO ? cfg.relatorios.filter((r) => r.id === SO) : TODOS ? cfg.relatorios : gradesEmUso(cfg.relatorios);
       if (!lista.length) throw new Error(`nenhum relatório com id "${SO}" no config`);
       const feitos: string[] = [];
       for (const r of lista) {

@@ -44,8 +44,16 @@ Exporta um relatório só (teste).
 ```bash
 npx tsx scripts/robo-corp/exportar.ts
 ```
-Exporta todos os relatórios do `config.json`, salva em `pastaSaida` e copia
-para `pastaSharepoint` (se configurada). Depois, o Workspace lê o SharePoint
+Exporta os relatórios do `config.json`, salva em `pastaSaida` e copia
+para `pastaSharepoint` (se configurada). Das grades de produção, só baixa a do
+ano em uso (decisão do Matheus, 23/10/2026): os anos fechados já estão na base
+e congelados. "Em uso" = do mês anterior (só até o dia 15) ao mês seguinte; na
+prática, a grade do ano corrente, mais a do ano seguinte em dezembro e a do ano
+anterior de 1º a 15 de janeiro (ano sem linha no config vira `grade_prods_AAAA`).
+Clientes com Documentos e Sinistros continuam completos. `--todos` baixa
+também os anos fechados; `--listar` (com `--hoje AAAA-MM-DD`, opcional) mostra o
+que seria baixado sem abrir o Corp. Arquivo que não mudou não é recarregado no
+Workspace (a carga compara o conteúdo). Depois, o Workspace lê o SharePoint
 pelo cron `corp-sharepoint` — ou, enquanto o acesso ao SharePoint não estiver
 configurado na Vercel, pela carga local:
 `npx tsx scripts/corp-sharepoint/carregar-local.ts <pastaSaida>`.
