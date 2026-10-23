@@ -1,6 +1,6 @@
 @echo off
 rem Robo do Corp -> Excel -> SharePoint -> Workspace. Agendado no Agendador de
-rem Tarefas do Windows ("Robo Corp", todo dia 02:00; ver README.md). Roda a
+rem Tarefas do Windows ("Robo Corp", todo dia 12:00 e 20:00; ver README.md). Roda a
 rem partir da pasta do projeto; registra a saida em saida\ultimo.log.
 cd /d "%~dp0..\.."
 if not exist scripts\robo-corp\saida mkdir scripts\robo-corp\saida

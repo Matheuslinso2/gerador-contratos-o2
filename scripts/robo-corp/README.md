@@ -50,7 +50,8 @@ pelo cron `corp-sharepoint` — ou, enquanto o acesso ao SharePoint não estiver
 configurado na Vercel, pela carga local:
 `npx tsx scripts/corp-sharepoint/carregar-local.ts <pastaSaida>`.
 
-Agendado: Agendador de Tarefas do Windows → "Robo Corp", diário às 02:00,
+Agendado: Agendador de Tarefas do Windows → "Robo Corp", diário às 12:00 e às 20:00
+(decisão do Matheus, 23/10/2026; antes era só 02:00),
 roda `robo-corp.cmd` (exportar → espelho do Workspace → regra do Power BI →
 conferência do cadastro). Log em `saida/ultimo.log`; fotos de cada execução
 em `saida/<data>/`.
