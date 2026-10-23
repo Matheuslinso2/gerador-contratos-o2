@@ -41,6 +41,7 @@ export type HistoricoItem = {
   documento: string;
   numero: string;
   complemento: string;
+  valorAluguel: number | null;
   cep: string;
   apolice: string;
   ocupacao: string;
@@ -102,32 +103,52 @@ export function lerSimplificadoComProdutor(arquivo: Buffer): ApoliceCorp[] {
     });
 }
 
-// Planilhas de lote dos anos anteriores (formato varia: lê pelo nome da coluna).
+// Planilhas de lote dos anos anteriores. O formato varia por imobiliária e por
+// ano (lê pelo nome da coluna): Special/Yelum ("LMI DE INCÊNDIO", "LMI DE
+// ALUGUEL"), Renascença ("CPFLOCD", "LMI"), Liberty ("LMI", "PERDA DE ALUGUEL",
+// endereço com número numa coluna só) e o orçamento Tokio/Segimob, que não tem
+// LMI — só "Valor Aluguel" (a base do cálculo da Tokio).
 export function lerHistorico(arquivo: Buffer, nomeArquivo: string): HistoricoItem[] {
   const wb = XLSX.read(arquivo, { type: "buffer" });
   const itens: HistoricoItem[] = [];
   for (const nome of wb.SheetNames) {
     const matriz = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[nome], { header: 1, defval: "" });
-    const iCab = matriz.findIndex((l) => l.some((c) => /CPF/i.test(texto(c))) && l.some((c) => /LMI|INC[EÊ]NDIO/i.test(texto(c))));
+    const iCab = matriz
+      .slice(0, 15)
+      .findIndex((l) => l.some((c) => /CPF/i.test(texto(c))) && l.some((c) => /LMI|INC[EÊ]NDIO|ALUGUEL/i.test(texto(c))));
     if (iCab < 0) continue;
     const cab = matriz[iCab].map((c) => semAcento(texto(c)));
     const col = (re: RegExp) => cab.findIndex((c) => re.test(c));
     const c = {
       doc: col(/CPF/), num: col(/^N[º°O]?$|^NUMERO/), comp: col(/COMPLEMENTO/), cep: col(/^CEP/), apolice: col(/APOLICE/),
-      ocup: col(/OCUPACAO|ATIVIDADE|TIPO DO IMOVEL/), inc: col(/LMI.*INCENDIO|^INCENDIO/), alu: col(/ALUGUEL/),
+      end: col(/^ENDERECO|^LOGRADOURO/),
+      ocup: col(/OCUPACAO|TIPO DO IMOVEL/), ativ: col(/ATIVIDADE/),
+      inc: col(/LMI.*INCENDIO|^INCENDIO|^LMI$/), alu: col(/LMI.*ALUGUEL|PERDA DE ALUGUEL/),
+      valorAluguel: col(/^VALOR (DO )?ALUGUEL/),
       de: col(/DANOS? ELETRICOS?/), ven: col(/VENDAVAL/), plano: col(/PLANO|ASSISTENCIA/),
     };
     for (const l of matriz.slice(iCab + 1)) {
       const doc = digitos(texto(l[c.doc]));
       if (!doc) continue;
-      const v = (i: number) => (i >= 0 && texto(l[i]) !== "" ? numero(l[i]) : null);
+      const v = (i: number) => (i >= 0 && texto(l[i]) !== "" && numero(l[i]) > 0 ? numero(l[i]) : null);
+      let numeroImovel = c.num >= 0 ? texto(l[c.num]) : "";
+      let complemento = c.comp >= 0 ? texto(l[c.comp]) : "";
+      // "R SÃO PAULO 27/COB 01" → número 27, complemento COB 01
+      if (!numeroImovel && c.end >= 0) {
+        const m = texto(l[c.end]).match(/^.*?[\s,]+(\d+)\s*(?:[/-]\s*(.*))?$/);
+        if (m) {
+          numeroImovel = m[1];
+          if (!complemento) complemento = (m[2] ?? "").trim();
+        }
+      }
       itens.push({
         documento: doc.replace(/^0+/, ""),
-        numero: c.num >= 0 ? texto(l[c.num]) : "",
-        complemento: c.comp >= 0 ? texto(l[c.comp]) : "",
+        numero: numeroImovel,
+        complemento,
+        valorAluguel: v(c.valorAluguel),
         cep: c.cep >= 0 ? digitos(texto(l[c.cep])) : "",
         apolice: c.apolice >= 0 ? digitos(texto(l[c.apolice])) : "",
-        ocupacao: c.ocup >= 0 ? texto(l[c.ocup]) : "",
+        ocupacao: [c.ocup, c.ativ].filter((i) => i >= 0).map((i) => texto(l[i])).find(Boolean) ?? "",
         lmiIncendio: v(c.inc),
         lmiAluguel: v(c.alu),
         danosEletricos: v(c.de),
@@ -140,16 +161,24 @@ export function lerHistorico(arquivo: Buffer, nomeArquivo: string): HistoricoIte
   return itens;
 }
 
-// Mesmo segurado (CPF/CNPJ) e mesmo imóvel (número + complemento; senão CEP; senão único do CPF).
+// Mesmo segurado (CPF/CNPJ) e mesmo imóvel (número + complemento; senão CEP +
+// número; senão o CPF só tem um imóvel no histórico). O mesmo imóvel aparece em
+// vários lotes (um por ano/versão): fica o mais recente que tem LMI — o nome do
+// arquivo começa pela data de modificação no Drive (AAAA-MM-DD), então a ordem
+// alfabética é a cronológica.
 export function acharNoHistorico(hist: HistoricoItem[], documento: string, numeroImovel: string, complemento: string, cep: string) {
   const doc = documento.replace(/^0+/, "");
-  const doCpf = hist.filter((h) => h.documento === doc);
+  const doCpf = hist.filter((h) => h.documento === doc && (h.lmiIncendio || h.valorAluguel));
   if (!doCpf.length) return null;
+  // com LMI antes de só aluguel; depois o mais recente
+  const maisRecente = (l: HistoricoItem[]) =>
+    [...l].sort((a, b) => Number(!!b.lmiIncendio) - Number(!!a.lmiIncendio) || b.arquivo.localeCompare(a.arquivo))[0];
   const exato = doCpf.filter((h) => norm(h.numero) === norm(numeroImovel) && norm(h.complemento) === norm(complemento));
-  if (exato.length === 1) return { item: exato[0], como: "CPF + endereço" };
+  if (exato.length) return { item: maisRecente(exato), como: "CPF + endereço" };
   const porCep = doCpf.filter((h) => cep && h.cep && h.cep.padStart(8, "0") === cep.padStart(8, "0") && norm(h.numero) === norm(numeroImovel));
-  if (porCep.length === 1) return { item: porCep[0], como: "CPF + CEP + número" };
-  if (doCpf.length === 1) return { item: doCpf[0], como: "único item do CPF (conferir endereço)" };
+  if (porCep.length) return { item: maisRecente(porCep), como: "CPF + CEP + número" };
+  const imoveis = new Set(doCpf.map((h) => `${norm(h.numero)}|${norm(h.complemento)}`));
+  if (imoveis.size === 1) return { item: maisRecente(doCpf), como: "único imóvel do CPF no histórico (conferir endereço)" };
   return null;
 }
 
@@ -190,7 +219,10 @@ export function montarLinha(ap: ApoliceCorp, kamila: ItemRenovacao | undefined, 
     de = h.danosEletricos ?? "";
     if (!ocupacao) ocupacao = h.ocupacao;
     if (!plano) plano = h.plano;
-    fonteLmi = `histórico (${achado.como}) — ${h.arquivo}`;
+    fonteLmi = h.lmiIncendio ? `histórico (${achado.como}) — ${h.arquivo}` : "LMI a conferir";
+    if (h.lmiIncendio && achado.como !== "CPF + endereço") obs.push(`LMI achado por ${achado.como} — conferir unidade`);
+    if (h.valorAluguel) obs.push(`aluguel R$ ${h.valorAluguel.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} no lote anterior`);
+    if (!h.lmiIncendio && kamila?.lmiCorp) { lmiInc = kamila.lmiCorp; fonteLmi = "Corp (Limite Máximo de Garantia da Yelum)"; }
     if (h.vendaval) obs.push(`vendaval ano anterior ${h.vendaval.toLocaleString("pt-BR")}`);
   } else if (kamila?.lmiCorp) {
     lmiInc = kamila.lmiCorp;

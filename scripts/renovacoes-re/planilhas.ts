@@ -53,7 +53,7 @@ async function main() {
     aps.sort((x, y) => (x.fimVigencia ?? "").localeCompare(y.fimVigencia ?? "") || x.cliente.localeCompare(y.cliente));
     const montadas = aps.map((a) => montarLinha(a, porNossoNumero.get(a.nossoNumero), pdfPorNN.get(a.nossoNumero), historico));
     const arquivo = `${nomeArquivo(imob)} - ${seg} - RENOVAÇÃO ${mesBr}.xlsx`;
-    XLSX.writeFile(planilhaDoLote(montadas.map((m) => m.linha)), path.join(saida, arquivo));
+    XLSX.writeFile(planilhaDoLote(montadas.map((m) => m.linha)), path.join(saida, arquivo), { compression: true });
     resumo.push({
       "Card / planilha": arquivo.replace(/\.xlsx$/, ""),
       Imobiliária: imob,
