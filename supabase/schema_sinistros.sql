@@ -539,3 +539,87 @@ end;
 $$;
 revoke execute on function buscar_apolices_sinistro(text) from anon, public;
 grant execute on function buscar_apolices_sinistro(text) to authenticated;
+
+-- 23/10/2026 (pedido do Matheus): a busca de apólice da abertura traz os
+-- LOCATÁRIOS (garantidos) e o local de risco lidos do PDF da apólice
+-- (apolice_documentos/apolice_partes, só apólices ligadas com certeza ao Corp
+-- -- ver schema_apolices_documentos.sql). Na tela, vêm marcados como "lido da
+-- apólice", com link para o PDF. Também acha a apólice pelo nome/CPF do inquilino.
+drop function if exists buscar_apolices_sinistro(text);
+create or replace function buscar_apolices_sinistro(p_q text)
+returns table (
+  nosso_numero text, produto text, ramo text, seguradora text, numero_apolice text, vigencia_inicio date, vigencia_fim date,
+  imobiliaria_texto text, imobiliaria_id uuid, cliente_nome text, cliente_documento text,
+  cliente_email text, cliente_telefone text, data_efetivacao date, status text,
+  imovel_logradouro text, imovel_numero text, imovel_complemento text, imovel_bairro text, imovel_cidade text, imovel_uf text, imovel_cep text,
+  apolice_arquivo_id text, apolice_local_risco text, locatarios_apolice jsonb
+)
+language plpgsql stable security definer set search_path to 'public'
+as $$
+declare
+  termo text := trim(coalesce(p_q, ''));
+  dig text := regexp_replace(coalesce(p_q, ''), '\D', '', 'g');
+  o2 boolean := is_colaborador_o2();
+begin
+  if length(termo) < 3 then return; end if;
+  return query
+  with alvo_loc as (
+    select l.id from locatarios l
+    where (length(dig) in (11, 14) and l.cpf = dig)
+       or (termo ~ '^\d{1,9}$' and l.codigo_corp_cliente = termo)
+       or (termo ~ '[A-Za-zÀ-ú]' and length(termo) >= 4 and l.nome ilike '%' || termo || '%')
+    limit 30
+  ),
+  cand as (
+    select p.* from producao_unificada p
+    where p.fonte = 'corp' and p.produto in ('fianca', 'capitalizacao', 'automovel', 're') and p.origem_corp_numero = termo
+    union
+    select p.* from producao_unificada p join alvo_loc a on a.id = p.locatario_id where p.fonte = 'corp'
+    union
+    -- inquilino lido da apólice (garantido) -> apólice
+    select p.* from producao_unificada p
+    join apolice_partes ap on ap.nosso_numero = p.origem_corp_numero and ap.papel = 'garantido'
+    join alvo_loc a on a.id = ap.locatario_id
+    where p.fonte = 'corp'
+  ),
+  vinc as (
+    select distinct on (trim(v.nome_original)) trim(v.nome_original) nome, v.imobiliaria_id
+    from imobiliaria_registros_fonte v
+    where v.fonte = 'corp_produtor' and v.situacao = 'confirmado' and v.imobiliaria_id is not null
+      and trim(v.nome_original) in (select distinct trim(c.imobiliaria_texto) from cand c)
+    order by trim(v.nome_original), v.confirmado_em desc nulls last
+  ),
+  res as (
+    select c.*, coalesce(imobiliaria_por_apolice_corp(c.origem_corp_numero), vi.imobiliaria_id) imob,
+      (select g.numero_apolice from corp_grade g
+        where c.origem_corp_numero ~ '^\d{1,18}$' and g.nosso_numero = c.origem_corp_numero::bigint and g.numero_apolice is not null
+        order by g.incluir_corretora desc, g.id limit 1) apolice
+    from cand c left join vinc vi on vi.nome = trim(c.imobiliaria_texto)
+  )
+  select r.origem_corp_numero, produto_sinistro_de_ramo(r.produto, r.ramo_padrao), r.ramo_padrao, r.seguradora, r.apolice,
+    (r.extras ->> 'vigencia_inicio')::date, (r.extras ->> 'vigencia_fim')::date,
+    trim(r.imobiliaria_texto), r.imob, l.nome, l.cpf, l.email, l.telefone, r.data_efetivacao, r.status_padrao,
+    e.logradouro, e.numero, e.complemento, e.bairro, e.cidade, e.uf, e.cep,
+    d.arquivo_id, d.local_texto,
+    (select jsonb_agg(jsonb_build_object('ordem', ap.ordem, 'nome', g.nome, 'documento', g.cpf, 'telefone', g.telefone, 'email', g.email) order by ap.ordem)
+       from apolice_partes ap join locatarios g on g.id = ap.locatario_id
+      where ap.documento_id = d.id and ap.papel = 'garantido')
+  from res r
+  left join locatarios l on l.id = r.locatario_id
+  left join lateral (
+    select pe.* from producao_enderecos pe where pe.nosso_numero = r.origem_corp_numero order by pe.importado_em desc limit 1
+  ) e on true
+  left join lateral (
+    -- PDF da apólice ligado com certeza; prefere o que trouxe locatários
+    select ad.id, ad.arquivo_id, ad.local_risco ->> 'texto' local_texto from apolice_documentos ad
+    where ad.nosso_numero = r.origem_corp_numero and ad.situacao = 'certa'
+    order by exists (select 1 from apolice_partes x where x.documento_id = ad.id and x.papel = 'garantido') desc, ad.arquivo_criado_em desc nulls last
+    limit 1
+  ) d on true
+  where o2 or r.imob in (select imobiliarias_do_usuario())
+  order by r.data_efetivacao desc nulls last
+  limit 15;
+end;
+$$;
+revoke execute on function buscar_apolices_sinistro(text) from anon, public;
+grant execute on function buscar_apolices_sinistro(text) to authenticated;

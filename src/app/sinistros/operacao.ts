@@ -452,6 +452,10 @@ export type ApoliceEncontrada = {
   imovel_cidade: string | null;
   imovel_uf: string | null;
   imovel_cep: string | null;
+  // Lido do PDF da apólice (acervo do Drive ligado com certeza ao Corp -- apolice_documentos).
+  apolice_arquivo_id: string | null;
+  apolice_local_risco: string | null;
+  locatarios_apolice: { ordem: number; nome: string | null; documento: string; telefone: string | null; email: string | null }[] | null;
 };
 
 // Busca a apólice na base de produção (Nosso Nº, CPF/CNPJ ou nome do

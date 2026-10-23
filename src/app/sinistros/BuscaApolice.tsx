@@ -5,6 +5,16 @@ import { buscarApolices, type ApoliceEncontrada } from "./operacao";
 import { rotuloProduto } from "@/lib/sinistros/produtos";
 
 const dataBr = (d: string | null) => (d ? d.slice(0, 10).split("-").reverse().join("/") : "—");
+const docBr = (d: string) =>
+  d.length === 11 ? d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4") : d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
+/** CEP no texto do local de risco lido da apólice ("22795450", "22795-450", "28.895-178"). */
+const cepDoTexto = (t: string | null) => {
+  const m = t?.match(/\b(\d{2})\.?(\d{3})-?(\d{3})\b/);
+  return m ? `${m[1]}${m[2]}-${m[3]}` : null;
+};
+// Campo preenchido com dado lido do PDF da apólice: destaque em amarelo + dica.
+const MARCA_APOLICE = ["ring-2", "ring-amber-400", "bg-amber-50"];
+type DaApolice = { arquivoId: string | null; local: string | null; locatarios: NonNullable<ApoliceEncontrada["locatarios_apolice"]> };
 
 // Busca a apólice na base de produção (Nosso Nº, CPF/CNPJ ou nome do
 // locatário) e preenche o formulário em volta -- evita redigitar o que o
@@ -18,6 +28,7 @@ export default function BuscaApolice({ nossoNumeroInicial }: { nossoNumeroInicia
   const [termo, setTermo] = useState("");
   const [resultados, setResultados] = useState<ApoliceEncontrada[] | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [daApolice, setDaApolice] = useState<DaApolice | null>(null);
   const [carregando, iniciar] = useTransition();
 
   function buscar() {
@@ -33,11 +44,17 @@ export default function BuscaApolice({ nossoNumeroInicial }: { nossoNumeroInicia
     const form = caixa.current?.closest("form");
     if (!form) return;
     const preenchidos: string[] = [];
-    const definir = (nome: string, valor: string | null | undefined, sempre = false, criarOpcao = true) => {
+    const lidosDaApolice: string[] = [];
+    const definir = (nome: string, valor: string | null | undefined, sempre = false, criarOpcao = true, daApolice = false) => {
       if (!valor) return;
       const el = form.elements.namedItem(nome) as HTMLInputElement | HTMLSelectElement | null;
       if (!el || !("value" in el)) return;
       if (!sempre && el.value) return;
+      if (daApolice) {
+        el.classList.add(...MARCA_APOLICE);
+        el.title = "Lido da apólice (PDF) — confira";
+        lidosDaApolice.push(nome);
+      }
       // Valor pelo setter nativo + evento: o formulário (React) fica sabendo da mudança.
       const definirValor = (alvo: HTMLInputElement | HTMLSelectElement, v: string) => {
         const proto = alvo instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
@@ -73,19 +90,35 @@ export default function BuscaApolice({ nossoNumeroInicial }: { nossoNumeroInicia
     } else {
       definir("locador_nome", a.cliente_nome);
       definir("locador_documento", a.cliente_documento);
+      // Garantido (locatário): não vem do Corp; vem do PDF da apólice quando ele foi
+      // lido e ligado com certeza à apólice (23/10/2026). O 1º vai para os campos; todos no quadro abaixo.
+      const loc = a.locatarios_apolice?.[0];
+      if (loc) {
+        definir("locatario_nome", loc.nome, false, true, true);
+        definir("locatario_documento", docBr(loc.documento), false, true, true);
+        definir("locatario_telefone", loc.telefone, false, true, true);
+        definir("locatario_email", loc.email, false, true, true);
+      }
     }
-    // Local de risco.
-    definir("cep", a.imovel_cep);
-    definir("logradouro", a.imovel_logradouro);
-    definir("numero", a.imovel_numero);
-    definir("complemento", a.imovel_complemento);
-    definir("bairro", a.imovel_bairro);
-    definir("cidade", a.imovel_cidade);
-    definir("uf", a.imovel_uf);
+    // Local de risco: o do Corp; sem ele, o CEP lido da apólice (o formulário completa rua/bairro/cidade pelo CEP).
+    if (a.imovel_cep || a.imovel_logradouro) {
+      definir("cep", a.imovel_cep);
+      definir("logradouro", a.imovel_logradouro);
+      definir("numero", a.imovel_numero);
+      definir("complemento", a.imovel_complemento);
+      definir("bairro", a.imovel_bairro);
+      definir("cidade", a.imovel_cidade);
+      definir("uf", a.imovel_uf);
+    } else definir("cep", cepDoTexto(a.apolice_local_risco), false, true, true);
     if (a.imobiliaria_id) definir("imobiliaria_id", a.imobiliaria_id);
     setResultados(null);
+    const temLocatario = !!a.locatarios_apolice?.length;
+    setDaApolice(temLocatario || a.apolice_local_risco ? { arquivoId: a.apolice_arquivo_id, local: a.apolice_local_risco, locatarios: a.locatarios_apolice ?? [] } : null);
     setAviso(
-      `Preenchido a partir do Nosso Nº ${a.nosso_numero} (${preenchidos.length} campo(s)).${a.produto === "fianca" ? " O garantido (locatário) não vem do Corp: preencha à mão." : ""} Confira e complete o resto.`
+      `Preenchido a partir do Nosso Nº ${a.nosso_numero} (${preenchidos.length} campo(s)).` +
+        (lidosDaApolice.length ? " Os campos em amarelo foram lidos da apólice em PDF." : "") +
+        (a.produto === "fianca" && !temLocatario ? " O garantido (locatário) não vem do Corp e não há apólice em PDF lida para este Nosso Nº: preencha à mão." : "") +
+        " Confira e complete o resto."
     );
   }
 
@@ -103,7 +136,7 @@ export default function BuscaApolice({ nossoNumeroInicial }: { nossoNumeroInicia
               buscar();
             }
           }}
-          placeholder="Nosso Nº, código do cliente no Corp, CPF/CNPJ ou nome do segurado"
+          placeholder="Nosso Nº, código do cliente no Corp, CPF/CNPJ ou nome do segurado ou do inquilino"
           className="min-w-64 flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
         />
         <button type="button" onClick={buscar} disabled={carregando || termo.trim().length < 3} className="rounded-full bg-o2-navy px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
@@ -111,6 +144,27 @@ export default function BuscaApolice({ nossoNumeroInicial }: { nossoNumeroInicia
         </button>
       </div>
       {aviso && <p className="text-xs text-blue-900">{aviso}</p>}
+      {daApolice && (
+        <div className="space-y-1 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+          <p className="font-semibold">Lido da apólice (PDF)</p>
+          {daApolice.locatarios.length > 0 && (
+            <ul className="space-y-0.5">
+              {daApolice.locatarios.map((l) => (
+                <li key={l.documento}>
+                  {l.ordem}º locatário: <span className="font-medium">{l.nome ?? "(nome não lido)"}</span> — {docBr(l.documento)}
+                  {l.ordem > 1 ? " (não vai para os campos acima; registre no sinistro se precisar)" : ""}
+                </li>
+              ))}
+            </ul>
+          )}
+          {daApolice.local && <p>Local de risco: {daApolice.local}</p>}
+          {daApolice.arquivoId && (
+            <a href={`https://drive.google.com/file/d/${daApolice.arquivoId}/view`} target="_blank" rel="noreferrer" className="font-semibold underline">
+              Abrir a apólice em PDF (Drive)
+            </a>
+          )}
+        </div>
+      )}
       {resultados && resultados.length > 0 && (
         <ul className="divide-y divide-blue-100 overflow-hidden rounded-lg border border-blue-100 bg-white">
           {resultados.map((a) => (
@@ -126,6 +180,11 @@ export default function BuscaApolice({ nossoNumeroInicial }: { nossoNumeroInicia
                   {a.imovel_logradouro ? ` · ${a.imovel_logradouro}${a.imovel_numero ? `, ${a.imovel_numero}` : ""}` : ""}
                   {a.status ? ` · ${a.status}` : ""}
                 </span>
+                {(!!a.apolice_arquivo_id || !!a.locatarios_apolice?.length) && (
+                  <span className="mt-0.5 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
+                    Apólice em PDF lida{a.locatarios_apolice?.length ? ` · ${a.locatarios_apolice.length} locatário(s)` : ""}
+                  </span>
+                )}
               </button>
             </li>
           ))}
