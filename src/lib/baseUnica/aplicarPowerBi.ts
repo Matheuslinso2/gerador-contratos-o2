@@ -332,6 +332,9 @@ export async function aplicarPowerBi(sb: SupabaseClient, { gravar }: { gravar: b
           percentual_juros_mora: 0,
           percentual_honorarios_advocaticios: 0,
           cadastro_incompleto: true,
+          // Campanhas e Repasses leem este campo (decisão do Matheus, 23/10/2026:
+          // ficha criada pelo robô já nasce com o código do Corp).
+          codigo_produtor_corp: codigo(r) || null,
           email: d.emails?.[0] ?? null,
           telefone: d.telefones?.[0] ?? null,
           endereco: t(d.endereco) || null,
@@ -370,6 +373,15 @@ export async function aplicarPowerBi(sb: SupabaseClient, { gravar }: { gravar: b
       { situacao: "confirmado", imobiliaria_id: l.fichaId },
       l.criada ? "Ligado à ficha criada a partir do Power BI" : "Ligado à ficha de mesmo nome (produtor classificado no Power BI)"
     );
+    // Ficha existente sem código do Corp ganha o código do produtor ligado
+    // (nunca sobrescreve: se já tem código, o outro fica como produtor extra).
+    if (!l.criada && codigo(r)) {
+      const preenchida = await ok(
+        sb.from("imobiliarias").update({ codigo_produtor_corp: codigo(r) }).eq("id", l.fichaId).or("codigo_produtor_corp.is.null,codigo_produtor_corp.eq.").select("id")
+      );
+      if ((preenchida as { id: string }[]).length)
+        await log("codigo_produtor_corp", { imobiliaria_id: l.fichaId }, null, codigo(r), `Código do Corp do produtor "${t(l.item.produtor)}" ligado pelo Power BI`);
+    }
   }
 
   for (const g of planoGrupos) {
