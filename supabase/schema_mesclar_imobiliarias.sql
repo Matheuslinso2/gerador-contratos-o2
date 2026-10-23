@@ -150,7 +150,14 @@ begin
     origem_comercial = coalesce(nullif(m.origem_comercial, ''), r.origem_comercial),
     email_faturas = (select array_agg(distinct e) from unnest(coalesce(m.email_faturas, '{}') || coalesce(r.email_faturas, '{}')) e where e <> ''),
     email_repasses = (select array_agg(distinct e) from unnest(coalesce(m.email_repasses, '{}') || coalesce(r.email_repasses, '{}')) e where e <> ''),
-    email_campanhas = (select array_agg(distinct e) from unnest(coalesce(m.email_campanhas, '{}') || coalesce(r.email_campanhas, '{}')) e where e <> ''),
+    -- Nunca descarta e-mail (Matheus, 23/10/2026): se as duas fichas têm
+    -- e-mail principal diferente, o da removida entra na lista de campanhas
+    -- (junto com o da mantida, se a lista estava vazia e a campanha ia para ele).
+    email_campanhas = (select array_agg(distinct e) from unnest(
+        coalesce(m.email_campanhas, '{}') || coalesce(r.email_campanhas, '{}') ||
+        case when nullif(btrim(m.email), '') is not null and nullif(btrim(r.email), '') is not null and lower(btrim(m.email)) <> lower(btrim(r.email))
+             then case when coalesce(array_length(m.email_campanhas, 1), 0) = 0 then array[btrim(m.email), btrim(r.email)] else array[btrim(r.email)] end
+             else '{}'::text[] end) e where e <> ''),
     observacao_interna = nullif(concat_ws(E'\n\n', nullif(m.observacao_interna, ''),
       case when nullif(r.observacao_interna, '') is not null then 'Da ficha mesclada "' || r.nome || '": ' || r.observacao_interna end), '')
   where id = m.id;
