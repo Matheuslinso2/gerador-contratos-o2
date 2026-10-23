@@ -28,6 +28,10 @@ export type ItemRenovacao = {
   proprietarioDocumento: string;
   numeroItem: string;
   enderecoItem: string;
+  logradouroItem: string;
+  numeroImovel: string;
+  complementoItem: string;
+  bairroItem: string;
   cepItem: string;
   cidadeItem: string;
   atividade: string;
@@ -147,6 +151,10 @@ export function lerExportItens(arquivo: Buffer): ItemRenovacao[] {
       proprietarioDocumento: texto(l["CPF/CNPJ - Item"]),
       numeroItem: texto(l["Item"]),
       enderecoItem: endereco,
+      logradouroItem: texto(l["Logradouro - Item"]),
+      numeroImovel: texto(l["Número - Item"]),
+      complementoItem: texto(l["Complemento - Item"]),
+      bairroItem: texto(l["Bairro - Item"]),
       cepItem: texto(l["CEP - Item"]),
       cidadeItem: [texto(l["Cidade - Item"]), texto(l["Estado - Item"])].filter(Boolean).join("/"),
       atividade: texto(l["Atividade"]),
