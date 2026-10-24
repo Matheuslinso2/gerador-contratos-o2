@@ -492,7 +492,9 @@ async function casar() {
     for (const ap of daqui)
         // início E fim da vigência (±1 dia) no texto: evita ligar o PDF de uma renovação à
         // apólice anterior (que termina no dia em que a nova começa) quando a nova não está no Corp.
-        if ([ap.ini, ap.fim].every((d) => datas.has(d) || datas.has(maisDias(d, 1)) || datas.has(maisDias(d, -1)))) achadas.set(ap.nn, ap);
+        // Anexo do próprio documento do Corp (decisão do Matheus, 24/10/2026): basta o FIM exato
+        // -- o Corp às vezes registra o início dias antes da apólice, e o vínculo já vem do anexo.
+        if ([ap.ini, ap.fim].every((d) => datas.has(d) || datas.has(maisDias(d, 1)) || datas.has(maisDias(d, -1))) || (doAnexo && datas.has(ap.fim))) achadas.set(ap.nn, ap);
     candidatas.set(l.arquivo.id, [...achadas.values()]);
   }
 
@@ -505,7 +507,7 @@ async function casar() {
     if (!l.generico) return { ...base, situacao: "nao_lida", motivo: l.erro ?? "não lida" };
     const docsPdf = new Set(l.generico.documentos);
     const cands = candidatas.get(l.arquivo.id) ?? [];
-    if (!cands.length) return { ...base, situacao: "sem_par", motivo: ehCotacao(l.arquivo.id) ? "cotação, não é apólice" : doAnexo ? "o início e o fim da vigência do documento do Corp não estão no texto" : "nenhuma apólice do Corp desde 2020 com o mesmo nº, início e fim de vigência" };
+    if (!cands.length) return { ...base, situacao: "sem_par", motivo: ehCotacao(l.arquivo.id) ? "cotação, não é apólice" : doAnexo ? "o fim da vigência do documento do Corp não está no texto" : "nenhuma apólice do Corp desde 2020 com o mesmo nº, início e fim de vigência" };
     let comCliente = cands.filter((ap) => [...(clientes.get(ap.nn) ?? [])].some((d) => docsPdf.has(d)));
     // Renovação: o PDF novo cita o nº da apólice anterior ("renova apólice nº") e começa no dia
     // em que ela termina, então as duas batem. Desempate seguro: só a apólice deste PDF tem
