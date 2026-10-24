@@ -5,8 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { signOut } from "../actions";
 import { pediuAtualizacao, retratoRecente } from "@/lib/retratoPaineis";
 
-import { lerFonteRamosElementares } from "@/lib/ramos-elementares/fonteGoogle";
-import { lerFonteRamosElementaresHibrida } from "@/lib/ramos-elementares/fonteHibrida";
+import { lerFonteRamosElementaresDaCompetencia, modoFonteRamos } from "@/lib/ramos-elementares/fonteHibrida";
 import {
   analiseRamosVazia,
   montarAnaliseRamosElementares,
@@ -22,12 +21,6 @@ import {
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
-
-// A partir desta competência, Novos Negócios/Pendências vêm do Bitrix (SPA
-// 1046) e Renovações/Endossos continuam vindo da planilha mensal — ver
-// fonteHibrida.ts. Decisão de 11/08/2026 (commit 671d12c), ajustada em
-// 01/09/2026 para híbrida em vez de 100% Bitrix (renovações não migraram).
-const COMPETENCIA_INICIO_HIBRIDO = "2026-09";
 
 function competenciaAtual(): string {
   const partes = new Intl.DateTimeFormat("en-CA", {
@@ -89,8 +82,10 @@ export default async function RamosElementaresPage({
   const emailsConfirmacao = emailsConfirmacaoRaw ?? [];
 
   let analise: AnaliseRamosElementares;
-  const usarHibrido = competencia >= COMPETENCIA_INICIO_HIBRIDO;
-  let origem: "planilha" | "hibrida" | "snapshot" | "indisponivel" = usarHibrido ? "hibrida" : "planilha";
+  // Planilha até ago/2026, híbrida em set/2026, só Bitrix de out/2026 em
+  // diante -- ver fonteHibrida.ts.
+  const modo = modoFonteRamos(competencia);
+  let origem: "planilha" | "hibrida" | "bitrix" | "snapshot" | "indisponivel" = modo;
   let erroFonte: string | null = null;
 
   // Caminho rápido: retrato salvo de até 10 min (ver lib/retratoPaineis.ts).
@@ -109,7 +104,7 @@ export default async function RamosElementaresPage({
   } else {
   try {
     const fonte = await comLimiteDeTempo(
-      usarHibrido ? lerFonteRamosElementaresHibrida(competencia) : lerFonteRamosElementares(competencia),
+      lerFonteRamosElementaresDaCompetencia(competencia),
       LIMITE_TEMPO_AO_VIVO_MS
     );
     analise = montarAnaliseRamosElementares(fonte);
@@ -138,15 +133,24 @@ export default async function RamosElementaresPage({
       origem = "snapshot";
     } else {
       analise = analiseRamosVazia(competencia, erroFonte);
-      analise.fonte = usarHibrido
-        ? {
-            id: "hibrido-indisponivel",
-            titulo: "Bitrix24 — Produção Incêndio (novos) + planilha mensal (renovações/endossos)",
-            url: "https://o2seguros.bitrix24.com.br/crm/type/1046/list/category/22/",
-            modificadaEm: null,
-            tipo: "hibrido",
-          }
-        : { ...analise.fonte, tipo: "google_sheets" };
+      analise.fonte =
+        modo === "bitrix"
+          ? {
+              id: "bitrix-spa-1046",
+              titulo: "Bitrix24 — Produção Incêndio",
+              url: "https://o2seguros.bitrix24.com.br/crm/type/1046/list/category/22/",
+              modificadaEm: null,
+              tipo: "bitrix24",
+            }
+          : modo === "hibrida"
+            ? {
+                id: "hibrido-indisponivel",
+                titulo: "Bitrix24 — Produção Incêndio (novos e renovações) + planilha mensal (renovações e endossos)",
+                url: "https://o2seguros.bitrix24.com.br/crm/type/1046/list/category/22/",
+                modificadaEm: null,
+                tipo: "hibrido",
+              }
+            : { ...analise.fonte, tipo: "google_sheets" };
       origem = "indisponivel";
     }
   }

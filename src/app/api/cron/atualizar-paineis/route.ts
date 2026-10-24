@@ -10,8 +10,7 @@ import {
   type PainelCapitalizacao,
 } from "@/lib/capitalizacao/painel";
 import { montarPainelSeguroAuto } from "@/lib/seguroAuto/painel";
-import { lerFonteRamosElementares } from "@/lib/ramos-elementares/fonteGoogle";
-import { lerFonteRamosElementaresHibrida } from "@/lib/ramos-elementares/fonteHibrida";
+import { lerFonteRamosElementaresDaCompetencia } from "@/lib/ramos-elementares/fonteHibrida";
 import { montarAnaliseRamosElementares } from "@/lib/ramos-elementares/analise";
 import { calcularPeriodoRelatorio } from "@/lib/relatorioDiario/periodo";
 import { alertarAdmin } from "@/lib/email";
@@ -31,9 +30,6 @@ export const maxDuration = 60;
 // da Fiança falhou por isso).
 //
 // Protegida por CRON_SECRET — mesmo padrão de congelar-paineis/route.ts.
-
-// Ver ramos-elementares/page.tsx -- a partir daqui Novos vêm do Bitrix.
-const COMPETENCIA_INICIO_HIBRIDO_RAMOS = "2026-09";
 
 // Capitalização conta Emitidos pelo mês do pagamento, mas o card só chega em
 // Emitido quando o Controle confirma no Corp, às vezes dias depois. Até esse
@@ -88,10 +84,7 @@ const PAINEIS = {
   "ramos-elementares": {
     nome: "Ramos Elementares",
     async salvar(competencia: string) {
-      const fonte =
-        competencia >= COMPETENCIA_INICIO_HIBRIDO_RAMOS
-          ? await lerFonteRamosElementaresHibrida(competencia)
-          : await lerFonteRamosElementares(competencia);
+      const fonte = await lerFonteRamosElementaresDaCompetencia(competencia);
       const payload = montarAnaliseRamosElementares(fonte);
       return {
         tabela: "ramos_elementares_snapshots",
