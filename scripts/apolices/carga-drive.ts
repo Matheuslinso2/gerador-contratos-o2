@@ -30,6 +30,7 @@ import zlib from "node:zlib";
 import { createRequire } from "node:module";
 import { createServiceClient } from "@/lib/supabase/service";
 import { extrairTextoPdf } from "@/lib/extrairTextoPdf";
+import { getDocumentProxy, extractText } from "unpdf";
 import { lerApolice, documento, type Leitura } from "./leitores";
 
 const require = createRequire(import.meta.url);
@@ -46,10 +47,14 @@ const arq = (n: string) => path.join(CACHE, n);
 const lerJson = <T>(n: string, padrao: T): T => (fs.existsSync(arq(n)) ? JSON.parse(fs.readFileSync(arq(n), "utf8")) : padrao);
 const salvarJson = (n: string, v: unknown) => fs.writeFileSync(arq(n), JSON.stringify(v));
 const VERSAO_LEITURA = 3;
+const SO_SENHA = process.env.APOLICES_SO_SENHA === "1";
+const IGNORADO = "ignorado nesta rodada (PDF sem senha)";
+const PROTEGIDOS = path.join(CACHE, "protegidos");
+fs.mkdirSync(PROTEGIDOS, { recursive: true });
 const nomeArq = (id: string) => id.replace(/:/g, "_"); // "gmail:x:y" não vale como nome de arquivo no Windows
 
 /** Drive: id do arquivo e pasta. E-mail: id "gmail:<mensagem>:<parte>", pasta = conversa, anexo = id do anexo. */
-type Arquivo = { id: string; nome: string; pasta: string | null; criado: string; tamanho: number; anexo?: string };
+type Arquivo = { id: string; nome: string; pasta: string | null; criado: string; tamanho: number; anexo?: string; assunto?: string; de?: string };
 /** O que vale para qualquer ramo: candidatos a nº de apólice, datas e CPFs/CNPJs do texto. */
 type Generico = { numeros: string[]; datas: string[]; documentos: string[] };
 type Lido = { versao?: number; arquivo: Arquivo; leitura: Leitura | null; generico?: Generico; erro?: string; caracteres?: number };
@@ -110,19 +115,21 @@ async function listarEmail() {
   const salvar = () => salvarJson("email-parcial.json", { vistos: [...vistosSet], anexos, todos: [...todos] });
   // Só a estrutura das partes (sem o corpo dos e-mails): bem mais leve.
   const nivel = (n: number): string => `partId,filename,body(attachmentId,size)${n ? `,parts(${nivel(n - 1)})` : ""}`;
-  const campos = `id,threadId,internalDate,payload(${nivel(5)})`;
+  const campos = `id,threadId,internalDate,payload(headers(name,value),${nivel(5)})`;
   const trabalhar = async (id: string) => {
     let r;
     for (let t = 0; ; t++) {
       try { r = await g.users.messages.get({ userId: "me", id, format: "full", fields: campos }); break; }
       catch (e) { if (t >= 4) { console.log(`  falhou ${id}: ${(e as Error).message}`); vistosSet.add(id); return; } await new Promise((ok) => setTimeout(ok, 2000 * (t + 1))); }
     }
+    // Assunto e remetente: pistas da senha dos PDFs protegidos (ex.: aviso da seguradora com o nome do segurado).
+    const cab = (n: string): string | undefined => (r.data.payload?.headers ?? []).find((h: { name?: string }) => h.name?.toLowerCase() === n)?.value ?? undefined;
     for (const p of partesDe(r.data.payload)) {
       if (!p.filename || !/\.pdf$/i.test(p.filename) || !p.body?.attachmentId) continue;
       anexos++;
       const chave = `${p.filename.toLowerCase()}|${p.body.size}`;
       if (todos.has(chave)) continue;
-      todos.set(chave, { id: `gmail:${id}:${p.partId}`, nome: p.filename, pasta: r.data.threadId ?? null, criado: new Date(Number(r.data.internalDate)).toISOString(), tamanho: p.body.size ?? 0, anexo: p.body.attachmentId });
+      todos.set(chave, { id: `gmail:${id}:${p.partId}`, nome: p.filename, pasta: r.data.threadId ?? null, criado: new Date(Number(r.data.internalDate)).toISOString(), tamanho: p.body.size ?? 0, anexo: p.body.attachmentId, assunto: cab("subject"), de: cab("from") });
     }
     vistosSet.add(id);
     if (vistosSet.size % 1000 === 0) { salvar(); console.log(`  ${vistosSet.size}/${ids.length} e-mails | anexos distintos: ${todos.size}`); }
@@ -231,6 +238,12 @@ async function ler() {
           const r = await drive!.files.get({ fileId: a.id, alt: "media", supportsAllDrives: true }, { responseType: "arraybuffer" });
           pdf = Buffer.from(r.data as ArrayBuffer);
         }
+        // Rodada dos protegidos (APOLICES_SO_SENHA=1): só interessa PDF criptografado; ele é
+        // guardado para a etapa 'senha' tentar abrir. Os demais já foram tratados na 1ª rodada.
+        if (SO_SENHA) {
+          if (!pdf.includes("/Encrypt")) throw new Error(IGNORADO);
+          fs.writeFileSync(path.join(PROTEGIDOS, `${nomeArq(a.id)}.pdf`), pdf);
+        }
         texto = await extrairTextoPdf(pdf);
         fs.writeFileSync(ft, zlib.gzipSync(texto));
       }
@@ -243,8 +256,85 @@ async function ler() {
     if (++feitos % 100 === 0) console.log(`  ${feitos}/${pendentes.length}`);
   };
   const fila = [...pendentes];
-  await Promise.all(Array.from({ length: 6 }, async () => { while (fila.length) await trabalhar(fila.shift()!); }));
+  await Promise.all(Array.from({ length: SO_SENHA ? 12 : 6 }, async () => { while (fila.length) await trabalhar(fila.shift()!); }));
   console.log(`lidos: ${feitos}`);
+}
+
+// ---------------- senha ----------------
+// PDFs protegidos (guardados pela rodada APOLICES_SO_SENHA=1). A senha costuma ser o CPF/CNPJ
+// do segurado (inteiro ou o começo). Candidatos: clientes do Corp das apólices cujo nº aparece
+// no nome do arquivo ou no assunto do e-mail (a Porto põe o nº no meio de um número maior).
+// O que abre segue o fluxo normal (texto + leitura); o casamento continua exigindo nº,
+// vigência e CPF/CNPJ dentro do texto -- a senha só abre a porta, não prova nada.
+// Amostra de 24/10/2026: Porto (e-mails "A apólice do seu seguro foi emitida!") = 4 primeiros dígitos.
+const FORMATOS_SENHA: [string, (d: string) => string][] = [
+  ["4 primeiros", (d) => d.slice(0, 4)], ["inteiro", (d) => d], ["5 primeiros", (d) => d.slice(0, 5)],
+  ["6 primeiros", (d) => d.slice(0, 6)], ["8 primeiros", (d) => d.slice(0, 8)], ["3 primeiros", (d) => d.slice(0, 3)],
+];
+
+async function abrirComSenha(pdf: Buffer, senha: string): Promise<string | null> {
+  try {
+    const doc = await getDocumentProxy(new Uint8Array(pdf), { password: senha });
+    const { text } = await extractText(doc, { mergePages: true });
+    return text.trim();
+  } catch (e) {
+    if (/password/i.test((e as Error).name + (e as Error).message)) return null;
+    throw e;
+  }
+}
+
+async function senha() {
+  const lista = lerJson<Arquivo[]>("lista.json", []);
+  const porArq = new Map(lista.map((a) => [nomeArq(a.id), a]));
+  const arquivos = fs.readdirSync(PROTEGIDOS).filter((f) => f.endsWith(".pdf"));
+  console.log(`PDFs protegidos guardados: ${arquivos.length}`);
+  const sb = createServiceClient();
+  const porNumero = await indiceDoCorp(sb);
+
+  // nº do Corp em qualquer trecho de 6 a 10 dígitos do nome do arquivo e do assunto
+  const nnsDoArquivo = new Map<string, Set<string>>();
+  for (const f of arquivos) {
+    const a = porArq.get(f.slice(0, -4));
+    if (!a) continue;
+    const nns = new Set<string>();
+    for (const m of `${a.nome} ${a.assunto ?? ""}`.matchAll(/\d+/g))
+      for (let i = 0; i < m[0].length; i++)
+        for (let n = 6; n <= 10 && i + n <= m[0].length; n++) {
+          const t = m[0].slice(i, i + n);
+          if (t[0] === "0") continue;
+          for (const ap of porNumero.get(t) ?? []) nns.add(ap.nn);
+        }
+    nnsDoArquivo.set(f, nns);
+  }
+  const { clientes } = await clientesDoCorp(sb, [...new Set([...nnsDoArquivo.values()].flatMap((s) => [...s]))]);
+
+  const deuCerto: Record<string, number> = {};
+  let abertos = 0, semCandidato = 0, naoAbriu = 0, feitos = 0;
+  for (const f of arquivos) {
+    const a = porArq.get(f.slice(0, -4));
+    if (!a) continue;
+    const docs = [...new Set([...(nnsDoArquivo.get(f) ?? [])].flatMap((nn) => [...(clientes.get(nn) ?? [])]))].slice(0, 40);
+    if (!docs.length) { semCandidato++; continue; }
+    const pdf = fs.readFileSync(path.join(PROTEGIDOS, f));
+    let texto: string | null = null;
+    for (const [rotulo, formato] of FORMATOS_SENHA) {
+      for (const d of docs) {
+        texto = await abrirComSenha(pdf, formato(d));
+        if (texto !== null) { deuCerto[`${rotulo} do ${d.length === 11 ? "CPF" : "CNPJ"}`] = (deuCerto[`${rotulo} do ${d.length === 11 ? "CPF" : "CNPJ"}`] ?? 0) + 1; break; }
+      }
+      if (texto !== null) break;
+    }
+    if (texto === null) { naoAbriu++; continue; }
+    abertos++;
+    fs.writeFileSync(path.join(TEXTOS, `${f.slice(0, -4)}.txt.gz`), zlib.gzipSync(texto));
+    const lido: Lido = texto.length <= 50
+      ? { versao: VERSAO_LEITURA, arquivo: a, leitura: null, erro: "PDF sem texto (provavelmente imagem/escaneado)", caracteres: texto.length }
+      : { versao: VERSAO_LEITURA, arquivo: a, leitura: lerApolice(texto), generico: generico(texto.slice(0, 40000)), caracteres: texto.length };
+    fs.writeFileSync(path.join(LEITURAS, `${f.slice(0, -4)}.json`), JSON.stringify(lido));
+    if (++feitos % 100 === 0) console.log(`  ${feitos} abertos...`);
+  }
+  console.log(`abertos: ${abertos} | sem nº do Corp no nome/assunto: ${semCandidato} | candidatos não abriram: ${naoAbriu}`);
+  console.log("senha que funcionou:", JSON.stringify(deuCerto));
 }
 
 // ---------------- casar ----------------
@@ -276,18 +366,14 @@ async function todasAsLinhas<T>(consulta: (de: number, ate: number) => PromiseLi
   }
 }
 
-async function casar() {
-  const sb = createServiceClient();
-  const lidos = fs.readdirSync(LEITURAS).map((f) => JSON.parse(fs.readFileSync(path.join(LEITURAS, f), "utf8")) as Lido)
-    .filter((l) => l.versao === VERSAO_LEITURA);
-  console.log(`PDFs lidos: ${lidos.length}`);
-
-  // Espelho do Corp: emissões (NOVO/RENV sem endosso) com vigência a partir de 2020, qualquer ramo.
+// Espelho do Corp: emissões (NOVO/RENV sem endosso) com vigência a partir de 2020, qualquer ramo,
+// indexadas pelo nº da apólice (só dígitos, sem zeros à esquerda).
+type Ap = { nn: string; seg: string; ramo: string; numero: string; ini: string; fim: string };
+async function indiceDoCorp(sb: ReturnType<typeof createServiceClient>) {
   type Grade = { seg: string; ramo: string; numero_apolice: string; nosso_numero: number; numero_endosso: string | null; ini_vig: string; fim_vig: string };
   const grade = await todasAsLinhas<Grade>((de, ate) =>
     sb.from("corp_grade").select("seg,ramo,numero_apolice,nosso_numero,numero_endosso,ini_vig,fim_vig")
       .in("tipo", ["NOVO", "RENV"]).gte("ini_vig", "2020-01-01").not("numero_apolice", "is", null).order("id").range(de, ate));
-  type Ap = { nn: string; seg: string; ramo: string; numero: string; ini: string; fim: string };
   const porNumero = new Map<string, Ap[]>();
   for (const g of grade) {
     if ((g.numero_endosso ?? "0").replace(/^0+/, "") !== "") continue;
@@ -299,23 +385,11 @@ async function casar() {
     porNumero.set(dig, lista);
   }
   console.log(`apólices do Corp (emissões desde 2020) no índice: ${new Set([...porNumero.values()].flat().map((a) => a.nn)).size}`);
+  return porNumero;
+}
 
-  // Candidatas por PDF: nº presente + fim de vigência (±1 dia) presente no texto.
-  const candidatas = new Map<string, Ap[]>();
-  for (const l of lidos) {
-    if (!l.generico) continue;
-    const datas = new Set(l.generico.datas);
-    const achadas = new Map<string, Ap>();
-    for (const n of l.generico.numeros)
-      for (const ap of porNumero.get(n) ?? [])
-        // início E fim da vigência (±1 dia) no texto: evita ligar o PDF de uma renovação à
-        // apólice anterior (que termina no dia em que a nova começa) quando a nova não está no Corp.
-        if ([ap.ini, ap.fim].every((d) => datas.has(d) || datas.has(maisDias(d, 1)) || datas.has(maisDias(d, -1)))) achadas.set(ap.nn, ap);
-    candidatas.set(l.arquivo.id, [...achadas.values()]);
-  }
-
-  // Cliente do Corp (CPF/CNPJ) de cada candidata: grade de produção do Corp (2025+) e cofre (anos anteriores).
-  const nns = [...new Set([...candidatas.values()].flat().map((a) => a.nn))];
+/** Cliente do Corp (CPF/CNPJ) de cada apólice: grade de produção do Corp (2025+) e cofre (anos anteriores). */
+async function clientesDoCorp(sb: ReturnType<typeof createServiceClient>, nns: string[]) {
   const clientes = new Map<string, Set<string>>();
   const addCli = (nn: string, d: string | null | undefined) => { const doc = documento(d); if (doc) { if (!clientes.has(nn)) clientes.set(nn, new Set()); clientes.get(nn)!.add(doc); } };
   const nomeCliente = new Map<string, string>();
@@ -337,6 +411,33 @@ async function casar() {
     for (const x of data ?? []) docDoLoc.set(x.id, x.cpf);
   }
   for (const [nn, locs] of locDoNn) for (const id of locs) addCli(nn, docDoLoc.get(id));
+  return { clientes, nomeCliente };
+}
+
+async function casar() {
+  const sb = createServiceClient();
+  const lidos = fs.readdirSync(LEITURAS).map((f) => JSON.parse(fs.readFileSync(path.join(LEITURAS, f), "utf8")) as Lido)
+    .filter((l) => l.versao === VERSAO_LEITURA);
+  console.log(`PDFs lidos: ${lidos.length}`);
+
+  const porNumero = await indiceDoCorp(sb);
+
+  // Candidatas por PDF: nº presente + fim de vigência (±1 dia) presente no texto.
+  const candidatas = new Map<string, Ap[]>();
+  for (const l of lidos) {
+    if (!l.generico) continue;
+    const datas = new Set(l.generico.datas);
+    const achadas = new Map<string, Ap>();
+    for (const n of l.generico.numeros)
+      for (const ap of porNumero.get(n) ?? [])
+        // início E fim da vigência (±1 dia) no texto: evita ligar o PDF de uma renovação à
+        // apólice anterior (que termina no dia em que a nova começa) quando a nova não está no Corp.
+        if ([ap.ini, ap.fim].every((d) => datas.has(d) || datas.has(maisDias(d, 1)) || datas.has(maisDias(d, -1)))) achadas.set(ap.nn, ap);
+    candidatas.set(l.arquivo.id, [...achadas.values()]);
+  }
+
+  const nns = [...new Set([...candidatas.values()].flat().map((a) => a.nn))];
+  const { clientes, nomeCliente } = await clientesDoCorp(sb, nns);
 
   const casados: Casado[] = lidos.map((l) => {
     const r = l.leitura;
@@ -534,9 +635,9 @@ async function gravar() {
 }
 
 const etapa = process.argv[2];
-const etapas: Record<string, () => Promise<void>> = { listar, ler, casar, gravar };
+const etapas: Record<string, () => Promise<void>> = { listar, ler, senha, casar, gravar };
 if (!etapas[etapa]) {
-  console.log("uso: npx tsx scripts/apolices/carga-drive.ts listar|ler|casar|gravar");
+  console.log("uso: npx tsx scripts/apolices/carga-drive.ts listar|ler|senha|casar|gravar");
   process.exit(1);
 }
 etapas[etapa]().catch((e) => {
