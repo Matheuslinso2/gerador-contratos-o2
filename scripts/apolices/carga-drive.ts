@@ -31,14 +31,19 @@ import { createRequire } from "node:module";
 import { createServiceClient } from "@/lib/supabase/service";
 import { extrairTextoPdf } from "@/lib/extrairTextoPdf";
 import { getDocumentProxy, extractText } from "unpdf";
+import * as XLSX from "xlsx";
 import { lerApolice, documento, type Leitura } from "./leitores";
 
 const require = createRequire(import.meta.url);
 const { cliente } = require("../base-unica/_google.cjs");
 const { auth: gauth, gmail } = require("@googleapis/gmail");
 
-const FONTE: "drive" | "email" = process.env.APOLICES_FONTE === "email" ? "email" : "drive";
-const CACHE = process.env.APOLICES_CACHE || path.join(os.tmpdir(), FONTE === "email" ? "o2-apolices-email" : "o2-apolices-fianca");
+const FONTE: "drive" | "email" | "corp" = process.env.APOLICES_FONTE === "email" ? "email" : process.env.APOLICES_FONTE === "corp" ? "corp" : "drive";
+const CACHE = process.env.APOLICES_CACHE || path.join(os.tmpdir(), { drive: "o2-apolices-fianca", email: "o2-apolices-email", corp: "o2-apolices-corp-leitura" }[FONTE]);
+// Fonte corp (24/10/2026): PDFs baixados da aba Anexos do Corp pelo robô scripts/robo-corp/anexos.ts
+// (arquivo <Nosso Nº>__<n>.pdf). O vínculo vem do próprio documento do Corp; o casamento
+// confere início e fim da vigência e o CPF/CNPJ do cliente no texto (o nº pode estar "0" no Corp).
+const PDFS_CORP = path.join(process.env.APOLICES_CORP || path.join(os.tmpdir(), "o2-apolices-corp"), "pdfs");
 const LEITURAS = path.join(CACHE, "leituras");
 const TEXTOS = path.join(CACHE, "textos");
 fs.mkdirSync(LEITURAS, { recursive: true });
@@ -149,8 +154,20 @@ async function listarEmail() {
   console.log("por ano do e-mail:", JSON.stringify(porAno));
 }
 
+function listarCorp() {
+  const lista: Arquivo[] = fs.readdirSync(PDFS_CORP).filter((f) => f.endsWith(".pdf")).map((f) => {
+    const [nn, n] = f.slice(0, -4).split("__");
+    const nomeTxt = path.join(PDFS_CORP, f.replace(/\.pdf$/, ".nome.txt"));
+    const st = fs.statSync(path.join(PDFS_CORP, f));
+    return { id: `corp:${nn}:${n}`, nome: fs.existsSync(nomeTxt) ? fs.readFileSync(nomeTxt, "utf8") : f, pasta: nn, criado: st.mtime.toISOString(), tamanho: st.size };
+  });
+  salvarJson("lista.json", lista);
+  console.log(`PDFs baixados do Corp: ${lista.length} (de ${new Set(lista.map((a) => a.pasta)).size} documentos)`);
+}
+
 async function listar() {
   if (FONTE === "email") return listarEmail();
+  if (FONTE === "corp") return listarCorp();
   const { drive } = cliente("GERAL");
   // Pelo nome ("apólice", qualquer ramo) e, na Fiança, também pelo texto
   // ("Fiança Locatícia"), porque há apólices salvas só com o nome do inquilino.
@@ -222,7 +239,10 @@ async function ler() {
       else {
         if (a.tamanho > 15_000_000) throw new Error("arquivo grande demais (>15 MB)");
         let pdf: Buffer;
-        if (g) {
+        if (FONTE === "corp") {
+          const [, nn, n] = a.id.split(":");
+          pdf = fs.readFileSync(path.join(PDFS_CORP, `${nn}__${n}.pdf`));
+        } else if (g) {
           const [, mensagem, parte] = a.id.split(":");
           const baixar = (anexo: string) => g.users.messages.attachments.get({ userId: "me", messageId: mensagem, id: anexo });
           // O id do anexo pode mudar desde a listagem: se falhar, relê a mensagem e acha a parte.
@@ -411,7 +431,45 @@ async function clientesDoCorp(sb: ReturnType<typeof createServiceClient>, nns: s
     for (const x of data ?? []) docDoLoc.set(x.id, x.cpf);
   }
   for (const [nn, locs] of locDoNn) for (const id of locs) addCli(nn, docDoLoc.get(id));
+  // 3ª fonte: a planilha "Clientes Com Documentos" que o Robô do Corp baixa todo dia (2020→hoje,
+  // com CPF/CNPJ por Nosso Nº). Lida só aqui, na hora, para conferir; o espelho do Workspace não
+  // guarda nome/CPF dela (corp_documentos). Cobre os documentos recentes que ainda não estão nas outras.
+  const planilha = process.env.CORP_CLIENTES_XLSX || path.join(os.homedir(), ".robo-corp", "saida", "Clientes Com Documentos.xlsx");
+  if (fs.existsSync(planilha)) {
+    const quero = new Set(nns);
+    const ws = XLSX.readFile(planilha).Sheets;
+    const linhas = XLSX.utils.sheet_to_json<unknown[]>(Object.values(ws)[0], { header: 1 });
+    const cab = (linhas[0] ?? []) as string[];
+    const [iNome, iDoc, iNn] = ["Nome", "CPF/CNPJ", "Nosso Nº"].map((n) => cab.indexOf(n));
+    let usados = 0;
+    for (const r of linhas.slice(1)) {
+      const nn = String(r[iNn] ?? "").trim();
+      if (!quero.has(nn)) continue;
+      const d = documento(String(r[iDoc] ?? ""));
+      if (!d) continue;
+      if (!clientes.get(nn)?.has(d)) usados++;
+      addCli(nn, d);
+      if (r[iNome]) nomeCliente.set(d, String(r[iNome]));
+    }
+    console.log(`clientes do Corp pela planilha Clientes Com Documentos: +${usados} CPF/CNPJ`);
+  }
   return { clientes, nomeCliente };
+}
+
+/** Emissão (NOVO/RENV sem endosso) de cada Nosso Nº, com qualquer nº de apólice (até "0"). */
+async function emissoesPorNossoNumero(sb: ReturnType<typeof createServiceClient>, nns: string[]) {
+  const mapa = new Map<string, Ap[]>();
+  for (const lote of emLotes(nns, 300)) {
+    const { data, error } = await sb.from("corp_grade").select("seg,ramo,numero_apolice,nosso_numero,numero_endosso,ini_vig,fim_vig")
+      .in("tipo", ["NOVO", "RENV"]).in("nosso_numero", lote);
+    if (error) throw new Error(error.message);
+    for (const g of data ?? []) {
+      if ((g.numero_endosso ?? "0").replace(/^0+/, "") !== "") continue;
+      const nn = String(g.nosso_numero);
+      if (!(mapa.get(nn) ?? []).length) mapa.set(nn, [{ nn, seg: g.seg, ramo: g.ramo, numero: g.numero_apolice ?? "0", ini: g.ini_vig, fim: g.fim_vig }]);
+    }
+  }
+  return mapa;
 }
 
 async function casar() {
@@ -420,16 +478,18 @@ async function casar() {
     .filter((l) => l.versao === VERSAO_LEITURA);
   console.log(`PDFs lidos: ${lidos.length}`);
 
-  const porNumero = await indiceDoCorp(sb);
+  const porNumero = FONTE === "corp" ? new Map<string, Ap[]>() : await indiceDoCorp(sb);
+  const doAnexo = FONTE === "corp" ? await emissoesPorNossoNumero(sb, [...new Set(lidos.map((l) => l.arquivo.pasta!))]) : null;
 
-  // Candidatas por PDF: nº presente + fim de vigência (±1 dia) presente no texto.
+  // Candidatas por PDF: nº presente + início e fim de vigência (±1 dia) presentes no texto.
+  // Anexo do Corp: a candidata é o próprio documento onde o PDF estava anexado.
   const candidatas = new Map<string, Ap[]>();
   for (const l of lidos) {
     if (!l.generico) continue;
     const datas = new Set(l.generico.datas);
     const achadas = new Map<string, Ap>();
-    for (const n of l.generico.numeros)
-      for (const ap of porNumero.get(n) ?? [])
+    const daqui = doAnexo ? (doAnexo.get(l.arquivo.pasta!) ?? []) : l.generico.numeros.flatMap((n) => porNumero.get(n) ?? []);
+    for (const ap of daqui)
         // início E fim da vigência (±1 dia) no texto: evita ligar o PDF de uma renovação à
         // apólice anterior (que termina no dia em que a nova começa) quando a nova não está no Corp.
         if ([ap.ini, ap.fim].every((d) => datas.has(d) || datas.has(maisDias(d, 1)) || datas.has(maisDias(d, -1)))) achadas.set(ap.nn, ap);
@@ -445,7 +505,7 @@ async function casar() {
     if (!l.generico) return { ...base, situacao: "nao_lida", motivo: l.erro ?? "não lida" };
     const docsPdf = new Set(l.generico.documentos);
     const cands = candidatas.get(l.arquivo.id) ?? [];
-    if (!cands.length) return { ...base, situacao: "sem_par", motivo: ehCotacao(l.arquivo.id) ? "cotação, não é apólice" : "nenhuma apólice do Corp desde 2020 com o mesmo nº, início e fim de vigência" };
+    if (!cands.length) return { ...base, situacao: "sem_par", motivo: ehCotacao(l.arquivo.id) ? "cotação, não é apólice" : doAnexo ? "o início e o fim da vigência do documento do Corp não estão no texto" : "nenhuma apólice do Corp desde 2020 com o mesmo nº, início e fim de vigência" };
     let comCliente = cands.filter((ap) => [...(clientes.get(ap.nn) ?? [])].some((d) => docsPdf.has(d)));
     // Renovação: o PDF novo cita o nº da apólice anterior ("renova apólice nº") e começa no dia
     // em que ela termina, então as duas batem. Desempate seguro: só a apólice deste PDF tem
@@ -511,7 +571,7 @@ async function casar() {
   for (const c of casados) if (c.situacao !== "certa" && c.motivo) { const k = `${c.situacao}: ${c.motivo.replace(/\d+ apólices/, "N apólices")}`; motivos[k] = (motivos[k] ?? 0) + 1; }
   console.log("\nmotivos fora de 'certa':");
   for (const [m, n] of Object.entries(motivos).sort((a, b) => b[1] - a[1]).slice(0, 15)) console.log(`  ${n} × ${m.slice(0, 160)}`);
-  if (FONTE === "email") {
+  if (FONTE !== "drive") {
     const { novas, jaNoAcervo, repetidas } = await selecionarEmail(sb, casados);
     const porProd: Record<string, number> = {};
     for (const c of novas) porProd[c.corp!.produto] = (porProd[c.corp!.produto] ?? 0) + 1;
@@ -521,7 +581,7 @@ async function casar() {
       const { count } = await sb.from("sinistros_corp").select("id", { count: "exact", head: true }).in("nosso_numero", lote);
       sinNovas += count ?? 0;
     }
-    console.log(`\nE-MAIL → o que entraria no acervo: ${novas.length} apólices novas ${JSON.stringify(porProd)} | Fiança com locatários: ${novasLoc.length} (sinistros nelas: ${sinNovas})`);
+    console.log(`\n${FONTE.toUpperCase()} → o que entraria no acervo: ${novas.length} apólices novas ${JSON.stringify(porProd)} | Fiança com locatários: ${novasLoc.length} (sinistros nelas: ${sinNovas})`);
     console.log(`  fora: ${jaNoAcervo} PDFs de apólices que já estão no acervo (Drive) | ${repetidas} cópias repetidas da mesma apólice em outros e-mails`);
   }
   console.log(`\n(simulação — nada gravado; arquivos de trabalho em ${CACHE})`);
@@ -555,7 +615,7 @@ async function gravar() {
   const casados = lerJson<Casado[]>("casamento.json", []);
   const nomesCorp = new Map(Object.entries(lerJson<Record<string, string>>("nomes-clientes.json", {})));
   if (!casados.length) throw new Error("rode 'casar' antes");
-  const gravaveis = FONTE === "email" ? (await selecionarEmail(sb, casados)).novas : casados;
+  const gravaveis = FONTE !== "drive" ? (await selecionarEmail(sb, casados)).novas : casados;
   const certas = gravaveis.filter((c) => c.situacao === "certa");
 
   // 1. Cofre: cliente do Corp de cada apólice certa + locatários confirmados da Fiança
@@ -603,7 +663,7 @@ async function gravar() {
       limite_maximo_garantia: usaLeitura ? r!.limite_maximo_garantia : null, coberturas: usaLeitura ? r!.coberturas : [],
       local_risco: usaLeitura && r!.local_risco ? { texto: r!.local_risco } : {},
       estipulante_nome: usaLeitura ? r!.estipulante_nome : null, estipulante_documento: usaLeitura ? r!.estipulante_documento : null,
-      nosso_numero: c.nosso_numero, regra_casamento: c.situacao === "certa" ? "numero_vigencia_cliente" : null,
+      nosso_numero: c.nosso_numero, regra_casamento: c.situacao === "certa" ? (FONTE === "corp" ? "anexo_corp_vigencia_cliente" : "numero_vigencia_cliente") : null,
       situacao: c.situacao, motivo: c.motivo, gravado_em: new Date().toISOString(),
     };
   });

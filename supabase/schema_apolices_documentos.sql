@@ -80,6 +80,17 @@ alter table apolice_documentos drop constraint if exists apolice_documentos_font
 alter table apolice_documentos add constraint apolice_documentos_fonte_check
   check (fonte in ('drive', 'email', 'sinistro', 'upload'));
 
+-- 24/10/2026: anexos do próprio Corp (aba Anexos do documento), baixados pelo robô
+-- scripts/robo-corp/anexos.ts: fonte 'corp', arquivo_id "corp:<Nosso Nº>:<n>". Regra
+-- 'anexo_corp_vigencia_cliente': PDF anexado naquele documento + início e fim da vigência
+-- (±1 dia) + CPF/CNPJ do cliente do Corp no texto (o nº da apólice pode estar "0" no Corp).
+alter table apolice_documentos drop constraint if exists apolice_documentos_fonte_check;
+alter table apolice_documentos add constraint apolice_documentos_fonte_check
+  check (fonte in ('drive', 'email', 'corp', 'sinistro', 'upload'));
+alter table apolice_documentos drop constraint if exists apolice_documentos_regra_casamento_check;
+alter table apolice_documentos add constraint apolice_documentos_regra_casamento_check
+  check (regra_casamento in ('numero_vigencia', 'segurado_vigencia', 'numero_vigencia_cliente', 'anexo_corp_vigencia_cliente'));
+
 -- Só equipe O2 (regra: tabela nova já nasce com ALL para is_colaborador_o2).
 alter table apolice_documentos enable row level security;
 alter table apolice_partes enable row level security;

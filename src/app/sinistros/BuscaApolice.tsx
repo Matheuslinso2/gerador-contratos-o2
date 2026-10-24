@@ -159,8 +159,11 @@ export default function BuscaApolice({ nossoNumeroInicial }: { nossoNumeroInicia
           )}
           {daApolice.local && <p>Local de risco: {daApolice.local}</p>}
           {daApolice.arquivoId &&
-            // PDF achado num anexo da caixa do Matheus ("gmail:<mensagem>:<parte>") ou no Drive.
-            (daApolice.arquivoId.startsWith("gmail:") ? (
+            // PDF achado no próprio Corp ("corp:<Nosso Nº>:<n>"), num anexo da caixa do Matheus
+            // ("gmail:<mensagem>:<parte>") ou no Drive.
+            (daApolice.arquivoId.startsWith("corp:") ? (
+              <p className="font-semibold">PDF anexado no Corp (aba Anexos do Nosso Nº {daApolice.arquivoId.split(":")[1]})</p>
+            ) : daApolice.arquivoId.startsWith("gmail:") ? (
               <a href={`https://mail.google.com/mail/u/?authuser=matheus@o2seguros.com.br#all/${daApolice.arquivoId.split(":")[1]}`} target="_blank" rel="noreferrer" className="font-semibold underline">
                 Abrir o e-mail com a apólice (caixa do Matheus)
               </a>
