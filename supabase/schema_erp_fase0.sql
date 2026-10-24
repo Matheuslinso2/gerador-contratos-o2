@@ -505,6 +505,7 @@ end $$;
 -- Cofre de clientes: leitura liberada para a equipe (decisão 2), escrita continua só pelo sistema
 drop policy if exists locatarios_leitura_o2 on locatarios;
 create policy locatarios_leitura_o2 on locatarios for select to authenticated using ((select is_colaborador_o2()));
+grant select on locatarios to authenticated;   -- sem o GRANT a policy não vale (achado no teste da tela, 24/10)
 
 -- ============================================================ sementes
 insert into erp_corretoras (razao_social, cnpj, apelido) values

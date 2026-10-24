@@ -10,6 +10,8 @@ import VinculosCampanhas from "../../../campanhas/VinculosCampanhas";
 import VinculosWhatsapp, { type ContatoWhatsappImobiliaria } from "../VinculosWhatsapp";
 import FontesVinculos from "../FontesVinculos";
 import { ProdutoresCorp, buscarProdutoresCorp } from "../ProdutoresCorp";
+import RegrasRepasseErp from "../RegrasRepasseErp";
+import { buscarRegrasRepasse } from "@/lib/erp/documentos";
 import { buscarFontesDaFicha, buscarNomesSoltos, type RegistroFonte } from "@/lib/baseUnica/revisao";
 import { atualizarImobiliariaAdmin, adicionarMembroImobiliariaAdmin, removerMembroImobiliariaAdmin } from "../actions";
 
@@ -62,7 +64,11 @@ export default async function AdminImobiliariaDetalhePage({
   const voltarPara = `/admin/imobiliarias/${id}`;
   // Produtores do Corp desta ficha (pode ter mais de um), produção no ano.
   const hoje = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
-  const produtoresCorp = await buscarProdutoresCorp(supabase, [id], `${hoje.slice(0, 4)}-01-01`, hoje);
+  const [produtoresCorp, regrasErp] = await Promise.all([
+    buscarProdutoresCorp(supabase, [id], `${hoje.slice(0, 4)}-01-01`, hoje),
+    // ERP O2 (Fase 0): regra ESPERADA de repasse desta ficha, inferida do Corp.
+    buscarRegrasRepasse(supabase, id),
+  ]);
 
   return (
     <>
@@ -236,6 +242,8 @@ export default async function AdminImobiliariaDetalhePage({
             voltarPara={voltarPara}
           />
         </section>
+
+        <RegrasRepasseErp regras={regrasErp} />
 
         <section className="space-y-3 border-t border-gray-200 pt-6">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">
