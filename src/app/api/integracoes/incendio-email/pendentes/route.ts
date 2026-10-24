@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import { lerFonteRamosElementares } from "@/lib/ramos-elementares/fonteGoogle";
-import { lerFonteRamosElementaresHibrida } from "@/lib/ramos-elementares/fonteHibrida";
+import { lerFonteRamosElementaresDaCompetencia } from "@/lib/ramos-elementares/fonteHibrida";
 import { montarAnaliseRamosElementares, STATUS_TERMINAIS, type AnaliseRamosElementares } from "@/lib/ramos-elementares/analise";
 
 // Lista os negócios "de risco" (em andamento, parados, sem nenhum e-mail
@@ -14,8 +13,6 @@ import { montarAnaliseRamosElementares, STATUS_TERMINAIS, type AnaliseRamosEleme
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-// Mesmo corte de page.tsx: novos vêm do Bitrix, renovações/endossos da planilha.
-const COMPETENCIA_INICIO_HIBRIDO = "2026-09";
 const LIMIAR_DIAS_SEM_CONTATO = 4;
 const LIMITE_RESULTADOS = 30;
 
@@ -40,13 +37,10 @@ export async function GET(request: NextRequest) {
 
   const supabase = createServiceClient();
   const competencia = competenciaAtual();
-  const usarHibrido = competencia >= COMPETENCIA_INICIO_HIBRIDO;
 
   let analise: AnaliseRamosElementares;
   try {
-    const fonte = usarHibrido
-      ? await lerFonteRamosElementaresHibrida(competencia)
-      : await lerFonteRamosElementares(competencia);
+    const fonte = await lerFonteRamosElementaresDaCompetencia(competencia);
     analise = montarAnaliseRamosElementares(fonte);
   } catch (erro) {
     // Mesmo padrão de resiliência da tela: se a leitura ao vivo falhar,

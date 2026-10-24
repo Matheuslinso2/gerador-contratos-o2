@@ -1142,8 +1142,8 @@ function PainelEndossos({
   competencia: string;
 }) {
   const dados = analise.endossos;
-  // Endossos vêm da planilha tanto no modo "planilha" quanto no "hibrida"
-  // (só o modo 100% Bitrix, hoje sem uso, tem endossos estruturados no CRM).
+  // Endossos vêm da planilha nos modos "planilha" e "hibrida" (até set/2026);
+  // de out/2026 em diante, do funil Movimentações do Bitrix (estruturado).
   const endossosDoBitrix = tipoFonteExibicao(analise.fonte) === "bitrix";
   const arquivo = (sufixo: string) =>
     `ramos-elementares-endossos-${sufixo}-${competencia}`;
@@ -1843,7 +1843,7 @@ export default function PainelRamosElementares({
 }: {
   analise: AnaliseRamosElementares;
   competencia: string;
-  origem: "planilha" | "hibrida" | "snapshot" | "indisponivel";
+  origem: "planilha" | "hibrida" | "bitrix" | "snapshot" | "indisponivel";
   erroFonte: string | null;
   emailsConfirmacao: EmailConfirmacao[];
   imobiliariasVisao?: ImobiliariaUnificada[];
@@ -1902,7 +1902,7 @@ export default function PainelRamosElementares({
             <>
               {tituloCompetencia} — Fonte:{" "}
               {tipoFonte === "hibrida"
-                ? "Bitrix24 (novos e renovações) + Planilha (renovações de novembro em diante e endossos)"
+                ? "Bitrix24 (novos e renovações) + Planilha (renovações e endossos)"
                 : tipoFonte === "bitrix"
                   ? "CRM Bitrix24"
                   : "Google Sheets"}
@@ -1940,12 +1940,14 @@ export default function PainelRamosElementares({
         <div>
           <strong>
             {origem === "hibrida"
-              ? "Dados lidos diretamente do Bitrix24 (novos) e da planilha (renovações/endossos)"
-              : origem === "planilha"
-                ? "Dados lidos diretamente da planilha"
-                : origem === "snapshot"
-                  ? "Exibindo o último retrato salvo"
-                  : "Fonte indisponível"}
+              ? "Dados lidos diretamente do Bitrix24 (novos e renovações) e da planilha (renovações e endossos)"
+              : origem === "bitrix"
+                ? "Dados lidos diretamente do Bitrix24"
+                : origem === "planilha"
+                  ? "Dados lidos diretamente da planilha"
+                  : origem === "snapshot"
+                    ? "Exibindo o último retrato salvo"
+                    : "Fonte indisponível"}
           </strong>
           <span>
             Última leitura:{" "}
