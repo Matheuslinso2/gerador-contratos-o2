@@ -158,11 +158,17 @@ export default function BuscaApolice({ nossoNumeroInicial }: { nossoNumeroInicia
             </ul>
           )}
           {daApolice.local && <p>Local de risco: {daApolice.local}</p>}
-          {daApolice.arquivoId && (
-            <a href={`https://drive.google.com/file/d/${daApolice.arquivoId}/view`} target="_blank" rel="noreferrer" className="font-semibold underline">
-              Abrir a apólice em PDF (Drive)
-            </a>
-          )}
+          {daApolice.arquivoId &&
+            // PDF achado num anexo da caixa do Matheus ("gmail:<mensagem>:<parte>") ou no Drive.
+            (daApolice.arquivoId.startsWith("gmail:") ? (
+              <a href={`https://mail.google.com/mail/u/?authuser=matheus@o2seguros.com.br#all/${daApolice.arquivoId.split(":")[1]}`} target="_blank" rel="noreferrer" className="font-semibold underline">
+                Abrir o e-mail com a apólice (caixa do Matheus)
+              </a>
+            ) : (
+              <a href={`https://drive.google.com/file/d/${daApolice.arquivoId}/view`} target="_blank" rel="noreferrer" className="font-semibold underline">
+                Abrir a apólice em PDF (Drive)
+              </a>
+            ))}
         </div>
       )}
       {resultados && resultados.length > 0 && (

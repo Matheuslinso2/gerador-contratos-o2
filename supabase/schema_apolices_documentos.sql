@@ -74,6 +74,12 @@ alter table apolice_documentos add constraint apolice_documentos_regra_casamento
 alter table apolice_documentos alter column produto drop default;
 create index if not exists apolice_partes_locatario_idx on apolice_partes (locatario_id);
 
+-- 23/10/2026: PDFs anexados na caixa do Matheus também entram (fonte 'email',
+-- arquivo_id "gmail:<mensagem>:<parte>", arquivo_pasta_id = conversa).
+alter table apolice_documentos drop constraint if exists apolice_documentos_fonte_check;
+alter table apolice_documentos add constraint apolice_documentos_fonte_check
+  check (fonte in ('drive', 'email', 'sinistro', 'upload'));
+
 -- Só equipe O2 (regra: tabela nova já nasce com ALL para is_colaborador_o2).
 alter table apolice_documentos enable row level security;
 alter table apolice_partes enable row level security;

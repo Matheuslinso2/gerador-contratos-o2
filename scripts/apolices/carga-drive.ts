@@ -16,6 +16,12 @@
 //
 // Dados pessoais (texto dos PDFs, nomes, CPFs) ficam numa pasta temporária FORA
 // do projeto (APOLICES_CACHE ou <tmp>/o2-apolices-fianca) até a gravação; apagar depois.
+//
+// Fonte e-mail (23/10/2026, pedido do Matheus): APOLICES_FONTE=email faz as mesmas
+// etapas com os PDFs anexados na caixa matheus@o2seguros.com.br desde out/2019
+// (conta de serviço com delegação, só leitura; GESTAO_EMAILS_* no .env.local).
+// Mesmo casamento; grava só as apólices certas que o acervo ainda não tem
+// (o mesmo PDF costuma estar no Drive e em vários e-mails).
 process.loadEnvFile(".env.local");
 import fs from "node:fs";
 import os from "node:os";
@@ -28,8 +34,10 @@ import { lerApolice, documento, type Leitura } from "./leitores";
 
 const require = createRequire(import.meta.url);
 const { cliente } = require("../base-unica/_google.cjs");
+const { auth: gauth, gmail } = require("@googleapis/gmail");
 
-const CACHE = process.env.APOLICES_CACHE || path.join(os.tmpdir(), "o2-apolices-fianca");
+const FONTE: "drive" | "email" = process.env.APOLICES_FONTE === "email" ? "email" : "drive";
+const CACHE = process.env.APOLICES_CACHE || path.join(os.tmpdir(), FONTE === "email" ? "o2-apolices-email" : "o2-apolices-fianca");
 const LEITURAS = path.join(CACHE, "leituras");
 const TEXTOS = path.join(CACHE, "textos");
 fs.mkdirSync(LEITURAS, { recursive: true });
@@ -38,8 +46,10 @@ const arq = (n: string) => path.join(CACHE, n);
 const lerJson = <T>(n: string, padrao: T): T => (fs.existsSync(arq(n)) ? JSON.parse(fs.readFileSync(arq(n), "utf8")) : padrao);
 const salvarJson = (n: string, v: unknown) => fs.writeFileSync(arq(n), JSON.stringify(v));
 const VERSAO_LEITURA = 3;
+const nomeArq = (id: string) => id.replace(/:/g, "_"); // "gmail:x:y" não vale como nome de arquivo no Windows
 
-type Arquivo = { id: string; nome: string; pasta: string | null; criado: string; tamanho: number };
+/** Drive: id do arquivo e pasta. E-mail: id "gmail:<mensagem>:<parte>", pasta = conversa, anexo = id do anexo. */
+type Arquivo = { id: string; nome: string; pasta: string | null; criado: string; tamanho: number; anexo?: string };
 /** O que vale para qualquer ramo: candidatos a nº de apólice, datas e CPFs/CNPJs do texto. */
 type Generico = { numeros: string[]; datas: string[]; documentos: string[] };
 type Lido = { versao?: number; arquivo: Arquivo; leitura: Leitura | null; generico?: Generico; erro?: string; caracteres?: number };
@@ -56,7 +66,84 @@ type Casado = {
 };
 
 // ---------------- listar ----------------
+// Pelo nome, descarta o que claramente não é apólice (cartas de aprovação/recusa,
+// cotações, contratos, propostas, boletos...). Nome com "apólice" sempre fica.
+const sem = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
+const NAO_APOLICE = /CARTA|APROVA|APROV\b|RECUSA|CONTRATO|BASICO|COMPLET|PROPOSTA|\bPROP\b|ORCAMENTO|COTACAO|PENDENCIA|FICHA|ANALISE|MINUTA|RELATORIO|ADITIVO|TAXA FIXA|\bLMI\b|CONDICOES|CONDICAO|BOLETO|PANORAMA|CALCULO|ENDOSSO|CANCELAMENTO|CLAUSULA|MANUAL|NOTIFICA|DECLARA|VISTORIA|LAUDO|RECIBO|PLANILHA|NOTA FISCAL|\bNF\b|DANFE|FATURA|EXTRATO|COMPROVANTE/;
+const talvezApolice = (nome: string) => /APOLICE/.test(sem(nome)) || !NAO_APOLICE.test(sem(nome));
+
+/** Gmail da caixa do Matheus, só leitura (mesma conta de serviço da Gestão de E-mails). */
+function clienteGmail() {
+  const email = process.env.GESTAO_EMAILS_GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const chave = process.env.GESTAO_EMAILS_GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY;
+  if (!email || !chave) throw new Error("faltam GESTAO_EMAILS_GOOGLE_SERVICE_ACCOUNT_EMAIL/PRIVATE_KEY no .env.local");
+  const jwt = new gauth.JWT({ email, key: chave.replace(/\\n/g, "\n"), scopes: ["https://www.googleapis.com/auth/gmail.readonly"], subject: "matheus@o2seguros.com.br" });
+  return gmail({ version: "v1", auth: jwt });
+}
+
+type Parte = { partId?: string | null; filename?: string | null; body?: { attachmentId?: string | null; size?: number | null } | null; parts?: Parte[] | null };
+const partesDe = (p: Parte | null | undefined): Parte[] => (p ? [p, ...(p.parts ?? []).flatMap(partesDe)] : []);
+
+async function listarEmail() {
+  const g = clienteGmail();
+  // Caixa grande (recebe os grupos incêndio/fiança...): ids e anexos já vistos ficam
+  // salvos, e a etapa retoma de onde parou se for interrompida.
+  let ids = lerJson<string[]>("email-ids.json", []);
+  if (!ids.length) {
+    let pageToken: string | undefined;
+    do {
+      const r = await g.users.messages.list({ userId: "me", q: "has:attachment filename:pdf after:2019/10/01", maxResults: 500, pageToken });
+      for (const m of r.data.messages ?? []) ids.push(m.id!);
+      pageToken = r.data.nextPageToken ?? undefined;
+      if (ids.length % 5000 === 0) console.log(`  contando e-mails: ${ids.length}`);
+    } while (pageToken);
+    salvarJson("email-ids.json", ids);
+  }
+  console.log(`e-mails com PDF anexo desde out/2019: ${ids.length}`);
+  // O mesmo anexo (nome + tamanho) encaminhado em vários e-mails é baixado uma vez só.
+  type Parcial = { vistos: string[]; anexos: number; todos: [string, Arquivo][] };
+  const parcial = lerJson<Parcial>("email-parcial.json", { vistos: [], anexos: 0, todos: [] });
+  const vistosSet = new Set(parcial.vistos);
+  const todos = new Map<string, Arquivo>(parcial.todos);
+  let anexos = parcial.anexos;
+  const fila = ids.filter((id) => !vistosSet.has(id));
+  const salvar = () => salvarJson("email-parcial.json", { vistos: [...vistosSet], anexos, todos: [...todos] });
+  // Só a estrutura das partes (sem o corpo dos e-mails): bem mais leve.
+  const nivel = (n: number): string => `partId,filename,body(attachmentId,size)${n ? `,parts(${nivel(n - 1)})` : ""}`;
+  const campos = `id,threadId,internalDate,payload(${nivel(5)})`;
+  const trabalhar = async (id: string) => {
+    let r;
+    for (let t = 0; ; t++) {
+      try { r = await g.users.messages.get({ userId: "me", id, format: "full", fields: campos }); break; }
+      catch (e) { if (t >= 4) { console.log(`  falhou ${id}: ${(e as Error).message}`); vistosSet.add(id); return; } await new Promise((ok) => setTimeout(ok, 2000 * (t + 1))); }
+    }
+    for (const p of partesDe(r.data.payload)) {
+      if (!p.filename || !/\.pdf$/i.test(p.filename) || !p.body?.attachmentId) continue;
+      anexos++;
+      const chave = `${p.filename.toLowerCase()}|${p.body.size}`;
+      if (todos.has(chave)) continue;
+      todos.set(chave, { id: `gmail:${id}:${p.partId}`, nome: p.filename, pasta: r.data.threadId ?? null, criado: new Date(Number(r.data.internalDate)).toISOString(), tamanho: p.body.size ?? 0, anexo: p.body.attachmentId });
+    }
+    vistosSet.add(id);
+    if (vistosSet.size % 1000 === 0) { salvar(); console.log(`  ${vistosSet.size}/${ids.length} e-mails | anexos distintos: ${todos.size}`); }
+  };
+  await Promise.all(Array.from({ length: 16 }, async () => { while (fila.length) await trabalhar(fila.shift()!); }));
+  salvar();
+  const unicos = [...todos.values()];
+  // Na caixa de e-mail o volume é ~15× o do Drive (repasses, NFS-e, pendências, termos de
+  // chaves...): além do filtro geral, descarta nomes com qualquer palavra que comece assim.
+  const RUIM = /^(REPASSE|PENDDOC|APROV|RECUS|CANC|NFSE|NFE|PAGAMENTO|PROGRAMA|PREVIA|COMUNICADO|GUIA|DARF|CARNE|PARCELA|QUITA|SINISTRO|INDENIZ|TERMO|ENTREGA|CHAVES|CLICKSIGN|ASSINAD|PREMIA|RELACAOCERTIFICADO|EXTRATO|FATURA|BOLETO|RECIBO|DANFE|CONTRATO|VISTORIA|LAUDO|ORCAMENTO|COTAC|PROPOSTA|AVISO|RELATORIO|DEMONSTRATIVO|COMISS|HOLERITE|CURRICULO|INFORME|PROCURA|ATA|EDITAL|IPTU|CONDOMINIO|COBRANCA|NOTIFICA|DECLARA|DOCUMENTO|IDENTIDADE|CNH|RG|CPF|COMPROVANTE|CERTIDAO)/;
+  const palavras = (nome: string) => sem(nome).replace(/\.PDF$/, "").split(/[^A-Z]+/);
+  const lista = unicos.filter((a) => talvezApolice(a.nome) && (/APOLICE/.test(sem(a.nome)) || !palavras(a.nome).some((t) => RUIM.test(t))));
+  salvarJson("lista.json", lista);
+  const porAno: Record<string, number> = {};
+  for (const a of lista) porAno[a.criado.slice(0, 4)] = (porAno[a.criado.slice(0, 4)] ?? 0) + 1;
+  console.log(`anexos PDF: ${anexos} | distintos (nome+tamanho): ${unicos.length} | na lista: ${lista.length} (descartados pelo nome — boletos, notas, cotações...: ${unicos.length - lista.length})`);
+  console.log("por ano do e-mail:", JSON.stringify(porAno));
+}
+
 async function listar() {
+  if (FONTE === "email") return listarEmail();
   const { drive } = cliente("GERAL");
   // Pelo nome ("apólice", qualquer ramo) e, na Fiança, também pelo texto
   // ("Fiança Locatícia"), porque há apólices salvas só com o nome do inquilino.
@@ -79,11 +166,7 @@ async function listar() {
       pageToken = r.data.nextPageToken ?? undefined;
     } while (pageToken);
   }
-  // Pelo nome, descarta o que claramente não é apólice (cartas de aprovação/recusa,
-  // cotações, contratos, propostas...). Nome com "apólice" sempre fica.
-  const sem = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
-  const NAO_APOLICE = /CARTA|APROVA|APROV\b|RECUSA|CONTRATO|BASICO|COMPLET|PROPOSTA|\bPROP\b|ORCAMENTO|COTACAO|PENDENCIA|FICHA|ANALISE|MINUTA|RELATORIO|ADITIVO|TAXA FIXA|\bLMI\b|CONDICOES|CONDICAO|BOLETO|PANORAMA|CALCULO|ENDOSSO|CANCELAMENTO|CLAUSULA|MANUAL|NOTIFICA|DECLARA|VISTORIA|LAUDO|RECIBO|PLANILHA/;
-  const lista = [...todos.values()].filter((a) => /APOLICE/.test(sem(a.nome)) || !NAO_APOLICE.test(sem(a.nome)));
+  const lista = [...todos.values()].filter((a) => talvezApolice(a.nome));
   salvarJson("lista.json", lista);
   const porAno: Record<string, number> = {};
   for (const a of lista) porAno[a.criado.slice(0, 4)] = (porAno[a.criado.slice(0, 4)] ?? 0) + 1;
@@ -115,9 +198,10 @@ function generico(texto: string): Generico {
 async function ler() {
   const lista = lerJson<Arquivo[]>("lista.json", []);
   if (!lista.length) throw new Error("rode 'listar' antes");
-  const { drive } = cliente("GERAL");
+  const drive = FONTE === "drive" ? cliente("GERAL").drive : null;
+  const g = FONTE === "email" ? clienteGmail() : null;
   const pendentes = lista.filter((a) => {
-    const f = path.join(LEITURAS, `${a.id}.json`);
+    const f = path.join(LEITURAS, `${nomeArq(a.id)}.json`);
     return !fs.existsSync(f) || (JSON.parse(fs.readFileSync(f, "utf8")) as Lido).versao !== VERSAO_LEITURA;
   });
   console.log(`a ler: ${pendentes.length} de ${lista.length}`);
@@ -125,13 +209,29 @@ async function ler() {
   const trabalhar = async (a: Arquivo) => {
     let lido: Lido;
     try {
-      const ft = path.join(TEXTOS, `${a.id}.txt.gz`);
+      const ft = path.join(TEXTOS, `${nomeArq(a.id)}.txt.gz`);
       let texto: string;
       if (fs.existsSync(ft)) texto = zlib.gunzipSync(fs.readFileSync(ft)).toString("utf8");
       else {
         if (a.tamanho > 15_000_000) throw new Error("arquivo grande demais (>15 MB)");
-        const r = await drive.files.get({ fileId: a.id, alt: "media", supportsAllDrives: true }, { responseType: "arraybuffer" });
-        texto = await extrairTextoPdf(Buffer.from(r.data as ArrayBuffer));
+        let pdf: Buffer;
+        if (g) {
+          const [, mensagem, parte] = a.id.split(":");
+          const baixar = (anexo: string) => g.users.messages.attachments.get({ userId: "me", messageId: mensagem, id: anexo });
+          // O id do anexo pode mudar desde a listagem: se falhar, relê a mensagem e acha a parte.
+          let r = await baixar(a.anexo!).catch(() => null);
+          if (!r) {
+            const m = await g.users.messages.get({ userId: "me", id: mensagem, format: "full" });
+            const nova = partesDe(m.data.payload).find((p) => p.partId === parte)?.body?.attachmentId;
+            if (!nova) throw new Error("anexo não encontrado no e-mail");
+            r = await baixar(nova);
+          }
+          pdf = Buffer.from(r.data.data, "base64url");
+        } else {
+          const r = await drive!.files.get({ fileId: a.id, alt: "media", supportsAllDrives: true }, { responseType: "arraybuffer" });
+          pdf = Buffer.from(r.data as ArrayBuffer);
+        }
+        texto = await extrairTextoPdf(pdf);
         fs.writeFileSync(ft, zlib.gzipSync(texto));
       }
       if (texto.length <= 50) lido = { versao: VERSAO_LEITURA, arquivo: a, leitura: null, erro: "PDF sem texto (provavelmente imagem/escaneado)", caracteres: texto.length };
@@ -139,7 +239,7 @@ async function ler() {
     } catch (e) {
       lido = { versao: VERSAO_LEITURA, arquivo: a, leitura: null, erro: (e as Error).message };
     }
-    fs.writeFileSync(path.join(LEITURAS, `${a.id}.json`), JSON.stringify(lido));
+    fs.writeFileSync(path.join(LEITURAS, `${nomeArq(a.id)}.json`), JSON.stringify(lido));
     if (++feitos % 100 === 0) console.log(`  ${feitos}/${pendentes.length}`);
   };
   const fila = [...pendentes];
@@ -150,7 +250,7 @@ async function ler() {
 // ---------------- casar ----------------
 /** Cotação salva como se fosse apólice (ex.: "Essa é a sua cotação do seguro Pottencial"). */
 const ehCotacao = (id: string) => {
-  const ft = path.join(TEXTOS, `${id}.txt.gz`);
+  const ft = path.join(TEXTOS, `${nomeArq(id)}.txt.gz`);
   if (!fs.existsSync(ft)) return false;
   const t = zlib.gunzipSync(fs.readFileSync(ft)).toString("utf8").slice(0, 6000);
   return /sua cota[çc][ãa]o|COTA[ÇC][ÃA]O DE SEGURO|COTA[ÇC][ÃA]O N[ºo°]/i.test(t) && !/N[ºo°] DA AP[ÓO]LICE|AP[ÓO]LICE N[ºo°]/i.test(t);
@@ -310,7 +410,40 @@ async function casar() {
   for (const c of casados) if (c.situacao !== "certa" && c.motivo) { const k = `${c.situacao}: ${c.motivo.replace(/\d+ apólices/, "N apólices")}`; motivos[k] = (motivos[k] ?? 0) + 1; }
   console.log("\nmotivos fora de 'certa':");
   for (const [m, n] of Object.entries(motivos).sort((a, b) => b[1] - a[1]).slice(0, 15)) console.log(`  ${n} × ${m.slice(0, 160)}`);
+  if (FONTE === "email") {
+    const { novas, jaNoAcervo, repetidas } = await selecionarEmail(sb, casados);
+    const porProd: Record<string, number> = {};
+    for (const c of novas) porProd[c.corp!.produto] = (porProd[c.corp!.produto] ?? 0) + 1;
+    const novasLoc = novas.filter((c) => c.garantidos_confirmados);
+    let sinNovas = 0;
+    for (const lote of emLotes(novasLoc.map((c) => c.nosso_numero!))) {
+      const { count } = await sb.from("sinistros_corp").select("id", { count: "exact", head: true }).in("nosso_numero", lote);
+      sinNovas += count ?? 0;
+    }
+    console.log(`\nE-MAIL → o que entraria no acervo: ${novas.length} apólices novas ${JSON.stringify(porProd)} | Fiança com locatários: ${novasLoc.length} (sinistros nelas: ${sinNovas})`);
+    console.log(`  fora: ${jaNoAcervo} PDFs de apólices que já estão no acervo (Drive) | ${repetidas} cópias repetidas da mesma apólice em outros e-mails`);
+  }
   console.log(`\n(simulação — nada gravado; arquivos de trabalho em ${CACHE})`);
+}
+
+/** E-mail: o que entra no acervo -- só apólices certas que ainda não têm PDF gravado (Drive ou
+ * e-mail anterior), uma por apólice (preferindo a que trouxe os locatários). Os demais anexos
+ * (boletos, cotações, apólices sem par no Corp) não são gravados. */
+async function selecionarEmail(sb: ReturnType<typeof createServiceClient>, casados: Casado[]) {
+  const certas = casados.filter((c) => c.situacao === "certa");
+  const jaTem = new Set<string>();
+  for (const lote of emLotes([...new Set(certas.map((c) => c.nosso_numero!))])) {
+    const { data, error } = await sb.from("apolice_documentos").select("nosso_numero").eq("situacao", "certa").in("nosso_numero", lote);
+    if (error) throw new Error(error.message);
+    for (const x of data ?? []) jaTem.add(x.nosso_numero);
+  }
+  const escolhida = new Map<string, Casado>();
+  for (const c of certas) {
+    if (jaTem.has(c.nosso_numero!)) continue;
+    const atual = escolhida.get(c.nosso_numero!);
+    if (!atual || (c.garantidos_confirmados && !atual.garantidos_confirmados)) escolhida.set(c.nosso_numero!, c);
+  }
+  return { novas: [...escolhida.values()], jaNoAcervo: certas.filter((c) => jaTem.has(c.nosso_numero!)).length, repetidas: certas.filter((c) => !jaTem.has(c.nosso_numero!)).length - escolhida.size };
 }
 
 // ---------------- gravar ----------------
@@ -321,7 +454,8 @@ async function gravar() {
   const casados = lerJson<Casado[]>("casamento.json", []);
   const nomesCorp = new Map(Object.entries(lerJson<Record<string, string>>("nomes-clientes.json", {})));
   if (!casados.length) throw new Error("rode 'casar' antes");
-  const certas = casados.filter((c) => c.situacao === "certa");
+  const gravaveis = FONTE === "email" ? (await selecionarEmail(sb, casados)).novas : casados;
+  const certas = gravaveis.filter((c) => c.situacao === "certa");
 
   // 1. Cofre: cliente do Corp de cada apólice certa + locatários confirmados da Fiança
   //    (não sobrescreve quem já existe; só marca a fonte "apolice_pdf").
@@ -357,11 +491,11 @@ async function gravar() {
 
   // 2. Documentos (todos, com a situação; nenhum dado pessoal aqui).
   const fianca = (c: Casado) => c.corp?.produto === "fianca" || (!c.corp && c.leitura?.fianca);
-  const linhas = casados.map((c) => {
+  const linhas = gravaveis.map((c) => {
     const r = c.leitura;
     const usaLeitura = c.garantidos_confirmados; // campos lidos (local, coberturas, estipulante) só na Fiança confirmada
     return {
-      fonte: "drive", arquivo_id: c.arquivo.id, arquivo_nome: c.arquivo.nome, arquivo_pasta_id: c.arquivo.pasta, arquivo_criado_em: c.arquivo.criado,
+      fonte: FONTE, arquivo_id: c.arquivo.id, arquivo_nome: c.arquivo.nome, arquivo_pasta_id: c.arquivo.pasta, arquivo_criado_em: c.arquivo.criado,
       produto: c.corp?.produto ?? (fianca(c) ? "fianca" : "nao_identificado"), seguradora: c.corp?.seg ?? r?.seguradora ?? null,
       numero_apolice: c.corp?.numero ?? r?.numero ?? null, ramo: c.corp?.ramo ?? r?.ramo ?? null,
       vigencia_inicio: c.corp?.ini ?? r?.vigencia_inicio ?? null, vigencia_fim: c.corp?.fim ?? r?.vigencia_fim ?? null, emitida_em: r?.emitida_em ?? null,
