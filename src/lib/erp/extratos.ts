@@ -168,6 +168,10 @@ export async function carregarExtratos(
   const saida: ResumoCarga[] = [];
   const { data: segs } = await sb.from("erp_seguradoras").select("id, abreviacao").in("abreviacao", ["POTT", "TOO", "TOKI"]);
   const segId = new Map((segs ?? []).map((s: { id: string; abreviacao: string }) => [s.abreviacao, s.id]));
+  const { data: corrs } = await sb.from("erp_corretoras").select("id, apelido");
+  const corrId = (apelido: string) => (corrs ?? []).find((c: { id: string; apelido: string }) => c.apelido === apelido)?.id ?? null;
+  // corretora pelo assunto/corpo do e-mail: CNPJ 54.493.758 ou "O2 CAPITALIZACAO" = O2 Capitalização; 20.001.784 ou "O2 CORRETORA" = O2 Corretora
+  const corretoraDe = (texto: string) => /54.?493.?758|O2 CAPITALIZA/i.test(texto) ? corrId("O2 Capitalização") : /20.?001.?784|O2 CORRETORA/i.test(texto) ? corrId("O2 Corretora") : null;
   for (const fonte of FONTES) {
     if (opts.apenas?.length && !opts.apenas.includes(fonte.seguradora)) continue;
     const resumo: ResumoCarga = { seguradora: fonte.seguradora, mensagens: 0, extratos_novos: 0, extratos_ja_carregados: 0, linhas: 0, erros: [] };
@@ -192,7 +196,7 @@ export async function carregarExtratos(
           resumo.extratos_novos++;
           if (!opts.gravar) continue;
           const { error } = await sb.from("erp_extratos_seguradora").insert({
-            seguradora_id: segId.get(fonte.abreviacao), competencia: r.competencia, tipo: "resumo_mensal", origem: "gmail",
+            seguradora_id: segId.get(fonte.abreviacao), corretora_id: corretoraDe(m.assunto + " " + m.corpoTexto.slice(0, 400)), competencia: r.competencia, tipo: "resumo_mensal", origem: "gmail",
             gmail_message_id: m.id, arquivo_path: null, linhas: [], total_bruto: r.total_bruto, total_liquido: r.total_bruto !== null && r.iss !== null ? r.total_bruto - r.iss : null,
             observacao: `${m.assunto} — só o total do mês; detalhe por apólice fica no Portal Parceiros (Eu, Corretor > Tributos).`,
           });
@@ -213,7 +217,7 @@ export async function carregarExtratos(
           const { data: ext, error } = await sb
             .from("erp_extratos_seguradora")
             .insert({
-              seguradora_id: segId.get(fonte.abreviacao), competencia, tipo: "demonstrativo", origem: "gmail",
+              seguradora_id: segId.get(fonte.abreviacao), corretora_id: corretoraDe(m.assunto), competencia, tipo: "demonstrativo", origem: "gmail",
               gmail_message_id: m.id, arquivo_path: a.nome, linhas: parsed.linhas, total_bruto: parsed.total_bruto, total_liquido: parsed.total_liquido,
               observacao: `${m.assunto} (${m.data.slice(0, 25)})${"demonstrativo" in parsed && parsed.demonstrativo ? ` · demonstrativo ${parsed.demonstrativo}` : ""}`,
             })
