@@ -16,7 +16,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import sharp from "sharp";
-import { chromium, type Page } from "playwright";
+import { chromium, type BrowserContext, type Page } from "playwright";
 import { createServiceClient } from "@/lib/supabase/service";
 import { agora, acharTodos, acharNaTela, definirPastaFotos, entrar, espera, esperarModelo, foto, lerConfig, log, RAIZ, VIEWPORT } from "./_corp";
 
@@ -170,9 +170,43 @@ async function main() {
 
   definirPastaFotos(path.join(RAIZ, "saida", MAPEAR ? "mapa-anexos" : `anexos-${agora()}`));
   const cfg = lerConfig();
-  const browser = await chromium.launch({ channel: "chrome", headless: false, args: ["--start-maximized"] });
-  const ctx = await browser.newContext({ viewport: VIEWPORT, acceptDownloads: true, locale: "pt-BR" });
-  try {
+
+  // O Corp é instável: o login trava, a sessão cai, o navegador fecha ("Target page,
+  // context or browser has been closed"). Regra do Matheus (25/10): não parar — fechar o
+  // navegador, refazer o login do zero e continuar de onde parou, até o horário-limite.
+  // O estado (estado.json) é gravado a cada documento, então a retomada é natural.
+  const MAX_REINICIOS = 12;
+  for (let reinicio = 0; ; reinicio++) {
+    const browser = await chromium.launch({ channel: "chrome", headless: false, args: ["--start-maximized"] });
+    const ctx = await browser.newContext({ viewport: VIEWPORT, acceptDownloads: true, locale: "pt-BR" });
+    let terminou = false;
+    try {
+      terminou = await rodada(ctx, cfg, { MAPEAR, limite, ate, pararEm });
+    } catch (e) {
+      const msg = (e as Error).message ?? String(e);
+      log(`sessão caiu: ${msg}`);
+      if (MAPEAR || reinicio >= MAX_REINICIOS) throw e;
+    } finally {
+      if (args.includes("--manter")) log("navegador mantido aberto (--manter)");
+      else await browser.close().catch(() => {});
+    }
+    if (terminou || MAPEAR) return;
+    if (pararEm && new Date() >= pararEm) { log(`horário-limite ${ate}: parando`); return; }
+    const pausa = Math.min(60 * (reinicio + 1), 300);
+    log(`reinício ${reinicio + 1}/${MAX_REINICIOS} em ${pausa} s (fecha o navegador e refaz o login)`);
+    await espera(pausa * 1000);
+  }
+}
+
+// Uma sessão no Corp: login, busca e varredura da fila. Devolve true quando a fila
+// acabou ou o horário-limite chegou; lança erro quando a sessão precisa ser refeita.
+async function rodada(
+  ctx: BrowserContext,
+  cfg: ReturnType<typeof lerConfig>,
+  o: { MAPEAR: string | null | undefined; limite: number; ate: string | null | undefined; pararEm: Date | null }
+): Promise<boolean> {
+  const { MAPEAR, limite, ate, pararEm } = o;
+  {
     const page = await entrar(ctx, cfg);
     await abrirConsultaDocumentos(page);
     if (MAPEAR) {
@@ -201,16 +235,16 @@ async function main() {
       await espera(3000);
       await foto(page, "sem-resultado");
       log("mapeamento: recorte os modelos a partir de saida/mapa-anexos");
-      return;
+      return true;
     }
     const fila = lerJson<Item[]>(FILA, []);
     if (!fila.length) throw new Error("fila vazia: rode com --fila fianca-vigentes");
     const estado = lerJson<Estado>(ESTADO, {});
     const pendentes = fila.filter((i) => !estado[i.nn] || estado[i.nn].resultado === "erro");
     log(`fila: ${fila.length} | já visitados: ${fila.length - pendentes.length} | nesta rodada: até ${Math.min(limite, pendentes.length)}`);
-    let feitos = 0, erros = 0;
+    let feitos = 0, erros = 0, limiteHorario = false;
     for (const item of pendentes.slice(0, limite)) {
-      if (pararEm && new Date() >= pararEm) { log(`horário-limite ${ate}: parando`); break; }
+      if (pararEm && new Date() >= pararEm) { log(`horário-limite ${ate}: parando`); limiteHorario = true; break; }
       const t0 = Date.now();
       try {
         if (!(await abrirDocumento(page, item.nn))) estado[item.nn] = { quando: new Date().toISOString(), resultado: "nao_achou" };
@@ -227,7 +261,9 @@ async function main() {
         // volta para um estado conhecido: fecha janelas e reabre a busca
         await page.keyboard.press("Escape").catch(() => {});
         await fecharDocumento(page).catch(() => {});
-        if (++erros >= 5) throw new Error("5 erros seguidos: parando para não ficar clicando no lugar errado");
+        fs.writeFileSync(ESTADO, JSON.stringify(estado));
+        // 5 erros seguidos = a tela saiu do lugar conhecido: refaz a sessão inteira (login do zero)
+        if (++erros >= 5) throw new Error("5 erros seguidos: refazendo o login do zero");
         await abrirConsultaDocumentos(page).catch(() => {});
       }
       fs.writeFileSync(ESTADO, JSON.stringify(estado));
@@ -237,9 +273,7 @@ async function main() {
     const r: Record<string, number> = {};
     for (const v of Object.values(estado)) r[v.resultado] = (r[v.resultado] ?? 0) + 1;
     log(`rodada: ${feitos} documento(s) | acumulado: ${JSON.stringify(r)}`);
-  } finally {
-    if (args.includes("--manter")) log("navegador mantido aberto (--manter)");
-    else await browser.close();
+    return limiteHorario || feitos >= Math.min(limite, pendentes.length);
   }
 }
 
