@@ -31,6 +31,7 @@ const texto = (v: unknown): string | null => {
   return s ? s : null;
 };
 const data = (v: unknown): string | null => (texto(v) ? String(v).slice(0, 10) : null);
+const addDays = (d: string, n: number): string => { const x = new Date(d + "T00:00:00Z"); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
 const digitos = (v: unknown): string => String(v ?? "").replace(/\D/g, "");
 /** CPF/CNPJ que veio como número perde zeros à esquerda: completa para 11 ou 14. */
 const documento = (v: unknown): string | null => {
@@ -366,13 +367,37 @@ export async function sincronizarSpa(sb: SupabaseClient, cfg: ConfigSpa, o: Opco
 
       let docId = docPorChave.get(chave) ?? null;
       let modo: "criado" | "ligado" | "atualizado" = "atualizado";
-      if (!docId && x.nnCorp) {
-        const { data: doCorp } = await sb.from("erp_documentos").select("id").eq("nosso_numero_corp", x.nnCorp).maybeSingle();
-        if (doCorp) { docId = doCorp.id; modo = "ligado"; }
+      const ehRenovacao = cfg.renovacaoCategorias.includes(Number(item.categoryId));
+      // Num card de RENOVAÇÃO o "Nosso Nº Corp" é a apólice ANTERIOR (148/150 batem com o "fim da
+      // vigência anterior" do card) — vira o elo da família, nunca o próprio documento.
+      let anteriorId: string | null = null;
+      if (x.nnCorp) {
+        const { data: doCorp } = await sb.from("erp_documentos").select("id, vigencia_fim").eq("nosso_numero_corp", x.nnCorp).maybeSingle();
+        if (doCorp) {
+          if (ehRenovacao) anteriorId = doCorp.id;
+          else if (!docId) { docId = doCorp.id; modo = "ligado"; }
+        }
       }
       if (!docId && x.numeroApolice) {
         const { data: porApolice } = await sb.from("erp_documentos").select("id").eq("numero_apolice", x.numeroApolice).eq("origem", "corp_import").limit(1).maybeSingle();
         if (porApolice) { docId = porApolice.id; modo = "ligado"; }
+      }
+      // Renovação: o Corp pode já ter digitado a apólice nova (ex.: 133629 = renovação do 114924).
+      // Casa quando há UM candidato do Corp, renovação, mesmo produto, mesma imob/cliente, começando
+      // perto da vigência inicial do card e que renova o anterior (ou ainda não está ligado a ninguém).
+      if (!docId && ehRenovacao && x.vigIni && ramo) {
+        let q = sb.from("erp_documentos").select("id, documento_renovado_id, imobiliaria_principal_id, locatario_id")
+          .eq("origem", "corp_import").eq("tipo", "A").eq("tipo_corp", "RENV")
+          .gte("vigencia_inicio", addDays(x.vigIni, -5)).lte("vigencia_inicio", addDays(x.vigIni, 5))
+          .in("ramo_id", (ramos ?? []).filter((rm) => rm.produto === x.produto).map((rm) => rm.id));
+        if (seg) q = q.eq("seguradora_id", seg);
+        const { data: cands } = await q.limit(50);
+        const bons = (cands ?? []).filter((c) =>
+          (anteriorId ? c.documento_renovado_id === anteriorId || c.documento_renovado_id === null : true) &&
+          ((imobId && c.imobiliaria_principal_id === imobId) || (locatarioId && c.locatario_id === locatarioId)));
+        const exatos = anteriorId ? bons.filter((c) => c.documento_renovado_id === anteriorId) : [];
+        const escolhido = exatos.length === 1 ? exatos[0] : bons.length === 1 ? bons[0] : null;
+        if (escolhido) { docId = escolhido.id; modo = "ligado"; }
       }
       const premio = x.premio ?? 0;
       const comissaoPct = x.comissaoPct ?? 0;
@@ -414,9 +439,12 @@ export async function sincronizarSpa(sb: SupabaseClient, cfg: ConfigSpa, o: Opco
       await sb.from("erp_chaves_externas").upsert({ sistema: "bitrix", entidade: "documento", entidade_id: docId, chave, dados: { entityTypeId: cfg.entityTypeId, itemId: id } }, { onConflict: "sistema,entidade,chave" });
 
       // renovação: liga ao documento anterior pelo nº da apólice/proposta citado no card (thread, como o Corp)
-      if (x.tipo_corp === "RENV" && (x.anterior.apolice || x.anterior.proposta)) {
+      if (x.tipo_corp === "RENV" && (anteriorId || x.anterior.apolice || x.anterior.proposta)) {
         const { data: atualDoc } = await sb.from("erp_documentos").select("documento_renovado_id").eq("id", docId).single();
-        if (!atualDoc?.documento_renovado_id) {
+        if (!atualDoc?.documento_renovado_id && anteriorId && anteriorId !== docId) {
+          await sb.from("erp_documentos").update({ documento_renovado_id: anteriorId }).eq("id", docId);
+          r.renovacoes_ligadas++;
+        } else if (!atualDoc?.documento_renovado_id) {
           // o card cita "apólice anterior" ou "proposta anterior", mas o Corp guarda o nº do título/apólice
           // em numero_apolice — procura as duas referências nas duas colunas
           let ant: { id: string } | null = null;
