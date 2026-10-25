@@ -96,15 +96,15 @@ export default async function ErpConferenciaPage() {
       .in("alerta", ["fora_da_fatura", "sem_destino_seguradora", "fatura_prevista_nao_carregada", "relatorio_incompleto"])
       .order("fatura_prevista", { ascending: false })
       .limit(300),
-    supabase.from("erp_alertas_fatura_pronto").select("alerta").limit(5000),
-    supabase.from("erp_fora_das_ultimas_faturas").select("documento_id, codigo_o2, nosso_numero_corp, numero_apolice, imobiliaria, seguradora, produto, vigencia_inicio, faturas_carregadas, parcela_na_janela, no_extrato").order("seguradora").order("imobiliaria").limit(400),
+    supabase.rpc("erp_contar_alertas_fatura"),
+    supabase.from("erp_fora_faturas_pronto").select("documento_id, codigo_o2, nosso_numero_corp, numero_apolice, imobiliaria, seguradora, produto, vigencia_inicio, faturas_carregadas, parcela_na_janela, no_extrato").order("seguradora").order("imobiliaria").limit(400),
     supabase.from("erp_extratos_resumo").select("*").order("created_at", { ascending: false }).limit(40),
     supabase.from("erp_comissao_recebimentos").select("diferenca").limit(5000),
   ]);
   const diferencas = (difs ?? []) as Linha[];
   if (erroAlertas) console.error("erp_alertas_fatura:", erroAlertas.message);
   const alertas = (alertasBrutos ?? []) as AlertaFatura[];
-  const contagemAlertas = ((todosAlertas ?? []) as { alerta: string }[]).reduce<Record<string, number>>((acc, a) => ({ ...acc, [a.alerta]: (acc[a.alerta] ?? 0) + 1 }), {});
+  const contagemAlertas = ((todosAlertas ?? []) as { alerta: string; n: number }[]).reduce<Record<string, number>>((acc, a) => ({ ...acc, [a.alerta]: Number(a.n) }), {});
   void todas;
   const fora = (foraBrutos ?? []) as ForaFatura[];
   if (erroFora) console.error("erp_fora_das_ultimas_faturas:", erroFora.message);

@@ -43,3 +43,10 @@ create unique index if not exists erp_comissao_recebimentos_linha_uk on erp_comi
 -- Resultado da 1ª carga (25/10): Pottencial 6 demonstrativos (105 linhas), Too 18 (229 linhas), Tokio 2 resumos;
 -- 334/334 linhas casadas com documento, 331 com parcela; comissão igual ao previsto em 284 (86%);
 -- 17 apólices da Too marcadas boleto (no extrato, fora da fatura).
+
+-- Ajustes (mesmo dia, migration erp_fase2_fora_faturas_pronto):
+--   • extratos duplicados por e-mail encaminhado ("Fwd:" com o mesmo anexo) removidos; índice único (seguradora_id, arquivo_path);
+--     o leitor deduplica pelo nome do arquivo, não pela mensagem.
+--   • "Fora das últimas faturas" virou tabela pronta erp_fora_faturas_pronto (a view estourava o tempo da página),
+--     refeita por erp_atualizar_fora_faturas() ao fim de erp_cruzar_faturas_carregadas() e erp_cruzar_extratos().
+--   • erp_contar_alertas_fatura(): contagem dos alertas em 1 consulta (a tela parava nas 1.000 linhas do Supabase).

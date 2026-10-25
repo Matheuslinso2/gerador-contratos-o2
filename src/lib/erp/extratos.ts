@@ -180,12 +180,13 @@ export async function carregarExtratos(
       continue;
     }
     resumo.mensagens = msgs.length;
-    const { data: jaCarregados } = await sb.from("erp_extratos_seguradora").select("gmail_message_id, arquivo_path").in("gmail_message_id", msgs.map((m) => m.id));
-    const chaves = new Set((jaCarregados ?? []).map((x: { gmail_message_id: string; arquivo_path: string | null }) => `${x.gmail_message_id}|${x.arquivo_path ?? ""}`));
+    const { data: jaCarregados } = await sb.from("erp_extratos_seguradora").select("gmail_message_id, arquivo_path").eq("seguradora_id", segId.get(fonte.abreviacao) ?? "");
+    // chave = mensagem (resumos sem anexo) ou nome do arquivo (e-mails encaminhados "Fwd:" repetem o mesmo anexo)
+    const chaves = new Set((jaCarregados ?? []).map((x: { gmail_message_id: string; arquivo_path: string | null }) => (x.arquivo_path ? `arq|${x.arquivo_path}` : `msg|${x.gmail_message_id}`)));
     for (const m of msgs) {
       try {
         if (fonte.tipo === "resumo") {
-          if (chaves.has(`${m.id}|`)) { resumo.extratos_ja_carregados++; continue; }
+          if (chaves.has(`msg|${m.id}`)) { resumo.extratos_ja_carregados++; continue; }
           const r = parseTokioResumo(m.corpoTexto);
           if (!r.total_bruto) { resumo.erros.push(`${m.assunto}: resumo não reconhecido`); continue; }
           resumo.extratos_novos++;
@@ -199,7 +200,8 @@ export async function carregarExtratos(
           continue;
         }
         for (const a of m.anexos.filter((x) => fonte.anexoAceito(x.nome))) {
-          if (chaves.has(`${m.id}|${a.nome}`)) { resumo.extratos_ja_carregados++; continue; }
+          if (chaves.has(`arq|${a.nome}`)) { resumo.extratos_ja_carregados++; continue; }
+          chaves.add(`arq|${a.nome}`);
           const buf = await baixarAnexo(m.id, a.attachmentId);
           const parsed = fonte.seguradora === "POTTENCIAL" ? parsePottencial(buf) : parseToo(buf);
           if (!parsed.linhas.length) { resumo.erros.push(`${a.nome}: nenhuma linha reconhecida`); continue; }
