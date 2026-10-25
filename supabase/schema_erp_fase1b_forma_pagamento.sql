@@ -43,3 +43,31 @@ begin
   get diagnostics v_n = row_count;
   return query select v_s, v_n;
 end $$;
+
+
+-- ---------------------------------------------------------------------------
+-- 25/10 (mesmo dia): cruzar as últimas faturas de cada imob × seguradora
+-- (Matheus: "se você cruzar as últimas 2 ou 3 faturas de cada imob e seguradora
+--  você vai conseguir cruzar quem é e quem não é da fatura").
+-- Aplicado via MCP: erp_fase1b_cruzar_faturas_carregadas + _v2.
+create table if not exists erp_fatura_apolices_observadas (
+  documento_id uuid not null references erp_documentos(id) on delete cascade,
+  fatura_id uuid not null references faturas(id) on delete cascade,
+  seguradora text not null,
+  vencimento date,
+  competencia text,
+  observado_em timestamptz not null default now(),
+  primary key (documento_id, fatura_id)
+);
+alter table erp_fatura_apolices_observadas enable row level security;
+create policy colab_all on erp_fatura_apolices_observadas for all to authenticated using ((select is_colaborador_o2())) with check ((select is_colaborador_o2()));
+create index if not exists erp_fatura_apolices_obs_fatura_idx on erp_fatura_apolices_observadas(fatura_id);
+
+-- erp_cruzar_faturas_carregadas(): para cada relatório de fatura carregado (Tokio/Pottencial/Too/Yelum;
+-- Too não tem vencimento → último dia da competência), grava em erp_fatura_apolices_observadas
+-- toda apólice do ERP (mesma imob × seguradora) cujo número aparece no texto; quem apareceu vira
+-- modo_cobranca = 'fatura' (sem sobrescrever escolha explícita) e administrado = true (inferido_fatura).
+-- Encadeada no cron /api/cron/erp-bitrix?spa=1042 (1× por hora) antes dos alertas.
+-- erp_fora_das_ultimas_faturas (view): apólices vigentes de fiança/incêndio/condomínio com parcela
+-- vencendo na janela das faturas carregadas (imob com 2+ relatórios) que não apareceram em nenhuma →
+-- candidatas a boleto/cartão; confirmar no extrato de comissão (Fase 2). Listada em /erp/conferencia.

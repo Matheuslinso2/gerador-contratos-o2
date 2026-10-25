@@ -21,6 +21,8 @@ export async function GET(request: NextRequest) {
   // alertas de fatura (lista pronta para a tela /erp/conferencia): refaz 1× por hora, junto da Fiança
   let alertas: unknown = null;
   if (spa === 1042) {
+    // cruza as faturas carregadas no /faturas com as apólices do ERP (quem apareceu = forma de pagamento fatura)
+    await sb.rpc("erp_cruzar_faturas_carregadas");
     const { data, error } = await sb.rpc("erp_atualizar_alertas_fatura");
     alertas = error ? { erro: error.message } : data;
     // administrado × não administrado deduzido pela forma de pagamento ESCOLHIDA (fatura → sim; boleto/cartão com fatura ativa → não)

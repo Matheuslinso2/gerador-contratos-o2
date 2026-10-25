@@ -49,6 +49,22 @@ const ROTULO_ALERTA: Record<string, { texto: string; cor: string }> = {
   relatorio_incompleto: { texto: "Relatório da fatura cortado na leitura (conferir à mão)", cor: "bg-gray-200 text-gray-700" },
 };
 
+// Fora das últimas faturas (Matheus 25/10): cruzando as últimas faturas de cada imob×seguradora
+// descobre-se quem é da fatura (vira forma de pagamento = fatura) e quem ficou de fora mesmo
+// tendo parcela na janela → candidato a outra forma de pagamento; confirmar no extrato de comissão.
+type ForaFatura = {
+  documento_id: string;
+  codigo_o2: number;
+  nosso_numero_corp: number | null;
+  numero_apolice: string | null;
+  imobiliaria: string;
+  seguradora: string;
+  produto: string;
+  vigencia_inicio: string | null;
+  faturas_carregadas: number;
+  parcela_na_janela: string | null;
+};
+
 export default async function ErpConferenciaPage() {
   const supabase = await createClient();
   const {
@@ -56,7 +72,7 @@ export default async function ErpConferenciaPage() {
   } = await supabase.auth.getUser();
   if (!isAdmin(user?.email) && !isColaboradorO2(user?.email)) redirect("/");
 
-  const [{ data: todas }, { data: difs }, { data: alertasBrutos, error: erroAlertas }, { data: todosAlertas }] = await Promise.all([
+  const [{ data: todas }, { data: difs }, { data: alertasBrutos, error: erroAlertas }, { data: todosAlertas }, { data: foraBrutos, error: erroFora }] = await Promise.all([
     supabase.from("erp_conferencia_corp").select("mes", { count: "exact", head: true }),
     supabase.from("erp_conferencia_corp").select("*").or("dif_docs.neq.0,dif_comissao.gte.0.01,dif_comissao.lte.-0.01").order("mes", { ascending: false }),
     supabase
@@ -66,12 +82,15 @@ export default async function ErpConferenciaPage() {
       .order("fatura_prevista", { ascending: false })
       .limit(300),
     supabase.from("erp_alertas_fatura_pronto").select("alerta").limit(5000),
+    supabase.from("erp_fora_das_ultimas_faturas").select("documento_id, codigo_o2, nosso_numero_corp, numero_apolice, imobiliaria, seguradora, produto, vigencia_inicio, faturas_carregadas, parcela_na_janela").order("seguradora").order("imobiliaria").limit(400),
   ]);
   const diferencas = (difs ?? []) as Linha[];
   if (erroAlertas) console.error("erp_alertas_fatura:", erroAlertas.message);
   const alertas = (alertasBrutos ?? []) as AlertaFatura[];
   const contagemAlertas = ((todosAlertas ?? []) as { alerta: string }[]).reduce<Record<string, number>>((acc, a) => ({ ...acc, [a.alerta]: (acc[a.alerta] ?? 0) + 1 }), {});
   void todas;
+  const fora = (foraBrutos ?? []) as ForaFatura[];
+  if (erroFora) console.error("erp_fora_das_ultimas_faturas:", erroFora.message);
 
   return (
     <>
@@ -141,6 +160,52 @@ export default async function ErpConferenciaPage() {
                       <td className="px-2 py-1">{formatarData(a.efetivacao)}</td>
                       <td className="px-2 py-1">{formatarData(a.fatura_prevista)}</td>
                       <td className="px-2 py-1">{formatarData(a.fatura_carregada_vencimento)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Fora das últimas faturas ({fora.length})</h2>
+          <p className="text-xs text-gray-500">
+            Cruzamento das últimas faturas carregadas de cada imobiliária × seguradora (Tokio, Pottencial, Too, Yelum): quem apareceu em alguma fatura ficou com forma de pagamento “fatura”.
+            Aqui estão as apólices com parcela vencendo na janela dessas faturas que não apareceram em nenhuma delas (imobiliárias com 2+ faturas carregadas) — candidatas a boleto/cartão, a confirmar no extrato de comissão.
+          </p>
+          {fora.length === 0 ? (
+            <p className="text-xs text-green-700">Nenhuma apólice fora das faturas.</p>
+          ) : (
+            <div className="max-h-[360px] overflow-auto">
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+                  <tr>
+                    <th className="px-2 py-1">Código O2</th>
+                    <th className="px-2 py-1">Nº Corp</th>
+                    <th className="px-2 py-1">Apólice</th>
+                    <th className="px-2 py-1">Imobiliária</th>
+                    <th className="px-2 py-1">Seg.</th>
+                    <th className="px-2 py-1">Produto</th>
+                    <th className="px-2 py-1">Início vig.</th>
+                    <th className="px-2 py-1">Parcela na janela</th>
+                    <th className="px-2 py-1">Faturas conferidas</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {fora.map((f) => (
+                    <tr key={f.documento_id}>
+                      <td className="px-2 py-1">
+                        <Link href={`/erp/documentos/${f.documento_id}`} className="text-o2-navy hover:underline">{f.codigo_o2}</Link>
+                      </td>
+                      <td className="px-2 py-1 text-gray-500">{f.nosso_numero_corp ?? "—"}</td>
+                      <td className="px-2 py-1">{f.numero_apolice}</td>
+                      <td className="px-2 py-1">{f.imobiliaria}</td>
+                      <td className="px-2 py-1">{f.seguradora}</td>
+                      <td className="px-2 py-1">{f.produto}</td>
+                      <td className="px-2 py-1">{formatarData(f.vigencia_inicio)}</td>
+                      <td className="px-2 py-1">{formatarData(f.parcela_na_janela)}</td>
+                      <td className="px-2 py-1">{f.faturas_carregadas}</td>
                     </tr>
                   ))}
                 </tbody>
