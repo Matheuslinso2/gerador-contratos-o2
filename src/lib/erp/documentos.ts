@@ -241,7 +241,23 @@ export type DocumentoFicha = DocumentoLista & {
   itens: ItemDoc[];
   origens: OrigemDoc[];
   familia: FamiliaDoc[];
+  /** endossos desta apólice (filhos por documento_pai_id), do mais antigo ao mais novo */
+  endossos: EndossoDoc[];
+  /** quando o documento é um endosso: a apólice que ele altera */
+  apolice_mae: { id: string; nosso_numero: number; numero_apolice: string | null; vigencia_inicio: string | null; vigencia_fim: string | null } | null;
   cadeia: { canal: string | null; imobiliaria: string | null; grupo: string | null; cliente: string | null };
+};
+export type EndossoDoc = {
+  id: string;
+  nosso_numero: number;
+  nosso_numero_corp: number | null;
+  tipo: string;
+  numero_endosso: string | null;
+  dt_emissao: string | null;
+  vigencia_inicio: string | null;
+  premio_liquido: number;
+  comissao_valor: number;
+  situacao: string;
 };
 /** Corrente de renovações (como a coluna esquerda do Controle de Documentos do Corp). */
 export type FamiliaDoc = {
@@ -323,7 +339,7 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
     .from("erp_documentos")
     .select(
       SELECT_LISTA +
-        ", corretora:erp_corretoras(apelido), canal:erp_canais(nome), imob_grupo:imobiliarias!erp_documentos_imobiliaria_principal_id_fkey(grupo:imobiliaria_grupos(nome)), tipo_contratacao, modo_cobranca, revisao_pendente, revisado_por_email, locatario_id, numero_proposta, numero_endosso, dt_proposta, dt_emissao, qtd_parcelas, forma_pagamento, premio_adicional, iof, comissao_pct, comissao_base, premiacao_valor, cancelado_em, competencia, congelado, fora_regra_pbi, origem, observacoes, digitado_em, documento_renovado_id"
+        ", corretora:erp_corretoras(apelido), canal:erp_canais(nome), imob_grupo:imobiliarias!erp_documentos_imobiliaria_principal_id_fkey(grupo:imobiliaria_grupos(nome)), tipo_contratacao, modo_cobranca, revisao_pendente, revisado_por_email, locatario_id, numero_proposta, numero_endosso, dt_proposta, dt_emissao, qtd_parcelas, forma_pagamento, premio_adicional, iof, comissao_pct, comissao_base, premiacao_valor, cancelado_em, competencia, congelado, fora_regra_pbi, origem, observacoes, digitado_em, documento_renovado_id, documento_pai_id"
     )
     .eq("id", id)
     .maybeSingle();
@@ -357,9 +373,10 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
     observacoes: string | null;
     digitado_em: string | null;
     documento_renovado_id: string | null;
+    documento_pai_id: string | null;
   };
 
-  const [{ data: prods }, { data: parcs }, { data: anexos }, { data: eventos }, { data: renovadoDe }, { data: renovadoPor }, { data: itens }, { data: origens }, { data: familia }] = await Promise.all([
+  const [{ data: prods }, { data: parcs }, { data: anexos }, { data: eventos }, { data: renovadoDe }, { data: renovadoPor }, { data: itens }, { data: origens }, { data: familia }, { data: endossos }, { data: mae }] = await Promise.all([
     sb
       .from("erp_documento_produtores")
       .select("id, imobiliaria_id, produtor_corp_codigo, produtor_corp_nome, agente, principal, pct_participacao, repasse_pct, repasse_valor_previsto, repasse_pct_esperado, motivo_diferenca, forma_repasse, imobiliaria:imobiliarias(nome)")
@@ -388,6 +405,16 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
       .eq("documento_id", id)
       .order("capturado_em", { ascending: false }),
     sb.rpc("erp_familia_documento", { p_id: id }),
+    // linha do tempo da apólice: endossos ligados a ela (Matheus 25/10: todo endosso é filho de uma apólice)
+    sb
+      .from("erp_documentos")
+      .select("id, nosso_numero, nosso_numero_corp, tipo, numero_endosso, dt_emissao, vigencia_inicio, premio_liquido, comissao_valor, situacao")
+      .eq("documento_pai_id", id)
+      .order("vigencia_inicio", { ascending: true, nullsFirst: true })
+      .limit(200),
+    d.documento_pai_id
+      ? sb.from("erp_documentos").select("id, nosso_numero, numero_apolice, vigencia_inicio, vigencia_fim").eq("id", d.documento_pai_id).maybeSingle()
+      : Promise.resolve({ data: null }),
   ]);
 
   type ProdBruto = Omit<ProdutorDoc, "imobiliaria"> & { imobiliaria: { nome: string } | null };
@@ -462,6 +489,14 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
     })),
     origens: (origens ?? []) as unknown as OrigemDoc[],
     cadeia: { canal: d.canal?.nome ?? null, imobiliaria: d.imobiliaria?.nome ?? null, grupo: d.imob_grupo?.grupo?.nome ?? null, cliente: d.cliente?.nome ?? null },
+    endossos: ((endossos ?? []) as EndossoDoc[]).map((e) => ({
+      ...e,
+      nosso_numero: Number(e.nosso_numero),
+      nosso_numero_corp: e.nosso_numero_corp === null ? null : Number(e.nosso_numero_corp),
+      premio_liquido: Number(e.premio_liquido ?? 0),
+      comissao_valor: Number(e.comissao_valor ?? 0),
+    })),
+    apolice_mae: mae ? { ...(mae as NonNullable<DocumentoFicha["apolice_mae"]>), nosso_numero: Number((mae as { nosso_numero: number }).nosso_numero) } : null,
     familia: ((familia ?? []) as FamiliaDoc[]).map((f) => ({ ...f, nosso_numero: Number(f.nosso_numero), nosso_numero_corp: f.nosso_numero_corp === null ? null : Number(f.nosso_numero_corp) })),
   };
 }

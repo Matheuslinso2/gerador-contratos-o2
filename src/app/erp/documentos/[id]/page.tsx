@@ -131,6 +131,45 @@ export default async function ErpDocumentoFichaPage({ params }: { params: Promis
               ))}
             </p>
           )}
+          {d.apolice_mae && (
+            <p className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-gray-700">
+              Endosso da apólice{" "}
+              <Link className="font-semibold text-o2-navy underline" href={`/erp/documentos/${d.apolice_mae.id}`}>
+                Código O2 {d.apolice_mae.nosso_numero}
+              </Link>
+              {d.apolice_mae.numero_apolice ? ` · nº ${d.apolice_mae.numero_apolice}` : ""} · vigência {formatarData(d.apolice_mae.vigencia_inicio)} a {formatarData(d.apolice_mae.vigencia_fim)}
+            </p>
+          )}
+          {d.endossos.length > 0 && (
+            <div className="rounded-lg border border-gray-100 bg-gray-50 p-3 text-xs">
+              <div className="mb-1 text-[11px] uppercase tracking-wide text-gray-500">
+                Endossos desta apólice ({d.endossos.length}) · prêmio {formatarReais(d.endossos.reduce((s, e) => s + e.premio_liquido, 0))} · comissão{" "}
+                {formatarReais(d.endossos.reduce((s, e) => s + e.comissao_valor, 0))}
+              </div>
+              <table className="w-full">
+                <tbody className="divide-y divide-gray-200">
+                  {d.endossos.map((e) => (
+                    <tr key={e.id}>
+                      <td className="py-1 pr-2">
+                        <Link href={`/erp/documentos/${e.id}`} className="text-o2-navy hover:underline">
+                          Código O2 {e.nosso_numero}
+                        </Link>
+                      </td>
+                      <td className="py-1 pr-2">
+                        {e.tipo} · {TIPOS_DOCUMENTO[e.tipo] ?? e.tipo}
+                        {e.numero_endosso && e.numero_endosso !== "0" ? ` nº ${e.numero_endosso}` : ""}
+                      </td>
+                      <td className="py-1 pr-2 text-gray-500">{formatarData(e.vigencia_inicio ?? e.dt_emissao)}</td>
+                      <td className={`py-1 pr-2 text-right ${e.premio_liquido < 0 ? "text-red-700" : ""}`}>{formatarReais(e.premio_liquido)}</td>
+                      <td className={`py-1 text-right ${e.comissao_valor < 0 ? "text-red-700" : ""}`} title="Comissão do endosso (negativa = estorno descontado no extrato)">
+                        {formatarReais(e.comissao_valor)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
           {d.observacoes && <p className="whitespace-pre-wrap rounded-lg bg-gray-50 p-3 text-xs text-gray-700">{d.observacoes}</p>}
         </section>
 

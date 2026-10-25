@@ -7,3 +7,4 @@ create index if not exists erp_documentos_seg_apolice_idx on public.erp_document
 -- função public.erp_vincular_endossos(p_limite int default 5000) returns int:
 --   liga documento_pai_id (só se vazio) pela seguradora + nº da apólice; com várias apólices de mesmo nº, a que cobre
 --   a data do endosso > a mais recente que começou antes > a mais recente. Chamada pelo cron erp-bitrix (lote 2000).
+create index if not exists erp_documentos_pai_idx on public.erp_documentos (documento_pai_id) where documento_pai_id is not null; -- ficha da apólice lista os endossos
