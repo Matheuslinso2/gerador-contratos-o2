@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { formatarCNPJ, validarCNPJ, apenasDigitos, formatarMoedaDigitada } from "@/lib/validacoesBr";
 import { enviarFichaRcp, type EstadoEnvioRcp } from "./actions";
+import RascunhoAutomatico, { limparRascunho } from "@/components/RascunhoAutomatico";
 
 const O2_LARANJA = "#F8540D";
 const O2_NAVY = "#01192e";
@@ -94,6 +95,8 @@ function RcpFormInterno({ aoConcluirNova }: { aoConcluirNova: () => void }) {
   const [responseId] = useState(() => crypto.randomUUID());
 
   if (estado?.ok) {
+    // Enviada: o rascunho guardado no navegador não serve mais.
+    limparRascunho("rcp");
     return (
       <div className="rounded-xl border border-green-300 bg-green-50 p-6 text-center">
         <p className="text-lg font-semibold" style={{ color: O2_NAVY }}>
@@ -120,6 +123,7 @@ function RcpFormInterno({ aoConcluirNova }: { aoConcluirNova: () => void }) {
 
   return (
     <form action={formAction} className="space-y-4">
+      <RascunhoAutomatico chave="rcp" />
       <input type="hidden" name="response_id" value={responseId} />
       {estado?.erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">⚠️ {estado.erro}</p>}
 

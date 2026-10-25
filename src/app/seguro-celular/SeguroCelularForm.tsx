@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/browser";
 import { arquivoParaUpload } from "@/lib/tipoArquivoUpload";
 import { formatarCPF, validarCPF, apenasDigitos } from "@/lib/validacoesBr";
 import { enviarFichaSeguroCelular, type EstadoEnvioSeguroCelular } from "./actions";
+import RascunhoAutomatico, { limparRascunho } from "@/components/RascunhoAutomatico";
 
 const O2_LARANJA = "#F8540D";
 const O2_NAVY = "#01192e";
@@ -139,6 +140,8 @@ function SeguroCelularFormInterno({ aoConcluirNova }: { aoConcluirNova: () => vo
   const [anexoNotaFiscal, setAnexoNotaFiscal] = useState("");
 
   if (estado?.ok) {
+    // Enviada: o rascunho guardado no navegador não serve mais.
+    limparRascunho("seguro-celular");
     return (
       <div className="rounded-xl border border-green-300 bg-green-50 p-6 text-center">
         <p className="text-lg font-semibold" style={{ color: O2_NAVY }}>
@@ -165,6 +168,7 @@ function SeguroCelularFormInterno({ aoConcluirNova }: { aoConcluirNova: () => vo
 
   return (
     <form action={formAction} className="space-y-4">
+      <RascunhoAutomatico chave="seguro-celular" />
       <input type="hidden" name="response_id" value={responseId} />
       {estado?.erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">⚠️ {estado.erro}</p>}
 
