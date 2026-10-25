@@ -14,6 +14,7 @@ import RegrasRepasseErp from "../RegrasRepasseErp";
 import { buscarRegrasRepasse } from "@/lib/erp/documentos";
 import { buscarFontesDaFicha, buscarNomesSoltos, type RegistroFonte } from "@/lib/baseUnica/revisao";
 import { atualizarImobiliariaAdmin, adicionarMembroImobiliariaAdmin, removerMembroImobiliariaAdmin } from "../actions";
+import RascunhoAutomatico from "@/components/RascunhoAutomatico";
 
 export const dynamic = "force-dynamic";
 
@@ -150,6 +151,7 @@ export default async function AdminImobiliariaDetalhePage({
             atributo form="form-imobiliaria" (pedido do Matheus, 08/10/2026:
             canais em sequência, sem ficar procurando pela página). */}
         <form id="form-imobiliaria" action={atualizarImobiliariaAdmin} className="space-y-6">
+          <RascunhoAutomatico />
           <input type="hidden" name="id" value={imobiliaria.id} />
           <input type="hidden" name="voltar_para" value={voltarPara} />
 

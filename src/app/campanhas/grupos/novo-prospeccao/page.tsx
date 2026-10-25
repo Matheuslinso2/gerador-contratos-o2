@@ -8,6 +8,7 @@ import PageHeader from "@/components/PageHeader";
 import SubmitButton from "@/components/SubmitButton";
 import { IconFolder } from "@/components/icons";
 import { criarGrupoProspeccao } from "./actions";
+import RascunhoAutomatico from "@/components/RascunhoAutomatico";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,7 @@ export default async function NovoGrupoProspeccaoPage({
         {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
 
         <form action={criarGrupoProspeccao} className="space-y-4 rounded-2xl border border-o2-navy/10 bg-quadro p-6 shadow-sm">
+          <RascunhoAutomatico />
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">Nome do grupo</label>
             <input

@@ -11,8 +11,13 @@ import { useEffect, useRef, useState } from "react";
 // ou depois de DIAS_VALIDADE dias.
 //
 // Uso: <RascunhoAutomatico chave="ficha-fianca" /> como primeiro filho do
-// <form>. Anexos (arquivos) não podem ser guardados pelo navegador: a pessoa
-// escolhe de novo.
+// <form>; sem chave, vale o endereço da página (telas internas, inclusive de
+// edição: cada registro tem o seu). Anexos (arquivos) não podem ser guardados
+// pelo navegador: a pessoa escolhe de novo. Editor de texto (contentEditable)
+// entra se tiver o atributo data-rascunho="nome".
+//
+// Telas que, ao salvar, mudam de página (ou voltam com ?ok=): o rascunho é
+// apagado sozinho quando isso acontece logo depois do envio.
 
 const DIAS_VALIDADE = 3;
 const prefixo = (chave: string) => `rascunho:${chave}`;
@@ -70,6 +75,9 @@ function serializar(form: HTMLFormElement): Record<string, Valor> {
       campos[el.name] = el.value;
     }
   }
+  for (const ce of form.querySelectorAll<HTMLElement>('[contenteditable="true"][data-rascunho]')) {
+    if ((ce.textContent ?? "").trim() || ce.querySelector("img")) campos[`__ce:${ce.dataset.rascunho}`] = ce.innerHTML;
+  }
   for (const [nome, v] of Object.entries(campos)) if (Array.isArray(v) && !v.length) delete campos[nome];
   return campos;
 }
@@ -99,20 +107,29 @@ function aplicar(el: Campo, valor: Valor): boolean {
 
 const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export default function RascunhoAutomatico({ chave }: { chave: string }) {
+export default function RascunhoAutomatico({ chave: chaveFixa, sufixo }: { chave?: string; sufixo?: string }) {
+  const [chave, setChave] = useState(chaveFixa ?? "");
   const ancora = useRef<HTMLSpanElement>(null);
+  // Descartado: para de salvar (senão o recarregamento salvaria tudo de novo).
+  const parado = useRef(false);
   const [recuperadoEm, setRecuperadoEm] = useState<number | null>(null);
   const [temAnexo, setTemAnexo] = useState(false);
 
   useEffect(() => {
     const form = ancora.current?.closest("form");
     if (!form) return;
+    const chave = chaveFixa ?? `pagina:${window.location.pathname}${sufixo ? `#${sufixo}` : ""}`;
+    setChave(chave);
+    const caminho = window.location.pathname;
+    let enviouEm = 0;
     let pronto = false;
+    // Depois de um envio que deu certo, só volta a guardar se a pessoa mexer de novo.
+    let aguardandoEdicao = false;
     let cancelado = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
 
     const salvar = () => {
-      if (!pronto) return;
+      if (!pronto || parado.current || aguardandoEdicao) return;
       try {
         const campos = serializar(form);
         if (Object.keys(campos).length) window.localStorage.setItem(prefixo(chave), JSON.stringify({ salvoEm: Date.now(), campos } satisfies Rascunho));
@@ -122,47 +139,117 @@ export default function RascunhoAutomatico({ chave }: { chave: string }) {
       }
     };
     const agendar = () => {
+      aguardandoEdicao = false;
       clearTimeout(timer);
       timer = setTimeout(salvar, 400);
     };
 
-    (async () => {
+    // Põe o rascunho de volta na tela. Em rodadas: escolher uma opção pode
+    // fazer aparecer outros campos (ex.: "Pessoa Física" mostra os dados do
+    // locatário).
+    const restaurar = async () => {
       const rascunho = ler(chave);
-      if (rascunho) {
-        // Em rodadas: escolher uma opção pode fazer aparecer outros campos
-        // (ex.: "Pessoa Física" mostra os dados do locatário).
-        const faltam = new Map(Object.entries(rascunho.campos));
-        for (let rodada = 0; rodada < 8 && faltam.size && !cancelado; rodada++) {
-          for (const el of camposDo(form)) {
-            const v = faltam.get(el.name);
-            if (v === undefined) continue;
-            if (aplicar(el, v) && !(el instanceof HTMLInputElement && (el.type === "radio" || el.type === "checkbox"))) faltam.delete(el.name);
-          }
-          // Rádios/checkboxes de um mesmo nome: dá como aplicados depois da rodada.
-          for (const el of camposDo(form)) if (el instanceof HTMLInputElement && (el.type === "radio" || el.type === "checkbox")) faltam.delete(el.name);
-          await espera(120);
-        }
-        if (!cancelado) {
-          setRecuperadoEm(rascunho.salvoEm);
-          setTemAnexo(!!form.querySelector('input[type="file"]'));
+      if (!rascunho) return;
+      pronto = false; // não regrava enquanto repõe
+      for (const [nome, html] of Object.entries(rascunho.campos)) {
+        if (!nome.startsWith("__ce:") || typeof html !== "string") continue;
+        const ce = form.querySelector<HTMLElement>(`[contenteditable="true"][data-rascunho="${nome.slice(5)}"]`);
+        if (ce) {
+          ce.innerHTML = html;
+          ce.dispatchEvent(new Event("input", { bubbles: true }));
         }
       }
+      const faltam = new Map(Object.entries(rascunho.campos).filter(([nome]) => !nome.startsWith("__ce:")));
+      for (let rodada = 0; rodada < 8 && faltam.size && !cancelado; rodada++) {
+        for (const el of camposDo(form)) {
+          const v = faltam.get(el.name);
+          if (v === undefined) continue;
+          if (aplicar(el, v) && !(el instanceof HTMLInputElement && (el.type === "radio" || el.type === "checkbox"))) faltam.delete(el.name);
+        }
+        // Rádios/checkboxes de um mesmo nome: dá como aplicados depois da rodada.
+        for (const el of camposDo(form)) if (el instanceof HTMLInputElement && (el.type === "radio" || el.type === "checkbox")) faltam.delete(el.name);
+        await espera(120);
+      }
+      if (!cancelado) {
+        setRecuperadoEm(rascunho.salvoEm);
+        setTemAnexo(!!form.querySelector('input[type="file"]'));
+      }
+      pronto = true;
+    };
+
+    (async () => {
+      // Deixa os outros componentes do formulário montarem primeiro (ex.: o
+      // editor de texto da campanha põe o conteúdo inicial no próprio efeito).
+      await espera(60);
+      await restaurar();
       pronto = true;
     })();
 
     form.addEventListener("input", agendar, true);
     form.addEventListener("change", agendar, true);
-    form.addEventListener("submit", salvar, true);
+
+    // Depois do envio, observa a página por até 2 min:
+    // - mudou de endereço, ou voltou com ?ok= / ?sucesso= -> deu certo, o
+    //   rascunho é apagado (o formulário pode nem sair da tela quando volta
+    //   para a mesma página);
+    // - voltou com erro (ex.: ?erro=) ou o formulário foi limpo sem sucesso
+    //   -> repõe o que estava digitado.
+    let vigia: ReturnType<typeof setInterval> | undefined;
+    const enviouComSucesso = () => {
+      const busca = new URLSearchParams(window.location.search);
+      return window.location.pathname !== caminho || busca.has("ok") || busca.has("sucesso");
+    };
+    const recente = () => enviouEm > 0 && Date.now() - enviouEm < 120_000;
+    const concluir = () => {
+      if (enviouComSucesso()) {
+        clearTimeout(timer);
+        aguardandoEdicao = true;
+        limparRascunho(chave);
+      } else {
+        setTimeout(() => void restaurar(), 300);
+      }
+    };
+    const aoEnviar = () => {
+      enviouEm = Date.now();
+      salvar();
+      const urlNoEnvio = window.location.href;
+      clearInterval(vigia);
+      vigia = setInterval(() => {
+        if (!recente()) return clearInterval(vigia);
+        if (window.location.href === urlNoEnvio) return;
+        clearInterval(vigia);
+        concluir();
+      }, 500);
+    };
+    // O React limpa o formulário quando o envio termina: se não foi sucesso
+    // (ex.: erro de validação devolvido na mesma tela), repõe os campos.
+    const aoLimpar = () => {
+      if (!recente()) return;
+      setTimeout(() => {
+        if (!enviouComSucesso() && !cancelado) void restaurar();
+      }, 800);
+    };
+    form.addEventListener("submit", aoEnviar, true);
+    form.addEventListener("reset", aoLimpar);
     window.addEventListener("pagehide", salvar);
     return () => {
       cancelado = true;
+      // Saiu do formulário logo depois de enviar e a página mudou (ou voltou
+      // com ?ok=/?sucesso=): o envio deu certo, o rascunho não serve mais.
+      if (recente()) {
+        setTimeout(() => {
+          if (enviouComSucesso()) limparRascunho(chave);
+        }, 300);
+      }
       clearTimeout(timer);
+      clearInterval(vigia);
       form.removeEventListener("input", agendar, true);
       form.removeEventListener("change", agendar, true);
-      form.removeEventListener("submit", salvar, true);
+      form.removeEventListener("submit", aoEnviar, true);
+      form.removeEventListener("reset", aoLimpar);
       window.removeEventListener("pagehide", salvar);
     };
-  }, [chave]);
+  }, [chaveFixa, sufixo]);
 
   return (
     <span ref={ancora} className="block">
@@ -176,6 +263,7 @@ export default function RascunhoAutomatico({ chave }: { chave: string }) {
           <button
             type="button"
             onClick={() => {
+              parado.current = true;
               limparRascunho(chave);
               window.location.reload();
             }}

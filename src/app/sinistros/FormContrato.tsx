@@ -6,6 +6,7 @@ import { buscarEnderecoPorCep, formatarCEP } from "@/lib/validacoesBr";
 import { SEGURADORAS } from "@/lib/sinistros/regras";
 import { botaoPrimario, inputClass, labelClass } from "./ui";
 import BuscaApolice from "./BuscaApolice";
+import RascunhoAutomatico from "@/components/RascunhoAutomatico";
 
 export type DadosContrato = {
   id?: string;
@@ -79,6 +80,7 @@ export default function FormContrato({
 
   return (
     <form action={action} className="space-y-6">
+      <RascunhoAutomatico sufixo="contrato" />
       {d.id && <input type="hidden" name="id" value={d.id} />}
       <input type="hidden" name="tipo_atual" value={d.tipo ?? ""} />
       {extras}

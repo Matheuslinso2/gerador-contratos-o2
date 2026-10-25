@@ -5,6 +5,7 @@ import { isEquipe } from "@/lib/admin";
 import { signOut } from "../../../actions";
 import AppHeader from "@/components/AppHeader";
 import { criarImobiliariaAdmin } from "../actions";
+import RascunhoAutomatico from "@/components/RascunhoAutomatico";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +46,7 @@ export default async function NovaImobiliariaAdminPage({
         {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
 
         <form action={criarImobiliariaAdmin} className="space-y-4 rounded-xl border border-o2-navy/10 bg-quadro p-5 shadow-sm">
+          <RascunhoAutomatico />
           <div>
             <label className="mb-1 block text-xs text-gray-500">Nome *</label>
             <input name="nome" required className={inputClass} />

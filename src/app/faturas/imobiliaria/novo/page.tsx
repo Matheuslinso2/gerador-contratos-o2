@@ -7,6 +7,7 @@ import { resolverImobiliariaProvisoria } from "../../actions";
 import { SEGURADORAS_CANONICAS } from "@/lib/faturasIdentificacao";
 import FaturasSubHeader from "../../FaturasSubHeader";
 import { IconBuilding, IconInvoice, IconMail, IconChecklist } from "@/components/icons";
+import RascunhoAutomatico from "@/components/RascunhoAutomatico";
 
 export const dynamic = "force-dynamic";
 
@@ -83,6 +84,7 @@ export default async function NovaImobiliariaFaturasPage({
         {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">⚠️ {erro}</p>}
 
         <form action={resolverImobiliariaProvisoria} className="space-y-6">
+          <RascunhoAutomatico />
           <input type="hidden" name="nome_provisorio" value={nomeProvisorio} />
 
           <div className="rounded-2xl border border-o2-navy/10 bg-quadro p-6 shadow-sm">

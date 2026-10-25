@@ -3,6 +3,7 @@ import { SEGURADORAS, hojeSP } from "@/lib/sinistros/regras";
 import { PRODUTOS } from "@/lib/sinistros/produtos";
 import BuscaApolice from "./BuscaApolice";
 import { botaoPrimario, inputClass, labelClass } from "./ui";
+import RascunhoAutomatico from "@/components/RascunhoAutomatico";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- linha do Supabase sem tipos gerados */
 
@@ -30,6 +31,7 @@ export default function FormOutros({
   const secao = "text-sm font-semibold uppercase tracking-wide text-o2-navy";
   return (
     <form action={action} className="space-y-6">
+      <RascunhoAutomatico sufixo="outros" />
       {d.id && <input type="hidden" name="id" value={d.id} />}
       {extras}
       <BuscaApolice nossoNumeroInicial={d.nosso_numero} />

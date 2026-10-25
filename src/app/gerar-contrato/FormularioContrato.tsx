@@ -5,6 +5,7 @@ import { gerarContrato } from "./actions";
 import CampoPessoas from "./CampoPessoas";
 import CampoEndereco from "@/components/CampoEndereco";
 import { formatarMoedaDigitada } from "@/lib/validacoesBr";
+import RascunhoAutomatico from "@/components/RascunhoAutomatico";
 
 type TipoGarantia = { id: string; nome: string };
 type Produto = {
@@ -55,6 +56,7 @@ export default function FormularioContrato({
 
   return (
     <form action={gerarContrato} className="space-y-6">
+      <RascunhoAutomatico />
       <section className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">1. Partes</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

@@ -6,6 +6,7 @@ import InfoLegenda from "@/components/InfoLegenda";
 import { SeletorProdutos } from "../SeletorProdutos";
 import { EditorCorpo } from "../EditorCorpo";
 import { editarConteudoCampanha } from "./actions";
+import RascunhoAutomatico from "@/components/RascunhoAutomatico";
 
 const inputClass =
   "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-o2-coral focus:outline-none";
@@ -83,6 +84,7 @@ export function EditarConteudoCampanha({
       </div>
 
       <form action={editarConteudoCampanha} className="space-y-4 rounded-2xl border border-o2-navy/10 bg-quadro p-6 shadow-sm">
+        <RascunhoAutomatico sufixo="conteudo" />
         <input type="hidden" name="campanha_id" value={campanha.id} />
 
         <div>

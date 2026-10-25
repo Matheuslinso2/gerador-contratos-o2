@@ -9,6 +9,7 @@ import { IconMail } from "@/components/icons";
 import { buscarTemplateAviso } from "@/lib/avisosInternos/templates";
 import { EditorCorpo } from "../../EditorCorpo";
 import { prepararRevisaoAviso } from "./actions";
+import RascunhoAutomatico from "@/components/RascunhoAutomatico";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +43,7 @@ export default async function NovoAvisoInternoPage({
         {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
 
         <form action={prepararRevisaoAviso} className="space-y-4 rounded-2xl border border-o2-navy/10 bg-quadro p-6 shadow-sm">
+          <RascunhoAutomatico />
           <input type="hidden" name="template" value={template.id} />
 
           {template.campos.map((campo) => (

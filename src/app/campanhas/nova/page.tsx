@@ -11,6 +11,7 @@ import InfoLegenda from "@/components/InfoLegenda";
 import { SeletorProdutos } from "../SeletorProdutos";
 import { EditorCorpo } from "../EditorCorpo";
 import { criarCampanha } from "./actions";
+import RascunhoAutomatico from "@/components/RascunhoAutomatico";
 
 const inputClass =
   "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-o2-coral focus:outline-none";
@@ -46,6 +47,7 @@ export default async function NovaCampanhaPage({
         {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
 
         <form action={criarCampanha} className="space-y-4 rounded-2xl border border-o2-navy/10 bg-quadro p-6 shadow-sm">
+          <RascunhoAutomatico />
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">Nome interno da campanha</label>
             <input name="nome" required placeholder="Ex: Divulgação Seguro Fiança" className={inputClass} />

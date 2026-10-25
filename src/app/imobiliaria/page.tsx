@@ -10,6 +10,7 @@ import CampoCnpj from "@/components/CampoCnpj";
 import CampoEndereco from "@/components/CampoEndereco";
 import { buscarImobiliariaDoUsuario } from "@/lib/imobiliariaDoUsuario";
 import { adicionarMembroImobiliaria, removerMembroImobiliaria } from "./actions";
+import RascunhoAutomatico from "@/components/RascunhoAutomatico";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +55,7 @@ export default async function ImobiliariaPage({
       <ChecklistCadastro imobiliaria={imobiliaria} />
 
       <form action={salvarImobiliaria} className="space-y-6">
+        <RascunhoAutomatico />
         <section className="space-y-3">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">1. Dados da imobiliária</h2>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
