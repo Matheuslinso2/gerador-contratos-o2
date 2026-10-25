@@ -76,3 +76,11 @@ create unique index if not exists erp_comissao_recebimentos_linha_uk on erp_comi
 -- Migration erp_fase2_extratos_drive: origem 'drive'/'corp', coluna leitura ('ok'/'nao_lido'), erp_digitos_apolice(),
 -- erp_cruzar_extratos() casando pela seguradora do extrato (qualquer seguradora) e nº do Corp contido no nº do extrato,
 -- view erp_extratos_resumo com corretora/origem/leitura. Mesmo nome de arquivo já lido do e-mail não entra de novo.
+
+-- ---------------------------------------------------------------------------
+-- 25/10 (noite) — CORREÇÃO: a equipe já tinha a pasta oficial de extratos (manual de baixa de comissão):
+-- "- RELATÓRIO COMISSÃO SEGURADORAS" (Drive 11BDjbKy1Nj-A4mslt2onv3IzmhX8mYga, dona nathalie@, compartilhada com a conta de
+-- serviço em 25/10) → seguradora / ano / "08 - AGOSTO" / [O2 CAP | O2 CORR | SEGIMOB] / "26-08.pdf" (nome = data de recebimento).
+-- O leitor (src/lib/erp/extratosDrive.ts) passou a ler essa pasta (desde ERP_EXTRATOS_DESDE, padrão 2026-08), com
+-- competência pela pasta do mês e pago_em pelo nome do arquivo. A pasta "EXTRATOS DE COMISSÃO (o ERP lê daqui)" criada
+-- mais cedo foi para a lixeira (duplicava a oficial). 1ª listagem: 136 arquivos (ago–set/26).

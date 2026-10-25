@@ -1,11 +1,14 @@
-// ERP O2 — Fase 2 (25/10/2026): extratos de comissão baixados dos sites das seguradoras e colocados
-// pela equipe na pasta do Drive "BAIXA DE COMISSÃO / EXTRATOS DE COMISSÃO (o ERP lê daqui)".
-// Estrutura: <corretora> / <seguradora> / [subpastas livres, ex. 2026-10] / arquivo (xls, xlsx, csv, pdf, planilha Google).
-// A conta de serviço GOOGLE_SERVICE_ACCOUNT_* tem só leitura nessa pasta (dada em 25/10).
-// Leitura: Pottencial e Too pelos leitores fixos (mesmo layout do e-mail); outras planilhas por um leitor
-// genérico que acha o cabeçalho pelas palavras (apólice, parcela, prêmio, comissão…); PDF (com as senhas
-// conhecidas da O2) pela IA, que devolve as linhas. Cada arquivo vira 1 erp_extratos_seguradora
-// (origem 'drive', arquivo_path = 'drive:<id>') + linhas em erp_extrato_linhas; casamento em erp_cruzar_extratos().
+// ERP O2 — Fase 2 (25/10/2026): extratos de comissão baixados dos sites das seguradoras e salvos pela equipe
+// na pasta OFICIAL do Drive "- RELATÓRIO COMISSÃO SEGURADORAS" (manual de baixa de comissão da O2; dona nathalie@,
+// compartilhada em 25/10 com a conta de serviço GOOGLE_SERVICE_ACCOUNT_*, só leitura).
+// Estrutura: <seguradora> / <ano> / <"08 - AGOSTO"> / [O2 CAP | O2 CORR | O2 COR | o2 capitalização | SEGIMOB] / arquivo.
+// Os arquivos são nomeados pela data de recebimento ("26-08.pdf", "31-07 OK.pdf") → pago_em.
+// Corretora: pasta/segmento com CAP → O2 Capitalização ("PORTO O2CAP", "BRASILCAP (PORTAL NOVO - O2 CAP)", "O2 CAP");
+// senão O2 Corretora. SEGIMOB (extrato de remuneração das imobiliárias) é ignorado aqui.
+// Leitura: Pottencial e Too em planilha pelos leitores fixos; outras planilhas pelo leitor genérico (cabeçalho por
+// palavras); PDF (com as senhas conhecidas da O2) pela IA. Só lê a partir de ERP_EXTRATOS_DESDE (padrão 2026-08).
+// Cada arquivo vira 1 erp_extratos_seguradora (origem 'drive', arquivo_path = 'drive:<id>') + linhas em
+// erp_extrato_linhas; casamento em erp_cruzar_extratos().
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { drive, type drive_v3 } from "@googleapis/drive";
@@ -15,7 +18,8 @@ import { obterAutenticacaoGoogle } from "@/lib/googleAuth";
 import { abrirTextoPdfComSenha, candidatosSenhaO2 } from "@/lib/pdfComSenha";
 import { parsePottencial, parseToo, num, txt, dataBr, type LinhaExtrato } from "@/lib/erp/extratos";
 
-export const PASTA_EXTRATOS = process.env.ERP_EXTRATOS_DRIVE_PASTA || "1CWbgcf2V2DqYMiG_mCghoZsk6v8fR1EL";
+export const PASTA_EXTRATOS = process.env.ERP_EXTRATOS_DRIVE_PASTA || "11BDjbKy1Nj-A4mslt2onv3IzmhX8mYga";
+const DESDE = (process.env.ERP_EXTRATOS_DESDE || "2026-08").replace("-", ""); // AAAAMM
 
 // nome da pasta (como está no Drive / na planilha CONTROLE BAIXA) → abreviação em erp_seguradoras
 const SEGURADORA_DA_PASTA: Record<string, string> = {
@@ -24,7 +28,8 @@ const SEGURADORA_DA_PASTA: Record<string, string> = {
 };
 const NOME_LINHA: Record<string, string> = { POTT: "POTTENCIAL", TOO: "TOO", TOKI: "TOKIO" };
 
-type Arquivo = { id: string; nome: string; mime: string; modificado: string; corretora: "O2 Corretora" | "O2 Capitalização"; seguradora: string; caminho: string };
+type Arquivo = { id: string; nome: string; mime: string; modificado: string; corretora: "O2 Corretora" | "O2 Capitalização"; seguradora: string; caminho: string; competencia: string | null; pagoEm: string | null };
+const MESES = ["JANEIRO", "FEVEREIRO", "MARCO", "ABRIL", "MAIO", "JUNHO", "JULHO", "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO"];
 
 function clienteDrive(): drive_v3.Drive {
   const auth = obterAutenticacaoGoogle(["https://www.googleapis.com/auth/drive.readonly"], { contexto: "extratos de comissão (Drive)" });
@@ -48,27 +53,48 @@ async function filhos(api: drive_v3.Drive, pasta: string): Promise<drive_v3.Sche
 
 const PASTA = "application/vnd.google-apps.folder";
 
+const semAcento = (t: string) => t.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+// seguradora pelo nome da pasta do 1º nível (ex.: "PORTO SEGURO", "PORTO O2CAP", "BRASILCAP (PORTAL NOVO - O2 CAP)")
+function seguradoraDaPasta(nome: string): string | null {
+  const n = semAcento(nome);
+  for (const [chave, abrev] of Object.entries(SEGURADORA_DA_PASTA)) if (n.replace(/[^A-Z]/g, "").startsWith(chave)) return abrev;
+  return null;
+}
+const ehCap = (seg: string) => /O2 ?CAP|CAPITALIZA/i.test(semAcento(seg));
+
 export async function listarArquivosExtratos(api = clienteDrive()): Promise<Arquivo[]> {
   const saida: Arquivo[] = [];
-  for (const c of await filhos(api, PASTA_EXTRATOS)) {
-    if (c.mimeType !== PASTA) continue;
-    const corretora = /CAPITALIZA/i.test(c.name ?? "") ? "O2 Capitalização" : /CORRETORA/i.test(c.name ?? "") ? "O2 Corretora" : null;
-    if (!corretora) continue;
-    for (const s of await filhos(api, c.id!)) {
-      if (s.mimeType !== PASTA) continue;
-      const chave = (s.name ?? "").toUpperCase().normalize("NFD").replace(/[^A-Z]/g, "");
-      const abrev = SEGURADORA_DA_PASTA[chave];
-      if (!abrev) continue;
-      // arquivos da pasta da seguradora e de subpastas (até 2 níveis, ex.: 2026 / 10)
-      const fila: { id: string; caminho: string; nivel: number }[] = [{ id: s.id!, caminho: `${c.name}/${s.name}`, nivel: 0 }];
-      while (fila.length) {
-        const atual = fila.shift()!;
-        for (const f of await filhos(api, atual.id)) {
-          if (f.mimeType === PASTA) {
-            if (atual.nivel < 2) fila.push({ id: f.id!, caminho: `${atual.caminho}/${f.name}`, nivel: atual.nivel + 1 });
-            continue;
+  for (const s of await filhos(api, PASTA_EXTRATOS)) {
+    if (s.mimeType !== PASTA) continue;
+    const abrev = seguradoraDaPasta(s.name ?? "");
+    if (!abrev) continue;
+    for (const ano of await filhos(api, s.id!)) {
+      if (ano.mimeType !== PASTA || !/^20\d{2}$/.test((ano.name ?? "").trim())) continue;
+      for (const mes of await filhos(api, ano.id!)) {
+        if (mes.mimeType !== PASTA) continue;
+        const nm = semAcento(mes.name ?? "");
+        const numMes = Number(nm.match(/^(\d{1,2})/)?.[1] ?? 0) || MESES.findIndex((m) => nm.includes(m)) + 1;
+        if (!numMes) continue;
+        const aaaamm = `${ano.name!.trim()}${String(numMes).padStart(2, "0")}`;
+        if (aaaamm < DESDE) continue;
+        const competencia = `${ano.name!.trim()}-${String(numMes).padStart(2, "0")}-01`;
+        // arquivos do mês e das subpastas O2 CAP / O2 CORR (SEGIMOB fica de fora)
+        const fila: { id: string; caminho: string }[] = [{ id: mes.id!, caminho: `${s.name}/${ano.name}/${mes.name}` }];
+        while (fila.length) {
+          const atual = fila.shift()!;
+          for (const f of await filhos(api, atual.id)) {
+            if (f.mimeType === PASTA) {
+              if (!/SEGIMOB/i.test(f.name ?? "") && atual.caminho.split("/").length < 5) fila.push({ id: f.id!, caminho: `${atual.caminho}/${f.name}` });
+              continue;
+            }
+            const caminho = `${atual.caminho}/${f.name}`;
+            const d = (f.name ?? "").match(/^(\d{1,2})[-.](\d{1,2})/);
+            const pagoEm = d ? `${ano.name!.trim()}-${d[2].padStart(2, "0")}-${d[1].padStart(2, "0")}` : null;
+            saida.push({
+              id: f.id!, nome: f.name ?? "", mime: f.mimeType ?? "", modificado: f.modifiedTime ?? "",
+              corretora: ehCap(caminho) ? "O2 Capitalização" : "O2 Corretora", seguradora: abrev, caminho, competencia, pagoEm,
+            });
           }
-          saida.push({ id: f.id!, nome: f.name ?? "", mime: f.mimeType ?? "", modificado: f.modifiedTime ?? "", corretora, seguradora: abrev, caminho: `${atual.caminho}/${f.name}` });
         }
       }
     }
@@ -260,7 +286,8 @@ export async function carregarExtratosDrive(sb: SupabaseClient, opts: { gravar: 
     const dataArq = a.modificado ? a.modificado.slice(0, 7) + "-01" : null;
     const { data: ext, error } = await sb.from("erp_extratos_seguradora").insert({
       seguradora_id: seg.get(a.seguradora)?.id, corretora_id: corrId.get(a.corretora) ?? null,
-      competencia: competencia && /^\d{4}-\d{2}-\d{2}$/.test(competencia) ? competencia.slice(0, 7) + "-01" : dataArq,
+      competencia: a.competencia ?? (competencia && /^\d{4}-\d{2}-\d{2}$/.test(competencia) ? competencia.slice(0, 7) + "-01" : dataArq),
+      pago_em: a.pagoEm,
       tipo: "demonstrativo", origem: "drive", arquivo_path: `drive:${a.id}`, linhas: parsed.linhas,
       total_bruto: parsed.total_bruto ?? (parsed.linhas.length ? somaLinhas : null), total_liquido: parsed.total_liquido,
       leitura: erro ? "nao_lido" : "ok",
