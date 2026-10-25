@@ -16,6 +16,13 @@ export async function GET(request: NextRequest) {
   const spa = Number(request.nextUrl.searchParams.get("spa") ?? 1042);
   const cfg = CONFIGS.find((c) => c.entityTypeId === spa);
   if (!cfg) return NextResponse.json({ erro: "spa inválida" }, { status: 400 });
-  const resumo = await sincronizarSpa(createServiceClient(), cfg, { desde: "2026-07-01", gravar: true, comentarios: 25, apenasAlterados: true });
-  return NextResponse.json({ ok: resumo.erros.length === 0, ...resumo });
+  const sb = createServiceClient();
+  const resumo = await sincronizarSpa(sb, cfg, { desde: "2026-07-01", gravar: true, comentarios: 25, apenasAlterados: true });
+  // alertas de fatura (lista pronta para a tela /erp/conferencia): refaz 1× por hora, junto da Fiança
+  let alertas: unknown = null;
+  if (spa === 1042) {
+    const { data, error } = await sb.rpc("erp_atualizar_alertas_fatura");
+    alertas = error ? { erro: error.message } : data;
+  }
+  return NextResponse.json({ ok: resumo.erros.length === 0, ...resumo, alertas });
 }
