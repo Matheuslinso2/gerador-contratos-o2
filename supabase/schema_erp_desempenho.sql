@@ -10,3 +10,6 @@
 --     erp_documentos_situacao_idx e contagem estimada quando não há filtro (src/lib/erp/documentos.ts).
 -- As premissas (tabela pronta, índice, loading.tsx, aviso de versão silencioso, RascunhoAutomatico) estão escritas no
 -- topo de src/app/erp/layout.tsx.
+-- Correção (mesmo dia, migration erp_documentos_lista_idx_ordem_padrao): o índice da lista tinha "nulls last" e a consulta
+-- pede "order vigencia_inicio desc" (nulos primeiro) → o banco varria a tabela (1,1 s). Índice refeito na ordem padrão: 13 ms.
+-- Lista sem filtro não conta mais nada (estimativa com vínculos custava 2–8 s). Documentos: 0,3–0,6 s.

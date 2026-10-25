@@ -6,6 +6,8 @@ import PageHeader from "@/components/PageHeader";
 import { IconReport } from "@/components/icons";
 import { formatarData, formatarReais } from "@/lib/sinistros/regras";
 import { buscarDocumentos, SITUACOES, TIPOS_DOCUMENTO, TIPO_CORP } from "@/lib/erp/documentos";
+import { lerFiltros } from "@/lib/erp/filtros";
+import FiltrosErp from "../FiltrosErp";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +16,6 @@ export const dynamic = "force-dynamic";
 // busca da "Consulta de Documentos" do Corp: Nosso Nº, apólice, cliente ou
 // imobiliária. Entrada ainda fora do menu (vínculo ao dropdown fica para o fim).
 
-const inputClass = "rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-o2-coral focus:outline-none";
 
 const COR_SITUACAO: Record<string, string> = {
   vigente: "bg-green-100 text-green-800",
@@ -30,17 +31,34 @@ export const metadata = { title: "Documentos" };
 export default async function ErpDocumentosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; situacao?: string; limite?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { q, situacao, limite } = await searchParams;
+  const sp = await searchParams;
+  const f = lerFiltros(sp);
+  const limite = typeof sp.limite === "string" ? sp.limite : undefined;
+  const situacao = f.situacao;
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!isAdmin(user?.email) && !isColaboradorO2(user?.email)) redirect("/");
 
-  const busca = (q ?? "").trim();
-  const { linhas, total } = await buscarDocumentos(supabase, { busca, situacao: situacao || undefined, limite: Number(limite) || 50 });
+  const busca = f.q ?? "";
+  const { linhas, total } = await buscarDocumentos(supabase, {
+    busca,
+    situacao,
+    seguradora: f.seguradora,
+    produto: f.produto,
+    tipo: f.tipo,
+    imobiliaria: f.imobiliaria,
+    forma: f.forma,
+    canal: f.canal,
+    de: f.de,
+    ate: f.ate,
+    limite: Number(limite) || 50,
+  });
+  const paramsMais = new URLSearchParams(Object.entries(f).filter(([, v]) => v) as [string, string][]);
+  paramsMais.set("limite", String(linhas.length + 50));
 
   return (
     <>
@@ -51,30 +69,21 @@ export default async function ErpDocumentosPage({
           subtitulo="Apólices, endossos e faturas carregados do Corp. Busque pelo Código O2, pelo nosso número do Corp, nº da apólice, cliente ou imobiliária."
         />
 
-        <form className="flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 bg-white p-4" method="get">
-          <label className="flex flex-col gap-1 text-xs text-gray-500">
-            Busca
-            <input name="q" defaultValue={busca} placeholder="133632 · 0004640286 · Mario Imares · Monte Alegre" className={`${inputClass} w-80`} />
-          </label>
-          <label className="flex flex-col gap-1 text-xs text-gray-500">
-            Situação
-            <select name="situacao" defaultValue={situacao ?? ""} className={inputClass}>
-              <option value="">Todas</option>
-              {Object.entries(SITUACOES).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button type="submit" className="rounded-lg bg-o2-navy px-4 py-2 text-sm font-medium text-white hover:bg-o2-indigo">
-            Buscar
-          </button>
-          <span className="text-xs text-gray-500">
-            {total !== null ? `${total.toLocaleString("pt-BR")} documento(s)` : `os ${linhas.length} mais recentes (use a busca ou a situação para filtrar)`}
-            {total !== null && total > linhas.length ? ` · mostrando ${linhas.length}` : ""}
-          </span>
-        </form>
+        <FiltrosErp
+          caminho="/erp/documentos"
+          campos={["busca", "seguradora", "produto", "situacao", "tipo", "imobiliaria", "forma_pagamento", "canal", "periodo"]}
+          valores={f}
+          placeholderBusca="133632 · 0004640286 · Mario Imares"
+          rotuloPeriodo="Início de vigência"
+          situacoes={SITUACOES}
+          tipos={TIPOS_DOCUMENTO}
+          resumo={
+            <>
+              {total !== null ? `${total.toLocaleString("pt-BR")} documento(s)` : `os ${linhas.length} mais recentes (use os filtros para localizar)`}
+              {total !== null && total > linhas.length ? ` · mostrando ${linhas.length}` : ""}
+            </>
+          }
+        />
 
         {linhas.length === 0 ? (
           <p className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">Nenhum documento encontrado.</p>
@@ -140,7 +149,7 @@ export default async function ErpDocumentosPage({
         )}
         {total !== null && total > linhas.length && (
           <Link
-            href={`/erp/documentos?q=${encodeURIComponent(busca)}&situacao=${situacao ?? ""}&limite=${linhas.length + 50}`}
+            href={`/erp/documentos?${paramsMais.toString()}`}
             className="inline-block rounded-full border border-o2-navy px-3 py-1 text-xs font-medium text-o2-navy hover:bg-o2-navy hover:text-white"
           >
             Mostrar mais

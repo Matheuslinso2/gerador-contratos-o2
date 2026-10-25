@@ -1,3 +1,4 @@
+import { idsImobiliarias } from "@/lib/erp/filtros";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 // ERP O2 — Fase 0: consulta de documentos (só leitura). Espelha a "Consulta de
@@ -115,20 +116,56 @@ function mapear(r: LinhaBruta): DocumentoLista {
   };
 }
 
-export type FiltrosBusca = { busca: string; situacao?: string; limite?: number };
+export type FiltrosBusca = {
+  busca: string;
+  situacao?: string;
+  limite?: number;
+  // filtros padronizados do ERP (src/lib/erp/filtros.ts)
+  seguradora?: string; // abreviação
+  produto?: string; // erp_ramos.produto
+  tipo?: string; // A, F, C…
+  imobiliaria?: string; // nome ou parte (base única)
+  forma?: string; // modo_cobranca
+  canal?: string; // erp_canais.id
+  de?: string; // início de vigência a partir de
+  ate?: string; // início de vigência até
+};
 
 /**
  * Busca de documentos. Número puro = Nosso Nº ou nº da apólice; texto = nome do
  * cliente (cofre) ou da imobiliária. Sem busca, mostra os mais recentes por início
- * de vigência.
+ * de vigência. Os demais filtros recortam pelos níveis da tela (seguradora, produto,
+ * situação, tipo, imobiliária, forma de pagamento, canal, período de vigência).
  */
 export async function buscarDocumentos(sb: SupabaseClient, f: FiltrosBusca): Promise<{ linhas: DocumentoLista[]; total: number | null }> {
   const limite = Math.min(Math.max(f.limite ?? 50, 10), 200);
   const termo = f.busca.trim();
+  const filtrado = !!(termo || f.situacao || f.seguradora || f.produto || f.tipo || f.imobiliaria || f.forma || f.canal || f.de || f.ate);
   // premissa de desempenho do ERP: contagem só quando há filtro (contar/estimar os 120 mil com os vínculos custava 2–8 s);
   // sem filtro a tela mostra os mais recentes e total = null
-  let q = sb.from("erp_documentos").select(SELECT_LISTA, termo || f.situacao ? { count: "exact" } : undefined);
+  let q = sb.from("erp_documentos").select(SELECT_LISTA, filtrado ? { count: "exact" } : undefined);
   if (f.situacao) q = q.eq("situacao", f.situacao);
+  if (f.tipo) q = q.eq("tipo", f.tipo);
+  if (f.forma) q = q.eq("modo_cobranca", f.forma);
+  if (f.canal) q = q.eq("canal_id", f.canal);
+  if (f.de) q = q.gte("vigencia_inicio", f.de);
+  if (f.ate) q = q.lte("vigencia_inicio", f.ate);
+  if (f.seguradora) {
+    const { data: s } = await sb.from("erp_seguradoras").select("id").eq("abreviacao", f.seguradora).maybeSingle();
+    if (!s) return { linhas: [], total: 0 };
+    q = q.eq("seguradora_id", s.id);
+  }
+  if (f.produto) {
+    const { data: ramos } = await sb.from("erp_ramos").select("id").eq("produto", f.produto);
+    const ids = (ramos ?? []).map((r: { id: string }) => r.id);
+    if (!ids.length) return { linhas: [], total: 0 };
+    q = q.in("ramo_id", ids);
+  }
+  if (f.imobiliaria) {
+    const ids = await idsImobiliarias(sb, f.imobiliaria);
+    if (!ids.length) return { linhas: [], total: 0 };
+    q = q.in("imobiliaria_principal_id", ids);
+  }
 
   if (termo && /^\d+$/.test(termo)) {
     q = q.or(`nosso_numero.eq.${termo},nosso_numero_corp.eq.${termo},numero_apolice.eq.${termo}`);

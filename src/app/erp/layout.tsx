@@ -20,6 +20,9 @@ import ErpNav from "./ErpNav";
 //     todo formulário em que se digita tem <RascunhoAutomatico /> como 1º filho (o que foi digitado volta se a
 //     versão mudar no meio do preenchimento). Não há Skew Protection no plano da Vercel.
 //  4. Navegação: tela nova entra no ErpNav; nada do ERP nos menus do Workspace.
+//  5. Filtros padronizados: toda tela usa <FiltrosErp> (src/app/erp/FiltrosErp.tsx + src/lib/erp/filtros.ts) com os
+//     níveis hierárquicos que fazem sentido para ela (seguradora, corretora, produto, imobiliária/fatura, situação,
+//     tipo, forma de pagamento, canal, período/mês, busca do item). Mesmo nome de parâmetro na URL em todas as telas.
 export const metadata: Metadata = {
   title: { default: "ERP O2", template: "%s · ERP O2" },
   description: "Sistema de gestão da O2 Seguros: documentos, comissões, baixas, faturas e repasses",

@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { lerFiltros, limitesMes, SEGURADORA_FATURA } from "@/lib/erp/filtros";
+import FiltrosErp from "../FiltrosErp";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
@@ -94,28 +96,61 @@ const brl = (v: number | null | undefined) => (v == null ? "—" : Number(v).toL
 
 export const metadata = { title: "Conferência" };
 
-export default async function ErpConferenciaPage() {
+export default async function ErpConferenciaPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const f = lerFiltros(await searchParams);
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!isAdmin(user?.email) && !isColaboradorO2(user?.email)) redirect("/");
 
+  // filtros padronizados do ERP: cada seção aplica os níveis que tem (seguradora, corretora, imobiliária, mês)
+  const { data: segFiltro } = f.seguradora ? await supabase.from("erp_seguradoras").select("nome").eq("abreviacao", f.seguradora).maybeSingle() : { data: null };
+  const segFatura = f.seguradora ? SEGURADORA_FATURA[f.seguradora] ?? "—" : null;
+  const mes = f.mes ? limitesMes(f.mes) : null;
+  const imobLike = f.imobiliaria ? `%${f.imobiliaria.replace(/[%_,()]/g, "")}%` : null;
+
+  let qConf = supabase.from("erp_conferencia_corp_pronto").select("*").order("mes", { ascending: false });
+  if (f.seguradora) qConf = qConf.eq("seg", f.seguradora);
+  if (mes) qConf = qConf.eq("mes", mes.de);
+
+  let qAlertas = supabase
+    .from("erp_alertas_fatura_pronto")
+    .select("documento_id, codigo_o2, nosso_numero_corp, numero_apolice, situacao, vigencia_inicio, efetivacao, imobiliaria, seguradora, fatura_prevista, fatura_carregada_vencimento, alerta, gerado_em")
+    .in("alerta", ["fora_da_fatura", "sem_destino_seguradora", "fatura_prevista_nao_carregada", "relatorio_incompleto"]);
+  if (segFatura) qAlertas = qAlertas.eq("seguradora", segFatura);
+  if (imobLike) qAlertas = qAlertas.ilike("imobiliaria", imobLike);
+  if (mes) qAlertas = qAlertas.gte("fatura_prevista", mes.de).lte("fatura_prevista", mes.ate);
+
+  let qFora = supabase.from("erp_fora_faturas_pronto").select("documento_id, codigo_o2, nosso_numero_corp, numero_apolice, imobiliaria, seguradora, produto, vigencia_inicio, faturas_carregadas, parcela_na_janela, no_extrato");
+  if (segFatura) qFora = qFora.eq("seguradora", segFatura);
+  if (imobLike) qFora = qFora.ilike("imobiliaria", imobLike);
+
+  let qExtratos = supabase.from("erp_extratos_resumo").select("*");
+  if (f.seguradora) qExtratos = qExtratos.eq("seguradora", segFiltro?.nome ?? "—");
+  if (f.corretora) qExtratos = qExtratos.eq("corretora", f.corretora);
+  if (mes) qExtratos = qExtratos.eq("competencia", mes.de);
+
+  let qBaixa = supabase.from("erp_baixa_corp_mensal_pronto").select("*");
+  qBaixa = mes ? qBaixa.eq("mes", mes.de) : qBaixa.gte("mes", new Date(new Date().getFullYear(), new Date().getMonth() - 3, 1).toISOString().slice(0, 10));
+  if (f.seguradora) qBaixa = qBaixa.eq("seguradora", f.seguradora === "ALF" ? "ALFA" : f.seguradora);
+  if (f.corretora) qBaixa = qBaixa.eq("corretora", f.corretora);
+
+  let qAtraso = supabase.from("erp_baixa_corp_atraso_pronto").select("mes, corretora, seguradora, bruto, media_3m, situacao");
+  if (f.seguradora) qAtraso = qAtraso.eq("seguradora", f.seguradora === "ALF" ? "ALFA" : f.seguradora);
+  if (f.corretora) qAtraso = qAtraso.eq("corretora", f.corretora);
+  if (mes) qAtraso = qAtraso.eq("mes", mes.de);
+
   const [{ data: difs }, { data: alertasBrutos, error: erroAlertas }, { data: todosAlertas }, { data: foraBrutos, error: erroFora }, { data: extratosBrutos }, { data: pendentesBaixa }, { data: baixasBrutas }, { data: atrasosBrutos }] = await Promise.all([
     // tabela pronta (só as células que diferem), refeita a cada carga do robô do Corp — premissa de desempenho do ERP
-    supabase.from("erp_conferencia_corp_pronto").select("*").order("mes", { ascending: false }),
-    supabase
-      .from("erp_alertas_fatura_pronto")
-      .select("documento_id, codigo_o2, nosso_numero_corp, numero_apolice, situacao, vigencia_inicio, efetivacao, imobiliaria, seguradora, fatura_prevista, fatura_carregada_vencimento, alerta, gerado_em")
-      .in("alerta", ["fora_da_fatura", "sem_destino_seguradora", "fatura_prevista_nao_carregada", "relatorio_incompleto"])
-      .order("fatura_prevista", { ascending: false })
-      .limit(300),
+    qConf,
+    qAlertas.order("fatura_prevista", { ascending: false }).limit(300),
     supabase.rpc("erp_contar_alertas_fatura"),
-    supabase.from("erp_fora_faturas_pronto").select("documento_id, codigo_o2, nosso_numero_corp, numero_apolice, imobiliaria, seguradora, produto, vigencia_inicio, faturas_carregadas, parcela_na_janela, no_extrato").order("seguradora").order("imobiliaria").limit(400),
-    supabase.from("erp_extratos_resumo").select("*").order("created_at", { ascending: false }).limit(40),
+    qFora.order("seguradora").order("imobiliaria").limit(400),
+    qExtratos.order("created_at", { ascending: false }).limit(40),
     supabase.from("erp_baixa_assistida_resumo").select("id, n_cheia, n_pro_labore, n_estorno, n_divergente, n_nao_encontrada").is("baixa_aprovada_em", null).neq("tipo", "resumo_mensal"),
-    supabase.from("erp_baixa_corp_mensal_pronto").select("*").gte("mes", new Date(new Date().getFullYear(), new Date().getMonth() - 3, 1).toISOString().slice(0, 10)).order("mes", { ascending: false }).order("corretora").order("seguradora"),
-    supabase.from("erp_baixa_corp_atraso_pronto").select("mes, corretora, seguradora, bruto, media_3m, situacao").order("mes", { ascending: false }).order("media_3m", { ascending: false }),
+    qBaixa.order("mes", { ascending: false }).order("corretora").order("seguradora"),
+    qAtraso.order("mes", { ascending: false }).order("media_3m", { ascending: false }),
   ]);
   const diferencas = (difs ?? []) as Linha[];
   if (erroAlertas) console.error("erp_alertas_fatura:", erroAlertas.message);
@@ -139,6 +174,12 @@ export default async function ErpConferenciaPage() {
           icon={<IconReport />}
           titulo="ERP O2 — Conferência com o Corp"
           subtitulo="Documentos e comissão por mês × ramo × seguradora: ERP contra o retrato congelado do Power BI. Só o que difere aparece."
+        />
+        <FiltrosErp
+          caminho="/erp/conferencia"
+          campos={["seguradora", "corretora", "imobiliaria", "mes"]}
+          valores={f}
+          resumo="Os filtros valem para todas as seções abaixo, em cada uma no nível que ela tem (ex.: imobiliária só nas seções de fatura; corretora nas de baixa e extratos)."
         />
         <p className="text-sm text-gray-600">
           <Link href="/erp/documentos" className="underline">← Documentos</Link>. As diferenças abaixo são, em regra, alterações que o próprio Corp fez depois do fechamento do mês
