@@ -141,7 +141,12 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
   if (f.corretora) qAtraso = qAtraso.eq("corretora", f.corretora);
   if (mes) qAtraso = qAtraso.eq("mes", mes.de);
 
-  const [{ data: difs }, { data: alertasBrutos, error: erroAlertas }, { data: todosAlertas }, { data: foraBrutos, error: erroFora }, { data: extratosBrutos }, { data: pendentesBaixa }, { data: baixasBrutas }, { data: atrasosBrutos }] = await Promise.all([
+  // estornos de endosso (linha negativa do extrato × endosso do ERP): lista pronta refeita de hora em hora
+  let qEstornos = supabase.from("erp_estornos_endosso_pronto").select("alerta, seguradora, codigo_o2, documento_id, apolice, endosso, cliente, valor, data_ref, gerado_em");
+  if (segFiltro?.nome) qEstornos = qEstornos.ilike("seguradora", `${segFiltro.nome.split(" ")[0]}%`);
+  if (mes) qEstornos = qEstornos.gte("data_ref", mes.de).lte("data_ref", mes.ate);
+
+  const [{ data: difs }, { data: alertasBrutos, error: erroAlertas }, { data: todosAlertas }, { data: foraBrutos, error: erroFora }, { data: extratosBrutos }, { data: pendentesBaixa }, { data: baixasBrutas }, { data: atrasosBrutos }, { data: estornosBrutos }] = await Promise.all([
     // tabela pronta (só as células que diferem), refeita a cada carga do robô do Corp — premissa de desempenho do ERP
     qConf,
     qAlertas.order("fatura_prevista", { ascending: false }).limit(300),
@@ -151,7 +156,12 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
     supabase.from("erp_baixa_assistida_resumo").select("id, n_cheia, n_pro_labore, n_estorno, n_divergente, n_nao_encontrada").is("baixa_aprovada_em", null).neq("tipo", "resumo_mensal"),
     qBaixa.order("mes", { ascending: false }).order("corretora").order("seguradora"),
     qAtraso.order("mes", { ascending: false }).order("media_3m", { ascending: false }),
+    qEstornos.order("data_ref", { ascending: false }).limit(300),
   ]);
+  type Estorno = { alerta: string; seguradora: string | null; codigo_o2: number | null; documento_id: string | null; apolice: string | null; endosso: string | null; cliente: string | null; valor: number; data_ref: string | null; gerado_em: string };
+  const estornos = (estornosBrutos ?? []) as Estorno[];
+  const estornoSemEndosso = estornos.filter((e) => e.alerta === "estorno_sem_endosso");
+  const endossoSemEstorno = estornos.filter((e) => e.alerta === "endosso_sem_estorno");
   const diferencas = (difs ?? []) as Linha[];
   if (erroAlertas) console.error("erp_alertas_fatura:", erroAlertas.message);
   const alertas = (alertasBrutos ?? []) as AlertaFatura[];
@@ -366,6 +376,44 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
               );
             })
           )}
+        </section>
+
+        <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Estornos de endosso</h2>
+          <p className="text-xs text-gray-500">
+            Linha negativa no extrato = estorno de comissão de um endosso com restituição (cancelamento a pedido, cancelamento de item, restituição). Cada linha é casada com o endosso da apólice pelo nº do endosso, prêmio ou comissão.
+            {estornos[0] ? ` Atualizado em ${new Date(estornos[0].gerado_em).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}.` : ""}
+          </p>
+          {[
+            { titulo: "Estorno no extrato sem endosso no ERP", dica: "a seguradora descontou, mas o endosso não está cadastrado (ou não foi ligado à apólice)", linhas: estornoSemEndosso },
+            { titulo: "Endosso sem estorno no extrato", dica: "endosso com comissão negativa há mais de 30 dias, de seguradora com extratos carregados, e o desconto ainda não apareceu", linhas: endossoSemEstorno },
+          ].map((g) => (
+            <details key={g.titulo} className="rounded-lg border border-gray-100" open={g.linhas.length > 0 && g.linhas.length <= 15}>
+              <summary className="cursor-pointer px-3 py-2 text-sm">
+                <span className="font-medium text-o2-navy">{g.titulo}</span> · {g.linhas.length} · {formatarReais(g.linhas.reduce((t, l) => t + Number(l.valor), 0))}
+                <span className="ml-2 text-xs text-gray-500">{g.dica}</span>
+              </summary>
+              {g.linhas.length > 0 && (
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+                    <tr><th className="px-3 py-1">Seguradora</th><th className="px-3 py-1">Código O2</th><th className="px-3 py-1">Apólice / endosso</th><th className="px-3 py-1">Cliente</th><th className="px-3 py-1">Data</th><th className="px-3 py-1 text-right">Comissão</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {g.linhas.map((l, i) => (
+                      <tr key={i}>
+                        <td className="px-3 py-1">{l.seguradora ?? "—"}</td>
+                        <td className="px-3 py-1">{l.documento_id ? <Link href={`/erp/documentos/${l.documento_id}`} className="text-o2-navy hover:underline">{l.codigo_o2}</Link> : "—"}</td>
+                        <td className="px-3 py-1">{l.apolice ?? "—"}{l.endosso && l.endosso !== "0" ? ` / ${l.endosso}` : ""}</td>
+                        <td className="px-3 py-1">{l.cliente ?? "—"}</td>
+                        <td className="px-3 py-1">{l.data_ref ? new Date(l.data_ref + "T12:00:00").toLocaleDateString("pt-BR") : "—"}</td>
+                        <td className="px-3 py-1 text-right text-red-700">{formatarReais(Number(l.valor))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </details>
+          ))}
         </section>
 
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">

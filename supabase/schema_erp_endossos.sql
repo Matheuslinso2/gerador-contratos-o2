@@ -12,3 +12,9 @@ create index if not exists erp_documentos_pai_idx on public.erp_documentos (docu
 -- 25/10: card de endosso → apólice pelo campo "Código O2 da apólice" (src/lib/erp/bitrixOrigem.ts → vincularEndossoAoPai).
 -- Controle do aviso escrito no card (não repetir comentário). Aplicado via MCP (migration erp_origens_aviso_vinculo).
 alter table public.erp_origens add column if not exists aviso_vinculo text, add column if not exists aviso_vinculo_em timestamptz;
+
+-- Estornos de endosso (25/10): erp_extrato_linhas.endosso_documento_id (a linha negativa continua casada com a apólice
+-- em documento_id, usada pela baixa); erp_casar_estornos_endosso() casa pelo nº do endosso > prêmio > comissão (317 de
+-- 355 na 1ª execução); view erp_estornos_endosso (2 alertas: estorno_sem_endosso, endosso_sem_estorno — este só para
+-- seguradora+corretora com extratos COM linhas, emitidos há 30+ dias); tabela pronta erp_estornos_endosso_pronto
+-- refeita por erp_atualizar_estornos_endosso() no cron erp-bitrix (1048). Tela: /erp/conferencia, seção "Estornos de endosso".
