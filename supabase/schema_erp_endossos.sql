@@ -8,3 +8,7 @@ create index if not exists erp_documentos_seg_apolice_idx on public.erp_document
 --   liga documento_pai_id (só se vazio) pela seguradora + nº da apólice; com várias apólices de mesmo nº, a que cobre
 --   a data do endosso > a mais recente que começou antes > a mais recente. Chamada pelo cron erp-bitrix (lote 2000).
 create index if not exists erp_documentos_pai_idx on public.erp_documentos (documento_pai_id) where documento_pai_id is not null; -- ficha da apólice lista os endossos
+
+-- 25/10: card de endosso → apólice pelo campo "Código O2 da apólice" (src/lib/erp/bitrixOrigem.ts → vincularEndossoAoPai).
+-- Controle do aviso escrito no card (não repetir comentário). Aplicado via MCP (migration erp_origens_aviso_vinculo).
+alter table public.erp_origens add column if not exists aviso_vinculo text, add column if not exists aviso_vinculo_em timestamptz;

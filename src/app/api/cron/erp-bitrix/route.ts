@@ -18,7 +18,8 @@ export async function GET(request: NextRequest) {
   const cfg = CONFIGS.find((c) => c.entityTypeId === spa);
   if (!cfg) return NextResponse.json({ erro: "spa inválida" }, { status: 400 });
   const sb = createServiceClient();
-  const resumo = await sincronizarSpa(sb, cfg, { desde: "2026-07-01", gravar: true, comentarios: 25, apenasAlterados: true });
+  // cards de endosso em andamento recebem o "Código O2 da apólice" ou o pedido dele (comentário no card)
+  const resumo = await sincronizarSpa(sb, cfg, { desde: "2026-07-01", gravar: true, comentarios: 25, apenasAlterados: true, escreverNoBitrix: "abertos" });
   // todo endosso é filho de uma apólice: liga os novos (dos cards e do Corp) pela seguradora + nº da apólice
   await sb.rpc("erp_vincular_endossos", { p_limite: 2000 });
   // alertas de fatura (lista pronta para a tela /erp/conferencia): refaz 1× por hora, junto da Fiança
@@ -38,6 +39,8 @@ export async function GET(request: NextRequest) {
       const desde = new Date(Date.now() - 12 * 86400000).toISOString().slice(0, 10);
       const carga = await carregarExtratos(sb, { desde, gravar: true, max: 20 });
       const { data, error } = await sb.rpc("erp_cruzar_extratos");
+      // linhas negativas do extrato = estornos de endosso: casa com o endosso e refaz a lista pronta dos 2 alertas
+      await sb.rpc("erp_atualizar_estornos_endosso");
       extratos = { carga, cruzamento: error ? { erro: error.message } : data };
     } catch (e) {
       extratos = { erro: (e as Error).message };

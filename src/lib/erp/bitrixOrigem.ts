@@ -13,7 +13,9 @@ import { SEGURADORAS as SEGURADORAS_FIANCA } from "@/lib/bitrix/seguroFianca";
 //     imobiliário e individual, condomínio, celular, RCP), Capitalização (1048), Automóvel (1050);
 //   * TUDO é salvo, inclusive recusado, perdido e não efetivado: se o card existiu, a história
 //     completa está no banco. O ERP controla o que foi efetivado/convertido, como o Corp hoje.
-// Nada aqui escreve no Bitrix. O Código O2 nasce aqui, interno (parâmetro codigo_o2_exposto).
+// O Código O2 nasce aqui, interno (parâmetro codigo_o2_exposto). Única escrita no Bitrix: nos cards
+// de ENDOSSO, o campo "Código O2 da apólice" e um comentário dizendo a que apólice o endosso foi
+// ligado, ou pedindo que a equipe informe o código (vincularEndossoAoPai, 25/10/2026).
 
 type Raw = Record<string, unknown>;
 type Defs = Record<string, BitrixDefinicaoCampo & { title?: string; type?: string }>;
@@ -299,12 +301,15 @@ export function dadosLegiveis(item: BitrixItemRaw, defs: Defs): Record<string, u
 
 export type ResumoSincronizacao = {
   spa: number; nome: string; cards: number; criados: number; ligados_ao_corp: number; atualizados: number;
-  sem_imobiliaria: number; sem_cliente: number; comentarios_capturados: number; renovacoes_ligadas: number; erros: { card: number; erro: string }[];
+  sem_imobiliaria: number; sem_cliente: number; comentarios_capturados: number; renovacoes_ligadas: number;
+  endossos_ligados: number; endossos_sem_apolice: number; avisos_no_bitrix: number; erros: { card: number; erro: string }[];
 };
-type Opcoes = { desde: string; gravar: boolean; comentarios: number; apenasCards?: number[]; apenasAlterados?: boolean };
+/** escreverNoBitrix: "abertos" = só cards de endosso em andamento recebem campo/comentário (cron);
+ * "todos" = também os encerrados (teste por --card); false/ausente = só o banco. */
+type Opcoes = { desde: string; gravar: boolean; comentarios: number; apenasCards?: number[]; apenasAlterados?: boolean; escreverNoBitrix?: "abertos" | "todos" | false };
 
 export async function sincronizarSpa(sb: SupabaseClient, cfg: ConfigSpa, o: Opcoes): Promise<ResumoSincronizacao> {
-  const r: ResumoSincronizacao = { spa: cfg.entityTypeId, nome: cfg.nome, cards: 0, criados: 0, ligados_ao_corp: 0, atualizados: 0, sem_imobiliaria: 0, sem_cliente: 0, comentarios_capturados: 0, renovacoes_ligadas: 0, erros: [] };
+  const r: ResumoSincronizacao = { spa: cfg.entityTypeId, nome: cfg.nome, cards: 0, criados: 0, ligados_ao_corp: 0, atualizados: 0, sem_imobiliaria: 0, sem_cliente: 0, comentarios_capturados: 0, renovacoes_ligadas: 0, endossos_ligados: 0, endossos_sem_apolice: 0, avisos_no_bitrix: 0, erros: [] };
   const [todos, historico, defs, etapas] = await Promise.all([listarItensSpa(cfg.entityTypeId), listarHistoricoEtapas(cfg.entityTypeId), buscarDefinicaoCampos(cfg.entityTypeId) as Promise<Defs>, listarEtapas(cfg.entityTypeId)]);
   let itens = todos.filter((i) => String(i.createdTime).slice(0, 10) >= o.desde);
   if (o.apenasCards?.length) itens = itens.filter((i) => o.apenasCards!.includes(Number(i.id)));
@@ -383,6 +388,13 @@ export async function sincronizarSpa(sb: SupabaseClient, cfg: ConfigSpa, o: Opco
       }
 
       let docId = docPorChave.get(chave) ?? null;
+      const ehEndosso = x.tipo_corp === "END";
+      // card de endosso é documento próprio, filho da apólice — nunca a própria apólice (até 25/10 o nº da
+      // apólice do card casava com a apólice do Corp e 55 cards de endosso viraram a apólice): solta e recria
+      if (docId && ehEndosso) {
+        const { data: ja } = await sb.from("erp_documentos").select("tipo").eq("id", docId).maybeSingle();
+        if (ja && (ja.tipo === "A" || ja.tipo === "F")) docId = null;
+      }
       let modo: "criado" | "ligado" | "atualizado" = "atualizado";
       const ehRenovacao = cfg.renovacaoCategorias.includes(Number(item.categoryId));
       // Num card de RENOVAÇÃO o "Nosso Nº Corp" é a apólice ANTERIOR (148/150 batem com o "fim da
@@ -395,7 +407,7 @@ export async function sincronizarSpa(sb: SupabaseClient, cfg: ConfigSpa, o: Opco
           else if (!docId) { docId = doCorp.id; modo = "ligado"; }
         }
       }
-      if (!docId && x.numeroApolice) {
+      if (!docId && x.numeroApolice && !ehEndosso) {
         const { data: porApolice } = await sb.from("erp_documentos").select("id").eq("numero_apolice", x.numeroApolice).eq("origem", "corp_import").limit(1).maybeSingle();
         if (porApolice) { docId = porApolice.id; modo = "ligado"; }
       }
@@ -503,11 +515,109 @@ export async function sincronizarSpa(sb: SupabaseClient, cfg: ConfigSpa, o: Opco
         ...(comentarios ? { comentarios, comentarios_capturados_em: new Date().toISOString() } : {}),
       }, { onConflict: "sistema,entity_type_id,item_id" });
       if (eOri) throw new Error(eOri.message);
+
+      if (ehEndosso) {
+        const aberto = sit.situacao === "cotacao" || sit.situacao === "proposta";
+        const escrever = o.escreverNoBitrix === "todos" || (o.escreverNoBitrix === "abertos" && aberto);
+        const v = await vincularEndossoAoPai(sb, { cfg, item, defs, x, docId, seg, escrever });
+        if (v.pai) r.endossos_ligados++; else r.endossos_sem_apolice++;
+        if (v.avisou) r.avisos_no_bitrix++;
+      }
     } catch (e) {
       r.erros.push({ card: id, erro: (e as Error).message });
     }
   }
   return r;
+}
+
+// ------------------------------------------------------------ endosso → apólice (campo "Código O2 da apólice")
+// Todo card de endosso diz qual apólice altera. O campo é criado pela tela do Bitrix em cada SPA
+// (1046 e 1048; Fiança quando o funil de endosso existir) — achado pelo título, sem código fixo.
+// Ordem: (1) campo preenchido pela equipe manda (Código O2 = erp_documentos.nosso_numero);
+// (2) senão, seguradora + nº da apólice (mesma regra de erp_vincular_endossos) — só liga com UMA
+// apólice possível; (3) várias ou nenhuma: comentário no card pedindo o Código O2.
+// Escreve no card só quando a situação muda (erp_origens.aviso_vinculo), nunca repete.
+const TITULO_CAMPO_CODIGO_O2 = /c[oó]digo\s*o2\s*da\s*ap[oó]lice/i;
+export const campoCodigoO2 = (defs: Defs): string | null => Object.entries(defs).find(([, d]) => TITULO_CAMPO_CODIGO_O2.test(d.title ?? ""))?.[0] ?? null;
+
+type Apolice = { id: string; nosso_numero: number | null; numero_apolice: string | null; vigencia_inicio: string | null; vigencia_fim: string | null; origem: string | null };
+const COLS_APOLICE = "id, nosso_numero, numero_apolice, vigencia_inicio, vigencia_fim, origem";
+const br = (d: string | null) => (d ? d.slice(0, 10).split("-").reverse().join("/") : "?");
+
+/** Escrita no Bitrix pelo webhook de entrada (o mesmo das integrações que criam/atualizam cards). */
+async function escreverBitrix(metodo: string, params: Record<string, unknown>): Promise<void> {
+  const base = process.env.BITRIX_WEBHOOK_URL;
+  if (!base) throw new Error("BITRIX_WEBHOOK_URL não configurada");
+  const resp = await fetch(`${base.endsWith("/") ? base : base + "/"}${metodo}.json`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(params), cache: "no-store", signal: AbortSignal.timeout(20_000),
+  });
+  const dados = await resp.json().catch(() => ({}));
+  if (!resp.ok || dados.error) throw new Error(`Bitrix ${metodo}: ${dados.error_description || dados.error || `HTTP ${resp.status}`}`);
+}
+
+export async function vincularEndossoAoPai(
+  sb: SupabaseClient,
+  a: { cfg: ConfigSpa; item: BitrixItemRaw; defs: Defs; x: Extraido; docId: string; seg: string | null; escrever: boolean },
+): Promise<{ pai: Apolice | null; motivo: string | null; avisou: boolean }> {
+  const campo = campoCodigoO2(a.defs);
+  const codigoCard = campo ? digitos((a.item as Raw)[campo]) : "";
+  const { data: doc } = await sb.from("erp_documentos").select("documento_pai_id").eq("id", a.docId).single();
+  let pai: Apolice | null = null;
+  let motivo: string | null = null;
+  // Cap: o Corp guarda o nº do título em numero_apolice; o card do endosso traz o título na proposta
+  const numero = a.x.numeroApolice ?? (a.cfg.entityTypeId === 1048 ? a.x.numeroProposta ?? a.x.anterior.proposta : null);
+
+  if (codigoCard) {
+    const { data } = await sb.from("erp_documentos").select(COLS_APOLICE).eq("nosso_numero", Number(codigoCard)).in("tipo", ["A", "F"]).maybeSingle();
+    pai = data as Apolice | null;
+    if (!pai) motivo = `o Código O2 ${codigoCard} informado no card não é de uma apólice no ERP`;
+  } else if (!numero) {
+    motivo = "o card não tem o nº da apólice";
+  } else if (!a.seg) {
+    motivo = "o card não tem a seguradora";
+  } else {
+    const bruto = numero.trim();
+    const partes = bruto.split(/\s+e\s+|[\/,;]|\s{2,}/i).map((s) => s.trim()).filter(Boolean);
+    if (partes.length > 1) motivo = `o card cita mais de uma apólice (${bruto})`;
+    else if (digitos(bruto).replace(/^0+/, "").length < 5) motivo = `o nº da apólice no card (${bruto}) está incompleto`;
+    else {
+      // o card às vezes traz zeros à esquerda (07764752) que o Corp não guarda (7764752)
+      const variantes = [...new Set([bruto, bruto.replace(/[\s.\-]/g, ""), digitos(bruto), digitos(bruto).replace(/^0+/, "")].filter(Boolean))];
+      const { data } = await sb.from("erp_documentos").select(COLS_APOLICE).in("tipo", ["A", "F"]).eq("seguradora_id", a.seg)
+        .in("numero_apolice", variantes).not("situacao", "in", "(cotacao,proposta,recusado,perdido)").limit(50);
+      let cands = (data ?? []) as Apolice[];
+      // a apólice do Corp vale mais que o card de produção que ainda não foi ligado a ela
+      if (cands.some((c) => c.origem === "corp_import")) cands = cands.filter((c) => c.origem === "corp_import");
+      if (cands.length > 1) {
+        const dt = a.x.vigIni ?? String(a.item.createdTime).slice(0, 10);
+        const cobrem = cands.filter((c) => c.vigencia_inicio && c.vigencia_inicio <= dt && (!c.vigencia_fim || dt <= c.vigencia_fim));
+        if (cobrem.length === 1) cands = cobrem;
+      }
+      if (cands.length === 1) pai = cands[0];
+      else motivo = cands.length ? `há ${cands.length} apólices nº ${bruto} dessa seguradora no ERP` : `não achei a apólice nº ${bruto} dessa seguradora no ERP`;
+    }
+  }
+
+  if (pai && pai.id !== a.docId && pai.id !== doc?.documento_pai_id) {
+    const { error } = await sb.from("erp_documentos").update({ documento_pai_id: pai.id }).eq("id", a.docId);
+    if (error) throw new Error(error.message);
+  }
+  if (!a.escrever || !campo) return { pai, motivo, avisou: false };
+
+  const chaveAviso = pai ? `ligado:${pai.id}` : `pedir:${motivo}`;
+  const id = Number(a.item.id);
+  const { data: ori } = await sb.from("erp_origens").select("aviso_vinculo").eq("sistema", "bitrix").eq("entity_type_id", a.cfg.entityTypeId).eq("item_id", id).maybeSingle();
+  if (ori?.aviso_vinculo === chaveAviso) return { pai, motivo, avisou: false };
+
+  if (pai && !codigoCard && pai.nosso_numero) {
+    await escreverBitrix("crm.item.update", { entityTypeId: a.cfg.entityTypeId, id, fields: { [campo]: String(pai.nosso_numero) } });
+  }
+  const texto = pai
+    ? `ERP O2: endosso ligado à apólice ${pai.numero_apolice ?? "s/ nº"} (Código O2 ${pai.nosso_numero}), vigência ${br(pai.vigencia_inicio)} a ${br(pai.vigencia_fim)}${codigoCard ? ", conforme o Código O2 informado no card" : ""}.`
+    : `ERP O2: não consegui identificar com certeza a apólice deste endosso (${motivo}). Por favor, preencha o campo "Código O2 da apólice" com o Código O2 da apólice que este endosso altera (aparece na ficha do documento em /erp/documentos).`;
+  await escreverBitrix("crm.timeline.comment.add", { fields: { ENTITY_ID: id, ENTITY_TYPE: `dynamic_${a.cfg.entityTypeId}`, COMMENT: texto } });
+  await sb.from("erp_origens").update({ aviso_vinculo: chaveAviso, aviso_vinculo_em: new Date().toISOString() }).eq("sistema", "bitrix").eq("entity_type_id", a.cfg.entityTypeId).eq("item_id", id);
+  return { pai, motivo, avisou: true };
 }
 
 async function lerComentarios(entityTypeId: number, itemId: number): Promise<{ quando: string; autor: number | null; texto: string }[]> {
