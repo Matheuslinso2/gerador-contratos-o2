@@ -55,3 +55,25 @@ alter table erp_documentos add constraint erp_documentos_situacao_check check (s
 -- apresentou as partes (comissão única), o proprietário cuida. Vem do card de Fiança
 -- ("Imóvel será administrado?" / ADMINISTRADO?) e muda cobrança (fatura × individual) e contato na renovação.
 alter table erp_documento_itens add column if not exists administrado boolean;
+-- Matheus 25/10: administrado vale para Fiança, Capitalização e Incêndio (não Automóvel). A forma de
+-- cobrança denuncia: imob com fatura aberta no produto contrata por fatura (melhor condição); se foi por
+-- boleto individual, provavelmente a locação NÃO é administrada. Inferência com origem marcada.
+alter table erp_documento_itens add column if not exists administrado_fonte text
+  check (administrado_fonte in ('card','inferido_fatura','manual'));
+create or replace function erp_inferir_administrado() returns table (marcados_sim int, marcados_nao int)
+language plpgsql security definer set search_path = public as $$
+declare v_s int; v_n int;
+begin
+  update erp_documento_itens it set administrado = true, administrado_fonte = 'inferido_fatura'
+  from erp_alertas_fatura_pronto a
+  where a.documento_id = it.documento_id and it.item_n = 1 and it.administrado is null and a.alerta = 'ok';
+  get diagnostics v_s = row_count;
+  update erp_documento_itens it set administrado = false, administrado_fonte = 'inferido_fatura'
+  from erp_alertas_fatura_pronto a
+  where a.documento_id = it.documento_id and it.item_n = 1 and it.administrado is null and a.alerta = 'fora_da_fatura';
+  get diagnostics v_n = row_count;
+  return query select v_s, v_n;
+end $$;
+revoke all on function erp_inferir_administrado() from public;
+grant execute on function erp_inferir_administrado() to service_role;
+-- chamada 1×/h depois de erp_atualizar_alertas_fatura (cron erp-bitrix spa=1042)
