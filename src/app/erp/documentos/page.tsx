@@ -49,7 +49,7 @@ export default async function ErpDocumentosPage({
         <PageHeader
           icon={<IconReport />}
           titulo="ERP O2 — Documentos"
-          subtitulo="Apólices, endossos e faturas carregados do Corp (Fase 0). Busque como no Corp: Nosso Nº, nº da apólice, cliente ou imobiliária."
+          subtitulo="Apólices, endossos e faturas carregados do Corp. Busque pelo Código O2, pelo nosso número do Corp, nº da apólice, cliente ou imobiliária."
         />
 
         <form className="flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 bg-white p-4" method="get">
@@ -84,7 +84,8 @@ export default async function ErpDocumentosPage({
             <table className="w-full text-xs">
               <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
                 <tr>
-                  <th className="px-3 py-2">Nosso Nº</th>
+                  <th className="px-3 py-2">Código O2</th>
+                  <th className="px-3 py-2">Nº Corp</th>
                   <th className="px-3 py-2">Situação</th>
                   <th className="px-3 py-2">Tipo</th>
                   <th className="px-3 py-2">Cliente</th>
@@ -106,6 +107,7 @@ export default async function ErpDocumentosPage({
                         {d.nosso_numero}
                       </Link>
                     </td>
+                    <td className="px-3 py-2 text-gray-500">{d.nosso_numero_corp ?? "—"}</td>
                     <td className="px-3 py-2">
                       <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${COR_SITUACAO[d.situacao] ?? "bg-gray-100"}`}>
                         {SITUACOES[d.situacao] ?? d.situacao}

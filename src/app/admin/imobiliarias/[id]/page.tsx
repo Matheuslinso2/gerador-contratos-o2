@@ -243,7 +243,13 @@ export default async function AdminImobiliariaDetalhePage({
           />
         </section>
 
-        <RegrasRepasseErp regras={regrasErp} />
+        <RegrasRepasseErp
+          regras={regrasErp}
+          codigoO2={imobiliaria.codigo_o2 ?? null}
+          codigoCorp={imobiliaria.codigo_produtor_corp ?? null}
+          faturaHabilitada={!!imobiliaria.fatura_habilitada}
+          faturaHabilitadaEm={imobiliaria.fatura_habilitada_em ?? null}
+        />
 
         <section className="space-y-3 border-t border-gray-200 pt-6">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">

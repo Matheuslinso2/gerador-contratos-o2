@@ -27,6 +27,8 @@ export type DocumentoLista = {
 };
 
 export const SITUACOES: Record<string, string> = {
+  cotacao: "Cotação",
+  proposta: "Proposta",
   digitado: "Digitado (sem apólice)",
   emitido: "Emitido",
   vigente: "Vigente",
@@ -47,6 +49,15 @@ export const TIPOS_DOCUMENTO: Record<string, string> = {
 };
 
 export const TIPO_CORP: Record<string, string> = { NOVO: "Novo", RENV: "Renovação", END: "Endosso", FAT: "Fatura", CANC: "Cancelamento" };
+
+// Decisão 3 do Matheus (25/10): nem todo produto tem imobiliária; só o modo fatura exige produtor.
+export const TIPO_CONTRATACAO: Record<string, string> = {
+  indicacao_imobiliaria: "Indicação de imobiliária",
+  venda_direta: "Venda direta O2",
+  frota: "Frota",
+  canal: "Canal (Superlógica/Base/Segimob)",
+};
+export const MODO_COBRANCA: Record<string, string> = { individual: "Individual (cliente paga)", fatura: "Fatura da imobiliária" };
 
 const SELECT_LISTA =
   "id, nosso_numero, nosso_numero_corp, tipo, tipo_corp, numero_apolice, vigencia_inicio, vigencia_fim, premio_liquido, premio_total, comissao_valor, situacao, canal_venda, imobiliaria_principal_id, seguradora:erp_seguradoras(abreviacao), ramo:erp_ramos(abreviacao), cliente:locatarios(nome), imobiliaria:imobiliarias!erp_documentos_imobiliaria_principal_id_fkey(nome)";
@@ -133,6 +144,8 @@ export async function buscarDocumentos(sb: SupabaseClient, f: FiltrosBusca): Pro
 
 export type DocumentoFicha = DocumentoLista & {
   corretora: string | null;
+  tipo_contratacao: string | null;
+  modo_cobranca: string;
   locatario_id: string | null;
   numero_proposta: string | null;
   numero_endosso: string | null;
@@ -194,7 +207,7 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
     .from("erp_documentos")
     .select(
       SELECT_LISTA +
-        ", corretora:erp_corretoras(apelido), locatario_id, numero_proposta, numero_endosso, dt_proposta, dt_emissao, qtd_parcelas, forma_pagamento, premio_adicional, iof, comissao_pct, comissao_base, premiacao_valor, cancelado_em, competencia, congelado, fora_regra_pbi, origem, observacoes, digitado_em, documento_renovado_id"
+        ", corretora:erp_corretoras(apelido), tipo_contratacao, modo_cobranca, locatario_id, numero_proposta, numero_endosso, dt_proposta, dt_emissao, qtd_parcelas, forma_pagamento, premio_adicional, iof, comissao_pct, comissao_base, premiacao_valor, cancelado_em, competencia, congelado, fora_regra_pbi, origem, observacoes, digitado_em, documento_renovado_id"
     )
     .eq("id", id)
     .maybeSingle();
@@ -202,6 +215,8 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
   if (!data) return null;
   const d = data as unknown as LinhaBruta & {
     corretora: { apelido: string } | null;
+    tipo_contratacao: string | null;
+    modo_cobranca: string;
     locatario_id: string | null;
     numero_proposta: string | null;
     numero_endosso: string | null;
@@ -252,6 +267,8 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
   return {
     ...mapear(d),
     corretora: d.corretora?.apelido ?? null,
+    tipo_contratacao: d.tipo_contratacao,
+    modo_cobranca: d.modo_cobranca,
     locatario_id: d.locatario_id,
     numero_proposta: d.numero_proposta,
     numero_endosso: d.numero_endosso,

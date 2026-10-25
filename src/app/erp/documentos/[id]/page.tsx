@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import AppHeader from "@/components/AppHeader";
 import { formatarData, formatarReais } from "@/lib/sinistros/regras";
-import { buscarFichaDocumento, SITUACOES, TIPOS_DOCUMENTO, TIPO_CORP } from "@/lib/erp/documentos";
+import { buscarFichaDocumento, SITUACOES, TIPOS_DOCUMENTO, TIPO_CORP, TIPO_CONTRATACAO, MODO_COBRANCA } from "@/lib/erp/documentos";
 import { signOut } from "../../../actions";
 
 export const dynamic = "force-dynamic";
@@ -53,7 +53,7 @@ export default async function ErpDocumentoFichaPage({ params }: { params: Promis
           </Link>
           <div className="flex flex-wrap items-baseline gap-3">
             <h1 className="text-xl font-semibold text-o2-navy">
-              {d.nosso_numero} · {d.cliente ?? "cliente não ligado"}
+              Código O2 {d.nosso_numero} · {d.cliente ?? "cliente não ligado"}
             </h1>
             <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">{SITUACOES[d.situacao] ?? d.situacao}</span>
             {d.fora_regra_pbi && <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-xs text-yellow-800">fora da conta do Power BI</span>}
@@ -61,7 +61,7 @@ export default async function ErpDocumentoFichaPage({ params }: { params: Promis
           </div>
           <p className="text-sm text-gray-500">
             {TIPOS_DOCUMENTO[d.tipo] ?? d.tipo} · {d.tipo_corp ? TIPO_CORP[d.tipo_corp] ?? d.tipo_corp : ""} · {d.seguradora} · {d.ramo} · {d.corretora}
-            {d.nosso_numero_corp ? ` · Nosso Nº Corp ${d.nosso_numero_corp}` : ""}
+            {d.nosso_numero_corp ? ` · nosso número no Corp ${d.nosso_numero_corp}` : " · nasceu no ERP"}
           </p>
         </div>
 
@@ -82,6 +82,8 @@ export default async function ErpDocumentoFichaPage({ params }: { params: Promis
             <Campo rotulo="Comissão" valor={`${d.comissao_pct.toLocaleString("pt-BR")}% sobre ${d.comissao_base.replace("_", " ")} = ${formatarReais(d.comissao_valor)}`} />
             <Campo rotulo="Premiação" valor={formatarReais(d.premiacao_valor)} />
             <Campo rotulo="Canal de venda" valor={d.canal_venda ?? "—"} />
+            <Campo rotulo="Tipo de contratação" valor={d.tipo_contratacao ? TIPO_CONTRATACAO[d.tipo_contratacao] ?? d.tipo_contratacao : "—"} />
+            <Campo rotulo="Cobrança" valor={MODO_COBRANCA[d.modo_cobranca] ?? d.modo_cobranca} />
             <Campo rotulo="Cancelado em" valor={formatarData(d.cancelado_em)} />
             <Campo rotulo="Origem" valor={`${d.origem}${d.digitado_em ? ` · digitado ${formatarData(d.digitado_em)}` : ""}`} />
           </div>
@@ -201,7 +203,7 @@ export default async function ErpDocumentoFichaPage({ params }: { params: Promis
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Anexos (acervo de apólices)</h2>
           {d.anexos.length === 0 ? (
-            <p className="text-xs text-gray-500">Nenhum PDF ligado a este Nosso Nº no acervo ainda.</p>
+            <p className="text-xs text-gray-500">Nenhum PDF ligado a este documento no acervo ainda.</p>
           ) : (
             <ul className="space-y-1 text-xs">
               {d.anexos.map((a) => (
