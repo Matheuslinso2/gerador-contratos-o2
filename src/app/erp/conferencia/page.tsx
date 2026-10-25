@@ -146,7 +146,7 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
   if (segFiltro?.nome) qEstornos = qEstornos.ilike("seguradora", `${segFiltro.nome.split(" ")[0]}%`);
   if (mes) qEstornos = qEstornos.gte("data_ref", mes.de).lte("data_ref", mes.ate);
 
-  const [{ data: difs }, { data: alertasBrutos, error: erroAlertas }, { data: todosAlertas }, { data: foraBrutos, error: erroFora }, { data: extratosBrutos }, { data: pendentesBaixa }, { data: baixasBrutas }, { data: atrasosBrutos }, { data: estornosBrutos }] = await Promise.all([
+  const [{ data: difs }, { data: alertasBrutos, error: erroAlertas }, { data: todosAlertas }, { data: foraBrutos, error: erroFora }, { data: extratosBrutos }, { data: pendentesBaixa }, { data: baixasBrutas }, { data: atrasosBrutos }, { data: estornosBrutos }, { data: semMaeBrutos }] = await Promise.all([
     // tabela pronta (só as células que diferem), refeita a cada carga do robô do Corp — premissa de desempenho do ERP
     qConf,
     qAlertas.order("fatura_prevista", { ascending: false }).limit(300),
@@ -157,7 +157,21 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
     qBaixa.order("mes", { ascending: false }).order("corretora").order("seguradora"),
     qAtraso.order("mes", { ascending: false }).order("media_3m", { ascending: false }),
     qEstornos.order("data_ref", { ascending: false }).limit(300),
+    // endossos sem apólice-mãe (a ligação automática não resolveu): revisão manual na ficha do endosso. Desde 2021 —
+    // os de 2020 são de apólices anteriores à base do Corp no ERP.
+    (() => {
+      let q = supabase
+        .from("erp_documentos")
+        .select("id, nosso_numero, tipo, numero_apolice, numero_endosso, vigencia_inicio, premio_liquido, seguradora:erp_seguradoras(nome), cliente:locatarios(nome)")
+        .in("tipo", ["C", "D", "I", "M", "R", "X"])
+        .is("documento_pai_id", null)
+        .gte("vigencia_inicio", "2021-01-01");
+      if (mes) q = q.gte("vigencia_inicio", mes.de).lte("vigencia_inicio", mes.ate);
+      return q.order("vigencia_inicio", { ascending: false }).limit(300);
+    })(),
   ]);
+  type SemMae = { id: string; nosso_numero: number; tipo: string; numero_apolice: string | null; numero_endosso: string | null; vigencia_inicio: string | null; premio_liquido: number; seguradora: { nome: string } | null; cliente: { nome: string } | null };
+  const semMae = ((semMaeBrutos ?? []) as unknown as SemMae[]).filter((e) => !segFiltro?.nome || e.seguradora?.nome === segFiltro.nome);
   type Estorno = { alerta: string; seguradora: string | null; codigo_o2: number | null; documento_id: string | null; apolice: string | null; endosso: string | null; cliente: string | null; valor: number; data_ref: string | null; gerado_em: string };
   const estornos = (estornosBrutos ?? []) as Estorno[];
   const estornoSemEndosso = estornos.filter((e) => e.alerta === "estorno_sem_endosso");
@@ -414,6 +428,32 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
               )}
             </details>
           ))}
+          <details className="rounded-lg border border-gray-100">
+            <summary className="cursor-pointer px-3 py-2 text-sm">
+              <span className="font-medium text-o2-navy">Endossos sem apólice ligada</span> · {semMae.length}
+              <span className="ml-2 text-xs text-gray-500">a ligação automática (seguradora + nº da apólice) não achou uma apólice única; abra o endosso e informe o Código O2 da apólice</span>
+            </summary>
+            {semMae.length > 0 && (
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+                  <tr><th className="px-3 py-1">Endosso</th><th className="px-3 py-1">Tipo</th><th className="px-3 py-1">Seguradora</th><th className="px-3 py-1">Nº apólice informado</th><th className="px-3 py-1">Cliente</th><th className="px-3 py-1">Início</th><th className="px-3 py-1 text-right">Prêmio</th></tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {semMae.map((e) => (
+                    <tr key={e.id}>
+                      <td className="px-3 py-1"><Link href={`/erp/documentos/${e.id}`} className="text-o2-navy hover:underline">Código O2 {e.nosso_numero}</Link></td>
+                      <td className="px-3 py-1">{e.tipo}</td>
+                      <td className="px-3 py-1">{e.seguradora?.nome ?? "—"}</td>
+                      <td className="px-3 py-1">{e.numero_apolice && e.numero_apolice !== "0" ? e.numero_apolice : "—"}</td>
+                      <td className="px-3 py-1">{e.cliente?.nome ?? "—"}</td>
+                      <td className="px-3 py-1">{e.vigencia_inicio ? new Date(e.vigencia_inicio + "T12:00:00").toLocaleDateString("pt-BR") : "—"}</td>
+                      <td className="px-3 py-1 text-right">{formatarReais(Number(e.premio_liquido))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </details>
         </section>
 
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">

@@ -18,3 +18,4 @@ alter table public.erp_origens add column if not exists aviso_vinculo text, add 
 -- 355 na 1ª execução); view erp_estornos_endosso (2 alertas: estorno_sem_endosso, endosso_sem_estorno — este só para
 -- seguradora+corretora com extratos COM linhas, emitidos há 30+ dias); tabela pronta erp_estornos_endosso_pronto
 -- refeita por erp_atualizar_estornos_endosso() no cron erp-bitrix (1048). Tela: /erp/conferencia, seção "Estornos de endosso".
+create index if not exists erp_documentos_endosso_sem_mae_idx on public.erp_documentos (vigencia_inicio desc) where documento_pai_id is null and tipo in ('C','D','I','M','R','X'); -- lista 'Endossos sem apólice ligada' (37 s -> 0,14 s)

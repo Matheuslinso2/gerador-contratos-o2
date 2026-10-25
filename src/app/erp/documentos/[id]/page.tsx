@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { formatarData, formatarReais } from "@/lib/sinistros/regras";
+import RascunhoAutomatico from "@/components/RascunhoAutomatico";
+import { ligarEndossoApolice } from "./actions";
 import { buscarFichaDocumento, SITUACOES, TIPOS_DOCUMENTO, TIPO_CORP, TIPO_CONTRATACAO, MODO_COBRANCA } from "@/lib/erp/documentos";
 
 export const dynamic = "force-dynamic";
@@ -24,8 +26,18 @@ const AGENTE: Record<string, string> = { imob: "Imobiliária", parceiro: "Parcei
 
 export const metadata = { title: "Documento" };
 
-export default async function ErpDocumentoFichaPage({ params }: { params: Promise<{ id: string }> }) {
+const AVISO_VINCULO: Record<string, string> = {
+  ok: "Endosso ligado à apólice.",
+  dados: "Informe o Código O2 da apólice.",
+  nao_endosso: "Este documento é uma apólice, não um endosso.",
+  nao_achou: "Não achei apólice (ou fatura) com esse Código O2.",
+  seguradora: "A apólice informada é de outra seguradora.",
+  gravar: "Não consegui gravar; tente de novo.",
+};
+
+export default async function ErpDocumentoFichaPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ vinculo?: string }> }) {
   const { id } = await params;
+  const { vinculo } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -153,6 +165,16 @@ export default async function ErpDocumentoFichaPage({ params }: { params: Promis
               {d.apolice_mae.numero_apolice ? ` · nº ${d.apolice_mae.numero_apolice}` : ""} · vigência {formatarData(d.apolice_mae.vigencia_inicio)} a {formatarData(d.apolice_mae.vigencia_fim)}
               {d.imobiliaria ? ` · imobiliária ${d.imobiliaria}` : ""}
             </p>
+          )}
+          {d.tipo !== "A" && d.tipo !== "F" && (
+            <form action={ligarEndossoApolice} className="flex flex-wrap items-center gap-2 rounded-lg border border-orange-100 bg-orange-50/60 p-3 text-xs">
+              <RascunhoAutomatico sufixo={d.id} />
+              <input type="hidden" name="id" value={d.id} />
+              <span className="font-medium text-gray-700">{d.apolice_mae ? "Corrigir a apólice deste endosso:" : "Endosso sem apólice ligada. Código O2 da apólice:"}</span>
+              <input name="codigo_o2" inputMode="numeric" placeholder="ex.: 200629" className="w-28 rounded border border-gray-300 px-2 py-1" />
+              <button className="rounded bg-o2-navy px-3 py-1 text-white hover:bg-o2-indigo">Ligar</button>
+              {vinculo && AVISO_VINCULO[vinculo] && <span className={vinculo === "ok" ? "text-green-700" : "text-red-700"}>{AVISO_VINCULO[vinculo]}</span>}
+            </form>
           )}
           {d.endossos.length > 0 && (
             <div className="rounded-lg border border-gray-100 bg-gray-50 p-3 text-xs">
