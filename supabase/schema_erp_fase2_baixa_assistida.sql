@@ -284,3 +284,23 @@ select erp_conferir_extratos(null);
 -- só para cheia/pró-labore. Tela: aviso "quando baixar" (Pottencial ≥ dia 26 ou pagamento confirmado; Too após NF + dinheiro).
 -- Repasse (manual REPASSE AO PRODUTOR): até o fim do mês seguinte ao recebimento; documento com pró-labore pago direto
 -- (erp_repasse_direto_seguradora) NÃO gera repasse da O2 — vale para a fase de repasses.
+
+-- ---------------------------------------------------------------------------
+-- 25/10 (noite) — EXTRATOS DA TOKIO E DA PORTO PELA PASTA OFICIAL, COM LEITOR FIXO (sem IA)
+-- src/lib/erp/extratosPdf.ts: parseTokioPdf ("Extrato do Corretor": Segurado|Negócio|Ramo|Apólice|Endosso|Tipo|Parc|Prêmio|%|R$;
+--   cabeçalho = data de crédito + bruto + líquido) e parsePortoPdf ("Analítico de Pagamentos de Comissões"; a coluna Marca sai
+--   grudada no fim do Tipo; venda avulsa de cartão sem Apl/Prop; rodapé Bruta|INSS|IRRF|ISS|Líquido|Débito/Crédito|A pagar —
+--   o "A pagar" já vem com o desconto do empréstimo, ex. 19/08: bruto 22.605,02 → a pagar 426,54). Ligado em extratosDrive.ts
+--   antes da IA. Agosto/26: 37/37 arquivos fecham ao centavo (1.668 linhas). Set/out da Tokio e da Porto NÃO estão na pasta.
+-- Migrations: erp_fase2_extratos_tokio_porto_pdf (resumo mensal não soma o total por e-mail da Tokio quando já há extrato por
+--   apólice do mesmo mês × corretora), erp_fase2_cruzar_extratos_indices (casamento por índice: igual / nº do Corp termina com o
+--   do extrato [Porto 1718624076712 × 24076712] / nº do extrato termina com o do Corp [Pottencial]; índices
+--   erp_documentos_apolice_dig_idx e _rev_idx — o casamento antigo por LIKE estourava o tempo com 1.668 linhas),
+--   erp_fase2_corp_comissoes_parcela_idx (ja_baixada_corp por índice), erp_fase2_conferir_extratos_incremental (cron reclassifica
+--   só linhas novas/recasadas ou conferidas há > 6 h; aprovar reconfere o extrato inteiro), erp_fase2_conferir_sugere_pro_labore
+--   (divergente com falta exata de 3/5/10/15/20/25/30 pontos e sem regra → "parece pró-labore … cadastrar na ficha da imob"),
+--   erp_fase2_baixa_resumo_arquivo_nome (caminho legível do arquivo do Drive).
+-- Resultado: 1.646/1.668 casadas; Tokio 333 cheias, 38 pró-labore conferido, 49 divergentes (36 "parece pró-labore"), 49 estornos;
+--   Porto 897 cheias, 7 pró-labore, 266 divergentes (70 "parece pró-labore"), 6 estornos, 23 não encontradas. Quase tudo de
+--   agosto já estava baixado no Corp. erp_cruzar_extratos inteiro ≈ 2,7 s; resumo mensal 5 ms.
+-- Tela /erp/baixas: linhas carregadas só do extrato aberto (?extrato=) e só as "para tratar" em aberto; RascunhoAutomatico no motivo.

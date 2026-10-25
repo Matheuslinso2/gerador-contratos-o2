@@ -16,6 +16,7 @@ import * as XLSX from "xlsx";
 import Anthropic from "@anthropic-ai/sdk";
 import { obterAutenticacaoGoogle } from "@/lib/googleAuth";
 import { abrirTextoPdfComSenha, candidatosSenhaO2 } from "@/lib/pdfComSenha";
+import { parseTokioPdf, parsePortoPdf } from "@/lib/erp/extratosPdf";
 import { parsePottencial, parseToo, num, txt, dataBr, type LinhaExtrato } from "@/lib/erp/extratos";
 
 export const PASTA_EXTRATOS = process.env.ERP_EXTRATOS_DRIVE_PASTA || "11BDjbKy1Nj-A4mslt2onv3IzmhX8mYga";
@@ -242,7 +243,7 @@ async function lerTextoPelaIA(texto: string, seguradora: string): Promise<{ linh
 
 export type ResumoDrive = { arquivos: number; novos: number; lidos: number; nao_lidos: number; linhas: number; erros: string[] };
 
-export async function carregarExtratosDrive(sb: SupabaseClient, opts: { gravar: boolean; max?: number; refazerNaoLidos?: boolean }): Promise<ResumoDrive> {
+export async function carregarExtratosDrive(sb: SupabaseClient, opts: { gravar: boolean; max?: number; refazerNaoLidos?: boolean; seguradoras?: string[] }): Promise<ResumoDrive> {
   const api = clienteDrive();
   const arquivos = await listarArquivosExtratos(api);
   const resumo: ResumoDrive = { arquivos: arquivos.length, novos: 0, lidos: 0, nao_lidos: 0, linhas: 0, erros: [] };
@@ -256,7 +257,7 @@ export async function carregarExtratosDrive(sb: SupabaseClient, opts: { gravar: 
   const corrId = new Map((corrs ?? []).map((c: { id: string; apelido: string }) => [c.apelido, c.id]));
 
   const jaLido = (x: Arquivo) => carregados.has(`drive:${x.id}`) || carregados.has(`${seg.get(x.seguradora)?.id}|${x.nome}`);
-  for (const a of arquivos.filter((x) => !jaLido(x)).slice(0, opts.max ?? 30)) {
+  for (const a of arquivos.filter((x) => !jaLido(x) && (!opts.seguradoras || opts.seguradoras.includes(x.seguradora))).slice(0, opts.max ?? 30)) {
     resumo.novos++;
     let parsed: { linhas: LinhaExtrato[]; total_bruto: number | null; total_liquido: number | null };
     let como = "";
@@ -272,8 +273,15 @@ export async function carregarExtratosDrive(sb: SupabaseClient, opts: { gravar: 
       } else if (tipo === "pdf" || tipo === "texto") {
         const texto = tipo === "pdf" ? (await abrirTextoPdfComSenha(buf, candidatosSenhaO2()))?.texto ?? null : buf.toString("utf8");
         if (!texto) throw new Error("PDF não abriu (senha desconhecida?)");
-        const ia = await lerTextoPelaIA(texto, seg.get(a.seguradora)?.nome ?? a.seguradora);
-        parsed = ia; competencia = ia.competencia; como = "leitura por IA";
+        // Tokio e Porto: leitor fixo (exato, sem custo); a IA só para formato desconhecido.
+        const fixo = a.seguradora === "TOKI" ? parseTokioPdf(texto) : a.seguradora === "PORT" ? parsePortoPdf(texto) : null;
+        if (fixo) {
+          parsed = fixo; como = a.seguradora === "TOKI" ? "leitor Tokio (PDF)" : "leitor Porto (PDF)";
+          if (!a.pagoEm && fixo.pago_em) a.pagoEm = fixo.pago_em;
+        } else {
+          const ia = await lerTextoPelaIA(texto, seg.get(a.seguradora)?.nome ?? a.seguradora);
+          parsed = ia; competencia = ia.competencia; como = "leitura por IA";
+        }
       } else throw new Error(`tipo de arquivo não lido (${a.mime})`);
       if (!parsed.linhas.length) erro = `nenhuma linha reconhecida (${como})`;
     } catch (e) {
