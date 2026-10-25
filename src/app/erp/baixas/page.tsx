@@ -7,6 +7,8 @@ import RascunhoAutomatico from "@/components/RascunhoAutomatico";
 import { IconReport } from "@/components/icons";
 import { formatarData } from "@/lib/sinistros/regras";
 import { aprovarBaixa, salvarTratativa } from "./actions";
+import FiltrosErp from "../FiltrosErp";
+import { lerFiltros, idsImobiliarias } from "@/lib/erp/filtros";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +25,7 @@ type Mensal = {
 };
 type Extrato = {
   id: string; seguradora: string; seg_abrev: string; corretora: string | null; mes: string; competencia: string; tipo: string; origem: string;
-  leitura: string; arquivo_path: string | null; arquivo_nome: string | null; created_at: string; total_extrato: number | null; soma_linhas: number; linhas: number; conta_fecha: boolean;
+  leitura: string; arquivo_path: string | null; arquivo_nome: string | null; data_recebimento: string | null; created_at: string; total_extrato: number | null; soma_linhas: number; linhas: number; conta_fecha: boolean;
   n_cheia: number; n_pro_labore: number; n_estorno: number; n_divergente: number; n_nao_encontrada: number;
   valor_cheia: number; valor_pro_labore: number; valor_tratar: number; valor_a_baixar: number; pro_labore_pago_direto: number;
   ja_baixadas_corp: number; tratar_em_aberto: number; imposto_pct: number; imposto: number; liquido_sem_desconto: number;
@@ -34,7 +36,7 @@ type LinhaExtrato = {
   premio: number | null; valor_comissao: number | null; pct_doc: number | null; pct_recebido: number | null; valor_esperado: number | null;
   pct_pro_labore: number | null; valor_falta: number | null; conferencia: string | null; motivo_auto: string | null; ja_baixada_corp: boolean;
   documento_id: string | null; tratar_motivo: string | null; tratar_resolvido_em: string | null; tratar_por_email: string | null;
-  documento: { nosso_numero_corp: number | null } | null;
+  documento: { nosso_numero_corp: number | null; imobiliaria: { nome: string } | null } | null;
 };
 
 const CLASSE: Record<string, { texto: string; cor: string }> = {
@@ -66,8 +68,10 @@ function Chips({ e }: { e: Pick<Extrato, "n_cheia" | "n_pro_labore" | "n_estorno
   );
 }
 
-export default async function ErpBaixasPage({ searchParams }: { searchParams: Promise<{ erro?: string; sucesso?: string; aprovado?: string; tratar?: string; extrato?: string }> }) {
-  const { erro, sucesso, aprovado, tratar, extrato: extratoAberto } = await searchParams;
+export default async function ErpBaixasPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+  const sp = await searchParams;
+  const { erro, sucesso, aprovado, tratar, extrato: extratoAberto } = sp;
+  const filtros = lerFiltros(sp);
   const supabase = await createClient();
   const {
     data: { user },
@@ -75,14 +79,48 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
   if (!isAdmin(user?.email) && !isColaboradorO2(user?.email)) redirect("/");
 
   // Premissa de velocidade do ERP: resumos vêm das views por extrato (agregado por índice em extrato_id); as linhas só
-  // do extrato aberto (?extrato=) e só as "para tratar" em aberto — nunca todas as linhas de todos os extratos.
-  const SEL_LINHA = "id, extrato_id, n, tipo, apolice, parcela, cliente, premio, valor_comissao, pct_doc, pct_recebido, valor_esperado, pct_pro_labore, valor_falta, conferencia, motivo_auto, ja_baixada_corp, documento_id, tratar_motivo, tratar_resolvido_em, tratar_por_email, documento:erp_documentos(nosso_numero_corp)";
-  const [{ data: mensaisBrutos }, { data: extratosBrutos }] = await Promise.all([
-    supabase.from("erp_baixa_assistida_mensal").select("*").order("mes", { ascending: false }).order("seguradora").order("corretora"),
-    supabase.from("erp_baixa_assistida_resumo").select("*").order("mes", { ascending: false }).order("seguradora").order("created_at"),
-  ]);
+  // do extrato aberto (?extrato=), as "para tratar" em aberto e as que casam com a busca/imobiliária/classificação.
+  // Filtros padronizados (premissa 5): seguradora, corretora e período (data de recebimento) recortam os extratos;
+  // busca (apólice / Nosso Nº / cliente), imobiliária e classificação recortam as LINHAS.
+  const SEL_LINHA = "id, extrato_id, n, tipo, apolice, parcela, cliente, premio, valor_comissao, pct_doc, pct_recebido, valor_esperado, pct_pro_labore, valor_falta, conferencia, motivo_auto, ja_baixada_corp, documento_id, tratar_motivo, tratar_resolvido_em, tratar_por_email, documento:erp_documentos(nosso_numero_corp, imobiliaria:imobiliarias!erp_documentos_imobiliaria_principal_id_fkey(nome))";
+  let qResumo = supabase.from("erp_baixa_assistida_resumo").select("*").order("mes", { ascending: false }).order("seguradora").order("created_at");
+  let qMensal = supabase.from("erp_baixa_assistida_mensal").select("*").order("mes", { ascending: false }).order("seguradora").order("corretora");
+  if (filtros.seguradora) { qResumo = qResumo.eq("seg_abrev", filtros.seguradora); qMensal = qMensal.eq("seg_abrev", filtros.seguradora); }
+  if (filtros.corretora) { qResumo = qResumo.eq("corretora", filtros.corretora); qMensal = qMensal.eq("corretora", filtros.corretora); }
+  if (filtros.de) { qResumo = qResumo.gte("data_recebimento", filtros.de); qMensal = qMensal.gte("mes", filtros.de.slice(0, 7) + "-01"); }
+  if (filtros.ate) { qResumo = qResumo.lte("data_recebimento", filtros.ate); qMensal = qMensal.lte("mes", filtros.ate.slice(0, 7) + "-01"); }
+  if (filtros.situacao === "a_aprovar") qResumo = qResumo.is("baixa_aprovada_em", null);
+  if (filtros.situacao === "aprovada") qResumo = qResumo.not("baixa_aprovada_em", "is", null);
+  const [{ data: mensaisBrutos }, { data: extratosBrutos }] = await Promise.all([qMensal, qResumo]);
   const mensais = (mensaisBrutos ?? []) as Mensal[];
-  const extratos = (extratosBrutos ?? []) as Extrato[];
+  let extratos = (extratosBrutos ?? []) as Extrato[];
+
+  // Filtros de linha: busca, imobiliária, classificação.
+  const classe = filtros.situacao && CLASSE[filtros.situacao] ? filtros.situacao : null;
+  const filtroLinha = Boolean(filtros.q || filtros.imobiliaria || classe);
+  let linhasFiltradas: LinhaExtrato[] = [];
+  if (filtroLinha && extratos.length) {
+    const imobIds = filtros.imobiliaria ? await idsImobiliarias(supabase, filtros.imobiliaria) : null;
+    const sel = imobIds ? SEL_LINHA.replace("documento:erp_documentos(", "documento:erp_documentos!inner(") : SEL_LINHA;
+    let q = supabase.from("erp_extrato_linhas").select(sel).in("extrato_id", extratos.map((e) => e.id));
+    if (imobIds) q = q.in("documento.imobiliaria_principal_id", imobIds.length ? imobIds : ["00000000-0000-0000-0000-000000000000"]);
+    if (classe) q = q.eq("conferencia", classe);
+    if (filtros.q) {
+      const t = filtros.q.replace(/[%_,()]/g, "");
+      const dig = t.replace(/\D/g, "");
+      const ors = [`apolice.ilike.%${t}%`, `cliente.ilike.%${t}%`];
+      if (dig && dig.length <= 7) {
+        const { data: docs } = await supabase.from("erp_documentos").select("id").eq("nosso_numero_corp", Number(dig)).limit(5);
+        for (const d of (docs ?? []) as { id: string }[]) ors.push(`documento_id.eq.${d.id}`);
+      }
+      q = q.or(ors.join(","));
+    }
+    const { data } = await q.order("extrato_id").order("n").limit(300);
+    linhasFiltradas = (data ?? []) as unknown as LinhaExtrato[];
+    const comLinha = new Set(linhasFiltradas.map((l) => l.extrato_id));
+    extratos = extratos.filter((e) => comLinha.has(e.id));
+  }
+
   const extratoPorId = Object.fromEntries(extratos.map((e) => [e.id, e]));
   const meses = [...new Set(mensais.map((m) => m.mes))];
   const pendentes = extratos.filter((e) => !e.baixa_aprovada_em && e.tipo !== "resumo_mensal");
@@ -105,6 +143,10 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
   const linhasParaCorp = aprovados.reduce((t, e) => t + Number(e.linhas) - Number(e.n_nao_encontrada), 0);
   const jaBaixadasCorp = aprovados.reduce((t, e) => t + Number(e.ja_baixadas_corp), 0);
   const card = (e: Extrato) => <ExtratoCard key={e.id} e={e} aberto={e.id === extratoAberto} linhas={e.id === extratoAberto ? linhasAbertas : []} />;
+  const SITUACOES: Record<string, string> = {
+    a_aprovar: "Extrato a aprovar", aprovada: "Extrato com baixa aprovada",
+    cheia: "Linha: cheia", pro_labore_direto: "Linha: pró-labore conferido", estorno: "Linha: estorno", divergente: "Linha: divergente", nao_encontrada: "Linha: não encontrada",
+  };
 
   return (
     <>
@@ -126,6 +168,73 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
           </p>
         )}
         {sucesso && <p className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-800">Salvo.</p>}
+
+        <FiltrosErp
+          caminho="/erp/baixas"
+          campos={["busca", "seguradora", "corretora", "imobiliaria", "periodo", "situacao"]}
+          valores={filtros}
+          placeholderBusca="Apólice, Nosso Nº (Corp) ou cliente…"
+          rotuloPeriodo="Data de recebimento"
+          situacoes={SITUACOES}
+          resumo={
+            <>
+              {extratos.length} extrato(s) · {pendentes.length} a aprovar · {aprovados.length} aprovado(s)
+              {filtroLinha ? ` · ${linhasFiltradas.length}${linhasFiltradas.length === 300 ? "+" : ""} linha(s) encontrada(s)` : ""}
+              {filtros.imobiliaria ? " · imobiliária procurada na base única pelo nome" : ""}
+            </>
+          }
+        />
+
+        {filtroLinha && (
+          <section className="space-y-2 rounded-xl border border-o2-navy bg-white p-4">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Linhas encontradas ({linhasFiltradas.length}{linhasFiltradas.length === 300 ? "+" : ""})</h2>
+            {linhasFiltradas.length === 0 ? (
+              <p className="text-xs text-gray-500">Nenhuma linha de extrato com esse filtro.</p>
+            ) : (
+              <div className="max-h-[420px] overflow-auto">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+                    <tr>
+                      <th className="px-2 py-1">Extrato</th>
+                      <th className="px-2 py-1">Classificação</th>
+                      <th className="px-2 py-1">Nº Corp</th>
+                      <th className="px-2 py-1">Apólice</th>
+                      <th className="px-2 py-1">Parc.</th>
+                      <th className="px-2 py-1">Cliente</th>
+                      <th className="px-2 py-1">Imobiliária</th>
+                      <th className="px-2 py-1 text-right">Recebido</th>
+                      <th className="px-2 py-1 text-right">Esperado</th>
+                      <th className="px-2 py-1">Obs.</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {linhasFiltradas.map((l) => {
+                      const e = extratoPorId[l.extrato_id];
+                      return (
+                        <tr key={l.id}>
+                          <td className="px-2 py-1">
+                            <Link href={`/erp/baixas?extrato=${l.extrato_id}#extrato-${l.extrato_id}`} className="text-o2-navy hover:underline">
+                              {e?.seg_abrev} · {e ? formatarData(e.data_recebimento ?? e.competencia) : ""}
+                            </Link>
+                          </td>
+                          <td className="px-2 py-1"><span className={`rounded-full px-2 py-0.5 ${CLASSE[l.conferencia ?? ""]?.cor ?? "bg-gray-100"}`}>{CLASSE[l.conferencia ?? ""]?.texto ?? "—"}</span></td>
+                          <td className="px-2 py-1">{l.documento_id ? <Link href={`/erp/documentos/${l.documento_id}`} className="text-o2-navy hover:underline">{l.documento?.nosso_numero_corp ?? "ver"}</Link> : "—"}</td>
+                          <td className="px-2 py-1">{l.apolice}</td>
+                          <td className="px-2 py-1">{l.parcela ?? "—"}</td>
+                          <td className="max-w-[180px] truncate px-2 py-1" title={l.cliente ?? ""}>{l.cliente}</td>
+                          <td className="max-w-[160px] truncate px-2 py-1">{l.documento?.imobiliaria?.nome ?? "—"}</td>
+                          <td className="px-2 py-1 text-right">{brl(l.valor_comissao)}</td>
+                          <td className="px-2 py-1 text-right">{brl(l.valor_esperado)}</td>
+                          <td className="max-w-[260px] px-2 py-1 text-gray-500">{l.motivo_auto ?? (l.conferencia === "pro_labore_direto" ? `pró-labore ${pct(l.pct_pro_labore)} pago direto à imob` : "")}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
 
         <section className="space-y-2 rounded-xl border border-gray-200 bg-white p-4 text-xs text-gray-600">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Como cada linha é classificada</h2>

@@ -304,3 +304,8 @@ select erp_conferir_extratos(null);
 --   Porto 897 cheias, 7 pró-labore, 266 divergentes (70 "parece pró-labore"), 6 estornos, 23 não encontradas. Quase tudo de
 --   agosto já estava baixado no Corp. erp_cruzar_extratos inteiro ≈ 2,7 s; resumo mensal 5 ms.
 -- Tela /erp/baixas: linhas carregadas só do extrato aberto (?extrato=) e só as "para tratar" em aberto; RascunhoAutomatico no motivo.
+
+-- 25/10 (noite) — filtros padronizados na /erp/baixas (premissa 5 do ERP, componente FiltrosErp): busca (apólice / Nosso Nº /
+-- cliente), seguradora, corretora, imobiliária (base única, pelo documento casado), período = data de recebimento e situação
+-- (extrato a aprovar/aprovado ou classificação da linha). Migration erp_fase2_baixa_resumo_data_recebimento: coluna
+-- data_recebimento no erp_baixa_assistida_resumo. Filtros de linha mostram a seção "Linhas encontradas" (até 300).
