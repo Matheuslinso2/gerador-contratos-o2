@@ -73,6 +73,8 @@ async function casarEmLotes(sb: ReturnType<typeof createServiceClient>) {
   }
   const { data, error } = await sb.rpc("erp_corp_quitar_parcelas");
   console.log("parcelas quitadas:", error ? error.message : data);
+  const r3 = await sb.rpc("erp_atualizar_conferencia_corp");
+  console.log("conferência ERP × Power BI (tela):", r3.error ? r3.error.message : r3.data);
   const r2 = await sb.rpc("erp_atualizar_baixa_corp_mensal");
   console.log("baixa mensal (tela de conferência):", r2.error ? r2.error.message : r2.data);
 }

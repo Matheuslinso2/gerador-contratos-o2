@@ -1,4 +1,5 @@
 import Link from "next/link";
+import RascunhoAutomatico from "@/components/RascunhoAutomatico";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
@@ -55,6 +56,8 @@ const PRODUTOS: Record<string, string> = {
 };
 
 const inputClass = "rounded-lg border border-gray-300 px-2 py-1 text-xs focus:border-o2-coral focus:outline-none";
+
+export const metadata = { title: "Seguradoras" };
 
 export default async function ErpSeguradorasPage({ searchParams }: { searchParams: Promise<{ erro?: string; sucesso?: string }> }) {
   const { erro, sucesso } = await searchParams;
@@ -161,6 +164,7 @@ export default async function ErpSeguradorasPage({ searchParams }: { searchParam
             </tbody>
           </table>
           <form action={salvarRegraProduto} className="flex flex-wrap items-end gap-2 border-t border-gray-100 pt-3">
+            <RascunhoAutomatico chave="erp-regra-produto-nova" />
             <label className="flex flex-col gap-1 text-[11px] text-gray-500">
               Seguradora
               <select name="seguradora_id" className={inputClass} required defaultValue="">

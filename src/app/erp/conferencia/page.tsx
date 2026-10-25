@@ -92,6 +92,8 @@ type BaixaMensal = {
 type BaixaAtraso = { mes: string; corretora: string; seguradora: string; bruto: number; media_3m: number; situacao: string };
 const brl = (v: number | null | undefined) => (v == null ? "—" : Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 
+export const metadata = { title: "Conferência" };
+
 export default async function ErpConferenciaPage() {
   const supabase = await createClient();
   const {
@@ -99,9 +101,9 @@ export default async function ErpConferenciaPage() {
   } = await supabase.auth.getUser();
   if (!isAdmin(user?.email) && !isColaboradorO2(user?.email)) redirect("/");
 
-  const [{ data: todas }, { data: difs }, { data: alertasBrutos, error: erroAlertas }, { data: todosAlertas }, { data: foraBrutos, error: erroFora }, { data: extratosBrutos }, { data: pendentesBaixa }, { data: baixasBrutas }, { data: atrasosBrutos }] = await Promise.all([
-    supabase.from("erp_conferencia_corp").select("mes", { count: "exact", head: true }),
-    supabase.from("erp_conferencia_corp").select("*").or("dif_docs.neq.0,dif_comissao.gte.0.01,dif_comissao.lte.-0.01").order("mes", { ascending: false }),
+  const [{ data: difs }, { data: alertasBrutos, error: erroAlertas }, { data: todosAlertas }, { data: foraBrutos, error: erroFora }, { data: extratosBrutos }, { data: pendentesBaixa }, { data: baixasBrutas }, { data: atrasosBrutos }] = await Promise.all([
+    // tabela pronta (só as células que diferem), refeita a cada carga do robô do Corp — premissa de desempenho do ERP
+    supabase.from("erp_conferencia_corp_pronto").select("*").order("mes", { ascending: false }),
     supabase
       .from("erp_alertas_fatura_pronto")
       .select("documento_id, codigo_o2, nosso_numero_corp, numero_apolice, situacao, vigencia_inicio, efetivacao, imobiliaria, seguradora, fatura_prevista, fatura_carregada_vencimento, alerta, gerado_em")
@@ -119,7 +121,6 @@ export default async function ErpConferenciaPage() {
   if (erroAlertas) console.error("erp_alertas_fatura:", erroAlertas.message);
   const alertas = (alertasBrutos ?? []) as AlertaFatura[];
   const contagemAlertas = ((todosAlertas ?? []) as { alerta: string; n: number }[]).reduce<Record<string, number>>((acc, a) => ({ ...acc, [a.alerta]: Number(a.n) }), {});
-  void todas;
   const fora = (foraBrutos ?? []) as ForaFatura[];
   if (erroFora) console.error("erp_fora_das_ultimas_faturas:", erroFora.message);
   const extratos = (extratosBrutos ?? []) as ExtratoResumo[];

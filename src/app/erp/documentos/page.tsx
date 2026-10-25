@@ -25,6 +25,8 @@ const COR_SITUACAO: Record<string, string> = {
   devolvido: "bg-red-100 text-red-700",
 };
 
+export const metadata = { title: "Documentos" };
+
 export default async function ErpDocumentosPage({
   searchParams,
 }: {

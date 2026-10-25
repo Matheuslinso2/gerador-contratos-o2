@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 
-export const metadata = { title: "Início" };
+export const metadata = { title: { absolute: "ERP O2" } };
 
 // Tela inicial do ERP O2: atalhos para as áreas e o que está pedindo atenção agora.
 // Lê só tabelas prontas/contagens leves (regra de desempenho do Workspace).

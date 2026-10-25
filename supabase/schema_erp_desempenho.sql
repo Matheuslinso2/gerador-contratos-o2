@@ -1,0 +1,12 @@
+-- ERP O2 — premissas de desempenho do Workspace aplicadas ao ERP (Matheus 25/10/2026).
+-- Aplicado via MCP apply_migration: erp_desempenho_premissas_workspace.
+-- Medição antes: /erp/conferencia 8,5 s, /erp 3–6,6 s, /erp/documentos 2,2 s.
+--   view erp_conferencia_corp (varre o espelho do Corp) 1,4 s + 1,7 s  → tabela erp_conferencia_corp_pronto
+--     (só as células que diferem) + erp_atualizar_conferencia_corp(), chamada pelo scripts/erp/carregar-comissoes-corp.ts
+--     (passo 2b do robo-corp.cmd, 12h e 20h).
+--   erp_comissao_recebimentos filtrado por origem sem índice 1,1 s → erp_comissao_recebimentos_origem_idx
+--   contagem de erp_documentos.revisao_pendente 0,65 s → erp_documentos_revisao_idx (parcial)
+--   lista de documentos (order vigencia_inicio desc, nosso_numero desc + count exact) → erp_documentos_lista_idx,
+--     erp_documentos_situacao_idx e contagem estimada quando não há filtro (src/lib/erp/documentos.ts).
+-- As premissas (tabela pronta, índice, loading.tsx, aviso de versão silencioso, RascunhoAutomatico) estão escritas no
+-- topo de src/app/erp/layout.tsx.

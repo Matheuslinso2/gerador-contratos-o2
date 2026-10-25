@@ -22,6 +22,8 @@ function Campo({ rotulo, valor }: { rotulo: string; valor: React.ReactNode }) {
 
 const AGENTE: Record<string, string> = { imob: "Imobiliária", parceiro: "Parceiro", pessoa: "Pessoa", canal: "Canal", marcador: "Marcador", o2: "O2 (venda direta)" };
 
+export const metadata = { title: "Documento" };
+
 export default async function ErpDocumentoFichaPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
