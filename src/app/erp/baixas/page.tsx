@@ -104,7 +104,7 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
           subtitulo="Cada extrato da seguradora conferido apólice por apólice. Você confere o resumo e aprova; o ERP grava o recebimento e monta a lista para lançar no Corp."
         />
         <p className="text-sm text-gray-600">
-          <Link href="/erp/conferencia" className="underline">← Conferência</Link>. Os extratos chegam de hora em hora pelo e-mail e pela pasta do Drive “BAIXA DE COMISSÃO / EXTRATOS DE COMISSÃO (o ERP lê daqui)”.
+          <Link href="/erp/conferencia" className="underline">← Conferência</Link>. Os extratos chegam de hora em hora pelo e-mail e pela pasta oficial do Drive “- RELATÓRIO COMISSÃO SEGURADORAS” (seguradora → ano → mês).
           Nada é lançado no Corp por aqui: a lista pronta sai em planilha para o financeiro (baixa pelo valor bruto, previsão de repasse dia 15 do mês seguinte).
         </p>
 

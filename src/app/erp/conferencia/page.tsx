@@ -329,7 +329,7 @@ export default async function ErpConferenciaPage() {
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Extratos de comissão das seguradoras</h2>
           <p className="text-xs text-gray-500">
-            Lidos de hora em hora de duas fontes: o e-mail (Pottencial mensal, Too semanal, Tokio só o total do mês) e a pasta do Drive “BAIXA DE COMISSÃO / EXTRATOS DE COMISSÃO (o ERP lê daqui)”, onde a equipe coloca os extratos baixados dos sites das seguradoras (pasta da corretora → pasta da seguradora).
+            Lidos de hora em hora de duas fontes: o e-mail (Pottencial mensal, Too semanal, Tokio só o total do mês) e a pasta oficial do Drive “- RELATÓRIO COMISSÃO SEGURADORAS”, onde a equipe salva os extratos baixados dos sites das seguradoras (seguradora → ano → mês, arquivo com a data de recebimento).
             Cada linha é casada com o documento e a parcela do ERP e conferida contra o previsto; a baixa é aprovada em <Link href="/erp/baixas" className="underline">Baixa de comissão assistida</Link>.
           </p>
           <div className="flex flex-wrap items-center gap-2 text-xs">
