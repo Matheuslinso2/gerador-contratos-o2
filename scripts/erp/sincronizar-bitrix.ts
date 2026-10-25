@@ -26,7 +26,7 @@ async function main() {
     const r = await sincronizarSpa(sb, cfg, { desde, gravar, comentarios, apenasCards: apenasCards.length ? apenasCards : undefined });
     console.log(`${gravar ? "GRAVADO" : "SIMULAÇÃO"} · SPA ${r.spa} ${r.nome} · cards desde ${desde}: ${r.cards} · ${Math.round((Date.now() - t0) / 1000)} s`);
     console.log(`  criados: ${r.criados} | ligados a documento do Corp: ${r.ligados_ao_corp} | atualizados: ${r.atualizados}`);
-    console.log(`  sem imobiliária: ${r.sem_imobiliaria} | sem CPF/CNPJ do cliente: ${r.sem_cliente} | comentários: ${r.comentarios_capturados} | erros: ${r.erros.length}`);
+    console.log(`  sem imobiliária: ${r.sem_imobiliaria} | sem CPF/CNPJ do cliente: ${r.sem_cliente} | comentários: ${r.comentarios_capturados} | renovações ligadas: ${r.renovacoes_ligadas} | erros: ${r.erros.length}`);
     for (const e of r.erros.slice(0, 10)) console.log(`  erro card ${e.card}: ${e.erro}`);
   }
 }

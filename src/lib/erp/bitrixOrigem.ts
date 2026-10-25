@@ -65,6 +65,7 @@ export type Extraido = {
   nnCorp: number | null;
   numeroApolice: string | null;
   numeroProposta: string | null;
+  anterior: { apolice: string | null; proposta: string | null }; // renovação: liga ao documento anterior (thread, como o Corp)
   cliente: { documento: string | null; nome: string | null; email: string | null; telefone: string | null };
   imobTexto: string | null; // nome/código da imobiliária quando o card não usa Empresa
   tipoContratacao: "indicacao_imobiliaria" | "venda_direta" | "frota" | "canal" | null;
@@ -109,6 +110,7 @@ export const CONFIGS: ConfigSpa[] = [
         comissaoPct: num(r.ufCrm10_1779820737) ?? (cfg?.comissao ? num(r[cfg.comissao]) : null), repassePct: null,
         vigIni: data(r.ufCrm10_1779821934), vigFim: data(r.ufCrm10_1779821962),
         nnCorp: num(r.ufCrm10_1778258392), numeroApolice: null, numeroProposta: null,
+        anterior: { apolice: texto(r.ufCrm10_1790800677), proposta: null },
         cliente: { documento: cpf1, nome: texto(r.ufCrm10_1776354897), email: texto(r.ufCrm10_1783366659), telefone: texto(r.ufCrm10_1783366668) },
         imobTexto: texto(r.ufCrm10_1783371296),
         tipoContratacao: it.companyId ? "indicacao_imobiliaria" : voceE.includes("Pretendente") || voceE.includes("Proprietário") ? "venda_direta" : null,
@@ -158,6 +160,7 @@ export const CONFIGS: ConfigSpa[] = [
         repassePct: repDec !== null ? (repDec <= 1 ? repDec * 100 : repDec) : num(r.ufCrm12RepassePercentual),
         vigIni: data(r.ufCrm12CompetenciaOperacional), vigFim: data(r.ufCrm12FimVigencia),
         nnCorp: null, numeroApolice: texto(r.ufCrm12NumApolice), numeroProposta: texto(r.ufCrm12NumOrcamento),
+        anterior: { apolice: null, proposta: null },
         cliente: { documento: cpf, nome: texto(it.title), email: null, telefone: null },
         imobTexto: null,
         tipoContratacao: origem.includes("Segimob") ? "canal" : it.companyId ? "indicacao_imobiliaria" : null,
@@ -194,6 +197,7 @@ export const CONFIGS: ConfigSpa[] = [
         comissaoPct: num(r.ufCrm14CapComissaoPct), repassePct: null,
         vigIni: data(r.ufCrm14CapVigInicio), vigFim: data(r.ufCrm14CapVigFim),
         nnCorp: null, numeroApolice: null, numeroProposta: texto(r.ufCrm14CapNumProposta),
+        anterior: { apolice: null, proposta: texto(r.ufCrm14_1792781102) },
         cliente: { documento: docCliente, nome: nomeCliente, email: texto(r.ufCrm14CapLocatEmail) ?? texto(r.ufCrm14CapEmailEnvio), telefone: texto(r.ufCrm14CapLocatFone) },
         imobTexto: texto(r.ufCrm14CapImobAdmin),
         tipoContratacao: origem.includes("Imobili") ? "indicacao_imobiliaria" : origem.includes("Corretor") ? "canal" : origem.includes("Propriet") ? "venda_direta" : null,
@@ -220,7 +224,7 @@ export const CONFIGS: ConfigSpa[] = [
         produto: "automovel", ramoAbrev: "AUTO", corretora: "corretora", tipo: "A", tipo_corp: "NOVO",
         seguradoraNome: null, premio: num(r.ufCrm16_1787061422), parcelas: num(r.ufCrm16_1787060548431),
         comissaoPct: num(r.ufCrm16_1787060483253), repassePct: null,
-        vigIni: null, vigFim: null, nnCorp: null, numeroApolice: null, numeroProposta: null,
+        vigIni: null, vigFim: null, nnCorp: null, numeroApolice: null, numeroProposta: null, anterior: { apolice: null, proposta: null },
         cliente: { documento: null, nome: texto(r.ufCrm16_1787056933080) ?? texto(it.title), email: texto(r.ufCrm16_1787056957386), telefone: texto(r.ufCrm16_1787056962877) },
         imobTexto: null,
         tipoContratacao: it.companyId ? "indicacao_imobiliaria" : "venda_direta", canalVenda: it.companyId ? null : "venda_direta",
@@ -277,12 +281,12 @@ export function dadosLegiveis(item: BitrixItemRaw, defs: Defs): Record<string, u
 
 export type ResumoSincronizacao = {
   spa: number; nome: string; cards: number; criados: number; ligados_ao_corp: number; atualizados: number;
-  sem_imobiliaria: number; sem_cliente: number; comentarios_capturados: number; erros: { card: number; erro: string }[];
+  sem_imobiliaria: number; sem_cliente: number; comentarios_capturados: number; renovacoes_ligadas: number; erros: { card: number; erro: string }[];
 };
 type Opcoes = { desde: string; gravar: boolean; comentarios: number; apenasCards?: number[]; apenasAlterados?: boolean };
 
 export async function sincronizarSpa(sb: SupabaseClient, cfg: ConfigSpa, o: Opcoes): Promise<ResumoSincronizacao> {
-  const r: ResumoSincronizacao = { spa: cfg.entityTypeId, nome: cfg.nome, cards: 0, criados: 0, ligados_ao_corp: 0, atualizados: 0, sem_imobiliaria: 0, sem_cliente: 0, comentarios_capturados: 0, erros: [] };
+  const r: ResumoSincronizacao = { spa: cfg.entityTypeId, nome: cfg.nome, cards: 0, criados: 0, ligados_ao_corp: 0, atualizados: 0, sem_imobiliaria: 0, sem_cliente: 0, comentarios_capturados: 0, renovacoes_ligadas: 0, erros: [] };
   const [todos, historico, defs, etapas] = await Promise.all([listarItensSpa(cfg.entityTypeId), listarHistoricoEtapas(cfg.entityTypeId), buscarDefinicaoCampos(cfg.entityTypeId) as Promise<Defs>, listarEtapas(cfg.entityTypeId)]);
   let itens = todos.filter((i) => String(i.createdTime).slice(0, 10) >= o.desde);
   if (o.apenasCards?.length) itens = itens.filter((i) => o.apenasCards!.includes(Number(i.id)));
@@ -404,6 +408,27 @@ export async function sincronizarSpa(sb: SupabaseClient, cfg: ConfigSpa, o: Opco
       if (!o.gravar || !docId) continue;
 
       await sb.from("erp_chaves_externas").upsert({ sistema: "bitrix", entidade: "documento", entidade_id: docId, chave, dados: { entityTypeId: cfg.entityTypeId, itemId: id } }, { onConflict: "sistema,entidade,chave" });
+
+      // renovação: liga ao documento anterior pelo nº da apólice/proposta citado no card (thread, como o Corp)
+      if (x.tipo_corp === "RENV" && (x.anterior.apolice || x.anterior.proposta)) {
+        const { data: atualDoc } = await sb.from("erp_documentos").select("documento_renovado_id").eq("id", docId).single();
+        if (!atualDoc?.documento_renovado_id) {
+          // o card cita "apólice anterior" ou "proposta anterior", mas o Corp guarda o nº do título/apólice
+          // em numero_apolice — procura as duas referências nas duas colunas
+          let ant: { id: string } | null = null;
+          for (const ref of [x.anterior.apolice, x.anterior.proposta].filter((v): v is string => !!v)) {
+            for (const coluna of ["numero_apolice", "numero_proposta"] as const) {
+              ant = (await sb.from("erp_documentos").select("id").eq(coluna, ref).neq("id", docId).order("vigencia_inicio", { ascending: false }).limit(1).maybeSingle()).data;
+              if (ant) break;
+            }
+            if (ant) break;
+          }
+          if (ant) {
+            await sb.from("erp_documentos").update({ documento_renovado_id: ant.id }).eq("id", docId);
+            r.renovacoes_ligadas++;
+          }
+        }
+      }
 
       const { data: itemExistente } = await sb.from("erp_documento_itens").select("id").eq("documento_id", docId).eq("item_n", 1).maybeSingle();
       if (!itemExistente && (x.item || x.partes.length || x.coberturas.length)) {
