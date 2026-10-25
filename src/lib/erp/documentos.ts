@@ -31,7 +31,7 @@ export const SITUACOES: Record<string, string> = {
   proposta: "Proposta",
   recusado: "Recusado (cotação)",
   perdido: "Perdido (negociação)",
-  digitado: "Digitado (sem apólice)",
+  digitado: "Efetivada · em emissão",
   emitido: "Emitido",
   vigente: "Vigente",
   vencido: "Vencido",

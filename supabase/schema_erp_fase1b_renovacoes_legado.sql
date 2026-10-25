@@ -57,3 +57,33 @@ language sql stable set search_path = public as $$
   order by t.nivel, d.vigencia_inicio
 $$;
 grant execute on function erp_familia_documento(uuid) to authenticated;
+
+create index if not exists erp_documentos_renovado_idx on erp_documentos(documento_renovado_id);
+create index if not exists erp_documentos_imob_seg_vigfim_idx on erp_documentos(imobiliaria_principal_id, seguradora_id, vigencia_fim);
+
+-- 2ª passada: documentos em emissão/sem cliente ligado (ex.: 133629 da Lia Mara, digitado sem apólice):
+-- liga quando há UM único candidato com mesma imobiliária, mesma seguradora, mesmo produto e
+-- vigência encostada (até 3 dias). O cliente chega depois pelo casamento com o card/PDF.
+create or replace function erp_ligar_renovacoes_legado_sem_cliente()
+returns table (ligadas int)
+language plpgsql security definer set search_path = public as $$
+declare v_lig int;
+begin
+  alter table erp_documentos disable trigger erp_documentos_aud;
+  create temp table _ren2 on commit drop as
+  select d.id,
+    (select array_agg(d2.id) from erp_documentos d2 join erp_ramos r2 on r2.id = d2.ramo_id
+      where d2.id <> d.id and d2.tipo = 'A' and d2.tipo_corp <> 'CANC' and r2.produto = r.produto
+        and d2.imobiliaria_principal_id = d.imobiliaria_principal_id and d2.seguradora_id = d.seguradora_id
+        and d2.vigencia_fim between d.vigencia_inicio - 3 and d.vigencia_inicio + 3
+        and not exists (select 1 from erp_documentos d3 where d3.documento_renovado_id = d2.id)) as candidatos
+  from erp_documentos d join erp_ramos r on r.id = d.ramo_id
+  where d.origem = 'corp_import' and d.tipo = 'A' and d.tipo_corp = 'RENV' and d.documento_renovado_id is null
+    and d.locatario_id is null and d.imobiliaria_principal_id is not null and d.vigencia_inicio is not null;
+  update erp_documentos d set documento_renovado_id = x.candidatos[1] from _ren2 x where x.id = d.id and array_length(x.candidatos, 1) = 1;
+  get diagnostics v_lig = row_count;
+  alter table erp_documentos enable trigger erp_documentos_aud;
+  return query select v_lig;
+end $$;
+revoke all on function erp_ligar_renovacoes_legado_sem_cliente() from public;
+-- select * from erp_ligar_renovacoes_legado_sem_cliente();
