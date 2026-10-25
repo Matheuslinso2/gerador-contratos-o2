@@ -125,11 +125,14 @@ export default function RascunhoAutomatico({ chave: chaveFixa, sufixo }: { chave
     let pronto = false;
     // Depois de um envio que deu certo, só volta a guardar se a pessoa mexer de novo.
     let aguardandoEdicao = false;
+    // Só guarda depois que a PESSOA mexer (evento de verdade, não os que o
+    // próprio rascunho dispara ao repor) -- abrir e sair sem digitar não cria rascunho.
+    let editado = false;
     let cancelado = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
 
     const salvar = () => {
-      if (!pronto || parado.current || aguardandoEdicao) return;
+      if (!pronto || !editado || parado.current || aguardandoEdicao) return;
       try {
         const campos = serializar(form);
         if (Object.keys(campos).length) window.localStorage.setItem(prefixo(chave), JSON.stringify({ salvoEm: Date.now(), campos } satisfies Rascunho));
@@ -138,7 +141,9 @@ export default function RascunhoAutomatico({ chave: chaveFixa, sufixo }: { chave
         // armazenamento cheio/bloqueado: segue sem rascunho
       }
     };
-    const agendar = () => {
+    const agendar = (e: Event) => {
+      if (!e.isTrusted) return;
+      editado = true;
       aguardandoEdicao = false;
       clearTimeout(timer);
       timer = setTimeout(salvar, 400);
