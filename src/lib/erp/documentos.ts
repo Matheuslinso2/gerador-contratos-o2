@@ -51,7 +51,22 @@ export const TIPOS_DOCUMENTO: Record<string, string> = {
   X: "End. cancelamento de apólice",
 };
 
-export const TIPO_CORP: Record<string, string> = { NOVO: "Novo", RENV: "Renovação", END: "Endosso", FAT: "Fatura", CANC: "Cancelamento" };
+/** Nome por extenso do tipo do documento (Matheus 25/10: deixar explícito se é apólice nova, renovada, endosso…). */
+export function nomeTipoDocumento(tipo: string, tipoCorp: string | null): { nome: string; cor: string } {
+  if (tipo === "A") return tipoCorp === "RENV" ? { nome: "Apólice renovada", cor: "bg-indigo-100 text-indigo-800" } : { nome: "Apólice nova", cor: "bg-green-100 text-green-800" };
+  if (tipo === "F") return { nome: "Fatura", cor: "bg-sky-100 text-sky-800" };
+  const nomes: Record<string, string> = {
+    C: "Endosso de cobrança",
+    D: "Devolução de documento",
+    I: "Endosso de cancelamento de item",
+    M: "Endosso sem prêmio",
+    R: "Endosso de restituição",
+    X: "Endosso de cancelamento da apólice",
+  };
+  return { nome: nomes[tipo] ?? tipo, cor: tipo === "X" || tipo === "I" ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-800" };
+}
+
+export const TIPO_CORP: Record<string, string> ={ NOVO: "Novo", RENV: "Renovação", END: "Endosso", FAT: "Fatura", CANC: "Cancelamento" };
 
 // Decisão 3 do Matheus (25/10): nem todo produto tem imobiliária; só o modo fatura exige produtor.
 export const TIPO_CONTRATACAO: Record<string, string> = {

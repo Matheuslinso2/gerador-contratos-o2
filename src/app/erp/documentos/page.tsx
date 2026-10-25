@@ -5,7 +5,7 @@ import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import PageHeader from "@/components/PageHeader";
 import { IconReport } from "@/components/icons";
 import { formatarData, formatarReais } from "@/lib/sinistros/regras";
-import { buscarDocumentos, SITUACOES, TIPOS_DOCUMENTO, TIPO_CORP } from "@/lib/erp/documentos";
+import { buscarDocumentos, nomeTipoDocumento, SITUACOES, TIPOS_DOCUMENTO } from "@/lib/erp/documentos";
 import { lerFiltros } from "@/lib/erp/filtros";
 import FiltrosErp from "../FiltrosErp";
 
@@ -125,8 +125,8 @@ export default async function ErpDocumentosPage({
                         {SITUACOES[d.situacao] ?? d.situacao}
                       </span>
                     </td>
-                    <td className="px-3 py-2" title={TIPOS_DOCUMENTO[d.tipo]}>
-                      {d.tipo} · {d.tipo_corp ? TIPO_CORP[d.tipo_corp] ?? d.tipo_corp : "—"}
+                    <td className="px-3 py-2" title={`${d.tipo} · ${TIPOS_DOCUMENTO[d.tipo] ?? d.tipo}`}>
+                      <span className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-medium ${nomeTipoDocumento(d.tipo, d.tipo_corp).cor}`}>{nomeTipoDocumento(d.tipo, d.tipo_corp).nome}</span>
                     </td>
                     <td className="px-3 py-2">{d.cliente ?? <span className="text-gray-400">sem cliente ligado</span>}</td>
                     <td className="px-3 py-2">

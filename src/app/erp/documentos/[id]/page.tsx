@@ -5,7 +5,7 @@ import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { formatarData, formatarReais } from "@/lib/sinistros/regras";
 import RascunhoAutomatico from "@/components/RascunhoAutomatico";
 import { ligarEndossoApolice } from "./actions";
-import { buscarFichaDocumento, SITUACOES, TIPOS_DOCUMENTO, TIPO_CORP, TIPO_CONTRATACAO, MODO_COBRANCA } from "@/lib/erp/documentos";
+import { buscarFichaDocumento, nomeTipoDocumento, SITUACOES, TIPOS_DOCUMENTO, TIPO_CORP, TIPO_CONTRATACAO, MODO_COBRANCA } from "@/lib/erp/documentos";
 
 export const dynamic = "force-dynamic";
 
@@ -63,6 +63,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
             ← Documentos
           </Link>
           <div className="flex flex-wrap items-baseline gap-3">
+            <span className={`rounded-md px-2.5 py-1 text-sm font-semibold uppercase tracking-wide ${nomeTipoDocumento(d.tipo, d.tipo_corp).cor}`}>{nomeTipoDocumento(d.tipo, d.tipo_corp).nome}</span>
             <h1 className="text-xl font-semibold text-o2-navy">
               Código O2 {d.nosso_numero} · {d.cliente ?? "cliente não ligado"}
             </h1>
