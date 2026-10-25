@@ -143,7 +143,10 @@ export default async function ErpDocumentoFichaPage({ params }: { params: Promis
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                   <Campo rotulo="Imóvel" valor={[it.logradouro, it.numero, it.complemento].filter(Boolean).join(", ") || "—"} />
                   <Campo rotulo="Cidade / UF / CEP" valor={[it.cidade, it.uf, it.cep].filter(Boolean).join(" · ") || "—"} />
-                  <Campo rotulo="Tipo / plano" valor={[it.tipo_imovel, it.plano].filter(Boolean).join(" · ") || "—"} />
+                  <Campo
+                    rotulo="Tipo / plano / administração"
+                    valor={[it.tipo_imovel, it.plano, it.administrado === true ? "administrado pela imob" : it.administrado === false ? "NÃO administrado (só intermediação)" : null].filter(Boolean).join(" · ") || "—"}
+                  />
                   <Campo rotulo="Aluguel" valor={it.valor_aluguel === null ? "—" : formatarReais(it.valor_aluguel)} />
                 </div>
                 {it.partes.length > 0 && (

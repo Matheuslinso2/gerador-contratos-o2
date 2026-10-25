@@ -74,7 +74,7 @@ export type Extraido = {
   modoCobranca: "individual" | "fatura";
   formaPagamento: string | null;
   observacoes: string | null;
-  item: { tipo_imovel?: string | null; cep?: string | null; logradouro?: string | null; numero?: string | null; complemento?: string | null; bairro?: string | null; cidade?: string | null; uf?: string | null; valor_aluguel?: number | null; plano?: string | null; observacoes?: string | null; placa?: string | null; veiculo?: string | null } | null;
+  item: { administrado?: boolean | null; tipo_imovel?: string | null; cep?: string | null; logradouro?: string | null; numero?: string | null; complemento?: string | null; bairro?: string | null; cidade?: string | null; uf?: string | null; valor_aluguel?: number | null; plano?: string | null; observacoes?: string | null; placa?: string | null; veiculo?: string | null } | null;
   partes: { papel: "garantido" | "locatario" | "proprietario" | "condutor" | "beneficiario"; nome: string | null; documento_numero: string | null; ordem: number }[];
   coberturas: { nome: string; importancia_segurada: number | null }[];
 };
@@ -118,6 +118,7 @@ export const CONFIGS: ConfigSpa[] = [
         canalVenda: null, modoCobranca: "individual", formaPagamento: null,
         observacoes: texto(r.ufCrm10_1776352503),
         item: {
+          administrado: (() => { const a = rotulo(defs, "ufCrm10_1781116076", r.ufCrm10_1781116076); if (a === "Sim") return true; if (a === "Não") return false; if (r.ufCrm10_1788957284213 === "Y" || r.ufCrm10_1788957828053 === "Y") return true; if (r.ufCrm10_1788957284213 === "N") return false; return null; })(),
           tipo_imovel: tipoLoc.includes("comerc") ? "comercial" : tipoLoc.includes("resid") ? "residencial" : null,
           cep: texto(r.ufCrm10_1776351647), logradouro: texto(r.ufCrm10_1776351662), numero: texto(r.ufCrm10_1776351686), complemento: texto(r.ufCrm10_1776351702),
           cidade: texto(r.ufCrm10_1776351708), uf: rotulo(defs, "ufCrm10_1776351720", r.ufCrm10_1776351720),

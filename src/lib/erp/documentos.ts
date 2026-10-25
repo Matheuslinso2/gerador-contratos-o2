@@ -195,6 +195,7 @@ export type FamiliaDoc = {
 export type ItemDoc = {
   id: string;
   item_n: number;
+  administrado: boolean | null;
   tipo_imovel: string | null;
   logradouro: string | null;
   numero: string | null;
@@ -315,7 +316,7 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
     sb.from("erp_documentos").select("id, nosso_numero").eq("documento_renovado_id", id).limit(10),
     sb
       .from("erp_documento_itens")
-      .select("id, item_n, tipo_imovel, logradouro, numero, complemento, cidade, uf, cep, valor_aluguel, plano, observacoes, partes:erp_item_partes(papel, nome, documento_numero, ordem), coberturas:erp_item_coberturas(nome, importancia_segurada)")
+      .select("id, item_n, administrado, tipo_imovel, logradouro, numero, complemento, cidade, uf, cep, valor_aluguel, plano, observacoes, partes:erp_item_partes(papel, nome, documento_numero, ordem), coberturas:erp_item_coberturas(nome, importancia_segurada)")
       .eq("documento_id", id)
       .order("item_n"),
     sb

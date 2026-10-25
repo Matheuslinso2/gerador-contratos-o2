@@ -49,3 +49,9 @@ alter table erp_documentos add constraint erp_documentos_origem_check
 alter table erp_documentos drop constraint if exists erp_documentos_situacao_check;
 alter table erp_documentos add constraint erp_documentos_situacao_check check (situacao in
   ('cotacao','proposta','recusado','perdido','digitado','emitido','vigente','vencido','cancelado','devolvido'));
+
+-- 25/10 (noite): imóvel ADMINISTRADO × NÃO ADMINISTRADO (Matheus): administrado = a imobiliária cuida
+-- da locação na vigência (taxa de administração mensal, cobra e é o contato); não administrado = só
+-- apresentou as partes (comissão única), o proprietário cuida. Vem do card de Fiança
+-- ("Imóvel será administrado?" / ADMINISTRADO?) e muda cobrança (fatura × individual) e contato na renovação.
+alter table erp_documento_itens add column if not exists administrado boolean;
