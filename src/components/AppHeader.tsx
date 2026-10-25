@@ -24,11 +24,23 @@ export default function AppHeader({
         </Link>
 
         {userEmail && (
-          <form action={logoutAction}>
-            <button type="submit" className="text-sm text-white/70 hover:text-white hover:underline">
-              {userEmail} · Sair
-            </button>
-          </form>
+          <div className="flex items-center gap-4">
+            {(isAdmin(userEmail) || isColaboradorO2(userEmail)) && (
+              // ERP O2: aplicativo à parte do mesmo grupo (25/10/2026) — a única porta para ele no Workspace
+              <Link
+                href="/erp"
+                className="rounded-full border border-o2-coral px-3 py-1 text-xs font-semibold text-white hover:bg-o2-coral"
+                title="Abrir o ERP O2 (sistema de gestão)"
+              >
+                ERP O2 ↗
+              </Link>
+            )}
+            <form action={logoutAction}>
+              <button type="submit" className="text-sm text-white/70 hover:text-white hover:underline">
+                {userEmail} · Sair
+              </button>
+            </form>
+          </div>
         )}
       </div>
 

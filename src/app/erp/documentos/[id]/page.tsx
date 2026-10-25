@@ -2,10 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
-import AppHeader from "@/components/AppHeader";
 import { formatarData, formatarReais } from "@/lib/sinistros/regras";
 import { buscarFichaDocumento, SITUACOES, TIPOS_DOCUMENTO, TIPO_CORP, TIPO_CONTRATACAO, MODO_COBRANCA } from "@/lib/erp/documentos";
-import { signOut } from "../../../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -45,8 +43,7 @@ export default async function ErpDocumentoFichaPage({ params }: { params: Promis
 
   return (
     <>
-      <AppHeader userEmail={user?.email} logoutAction={signOut} />
-      <main className="mx-auto max-w-[1100px] flex-1 space-y-6 p-8">
+      <main className="mx-auto w-full max-w-[1100px] flex-1 space-y-6 p-8">
         <div className="space-y-2">
           <Link href="/erp/documentos" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-o2-navy hover:underline">
             ← Documentos

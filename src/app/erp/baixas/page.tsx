@@ -2,11 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
-import AppHeader from "@/components/AppHeader";
 import PageHeader from "@/components/PageHeader";
 import { IconReport } from "@/components/icons";
 import { formatarData } from "@/lib/sinistros/regras";
-import { signOut } from "../../actions";
 import { aprovarBaixa, salvarTratativa } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -99,8 +97,7 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
 
   return (
     <>
-      <AppHeader userEmail={user?.email} logoutAction={signOut} />
-      <main className="mx-auto max-w-[1200px] flex-1 space-y-6 p-8">
+      <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-6 p-8">
         <PageHeader
           icon={<IconReport />}
           titulo="ERP O2 — Baixa de comissão assistida"

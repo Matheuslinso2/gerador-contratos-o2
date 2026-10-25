@@ -2,11 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
-import AppHeader from "@/components/AppHeader";
 import PageHeader from "@/components/PageHeader";
 import { IconReport } from "@/components/icons";
 import { formatarData, formatarReais } from "@/lib/sinistros/regras";
-import { signOut } from "../../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -135,8 +133,7 @@ export default async function ErpConferenciaPage() {
 
   return (
     <>
-      <AppHeader userEmail={user?.email} logoutAction={signOut} />
-      <main className="mx-auto max-w-[1100px] flex-1 space-y-6 p-8">
+      <main className="mx-auto w-full max-w-[1100px] flex-1 space-y-6 p-8">
         <PageHeader
           icon={<IconReport />}
           titulo="ERP O2 — Conferência com o Corp"

@@ -3,6 +3,7 @@ import { Poppins } from "next/font/google";
 import Footer from "@/components/Footer";
 import BotaoWhatsApp from "@/components/BotaoWhatsApp";
 import AvisoNovaVersao from "@/components/AvisoNovaVersao";
+import ForaDoErp from "@/components/ForaDoErp";
 import "./globals.css";
 
 const poppins = Poppins({
@@ -25,8 +26,10 @@ export default function RootLayout({
     <html lang="pt-BR" className={`${poppins.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col bg-o2-gray print:bg-white">
         {children}
-        <Footer />
-        <BotaoWhatsApp />
+        <ForaDoErp>
+          <Footer />
+          <BotaoWhatsApp />
+        </ForaDoErp>
         <AvisoNovaVersao />
       </body>
     </html>
