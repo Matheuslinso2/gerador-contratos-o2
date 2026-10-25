@@ -16,7 +16,7 @@ import path from "node:path";
 import sharp from "sharp";
 import { chromium, type BrowserContext, type Page } from "playwright";
 
-type Relatorio = { id: string; tipo: "grade" | "clientes" | "sinistros"; de?: string; ate?: string; pasta: string };
+type Relatorio = { id: string; tipo: "grade" | "clientes" | "sinistros" | "comissoes_recebidas" | "comissoes_pendentes"; de?: string; ate?: string; pasta: string };
 type Config = {
   url: string;
   corretora: { usuario: string; senha: string };
@@ -46,6 +46,9 @@ const ARVORE: Record<Relatorio["tipo"], { grupo: string; item: string }> = {
   grade: { grupo: "Documentos", item: "Propostas Grade por Produtor" },
   clientes: { grupo: "Clientes", item: "com Documentos" },
   sinistros: { grupo: "Sinistros", item: "Geral - Grade" },
+  // ERP O2 (25/10/2026): baixa de comissão por data de quitação e comissões em aberto por vencimento
+  comissoes_recebidas: { grupo: "Comissões", item: "Recebidas" },
+  comissoes_pendentes: { grupo: "Comissões", item: "Pendentes" },
 };
 
 const agora = () => new Date().toLocaleString("sv-SE", { timeZone: "America/Sao_Paulo" }).replace(" ", "_").replace(/:/g, "-");
@@ -398,7 +401,17 @@ export function gradesEmUso(relatorios: Relatorio[], hoje = new Date()): Relator
     const coberto = grades.some((r) => r.de && r.ate && dataBr(r.de) <= new Date(Date.UTC(ano, 0, 1)) && dataBr(r.ate) >= new Date(Date.UTC(ano, 11, 31)));
     if (!coberto) escolhidas.push({ id: `grade_prods_${ano}`, tipo: "grade", de: `01/01/${ano}`, ate: `31/12/${ano}`, pasta });
   }
-  return [...escolhidas, ...relatorios.filter((r) => r.tipo !== "grade")];
+  // Comissões recebidas (baixa por data de quitação): só os arquivos por ano que cobrem o período aberto;
+  // ano sem linha no config vira comissoes_recebidas_AAAA (01/01 a hoje). Os anos fechados ficam na base.
+  const receb = relatorios.filter((r) => r.tipo === "comissoes_recebidas");
+  const pastaC = receb[0]?.pasta ?? "ERP_COMISSOES";
+  const hojeBr = hoje.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+  const recebEscolhidas = receb.filter((r) => r.de && dataBr(r.de) <= new Date(Date.UTC(a, m - 1, d)) && (!r.ate || r.ate === "hoje" || dataBr(r.ate) >= inicio));
+  for (let ano = inicio.getUTCFullYear(); ano <= a; ano++) {
+    if (!receb.some((r) => r.id === `comissoes_recebidas_${ano}`)) recebEscolhidas.push({ id: `comissoes_recebidas_${ano}`, tipo: "comissoes_recebidas", de: `01/01/${ano}`, ate: ano === a ? "hoje" : `31/12/${ano}`, pasta: pastaC });
+  }
+  void hojeBr;
+  return [...escolhidas, ...relatorios.filter((r) => r.tipo !== "grade" && r.tipo !== "comissoes_recebidas"), ...recebEscolhidas];
 }
 
 async function main() {
@@ -443,7 +456,7 @@ async function main() {
         await selecionarRelatorio(page, r);
         if (r.tipo === "grade") await preencherFiltrosGrade(page, r);
         if (r.tipo === "clientes") await preencherFiltrosClientes(page, r);
-        if (r.tipo === "sinistros") await preencherPeriodo(page, r);
+        if (r.tipo === "sinistros" || r.tipo === "comissoes_recebidas" || r.tipo === "comissoes_pendentes") await preencherPeriodo(page, r);
         feitos.push(await exportarExcel(page, r, cfg));
       }
       await fecharRelatorio(page);

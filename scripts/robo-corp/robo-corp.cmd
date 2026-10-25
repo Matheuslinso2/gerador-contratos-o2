@@ -18,6 +18,10 @@ rem 2) carrega no espelho do Workspace (enquanto o acesso direto ao SharePoint n
 call npx.cmd tsx scripts/corp-sharepoint/carregar-local.ts "%USERPROFILE%\.robo-corp\saida" >> %LOG% 2>&1
 if errorlevel 1 echo carga no Workspace falhou: %errorlevel% >> %LOG%
 
+rem 2b) ERP: baixa de comissao (Comissoes Recebidas) e comissoes em aberto (Pendentes) do Corp
+call npx.cmd tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/erp/carregar-comissoes-corp.ts "%USERPROFILE%\.robo-corp\saida" --gravar >> %LOG% 2>&1
+if errorlevel 1 echo carga das comissoes no ERP falhou: %errorlevel% >> %LOG%
+
 rem 3) produtor novo no Corp ganha registro/ficha pela regra do Power BI
 call npx.cmd tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/base-unica/aplicar-power-bi.ts --gravar >> %LOG% 2>&1
 

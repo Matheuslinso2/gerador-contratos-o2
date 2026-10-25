@@ -83,6 +83,15 @@ type ExtratoResumo = {
   parcelas: number;
 };
 
+// Baixa de comissão (ERP Fase 2, 25/10): Corp → Comissões → Recebidas (data de quitação), por mês × corretora ×
+// seguradora, no formato da planilha CONTROLE BAIXA: bruto → imposto → desconto (empréstimo Porto) → líquido esperado.
+// "Pró-labore pago direto" = fatia que Tokio/Yelum pagam direto à imobiliária (não é divergência).
+type BaixaMensal = {
+  mes: string; corretora: string; seguradora: string; linhas: number; bruto: number; premiacao: number | null;
+  imposto_pct: number; imposto: number; desconto: number; liquido_esperado: number; pro_labore_pago_direto: number | null; gerado_em: string;
+};
+const brl = (v: number | null | undefined) => (v == null ? "—" : Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+
 export default async function ErpConferenciaPage() {
   const supabase = await createClient();
   const {
@@ -90,7 +99,7 @@ export default async function ErpConferenciaPage() {
   } = await supabase.auth.getUser();
   if (!isAdmin(user?.email) && !isColaboradorO2(user?.email)) redirect("/");
 
-  const [{ data: todas }, { data: difs }, { data: alertasBrutos, error: erroAlertas }, { data: todosAlertas }, { data: foraBrutos, error: erroFora }, { data: extratosBrutos }, { data: recebimentos }] = await Promise.all([
+  const [{ data: todas }, { data: difs }, { data: alertasBrutos, error: erroAlertas }, { data: todosAlertas }, { data: foraBrutos, error: erroFora }, { data: extratosBrutos }, { data: recebimentos }, { data: baixasBrutas }] = await Promise.all([
     supabase.from("erp_conferencia_corp").select("mes", { count: "exact", head: true }),
     supabase.from("erp_conferencia_corp").select("*").or("dif_docs.neq.0,dif_comissao.gte.0.01,dif_comissao.lte.-0.01").order("mes", { ascending: false }),
     supabase
@@ -102,7 +111,8 @@ export default async function ErpConferenciaPage() {
     supabase.rpc("erp_contar_alertas_fatura"),
     supabase.from("erp_fora_faturas_pronto").select("documento_id, codigo_o2, nosso_numero_corp, numero_apolice, imobiliaria, seguradora, produto, vigencia_inicio, faturas_carregadas, parcela_na_janela, no_extrato").order("seguradora").order("imobiliaria").limit(400),
     supabase.from("erp_extratos_resumo").select("*").order("created_at", { ascending: false }).limit(40),
-    supabase.from("erp_comissao_recebimentos").select("diferenca").limit(5000),
+    supabase.from("erp_comissao_recebimentos").select("diferenca").eq("origem", "extrato").limit(5000),
+    supabase.from("erp_baixa_corp_mensal_pronto").select("*").gte("mes", new Date(new Date().getFullYear(), new Date().getMonth() - 3, 1).toISOString().slice(0, 10)).order("mes", { ascending: false }).order("corretora").order("seguradora"),
   ]);
   const diferencas = (difs ?? []) as Linha[];
   if (erroAlertas) console.error("erp_alertas_fatura:", erroAlertas.message);
@@ -112,6 +122,8 @@ export default async function ErpConferenciaPage() {
   const fora = (foraBrutos ?? []) as ForaFatura[];
   if (erroFora) console.error("erp_fora_das_ultimas_faturas:", erroFora.message);
   const extratos = (extratosBrutos ?? []) as ExtratoResumo[];
+  const baixas = (baixasBrutas ?? []) as BaixaMensal[];
+  const mesesBaixa = [...new Set(baixas.map((b) => b.mes))];
   const difRecebimentos = ((recebimentos ?? []) as { diferenca: number | null }[]).map((r) => Number(r.diferenca ?? 0));
   const recebIguais = difRecebimentos.filter((d) => Math.abs(d) < 0.05).length;
   const recebMenos = difRecebimentos.filter((d) => d <= -0.05).length;
@@ -238,6 +250,60 @@ export default async function ErpConferenciaPage() {
                 </tbody>
               </table>
             </div>
+          )}
+        </section>
+
+        <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Baixa de comissão (Corp) — formato da planilha CONTROLE BAIXA</h2>
+          <p className="text-xs text-gray-500">
+            Corp → Comissões → Recebidas, por data de quitação, exportado pelo robô do Corp (12h e 20h). O2 Capitalização = ramos 2FIA/2IMO/2POR, CAP2 e premiação (PREM).
+            Líquido esperado = bruto − imposto retido − desconto da seguradora (empréstimo da Porto). “Pró-labore pago direto” é a fatia que Tokio/Yelum pagam à imobiliária: não entra na conta da O2 e não é divergência.
+            A coluna do Nibo entra quando o token estiver na Vercel.{baixas[0]?.gerado_em ? ` Atualizado ${formatarData(baixas[0].gerado_em)}.` : ""}
+          </p>
+          {mesesBaixa.length === 0 ? (
+            <p className="text-xs text-gray-500">Nenhuma baixa carregada.</p>
+          ) : (
+            mesesBaixa.map((mes) => {
+              const doMes = baixas.filter((b) => b.mes === mes);
+              const tot = (k: keyof BaixaMensal) => doMes.reduce((s, b) => s + Number(b[k] ?? 0), 0);
+              return (
+                <details key={mes} open={mes === mesesBaixa[0]} className="rounded-lg border border-gray-100">
+                  <summary className="cursor-pointer px-2 py-1 text-xs font-semibold text-o2-navy">
+                    {mes.slice(5, 7)}/{mes.slice(0, 4)} · bruto {brl(tot("bruto"))} · líquido esperado {brl(tot("liquido_esperado"))}
+                  </summary>
+                  <div className="overflow-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+                        <tr>
+                          <th className="px-2 py-1">Corretora</th>
+                          <th className="px-2 py-1">Seguradora</th>
+                          <th className="px-2 py-1 text-right">Bruto</th>
+                          <th className="px-2 py-1 text-right">Imposto</th>
+                          <th className="px-2 py-1 text-right">Desconto</th>
+                          <th className="px-2 py-1 text-right">Líquido esperado</th>
+                          <th className="px-2 py-1 text-right">Premiação</th>
+                          <th className="px-2 py-1 text-right">Pró-labore pago direto</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {doMes.map((b) => (
+                          <tr key={b.corretora + b.seguradora}>
+                            <td className="px-2 py-1">{b.corretora}</td>
+                            <td className="px-2 py-1">{b.seguradora}</td>
+                            <td className="px-2 py-1 text-right">{brl(b.bruto)}</td>
+                            <td className="px-2 py-1 text-right">{Number(b.imposto_pct) ? `${brl(b.imposto)} (${Number(b.imposto_pct)}%)` : "—"}</td>
+                            <td className="px-2 py-1 text-right">{Number(b.desconto) ? brl(b.desconto) : "—"}</td>
+                            <td className="px-2 py-1 text-right font-semibold">{brl(b.liquido_esperado)}</td>
+                            <td className="px-2 py-1 text-right">{b.premiacao ? brl(b.premiacao) : "—"}</td>
+                            <td className="px-2 py-1 text-right text-gray-500">{b.pro_labore_pago_direto ? brl(b.pro_labore_pago_direto) : "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              );
+            })
           )}
         </section>
 

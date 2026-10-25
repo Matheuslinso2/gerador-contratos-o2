@@ -1,0 +1,42 @@
+-- ERP O2 — Fase 2 (25/10/2026): baixa de comissão vinda do Corp, descontos da seguradora e pró-labore pago direto.
+-- Aplicado via MCP apply_migration: erp_fase2_comissoes_corp, _v2, _lotes, erp_fase2_parcelas_do_corp_comissoes,
+-- erp_fase2_descontos_e_pro_labore_direto, erp_fase2_pro_labore_inferido_e_baixa_mensal, erp_fase2_baixa_corp_mensal_pronto.
+--
+-- FONTE: Corp → Consultas → Gerenciador de Relatórios → Comissões →
+--   • Recebidas (Período por Data de Quitação, "da Corretora") = a coluna CORP da planilha CONTROLE BAIXA;
+--   • Pendentes (Período por Data de Vencimento) = comissões em aberto.
+-- Exportados pelo robô do Corp (scripts/robo-corp/exportar.ts, tipos comissoes_recebidas / comissoes_pendentes;
+-- arquivos comissoes_recebidas_AAAA.xlsx por ano em uso e comissoes_pendentes.xlsx 2025→2027) e carregados por
+-- scripts/erp/carregar-comissoes-corp.ts (passo 2b do robo-corp.cmd, 12h e 20h). Histórico 2024–2026 carregado em 25/10.
+-- Mapeado com o robô de exploração scripts/robo-corp/explorar.ts (fotos em scripts/robo-corp/saida/explorar).
+--
+-- CONFERÊNCIA com a planilha do financeiro (ago/26, out/25, jan/26, jun/26): Tokio, Brasilcap, Alfa, Allianz, Bradesco,
+-- Icatu, SulAmérica, Yelum, Zurich, Too, Pottencial e as linhas da O2 Cap batem ao centavo (Tokio Corretora ± poucas
+-- dezenas de reais = ajustes lançados depois no Corp). Porto diverge (planilha com pendências em aberto, ex. ago/26).
+--
+-- REGRAS
+--   corretora: ramo começando com "2" (2FIA, 2IMO, 2POR), CAP2 e PREM (premiação) = O2 Capitalização; o resto = O2 Corretora.
+--   casamento: Nosso Nº do Corp → erp_documentos (endosso pelo nº do endosso); parcela n/total (total 1 → parcela 1).
+--   documentos do legado sem parcela no ERP (11.514) ganharam as parcelas do próprio relatório (origem 'corp_comissoes').
+--   cada baixa vira erp_comissao_recebimentos (origem 'corp', diferenca = recebido − previsto) e marca erp_parcelas.quitada_em.
+--
+-- TABELAS / FUNÇÕES
+--   erp_corp_comissoes (linhas cruas recebida/pendente, CPF/CNPJ do cliente = dado pessoal, RLS colaborador)
+--   erp_corp_casar_documentos / erp_corp_casar_parcelas / erp_corp_criar_parcelas / erp_corp_gravar_baixas (em lotes)
+--   erp_corp_quitar_parcelas, erp_aplicar_comissoes_corp (chama as etapas)
+--   erp_baixa_corp_mensal (view) + erp_baixa_corp_mensal_pronto (tabela da tela) + erp_atualizar_baixa_corp_mensal()
+--     = mês × corretora × seguradora: bruto, premiação, imposto (erp_imposto_retido), desconto, líquido esperado,
+--       pró-labore pago direto.
+--
+-- DESCONTOS DA SEGURADORA (Matheus 25/10): a Porto emprestou à O2 e desconta a parcela todo início de mês da comissão
+-- (~15 mil/mês): o extrato traz as apólices, o somatório e depois o desconto.
+--   erp_descontos_recorrentes (regra: Porto × O2 Corretora × empréstimo, 15.000/mês, a confirmar valor/início/fim)
+--   erp_descontos_comissao (por mês; histórico jan/25–mai/26 inferido da planilha = bruto × (1 − imposto) − líquido,
+--     origem 'planilha'; mar, jun e jul/26 sem desconto na planilha → confirmar)
+--
+-- PRÓ-LABORE PAGO DIRETO (Matheus 25/10): algumas seguradoras pagam o repasse/pró-labore direto à imobiliária (NF da imob);
+-- a seguradora não paga essa fatia à O2, mas o Corp registra a comissão cheia e o % de repasse.
+--   Achado nos dados: Tokio e Yelum. No Corp a parcela é baixada só com o % recebido (ex.: Yelum Monte Alegre 45% de 70%);
+--   a fatia da imobiliária não fica pendente, fica como diferença. Desde jul/25: Tokio 365 mil, Yelum 88 mil.
+--   erp_repasse_direto_seguradora (imobiliária [banco único] × seguradora × pct; inferido das baixas de 2026,
+--     fonte 'inferido_corp', confirmado = false → o financeiro confirma).
