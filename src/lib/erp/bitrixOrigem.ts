@@ -341,6 +341,9 @@ export async function sincronizarSpa(sb: SupabaseClient, cfg: ConfigSpa, o: Opco
     try {
       const chave = `${cfg.entityTypeId}:${id}`;
       const x = cfg.extrair(item, defs);
+      // o funil manda: renovação/endosso pela categoria do card, independente do que a extração assumiu
+      if (cfg.renovacaoCategorias.includes(Number(item.categoryId))) x.tipo_corp = "RENV";
+      if (cfg.endossoCategorias.includes(Number(item.categoryId))) { x.tipo_corp = "END"; x.tipo = "C"; }
       const sit = situacaoDoCard(cfg, item, etapas);
       // produtor: Empresa do card → ficha; senão, texto do card resolvido pela base única (nunca cria ficha)
       let imobId = item.companyId ? imobPorEmpresa.get(String(item.companyId)) ?? null : null;
@@ -395,7 +398,7 @@ export async function sincronizarSpa(sb: SupabaseClient, cfg: ConfigSpa, o: Opco
         const { data: atual } = await sb.from("erp_documentos").select("origem, locatario_id, imobiliaria_principal_id, tipo_contratacao, seguradora_id, numero_apolice, numero_proposta").eq("id", docId).single();
         const patch: Record<string, unknown> = {};
         if (atual?.origem === "bitrix") {
-          Object.assign(patch, { situacao: sit.situacao, motivo_cancelamento: sit.motivo ?? null, vigencia_inicio: x.vigIni, vigencia_fim: x.vigFim, seguradora_id: seg ?? atual.seguradora_id, qtd_parcelas: x.parcelas, numero_apolice: x.numeroApolice ?? atual.numero_apolice, numero_proposta: x.numeroProposta ?? atual.numero_proposta });
+          Object.assign(patch, { tipo_corp: x.tipo_corp, situacao: sit.situacao, motivo_cancelamento: sit.motivo ?? null, vigencia_inicio: x.vigIni, vigencia_fim: x.vigFim, seguradora_id: seg ?? atual.seguradora_id, qtd_parcelas: x.parcelas, numero_apolice: x.numeroApolice ?? atual.numero_apolice, numero_proposta: x.numeroProposta ?? atual.numero_proposta });
           if (premio) { patch.premio_liquido = premio; patch.premio_total = premio; patch.comissao_valor = Math.round(premio * comissaoPct) / 100; }
           if (comissaoPct) patch.comissao_pct = comissaoPct;
         }
