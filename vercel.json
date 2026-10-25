@@ -130,6 +130,10 @@
     {
       "path": "/api/cron/erp-bitrix?spa=1050",
       "schedule": "32 * * * *"
+    },
+    {
+      "path": "/api/cron/erp-extratos-drive",
+      "schedule": "40 * * * *"
     }
   ]
 }

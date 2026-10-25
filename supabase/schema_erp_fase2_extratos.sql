@@ -62,3 +62,17 @@ create unique index if not exists erp_comissao_recebimentos_linha_uk on erp_comi
 --   view erp_baixa_comissao_mensal = lado ERP (extratos) por corretora × seguradora × mês com líquido esperado.
 -- Achado: os extratos por e-mail cobrem só PARTE da comissão (ago/26: Pottencial e-mail 174 + 269 vs planilha 7.734 + 50.198;
 -- Tokio resumo por e-mail = só a O2 Cap). A fonte completa hoje é a baixa no Corp (relatórios das seguradoras) e o Nibo.
+
+-- ---------------------------------------------------------------------------
+-- 25/10 — Pasta do Drive para extratos baixados dos sites das seguradoras (pedido do Matheus:
+-- "pasta no drive já com as pastas divididas e bem intuitivas para download e leitura pelo sistema";
+-- depois, API da seguradora). Pasta: BAIXA DE COMISSÃO / EXTRATOS DE COMISSÃO (o ERP lê daqui)
+-- (id 1CWbgcf2V2DqYMiG_mCghoZsk6v8fR1EL, drive compartilhado da equipe; conta de serviço prospeccao-leitura só leitura)
+--   └ O2 CORRETORA (CNPJ 20.001.784) / ALFA … ZURICH (17 seguradoras, nomes da planilha CONTROLE BAIXA)
+--   └ O2 CAPITALIZAÇÃO (CNPJ 54.493.758) / BRASILCAP, ICATU, PORTO, POTTENCIAL, TOKIO, TOO
+--   └ 00 LEIA-ME
+-- Código: src/lib/erp/extratosDrive.ts (Pottencial/Too leitores fixos; planilha genérica por nome de coluna;
+-- PDF/texto pela IA); cron /api/cron/erp-extratos-drive (xx:40, até 15 arquivos/rodada); script scripts/erp/carregar-extratos-drive.ts.
+-- Migration erp_fase2_extratos_drive: origem 'drive'/'corp', coluna leitura ('ok'/'nao_lido'), erp_digitos_apolice(),
+-- erp_cruzar_extratos() casando pela seguradora do extrato (qualquer seguradora) e nº do Corp contido no nº do extrato,
+-- view erp_extratos_resumo com corretora/origem/leitura. Mesmo nome de arquivo já lido do e-mail não entra de novo.

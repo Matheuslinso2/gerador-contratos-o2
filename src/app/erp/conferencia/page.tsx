@@ -70,6 +70,9 @@ type ForaFatura = {
 // Tokio só o total do mês; Porto/Yelum só no portal. Linhas casadas por nº de apólice (erp_cruzar_extratos).
 type ExtratoResumo = {
   seguradora: string;
+  corretora: string | null;
+  origem: string;
+  leitura: string;
   tipo: string;
   competencia: string | null;
   total_bruto: number | null;
@@ -241,7 +244,7 @@ export default async function ErpConferenciaPage() {
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Extratos de comissão das seguradoras</h2>
           <p className="text-xs text-gray-500">
-            Lidos do e-mail de hora em hora: Pottencial (demonstrativo mensal, 1 linha por apólice × parcela) e Too (demonstrativo semanal). Tokio só manda o total do mês; Porto e Yelum não mandam extrato por e-mail (só no portal).
+            Lidos de hora em hora de duas fontes: o e-mail (Pottencial mensal, Too semanal, Tokio só o total do mês) e a pasta do Drive “BAIXA DE COMISSÃO / EXTRATOS DE COMISSÃO (o ERP lê daqui)”, onde a equipe coloca os extratos baixados dos sites das seguradoras (pasta da corretora → pasta da seguradora).
             Cada linha é casada com o documento e a parcela do ERP e vira um recebimento de comissão conferido contra o previsto.
           </p>
           <div className="flex flex-wrap gap-2 text-xs">
@@ -257,6 +260,8 @@ export default async function ErpConferenciaPage() {
                 <thead className="sticky top-0 bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
                   <tr>
                     <th className="px-2 py-1">Seguradora</th>
+                    <th className="px-2 py-1">Corretora</th>
+                    <th className="px-2 py-1">Fonte</th>
                     <th className="px-2 py-1">Tipo</th>
                     <th className="px-2 py-1">Competência</th>
                     <th className="px-2 py-1">Total bruto</th>
@@ -270,7 +275,9 @@ export default async function ErpConferenciaPage() {
                   {extratos.map((e, i) => (
                     <tr key={i}>
                       <td className="px-2 py-1">{e.seguradora}</td>
-                      <td className="px-2 py-1">{e.tipo === "resumo_mensal" ? "só total do mês" : "demonstrativo"}</td>
+                      <td className="px-2 py-1">{e.corretora ?? "—"}</td>
+                      <td className="px-2 py-1">{e.origem === "drive" ? "pasta do Drive" : e.origem === "gmail" ? "e-mail" : e.origem}</td>
+                      <td className="px-2 py-1">{e.leitura === "nao_lido" ? <span className="rounded-full bg-red-100 px-2 py-0.5 text-red-700">não lido</span> : e.tipo === "resumo_mensal" ? "só total do mês" : "demonstrativo"}</td>
                       <td className="px-2 py-1">{e.competencia ? e.competencia.slice(0, 7) : "—"}</td>
                       <td className="px-2 py-1">{e.total_bruto != null ? Number(e.total_bruto).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "—"}</td>
                       <td className="px-2 py-1">{e.linhas}</td>

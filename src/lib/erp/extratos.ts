@@ -58,19 +58,19 @@ export const FONTES: Fonte[] = [
   },
 ];
 
-const num = (v: unknown): number | null => {
+export const num = (v: unknown): number | null => {
   if (v === null || v === undefined || v === "") return null;
   if (typeof v === "number") return Number.isFinite(v) ? v : null;
   const s = String(v).trim().replace(/\./g, "").replace(",", ".");
   const n = Number(s);
   return Number.isFinite(n) ? n : null;
 };
-const txt = (v: unknown): string | null => {
+export const txt = (v: unknown): string | null => {
   if (v === null || v === undefined) return null;
   const s = String(v).replace(/ /g, " ").trim();
   return s ? s : null;
 };
-const dataBr = (v: unknown): string | null => {
+export const dataBr = (v: unknown): string | null => {
   const s = txt(v);
   if (!s) return null;
   const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
