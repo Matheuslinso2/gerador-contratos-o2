@@ -40,3 +40,18 @@
 --   a fatia da imobiliária não fica pendente, fica como diferença. Desde jul/25: Tokio 365 mil, Yelum 88 mil.
 --   erp_repasse_direto_seguradora (imobiliária [banco único] × seguradora × pct; inferido das baixas de 2026,
 --     fonte 'inferido_corp', confirmado = false → o financeiro confirma).
+
+-- ---------------------------------------------------------------------------
+-- 25/10 (noite) — Matheus: "o pró-labore é fácil de identificar: falta a cada apólice exatamente o % de pró-labore daquela
+-- produção; se bate, não é pendência de comissão, é pró-labore pago direto à imob". E: "mês sem baixa conferida contra os
+-- extratos = atraso no processo; a baixa precisa ser feita para o fluxo correto ocorrer".
+-- Migrations erp_fase2_conferencia_pro_labore_por_apolice, erp_fase2_pro_labore_regra_maioria, erp_fase2_baixa_mensal_conferida_e_atraso:
+--   erp_corp_comissoes.conferencia: 'cheia' (recebido = base × % doc, ±0,5%) | 'pro_labore_direto' (% doc − % recebido = pró-labore
+--     da imob × seguradora, ±1 ponto) | 'divergente' | 'sem_base' (premiação, base/percentual zerado); pct_falta, valor_falta.
+--   erp_inferir_pro_labore_direto(): regra por imobiliária × seguradora = diferença mais frequente, quando aparece em ≥ 50% das
+--     baixas dela (2024→) e em ≥ 5 parcelas; confirmado = false (fonte 'inferido_corp'). Resultado 25/10: Tokio 68 imobs,
+--     Porto 30, Yelum 18, Alfa 18, Pottencial 12 (25–30%), Allianz 6, Too 5, outros.
+--   erp_conferir_comissoes_corp(lote) no carregador (passo do robô). 2026: 23.840 cheias, 14.498 pró-labore conferido
+--     (246 mil), 5.482 divergentes (45 mil).
+--   erp_baixa_corp_atraso (+ _pronto): mês fechado com baixa < 30% da média dos 3 meses anteriores (sem_baixa / baixa_parcial).
+--     25/10: set/26 com 20 combinações corretora × seguradora atrasadas (Tokio, Porto, Pottencial, Brasilcap…).

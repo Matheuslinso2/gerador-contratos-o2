@@ -59,8 +59,9 @@ function lerLinhas(arq: string, situacao: "recebida" | "pendente") {
 
 // casamento em lotes (cada chamada cabe no tempo da API do banco)
 async function casarEmLotes(sb: ReturnType<typeof createServiceClient>) {
+  // conferir: cada baixa vira cheia / pró-labore pago direto (diferença = pró-labore da imob × seguradora) / divergente
   // criar_parcelas: documento do legado sem parcela no ERP ganha as parcelas do próprio relatório do Corp
-  for (const [fn, lote] of [["erp_corp_casar_documentos", 3000], ["erp_corp_casar_parcelas", 5000], ["erp_corp_criar_parcelas", 1500], ["erp_corp_casar_parcelas", 5000], ["erp_corp_gravar_baixas", 5000]] as const) {
+  for (const [fn, lote] of [["erp_corp_casar_documentos", 3000], ["erp_corp_casar_parcelas", 5000], ["erp_corp_criar_parcelas", 1500], ["erp_corp_casar_parcelas", 5000], ["erp_corp_gravar_baixas", 5000], ["erp_conferir_comissoes_corp", 5000]] as const) {
     let total = 0;
     for (;;) {
       const { data, error } = await sb.rpc(fn, fn === "erp_corp_criar_parcelas" ? { p_limite_docs: lote } : { p_limite: lote });

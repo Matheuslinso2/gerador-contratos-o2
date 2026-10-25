@@ -89,7 +89,9 @@ type ExtratoResumo = {
 type BaixaMensal = {
   mes: string; corretora: string; seguradora: string; linhas: number; bruto: number; premiacao: number | null;
   imposto_pct: number; imposto: number; desconto: number; liquido_esperado: number; pro_labore_pago_direto: number | null; gerado_em: string;
+  linhas_divergentes: number; divergencia: number | null; media_3m: number | null;
 };
+type BaixaAtraso = { mes: string; corretora: string; seguradora: string; bruto: number; media_3m: number; situacao: string };
 const brl = (v: number | null | undefined) => (v == null ? "—" : Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 
 export default async function ErpConferenciaPage() {
@@ -99,7 +101,7 @@ export default async function ErpConferenciaPage() {
   } = await supabase.auth.getUser();
   if (!isAdmin(user?.email) && !isColaboradorO2(user?.email)) redirect("/");
 
-  const [{ data: todas }, { data: difs }, { data: alertasBrutos, error: erroAlertas }, { data: todosAlertas }, { data: foraBrutos, error: erroFora }, { data: extratosBrutos }, { data: recebimentos }, { data: baixasBrutas }] = await Promise.all([
+  const [{ data: todas }, { data: difs }, { data: alertasBrutos, error: erroAlertas }, { data: todosAlertas }, { data: foraBrutos, error: erroFora }, { data: extratosBrutos }, { data: recebimentos }, { data: baixasBrutas }, { data: atrasosBrutos }] = await Promise.all([
     supabase.from("erp_conferencia_corp").select("mes", { count: "exact", head: true }),
     supabase.from("erp_conferencia_corp").select("*").or("dif_docs.neq.0,dif_comissao.gte.0.01,dif_comissao.lte.-0.01").order("mes", { ascending: false }),
     supabase
@@ -113,6 +115,7 @@ export default async function ErpConferenciaPage() {
     supabase.from("erp_extratos_resumo").select("*").order("created_at", { ascending: false }).limit(40),
     supabase.from("erp_comissao_recebimentos").select("diferenca").eq("origem", "extrato").limit(5000),
     supabase.from("erp_baixa_corp_mensal_pronto").select("*").gte("mes", new Date(new Date().getFullYear(), new Date().getMonth() - 3, 1).toISOString().slice(0, 10)).order("mes", { ascending: false }).order("corretora").order("seguradora"),
+    supabase.from("erp_baixa_corp_atraso_pronto").select("mes, corretora, seguradora, bruto, media_3m, situacao").order("mes", { ascending: false }).order("media_3m", { ascending: false }),
   ]);
   const diferencas = (difs ?? []) as Linha[];
   if (erroAlertas) console.error("erp_alertas_fatura:", erroAlertas.message);
@@ -124,6 +127,8 @@ export default async function ErpConferenciaPage() {
   const extratos = (extratosBrutos ?? []) as ExtratoResumo[];
   const baixas = (baixasBrutas ?? []) as BaixaMensal[];
   const mesesBaixa = [...new Set(baixas.map((b) => b.mes))];
+  const atrasos = (atrasosBrutos ?? []) as BaixaAtraso[];
+  const mesesAtraso = [...new Set(atrasos.map((a) => a.mes))];
   const difRecebimentos = ((recebimentos ?? []) as { diferenca: number | null }[]).map((r) => Number(r.diferenca ?? 0));
   const recebIguais = difRecebimentos.filter((d) => Math.abs(d) < 0.05).length;
   const recebMenos = difRecebimentos.filter((d) => d <= -0.05).length;
@@ -257,9 +262,25 @@ export default async function ErpConferenciaPage() {
           <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Baixa de comissão (Corp) — formato da planilha CONTROLE BAIXA</h2>
           <p className="text-xs text-gray-500">
             Corp → Comissões → Recebidas, por data de quitação, exportado pelo robô do Corp (12h e 20h). O2 Capitalização = ramos 2FIA/2IMO/2POR, CAP2 e premiação (PREM).
-            Líquido esperado = bruto − imposto retido − desconto da seguradora (empréstimo da Porto). “Pró-labore pago direto” é a fatia que Tokio/Yelum pagam à imobiliária: não entra na conta da O2 e não é divergência.
+            Líquido esperado = bruto − imposto retido − desconto da seguradora (empréstimo da Porto). Cada baixa é conferida apólice por apólice: % do documento − % recebido. Se a diferença bate com o pró-labore daquela imobiliária naquela seguradora, é “pró-labore conferido” (pago direto à imob, não é pendência); se não bate, é divergência.
             A coluna do Nibo entra quando o token estiver na Vercel.{baixas[0]?.gerado_em ? ` Atualizado ${formatarData(baixas[0].gerado_em)}.` : ""}
           </p>
+          {atrasos.length > 0 && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">
+              <p className="font-semibold">Baixa de comissão atrasada</p>
+              <p className="mt-1 text-red-700">Mês já fechado com baixa no Corp abaixo de 30% da média dos 3 meses anteriores. Sem a baixa, o mês não foi conferido contra os extratos e o fluxo (repasse, conferência, fechamento) fica parado.</p>
+              <ul className="mt-2 space-y-1">
+                {mesesAtraso.map((m) => {
+                  const doMes = atrasos.filter((a) => a.mes === m);
+                  return (
+                    <li key={m}>
+                      <b>{m.slice(5, 7)}/{m.slice(0, 4)}</b>: {doMes.length} {doMes.length === 1 ? "combinação" : "combinações"} — {doMes.map((a) => `${a.seguradora} ${a.corretora === "O2 Capitalização" ? "(Cap)" : ""} ${a.situacao === "sem_baixa" ? "sem baixa" : `baixa ${brl(a.bruto)} de ~${brl(a.media_3m)}`}`).join(" · ")}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
           {mesesBaixa.length === 0 ? (
             <p className="text-xs text-gray-500">Nenhuma baixa carregada.</p>
           ) : (
@@ -282,7 +303,8 @@ export default async function ErpConferenciaPage() {
                           <th className="px-2 py-1 text-right">Desconto</th>
                           <th className="px-2 py-1 text-right">Líquido esperado</th>
                           <th className="px-2 py-1 text-right">Premiação</th>
-                          <th className="px-2 py-1 text-right">Pró-labore pago direto</th>
+                          <th className="px-2 py-1 text-right">Pró-labore conferido</th>
+                          <th className="px-2 py-1 text-right">Divergência</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
@@ -296,6 +318,7 @@ export default async function ErpConferenciaPage() {
                             <td className="px-2 py-1 text-right font-semibold">{brl(b.liquido_esperado)}</td>
                             <td className="px-2 py-1 text-right">{b.premiacao ? brl(b.premiacao) : "—"}</td>
                             <td className="px-2 py-1 text-right text-gray-500">{b.pro_labore_pago_direto ? brl(b.pro_labore_pago_direto) : "—"}</td>
+                            <td className="px-2 py-1 text-right">{b.linhas_divergentes ? <span className="text-orange-700">{brl(b.divergencia)} ({b.linhas_divergentes})</span> : "—"}</td>
                           </tr>
                         ))}
                       </tbody>
