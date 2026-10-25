@@ -103,3 +103,38 @@ export function parsePortoPdf(texto: string): ExtratoPdf | null {
     corretora_cnpj: /O2 CAPITALIZA/i.test(texto) ? "54493758000138" : /O2 CORRETORA/i.test(texto) ? "20001784000180" : null,
   };
 }
+
+// Porto — "Gerar planilha no formato XLS" de cada pagamento (Comissões → Consulta Pagamentos e Pendências → Pagamentos):
+// na verdade é uma tabela HTML (latin1) com as mesmas colunas do Analítico em PDF. Linha de dados = 13 células
+// (Histórico, Marca, Suc., Ramo, Apl/Prop, Fat/Eds, Parc., Carne, Data, Prêmio Líq., Taxa, Comissão, Tipo); premiação
+// "Programa Super" e venda avulsa vêm com menos células (sem Apl/Prop). Rodapé por favorecida: Bruta|INSS|IRRF|ISS|Líquido|Déb/Créd|A pagar.
+export function parsePortoHtml(html: string): ExtratoPdf | null {
+  const limpa = (s: string) => s.replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+  const trs = [...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)].map((m) => [...m[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map((c) => limpa(c[1])));
+  if (!trs.some((r) => r.some((c) => /Anal[ií]tico dos Pagamentos de Comiss/i.test(c)))) return null;
+  const valorDe = (rotulo: RegExp) => { for (const r of trs) { const i = r.findIndex((c) => rotulo.test(c)); if (i >= 0 && r[i + 1]) return r[i + 1]; } return null; };
+  const linhas: LinhaExtrato[] = [];
+  let ultimoRodape: string[] | null = null;
+  for (const [k, r] of trs.entries()) {
+    if (r[0] === "Comissão Bruta" || r[0] === "Comissao Bruta") { const v = trs[k + 1]; if (v && v.length >= 7) ultimoRodape = v; continue; }
+    const iData = r.findIndex((c) => /^\d{4}-\d{2}-\d{2}$/.test(c));
+    if (iData < 2 || r.length < iData + 5) continue;
+    const antes = r.slice(0, iData);
+    const [premio, taxa, com] = r.slice(iData + 1, iData + 4);
+    const tipo = r.slice(iData + 4).join(" ");
+    const completa = antes.length >= 8;
+    const [hist, marca, , ramo, apl, eds, parc] = completa ? antes : [antes[0], "", "", antes[2] ?? "", null, null, null];
+    linhas.push({
+      n: linhas.length + 1, tipo, apolice: apl && apl !== "0/0" ? apl.replace(/\s/g, "") : null, proposta: null, endosso: eds && eds !== "0" ? eds : null,
+      parcela: Number(parc) || (apl && /TOTAL/i.test(tipo) ? 1 : null), cliente: hist || null, cpf_cnpj: null,
+      premio: valor(premio), pct_comissao: valor(taxa), valor_comissao: valor(com), vigencia_inicio: null, produto: `${marca || "Porto"} ramo ${ramo}`,
+    });
+  }
+  if (!linhas.length) return null;
+  const fav = valorDe(/Susep Favorecida/i) ?? "";
+  return {
+    linhas, total_bruto: ultimoRodape ? valor(ultimoRodape[0]) : soma(linhas), total_liquido: ultimoRodape ? valor(ultimoRodape[6]) : null,
+    pago_em: dataBr(valorDe(/Data de Pagamento/i) ?? undefined), numero: valorDe(/Ordem de Pagamento/i), cod_corretor: fav.split(/\s|-/)[0] || null,
+    corretora_cnpj: /CAPITALIZA/i.test(fav) ? "54493758000138" : /CORRETORA/i.test(fav) ? "20001784000180" : null,
+  };
+}

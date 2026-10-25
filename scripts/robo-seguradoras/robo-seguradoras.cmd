@@ -10,3 +10,7 @@ echo ===== %date% %time% ===== >> %LOG%
 rem 1) Tokio Marine (codigos 55002, 195354 e 70145; ultimos 15 dias)
 call npx.cmd tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/robo-seguradoras/tokio.ts %* >> %LOG% 2>&1
 if errorlevel 1 echo Tokio falhou: %errorlevel% >> %LOG%
+
+rem 2) Porto Seguro (favorecidas LI7PMJ e G0852J; mes atual e anterior; so pagamentos ainda nao gravados)
+call npx.cmd tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/robo-seguradoras/porto.ts >> %LOG% 2>&1
+if errorlevel 1 echo Porto falhou: %errorlevel% >> %LOG%

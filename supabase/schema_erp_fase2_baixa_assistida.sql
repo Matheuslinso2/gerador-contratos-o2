@@ -328,3 +328,12 @@ select erp_conferir_extratos(null);
 -- Migration erp_fase2_cruzar_sem_deduzir_boleto: o cruzamento NÃO marca mais modo_cobranca='boleto' por ausência na fatura
 --   (regra do Matheus: forma de pagamento é escolhida na efetivação); os 1.248 documentos marcados em 25/10 voltaram a
 --   'nao_informado' pela erp_auditoria (eles tinham saído do alerta "efetivado e fora da fatura").
+
+-- 25/10 (noite) — PORTO pelo portal (scripts/robo-seguradoras/porto.ts, 2ª etapa do robo-seguradoras.cmd das 20:30).
+-- Comissões → Consulta Pagamentos e Pendências (quadro demonstrativocomissaocorretor): Empresa TODAS, Favorecida LI7PMJ (com a
+-- SUSEP CFU15J no topo) ou G0852J, Tipo Pagamentos, Mês → uma linha por ordem de pagamento com "planilha XLS" (= tabela HTML,
+-- parsePortoHtml em extratosPdf.ts). "Processando" = ainda não liberado (pula; pega na noite seguinte). Login sem senha no robô
+-- (rastreamento de dispositivo da Porto): sessão guardada no perfil do robô, entrada manual quando expirar.
+-- 1ª carga (baixada com o Matheus): set+out/26, 43 ordens de pagamento (LI7PMJ 10+8, G0852J 13+12), todas fecham com o portal,
+-- 2.207 linhas casadas. Empréstimo Porto: débito de R$ 25.949,64 no pagamento grande de set (16/09) e de out (20/10) — e não os
+-- ~R$ 15 mil de erp_descontos_recorrentes → conferir com o financeiro.
