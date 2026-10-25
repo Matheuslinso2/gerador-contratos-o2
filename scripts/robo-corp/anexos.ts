@@ -6,6 +6,8 @@
 //
 // uso: npx tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/robo-corp/anexos.ts [opções]
 //   --fila fianca-vigentes   monta a fila no banco (Fiança vigente sem PDF no acervo) e sai
+//   --fila fora-faturas      monta a fila de PRIORIDADE (prioridade.json): apólices "fora das últimas faturas" do ERP
+//                            (Expan/Tokio primeiro) — a rodada visita a prioridade antes da fila normal
 //   --limite N               processa no máximo N documentos nesta rodada
 //   --ate HH:MM              para de pegar documento novo nesse horário (rodada da noite)
 //   --mapear NN              só fotografa cada passo com o Nosso Nº NN (calibração)
@@ -26,6 +28,7 @@ const PASTA = process.env.APOLICES_CORP || path.join(os.tmpdir(), "o2-apolices-c
 const PDFS = path.join(PASTA, "pdfs");
 const FILA = path.join(PASTA, "fila.json");
 const ESTADO = path.join(PASTA, "estado.json");
+const PRIORIDADE = path.join(PASTA, "prioridade.json");
 fs.mkdirSync(PDFS, { recursive: true });
 
 type Item = { nn: string; produto: string; fim_vig: string };
@@ -35,6 +38,7 @@ const lerJson = <T>(f: string, padrao: T): T => (fs.existsSync(f) ? JSON.parse(f
 
 // ------------------------------------------------------------ fila
 async function montarFila(qual: string) {
+  if (qual === "fora-faturas") return montarPrioridadeForaFaturas();
   if (qual !== "fianca-vigentes") throw new Error(`fila desconhecida: ${qual}`);
   const sb = createServiceClient();
   const hoje = new Date().toISOString().slice(0, 10);
@@ -58,6 +62,27 @@ async function montarFila(qual: string) {
   const fila: Item[] = nns.filter((nn) => !temPdf.has(nn)).sort((a, b) => Number(b) - Number(a)).map((nn) => ({ nn, produto: "fianca", fim_vig: fimDe.get(nn)! }));
   fs.writeFileSync(FILA, JSON.stringify(fila));
   log(`fila: ${fila.length} Fianças vigentes sem PDF no acervo (de ${nns.length} vigentes) → ${FILA}`);
+}
+
+// Prioridade (Matheus 25/10): as apólices que o ERP acusa "fora das últimas faturas" (ex.: 149 Incêndio Tokio da
+// Expan) — o PDF da apólice mostra a forma de cobrança e explica se é fatura ou boleto. Maiores grupos primeiro.
+async function montarPrioridadeForaFaturas() {
+  const sb = createServiceClient();
+  const { data, error } = await sb.from("erp_fora_faturas_pronto").select("nosso_numero_corp, imobiliaria, seguradora, produto, vigencia_inicio");
+  if (error) throw new Error(error.message);
+  const linhas = (data ?? []).filter((l: { nosso_numero_corp: number | null }) => l.nosso_numero_corp) as { nosso_numero_corp: number; imobiliaria: string; seguradora: string; produto: string | null; vigencia_inicio: string | null }[];
+  const tamanho = new Map<string, number>();
+  for (const l of linhas) tamanho.set(`${l.imobiliaria}|${l.seguradora}`, (tamanho.get(`${l.imobiliaria}|${l.seguradora}`) ?? 0) + 1);
+  linhas.sort((a, b) => (tamanho.get(`${b.imobiliaria}|${b.seguradora}`)! - tamanho.get(`${a.imobiliaria}|${a.seguradora}`)!) || b.nosso_numero_corp - a.nosso_numero_corp);
+  const nns = [...new Set(linhas.map((l) => String(l.nosso_numero_corp)))];
+  const temPdf = new Set<string>();
+  for (let i = 0; i < nns.length; i += 300) {
+    const { data: ja } = await sb.from("apolice_documentos").select("nosso_numero").eq("situacao", "certa").in("nosso_numero", nns.slice(i, i + 300));
+    for (const x of ja ?? []) temPdf.add(x.nosso_numero);
+  }
+  const fila: Item[] = nns.filter((nn) => !temPdf.has(nn)).map((nn) => ({ nn, produto: linhas.find((l) => String(l.nosso_numero_corp) === nn)?.produto ?? "?", fim_vig: "" }));
+  fs.writeFileSync(PRIORIDADE, JSON.stringify(fila));
+  log(`prioridade: ${fila.length} apólices fora das faturas sem PDF no acervo (de ${nns.length}) → ${PRIORIDADE}`);
 }
 
 // ------------------------------------------------------------ Corp
@@ -237,9 +262,14 @@ async function rodada(
       log("mapeamento: recorte os modelos a partir de saida/mapa-anexos");
       return true;
     }
-    const fila = lerJson<Item[]>(FILA, []);
+    // a prioridade (--fila fora-faturas) vem antes da fila normal; o mesmo Nosso Nº não entra duas vezes
+    const estado0 = lerJson<Estado>(ESTADO, {});
+    const prioridade = lerJson<Item[]>(PRIORIDADE, []);
+    const naPrioridade = new Set(prioridade.map((i) => i.nn));
+    const fila = [...prioridade, ...lerJson<Item[]>(FILA, []).filter((i) => !naPrioridade.has(i.nn))];
     if (!fila.length) throw new Error("fila vazia: rode com --fila fianca-vigentes");
-    const estado = lerJson<Estado>(ESTADO, {});
+    if (prioridade.length) log(`prioridade: ${prioridade.filter((i) => !estado0[i.nn] || estado0[i.nn].resultado === "erro").length} de ${prioridade.length} ainda a visitar`);
+    const estado = estado0;
     const pendentes = fila.filter((i) => !estado[i.nn] || estado[i.nn].resultado === "erro");
     log(`fila: ${fila.length} | já visitados: ${fila.length - pendentes.length} | nesta rodada: até ${Math.min(limite, pendentes.length)}`);
     let feitos = 0, erros = 0, limiteHorario = false;
