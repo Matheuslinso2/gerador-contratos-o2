@@ -177,6 +177,20 @@ export type DocumentoFicha = DocumentoLista & {
   revisado_por_email: string | null;
   itens: ItemDoc[];
   origens: OrigemDoc[];
+  familia: FamiliaDoc[];
+  cadeia: { canal: string | null; imobiliaria: string | null; grupo: string | null; cliente: string | null };
+};
+/** Corrente de renovações (como a coluna esquerda do Controle de Documentos do Corp). */
+export type FamiliaDoc = {
+  id: string;
+  nosso_numero: number;
+  nosso_numero_corp: number | null;
+  tipo_corp: string | null;
+  situacao: string;
+  vigencia_inicio: string | null;
+  vigencia_fim: string | null;
+  numero_apolice: string | null;
+  nivel: number;
 };
 export type ItemDoc = {
   id: string;
@@ -245,7 +259,7 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
     .from("erp_documentos")
     .select(
       SELECT_LISTA +
-        ", corretora:erp_corretoras(apelido), tipo_contratacao, modo_cobranca, revisao_pendente, revisado_por_email, locatario_id, numero_proposta, numero_endosso, dt_proposta, dt_emissao, qtd_parcelas, forma_pagamento, premio_adicional, iof, comissao_pct, comissao_base, premiacao_valor, cancelado_em, competencia, congelado, fora_regra_pbi, origem, observacoes, digitado_em, documento_renovado_id"
+        ", corretora:erp_corretoras(apelido), canal:erp_canais(nome), imob_grupo:imobiliarias!erp_documentos_imobiliaria_principal_id_fkey(grupo:imobiliaria_grupos(nome)), tipo_contratacao, modo_cobranca, revisao_pendente, revisado_por_email, locatario_id, numero_proposta, numero_endosso, dt_proposta, dt_emissao, qtd_parcelas, forma_pagamento, premio_adicional, iof, comissao_pct, comissao_base, premiacao_valor, cancelado_em, competencia, congelado, fora_regra_pbi, origem, observacoes, digitado_em, documento_renovado_id"
     )
     .eq("id", id)
     .maybeSingle();
@@ -253,6 +267,8 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
   if (!data) return null;
   const d = data as unknown as LinhaBruta & {
     corretora: { apelido: string } | null;
+    canal: { nome: string } | null;
+    imob_grupo: { grupo: { nome: string } | null } | null;
     tipo_contratacao: string | null;
     modo_cobranca: string;
     revisao_pendente: boolean;
@@ -279,7 +295,7 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
     documento_renovado_id: string | null;
   };
 
-  const [{ data: prods }, { data: parcs }, { data: anexos }, { data: eventos }, { data: renovadoDe }, { data: renovadoPor }, { data: itens }, { data: origens }] = await Promise.all([
+  const [{ data: prods }, { data: parcs }, { data: anexos }, { data: eventos }, { data: renovadoDe }, { data: renovadoPor }, { data: itens }, { data: origens }, { data: familia }] = await Promise.all([
     sb
       .from("erp_documento_produtores")
       .select("id, imobiliaria_id, produtor_corp_codigo, produtor_corp_nome, agente, principal, pct_participacao, repasse_pct, repasse_valor_previsto, repasse_pct_esperado, motivo_diferenca, forma_repasse, imobiliaria:imobiliarias(nome)")
@@ -307,6 +323,7 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
       .select("id, sistema, entity_type_id, item_id, titulo, url, etapa_id, dados_legiveis, historico_etapas, comentarios, comentarios_capturados_em, card_criado_em, card_atualizado_em, capturado_em")
       .eq("documento_id", id)
       .order("capturado_em", { ascending: false }),
+    sb.rpc("erp_familia_documento", { p_id: id }),
   ]);
 
   type ProdBruto = Omit<ProdutorDoc, "imobiliaria"> & { imobiliaria: { nome: string } | null };
@@ -380,6 +397,8 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
       coberturas: (i.coberturas ?? []).map((c) => ({ nome: c.nome, importancia_segurada: c.importancia_segurada === null ? null : Number(c.importancia_segurada) })),
     })),
     origens: (origens ?? []) as unknown as OrigemDoc[],
+    cadeia: { canal: d.canal?.nome ?? null, imobiliaria: d.imobiliaria?.nome ?? null, grupo: d.imob_grupo?.grupo?.nome ?? null, cliente: d.cliente?.nome ?? null },
+    familia: ((familia ?? []) as FamiliaDoc[]).map((f) => ({ ...f, nosso_numero: Number(f.nosso_numero), nosso_numero_corp: f.nosso_numero_corp === null ? null : Number(f.nosso_numero_corp) })),
   };
 }
 

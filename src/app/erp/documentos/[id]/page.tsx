@@ -66,6 +66,19 @@ export default async function ErpDocumentoFichaPage({ params }: { params: Promis
           </p>
         </div>
 
+        <div className="rounded-xl border border-o2-navy/20 bg-blue-50/40 px-4 py-2 text-sm">
+          <span className="text-[11px] uppercase tracking-wide text-gray-500">Cadeia da produção: </span>
+          <span className={d.cadeia.canal ? "" : "text-gray-400"}>{d.cadeia.canal ?? "sem canal de gestão"}</span>
+          <span className="text-gray-400"> → </span>
+          <span className={d.cadeia.imobiliaria ? "" : "text-gray-400"}>
+            {d.cadeia.imobiliaria ?? "sem imobiliária indicadora (venda direta)"}
+            {d.cadeia.grupo ? <span className="text-gray-500"> (grupo {d.cadeia.grupo})</span> : null}
+          </span>
+          <span className="text-gray-400"> → </span>
+          <span className={d.cadeia.cliente ? "font-medium" : "text-gray-400"}>{d.cadeia.cliente ?? "cliente não ligado"}</span>
+          <span className="text-gray-500"> (segurado)</span>
+        </div>
+
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Documento</h2>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -88,7 +101,24 @@ export default async function ErpDocumentoFichaPage({ params }: { params: Promis
             <Campo rotulo="Cancelado em" valor={formatarData(d.cancelado_em)} />
             <Campo rotulo="Origem" valor={`${d.origem}${d.digitado_em ? ` · digitado ${formatarData(d.digitado_em)}` : ""}`} />
           </div>
-          {(d.renovacao_de || d.renovado_por.length > 0) && (
+          {d.familia.length > 1 && (
+            <div className="rounded-lg border border-gray-100 bg-gray-50 p-3 text-xs">
+              <div className="mb-1 text-[11px] uppercase tracking-wide text-gray-500">Família (corrente de renovações, como no Corp)</div>
+              <ol className="space-y-0.5">
+                {d.familia.map((f) => (
+                  <li key={f.id} className={f.id === d.id ? "font-semibold text-o2-navy" : ""}>
+                    {f.id === d.id ? "▶ " : "· "}
+                    <Link href={`/erp/documentos/${f.id}`} className="hover:underline">
+                      Código O2 {f.nosso_numero}
+                    </Link>
+                    {f.nosso_numero_corp ? ` (Corp ${f.nosso_numero_corp})` : ""} · {f.tipo_corp ? TIPO_CORP[f.tipo_corp] ?? f.tipo_corp : "—"} · {SITUACOES[f.situacao] ?? f.situacao} · {formatarData(f.vigencia_inicio)} a {formatarData(f.vigencia_fim)}
+                    {f.numero_apolice ? ` · apólice ${f.numero_apolice}` : ""}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+          {d.familia.length <= 1 && (d.renovacao_de || d.renovado_por.length > 0) && (
             <p className="text-xs text-gray-600">
               {d.renovacao_de && (
                 <>
