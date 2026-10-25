@@ -81,6 +81,19 @@ export default async function ErpDocumentoFichaPage({ params }: { params: Promis
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Documento</h2>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="col-span-2 md:col-span-4">
+              <div className="text-[11px] uppercase tracking-wide text-gray-500">Imobiliária da produção</div>
+              <div className="text-sm font-medium text-gray-800">
+                {d.imobiliaria_id ? (
+                  <Link href={`/erp/imobiliarias/${d.imobiliaria_id}`} className="text-o2-navy hover:underline">
+                    {d.imobiliaria}
+                  </Link>
+                ) : (
+                  <span className="text-gray-400">sem imobiliária ligada (venda direta ou a conferir)</span>
+                )}
+                {d.cadeia.grupo ? <span className="font-normal text-gray-500"> · grupo {d.cadeia.grupo}</span> : null}
+              </div>
+            </div>
             <Campo rotulo="Dt. proposta" valor={formatarData(d.dt_proposta)} />
             <Campo rotulo="Dt. emissão" valor={formatarData(d.dt_emissao)} />
             <Campo rotulo="Nº apólice" valor={d.numero_apolice ?? "0 (não emitida)"} />
@@ -138,6 +151,7 @@ export default async function ErpDocumentoFichaPage({ params }: { params: Promis
                 Código O2 {d.apolice_mae.nosso_numero}
               </Link>
               {d.apolice_mae.numero_apolice ? ` · nº ${d.apolice_mae.numero_apolice}` : ""} · vigência {formatarData(d.apolice_mae.vigencia_inicio)} a {formatarData(d.apolice_mae.vigencia_fim)}
+              {d.imobiliaria ? ` · imobiliária ${d.imobiliaria}` : ""}
             </p>
           )}
           {d.endossos.length > 0 && (
