@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
   if (spa === 1042) {
     const { data, error } = await sb.rpc("erp_atualizar_alertas_fatura");
     alertas = error ? { erro: error.message } : data;
-    // administrado × não administrado deduzido pela cobrança (entrou na fatura / ficou de fora)
+    // administrado × não administrado deduzido pela forma de pagamento ESCOLHIDA (fatura → sim; boleto/cartão com fatura ativa → não)
     await sb.rpc("erp_inferir_administrado");
   }
   return NextResponse.json({ ok: resumo.erros.length === 0, ...resumo, alertas });

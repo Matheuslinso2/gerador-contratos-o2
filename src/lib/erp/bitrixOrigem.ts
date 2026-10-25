@@ -71,7 +71,7 @@ export type Extraido = {
   imobTexto: string | null; // nome/código da imobiliária quando o card não usa Empresa
   tipoContratacao: "indicacao_imobiliaria" | "venda_direta" | "frota" | "canal" | null;
   canalVenda: string | null;
-  modoCobranca: "individual" | "fatura";
+  modoCobranca: "nao_informado" | "fatura" | "boleto" | "cartao" | "debito";
   formaPagamento: string | null;
   observacoes: string | null;
   item: { administrado?: boolean | null; tipo_imovel?: string | null; cep?: string | null; logradouro?: string | null; numero?: string | null; complemento?: string | null; bairro?: string | null; cidade?: string | null; uf?: string | null; valor_aluguel?: number | null; plano?: string | null; observacoes?: string | null; placa?: string | null; veiculo?: string | null } | null;
@@ -115,7 +115,7 @@ export const CONFIGS: ConfigSpa[] = [
         cliente: { documento: cpf1, nome: texto(r.ufCrm10_1776354897), email: texto(r.ufCrm10_1783366659), telefone: texto(r.ufCrm10_1783366668) },
         imobTexto: texto(r.ufCrm10_1783371296),
         tipoContratacao: it.companyId ? "indicacao_imobiliaria" : voceE.includes("Pretendente") || voceE.includes("Proprietário") ? "venda_direta" : null,
-        canalVenda: null, modoCobranca: "individual", formaPagamento: null,
+        canalVenda: null, modoCobranca: "nao_informado", formaPagamento: null,
         observacoes: texto(r.ufCrm10_1776352503),
         item: {
           administrado: (() => { const a = rotulo(defs, "ufCrm10_1781116076", r.ufCrm10_1781116076); if (a === "Sim") return true; if (a === "Não") return false; if (r.ufCrm10_1788957284213 === "Y" || r.ufCrm10_1788957828053 === "Y") return true; if (r.ufCrm10_1788957284213 === "N") return false; return null; })(),
@@ -167,7 +167,7 @@ export const CONFIGS: ConfigSpa[] = [
         imobTexto: null,
         tipoContratacao: origem.includes("Segimob") ? "canal" : it.companyId ? "indicacao_imobiliaria" : null,
         canalVenda: origem.includes("Segimob") ? "segimob" : null,
-        modoCobranca: ramoAbrev === "IMOB" ? "fatura" : "individual", formaPagamento: null,
+        modoCobranca: ramoAbrev === "IMOB" ? "fatura" : "nao_informado", formaPagamento: null,
         observacoes: [texto(r.ufCrm12Observacoes), movimentacao ? `Movimentação: ${movimentacao}` : null, rotulo(defs, "ufCrm12_1789156499539", r.ufCrm12_1789156499539) ? `Endosso: ${rotulo(defs, "ufCrm12_1789156499539", r.ufCrm12_1789156499539)}` : null, texto(r.ufCrm12ReferenciaPlanilha) ? `Planilha: ${texto(r.ufCrm12ReferenciaPlanilha)}` : null].filter(Boolean).join("\n") || null,
         item: {
           cep: texto(r.ufCrm12_1790085456047), logradouro: texto(r.ufCrm12_1790085424526), numero: texto(r.ufCrm12_1790085444491), complemento: texto(r.ufCrm12_1790085448344),
@@ -203,7 +203,8 @@ export const CONFIGS: ConfigSpa[] = [
         cliente: { documento: docCliente, nome: nomeCliente, email: texto(r.ufCrm14CapLocatEmail) ?? texto(r.ufCrm14CapEmailEnvio), telefone: texto(r.ufCrm14CapLocatFone) },
         imobTexto: texto(r.ufCrm14CapImobAdmin),
         tipoContratacao: origem.includes("Imobili") ? "indicacao_imobiliaria" : origem.includes("Corretor") ? "canal" : origem.includes("Propriet") ? "venda_direta" : null,
-        canalVenda: null, modoCobranca: "individual",
+        canalVenda: null,
+        modoCobranca: (rotulo(defs, "ufCrm14CapFormaPgto", r.ufCrm14CapFormaPgto) ?? "").toLowerCase().startsWith("cart") ? "cartao" : (rotulo(defs, "ufCrm14CapFormaPgto", r.ufCrm14CapFormaPgto) ?? "").toLowerCase().startsWith("bolet") ? "boleto" : "nao_informado",
         formaPagamento: rotulo(defs, "ufCrm14CapFormaPgto", r.ufCrm14CapFormaPgto),
         observacoes: [texto(r.ufCrm14CapGarantia), rotulo(defs, "ufCrm14CapEncConsid", r.ufCrm14CapEncConsid) ? `Encargos: ${rotulo(defs, "ufCrm14CapEncConsid", r.ufCrm14CapEncConsid)}` : null, rotulo(defs, "ufCrm14CapPrazoRenov", r.ufCrm14CapPrazoRenov) ? `Prazo: ${rotulo(defs, "ufCrm14CapPrazoRenov", r.ufCrm14CapPrazoRenov)}` : null, texto(r.ufCrm14_1792781102) ? `Proposta anterior: ${texto(r.ufCrm14_1792781102)}` : null].filter(Boolean).join("\n") || null,
         item: { cep: texto(r.ufCrm14CapImovelCep), logradouro: texto(r.ufCrm14CapImovelEnd), bairro: texto(r.ufCrm14CapImovelBairro), cidade: texto(r.ufCrm14CapImovelCidade) },
@@ -230,7 +231,7 @@ export const CONFIGS: ConfigSpa[] = [
         cliente: { documento: null, nome: texto(r.ufCrm16_1787056933080) ?? texto(it.title), email: texto(r.ufCrm16_1787056957386), telefone: texto(r.ufCrm16_1787056962877) },
         imobTexto: null,
         tipoContratacao: it.companyId ? "indicacao_imobiliaria" : "venda_direta", canalVenda: it.companyId ? null : "venda_direta",
-        modoCobranca: "individual", formaPagamento: null,
+        modoCobranca: "nao_informado", formaPagamento: null,
         observacoes: [texto(r.ufCrm16_1787057323033) ? `Endereço: ${texto(r.ufCrm16_1787057323033)}` : null, rotulo(defs, "ufCrm16_1787057098438", r.ufCrm16_1787057098438) ? `Uso: ${rotulo(defs, "ufCrm16_1787057098438", r.ufCrm16_1787057098438)}` : null, texto(r.ufCrm16_1787057276856) ? `Estado civil: ${texto(r.ufCrm16_1787057276856)}` : null].filter(Boolean).join("\n") || null,
         item: { observacoes: [r.ufCrm16_1787056986772 ? "garagem na residência" : null, rotulo(defs, "ufCrm16_1787057051225", r.ufCrm16_1787057051225) ? `portão ${rotulo(defs, "ufCrm16_1787057051225", r.ufCrm16_1787057051225)}` : null].filter(Boolean).join(" · ") || null },
         partes: [{ papel: "condutor", ordem: 1, nome: texto(r.ufCrm16_1787056933080) ?? texto(it.title), documento_numero: null }],
@@ -409,7 +410,7 @@ export async function sincronizarSpa(sb: SupabaseClient, cfg: ConfigSpa, o: Opco
         const { data: novo, error } = await sb.from("erp_documentos").insert({
           corretora_id: corr, tipo: x.tipo, tipo_corp: x.tipo_corp, seguradora_id: seg, ramo_id: ramo,
           locatario_id: locatarioId, imobiliaria_principal_id: imobId, canal_venda: x.canalVenda,
-          tipo_contratacao: x.tipoContratacao, modo_cobranca: imobId ? x.modoCobranca : "individual",
+          tipo_contratacao: x.tipoContratacao, modo_cobranca: x.modoCobranca === "fatura" && !imobId ? "nao_informado" : x.modoCobranca,
           numero_apolice: x.numeroApolice, numero_proposta: x.numeroProposta, forma_pagamento: null,
           dt_proposta: String(item.createdTime).slice(0, 10), vigencia_inicio: x.vigIni, vigencia_fim: x.vigFim,
           qtd_parcelas: x.parcelas, premio_liquido: premio, premio_total: premio,

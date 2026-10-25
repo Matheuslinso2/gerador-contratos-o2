@@ -59,7 +59,14 @@ export const TIPO_CONTRATACAO: Record<string, string> = {
   frota: "Frota",
   canal: "Canal (Superlógica/Base/Segimob)",
 };
-export const MODO_COBRANCA: Record<string, string> = { individual: "Individual (cliente paga)", fatura: "Fatura da imobiliária" };
+export const MODO_COBRANCA: Record<string, string> = {
+  nao_informado: "Não informada",
+  fatura: "Fatura da imobiliária",
+  boleto: "Boleto (cliente paga)",
+  cartao: "Cartão (cliente paga)",
+  debito: "Débito (cliente paga)",
+  individual: "Individual (legado, sem detalhe)",
+};
 
 const SELECT_LISTA =
   "id, nosso_numero, nosso_numero_corp, tipo, tipo_corp, numero_apolice, vigencia_inicio, vigencia_fim, premio_liquido, premio_total, comissao_valor, situacao, canal_venda, imobiliaria_principal_id, seguradora:erp_seguradoras(abreviacao), ramo:erp_ramos(abreviacao), cliente:locatarios(nome), imobiliaria:imobiliarias!erp_documentos_imobiliaria_principal_id_fkey(nome)";
