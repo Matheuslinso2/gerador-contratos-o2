@@ -50,11 +50,24 @@ const rotulo = (defs: Defs, campo: string, v: unknown): string | null => {
 };
 
 // ------------------------------------------------------------ o que cada produto sabe extrair do card
+export type TipoEndosso = "C" | "I" | "M" | "R" | "X";
+/** Rótulo do tipo de endosso no card → tipo do Corp. Desconhecido = C (cobrança), como antes. */
+export function tipoEndossoDoRotulo(rotulo: string | null | undefined): TipoEndosso {
+  const t = (rotulo ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
+  if (t.includes("CANCEL")) return t.includes("ITEM") ? "I" : "X";
+  if (t.includes("RESTITU") || t.includes("DEVOLU")) return "R";
+  if (t.includes("SEM PREM") || t.includes("SEM CUSTO") || t.includes("TROCA") || t.includes("CADASTR")) return "M";
+  return "C";
+}
+
 export type Extraido = {
   produto: string; // erp_ramos.produto
   ramoAbrev: string | null; // abreviação preferida (IMOB, RESI, CAP, AUTO…); null = decide pelo produto
   corretora: "corretora" | "capitalizacao";
   tipo: "A" | "C"; // A apólice · C endosso
+  /** tipo de endosso do Corp que o card define (C cobrança, I cancel. de item, M sem prêmio, R restituição, X cancel. de
+   * apólice) — o funil de endossos de cada SPA é a origem do tipo e do motivo (Matheus 25/10/2026) */
+  tipoEndosso?: TipoEndosso;
   tipo_corp: "NOVO" | "RENV" | "END";
   seguradoraNome: string | null;
   premio: number | null;
@@ -157,6 +170,7 @@ export const CONFIGS: ConfigSpa[] = [
       return {
         produto: produtoErp, ramoAbrev, corretora: operacao.includes("Capitaliza") ? "capitalizacao" : "corretora",
         tipo: endosso ? "C" : "A", tipo_corp: endosso ? "END" : processo.includes("Renova") ? "RENV" : "NOVO",
+        tipoEndosso: endosso ? tipoEndossoDoRotulo(rotulo(defs, "ufCrm12_1789156499539", r.ufCrm12_1789156499539)) : undefined,
         seguradoraNome: segNome, premio: num(r.ufCrm12PremioTotal) ?? num(r.ufCrm12_1789158416459), parcelas: num(r.ufCrm12Parcelas),
         comissaoPct: comDec !== null ? (comDec <= 1 ? comDec * 100 : comDec) : num(r.ufCrm12ComissaoPercentual),
         repassePct: repDec !== null ? (repDec <= 1 ? repDec * 100 : repDec) : num(r.ufCrm12RepassePercentual),
@@ -195,6 +209,7 @@ export const CONFIGS: ConfigSpa[] = [
       return {
         produto: "capitalizacao", ramoAbrev: null, corretora: "capitalizacao",
         tipo: endosso ? "C" : "A", tipo_corp: endosso ? "END" : Number(it.categoryId) === 38 ? "RENV" : "NOVO",
+        tipoEndosso: endosso ? "M" : undefined, // funil Endossos do Cap: troca de locador/locatário/titular, sem prêmio
         seguradoraNome: texto(r.ufCrm14CapSeguradora), premio: num(r.ufCrm14CapValorTit), parcelas: 1,
         comissaoPct: num(r.ufCrm14CapComissaoPct), repassePct: null,
         vigIni: data(r.ufCrm14CapVigInicio), vigFim: data(r.ufCrm14CapVigFim),
@@ -408,7 +423,7 @@ export async function sincronizarSpa(sb: SupabaseClient, cfg: ConfigSpa, o: Opco
         if (!o.gravar) { r.criados++; continue; }
         const competencia = (x.vigIni ?? String(item.createdTime).slice(0, 10)).slice(0, 7) + "-01";
         const { data: novo, error } = await sb.from("erp_documentos").insert({
-          corretora_id: corr, tipo: x.tipo, tipo_corp: x.tipo_corp, seguradora_id: seg, ramo_id: ramo,
+          corretora_id: corr, tipo: x.tipo_corp === "END" ? x.tipoEndosso ?? "C" : x.tipo, tipo_corp: x.tipo_corp, seguradora_id: seg, ramo_id: ramo,
           locatario_id: locatarioId, imobiliaria_principal_id: imobId, canal_venda: x.canalVenda,
           tipo_contratacao: x.tipoContratacao, modo_cobranca: x.modoCobranca === "fatura" && !imobId ? "nao_informado" : x.modoCobranca,
           numero_apolice: x.numeroApolice, numero_proposta: x.numeroProposta, forma_pagamento: null,
@@ -426,7 +441,7 @@ export async function sincronizarSpa(sb: SupabaseClient, cfg: ConfigSpa, o: Opco
         const { data: atual } = await sb.from("erp_documentos").select("origem, locatario_id, imobiliaria_principal_id, tipo_contratacao, seguradora_id, numero_apolice, numero_proposta").eq("id", docId).single();
         const patch: Record<string, unknown> = {};
         if (atual?.origem === "bitrix") {
-          Object.assign(patch, { tipo_corp: x.tipo_corp, situacao: sit.situacao, motivo_cancelamento: sit.motivo ?? null, vigencia_inicio: x.vigIni, vigencia_fim: x.vigFim, seguradora_id: seg ?? atual.seguradora_id, qtd_parcelas: x.parcelas, numero_apolice: x.numeroApolice ?? atual.numero_apolice, numero_proposta: x.numeroProposta ?? atual.numero_proposta });
+          Object.assign(patch, { tipo_corp: x.tipo_corp, ...(x.tipo_corp === "END" ? { tipo: x.tipoEndosso ?? "C" } : {}), situacao: sit.situacao, motivo_cancelamento: sit.motivo ?? null, vigencia_inicio: x.vigIni, vigencia_fim: x.vigFim, seguradora_id: seg ?? atual.seguradora_id, qtd_parcelas: x.parcelas, numero_apolice: x.numeroApolice ?? atual.numero_apolice, numero_proposta: x.numeroProposta ?? atual.numero_proposta });
           if (premio) { patch.premio_liquido = premio; patch.premio_total = premio; patch.comissao_valor = Math.round(premio * comissaoPct) / 100; }
           if (comissaoPct) patch.comissao_pct = comissaoPct;
         }

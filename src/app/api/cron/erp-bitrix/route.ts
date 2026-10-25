@@ -19,6 +19,8 @@ export async function GET(request: NextRequest) {
   if (!cfg) return NextResponse.json({ erro: "spa inválida" }, { status: 400 });
   const sb = createServiceClient();
   const resumo = await sincronizarSpa(sb, cfg, { desde: "2026-07-01", gravar: true, comentarios: 25, apenasAlterados: true });
+  // todo endosso é filho de uma apólice: liga os novos (dos cards e do Corp) pela seguradora + nº da apólice
+  await sb.rpc("erp_vincular_endossos", { p_limite: 2000 });
   // alertas de fatura (lista pronta para a tela /erp/conferencia): refaz 1× por hora, junto da Fiança
   let alertas: unknown = null;
   if (spa === 1042) {
