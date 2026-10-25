@@ -5,7 +5,14 @@
 //         Prêmio | Taxa | Comissão | Tipo (46-RESTITUICAO DE PREMIO = estorno, 45-COMISSAO FRACIONADA, 69-COMISSAO TOTAL…)
 import type { LinhaExtrato } from "./extratos";
 
-export type ExtratoPdf = { linhas: LinhaExtrato[]; total_bruto: number | null; total_liquido: number | null; pago_em: string | null; corretora_cnpj: string | null };
+export type ExtratoPdf = { linhas: LinhaExtrato[]; total_bruto: number | null; total_liquido: number | null; pago_em: string | null; corretora_cnpj: string | null; numero?: string | null; cod_corretor?: string | null };
+
+// O portal da Tokio exporta UM PDF com todos os extratos do período ("Exportar em PDF"); cada extrato começa em
+// "Extrato do Corretor Extrato nº N". Divide e lê cada um (cada extrato = um pagamento, com sua data de crédito).
+export function parseTokioPdfVarios(texto: string): ExtratoPdf[] {
+  const blocos = texto.split(/(?=Extrato do Corretor\s+Extrato n[ºo°])/i).filter((b) => /Extrato n[ºo°]/i.test(b));
+  return blocos.map((b) => parseTokioPdf(b)).filter((x): x is ExtratoPdf => x !== null);
+}
 
 const valor = (s: string, neg = false) => {
   const n = Number(s.replace(/\./g, "").replace(",", "."));
@@ -50,7 +57,9 @@ export function parseTokioPdf(texto: string): ExtratoPdf | null {
   const valoresCab = [...cab.matchAll(/(-?)R\$ ?([\d.]+,\d{2})/g)];
   const liquido = valoresCab.length ? valor(valoresCab[valoresCab.length - 1][2]) : null;
   const cnpj = /CPF\/CNPJ: ([\d./-]+)/.exec(cab)?.[1]?.replace(/\D/g, "") ?? null;
-  return { linhas, total_bruto: credito ? valor(credito[2]) : soma(linhas), total_liquido: liquido, pago_em: dataBr(credito?.[1]), corretora_cnpj: cnpj };
+  const numero = /Extrato n[ºo°]\s*(\d+)/i.exec(cab)?.[1] ?? null;
+  const codCorretor = /Cod\. Corretor:\s*(\d+)/i.exec(cab)?.[1]?.replace(/^0+/, "") ?? null;
+  return { linhas, total_bruto: credito ? valor(credito[2]) : soma(linhas), total_liquido: liquido, pago_em: dataBr(credito?.[1]), corretora_cnpj: cnpj, numero, cod_corretor: codCorretor };
 }
 
 // No texto extraído a coluna Marca sai grudada no fim do Tipo ("46-RESTITUICAO DE PREMIOPorto").

@@ -309,3 +309,22 @@ select erp_conferir_extratos(null);
 -- cliente), seguradora, corretora, imobiliária (base única, pelo documento casado), período = data de recebimento e situação
 -- (extrato a aprovar/aprovado ou classificação da linha). Migration erp_fase2_baixa_resumo_data_recebimento: coluna
 -- data_recebimento no erp_baixa_assistida_resumo. Filtros de linha mostram a seção "Linhas encontradas" (até 300).
+
+-- ---------------------------------------------------------------------------
+-- 25/10 (noite) — ROBÔ DE BAIXA, FASE 2: TOKIO PELO PORTAL (scripts/robo-seguradoras/tokio.ts + robo-seguradoras.cmd)
+-- Mapeado na sessão logada do Matheus (só leitura): Financeiro → Extrato Comissão
+--   (/gestaoapolice/emissao/view/BackOfficeViewCorretor/extrato-comissao), período → Pesquisar (10–40 s) → "Exportar em PDF"
+--   = UM PDF com todos os extratos do período ("Extrato do Corretor Extrato nº N" por pagamento). "Excel extrato base" só traz
+--   os totais (sem apólices). Códigos da O2 na Tokio: 55002 e 195354 (O2 Corretora) e 70145 (O2 Cap) — o 55002 é o principal
+--   (ago–out/26: 44 extratos, R$ 240.218,52) e NÃO estava na pasta do Drive. Login = OpenAM ssoportais3 (#idToken1/#idToken2,
+--   sem captcha). Senhas só em %USERPROFILE%\.robo-seguradoras\config.json (preenchido pela equipe); sessão guardada no perfil
+--   do navegador do robô. Tarefa do Windows "Robo Seguradoras" todo dia 20:30 (Matheus: baixa só depois das 20h).
+-- src/lib/erp/extratosPdf.ts: parseTokioPdfVarios (divide o PDF por extrato; número e código do corretor de cada um).
+-- src/lib/erp/extratosPortal.ts: gravarExtratosPortal (origem 'portal'; não duplica: mesmo nº de extrato ou mesma data de
+--   crédito + bruto que veio da pasta do Drive). scripts/erp/carregar-extrato-portal.ts carrega um PDF baixado à mão.
+-- Migration erp_fase2_extratos_numero_portal: erp_extratos_seguradora.numero_extrato / cod_corretor.
+-- 1ª carga (PDFs baixados com o Matheus): 72 extratos (24 + 4 + 44), 6.549 linhas, R$ 339.526 bruto, 72/72 fecham ao centavo,
+--   6.376 casadas; 55002 com 3.749 linhas de pró-labore conferido.
+-- Migration erp_fase2_cruzar_sem_deduzir_boleto: o cruzamento NÃO marca mais modo_cobranca='boleto' por ausência na fatura
+--   (regra do Matheus: forma de pagamento é escolhida na efetivação); os 1.248 documentos marcados em 25/10 voltaram a
+--   'nao_informado' pela erp_auditoria (eles tinham saído do alerta "efetivado e fora da fatura").

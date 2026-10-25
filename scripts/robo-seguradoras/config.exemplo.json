@@ -1,0 +1,23 @@
+{
+  "_leia": "Copie para %USERPROFILE%/.robo-seguradoras/config.json e preencha. NUNCA coloque senha neste arquivo de exemplo, no codigo, no chat ou no GitHub.",
+  "pastaSaida": "",
+  "portais": {
+    "TOKIO": {
+      "url": "https://portalparceiros.tokiomarine.com.br/group/portal-corretor",
+      "usuario": "",
+      "senha": "",
+      "dono_do_login": "",
+      "codigos": [
+        "55002",
+        "195354",
+        "70145"
+      ]
+    },
+    "PORTO": {
+      "url": "",
+      "usuario": "",
+      "senha": "",
+      "dono_do_login": ""
+    }
+  }
+}
