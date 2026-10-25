@@ -18,8 +18,9 @@ export async function GET(request: NextRequest) {
   const cfg = CONFIGS.find((c) => c.entityTypeId === spa);
   if (!cfg) return NextResponse.json({ erro: "spa inválida" }, { status: 400 });
   const sb = createServiceClient();
-  // cards de endosso em andamento recebem o "Código O2 da apólice" ou o pedido dele (comentário no card)
-  const resumo = await sincronizarSpa(sb, cfg, { desde: "2026-07-01", gravar: true, comentarios: 25, apenasAlterados: true, escreverNoBitrix: "abertos" });
+  // escrita nos cards de endosso (campo "Código O2 da apólice" + comentário) DESLIGADA: o Matheus decidiu
+  // em 25/10 não mexer no Bitrix até o ERP valer de fato (jan/2027). Para ligar: escreverNoBitrix: "abertos".
+  const resumo = await sincronizarSpa(sb, cfg, { desde: "2026-07-01", gravar: true, comentarios: 25, apenasAlterados: true, escreverNoBitrix: false });
   // todo endosso é filho de uma apólice: liga os novos (dos cards e do Corp) pela seguradora + nº da apólice
   await sb.rpc("erp_vincular_endossos", { p_limite: 2000 });
   // alertas de fatura (lista pronta para a tela /erp/conferencia): refaz 1× por hora, junto da Fiança
