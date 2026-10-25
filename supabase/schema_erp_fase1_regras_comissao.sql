@@ -118,3 +118,133 @@ language sql stable security invoker set search_path = public as $$
   group by d.seguradora_id
 $$;
 grant execute on function erp_docs_por_seguradora_2026() to authenticated;
+
+-- ============================================================ 25/10 (tarde): regra é por SEGURADORA × PRODUTO
+-- Conferência nos relatórios reais das seguradoras (Drive › relatórios de comissão, agosto/2026):
+--   * Tokio   — Incêndio (RESI/EMPR/COND, parcelas 1/4 … 10/11) e Fiança ("ALUGUEL 4/29"): PROPORCIONAL;
+--               Auto aparece como "COMISSÃO ANTECIPADA" (toda a comissão na 1ª parcela, limitada
+--               ao valor da parcela): ESGOTAMENTO.
+--   * Porto   — "45-COMISSÃO FRACIONADA", parcelas 1 a 9 com a taxa sobre a parcela: PROPORCIONAL.
+--   * Yelum   — parcelas 3/4, 7/12, 1/4 com % sobre a parcela: PROPORCIONAL.
+--   * Too     — Fiança parcelas 14, 16, 22 a 30%: PROPORCIONAL.
+--   * Pottencial — Fiança parcelas 10, 20, 36, 58 a 30%: PROPORCIONAL (renovações antigas a 10%).
+--   * Brasilcap — título pago na venda (1 parcela): indiferente.
+-- Conclusão: Incêndio e Fiança são proporcionais em todas; esgotamento ("comissão antecipada")
+-- vale para Auto (e provavelmente RE individual à vista). Por isso a regra sai do nível
+-- "seguradora" e passa a "seguradora × produto", com a seguradora como padrão.
+
+create table if not exists erp_comissao_regras (
+  id uuid primary key default gen_random_uuid(),
+  seguradora_id uuid references erp_seguradoras(id) on delete cascade,   -- null = todas
+  produto text,                                                            -- erp_ramos.produto; null = todos
+  ramo_id uuid references erp_ramos(id),                                   -- mais específico que produto; null = todos
+  regra_comissao text not null default 'proporcional' check (regra_comissao in ('proporcional','esgotamento')),
+  esgotamento_ate_parcelas int,
+  prazo_pagamento_dias int,                                                -- null = usa o da seguradora
+  confirmada_em date,
+  fonte text,                                                              -- de onde veio a confirmação
+  observacao text,
+  created_at timestamptz not null default now(),
+  unique (seguradora_id, produto, ramo_id)
+);
+alter table erp_comissao_regras enable row level security;
+drop policy if exists erp_comissao_regras_o2 on erp_comissao_regras;
+create policy erp_comissao_regras_o2 on erp_comissao_regras for all to authenticated
+  using ((select is_colaborador_o2())) with check ((select is_colaborador_o2()));
+
+-- Regra efetiva de um documento: ramo > produto > seguradora (colunas de erp_seguradoras) > proporcional
+create or replace function erp_regra_comissao_doc(p_seguradora_id uuid, p_ramo_id uuid)
+returns table (regra_comissao text, esgotamento_ate_parcelas int, prazo_pagamento_dias int)
+language sql stable set search_path = public as $$
+  select coalesce(r.regra_comissao, s.regra_comissao), coalesce(r.esgotamento_ate_parcelas, s.esgotamento_ate_parcelas), coalesce(r.prazo_pagamento_dias, s.prazo_pagamento_dias, 5)
+  from erp_seguradoras s
+  left join erp_ramos rm on rm.id = p_ramo_id
+  left join lateral (
+    select * from erp_comissao_regras c
+    where (c.seguradora_id = p_seguradora_id or c.seguradora_id is null)
+      and (c.ramo_id = p_ramo_id or c.ramo_id is null)
+      and (c.produto = rm.produto or c.produto is null)
+    order by (c.seguradora_id is not null) desc, (c.ramo_id is not null) desc, (c.produto is not null) desc
+    limit 1
+  ) r on true
+  where s.id = p_seguradora_id
+  union all
+  select 'proporcional', null, 5 where p_seguradora_id is null
+$$;
+
+-- Sementes confirmadas (25/10/2026)
+insert into erp_comissao_regras (seguradora_id, produto, regra_comissao, confirmada_em, fonte)
+select s.id, x.produto, x.regra, '2026-10-25', x.fonte
+from (values
+  ('TOKI','incendio','proporcional','Extrato do Corretor Tokio 18/08 e 20/08/2026 (parcelas 1/4…10/11, % sobre a parcela)'),
+  ('TOKI','fianca','proporcional','Extrato Tokio 03/08/2026 (ALUGUEL 4/29 a 29%)'),
+  ('TOKI','condominio','proporcional','Extrato Tokio 03/08/2026 (CONDOMINIO 5/6, 1/6)'),
+  ('TOKI','automovel','esgotamento','Extrato Tokio 03/08/2026 (AUTO "COMISSÃO ANTECIPADA" 1/6 = comissão inteira na 1ª)'),
+  ('PORT','incendio','proporcional','Analítico de pagamentos Porto 21/08/2026 (45-COMISSÃO FRACIONADA, parcelas 1 a 9)'),
+  ('YELU','incendio','proporcional','Demonstrativo Yelum 20/08/2026 (3/4, 7/12, 1/4)'),
+  ('TOO','fianca','proporcional','Demonstrativo Too 2026/40 de 20/08/2026 (parcelas 14, 16, 22 a 30%)'),
+  ('POTT','fianca','proporcional','Demonstrativo Pottencial 175995 jun/2026 (parcelas 10 a 58, 30%)')
+) as x(seg, produto, regra, fonte)
+join erp_seguradoras s on s.abreviacao = x.seg
+on conflict (seguradora_id, produto, ramo_id) do nothing;
+
+update erp_seguradoras set regra_confirmada_em = '2026-10-25',
+  regra_observacao = 'Regra por produto em erp_comissao_regras (conferida nos relatórios de agosto/2026)'
+where abreviacao in ('TOKI','PORT','YELU','TOO','POTT');
+
+-- erp_recalcular_comissoes passa a usar a regra efetiva por documento (erp_regra_comissao_doc)
+create or replace function erp_recalcular_comissoes(p_de date, p_ate date)
+returns table (documentos int, comissoes int)
+language plpgsql security definer set search_path = public as $$
+declare v_docs int; v_com int;
+begin
+  alter table erp_comissoes disable trigger erp_comissoes_aud;
+
+  create temp table _doc on commit drop as
+  select d.id, d.comissao_valor, d.premio_liquido, d.comissao_pct, d.qtd_parcelas,
+         rg.regra_comissao, rg.esgotamento_ate_parcelas, rg.prazo_pagamento_dias
+  from erp_documentos d
+  left join lateral erp_regra_comissao_doc(d.seguradora_id, d.ramo_id) rg on true
+  where d.competencia >= p_de and d.competencia < p_ate
+    and coalesce(d.qtd_parcelas, 0) > 0 and d.comissao_valor <> 0
+    and not exists (
+      select 1 from erp_parcelas p join erp_comissoes c on c.parcela_id = p.id
+      where p.documento_id = d.id and c.tipo = 'comissao' and c.status <> 'prevista');
+  select count(*) into v_docs from _doc;
+
+  delete from erp_comissoes c using erp_parcelas p
+   where c.parcela_id = p.id and c.tipo = 'comissao' and c.status = 'prevista'
+     and p.documento_id in (select id from _doc);
+
+  insert into erp_comissoes (parcela_id, tipo, base, pct, valor_previsto, previsao_recebimento, status)
+  select x.parcela_id, 'comissao', x.base, x.pct, x.valor, x.vencimento + coalesce(x.prazo, 5), 'prevista'
+  from (
+    select p.id as parcela_id, p.vencimento, o.prazo_pagamento_dias as prazo, o.comissao_pct as pct,
+           round(o.premio_liquido / o.qtd_parcelas, 2) as base,
+           case
+             when o.regra_comissao = 'esgotamento'
+              and (o.esgotamento_ate_parcelas is null or o.qtd_parcelas <= o.esgotamento_ate_parcelas)
+             then greatest(0, least(p.valor,
+                    o.comissao_valor - coalesce(sum(p.valor) over (partition by p.documento_id order by p.n
+                                                 rows between unbounded preceding and 1 preceding), 0)))
+             else round(o.comissao_valor / o.qtd_parcelas, 2)
+                  + case when p.n = 1 then o.comissao_valor - round(o.comissao_valor / o.qtd_parcelas, 2) * o.qtd_parcelas else 0 end
+           end as valor
+    from erp_parcelas p join _doc o on o.id = p.documento_id
+  ) x;
+  get diagnostics v_com = row_count;
+
+  update erp_comissoes c set valor_previsto = c.valor_previsto + s.sobra
+  from (
+    select p.documento_id, (array_agg(p.id order by p.n desc))[1] as ultima_parcela_id,
+           o.comissao_valor - sum(c2.valor_previsto) as sobra
+    from erp_parcelas p join _doc o on o.id = p.documento_id
+    join erp_comissoes c2 on c2.parcela_id = p.id and c2.tipo = 'comissao'
+    group by p.documento_id, o.comissao_valor, o.qtd_parcelas
+    having abs(o.comissao_valor - sum(c2.valor_previsto)) >= 0.01
+  ) s
+  where c.parcela_id = s.ultima_parcela_id and c.tipo = 'comissao';
+
+  alter table erp_comissoes enable trigger erp_comissoes_aud;
+  return query select v_docs, v_com;
+end $$;
