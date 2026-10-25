@@ -56,6 +56,7 @@ export default async function ErpDocumentoFichaPage({ params }: { params: Promis
               Código O2 {d.nosso_numero} · {d.cliente ?? "cliente não ligado"}
             </h1>
             <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">{SITUACOES[d.situacao] ?? d.situacao}</span>
+            {d.revisao_pendente && <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-800">pré-cadastro · revisão pendente</span>}
             {d.fora_regra_pbi && <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-xs text-yellow-800">fora da conta do Power BI</span>}
             {d.congelado && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-800">mês fechado</span>}
           </div>
@@ -103,6 +104,34 @@ export default async function ErpDocumentoFichaPage({ params }: { params: Promis
           )}
           {d.observacoes && <p className="whitespace-pre-wrap rounded-lg bg-gray-50 p-3 text-xs text-gray-700">{d.observacoes}</p>}
         </section>
+
+        {d.itens.length > 0 && (
+          <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Imóvel, partes e coberturas</h2>
+            {d.itens.map((it) => (
+              <div key={it.id} className="space-y-2">
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                  <Campo rotulo="Imóvel" valor={[it.logradouro, it.numero, it.complemento].filter(Boolean).join(", ") || "—"} />
+                  <Campo rotulo="Cidade / UF / CEP" valor={[it.cidade, it.uf, it.cep].filter(Boolean).join(" · ") || "—"} />
+                  <Campo rotulo="Tipo / plano" valor={[it.tipo_imovel, it.plano].filter(Boolean).join(" · ") || "—"} />
+                  <Campo rotulo="Aluguel" valor={it.valor_aluguel === null ? "—" : formatarReais(it.valor_aluguel)} />
+                </div>
+                {it.partes.length > 0 && (
+                  <p className="text-xs text-gray-700">
+                    {it.partes.map((p) => `${p.papel} ${p.ordem}: ${p.nome ?? "—"}${p.documento_numero ? ` (${p.documento_numero})` : ""}`).join(" · ")}
+                  </p>
+                )}
+                {it.coberturas.length > 0 && (
+                  <p className="text-xs text-gray-700">
+                    <span className="text-gray-500">Coberturas (verba mensal): </span>
+                    {it.coberturas.map((c) => `${c.nome} ${c.importancia_segurada === null ? "" : formatarReais(c.importancia_segurada)}`).join(" · ")}
+                  </p>
+                )}
+                {it.observacoes && <p className="text-[11px] text-gray-500">{it.observacoes}</p>}
+              </div>
+            ))}
+          </section>
+        )}
 
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Produtores e repasse</h2>
@@ -214,6 +243,62 @@ export default async function ErpDocumentoFichaPage({ params }: { params: Promis
             </ul>
           )}
         </section>
+
+        {d.origens.map((o) => (
+          <section key={o.id} className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Origem no Bitrix</h2>
+            <p className="text-xs text-gray-700">
+              Card {o.item_id} · {o.titulo ?? "—"} · etapa {o.etapa_id ?? "—"} · criado {formatarData(o.card_criado_em)} · atualizado {formatarData(o.card_atualizado_em)}
+              {o.url && (
+                <>
+                  {" "}
+                  · <a href={o.url} target="_blank" rel="noreferrer" className="underline">abrir no Bitrix</a>
+                </>
+              )}
+              <span className="text-gray-400"> · capturado {formatarData(o.capturado_em)} (uso interno; nada é escrito no card)</span>
+            </p>
+            {o.historico_etapas.length > 0 && (
+              <div className="text-xs">
+                <div className="text-[11px] uppercase tracking-wide text-gray-500">Trilha de etapas</div>
+                <ul className="mt-1 space-y-0.5">
+                  {o.historico_etapas.map((h, i) => (
+                    <li key={i}>
+                      {formatarData(h.quando)} · {h.etapa}
+                      {h.semantica === "S" ? " ✓" : h.semantica === "F" ? " ✗" : ""}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {o.comentarios.length > 0 ? (
+              <div className="text-xs">
+                <div className="text-[11px] uppercase tracking-wide text-gray-500">Comentários do card ({o.comentarios.length})</div>
+                <ul className="mt-1 max-h-72 space-y-1 overflow-y-auto">
+                  {o.comentarios.map((c, i) => (
+                    <li key={i} className="rounded bg-gray-50 p-2">
+                      <span className="text-gray-500">{formatarData(c.quando)}</span> · <span className="whitespace-pre-wrap">{c.texto}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <p className="text-[11px] text-gray-500">Comentários do card ainda não capturados (entram nas próximas rodadas).</p>
+            )}
+            <details className="text-xs">
+              <summary className="cursor-pointer text-gray-600">Todos os campos preenchidos do card ({Object.keys(o.dados_legiveis).length})</summary>
+              <table className="mt-2 w-full">
+                <tbody className="divide-y divide-gray-100">
+                  {Object.entries(o.dados_legiveis).map(([k, v]) => (
+                    <tr key={k}>
+                      <td className="py-0.5 pr-3 text-gray-500">{k}</td>
+                      <td className="py-0.5">{Array.isArray(v) ? v.join(", ") : typeof v === "object" && v !== null ? JSON.stringify(v) : String(v)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </details>
+          </section>
+        ))}
 
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Acompanhamento</h2>

@@ -29,6 +29,8 @@ export type DocumentoLista = {
 export const SITUACOES: Record<string, string> = {
   cotacao: "Cotação",
   proposta: "Proposta",
+  recusado: "Recusado (cotação)",
+  perdido: "Perdido (negociação)",
   digitado: "Digitado (sem apólice)",
   emitido: "Emitido",
   vigente: "Vigente",
@@ -171,6 +173,42 @@ export type DocumentoFicha = DocumentoLista & {
   eventos: EventoDoc[];
   renovacao_de: { id: string; nosso_numero: number } | null;
   renovado_por: { id: string; nosso_numero: number }[];
+  revisao_pendente: boolean;
+  revisado_por_email: string | null;
+  itens: ItemDoc[];
+  origens: OrigemDoc[];
+};
+export type ItemDoc = {
+  id: string;
+  item_n: number;
+  tipo_imovel: string | null;
+  logradouro: string | null;
+  numero: string | null;
+  complemento: string | null;
+  cidade: string | null;
+  uf: string | null;
+  cep: string | null;
+  valor_aluguel: number | null;
+  plano: string | null;
+  observacoes: string | null;
+  partes: { papel: string; nome: string | null; documento_numero: string | null; ordem: number }[];
+  coberturas: { nome: string; importancia_segurada: number | null }[];
+};
+export type OrigemDoc = {
+  id: string;
+  sistema: string;
+  entity_type_id: number | null;
+  item_id: number;
+  titulo: string | null;
+  url: string | null;
+  etapa_id: string | null;
+  dados_legiveis: Record<string, unknown>;
+  historico_etapas: { quando: string; categoria: number; etapa: string; semantica: string | null }[];
+  comentarios: { quando: string; autor: number | null; texto: string }[];
+  comentarios_capturados_em: string | null;
+  card_criado_em: string | null;
+  card_atualizado_em: string | null;
+  capturado_em: string;
 };
 export type ProdutorDoc = {
   id: string;
@@ -207,7 +245,7 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
     .from("erp_documentos")
     .select(
       SELECT_LISTA +
-        ", corretora:erp_corretoras(apelido), tipo_contratacao, modo_cobranca, locatario_id, numero_proposta, numero_endosso, dt_proposta, dt_emissao, qtd_parcelas, forma_pagamento, premio_adicional, iof, comissao_pct, comissao_base, premiacao_valor, cancelado_em, competencia, congelado, fora_regra_pbi, origem, observacoes, digitado_em, documento_renovado_id"
+        ", corretora:erp_corretoras(apelido), tipo_contratacao, modo_cobranca, revisao_pendente, revisado_por_email, locatario_id, numero_proposta, numero_endosso, dt_proposta, dt_emissao, qtd_parcelas, forma_pagamento, premio_adicional, iof, comissao_pct, comissao_base, premiacao_valor, cancelado_em, competencia, congelado, fora_regra_pbi, origem, observacoes, digitado_em, documento_renovado_id"
     )
     .eq("id", id)
     .maybeSingle();
@@ -217,6 +255,8 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
     corretora: { apelido: string } | null;
     tipo_contratacao: string | null;
     modo_cobranca: string;
+    revisao_pendente: boolean;
+    revisado_por_email: string | null;
     locatario_id: string | null;
     numero_proposta: string | null;
     numero_endosso: string | null;
@@ -239,7 +279,7 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
     documento_renovado_id: string | null;
   };
 
-  const [{ data: prods }, { data: parcs }, { data: anexos }, { data: eventos }, { data: renovadoDe }, { data: renovadoPor }] = await Promise.all([
+  const [{ data: prods }, { data: parcs }, { data: anexos }, { data: eventos }, { data: renovadoDe }, { data: renovadoPor }, { data: itens }, { data: origens }] = await Promise.all([
     sb
       .from("erp_documento_produtores")
       .select("id, imobiliaria_id, produtor_corp_codigo, produtor_corp_nome, agente, principal, pct_participacao, repasse_pct, repasse_valor_previsto, repasse_pct_esperado, motivo_diferenca, forma_repasse, imobiliaria:imobiliarias(nome)")
@@ -257,6 +297,16 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
     sb.from("erp_documento_eventos").select("id, tipo, data, canal, destinatario, usuario_email").eq("documento_id", id).order("data", { ascending: false }).limit(50),
     d.documento_renovado_id ? sb.from("erp_documentos").select("id, nosso_numero").eq("id", d.documento_renovado_id).maybeSingle() : Promise.resolve({ data: null }),
     sb.from("erp_documentos").select("id, nosso_numero").eq("documento_renovado_id", id).limit(10),
+    sb
+      .from("erp_documento_itens")
+      .select("id, item_n, tipo_imovel, logradouro, numero, complemento, cidade, uf, cep, valor_aluguel, plano, observacoes, partes:erp_item_partes(papel, nome, documento_numero, ordem), coberturas:erp_item_coberturas(nome, importancia_segurada)")
+      .eq("documento_id", id)
+      .order("item_n"),
+    sb
+      .from("erp_origens")
+      .select("id, sistema, entity_type_id, item_id, titulo, url, etapa_id, dados_legiveis, historico_etapas, comentarios, comentarios_capturados_em, card_criado_em, card_atualizado_em, capturado_em")
+      .eq("documento_id", id)
+      .order("capturado_em", { ascending: false }),
   ]);
 
   type ProdBruto = Omit<ProdutorDoc, "imobiliaria"> & { imobiliaria: { nome: string } | null };
@@ -321,6 +371,15 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
     eventos: (eventos ?? []) as EventoDoc[],
     renovacao_de: (renovadoDe as { id: string; nosso_numero: number } | null) ?? null,
     renovado_por: (renovadoPor ?? []) as { id: string; nosso_numero: number }[],
+    revisao_pendente: !!d.revisao_pendente,
+    revisado_por_email: d.revisado_por_email,
+    itens: ((itens ?? []) as unknown as (Omit<ItemDoc, "valor_aluguel" | "partes" | "coberturas"> & { valor_aluguel: number | string | null; partes: ItemDoc["partes"] | null; coberturas: { nome: string; importancia_segurada: number | string | null }[] | null })[]).map((i) => ({
+      ...i,
+      valor_aluguel: i.valor_aluguel === null ? null : Number(i.valor_aluguel),
+      partes: [...(i.partes ?? [])].sort((a, b) => a.ordem - b.ordem),
+      coberturas: (i.coberturas ?? []).map((c) => ({ nome: c.nome, importancia_segurada: c.importancia_segurada === null ? null : Number(c.importancia_segurada) })),
+    })),
+    origens: (origens ?? []) as unknown as OrigemDoc[],
   };
 }
 
