@@ -15,6 +15,7 @@ import os from "node:os";
 import path from "node:path";
 import sharp from "sharp";
 import { chromium, type BrowserContext, type Page } from "playwright";
+import { pegarVezDoCorp } from "./_corp";
 
 type Relatorio = { id: string; tipo: "grade" | "clientes" | "sinistros" | "comissoes_recebidas" | "comissoes_pendentes"; de?: string; ate?: string; pasta: string };
 type Config = {
@@ -114,6 +115,7 @@ async function clicarModelo(page: Page, modelo: string, descricao: string) {
 
 // ------------------------------------------------------------ Corp
 async function entrar(ctx: BrowserContext, cfg: Config): Promise<Page> {
+  await pegarVezDoCorp("exportar (Robo Corp 12h/20h)"); // um robô por vez no login único do Corp
   const login = await ctx.newPage();
   await login.goto(cfg.url, { waitUntil: "domcontentloaded" });
   await login.fill('input[placeholder="Usuário"]', cfg.corretora.usuario);

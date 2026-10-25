@@ -94,8 +94,59 @@ export async function esperarModelo(page: Page, modelo: string, timeoutMs: numbe
   throw new Error(`"${modelo}" não apareceu em ${Math.round(timeoutMs / 1000)} s`);
 }
 
+// ------------------------------------------------------------ vez no login (um robô por vez)
+// O Corp terá um único login para os robôs (Matheus 25/10/2026): dois robôs logados ao mesmo tempo derrubam um ao
+// outro. Antes de entrar, cada robô pega a "vez" (arquivo de trava com o número do processo); se outro robô vivo
+// estiver com ela, espera até `maxEsperaMin` e desiste com mensagem clara. A vez é devolvida quando o processo termina
+// (normal, erro ou Ctrl+C). Trava de processo morto ou com mais de 12 h é considerada abandonada.
+const TRAVA = path.join(os.homedir(), ".robo-corp", "login-em-uso.json");
+type Trava = { pid: number; robo: string; desde: string };
+const vivo = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === "EPERM";
+  }
+};
+function lerTrava(): Trava | null {
+  try {
+    const t = JSON.parse(fs.readFileSync(TRAVA, "utf8")) as Trava;
+    const velha = Date.now() - new Date(t.desde).getTime() > 12 * 3600_000;
+    return t.pid !== process.pid && vivo(t.pid) && !velha ? t : null;
+  } catch {
+    return null;
+  }
+}
+let temVez = false;
+export async function pegarVezDoCorp(robo: string, maxEsperaMin = 60): Promise<void> {
+  if (temVez) return;
+  const limite = Date.now() + maxEsperaMin * 60_000;
+  let avisou = false;
+  for (;;) {
+    const outro = lerTrava();
+    if (!outro) break;
+    if (Date.now() > limite) throw new Error(`login do Corp ocupado pelo robô "${outro.robo}" desde ${outro.desde} (esperei ${maxEsperaMin} min)`);
+    if (!avisou) log(`login do Corp em uso pelo robô "${outro.robo}" (desde ${outro.desde}); esperando a vez…`);
+    avisou = true;
+    await espera(30_000);
+  }
+  fs.mkdirSync(path.dirname(TRAVA), { recursive: true });
+  fs.writeFileSync(TRAVA, JSON.stringify({ pid: process.pid, robo, desde: new Date().toISOString() } satisfies Trava));
+  temVez = true;
+  const devolver = () => {
+    try {
+      const t = JSON.parse(fs.readFileSync(TRAVA, "utf8")) as Trava;
+      if (t.pid === process.pid) fs.unlinkSync(TRAVA);
+    } catch {}
+  };
+  process.on("exit", devolver);
+  for (const s of ["SIGINT", "SIGTERM", "SIGBREAK"] as const) process.on(s, () => process.exit(130));
+}
+
 // ------------------------------------------------------------ login
-export async function entrar(ctx: BrowserContext, cfg: ConfigCorp): Promise<Page> {
+export async function entrar(ctx: BrowserContext, cfg: ConfigCorp, robo = path.basename(process.argv[1] ?? "robo")): Promise<Page> {
+  await pegarVezDoCorp(robo);
   const login = await ctx.newPage();
   await login.goto(cfg.url, { waitUntil: "domcontentloaded" });
   await login.fill('input[placeholder="Usuário"]', cfg.corretora.usuario);
