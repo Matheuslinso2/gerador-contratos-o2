@@ -114,6 +114,22 @@
     {
       "path": "/api/cron/base-unica-bitrix?produto=re-renovacao",
       "schedule": "52 * * * *"
+    },
+    {
+      "path": "/api/cron/erp-bitrix?spa=1042",
+      "schedule": "20 * * * *"
+    },
+    {
+      "path": "/api/cron/erp-bitrix?spa=1046",
+      "schedule": "24 * * * *"
+    },
+    {
+      "path": "/api/cron/erp-bitrix?spa=1048",
+      "schedule": "28 * * * *"
+    },
+    {
+      "path": "/api/cron/erp-bitrix?spa=1050",
+      "schedule": "32 * * * *"
     }
   ]
 }
