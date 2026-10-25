@@ -298,7 +298,8 @@ export async function sincronizarSpa(sb: SupabaseClient, cfg: ConfigSpa, o: Opco
       for (const x of data ?? []) capturados.set(Number(x.item_id), String(x.card_atualizado_em ?? ""));
       if (!data || data.length < 1000) break;
     }
-    itens = itens.filter((i) => !capturados.has(Number(i.id)) || capturados.get(Number(i.id))! < String(i.updatedTime));
+    // compara instantes (o Bitrix manda +03:00, o banco devolve UTC): texto não serve
+    itens = itens.filter((i) => !capturados.has(Number(i.id)) || Date.parse(capturados.get(Number(i.id))!) < Date.parse(String(i.updatedTime)));
   }
   r.cards = itens.length;
   const eventosPorCard = new Map<number, BitrixStageHistoryEvent[]>();
@@ -444,7 +445,7 @@ export async function sincronizarSpa(sb: SupabaseClient, cfg: ConfigSpa, o: Opco
       const eventos = (eventosPorCard.get(id) ?? []).sort((a, b) => a.CREATED_TIME.localeCompare(b.CREATED_TIME)).map((e) => ({ quando: e.CREATED_TIME, categoria: e.CATEGORY_ID, etapa: etapas.get(e.STAGE_ID)?.nome ?? e.STAGE_ID, semantica: e.STAGE_SEMANTIC_ID }));
       const { data: origemAtual } = await sb.from("erp_origens").select("id, comentarios_capturados_em, card_atualizado_em").eq("sistema", "bitrix").eq("entity_type_id", cfg.entityTypeId).eq("item_id", id).maybeSingle();
       let comentarios: unknown[] | undefined;
-      if (comentariosRestantes > 0 && (!origemAtual?.comentarios_capturados_em || String(origemAtual.card_atualizado_em ?? "") < String(item.updatedTime))) {
+      if (comentariosRestantes > 0 && (!origemAtual?.comentarios_capturados_em || Date.parse(String(origemAtual.card_atualizado_em ?? 0)) < Date.parse(String(item.updatedTime)))) {
         comentarios = await lerComentarios(cfg.entityTypeId, id);
         comentariosRestantes--;
         r.comentarios_capturados++;
