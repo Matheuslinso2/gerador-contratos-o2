@@ -14,11 +14,15 @@ export type CampoFiltro =
   | "forma_pagamento" // modo_cobranca: fatura / boleto / cartao / debito / nao_informado
   | "canal" // erp_canais (Superlógica, Base Software, Segimob)
   | "periodo" // de / ate (datas) — cada tela diz qual data é
-  | "mes"; // AAAA-MM
+  | "mes" // AAAA-MM
+  // setor imobiliário (Matheus 25/10): partes do contrato de locação e o imóvel
+  | "inquilino" // nome ou CPF/CNPJ do locatário (cliente do documento ou parte "locatário" do item)
+  | "proprietario" // nome ou CPF/CNPJ do proprietário/locador (parte "proprietário" ou "garantido" do item)
+  | "imovel"; // endereço ou CEP do imóvel segurado
 
-export type ValoresFiltro = Partial<Record<"q" | "seguradora" | "corretora" | "produto" | "situacao" | "tipo" | "imobiliaria" | "forma" | "canal" | "de" | "ate" | "mes", string>>;
+export type ValoresFiltro = Partial<Record<(typeof CHAVES)[number], string>>;
 
-const CHAVES = ["q", "seguradora", "corretora", "produto", "situacao", "tipo", "imobiliaria", "forma", "canal", "de", "ate", "mes"] as const;
+const CHAVES = ["q", "seguradora", "corretora", "produto", "situacao", "tipo", "imobiliaria", "forma", "canal", "de", "ate", "mes", "inquilino", "proprietario", "imovel"] as const;
 
 /** Lê os filtros da URL (só os conhecidos, aparados, vazios descartados). */
 export function lerFiltros(sp: Record<string, string | string[] | undefined>): ValoresFiltro {
@@ -33,6 +37,24 @@ export function lerFiltros(sp: Record<string, string | string[] | undefined>): V
   if (v.mes && !/^\d{4}-\d{2}$/.test(v.mes)) delete v.mes;
   return v;
 }
+
+/** Parâmetro da URL de cada campo (para saber se um campo avançado está em uso). */
+export const PARAMS_DO_CAMPO: Record<CampoFiltro, (keyof ValoresFiltro)[]> = {
+  busca: ["q"],
+  seguradora: ["seguradora"],
+  corretora: ["corretora"],
+  produto: ["produto"],
+  situacao: ["situacao"],
+  tipo: ["tipo"],
+  imobiliaria: ["imobiliaria"],
+  forma_pagamento: ["forma"],
+  canal: ["canal"],
+  periodo: ["de", "ate"],
+  mes: ["mes"],
+  inquilino: ["inquilino"],
+  proprietario: ["proprietario"],
+  imovel: ["imovel"],
+};
 
 export const temFiltro = (v: ValoresFiltro, exceto: (keyof ValoresFiltro)[] = []) =>
   Object.entries(v).some(([k, x]) => x && !exceto.includes(k as keyof ValoresFiltro));

@@ -55,6 +55,9 @@ export default async function ErpDocumentosPage({
     canal: f.canal,
     de: f.de,
     ate: f.ate,
+    inquilino: f.inquilino,
+    proprietario: f.proprietario,
+    imovel: f.imovel,
     limite: Number(limite) || 50,
   });
   const paramsMais = new URLSearchParams(Object.entries(f).filter(([, v]) => v) as [string, string][]);
@@ -71,7 +74,8 @@ export default async function ErpDocumentosPage({
 
         <FiltrosErp
           caminho="/erp/documentos"
-          campos={["busca", "seguradora", "produto", "situacao", "tipo", "imobiliaria", "forma_pagamento", "canal", "periodo"]}
+          campos={["busca", "seguradora", "produto", "situacao", "imobiliaria", "inquilino", "periodo", "proprietario", "imovel", "tipo", "forma_pagamento", "canal"]}
+          avancados={["proprietario", "imovel", "tipo", "forma_pagamento", "canal"]}
           valores={f}
           placeholderBusca="133632 · 0004640286 · Mario Imares"
           rotuloPeriodo="Início de vigência"
