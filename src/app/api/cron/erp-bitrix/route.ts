@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { CONFIGS, sincronizarSpa } from "@/lib/erp/bitrixOrigem";
+import { carregarExtratos } from "@/lib/erp/extratos";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -28,5 +29,17 @@ export async function GET(request: NextRequest) {
     // administrado × não administrado deduzido pela forma de pagamento ESCOLHIDA (fatura → sim; boleto/cartão com fatura ativa → não)
     await sb.rpc("erp_inferir_administrado");
   }
-  return NextResponse.json({ ok: resumo.erros.length === 0, ...resumo, alertas });
+  // extratos de comissão (Pottencial/Too/Tokio-resumo) do Gmail → ERP, junto da Capitalização (1× por hora)
+  let extratos: unknown = null;
+  if (spa === 1048) {
+    try {
+      const desde = new Date(Date.now() - 12 * 86400000).toISOString().slice(0, 10);
+      const carga = await carregarExtratos(sb, { desde, gravar: true, max: 20 });
+      const { data, error } = await sb.rpc("erp_cruzar_extratos");
+      extratos = { carga, cruzamento: error ? { erro: error.message } : data };
+    } catch (e) {
+      extratos = { erro: (e as Error).message };
+    }
+  }
+  return NextResponse.json({ ok: resumo.erros.length === 0, ...resumo, alertas, extratos });
 }

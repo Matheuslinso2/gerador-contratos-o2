@@ -261,3 +261,39 @@ export async function criarRascunhoResposta({
     },
   });
 }
+
+// --- Anexos (ERP Fase 2, 25/10/2026) -------------------------------------
+// Os extratos/demonstrativos de comissão das seguradoras chegam como anexo
+// (PDF/XLSX). Lista os anexos de uma mensagem e baixa um deles em Buffer.
+export type AnexoGmail = { attachmentId: string; nome: string; mimeType: string; tamanho: number };
+
+function coletarAnexos(parte: gmail_v1.Schema$MessagePart | undefined, acc: AnexoGmail[]): AnexoGmail[] {
+  if (!parte) return acc;
+  if (parte.body?.attachmentId && parte.filename) {
+    acc.push({ attachmentId: parte.body.attachmentId, nome: parte.filename, mimeType: parte.mimeType || "", tamanho: parte.body.size || 0 });
+  }
+  for (const filha of parte.parts ?? []) coletarAnexos(filha, acc);
+  return acc;
+}
+
+export async function listarMensagensComAnexos(query: string, maxResultados = 40): Promise<(MensagemGmail & { anexos: AnexoGmail[] })[]> {
+  const api = obterClienteGmail();
+  const lista = await api.users.messages.list({ userId: "me", q: query, maxResults: maxResultados });
+  const ids = (lista.data.messages || []).map((m) => m.id).filter((id): id is string => !!id);
+  const saida: (MensagemGmail & { anexos: AnexoGmail[] })[] = [];
+  for (let i = 0; i < ids.length; i += TAMANHO_LOTE) {
+    const lote = ids.slice(i, i + TAMANHO_LOTE);
+    const resultados = await Promise.all(lote.map((id) => api.users.messages.get({ userId: "me", id, format: "full" })));
+    for (const r of resultados) {
+      const m = paraMensagemGmail(r.data);
+      if (m) saida.push({ ...m, anexos: coletarAnexos(r.data.payload, []) });
+    }
+  }
+  return saida;
+}
+
+export async function baixarAnexo(messageId: string, attachmentId: string): Promise<Buffer> {
+  const api = obterClienteGmail();
+  const r = await api.users.messages.attachments.get({ userId: "me", messageId, id: attachmentId });
+  return Buffer.from(r.data.data || "", "base64url");
+}

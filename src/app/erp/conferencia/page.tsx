@@ -63,6 +63,21 @@ type ForaFatura = {
   vigencia_inicio: string | null;
   faturas_carregadas: number;
   parcela_na_janela: string | null;
+  no_extrato: boolean;
+};
+
+// Extratos de comissão (ERP Fase 2, 25/10): Pottencial e Too mandam planilha por apólice × parcela;
+// Tokio só o total do mês; Porto/Yelum só no portal. Linhas casadas por nº de apólice (erp_cruzar_extratos).
+type ExtratoResumo = {
+  seguradora: string;
+  tipo: string;
+  competencia: string | null;
+  total_bruto: number | null;
+  observacao: string | null;
+  created_at: string;
+  linhas: number;
+  casadas: number;
+  parcelas: number;
 };
 
 export default async function ErpConferenciaPage() {
@@ -72,7 +87,7 @@ export default async function ErpConferenciaPage() {
   } = await supabase.auth.getUser();
   if (!isAdmin(user?.email) && !isColaboradorO2(user?.email)) redirect("/");
 
-  const [{ data: todas }, { data: difs }, { data: alertasBrutos, error: erroAlertas }, { data: todosAlertas }, { data: foraBrutos, error: erroFora }] = await Promise.all([
+  const [{ data: todas }, { data: difs }, { data: alertasBrutos, error: erroAlertas }, { data: todosAlertas }, { data: foraBrutos, error: erroFora }, { data: extratosBrutos }, { data: recebimentos }] = await Promise.all([
     supabase.from("erp_conferencia_corp").select("mes", { count: "exact", head: true }),
     supabase.from("erp_conferencia_corp").select("*").or("dif_docs.neq.0,dif_comissao.gte.0.01,dif_comissao.lte.-0.01").order("mes", { ascending: false }),
     supabase
@@ -82,7 +97,9 @@ export default async function ErpConferenciaPage() {
       .order("fatura_prevista", { ascending: false })
       .limit(300),
     supabase.from("erp_alertas_fatura_pronto").select("alerta").limit(5000),
-    supabase.from("erp_fora_das_ultimas_faturas").select("documento_id, codigo_o2, nosso_numero_corp, numero_apolice, imobiliaria, seguradora, produto, vigencia_inicio, faturas_carregadas, parcela_na_janela").order("seguradora").order("imobiliaria").limit(400),
+    supabase.from("erp_fora_das_ultimas_faturas").select("documento_id, codigo_o2, nosso_numero_corp, numero_apolice, imobiliaria, seguradora, produto, vigencia_inicio, faturas_carregadas, parcela_na_janela, no_extrato").order("seguradora").order("imobiliaria").limit(400),
+    supabase.from("erp_extratos_resumo").select("*").order("created_at", { ascending: false }).limit(40),
+    supabase.from("erp_comissao_recebimentos").select("diferenca").limit(5000),
   ]);
   const diferencas = (difs ?? []) as Linha[];
   if (erroAlertas) console.error("erp_alertas_fatura:", erroAlertas.message);
@@ -91,6 +108,11 @@ export default async function ErpConferenciaPage() {
   void todas;
   const fora = (foraBrutos ?? []) as ForaFatura[];
   if (erroFora) console.error("erp_fora_das_ultimas_faturas:", erroFora.message);
+  const extratos = (extratosBrutos ?? []) as ExtratoResumo[];
+  const difRecebimentos = ((recebimentos ?? []) as { diferenca: number | null }[]).map((r) => Number(r.diferenca ?? 0));
+  const recebIguais = difRecebimentos.filter((d) => Math.abs(d) < 0.05).length;
+  const recebMenos = difRecebimentos.filter((d) => d <= -0.05).length;
+  const recebMais = difRecebimentos.filter((d) => d >= 0.05).length;
 
   return (
     <>
@@ -190,6 +212,7 @@ export default async function ErpConferenciaPage() {
                     <th className="px-2 py-1">Início vig.</th>
                     <th className="px-2 py-1">Parcela na janela</th>
                     <th className="px-2 py-1">Faturas conferidas</th>
+                    <th className="px-2 py-1">No extrato?</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -206,6 +229,54 @@ export default async function ErpConferenciaPage() {
                       <td className="px-2 py-1">{formatarData(f.vigencia_inicio)}</td>
                       <td className="px-2 py-1">{formatarData(f.parcela_na_janela)}</td>
                       <td className="px-2 py-1">{f.faturas_carregadas}</td>
+                      <td className="px-2 py-1">{f.no_extrato ? <span className="rounded-full bg-blue-100 px-2 py-0.5 text-blue-800">sim · pago fora da fatura</span> : <span className="text-gray-400">não</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Extratos de comissão das seguradoras</h2>
+          <p className="text-xs text-gray-500">
+            Lidos do e-mail de hora em hora: Pottencial (demonstrativo mensal, 1 linha por apólice × parcela) e Too (demonstrativo semanal). Tokio só manda o total do mês; Porto e Yelum não mandam extrato por e-mail (só no portal).
+            Cada linha é casada com o documento e a parcela do ERP e vira um recebimento de comissão conferido contra o previsto.
+          </p>
+          <div className="flex flex-wrap gap-2 text-xs">
+            <span className="rounded-full bg-green-100 px-2 py-0.5 text-green-800">Comissão igual ao previsto: <b>{recebIguais}</b></span>
+            <span className="rounded-full bg-orange-100 px-2 py-0.5 text-orange-800">Recebeu menos (estorno/ajuste): <b>{recebMenos}</b></span>
+            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-blue-800">Recebeu mais: <b>{recebMais}</b></span>
+          </div>
+          {extratos.length === 0 ? (
+            <p className="text-xs text-gray-500">Nenhum extrato carregado ainda.</p>
+          ) : (
+            <div className="max-h-[300px] overflow-auto">
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+                  <tr>
+                    <th className="px-2 py-1">Seguradora</th>
+                    <th className="px-2 py-1">Tipo</th>
+                    <th className="px-2 py-1">Competência</th>
+                    <th className="px-2 py-1">Total bruto</th>
+                    <th className="px-2 py-1">Linhas</th>
+                    <th className="px-2 py-1">Casadas</th>
+                    <th className="px-2 py-1">Com parcela</th>
+                    <th className="px-2 py-1">Origem</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {extratos.map((e, i) => (
+                    <tr key={i}>
+                      <td className="px-2 py-1">{e.seguradora}</td>
+                      <td className="px-2 py-1">{e.tipo === "resumo_mensal" ? "só total do mês" : "demonstrativo"}</td>
+                      <td className="px-2 py-1">{e.competencia ? e.competencia.slice(0, 7) : "—"}</td>
+                      <td className="px-2 py-1">{e.total_bruto != null ? Number(e.total_bruto).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "—"}</td>
+                      <td className="px-2 py-1">{e.linhas}</td>
+                      <td className="px-2 py-1">{e.casadas}</td>
+                      <td className="px-2 py-1">{e.parcelas}</td>
+                      <td className="max-w-[320px] truncate px-2 py-1 text-gray-500" title={e.observacao ?? ""}>{e.observacao ?? ""}</td>
                     </tr>
                   ))}
                 </tbody>
