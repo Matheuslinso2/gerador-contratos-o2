@@ -134,21 +134,6 @@ export type FiltrosBusca = {
   imovel?: string; // endereço ou CEP do imóvel
 };
 
-const limpar = (t: string) => t.replace(/[%_,()]/g, "").trim();
-const soDigitos = (t: string) => t.replace(/\D/g, "");
-
-/** ids dos documentos cujos itens têm uma parte (papéis) com esse nome/CPF-CNPJ. */
-async function docsPorParte(sb: SupabaseClient, papeis: string[], texto: string, idsPessoa: string[] = []): Promise<string[]> {
-  const dig = soDigitos(texto);
-  const cond = [dig.length >= 11 ? `documento_numero.eq.${dig}` : `nome.ilike.%${limpar(texto)}%`];
-  if (idsPessoa.length) cond.push(`locatario_id.in.(${idsPessoa.join(",")})`);
-  const { data: partes } = await sb.from("erp_item_partes").select("item_id").in("papel", papeis).or(cond.join(",")).limit(1000);
-  const itens = [...new Set((partes ?? []).map((p: { item_id: string }) => p.item_id))];
-  if (!itens.length) return [];
-  const { data: docs } = await sb.from("erp_documento_itens").select("documento_id").in("id", itens.slice(0, 300));
-  return [...new Set((docs ?? []).map((d: { documento_id: string }) => d.documento_id))];
-}
-
 /**
  * Busca de documentos. Número puro = Nosso Nº ou nº da apólice; texto = nome do
  * cliente (cofre) ou da imobiliária. Sem busca, mostra os mais recentes por início
@@ -184,38 +169,19 @@ export async function buscarDocumentos(sb: SupabaseClient, f: FiltrosBusca): Pro
     if (!ids.length) return { linhas: [], total: 0 };
     q = q.in("imobiliaria_principal_id", ids);
   }
-  // setor imobiliário (Matheus 25/10): inquilino = cliente do documento ou parte "locatário" do item; proprietário =
-  // parte "proprietário" ou "garantido" (no Fiança o garantido é o locador); imóvel = endereço/CEP do item
-  if (f.inquilino) {
-    const dig = soDigitos(f.inquilino);
-    const { data: pessoas } =
-      dig.length === 11 || dig.length === 14
-        ? await sb.from("locatarios").select("id").eq("cpf", dig).limit(5)
-        : await sb.from("locatarios").select("id").ilike("nome", `%${limpar(f.inquilino)}%`).limit(300);
-    const idsPessoa = (pessoas ?? []).map((c: { id: string }) => c.id);
-    const idsDoc = await docsPorParte(sb, ["locatario"], f.inquilino, idsPessoa);
-    const partes: string[] = [];
-    if (idsPessoa.length) partes.push(`locatario_id.in.(${idsPessoa.join(",")})`);
-    if (idsDoc.length) partes.push(`id.in.(${idsDoc.join(",")})`);
-    if (!partes.length) return { linhas: [], total: 0 };
-    q = q.or(partes.join(","));
-  }
-  if (f.proprietario) {
-    const idsDoc = await docsPorParte(sb, ["proprietario", "garantido"], f.proprietario);
-    if (!idsDoc.length) return { linhas: [], total: 0 };
-    q = q.in("id", idsDoc);
-  }
-  if (f.imovel) {
-    const dig = soDigitos(f.imovel);
-    const t = limpar(f.imovel);
-    const { data: itens } = await sb
-      .from("erp_documento_itens")
-      .select("documento_id")
-      .or(dig.length === 8 ? `cep.eq.${dig},cep.eq.${dig.slice(0, 5)}-${dig.slice(5)}` : `logradouro.ilike.%${t}%,bairro.ilike.%${t}%,complemento.ilike.%${t}%`)
-      .limit(300);
-    const idsDoc = [...new Set((itens ?? []).map((i: { documento_id: string }) => i.documento_id))];
-    if (!idsDoc.length) return { linhas: [], total: 0 };
-    q = q.in("id", idsDoc);
+  // setor imobiliário (Matheus 25/10): inquilino (cliente do documento ou parte "locatário"), proprietário (parte
+  // "proprietário" ou "garantido" — no Fiança o garantido é o locador) e imóvel (endereço/CEP). Resolvido no banco
+  // (erp_docs_por_partes, até 400 documentos mais recentes) para não montar listas enormes de ids na URL.
+  if (f.inquilino || f.proprietario || f.imovel) {
+    const { data: ids, error: e } = await sb.rpc("erp_docs_por_partes", {
+      p_inquilino: f.inquilino ?? null,
+      p_proprietario: f.proprietario ?? null,
+      p_imovel: f.imovel ?? null,
+    });
+    if (e) throw new Error(`erp_docs_por_partes: ${e.message}`);
+    const lista = ((ids ?? []) as unknown[]).map((x) => (typeof x === "string" ? x : (Object.values(x as object)[0] as string)));
+    if (!lista.length) return { linhas: [], total: 0 };
+    q = q.in("id", lista);
   }
 
   if (termo && /^\d+$/.test(termo)) {
