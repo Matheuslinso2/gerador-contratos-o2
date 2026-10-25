@@ -71,7 +71,7 @@ export default async function ErpDocumentosPage({
             Buscar
           </button>
           <span className="text-xs text-gray-500">
-            {total !== null ? `${total.toLocaleString("pt-BR")} documento(s)` : ""}
+            {total !== null ? `${total.toLocaleString("pt-BR")} documento(s)` : `os ${linhas.length} mais recentes (use a busca ou a situação para filtrar)`}
             {total !== null && total > linhas.length ? ` · mostrando ${linhas.length}` : ""}
           </span>
         </form>

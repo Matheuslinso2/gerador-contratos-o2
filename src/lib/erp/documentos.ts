@@ -125,8 +125,9 @@ export type FiltrosBusca = { busca: string; situacao?: string; limite?: number }
 export async function buscarDocumentos(sb: SupabaseClient, f: FiltrosBusca): Promise<{ linhas: DocumentoLista[]; total: number | null }> {
   const limite = Math.min(Math.max(f.limite ?? 50, 10), 200);
   const termo = f.busca.trim();
-  // premissa de desempenho do ERP: contagem exata só quando há filtro; a lista inteira usa a estimativa do banco
-  let q = sb.from("erp_documentos").select(SELECT_LISTA, { count: termo || f.situacao ? "exact" : "estimated" });
+  // premissa de desempenho do ERP: contagem só quando há filtro (contar/estimar os 120 mil com os vínculos custava 2–8 s);
+  // sem filtro a tela mostra os mais recentes e total = null
+  let q = sb.from("erp_documentos").select(SELECT_LISTA, termo || f.situacao ? { count: "exact" } : undefined);
   if (f.situacao) q = q.eq("situacao", f.situacao);
 
   if (termo && /^\d+$/.test(termo)) {
