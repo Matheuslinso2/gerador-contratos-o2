@@ -84,8 +84,9 @@ export function lerRelatorioPottencial(texto: string): { pagador: string | null;
   let corretor: string | null = null;
   for (const linha of texto.split(/\r?\n/)) {
     const c = csvLinha(linha);
-    if (c.length < 9 || !/^\d{5,}$/.test(c[0].trim()) || !/^\d{12,}$/.test(c[4].trim())) continue;
-    corretor ??= c[0].trim();
+    if (c.length < 9 || !/^\d+$/.test(c[0].trim()) || !/^\d{12,}$/.test(c[4].trim())) continue;
+    // o código do corretor pode variar dentro da mesma fatura (ex.: 15167929 e 1244); a fatura fica com o mais frequente
+    if (c[0].trim().length >= 5) corretor ??= c[0].trim();
     const [n, t] = c[7].split("/");
     itens.push({ ramo: c[4].trim().slice(9, 13) || null, apolice: semZero(c[4].trim().slice(-9)), endosso: null, parcela_n: Number(n) || null, parcelas_total: Number(t) || null, valor: Number(c[8].replace(/,/g, "")) || 0 });
   }
