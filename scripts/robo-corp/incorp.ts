@@ -32,7 +32,7 @@ const PASTA = path.join(os.tmpdir(), "corp-incorp");
 const CMD = path.join(PASTA, "cmd.json");
 const OK = path.join(PASTA, "ok.json");
 
-type Comando = { direito?: [number, number]; clique?: [number, number]; duplo?: [number, number]; tecla?: string; texto?: string; espera?: number; foto?: string; rolar?: [number, number, number]; enviar?: string | string[]; baixar?: string; sair?: boolean };
+type Comando = { aguardar?: [number, number, number, number]; max?: number; direito?: [number, number]; clique?: [number, number]; duplo?: [number, number]; tecla?: string; texto?: string; espera?: number; foto?: string; rolar?: [number, number, number]; enviar?: string | string[]; baixar?: string; sair?: boolean };
 
 async function main() {
   fs.mkdirSync(PASTA, { recursive: true });
@@ -115,6 +115,23 @@ async function main() {
               }
             }
             feitas.push(salvo ? `baixado: ${destino}` : "não baixou (nem download nem aba com conteúdo)");
+            continue;
+          }
+          if (c.aguardar) {
+            // espera uma PESSOA agir na janela do robô (ex.: Matheus digita a Senha de Controle Financeiro — o robô
+            // nunca digita senha): fica olhando a região [x,y,larg,alt] até ela mudar, por até `max` ms (padrão 5 min)
+            const [x, y, width, height] = c.aguardar;
+            const antes = await page.screenshot({ clip: { x, y, width, height } });
+            const fim = Date.now() + (c.max ?? 300_000);
+            let mudou = false;
+            while (!mudou && Date.now() < fim) {
+              await espera(1500);
+              const agora = await page.screenshot({ clip: { x, y, width, height } });
+              mudou = !agora.equals(antes);
+            }
+            feitas.push(mudou ? "região mudou (pessoa agiu)" : "TEMPO ESGOTADO esperando a pessoa");
+            await espera(c.espera ?? 2000);
+            if (c.foto) feitas.push(await foto(page, c.foto));
             continue;
           }
           if (c.direito) await page.mouse.click(c.direito[0], c.direito[1], { button: "right" });
