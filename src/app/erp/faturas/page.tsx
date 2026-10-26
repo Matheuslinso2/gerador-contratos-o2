@@ -27,8 +27,8 @@ export default async function ErpFaturasPage({ searchParams }: { searchParams: P
       <div>
         <h1 className="text-xl font-semibold text-o2-navy">Faturas</h1>
         <p className="text-sm text-gray-600">
-          Uma tela por fatura: imobiliária + seguradora + a fatura na seguradora. Mostra o último mês carregado; abra a fatura para ver o movimento mês a mês. Por
-          enquanto Tokio e Porto. Os arquivos continuam chegando pelo /faturas do Workspace.
+          Uma tela por fatura: imobiliária + seguradora + a fatura na seguradora. Mostra o último mês carregado; abra a fatura para ver o movimento mês a mês. 
+          Tokio, Porto, Pottencial, Too e Yelum. Os arquivos continuam chegando pelo /faturas do Workspace.
         </p>
       </div>
       <FiltrosErp

@@ -111,7 +111,7 @@ export async function listarFaturas(sb: SupabaseClient, f: { seguradora?: string
     .from("erp_fatura_meses")
     .select("id, competencia, vencimento, valor_boleto, valor_itens, qtd_itens, fatura:erp_faturas!inner(id, seguradora, chave, corretora, imobiliaria:imobiliarias!inner(nome))")
     .order("competencia", { ascending: false });
-  if (f.seguradora) q = q.eq("fatura.seguradora", f.seguradora === "TOKI" ? "TOKIO" : f.seguradora === "PORT" ? "PORTO" : "—");
+  if (f.seguradora) q = q.eq("fatura.seguradora", ({ TOKI: "TOKIO", PORT: "PORTO", POTT: "POTTENCIAL", TOO: "TOO", YELU: "YELUM" } as Record<string, string>)[f.seguradora] ?? "—");
   if (f.imobiliaria) q = q.ilike("fatura.imobiliaria.nome", `%${f.imobiliaria.replace(/[%_,()]/g, "")}%`);
   if (f.mes) q = q.eq("competencia", f.mes);
   const { data } = await q.limit(2000);

@@ -65,7 +65,53 @@ export function lerBoletoPorto(texto: string): Item[] {
   return itens;
 }
 
-type Grupo = { seguradora: "TOKIO" | "PORTO"; imobiliaria_id: string; competencia: string; chaveBase: string; ramo: string | null; vencimento: string | null; valor_boleto: number | null; arquivos: string[]; itens: Item[] };
+// Pottencial (relatório .xls lido como texto): "Fatura:,,1000246093", "Pagador:,NOME (15021900)" e linhas
+// Código Corretor,CPF,Locatário,Proposta,Apólice(25 díg.),Locador,Vencimento,Parc. n/N,Valor. A apólice do Corp são os 9 últimos dígitos.
+function csvLinha(l: string): string[] {
+  const out: string[] = [];
+  let cur = "", q = false;
+  for (const ch of l) {
+    if (ch === '"') q = !q;
+    else if (ch === "," && !q) { out.push(cur); cur = ""; }
+    else cur += ch;
+  }
+  out.push(cur);
+  return out;
+}
+export function lerRelatorioPottencial(texto: string): { pagador: string | null; corretor: string | null; itens: Item[] } {
+  const pagador = texto.match(/Pagador:,[^\n]*\((\d+)\)/)?.[1] ?? null;
+  const itens: Item[] = [];
+  let corretor: string | null = null;
+  for (const linha of texto.split(/\r?\n/)) {
+    const c = csvLinha(linha);
+    if (c.length < 9 || !/^\d{5,}$/.test(c[0].trim()) || !/^\d{12,}$/.test(c[4].trim())) continue;
+    corretor ??= c[0].trim();
+    const [n, t] = c[7].split("/");
+    itens.push({ ramo: c[4].trim().slice(9, 13) || null, apolice: semZero(c[4].trim().slice(-9)), endosso: null, parcela_n: Number(n) || null, parcelas_total: Number(t) || null, valor: Number(c[8].replace(/,/g, "")) || 0 });
+  }
+  return { pagador, corretor, itens };
+}
+// Too (relatório PDF): "Ramo 46 - FIANÇA LOCATÍCIA Corretor O2 CAPITALIZACAO E SEGUROS LTDA …" e linhas "1074600156218 R$ 269,94 16 NOME CPF".
+export function lerRelatorioToo(texto: string): { ramo: string | null; corretor: string | null; itens: Item[] } {
+  const ramo = texto.match(/Ramo\s+(\d+)/)?.[1] ?? null;
+  const corretor = /Corretor\s+O2 CAP/i.test(texto) ? "O2 Capitalização" : /Corretor\s+O2/i.test(texto) ? "O2 Corretora" : null;
+  const itens: Item[] = [];
+  for (const m of texto.matchAll(/(\d{10,15})\s+R\$\s*(-?[\d.]*\d,\d{2})\s+(\d{1,3})\s/g)) itens.push({ ramo, apolice: semZero(m[1]), endosso: null, parcela_n: Number(m[3]) || null, parcelas_total: null, valor: reais(m[2]) });
+  return { ramo, corretor, itens };
+}
+// Yelum (relatório PDF): "143820260021360 78403897/1 NOME … RESID IMOBIIND 2/4 10/10/2026 59,48" (nomes podem quebrar linha).
+export function lerRelatorioYelum(texto: string): Item[] {
+  const itens: Item[] = [];
+  const pos = [...texto.matchAll(/(\d{15})\s+\d+\/\d+\s/g)];
+  pos.forEach((m, i) => {
+    const trecho = texto.slice(m.index!, pos[i + 1]?.index ?? texto.length);
+    const f = trecho.match(/\s(\d{1,3})\/(\d{1,3})\s+\d{2}\/\d{2}\/\d{4}\s+(-?[\d.]*\d,\d{2})/);
+    if (f) itens.push({ ramo: m[1].slice(0, 4), apolice: semZero(m[1]), endosso: null, parcela_n: Number(f[1]) || null, parcelas_total: Number(f[2]) || null, valor: reais(f[3]) });
+  });
+  return itens;
+}
+
+type Grupo = { seguradora: "TOKIO" | "PORTO" | "POTTENCIAL" | "TOO" | "YELUM"; codigo_corretor?: string | null; corretora?: string | null; imobiliaria_id: string; competencia: string; chaveBase: string; ramo: string | null; vencimento: string | null; valor_boleto: number | null; arquivos: string[]; itens: Item[] };
 
 function montarGrupos(arquivos: Arquivo[]): Grupo[] {
   const grupos: Grupo[] = [];
@@ -109,6 +155,36 @@ function montarGrupos(arquivos: Arquivo[]): Grupo[] {
         itens,
       });
     }
+    for (const seg of ["POTTENCIAL", "TOO", "YELUM"] as const) {
+      const daSeg = lista.filter((a) => a.seguradora === seg);
+      const bols = daSeg.filter((a) => (a.tipo_documento ?? "") === "boleto");
+      const rels = daSeg.filter((a) => (a.tipo_documento ?? "") !== "boleto");
+      const usadosB = new Set<string>();
+      for (const r of rels) {
+        let itens: Item[] = [], chaveBase = "", codigo: string | null = null, corretora: string | null = null, ramo: string | null = null;
+        if (seg === "POTTENCIAL") {
+          const p = lerRelatorioPottencial(r.texto_bruto_extraido!);
+          itens = p.itens; codigo = p.corretor; ramo = itens[0]?.ramo ?? null;
+          chaveBase = `${p.pagador ?? "sem-pagador"}-${p.corretor ?? "?"}`;
+        } else if (seg === "TOO") {
+          const t = lerRelatorioToo(r.texto_bruto_extraido!);
+          itens = t.itens; corretora = t.corretor; ramo = t.ramo;
+          chaveBase = `${t.ramo ?? "?"}-${t.corretor === "O2 Capitalização" ? "CAP" : t.corretor === "O2 Corretora" ? "COR" : "?"}`;
+        } else {
+          itens = lerRelatorioYelum(r.texto_bruto_extraido!); ramo = itens[0]?.ramo ?? null;
+          chaveBase = ramo ?? "?";
+        }
+        if (!itens.length) continue;
+        const soma = itens.reduce((x, i) => x + i.valor, 0);
+        const nucleo = nucleoArquivo(r.arquivo_nome);
+        const b =
+          bols.find((x) => !usadosB.has(x.id) && nucleoArquivo(x.arquivo_nome) === nucleo) ??
+          bols.find((x) => !usadosB.has(x.id) && x.valor !== null && Math.abs(Number(x.valor) - soma) <= 1) ??
+          bols.find((x) => !usadosB.has(x.id) && x.vencimento && x.vencimento === r.vencimento);
+        if (b) usadosB.add(b.id);
+        grupos.push({ seguradora: seg, imobiliaria_id: r.imobiliaria_id!, competencia: r.competencia, chaveBase, ramo, codigo_corretor: codigo, corretora, vencimento: b?.vencimento ?? r.vencimento, valor_boleto: b?.valor ?? null, arquivos: b ? [r.id, b.id] : [r.id], itens });
+      }
+    }
   }
   return grupos;
 }
@@ -120,7 +196,7 @@ export async function carregarItensFaturas(sb: SupabaseClient, o: { desde: strin
     const { data, error } = await sb
       .from("faturas")
       .select("id, imobiliaria_id, seguradora, competencia, vencimento, valor, tipo_documento, arquivo_nome, texto_bruto_extraido")
-      .in("seguradora", ["TOKIO", "PORTO FIANÇA", "PORTO RE"])
+      .in("seguradora", ["TOKIO", "PORTO FIANÇA", "PORTO RE", "POTTENCIAL", "TOO", "YELUM"])
       .neq("status", "cancelada")
       .gte("competencia", o.desde)
       .order("competencia")
@@ -135,11 +211,17 @@ export async function carregarItensFaturas(sb: SupabaseClient, o: { desde: strin
   let meses = 0, linhas = 0;
   for (const g of grupos) {
     // Porto: mesma imobiliária e ramo pode ter mais de uma fatura; a do mês continua a fatura que mais divide apólices com ela
-    let chave = g.seguradora === "TOKIO" ? g.chaveBase : `${g.chaveBase}#1`;
-    if (g.seguradora === "PORTO") {
-      const candidatas = [...faturas.entries()].filter(([k]) => k.startsWith(`PORTO|${g.imobiliaria_id}|${g.chaveBase}#`));
+    const porContinuidade = g.seguradora === "PORTO" || g.seguradora === "YELUM";
+    let chave = porContinuidade ? `${g.chaveBase}#1` : g.chaveBase;
+    if (porContinuidade) {
+      const candidatas = [...faturas.entries()].filter(([k]) => k.startsWith(`${g.seguradora}|${g.imobiliaria_id}|${g.chaveBase}#`));
       let melhor: { chave: string; comum: number } | null = null;
+      // reler é seguro: se este arquivo já foi lido neste mês, fica na mesma fatura
       for (const [k, id] of candidatas) {
+        const { data: ja } = await sb.from("erp_fatura_meses").select("id").eq("fatura_id", id).eq("competencia", g.competencia).overlaps("arquivos", g.arquivos).limit(1);
+        if (ja?.length) melhor = { chave: k.split("|")[2], comum: Number.MAX_SAFE_INTEGER };
+      }
+      for (const [k, id] of melhor ? [] : candidatas) {
         const { data: ant } = await sb.from("erp_fatura_meses").select("id, competencia, erp_fatura_itens(apolice)").eq("fatura_id", id).lt("competencia", g.competencia).order("competencia", { ascending: false }).limit(1);
         const aps = new Set(((ant?.[0] as unknown as { erp_fatura_itens: { apolice: string }[] } | undefined)?.erp_fatura_itens ?? []).map((i) => i.apolice));
         const comum = g.itens.filter((i) => aps.has(i.apolice)).length;
@@ -161,8 +243,8 @@ export async function carregarItensFaturas(sb: SupabaseClient, o: { desde: strin
     const kf = `${g.seguradora}|${g.imobiliaria_id}|${chave}`;
     let faturaId = faturas.get(kf);
     if (!faturaId) {
-      const { data, error } = await sb.from("erp_faturas").insert({ seguradora: g.seguradora, imobiliaria_id: g.imobiliaria_id, chave, ramo: g.ramo }).select("id").single();
-      if (error) throw new Error(`erp_faturas: ${error.message}`);
+      const { data, error } = await sb.from("erp_faturas").insert({ seguradora: g.seguradora, imobiliaria_id: g.imobiliaria_id, chave, ramo: g.ramo, codigo_corretor: g.codigo_corretor ?? null, corretora: g.corretora ?? null }).select("id").single();
+      if (error) throw new Error(`erp_faturas: ${error.message} (${kf})`);
       faturaId = data.id as string;
       faturas.set(kf, faturaId);
     }
