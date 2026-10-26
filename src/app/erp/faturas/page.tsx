@@ -39,7 +39,7 @@ export default async function ErpFaturasPage({ searchParams }: { searchParams: P
           <>
             {faturas.length} faturas · {divergentes} com boleto diferente da soma das linhas (acima de {formatarReais(TOLERANCIA_FATURA)}) ·{" "}
             <Link href="/erp/faturas/alertas" className="underline">
-              {alertas ?? 0} apólices fora das últimas faturas
+              {alertas ?? 0} contratadas fora da fatura (informativo, não é pendência)
             </Link>
           </>
         }

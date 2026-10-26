@@ -284,7 +284,7 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
         </section>
 
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Fora das últimas faturas ({fora.length})</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Contratadas fora da fatura ({fora.length}) — informativo, não é pendência</h2>
           <p className="text-xs text-gray-500">
             Cruzamento das últimas faturas carregadas de cada imobiliária × seguradora (Tokio, Pottencial, Too, Yelum): quem apareceu em alguma fatura ficou com forma de pagamento “fatura”.
             Aqui estão as apólices com parcela vencendo na janela dessas faturas que não apareceram em nenhuma delas (imobiliárias com 2+ faturas carregadas) — candidatas a boleto/cartão, a confirmar no extrato de comissão.

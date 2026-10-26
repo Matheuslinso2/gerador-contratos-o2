@@ -9,3 +9,4 @@
 -- Vencimentos (26/10): erp_parcelas.vencimento_seguradora/vencimento_fonte; erp_atualizar_vencimentos() grava o vencimento
 -- cobrado pela seguradora na fatura e refaz erp_vencimentos_pronto (parcelas cujo mês no Corp ≠ mês cobrado). Tela /erp/parcelas
 -- (+ CSV para corrigir no Corp). 1ª execução: 1.522 parcelas divergentes (Tokio 1.000 com o Corp 1 mês depois).
+-- 26/10: erp_alertas_fatura passou a filtrar só modo_cobranca = 'fatura' (fora da fatura NÃO é pendência — Matheus); migration erp_alertas_fatura_so_escolhida.

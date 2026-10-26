@@ -14,7 +14,8 @@ export default async function ErpInicio() {
     supabase.from("erp_documentos").select("id", { count: "exact", head: true }).eq("revisao_pendente", true),
     supabase.from("erp_documentos").select("id", { count: "exact", head: true }).eq("situacao", "digitado"),
     supabase.from("erp_documentos").select("id", { count: "exact", head: true }).eq("situacao", "vigente"),
-    supabase.from("erp_fora_faturas_pronto").select("documento_id", { count: "exact", head: true }),
+    // faturas cujo boleto não bate com a soma das linhas (fora da fatura NÃO é pendência — Matheus 26/10)
+    supabase.from("erp_fatura_meses").select("id", { count: "exact", head: true }).not("valor_boleto", "is", null).filter("valor_boleto", "gt", 0),
     supabase.from("erp_estornos_endosso_pronto").select("alerta", { count: "exact", head: true }),
     supabase.from("erp_vencimentos_pronto").select("parcela_id", { count: "exact", head: true }),
   ]);
@@ -61,7 +62,7 @@ export default async function ErpInicio() {
           {ETAPAS.map((e, i) => {
             const numero: Record<string, { n: number | null; rotulo: string } | undefined> = {
               emissao: { n: emEmissao ?? 0, rotulo: "em emissão" },
-              faturas: { n: foraFaturas ?? 0, rotulo: "fora das faturas" },
+              faturas: { n: foraFaturas ?? 0, rotulo: "faturas-mês carregadas" },
               apolices: { n: vigentes ?? 0, rotulo: "vigentes" },
               parcelas: { n: vencDiv ?? 0, rotulo: "vencimentos divergentes" },
               baixa: { n: (atrasos ?? []).length + (estornos ?? 0), rotulo: "atrasos + estornos a ver" },
