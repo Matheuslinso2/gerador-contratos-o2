@@ -52,7 +52,7 @@ async function main() {
     await espera(4000);
     fs.writeFileSync(OK, JSON.stringify({ pronto: true, fotos: [await foto(page, "incorp")] }));
     log(`pronto; comandos em ${CMD}; fotos em ${fotos}`);
-    const fim = Date.now() + 90 * 60_000;
+    const fim = Date.now() + 240 * 60_000; // lotes grandes (26/10: ~47 extratos)
     while (Date.now() < fim) {
       if (!fs.existsSync(CMD)) { await espera(700); continue; }
       let lote: Comando[] = [];
