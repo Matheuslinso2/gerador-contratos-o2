@@ -7,6 +7,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { nomeExibidoRemetente } from "@/lib/campanhas/remetente";
 import { bccDoCard, continuarConversa } from "@/lib/bitrix/conversasEmail";
 import { vincularPorTratativa } from "@/lib/bitrix/conversasGmail";
+import { buscarAssinatura, htmlAssinatura } from "@/lib/bitrix/assinaturasEmail";
 
 export const dynamic = "force-dynamic";
 
@@ -30,10 +31,11 @@ const AVISO_LEGAL =
 // destaques em laranja que cada pessoa aplica no próprio texto, e o AVISO
 // LEGAL em itálico no final. O corpo já vem em HTML (editado na tela de
 // composição), então é inserido direto, sem reprocessar quebra de linha.
-function montarHtmlEmailCard(params: { corpoHtml: string }): string {
+function montarHtmlEmailCard(params: { corpoHtml: string; assinaturaHtml: string }): string {
   return `
     <div style="font-family:verdana,sans-serif;font-size:small;line-height:1.5;color:#073763;">
       ${params.corpoHtml}
+      ${params.assinaturaHtml}
       <br />
       <div style="font-family:verdana,sans-serif;font-size:small;color:#073763;"><i><b>AVISO LEGAL</b> ${AVISO_LEGAL}</i></div>
     </div>`;
@@ -77,7 +79,7 @@ export async function POST(request: NextRequest) {
     itemId?: number;
     para?: string;
     cc?: string;
-    remetenteNome?: string;
+    assinaturaSlug?: string;
     assunto?: string;
     corpo?: string;
     anexos?: { caminho: string; nome: string }[];
@@ -114,7 +116,14 @@ export async function POST(request: NextRequest) {
   for (const e of copias) if (!cc.some((c) => c.toLowerCase() === e.toLowerCase())) cc.push(e);
   const replyTo = gerarEnderecoRespostaCard(entityTypeId, itemId);
 
-  const html = montarHtmlEmailCard({ corpoHtml: sanitizarHtmlSimples(corpo) });
+  // Quem está enviando é sempre alguém da equipe: o nome e a imagem de assinatura
+  // vêm do cadastro (nunca de texto digitado na tela).
+  const assinatura = body.assinaturaSlug ? await buscarAssinatura(body.assinaturaSlug) : null;
+  if (!assinatura) {
+    return NextResponse.json({ ok: false, erro: "Escolha quem está enviando o e-mail (campo Remetente)." }, { status: 400 });
+  }
+
+  const html = montarHtmlEmailCard({ corpoHtml: sanitizarHtmlSimples(corpo), assinaturaHtml: htmlAssinatura(assinatura) });
 
   // Anexos sobem direto pro Storage a partir do navegador (ver
   // anexo-upload-url/route.ts) -- aqui só baixamos de volta (chamada de
@@ -158,7 +167,7 @@ export async function POST(request: NextRequest) {
       html,
       anexos,
       replyTo,
-      remetente: nomeExibidoRemetente(body.remetenteNome),
+      remetente: nomeExibidoRemetente(assinatura.nome),
       throwSeFalhar: true,
     });
   } catch (erro) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { salvarInstalacao } from "@/lib/bitrix/appAuth";
 import { entityTypeIdPorPlacement } from "@/lib/bitrix/entidadesCard";
 import { MODELOS_EMAIL } from "@/lib/bitrix/modelosEmail";
+import { listarAssinaturas, urlImagemAssinatura } from "@/lib/bitrix/assinaturasEmail";
 
 export const dynamic = "force-dynamic";
 
@@ -122,6 +123,9 @@ export async function POST(request: NextRequest) {
     (m) => !m.entidades || (entityTypeIdDoPost !== null && m.entidades.includes(entityTypeIdDoPost))
   );
 
+  // Remetentes (equipe) com a imagem de assinatura de cada um.
+  const assinaturas = (await listarAssinaturas()).map((a) => ({ ...a, imagem: urlImagemAssinatura(a.arquivo) }));
+
   const html = `<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -181,9 +185,12 @@ export async function POST(request: NextRequest) {
   <div id="preview-card"></div>
 
   <form id="form-email" style="display:none;">
-    <label for="remetente-nome">Remetente (seu nome)</label>
-    <input id="remetente-nome" type="text" maxlength="40" placeholder="Ex: Henrique Guterres" autocomplete="off" />
+    <label for="remetente-nome">Remetente (quem está enviando)</label>
+    <select id="remetente-nome" required>
+      <option value="">Escolha seu nome…</option>
+    </select>
     <div id="dica-remetente"></div>
+    <img id="previa-assinatura" alt="" style="display:none;margin-top:8px;max-width:100%;width:420px;border:1px solid #eee;border-radius:6px;" />
 
     <label for="para">Para</label>
     <input id="para" type="text" required placeholder="cliente@exemplo.com (mais de um: separe por vírgula ou ponto e vírgula)" />
@@ -256,6 +263,7 @@ export async function POST(request: NextRequest) {
     // quando a prévia do card chega; até lá (ou se falhar) os placeholders viram
     // trechos entre colchetes pra pessoa completar à mão.
     var MODELOS_EMAIL = ${JSON.stringify(modelosDoCard).replace(/</g, "\\u003c")};
+    var ASSINATURAS = ${JSON.stringify(assinaturas).replace(/</g, "\\u003c")};
     var infoCard = null;
     var ultimoAssuntoModelo = "";
     var ultimoCorpoModelo = "";
@@ -678,19 +686,36 @@ export async function POST(request: NextRequest) {
         if (itemId && entityTypeId) carregarConversas(authInicial && authInicial.access_token);
         if (itemId && entityTypeId) mostrarEnderecoCard();
 
-        // Nome que a imobiliária vê como remetente. Lembrado no navegador de
-        // quem usa (só conveniência -- sem isso o campo só fica vazio).
+        // Quem está enviando: lista da equipe, cada um com a sua imagem de
+        // assinatura. O nome vira o remetente na caixa de entrada de quem recebe.
+        // Lembrado no navegador de quem usa (só conveniência).
         var remetenteEl = document.getElementById("remetente-nome");
         var dicaRemetenteEl = document.getElementById("dica-remetente");
+        var previaAssinaturaEl = document.getElementById("previa-assinatura");
+        ASSINATURAS.forEach(function (a) {
+          var opcao = document.createElement("option");
+          opcao.value = a.slug;
+          opcao.textContent = a.nome + (a.cargo ? " — " + a.cargo : "");
+          remetenteEl.appendChild(opcao);
+        });
         function atualizarDicaRemetente() {
-          var nome = remetenteEl.value.replace(/[^\\p{L}\\p{N} '\\-]/gu, "").replace(/\\s+/g, " ").trim();
-          dicaRemetenteEl.textContent = "Aparece na caixa de entrada como: " + (nome ? nome + " | O2 Seguros" : "O2 Seguros");
+          var escolhida = ASSINATURAS.filter(function (a) { return a.slug === remetenteEl.value; })[0];
+          dicaRemetenteEl.textContent = escolhida
+            ? "Aparece na caixa de entrada como: " + escolhida.nome + " | O2 Seguros. A assinatura abaixo vai no fim do e-mail."
+            : "Escolha quem está enviando: o nome e a assinatura saem no e-mail.";
+          if (escolhida) {
+            previaAssinaturaEl.src = escolhida.imagem;
+            previaAssinaturaEl.alt = escolhida.nome;
+            previaAssinaturaEl.style.display = "block";
+          } else {
+            previaAssinaturaEl.style.display = "none";
+          }
         }
         function restaurarRemetente() {
-          try { remetenteEl.value = localStorage.getItem("o2_remetente_nome") || ""; } catch (e) {}
+          try { remetenteEl.value = localStorage.getItem("o2_remetente_assinatura") || ""; } catch (e) {}
           atualizarDicaRemetente();
         }
-        remetenteEl.addEventListener("input", atualizarDicaRemetente);
+        remetenteEl.addEventListener("change", atualizarDicaRemetente);
         restaurarRemetente();
 
         document.getElementById("form-email").addEventListener("submit", function (evento) {
@@ -699,6 +724,13 @@ export async function POST(request: NextRequest) {
           var mensagem = document.getElementById("mensagem");
           mensagem.className = "";
           mensagem.textContent = "";
+
+          if (!remetenteEl.value) {
+            mensagem.className = "erro";
+            mensagem.textContent = "Escolha quem está enviando (campo Remetente).";
+            remetenteEl.focus();
+            return;
+          }
 
           if (!corpoEl.textContent.trim()) {
             mensagem.className = "erro";
@@ -718,7 +750,7 @@ export async function POST(request: NextRequest) {
               authId: auth && auth.access_token,
               entityTypeId: entityTypeId,
               itemId: Number(itemId),
-              remetenteNome: remetenteEl.value,
+              assinaturaSlug: remetenteEl.value,
               para: document.getElementById("para").value,
               cc: document.getElementById("cc").value,
               assunto: document.getElementById("assunto").value,
@@ -732,7 +764,7 @@ export async function POST(request: NextRequest) {
               if (resultado.ok && resultado.dados.ok) {
                 mensagem.className = "sucesso";
                 mensagem.textContent = "E-mail enviado.";
-                try { localStorage.setItem("o2_remetente_nome", remetenteEl.value); } catch (e) {}
+                try { localStorage.setItem("o2_remetente_assinatura", remetenteEl.value); } catch (e) {}
                 document.getElementById("form-email").reset();
                 restaurarRemetente();
                 aplicarConversa();
