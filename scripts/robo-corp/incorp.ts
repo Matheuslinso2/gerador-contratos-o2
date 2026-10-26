@@ -12,6 +12,12 @@
 //   foi gravada (ficou igual ao recebimento) porque o cursor ainda estava no campo. "Importação realizada com sucesso" → OK.
 //   Histórico de Comissões (487,95): período em campo com máscara (Ctrl+A, Delete, Home, ddmmaaaa) → funil (760,155).
 //   Arquivo da Tokio: gerar com gerarTxtTokioIncorp (src/lib/erp/incorpTxt.ts) — layout de colunas fixas da equipe.
+//   Ícones: "A" dourado (61,137) = Alfa; "AL" (141,137) = Allianz; "T" (1021,137) = Tokio. Ler a pasta leva 1–2 min
+//   (a tela congela nesse meio); importar 100 linhas ~1,5 min — esperar antes do OK/combo.
+//   Envio: caminho com "/" (barra invertida se perde no cmd.json) e espera ≥12 s por PDF antes de fechar a aba.
+//   26/10: PDF da Alfa (Demonstrativo do portal) e da Allianz ("Extrato de comissões pagas por SUSEP") são aceitos,
+//   vão para LIDAS (Allianz vira .txt), mas o InCorp não tira nenhuma linha → formato não serve; perguntar à equipe.
+//   Tokio "COMISSAO ANTECIPADA"/premiação aparecem em vermelho (valor ≠ estimado) — deixadas de fora para conferência.
 //   Arquivo recusado vira COM_<nome> na pasta; excluir pelo botão direito → Excluir com SÓ ele selecionado (clique simples antes).
 // uso: npx tsx scripts/robo-corp/incorp.ts   (comandos em %TEMP%\corp-incorp\cmd.json; resposta em ok.json)
 //   [{"clique":[x,y]},{"duplo":[x,y]},{"tecla":"Enter"},{"texto":"08/09/2026"},{"espera":1500},{"foto":"nome"},
@@ -26,7 +32,7 @@ const PASTA = path.join(os.tmpdir(), "corp-incorp");
 const CMD = path.join(PASTA, "cmd.json");
 const OK = path.join(PASTA, "ok.json");
 
-type Comando = { direito?: [number, number]; clique?: [number, number]; duplo?: [number, number]; tecla?: string; texto?: string; espera?: number; foto?: string; rolar?: [number, number, number]; enviar?: string; baixar?: string; sair?: boolean };
+type Comando = { direito?: [number, number]; clique?: [number, number]; duplo?: [number, number]; tecla?: string; texto?: string; espera?: number; foto?: string; rolar?: [number, number, number]; enviar?: string | string[]; baixar?: string; sair?: boolean };
 
 async function main() {
   fs.mkdirSync(PASTA, { recursive: true });
@@ -61,7 +67,7 @@ async function main() {
             // O Corp (programa transmitido pela tela) pede "Após o Upload, clique em OK" e abre o envio pelo navegador:
             // pode ser seletor de arquivos, aba nova ou campo <input type=file> na própria página — procura nos três.
             let entregue = false;
-            const naPagina = (p: import("playwright").Page) => p.on("filechooser", async (ch) => { if (!entregue) { entregue = true; await ch.setFiles(c.enviar!); } });
+            const naPagina = (p: import("playwright").Page) => p.on("filechooser", async (ch) => { if (!entregue) { entregue = true; await ch.setFiles(c.enviar as string[]); } });
             ctx.pages().forEach(naPagina);
             ctx.on("page", naPagina);
             await page.mouse.click(c.clique[0], c.clique[1]);
@@ -70,15 +76,24 @@ async function main() {
               for (const p of ctx.pages()) {
                 for (const fr of p.frames()) {
                   const campo = fr.locator('input[type="file"]').first();
-                  if (!entregue && (await campo.count().catch(() => 0))) { await campo.setInputFiles(c.enviar).catch(() => {}); entregue = true; feitas.push(`campo de arquivo em ${new URL(fr.url()).host}`); }
+                  if (!entregue && (await campo.count().catch(() => 0))) { await campo.setInputFiles(c.enviar as string[]).catch((e) => feitas.push(`ERRO ao entregar: ${(e as Error).message.split("\n")[0]}`)); entregue = true; feitas.push(`campo de arquivo em ${new URL(fr.url()).host}`); }
                 }
               }
             }
             const paginas = ctx.pages();
             for (const [k, p] of paginas.entries()) if (p !== page) feitas.push(await p.screenshot({ path: path.join(fotos, `aba-${k}.png`) }).then(() => `aba ${k}: ${p.url().slice(0, 80)}`).catch(() => `aba ${k}`));
-            feitas.push(entregue ? `enviado: ${path.basename(c.enviar)}` : "NÃO achou onde entregar o arquivo");
-            log(`envio ${path.basename(c.enviar)}: ${entregue ? "entregue" : "não entregue"} · abas: ${paginas.length}`);
+            const nomes = ([] as string[]).concat(c.enviar).map((f) => path.basename(f)).join(", ");
+            feitas.push(entregue ? `enviado: ${nomes}` : "NÃO achou onde entregar o arquivo");
+            log(`envio ${nomes}: ${entregue ? "entregue" : "não entregue"} · abas: ${paginas.length}`);
+            // espera o envio terminar ANTES de fechar a aba (26/10: PDFs da Alfa de ~200 KB sumiam porque a aba fechava no meio)
             await espera(c.espera ?? 5000);
+            // registra o que a aba de envio mostrou (aceita qual tipo? deu erro?) — para diagnosticar envio que não chega
+            for (const p of ctx.pages()) if (p !== page && p.url().includes("socket.io/upload")) {
+              const info = await p.evaluate(() => ({ accept: [...document.querySelectorAll('input[type="file"]')].map((i) => (i as HTMLInputElement).accept).join("|"), texto: (document.body?.innerText ?? "").slice(0, 300) })).catch(() => null);
+              if (info) feitas.push(`aba de envio: accept="${info.accept}" texto="${info.texto.replace(/\s+/g, " ")}"`);
+            }
+            // fecha as abas de envio/download já usadas (senão o próximo envio pode cair numa aba antiga)
+            for (const p of ctx.pages()) if (p !== page && (p.url().includes("socket.io/upload") || p.url().includes("/Downloads/"))) await p.close().catch(() => {});
             continue;
           }
           if (c.baixar && c.clique) {
