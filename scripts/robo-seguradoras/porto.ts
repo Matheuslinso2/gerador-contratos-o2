@@ -39,11 +39,20 @@ const MESES = arg("--meses")?.split(",") ?? [mesStr(agora), mesStr(new Date(agor
 const log = (m: string) => console.log(`${new Date().toLocaleTimeString("pt-BR")}  [porto] ${m}`);
 const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// A home do Corretor Online abre 1–3 anúncios em sequência (.modal-wrapper) que bloqueiam os cliques (25/10: travou o robô).
 async function fecharAnuncios(page: Page) {
-  for (let i = 0; i < 3; i++) {
-    const fechar = page.locator('button[aria-label*="echar" i], button.close, [class*="modal"] button:has(svg)').first();
-    if (await fechar.isVisible().catch(() => false)) { await fechar.click().catch(() => {}); await espera(800); } else break;
+  for (let i = 0; i < 6; i++) {
+    const modal = page.locator(".modal-wrapper").first();
+    if (!(await modal.isVisible().catch(() => false))) return;
+    await page.keyboard.press("Escape").catch(() => {});
+    await espera(500);
+    if (!(await modal.isVisible().catch(() => false))) continue;
+    const fechar = modal.locator('button[aria-label*="echar" i], button[class*="close" i], button:has(svg)').first();
+    if (await fechar.isVisible().catch(() => false)) await fechar.click({ timeout: 5000 }).catch(() => {});
+    await espera(1000);
   }
+  // último recurso: tira o anúncio da frente (só a camada do anúncio; nada do portal é alterado)
+  await page.evaluate(() => document.querySelectorAll(".modal-wrapper").forEach((m) => m.remove())).catch(() => {});
 }
 
 async function garantirLogin(page: Page) {
@@ -62,6 +71,7 @@ async function escolherSusep(page: Page, susep: string) {
   await fecharAnuncios(page);
   const atual = page.locator("button", { hasText: /CFU15J|G0852J|LI7PMJ|M48IGJ/ }).first();
   if ((await atual.textContent())?.includes(susep)) return;
+  await fecharAnuncios(page);
   await atual.click();
   await espera(1500);
   await page.locator("button", { hasText: /CFU15J|G0852J|LI7PMJ|M48IGJ/ }).nth(1).click();
@@ -70,17 +80,22 @@ async function escolherSusep(page: Page, susep: string) {
   await espera(6000);
 }
 
+// Comissões abre um quadro (iframe) de wwws.portoseguro.com.br; o robô abre o endereço do quadro direto na aba
+// (mesma sessão) — foi assim que funcionou no mapeamento de 25/10; dentro do quadro a página não carregava a tempo.
 async function quadroComissoes(page: Page): Promise<Frame> {
   await fecharAnuncios(page);
   const href = await page.getByRole("link", { name: "Comissões" }).first().getAttribute("href");
   if (!href) throw new Error("link Comissões não encontrado");
   await page.goto(new URL(href, HOME).toString(), { waitUntil: "domcontentloaded", timeout: 90_000 });
-  for (let i = 0; i < 30; i++) {
-    const fr = page.frames().find((f) => /demonstrativocomissaocorretor|integracaocomissoes/i.test(f.url()));
-    if (fr && (await fr.locator('select[name="susepCorretor"]').count())) return fr;
+  let src: string | null = null;
+  for (let i = 0; i < 40 && !src; i++) {
     await espera(1000);
+    src = await page.locator('iframe[src*="integracaocomissoes"], iframe[src*="demonstrativocomissao"]').first().getAttribute("src").catch(() => null);
   }
-  throw new Error("quadro de comissões não carregou");
+  if (!src) throw new Error("quadro de comissões não apareceu");
+  await page.goto(src, { waitUntil: "domcontentloaded", timeout: 90_000 });
+  await page.locator('select[name="susepCorretor"]').waitFor({ timeout: 60_000 });
+  return page.mainFrame();
 }
 
 async function baixarMes(page: Page, favorecida: string, mes: string, pasta: string, jaTem: Set<string>): Promise<string[]> {
@@ -94,8 +109,8 @@ async function baixarMes(page: Page, favorecida: string, mes: string, pasta: str
   await fr.selectOption('select[name="mesOrigem"]', mes);
   await fr.getByRole("button", { name: "Pesquisar" }).click();
   await espera(6000);
-  const res = page.frames().find((f) => /mostrarextratopagamento/i.test(f.url())) ?? fr;
-  await res.waitForLoadState("domcontentloaded").catch(() => {});
+  await page.waitForLoadState("domcontentloaded").catch(() => {});
+  const res = page.mainFrame();
   const linhas = res.locator("tr", { has: res.locator('img[src*="xls"]') });
   const n = await linhas.count();
   const salvos: string[] = [];

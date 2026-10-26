@@ -67,10 +67,19 @@ async function garantirLogin(page: Page, cfg: Portal) {
     if (await botao.count()) await botao.click();
     else await senha.press("Enter");
     await page.waitForLoadState("domcontentloaded", { timeout: 90_000 }).catch(() => {});
-    await espera(6000);
+    // o SSO redireciona algumas vezes antes de chegar ao portal: espera até 60 s
+    for (let i = 0; i < 20 && !(await logado()); i++) {
+      await espera(3000);
+      if (page.url().startsWith(BASE) && !page.url().includes("portal-corretor")) await page.goto(HOME, { waitUntil: "domcontentloaded" }).catch(() => {});
+    }
     if (await page.locator('iframe[src*="recaptcha"], iframe[title*="captcha" i]').count()) throw new Error("o portal pediu verificação 'não sou robô' — entrar à mão na janela do robô (rode com --manter)");
   }
   if (await logado()) return;
+  // registra por que o login automático não passou (25/10 não passou e não se sabia o motivo)
+  const foto = path.join(process.cwd(), "scripts", "robo-seguradoras", "saida", `tokio-login-${hoje}.png`);
+  await page.screenshot({ path: foto, fullPage: true }).catch(() => {});
+  const aviso = (await page.locator('.alert, [class*="error" i], [class*="erro" i], [role="alert"]').allInnerTexts().catch(() => [])).join(" | ").slice(0, 300);
+  log(`login automático não entrou (${new URL(page.url()).host}${new URL(page.url()).pathname})${aviso ? ` — mensagem: ${aviso}` : ""} · foto: ${foto}`);
   log("aguardando alguém entrar à mão na janela do robô (até 10 min)…");
   for (let i = 0; i < 120 && !(await logado()); i++) {
     await espera(5000);
