@@ -1,0 +1,6 @@
+-- ERP O2 — Nibo (26/10/2026), espelho só de leitura. Aplicado via MCP (migration erp_nibo).
+-- erp_nibo_contas (id, empresa, nome, tipo, banco, agencia, conta, arquivada) e erp_nibo_lancamentos (entry_id pk,
+-- empresa corretora|capitalizacao, tipo recebimento|pagamento, conta, stakeholder, categoria(s), data, competencia,
+-- valor (absoluto), descricao, referencia, identificador, conciliado, schedule_id). RLS: is_colaborador_o2().
+-- Sincronizado pelo cron /api/cron/erp-nibo (xx:25, últimos 120 dias) com src/lib/erp/nibo.ts.
+-- Tokens só na Vercel: NIBO_API_TOKEN (O2 Corretora) e NIBO_API_TOKEN_CAP (O2 Capitalização, se for outra empresa no Nibo).
