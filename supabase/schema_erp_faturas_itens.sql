@@ -6,3 +6,6 @@
 -- Carga: src/lib/erp/faturasItens.ts (cron /api/cron/erp-faturas xx:50; script scripts/erp/carregar-itens-faturas.ts).
 -- 1ª carga set–out/26: 375 faturas-mês, 4.457 linhas, 4.106 ligadas; boleto = soma das linhas em 348/360 (R$ 1).
 -- erp_fatura_movimentacoes (26/10): motivo registrado das entradas/saídas que o ERP não explica (fatura_id, competencia, movimento, apolice, documento_id, motivo, observacao, referencia, usuario_email); tela /erp/faturas/[id].
+-- Vencimentos (26/10): erp_parcelas.vencimento_seguradora/vencimento_fonte; erp_atualizar_vencimentos() grava o vencimento
+-- cobrado pela seguradora na fatura e refaz erp_vencimentos_pronto (parcelas cujo mês no Corp ≠ mês cobrado). Tela /erp/parcelas
+-- (+ CSV para corrigir no Corp). 1ª execução: 1.522 parcelas divergentes (Tokio 1.000 com o Corp 1 mês depois).

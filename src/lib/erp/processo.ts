@@ -17,7 +17,7 @@ export const ETAPAS: Etapa[] = [
   { chave: "faturas", curto: "Faturas", label: "Faturas", href: "/erp/faturas", descricao: "Apólices fora da fatura da imobiliária; a tela de cada fatura vem na fase B." },
   { chave: "envio", curto: "Envio", label: "Envio de apólices", href: null, descricao: "Apólices emitidas a enviar ao cliente/imobiliária (em breve)." },
   { chave: "apolices", curto: "Apólices", label: "Apólices", href: "/erp/documentos", descricao: "Apólices, endossos e faturas, com ficha e linha do tempo." },
-  { chave: "parcelas", curto: "Parcelas", label: "Parcelas", href: null, descricao: "Parcelas vencidas e inadimplência (em breve)." },
+  { chave: "parcelas", curto: "Parcelas", label: "Parcelas", href: "/erp/parcelas", descricao: "Vencimentos do Corp × cobrado pela seguradora; inadimplência em seguida." },
   { chave: "baixa", curto: "Baixa", label: "Baixa de comissão", href: "/erp/baixas", rotas: ["/erp/conferencia"], descricao: "Extratos conferidos, baixa assistida, atraso e estornos de endosso." },
   { chave: "repasses", curto: "Repasses", label: "Repasses", href: null, descricao: "Relatório do que será pago a cada imobiliária no dia 15 (em breve)." },
   { chave: "sinistro", curto: "Sinistro", label: "Sinistro", href: "/sinistros", externo: true, descricao: "Módulo de sinistros do Workspace." },

@@ -13,7 +13,11 @@ export async function GET(request: NextRequest) {
   if (request.headers.get("authorization") !== `Bearer ${segredo}`) return NextResponse.json({ erro: "não autorizado" }, { status: 401 });
   try {
     const desde = new Date(Date.now() - 40 * 86400000).toISOString().slice(0, 7);
-    return NextResponse.json({ ok: true, desde, ...(await carregarItensFaturas(createServiceClient(), { desde })) });
+    const sb = createServiceClient();
+    const faturas = await carregarItensFaturas(sb, { desde });
+    // conferência dos vencimentos das parcelas (Corp × cobrado pela seguradora) — etapa Parcelas
+    const { data: vencimentos } = await sb.rpc("erp_atualizar_vencimentos");
+    return NextResponse.json({ ok: true, desde, ...faturas, vencimentos });
   } catch (e) {
     return NextResponse.json({ ok: false, erro: (e as Error).message }, { status: 500 });
   }

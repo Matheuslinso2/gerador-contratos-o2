@@ -8,7 +8,7 @@ export const metadata = { title: { absolute: "ERP O2" } };
 // direita) com o número que pede ação em cada etapa, e os avisos. Só contagens leves e tabelas prontas.
 export default async function ErpInicio() {
   const supabase = await createClient();
-  const [{ data: atrasos }, { data: alertas }, { count: revisao }, { count: emEmissao }, { count: vigentes }, { count: foraFaturas }, { count: estornos }] = await Promise.all([
+  const [{ data: atrasos }, { data: alertas }, { count: revisao }, { count: emEmissao }, { count: vigentes }, { count: foraFaturas }, { count: estornos }, { count: vencDiv }] = await Promise.all([
     supabase.from("erp_baixa_corp_atraso_pronto").select("mes, seguradora, situacao"),
     supabase.rpc("erp_contar_alertas_fatura"),
     supabase.from("erp_documentos").select("id", { count: "exact", head: true }).eq("revisao_pendente", true),
@@ -16,6 +16,7 @@ export default async function ErpInicio() {
     supabase.from("erp_documentos").select("id", { count: "exact", head: true }).eq("situacao", "vigente"),
     supabase.from("erp_fora_faturas_pronto").select("documento_id", { count: "exact", head: true }),
     supabase.from("erp_estornos_endosso_pronto").select("alerta", { count: "exact", head: true }),
+    supabase.from("erp_vencimentos_pronto").select("parcela_id", { count: "exact", head: true }),
   ]);
   const nAtraso = (atrasos ?? []).length;
   const mesesAtraso = [...new Set((atrasos ?? []).map((a: { mes: string }) => a.mes))].sort().reverse();
@@ -62,6 +63,7 @@ export default async function ErpInicio() {
               emissao: { n: emEmissao ?? 0, rotulo: "em emissão" },
               faturas: { n: foraFaturas ?? 0, rotulo: "fora das faturas" },
               apolices: { n: vigentes ?? 0, rotulo: "vigentes" },
+              parcelas: { n: vencDiv ?? 0, rotulo: "vencimentos divergentes" },
               baixa: { n: (atrasos ?? []).length + (estornos ?? 0), rotulo: "atrasos + estornos a ver" },
             };
             const k = numero[e.chave];
