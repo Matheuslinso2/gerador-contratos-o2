@@ -375,6 +375,7 @@ export async function auditarContrato(
 // código garante: ausente = "problema" no pilar 4 + ponto crítico; o
 // contrato no mínimo deixa de sair APROVADO (a IA continua decidindo se é
 // grave o bastante para reprovar). Divergente = no mínimo "atencao".
+// Sub-rogação da seguradora ausente REPROVA sempre (decisão do Matheus, 26/10/2026).
 export function aplicarConferenciaParagrafos(relatorio: RelatorioAuditoria): RelatorioAuditoria {
   const lista = relatorio.paragrafos_texto_oficial ?? [];
   const ausentes = lista.filter((p) => p.situacao === "ausente");
@@ -394,12 +395,13 @@ export function aplicarConferenciaParagrafos(relatorio: RelatorioAuditoria): Rel
     if (status === "ok" || status === "nao_avaliado") status = "atencao";
     extras.push(`Parágrafo(s) com redação diferente do texto oficial: ${nomes(divergentes)}.`);
   }
+  const semSubrogacao = ausentes.some((p) => /sub-?roga/i.test(`${p.assunto} ${p.observacao ?? ""}`));
   return {
     ...relatorio,
     clausulas_seguradora_status: status,
     clausulas_seguradora_resumo: `${relatorio.clausulas_seguradora_resumo} ${extras.join(" ")}`,
     pontos_criticos: criticos,
-    status_geral: relatorio.status_geral === "APROVADO" ? "APROVADO_RESSALVAS" : relatorio.status_geral,
+    status_geral: semSubrogacao ? "REPROVADO" : relatorio.status_geral === "APROVADO" ? "APROVADO_RESSALVAS" : relatorio.status_geral,
   };
 }
 
