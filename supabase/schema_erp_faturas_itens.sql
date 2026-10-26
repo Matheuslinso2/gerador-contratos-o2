@@ -5,3 +5,4 @@
 -- documento_id, endosso_documento_id). Função erp_ligar_itens_fatura() liga linhas a apólices/endossos e deduz a corretora.
 -- Carga: src/lib/erp/faturasItens.ts (cron /api/cron/erp-faturas xx:50; script scripts/erp/carregar-itens-faturas.ts).
 -- 1ª carga set–out/26: 375 faturas-mês, 4.457 linhas, 4.106 ligadas; boleto = soma das linhas em 348/360 (R$ 1).
+-- erp_fatura_movimentacoes (26/10): motivo registrado das entradas/saídas que o ERP não explica (fatura_id, competencia, movimento, apolice, documento_id, motivo, observacao, referencia, usuario_email); tela /erp/faturas/[id].

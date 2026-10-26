@@ -20,7 +20,7 @@ export type LinhaFatura = {
   situacao_doc: string | null;
   comissao_extrato: number | null;
 };
-export type Saida = { apolice: string; documento_id: string | null; codigo_o2: number | null; cliente: string | null; valor_anterior: number; explicacao: string | null };
+export type Saida = { apolice: string; documento_id: string | null; codigo_o2: number | null; cliente: string | null; valor_anterior: number; explicacao: string | null; registrado?: { motivo: string; observacao: string | null; referencia: string | null; usuario_email: string | null; criado_em: string } };
 export type MesFatura = { id: string; competencia: string; vencimento: string | null; valor_boleto: number | null; valor_itens: number; qtd_itens: number };
 
 export async function fichaFatura(sb: SupabaseClient, faturaId: string, competencia?: string) {
@@ -89,6 +89,9 @@ export async function fichaFatura(sb: SupabaseClient, faturaId: string, competen
     const { data } = await sb.from("erp_documentos").select("documento_pai_id").in("documento_pai_id", idsSaida).in("tipo", ["X", "I"]);
     for (const e of (data ?? []) as { documento_pai_id: string }[]) cancelados.add(e.documento_pai_id);
   }
+  // motivos registrados pela equipe para este mês (tratativa por e-mail, card de renovação, endosso)
+  const { data: movs } = await sb.from("erp_fatura_movimentacoes").select("apolice, motivo, observacao, referencia, usuario_email, criado_em").eq("fatura_id", faturaId).eq("competencia", mes.competencia).eq("movimento", "saida");
+  const registrados = new Map(((movs ?? []) as NonNullable<Saida["registrado"]>[] & { apolice: string }[]).map((m) => [(m as unknown as { apolice: string }).apolice, m]));
   const vistos = new Set<string>();
   const saidas: Saida[] = [];
   for (const l of saidasBrutas) {
@@ -100,7 +103,8 @@ export async function fichaFatura(sb: SupabaseClient, faturaId: string, competen
     else if (l.doc?.situacao === "cancelado") explicacao = "apólice cancelada";
     else if (l.doc?.vigencia_fim && mes.vencimento && l.doc.vigencia_fim < mes.vencimento) explicacao = "vigência encerrada";
     else if (l.doc?.modo_cobranca && !["fatura", "nao_informado", "individual"].includes(l.doc.modo_cobranca)) explicacao = `passou para ${l.doc.modo_cobranca}`;
-    saidas.push({ apolice: l.apolice, documento_id: l.documento_id, codigo_o2: l.doc?.nosso_numero ?? null, cliente: l.doc?.cliente?.nome ?? null, valor_anterior: Number(l.valor), explicacao });
+    const reg = registrados.get(l.apolice);
+    saidas.push({ apolice: l.apolice, documento_id: l.documento_id, codigo_o2: l.doc?.nosso_numero ?? null, cliente: l.doc?.cliente?.nome ?? null, valor_anterior: Number(l.valor), explicacao: explicacao ?? (reg ? reg.motivo : null), registrado: reg });
   }
   return { fatura, meses, mes, anterior, linhas, entradas, saidas };
 }

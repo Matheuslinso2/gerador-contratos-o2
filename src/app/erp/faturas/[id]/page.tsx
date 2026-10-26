@@ -3,6 +3,10 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { formatarData, formatarReais } from "@/lib/sinistros/regras";
 import { fichaFatura, TOLERANCIA_FATURA, type LinhaFatura } from "@/lib/erp/faturaTela";
+import RascunhoAutomatico from "@/components/RascunhoAutomatico";
+import { registrarMovimentacao } from "./actions";
+
+const MOTIVOS = ["Entrega de chaves", "Fim de contrato", "Cancelamento a pedido", "Sinistro", "Litígio", "Troca de administradora", "Renovação em outra fatura", "Erro da seguradora", "Outro"];
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Fatura" };
@@ -167,7 +171,32 @@ export default async function ErpFaturaPage({ params, searchParams }: { params: 
                   </td>
                   <td className="px-3 py-1">{s.cliente ?? "—"}</td>
                   <td className="px-3 py-1 text-right">{formatarReais(s.valor_anterior)}</td>
-                  <td className="px-3 py-1">{s.explicacao ?? <span className="font-medium text-amber-700">sem explicação</span>}</td>
+                  <td className="px-3 py-1">
+                    {s.registrado ? (
+                      <span title={[s.registrado.observacao, s.registrado.referencia].filter(Boolean).join(" · ")}>
+                        {s.registrado.motivo} <span className="text-gray-400">· {s.registrado.usuario_email?.split("@")[0]} {formatarData(s.registrado.criado_em)}</span>
+                      </span>
+                    ) : s.explicacao ? (
+                      s.explicacao
+                    ) : (
+                      <form action={registrarMovimentacao} className="flex flex-wrap items-center gap-1">
+                        <RascunhoAutomatico sufixo={`${id}-${mes?.competencia}-${s.apolice}`} />
+                        <input type="hidden" name="fatura_id" value={id} />
+                        <input type="hidden" name="competencia" value={mes?.competencia ?? ""} />
+                        <input type="hidden" name="movimento" value="saida" />
+                        <input type="hidden" name="apolice" value={s.apolice} />
+                        <input type="hidden" name="documento_id" value={s.documento_id ?? ""} />
+                        <select name="motivo" required defaultValue="" className="rounded border border-amber-300 px-1 py-0.5">
+                          <option value="" disabled>sem explicação — motivo…</option>
+                          {MOTIVOS.map((m) => (
+                            <option key={m}>{m}</option>
+                          ))}
+                        </select>
+                        <input name="referencia" placeholder="assunto do e-mail / nº do card" className="w-44 rounded border border-gray-300 px-1 py-0.5" />
+                        <button className="rounded bg-o2-navy px-2 py-0.5 text-white">Registrar</button>
+                      </form>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
