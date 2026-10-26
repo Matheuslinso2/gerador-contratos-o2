@@ -22,6 +22,14 @@ export type RelatorioAuditoria = {
   prazo_declarado_meses?: number;
   vigencia_inicio?: string;
   vigencia_fim?: string;
+  // Conferência parágrafo a parágrafo do texto oficial da seguradora (26/10/2026).
+  paragrafos_texto_oficial?: ParagrafoOficial[];
+};
+
+export type ParagrafoOficial = {
+  assunto: string;
+  situacao: "presente" | "divergente" | "ausente" | "nao_se_aplica";
+  observacao?: string;
 };
 
 export type ClausulaReferencia = {
@@ -86,6 +94,8 @@ Você precisa preencher TODOS OS 10 CAMPOS de status/resumo abaixo, um de cada v
    — Se a garantia for Seguro Fiança ou Título de Capitalização e uma BIBLIOTECA DE CLÁUSULAS DE REFERÊNCIA for fornecida, verifique se a cláusula do contrato tem o mesmo conteúdo essencial do texto oficial daquele produto/seguradora (sem trechos essenciais alterados, removidos ou incompatíveis). Se a seguradora/produto citado não constar na biblioteca fornecida, use "nao_avaliado" com resumo explicando que não há como validar.
 
    CONFIRA O INÍCIO DA CLÁUSULA PALAVRA POR PALAVRA, SEMPRE: a primeira frase do texto oficial da biblioteca é o ENQUADRAMENTO JURÍDICO da garantia (qual modalidade é e em qual inciso do art. 37 da Lei 8.245/91 se apoia) — não basta o nome da seguradora, o segurado, o link das condições gerais e o restante do texto baterem. Localize no contrato a cláusula equivalente e compare a abertura dela com a abertura do texto oficial, termo a termo: (a) a MODALIDADE nomeada (ex: "seguro fiança locatícia" / "título de capitalização"); (b) o INCISO do art. 37 citado — seguro-fiança é o inciso III, título de capitalização é o inciso IV; o inciso I é caução e o inciso II é FIANÇA PESSOAL (fiador); (c) qualquer base legal extra que não esteja no texto oficial. Achado real (caso do Matheus, contrato Pottencial): o texto oficial começa "As Partes anuem com a emissão de seguro fiança locatícia ... nos termos do art. 37, III", mas o contrato trazia "A garantia é prestada na modalidade FIANÇA, na forma do art. 37, II da Lei nº 8.245/1991 e dos arts. 818 e seguintes do Código Civil, a ser contratado ... junto à Pottencial Seguradora S.A." — o resto da cláusula estava idêntico e o auditor aprovou como "presente e completa", o que foi um ERRO. Aquela abertura é a de uma VERSÃO DESATUALIZADA do modelo da Pottencial (título antigo "Seguro Pottencial Aluguel"), à qual também faltava a anuência com a indicação do corretor de seguros ("declaram ter negociado e anuído com a indicação do corretor de seguros"), que a versão atual exige. É o padrão típico de imobiliária que atualizou o corpo da cláusula mas manteve o parágrafo de abertura do modelo antigo — por isso, trate a biblioteca como a ÚNICA versão válida: se um trecho do contrato diverge dela (termo trocado, frase ausente, título/nome de produto antigo), chame isso explicitamente de "versão desatualizada/divergente da cláusula oficial" no resumo, nunca de "presente e completa", mesmo que o restante seja idêntico. Frases do texto oficial que tratam de anuência das partes (ex: indicação do corretor, coberturas contratadas) são essenciais: ausência delas é "problema". "Modalidade FIANÇA", "art. 37, II" ou "arts. 818 e seguintes do Código Civil" dentro de uma cláusula de seguro-fiança/capitalização descrevem fiança pessoal (fiador), não seguro — o contrato fica juridicamente incoerente sobre qual garantia foi prestada. Qualquer divergência no início da cláusula (modalidade trocada, inciso errado, base legal de fiança pessoal) é "problema": cite no resumo o trecho de abertura do contrato E o trecho de abertura do texto oficial, lado a lado, e inclua em pontos_criticos. Este é um GATILHO CRÍTICO do checklist, igual à dupla garantia — nunca escreva "presente e completa" sem ter feito essa comparação da abertura.
+
+   CONFERÊNCIA PARÁGRAFO POR PARÁGRAFO (OBRIGATÓRIA quando houver texto oficial na biblioteca para a seguradora/produto identificado): divida o texto oficial daquele produto em parágrafos (cada bloco separado por linha em branco; cada cláusula especial/condicional conta como um) e, para CADA UM, procure o equivalente no contrato e preencha um item em paragrafos_texto_oficial: assunto (ex: "Abertura / art. 37, III", "Negativação em Serasa/SPC", "Sub-rogação da seguradora", "Solidariedade e procuração entre locatários", "Cláusula especial Pintura Interna"), situacao ("presente" = mesmo conteúdo essencial; "divergente" = existe mas com termo/conteúdo diferente; "ausente" = não está no contrato; "nao_se_aplica" = parágrafo condicional cuja condição não se aplica, ou não dá pra confirmar — siga as regras de cláusulas condicionais abaixo) e uma observação curta. Não junte vários parágrafos num item só e não pule nenhum. Achado real (contrato Porto Seguro, Wetson × Paulo Roberto Rosa, 26/10/2026): o parágrafo de SUB-ROGAÇÃO do texto oficial ("As Partes convencionam que a Seguradora sub-rogar-se-á automaticamente no(s) direito(s) do(s) LOCADOR(es)...") não estava no contrato e o auditor escreveu que a cláusula "corresponde ao texto oficial" — ERRO: um parágrafo inteiro faltando nunca é "corresponde". O sistema confere essa lista sozinho e aponta todo parágrafo "ausente"; mesmo assim, cite no resumo deste pilar os parágrafos ausentes ou divergentes pelo assunto.
 
    CLÁUSULAS DA IMOBILIÁRIA QUE CONTRADIZEM O TEXTO OFICIAL: além de conferir se o texto oficial está no contrato, leia TODAS as demais cláusulas/subcláusulas que tratam da garantia, redigidas pela própria imobiliária (vigência, prorrogação, sinistro, sub-rogação, negativação, coberturas), e compare cada uma com o que o texto oficial diz sobre o mesmo assunto. Não basta o texto oficial estar presente: se outra cláusula do mesmo contrato disser algo incompatível com ele, o contrato fica contraditório e o locador pode achar que tem uma cobertura que a apólice não dá. Achados reais (mesmo contrato Pottencial acima), todos passaram batido:
       · Vigência/prorrogação: o texto oficial diz que o seguro vale pelo período da apólice e que a prorrogação da locação exige comunicação à seguradora para reanálise do risco; o contrato trazia, em outras subcláusulas, "a garantia vale por toda a locação, inclusive nas prorrogações" e "a fiança perdura até a devolução das chaves, estendendo-se automaticamente à prorrogação (art. 39)" — contradição direta, "problema".
@@ -169,6 +179,20 @@ const FERRAMENTA_RELATORIO: Anthropic.Tool = {
         type: "string",
         description: 'Data de término da vigência da locação, exatamente como no contrato, no formato DD/MM/AAAA. String vazia se não constar.',
       },
+      paragrafos_texto_oficial: {
+        type: "array",
+        description:
+          "Conferência do texto oficial da biblioteca (seguradora/produto identificado), UM item por parágrafo do texto oficial. Lista vazia se a garantia não for seguro fiança/capitalização ou se o produto não estiver na biblioteca.",
+        items: {
+          type: "object",
+          properties: {
+            assunto: { type: "string", description: 'Assunto do parágrafo oficial, curto (ex: "Sub-rogação da seguradora").' },
+            situacao: { type: "string", enum: ["presente", "divergente", "ausente", "nao_se_aplica"] },
+            observacao: { type: "string", description: "Uma frase: onde está no contrato (cláusula nº) ou o que diverge/falta." },
+          },
+          required: ["assunto", "situacao"],
+        },
+      },
       dados_cadastrais_status: { type: "string", enum: STATUS_ENUM, description: "Status do pilar 1 (dados cadastrais)." },
       dados_cadastrais_resumo: { type: "string", minLength: 1, description: "Resumo de uma frase do pilar 1 (dados cadastrais)." },
       dados_locacao_status: { type: "string", enum: STATUS_ENUM, description: "Status do pilar 2 (dados da locação)." },
@@ -204,6 +228,7 @@ const FERRAMENTA_RELATORIO: Anthropic.Tool = {
       "prazo_declarado_meses",
       "vigencia_inicio",
       "vigencia_fim",
+      "paragrafos_texto_oficial",
       "dados_cadastrais_status",
       "dados_cadastrais_resumo",
       "dados_locacao_status",
@@ -340,7 +365,42 @@ export async function auditarContrato(
     Object.keys(chamada.input as object).join(", ")
   );
 
-  return aplicarConferenciaPrazo(chamada.input as RelatorioAuditoria);
+  return aplicarConferenciaParagrafos(aplicarConferenciaPrazo(chamada.input as RelatorioAuditoria));
+}
+
+// Parágrafo do texto oficial da seguradora AUSENTE no contrato (26/10/2026):
+// a IA comparava "por cima" e dizia que a cláusula correspondia ao texto
+// oficial mesmo faltando um parágrafo inteiro (sub-rogação da Porto, contrato
+// Wetson × Paulo Roberto Rosa). Agora ela lista parágrafo a parágrafo e o
+// código garante: ausente = "problema" no pilar 4 + ponto crítico; o
+// contrato no mínimo deixa de sair APROVADO (a IA continua decidindo se é
+// grave o bastante para reprovar). Divergente = no mínimo "atencao".
+export function aplicarConferenciaParagrafos(relatorio: RelatorioAuditoria): RelatorioAuditoria {
+  const lista = relatorio.paragrafos_texto_oficial ?? [];
+  const ausentes = lista.filter((p) => p.situacao === "ausente");
+  const divergentes = lista.filter((p) => p.situacao === "divergente");
+  if (!ausentes.length && !divergentes.length) return relatorio;
+  const nomes = (ps: ParagrafoOficial[]) => ps.map((p) => p.assunto).join("; ");
+  let status = relatorio.clausulas_seguradora_status;
+  const extras: string[] = [];
+  const criticos = [...(relatorio.pontos_criticos ?? [])];
+  if (ausentes.length) {
+    status = "problema";
+    const alerta = `Texto oficial da seguradora incompleto no contrato — falta(m) o(s) parágrafo(s): ${nomes(ausentes)}.`;
+    extras.push(alerta);
+    criticos.push(alerta);
+  }
+  if (divergentes.length) {
+    if (status === "ok" || status === "nao_avaliado") status = "atencao";
+    extras.push(`Parágrafo(s) com redação diferente do texto oficial: ${nomes(divergentes)}.`);
+  }
+  return {
+    ...relatorio,
+    clausulas_seguradora_status: status,
+    clausulas_seguradora_resumo: `${relatorio.clausulas_seguradora_resumo} ${extras.join(" ")}`,
+    pontos_criticos: criticos,
+    status_geral: relatorio.status_geral === "APROVADO" ? "APROVADO_RESSALVAS" : relatorio.status_geral,
+  };
 }
 
 function lerData(texto: string | undefined): { d: number; m: number; a: number } | null {
