@@ -60,18 +60,20 @@ const dia = (v?: string) => (v ? v.slice(0, 10) : null);
 export async function sincronizarNibo(sb: SupabaseClient, o: { desde: string }) {
   const empresas = empresasNibo();
   if (!empresas.length) return { ok: false, erro: "NIBO_API_TOKEN não configurado na Vercel" };
-  const resumo: Record<string, { contas: number; recebimentos: number; pagamentos: number }> = {};
+  const resumo: Record<string, { contas: number; recebimentos: number; pagamentos: number; erros: string[] }> = {};
   for (const { empresa, token } of empresas) {
-    const { items: contas } = await niboGet<Conta>(token, "/accounts", { $orderby: "name", $top: "500" });
+    const erros: string[] = [];
+    const { items: contas } = await niboGet<Conta>(token, "/accounts", { $orderby: "name", $top: "500" }).catch((e) => { erros.push((e as Error).message); return { items: [] as Conta[] }; });
     if (contas.length) {
       const { error } = await sb.from("erp_nibo_contas").upsert(
         contas.map((c) => ({ id: c.id, empresa, nome: c.name, tipo: c.type, banco: c.bankNumber ?? null, agencia: c.bankAgency ?? null, conta: c.bankAccount ?? null, arquivada: !!c.isArchived, sincronizado_em: new Date().toISOString() }))
       );
       if (error) throw new Error(`erp_nibo_contas: ${error.message}`);
     }
-    const r = { contas: contas.length, recebimentos: 0, pagamentos: 0 };
+    const r = { contas: contas.length, recebimentos: 0, pagamentos: 0, erros };
     for (const [tipo, caminho] of [["recebimento", "/receipts"], ["pagamento", "/payments"]] as const) {
-      const itens = await listarDesde<Lanc>(token, caminho, o.desde);
+      // um erro numa rota não impede a outra nem a outra empresa
+      const itens = await listarDesde<Lanc>(token, caminho, o.desde).catch((e) => { erros.push((e as Error).message); return [] as Lanc[]; });
       const linhas = itens.map((l) => ({
         entry_id: l.entryId,
         empresa,
