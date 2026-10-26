@@ -97,7 +97,11 @@ const brl = (v: number | null | undefined) => (v == null ? "—" : Number(v).toL
 export const metadata = { title: "Conferência" };
 
 export default async function ErpConferenciaPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const f = lerFiltros(await searchParams);
+  const sp = await searchParams;
+  const f = lerFiltros(sp);
+  // etapas do processo (Matheus 26/10): esta tela serve a duas etapas — "Faturas" (/erp/faturas, alertas e fora das
+  // faturas) e "Baixa de comissão" (/erp/conferencia: baixa mensal, atraso, estornos de endosso, extratos, Power BI)
+  const secao: "faturas" | "baixa" = sp.secao === "faturas" ? "faturas" : "baixa";
   const supabase = await createClient();
   const {
     data: { user },
@@ -196,19 +200,26 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
       <main className="mx-auto w-full max-w-[1100px] flex-1 space-y-6 p-8">
         <PageHeader
           icon={<IconReport />}
-          titulo="ERP O2 — Conferência com o Corp"
-          subtitulo="Documentos e comissão por mês × ramo × seguradora: ERP contra o retrato congelado do Power BI. Só o que difere aparece."
+          titulo={secao === "faturas" ? "ERP O2 — Faturas" : "ERP O2 — Conferência da baixa de comissão"}
+          subtitulo={
+            secao === "faturas"
+              ? "Apólices que deveriam estar na fatura da imobiliária e não estão, por seguradora. A tela de cada fatura (movimento mês a mês e conferência tripla) vem na próxima fase."
+              : "Baixa do Corp no formato da planilha CONTROLE BAIXA, baixa atrasada, estornos de endosso, extratos das seguradoras e conferência com o Power BI."
+          }
         />
         <FiltrosErp
-          caminho="/erp/conferencia"
-          campos={["seguradora", "corretora", "imobiliaria", "mes"]}
+          caminho={secao === "faturas" ? "/erp/faturas" : "/erp/conferencia"}
+          campos={secao === "faturas" ? ["seguradora", "imobiliaria", "mes"] : ["seguradora", "corretora", "mes"]}
           valores={f}
           resumo="Os filtros valem para todas as seções abaixo, em cada uma no nível que ela tem (ex.: imobiliária só nas seções de fatura; corretora nas de baixa e extratos)."
         />
+        {secao === "baixa" && (
         <p className="text-sm text-gray-600">
-          <Link href="/erp/documentos" className="underline">← Documentos</Link>. As diferenças abaixo são, em regra, alterações que o próprio Corp fez depois do fechamento do mês
+          <Link href="/erp/baixas" className="underline">← Baixa assistida</Link>. As diferenças abaixo são, em regra, alterações que o próprio Corp fez depois do fechamento do mês
           (cancelamentos e ajustes registrados em <code>corp_alteracoes_pos_fechamento</code>); contra a grade viva do Corp o ERP bate em todas as células.
         </p>
+        )}
+        {secao === "faturas" && (<>
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Alertas de fatura (Tokio e Pottencial)</h2>
           <p className="text-xs text-gray-500">
@@ -320,6 +331,8 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
           )}
         </section>
 
+        </>)}
+        {secao === "baixa" && (<>
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Baixa de comissão (Corp) — formato da planilha CONTROLE BAIXA</h2>
           <p className="text-xs text-gray-500">
@@ -547,6 +560,7 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
             </table>
           </div>
         )}
+        </>)}
       </main>
     </>
   );

@@ -1,24 +1,21 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { CADASTROS, ETAPAS } from "@/lib/erp/processo";
 
 export const metadata = { title: { absolute: "ERP O2" } };
 
-// Tela inicial do ERP O2: atalhos para as áreas e o que está pedindo atenção agora.
-// Lê só tabelas prontas/contagens leves (regra de desempenho do Workspace).
-const AREAS = [
-  { href: "/erp/documentos", titulo: "Documentos", texto: "Propostas, apólices, endossos e renovações com o Código O2, a família de renovações e a origem no Bitrix." },
-  { href: "/erp/baixas", titulo: "Baixas de comissão", texto: "Extratos das seguradoras conferidos apólice por apólice, aprovação da baixa e lista pronta para o Corp (InCorp)." },
-  { href: "/erp/conferencia", titulo: "Conferência", texto: "ERP × Corp × Power BI, alertas de fatura, baixa mensal no formato da planilha e baixa atrasada." },
-  { href: "/erp/imobiliarias", titulo: "Imobiliárias", texto: "Código O2 do produtor, modo fatura, regras de repasse e pró-labore pago direto pela seguradora." },
-  { href: "/erp/seguradoras", titulo: "Seguradoras", texto: "Regra de comissão (proporcional × esgotamento) por seguradora e produto." },
-];
-
+// Tela inicial do ERP O2: a barra do processo (Matheus 26/10: telas por lógica de processo, da esquerda para a
+// direita) com o número que pede ação em cada etapa, e os avisos. Só contagens leves e tabelas prontas.
 export default async function ErpInicio() {
   const supabase = await createClient();
-  const [{ data: atrasos }, { data: alertas }, { count: revisao }] = await Promise.all([
+  const [{ data: atrasos }, { data: alertas }, { count: revisao }, { count: emEmissao }, { count: vigentes }, { count: foraFaturas }, { count: estornos }] = await Promise.all([
     supabase.from("erp_baixa_corp_atraso_pronto").select("mes, seguradora, situacao"),
     supabase.rpc("erp_contar_alertas_fatura"),
     supabase.from("erp_documentos").select("id", { count: "exact", head: true }).eq("revisao_pendente", true),
+    supabase.from("erp_documentos").select("id", { count: "exact", head: true }).eq("situacao", "digitado"),
+    supabase.from("erp_documentos").select("id", { count: "exact", head: true }).eq("situacao", "vigente"),
+    supabase.from("erp_fora_faturas_pronto").select("documento_id", { count: "exact", head: true }),
+    supabase.from("erp_estornos_endosso_pronto").select("alerta", { count: "exact", head: true }),
   ]);
   const nAtraso = (atrasos ?? []).length;
   const mesesAtraso = [...new Set((atrasos ?? []).map((a: { mes: string }) => a.mes))].sort().reverse();
@@ -32,7 +29,7 @@ export default async function ErpInicio() {
     (contagem.fora_da_fatura ?? 0) + (contagem.sem_destino_seguradora ?? 0) > 0 && {
       cor: "border-orange-200 bg-orange-50 text-orange-800",
       texto: `Faturas: ${contagem.fora_da_fatura ?? 0} efetivados fora da fatura carregada e ${contagem.sem_destino_seguradora ?? 0} sem destino da seguradora há mais de 10 dias.`,
-      href: "/erp/conferencia",
+      href: "/erp/faturas",
     },
     (revisao ?? 0) > 0 && {
       cor: "border-blue-200 bg-blue-50 text-blue-800",
@@ -57,13 +54,46 @@ export default async function ErpInicio() {
           ))}
         </section>
       )}
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {AREAS.map((a) => (
-          <Link key={a.href} href={a.href} className="rounded-xl border border-gray-200 bg-white p-4 transition hover:border-o2-coral hover:shadow-sm">
-            <p className="font-semibold text-o2-navy">{a.titulo}</p>
-            <p className="mt-1 text-sm text-gray-600">{a.texto}</p>
-          </Link>
-        ))}
+      <section className="space-y-2">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">O processo, da efetivação à renovação</h2>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9">
+          {ETAPAS.map((e, i) => {
+            const numero: Record<string, { n: number | null; rotulo: string } | undefined> = {
+              emissao: { n: emEmissao ?? 0, rotulo: "em emissão" },
+              faturas: { n: foraFaturas ?? 0, rotulo: "fora das faturas" },
+              apolices: { n: vigentes ?? 0, rotulo: "vigentes" },
+              baixa: { n: (atrasos ?? []).length + (estornos ?? 0), rotulo: "atrasos + estornos a ver" },
+            };
+            const k = numero[e.chave];
+            const corpo = (
+              <>
+                <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Etapa {i + 1}</p>
+                <p className="font-semibold text-o2-navy">{e.label}{e.externo ? " ↗" : ""}</p>
+                {k ? (
+                  <p className="mt-1 text-sm"><span className="text-lg font-semibold text-o2-navy">{k.n?.toLocaleString("pt-BR")}</span> <span className="text-gray-500">{k.rotulo}</span></p>
+                ) : (
+                  <p className="mt-1 text-xs text-gray-500">{e.href ? e.descricao : "em breve"}</p>
+                )}
+              </>
+            );
+            return e.href ? (
+              <Link key={e.chave} href={e.href} target={e.externo ? "_blank" : undefined} className="rounded-xl border border-gray-200 bg-white p-3 transition hover:border-o2-coral hover:shadow-sm" title={e.descricao}>
+                {corpo}
+              </Link>
+            ) : (
+              <div key={e.chave} className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-3 opacity-70" title={e.descricao}>
+                {corpo}
+              </div>
+            );
+          })}
+        </div>
+        <p className="text-xs text-gray-500">
+          Cotações ficam no Workspace; o ERP começa na efetivação. Cadastros:{" "}
+          {CADASTROS.map((c, i) => (
+            <span key={c.href}>{i > 0 ? " · " : ""}<Link href={c.href} className="underline">{c.label}</Link></span>
+          ))}
+          .
+        </p>
       </section>
     </main>
   );
