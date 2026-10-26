@@ -54,6 +54,21 @@ function sanitizarHtmlSimples(html: string): string {
 }
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MAX_ENDERECOS = 10;
+
+// "a@x.com; b@x.com, c@x.com" -> lista sem repetidos (a comparação ignora maiúsculas).
+function listarEnderecos(texto: string | undefined): string[] {
+  const vistos = new Set<string>();
+  const lista: string[] = [];
+  for (const parte of (texto ?? "").split(/[,;\s]+/)) {
+    const e = parte.trim();
+    if (e && !vistos.has(e.toLowerCase())) {
+      vistos.add(e.toLowerCase());
+      lista.push(e);
+    }
+  }
+  return lista;
+}
 
 export async function POST(request: NextRequest) {
   let body: {
@@ -61,6 +76,7 @@ export async function POST(request: NextRequest) {
     entityTypeId?: number;
     itemId?: number;
     para?: string;
+    cc?: string;
     remetenteNome?: string;
     assunto?: string;
     corpo?: string;
@@ -83,11 +99,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, erro: "Preencha destinatário, assunto e mensagem." }, { status: 400 });
   }
 
-  if (!EMAIL_REGEX.test(para.trim())) {
-    return NextResponse.json({ ok: false, erro: "E-mail de destino inválido." }, { status: 400 });
+  const destinatarios = listarEnderecos(para);
+  const copias = listarEnderecos(body.cc).filter((e) => !destinatarios.some((d) => d.toLowerCase() === e.toLowerCase()));
+  const invalido = [...destinatarios, ...copias].find((e) => !EMAIL_REGEX.test(e));
+  if (!destinatarios.length || invalido) {
+    return NextResponse.json({ ok: false, erro: invalido ? `E-mail inválido: ${invalido}` : "Preencha o destinatário." }, { status: 400 });
+  }
+  if (destinatarios.length + copias.length > MAX_ENDERECOS) {
+    return NextResponse.json({ ok: false, erro: `No máximo ${MAX_ENDERECOS} endereços (Para + Cc) por e-mail.` }, { status: 400 });
   }
 
-  const cc = ccPorEntidade(entityTypeId);
+  // CC fixo do tipo de card (ex: incendio@) + as cópias que a pessoa pôs na tela.
+  const cc = [ccPorEntidade(entityTypeId)];
+  for (const e of copias) if (!cc.some((c) => c.toLowerCase() === e.toLowerCase())) cc.push(e);
   const replyTo = gerarEnderecoRespostaCard(entityTypeId, itemId);
 
   const html = montarHtmlEmailCard({ corpoHtml: sanitizarHtmlSimples(corpo) });
@@ -117,7 +141,7 @@ export async function POST(request: NextRequest) {
   // de resposta, pra cair na mesma conversa no e-mail do cliente.
   let assuntoFinal = assunto.trim();
   let headers: Record<string, string> | undefined;
-  await vincularPorTratativa(entityTypeId, itemId, [para.trim()]);
+  await vincularPorTratativa(entityTypeId, itemId, destinatarios);
   const continuacao = await continuarConversa(entityTypeId, itemId);
   if (continuacao) {
     assuntoFinal = continuacao.assunto;
@@ -126,8 +150,8 @@ export async function POST(request: NextRequest) {
 
   try {
     await enviarEmail({
-      para: para.trim(),
-      cc: [cc],
+      para: destinatarios,
+      cc,
       bcc: [bccDoCard(entityTypeId, itemId)],
       headers,
       assunto: assuntoFinal,
@@ -162,7 +186,7 @@ export async function POST(request: NextRequest) {
       assunto: assuntoFinal,
       corpo: html,
       direcao: "enviado",
-      enderecoEnvolvido: para.trim(),
+      enderecoEnvolvido: destinatarios[0],
     });
   } catch (erro) {
     // O e-mail já saiu -- não desfaz o envio por causa disso, só avisa nos

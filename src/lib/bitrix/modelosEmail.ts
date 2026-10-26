@@ -26,7 +26,13 @@ export type ModeloEmail = {
   assunto: string;
   corpoHtml: string;
   entidades?: number[];
+  /** Cópia fixa do modelo: preenche o campo Cc da tela (a pessoa ainda pode editar). */
+  cc?: string[];
 };
+
+// Confirmação de contratação e de cancelamento vão sempre com a cobrança em cópia
+// (pedido da equipe de Ramos Elementares, 26/10/2026).
+const COBRANCA = ["cobranca@o2seguros.com.br"];
 
 const FIANCA = [ENTITY_TYPE_ID_SEGURO_FIANCA];
 const CAPITALIZACAO = [ENTITY_TYPE_ID_CAPITALIZACAO];
@@ -448,6 +454,7 @@ export const MODELOS_EMAIL: ModeloEmail[] = [
     id: "ramos-confirmacao-adjuve",
     nome: "Ramos — Confirmação de contratação ADJUVE",
     entidades: RAMOS,
+    cc: COBRANCA,
     assunto: "CONFIRMAÇÃO DE CONTRATAÇÃO ADJUVE",
     corpoHtml: [
       "<p>Olá Prezados, boa tarde! Tudo bem?</p>",
@@ -470,6 +477,7 @@ export const MODELOS_EMAIL: ModeloEmail[] = [
     id: "ramos-confirmacao-individual",
     nome: "Ramos — Confirmação de contratação individual",
     entidades: RAMOS,
+    cc: COBRANCA,
     assunto: "CONFIRMAÇÃO DE CONTRATAÇÃO INDIVIDUAL",
     corpoHtml: [
       "<p>Olá Prezados, boa tarde! Tudo bem?</p>",
@@ -492,6 +500,7 @@ export const MODELOS_EMAIL: ModeloEmail[] = [
     id: "ramos-confirmacao-imobiliario",
     nome: "Ramos — Confirmação de contratação imobiliário",
     entidades: RAMOS,
+    cc: COBRANCA,
     assunto: "CONFIRMAÇÃO DE CONTRATAÇÃO IMOBILIÁRIO",
     corpoHtml: [
       "<p>Olá Prezados, boa tarde! Tudo bem?</p>",
@@ -542,6 +551,130 @@ export const MODELOS_EMAIL: ModeloEmail[] = [
         laranja("🔸Cobertura de conteúdo:") + " Cobertura destinada a bens/mobília pessoais em caso de incêndio.<br>🔸 " +
         laranja("Assistências 24h:") + " Ao contratar o seguro incêndio você recebe gratuitamente os serviços de assistência 24h que ajudam na manutenção e conservação do imóvel. (Ex: Chaveiro, encanador, eletricista, entre outros)</p>",
       "<p>Qualquer dúvida estou à disposição para ajudar!</p>",
+      "<p>Atenciosamente,</p>",
+    ].join(""),
+  },
+  // Scripts da equipe de Ramos Elementares (Amanda, Ana Ingrid, Isabelle), tirados
+  // dos e-mails que elas mandaram à Kamila em 15 e 22/10/2026 e dos envios reais.
+  {
+    id: "ramos-acusar-cotacao",
+    nome: "Ramos — Acusar recebimento de cotação",
+    entidades: RAMOS,
+    assunto: "Re: {{card}}",
+    corpoHtml: [
+      "<p>{{responsavel}}, [bom dia/boa tarde]!<br>Tudo bem?</p>",
+      "<p>Recebemos a sua solicitação. Assim que finalizarmos a <b>cotação</b> entraremos em contato.</p>",
+      "<p>Qualquer dúvida estou à disposição!</p>",
+      "<p>Atenciosamente,</p>",
+    ].join(""),
+  },
+  {
+    id: "ramos-acusar-contratacao",
+    nome: "Ramos — Acusar recebimento de contratação",
+    entidades: RAMOS,
+    assunto: "Re: {{card}}",
+    corpoHtml: [
+      "<p>{{responsavel}}, [bom dia/boa tarde]!<br>Tudo bem?</p>",
+      "<p>Recebemos a sua solicitação. Assim que finalizarmos a <b>contratação</b> entraremos em contato.</p>",
+      "<p>Qualquer dúvida estou à disposição!!</p>",
+      "<p>Atenciosamente,</p>",
+    ].join(""),
+  },
+  {
+    id: "ramos-acusar-recalculo",
+    nome: "Ramos — Acusar recebimento de recálculo",
+    entidades: RAMOS,
+    assunto: "Re: {{card}}",
+    corpoHtml: [
+      "<p>{{responsavel}}, [bom dia/boa tarde]!<br>Tudo bem?</p>",
+      "<p>Recebemos a sua solicitação. Assim que finalizarmos o <b>recálculo</b> entraremos em contato.</p>",
+      "<p>Qualquer dúvida estou à disposição!!</p>",
+      "<p>Atenciosamente,</p>",
+    ].join(""),
+  },
+  {
+    id: "ramos-acusar-cancelamento",
+    nome: "Ramos — Acusar recebimento de cancelamento",
+    entidades: RAMOS,
+    assunto: "Re: {{card}}",
+    corpoHtml: [
+      "<p>{{responsavel}}, [bom dia/boa tarde]!<br>Tudo bem?</p>",
+      "<p>Recebemos a sua solicitação. Assim que finalizarmos o <b>cancelamento</b> entraremos em contato.</p>",
+      "<p>Qualquer dúvida estou à disposição!!</p>",
+      "<p>Atenciosamente,</p>",
+    ].join(""),
+  },
+  {
+    id: "ramos-cancelamento-confirmado",
+    nome: "Ramos — Cancelamento confirmado (script de cancelamento)",
+    entidades: RAMOS,
+    cc: COBRANCA,
+    assunto: "Re: {{card}}",
+    corpoHtml: [
+      "<p>{{responsavel}}, [bom dia/boa tarde]!<br>Tudo bem?</p>",
+      "<p><b>CANCELAMENTO CONFIRMADO 😎</b></p>",
+      "<p>Conforme solicitado realizamos o cancelamento do seguro.</p>",
+      "<ul>",
+      "<li>Seguro: <b>Incêndio [SEGURADORA]</b></li>",
+      "<li>Apólice: <b>[NÚMERO DA APÓLICE]</b></li>",
+      "<li>Cliente: <b>[NOME DO CLIENTE]</b></li>",
+      "</ul>",
+      "<p><b>Assim que disponível enviaremos o documento de endosso. 😁</b></p>",
+      "<p><b>Atenciosamente,</b></p>",
+    ].join(""),
+  },
+  {
+    id: "ramos-negativa-renovacao",
+    nome: "Ramos — Negativa de renovação (perguntar o motivo)",
+    entidades: RAMOS,
+    assunto: "Re: {{card}}",
+    corpoHtml: [
+      "<p>Prezados, [bom dia/boa tarde]!<br>Tudo bem?</p>",
+      "<p>Agradecemos pelo retorno!</p>",
+      "<p>Para que possamos entender melhor e também buscar ajudá-los da melhor forma, poderiam nos informar, por gentileza, o motivo pelo qual optaram por não realizar a renovação neste momento?</p>",
+      "<p>Caso tenha ficado alguma dúvida, ou se houver qualquer ponto em que possamos auxiliar, estamos à disposição para verificar e buscar a melhor solução para vocês.</p>",
+      "<p>Conte conosco sempre que precisarem!</p>",
+      "<p><b>Atenciosamente,</b></p>",
+    ].join(""),
+  },
+  {
+    id: "ramos-renovacao-imoveis",
+    nome: "Ramos — Renovação (imóveis)",
+    entidades: RAMOS,
+    assunto: "🔴🚒🔥 {{empresa}} - RENOVAÇÃO SEG. INCÊNDIO - [MM.AAAA]",
+    corpoHtml: [
+      "<p>Olá {{responsavel}}, [bom dia/boa tarde]!<br>Tudo bem?</p>",
+      "<p>Chegou a hora de renovar os seguros dos seus imóveis! 😊🎉</p>",
+      "<p>Mas, fique tranquilo! A <b>O2</b> busca sempre as melhores condições para você e seus clientes.</p>",
+      "<p><b>🟠 SEGUE EM ANEXO A MELHOR PROPOSTA, AGUARDAMOS A DEVOLUTIVA PARA SEGUIRMOS COM A RENOVAÇÃO 📑</b></p>",
+      "<p><b>Favor, confirmar as seguintes informações:</b></p>",
+      "<p><b>🔸</b>Quantidade de parcelas (1x a 11x);<br><b>🔸</b>Por gentileza, verificar se os dados da cotação estão corretos (endereço, complementos, atividade, ocupação e valor de aluguel), caso haja divergências nos sinalize, pois faremos o ajuste o mais breve possível.</p>",
+      "<p><b>E lembre-se! Após </b>" + dest("[DD/MM]") + "<b>, seus imóveis ficarão sem cobertura. Por isso, é importante que a renovação aconteça com antecedência.</b></p>",
+      "<p>Qualquer dúvida estou à disposição!</p>",
+      "<p>Atenciosamente,</p>",
+    ].join(""),
+  },
+  {
+    id: "ramos-renovacao-equipamento-portatil",
+    nome: "Ramos — Renovação equipamento portátil",
+    entidades: RAMOS,
+    assunto: "📱🔐 RENOVAÇÃO EQUIPAMENTO PORTÁTIL - [NOME DO CLIENTE]",
+    corpoHtml: [
+      "<p>Olá {{responsavel}}, [bom dia/boa tarde]!<br>Tudo bem?</p>",
+      "<p>Chegou a hora de renovar o seguro do seu aparelho! 😊🎉</p>",
+      "<p>Mas, fique tranquilo! A <b>O2</b> busca sempre as melhores condições para você e seus clientes.</p>",
+      "<p><b>Peço por gentileza que verifique se todos os dados na cotação estão corretos, nome, CPF, endereço, modelo do equipamento, caso precise realizar alguma alteração nos informe.</b></p>",
+      "<p><b>🟠 SEGUE EM ANEXO A MELHOR PROPOSTA, AGUARDAMOS A DEVOLUTIVA PARA SEGUIRMOS COM A RENOVAÇÃO.</b></p>",
+      "<p><b>💰 Opções de pagamento:</b></p>",
+      "<ul><li>À vista</li><li>Parcelamento em 12x no Débito em conta</li><li>Parcelamento em 12x no Cartão de crédito</li><li>Parcelamento em 12x no Cartão Porto</li></ul>",
+      "<p><b>*Em caso de atraso da parcela ou não pagamento o seguro será automaticamente cancelado.</b></p>",
+      "<p><b>🔒 Coberturas:</b></p>",
+      "<ul><li>Quebra acidental</li><li>Roubo e Furto mediante arrombamento</li><li>Furto simples</li><li>Transações Digitais e Pix</li></ul>",
+      "<p><b>Entenda melhor as nomenclaturas da proposta:</b><br>" +
+        laranja("🔸LMI:") + " Limite máximo indenizado, ou seja, em caso de sinistro de algum dos itens cobertos, esse será o valor máximo a ser indenizado pela Seguradora.<br>" +
+        laranja("🔸P.O.S") + " é a <b>parte da indenização que fica por conta do segurado em caso de sinistro</b> (Participação Obrigatória do segurado). Ou seja, a indenização da Seguradora ocorrerá de forma parcial, pois existe um percentual que corresponde a participação obrigatória de responsabilidade do segurado.</p>",
+      "<p><b>E lembre-se! Após </b>" + dest("[DD/MM]") + "<b>, seu aparelho ficará sem cobertura. Por isso, é importante que a renovação aconteça com antecedência ✅</b></p>",
+      "<p>Qualquer dúvida estou à disposição!</p>",
       "<p>Atenciosamente,</p>",
     ].join(""),
   },

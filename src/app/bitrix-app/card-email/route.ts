@@ -186,7 +186,11 @@ export async function POST(request: NextRequest) {
     <div id="dica-remetente"></div>
 
     <label for="para">Para</label>
-    <input id="para" type="email" required placeholder="cliente@exemplo.com" />
+    <input id="para" type="text" required placeholder="cliente@exemplo.com (mais de um: separe por vírgula ou ponto e vírgula)" />
+
+    <label for="cc">Cc (cópia) — opcional</label>
+    <input id="cc" type="text" placeholder="cobranca@o2seguros.com.br; outro@exemplo.com" />
+    <div id="dica-cc" style="font-size:11px;color:#8d8683;margin-top:4px;">O endereço fixo do tipo de card (ex: incendio@) já vai em cópia automaticamente.</div>
 
     <label for="modelo" id="rotulo-modelo">Modelo de e-mail</label>
     <select id="modelo">
@@ -310,9 +314,23 @@ export async function POST(request: NextRequest) {
           assuntoEl.value = preencherPlaceholders(modelo.assunto, false);
           ultimoAssuntoModelo = assuntoEl.value;
         }
+        // Modelos que pedem cópia fixa (ex: confirmação de contratação e de
+        // cancelamento -> cobrança): soma ao campo Cc sem repetir nem apagar o que a pessoa pôs.
+        if (modelo.cc && modelo.cc.length) {
+          var ccEl = document.getElementById("cc");
+          var atuais = listaEnderecos(ccEl.value);
+          modelo.cc.forEach(function (e) {
+            if (!atuais.some(function (a) { return a.toLowerCase() === e.toLowerCase(); })) atuais.push(e);
+          });
+          ccEl.value = atuais.join("; ");
+        }
         aplicarConversa();
         corpoEl.focus();
       });
+    }
+    // "a@x.com; b@x.com, c@x.com" -> ["a@x.com", "b@x.com", "c@x.com"]
+    function listaEnderecos(texto) {
+      return String(texto || "").split(/[,;\\s]+/).map(function (e) { return e.trim(); }).filter(Boolean);
     }
     popularModelos();
 
@@ -376,7 +394,7 @@ export async function POST(request: NextRequest) {
       botao.disabled = true;
       botao.textContent = "Procurando…";
       var textoBusca = document.getElementById("busca-gmail").value.trim();
-      chamarConversasGmail({ acao: "buscar", enderecos: [para], texto: textoBusca })
+      chamarConversasGmail({ acao: "buscar", enderecos: listaEnderecos(para), texto: textoBusca })
         .then(function (r) {
           botao.disabled = false;
           botao.textContent = "Procurar conversa no Gmail";
@@ -702,6 +720,7 @@ export async function POST(request: NextRequest) {
               itemId: Number(itemId),
               remetenteNome: remetenteEl.value,
               para: document.getElementById("para").value,
+              cc: document.getElementById("cc").value,
               assunto: document.getElementById("assunto").value,
               corpo: corpoEl.innerHTML,
               anexos: anexosConcluidos,
