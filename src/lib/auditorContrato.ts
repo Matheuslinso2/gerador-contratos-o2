@@ -22,6 +22,9 @@ export type RelatorioAuditoria = {
   prazo_declarado_meses?: number;
   vigencia_inicio?: string;
   vigencia_fim?: string;
+  // Cláusula que veda sublocação/cessão/empréstimo (regra da O2, 26/10/2026).
+  clausula_sublocacao_presente?: boolean;
+  clausula_sublocacao_trecho?: string;
 };
 
 export type ClausulaReferencia = {
@@ -66,6 +69,8 @@ Você precisa preencher TODOS OS 10 CAMPOS de status/resumo abaixo, um de cada v
    Verifique também se o contrato identifica um MORADOR ADICIONAL, diferente do(s) locatário(s) — normalmente aparece numa cláusula de finalidade/uso do imóvel (ex: "a presente locação... tendo também como morador(a) [NOME], [qualificação], RG..., CPF..."). Se houver, cite o nome completo dessa pessoa no resumo, em uma frase própria, no formato "Há incidência de morador adicional além do(s) locatário(s): [NOME]." — isso é só uma informação a mais pro resumo, não conta como "problema" por si só (a menos que a qualificação dessa pessoa esteja incompleta, ou que ela devesse constar como locatária solidária e não conste). Se não houver menção a nenhum morador adicional, não precisa dizer nada sobre isso.
 
 2. dados_locacao_status / dados_locacao_resumo — endereço do imóvel (logradouro, número, bairro e cidade; o CEP é OPCIONAL, ver regra abaixo), finalidade do imóvel classificada explicitamente como "Residencial" ou "Comercial" (não aceite resposta vaga tipo "uso normal" — se o contrato não deixar claro qual das duas, isso já é "atencao"), valor do aluguel, prazo da locação (datas de início/término coerentes). "problema" se algum desses dados estiver ausente, ambíguo ou incoerente. REGRA DO CEP (definida pela O2): o CEP NÃO é exigido no corpo do contrato — a falta de CEP no endereço NUNCA é pendência, NUNCA rebaixa o status deste pilar e NUNCA vai para pontos_criticos nem para o veredito. Se o CEP estiver no contrato, registre-o; se NÃO estiver, pode (e deve) informar isso apenas como nota informativa no fim do resumo, em uma frase curta tipo "Informativo: o contrato não traz CEP (não é exigido).", sem pedir correção e sem tom de problema.
+
+   CLÁUSULA DE SUBLOCAÇÃO (regra da O2, vale para TODO contrato, qualquer garantia): procure no contrato INTEIRO a cláusula que proíbe o locatário de SUBLOCAR, CEDER ou EMPRESTAR o imóvel (no todo ou em parte) sem consentimento prévio e por escrito do locador — pode estar numa cláusula de "obrigações do locatário", "uso do imóvel", "destinação", "cessão/sublocação" ou parecida, e pode citar o art. 13 da Lei 8.245/91. Basta uma redação que vede a sublocação (com ou sem as palavras cessão/empréstimo). Preencha clausula_sublocacao_presente (true/false) e, se presente, clausula_sublocacao_trecho com o número da cláusula e um trecho curto. O sistema aplica a regra sozinho (ressalva quando ausente): NÃO mude o status deste pilar, NÃO coloque em pontos_criticos e NÃO escreva sobre isso no resumo.
 
    PRAZO x VIGÊNCIA — NÃO faça essa conta você mesmo: o sistema calcula automaticamente, por código, se o prazo declarado bate com as datas de vigência e SEMPRE escreve no início do resumo deste pilar as datas, a conta e o resultado (e reprova quando não bate) — por isso não repita datas de vigência nem conta de meses no seu resumo. Sua tarefa é só EXTRAIR os três valores nos campos prazo_declarado_meses, vigencia_inicio e vigencia_fim (ver descrição de cada campo), copiando exatamente o que o contrato diz. Por isso, NÃO marque este pilar como "problema" por causa do prazo, NÃO escreva "ERRO GRAVE" sobre o prazo e NÃO coloque o prazo em pontos_criticos nem o use para decidir status_geral — julgue este pilar só pelos demais dados (endereço, finalidade, valor, datas ausentes ou ilegíveis; CEP ausente não conta).
 
@@ -169,6 +174,14 @@ const FERRAMENTA_RELATORIO: Anthropic.Tool = {
         type: "string",
         description: 'Data de término da vigência da locação, exatamente como no contrato, no formato DD/MM/AAAA. String vazia se não constar.',
       },
+      clausula_sublocacao_presente: {
+        type: "boolean",
+        description: "true se o contrato tem cláusula que veda sublocação, cessão ou empréstimo do imóvel sem consentimento prévio e por escrito do locador; false se não tem.",
+      },
+      clausula_sublocacao_trecho: {
+        type: "string",
+        description: 'Se presente: número da cláusula + trecho curto (ex: "Cláusula 9ª: é vedado sublocar, ceder ou emprestar..."). String vazia se ausente.',
+      },
       dados_cadastrais_status: { type: "string", enum: STATUS_ENUM, description: "Status do pilar 1 (dados cadastrais)." },
       dados_cadastrais_resumo: { type: "string", minLength: 1, description: "Resumo de uma frase do pilar 1 (dados cadastrais)." },
       dados_locacao_status: { type: "string", enum: STATUS_ENUM, description: "Status do pilar 2 (dados da locação)." },
@@ -204,6 +217,7 @@ const FERRAMENTA_RELATORIO: Anthropic.Tool = {
       "prazo_declarado_meses",
       "vigencia_inicio",
       "vigencia_fim",
+      "clausula_sublocacao_presente",
       "dados_cadastrais_status",
       "dados_cadastrais_resumo",
       "dados_locacao_status",
@@ -340,7 +354,33 @@ export async function auditarContrato(
     Object.keys(chamada.input as object).join(", ")
   );
 
-  return aplicarConferenciaPrazo(chamada.input as RelatorioAuditoria);
+  return aplicarConferenciaSublocacao(aplicarConferenciaPrazo(chamada.input as RelatorioAuditoria));
+}
+
+// Cláusula de sublocação (regra do Matheus, 26/10/2026): exigida em TODO
+// contrato; ausente = ressalva (pilar 2 em "atencao", ponto crítico e
+// APROVADO vira APROVADO COM RESSALVAS), nunca reprova sozinha. Aplicada por
+// código para não depender de a IA lembrar -- ela só diz se achou.
+// Achado real: contrato Wetson x Paulo Roberto Rosa (Mesquita/RJ) sem a
+// cláusula passou sem nenhum apontamento.
+export function aplicarConferenciaSublocacao(relatorio: RelatorioAuditoria): RelatorioAuditoria {
+  if (relatorio.clausula_sublocacao_presente === undefined) return relatorio;
+  if (relatorio.clausula_sublocacao_presente) {
+    const trecho = relatorio.clausula_sublocacao_trecho?.trim();
+    return {
+      ...relatorio,
+      dados_locacao_resumo: `${relatorio.dados_locacao_resumo} Cláusula de sublocação: presente${trecho ? ` (${trecho})` : ""}.`,
+    };
+  }
+  const alerta =
+    "Cláusula de sublocação ausente: o contrato não proíbe o locatário de sublocar, ceder ou emprestar o imóvel sem consentimento prévio e por escrito do locador (art. 13 da Lei 8.245/91) — incluir a cláusula.";
+  return {
+    ...relatorio,
+    dados_locacao_status: relatorio.dados_locacao_status === "ok" ? "atencao" : relatorio.dados_locacao_status,
+    dados_locacao_resumo: `${relatorio.dados_locacao_resumo} ${alerta}`,
+    pontos_criticos: [...(relatorio.pontos_criticos ?? []), alerta],
+    status_geral: relatorio.status_geral === "APROVADO" ? "APROVADO_RESSALVAS" : relatorio.status_geral,
+  };
 }
 
 function lerData(texto: string | undefined): { d: number; m: number; a: number } | null {
