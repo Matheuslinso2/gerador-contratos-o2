@@ -138,6 +138,10 @@
     {
       "path": "/api/cron/erp-nibo",
       "schedule": "25 * * * *"
+    },
+    {
+      "path": "/api/cron/erp-faturas",
+      "schedule": "50 * * * *"
     }
   ]
 }

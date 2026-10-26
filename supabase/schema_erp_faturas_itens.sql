@@ -1,0 +1,7 @@
+-- ERP O2 — fase B das faturas (26/10/2026). Aplicado via MCP (migration erp_faturas_itens).
+-- erp_faturas (seguradora TOKIO|PORTO, imobiliaria_id, chave = identidade na seguradora: Tokio "ramo-apólice-fatura" do
+-- boleto; Porto "ramo#n" pela continuidade das apólices), erp_fatura_meses (competencia, vencimento, valor_boleto,
+-- qtd_itens, valor_itens, arquivos = faturas.id), erp_fatura_itens (ramo, apolice, endosso, parcela n/N, valor,
+-- documento_id, endosso_documento_id). Função erp_ligar_itens_fatura() liga linhas a apólices/endossos e deduz a corretora.
+-- Carga: src/lib/erp/faturasItens.ts (cron /api/cron/erp-faturas xx:50; script scripts/erp/carregar-itens-faturas.ts).
+-- 1ª carga set–out/26: 375 faturas-mês, 4.457 linhas, 4.106 ligadas; boleto = soma das linhas em 348/360 (R$ 1).

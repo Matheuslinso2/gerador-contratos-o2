@@ -208,7 +208,7 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
           }
         />
         <FiltrosErp
-          caminho={secao === "faturas" ? "/erp/faturas" : "/erp/conferencia"}
+          caminho={secao === "faturas" ? "/erp/faturas/alertas" : "/erp/conferencia"}
           campos={secao === "faturas" ? ["seguradora", "imobiliaria", "mes"] : ["seguradora", "corretora", "mes"]}
           valores={f}
           resumo="Os filtros valem para todas as seções abaixo, em cada uma no nível que ela tem (ex.: imobiliária só nas seções de fatura; corretora nas de baixa e extratos)."
