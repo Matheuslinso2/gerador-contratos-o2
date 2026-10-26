@@ -5,7 +5,7 @@
 //         Prêmio | Taxa | Comissão | Tipo (46-RESTITUICAO DE PREMIO = estorno, 45-COMISSAO FRACIONADA, 69-COMISSAO TOTAL…)
 import type { LinhaExtrato } from "./extratos";
 
-export type ExtratoPdf = { linhas: LinhaExtrato[]; total_bruto: number | null; total_liquido: number | null; pago_em: string | null; corretora_cnpj: string | null; numero?: string | null; cod_corretor?: string | null };
+export type ExtratoPdf = { linhas: LinhaExtrato[]; total_bruto: number | null; total_liquido: number | null; pago_em: string | null; corretora_cnpj: string | null; numero?: string | null; cod_corretor?: string | null; linhas_texto?: string[]; linhas_campos?: string[][] };
 
 // O portal da Tokio exporta UM PDF com todos os extratos do período ("Exportar em PDF"); cada extrato começa em
 // "Extrato do Corretor Extrato nº N". Divide e lê cada um (cada extrato = um pagamento, com sua data de crédito).
@@ -31,6 +31,8 @@ const RE_TOKIO = /^(.*?)\s*(\d+) ([A-ZÀ-Ú][A-ZÀ-Ú0-9\/ .-]*?) (\d+) (\d+) ([
 export function parseTokioPdf(texto: string): ExtratoPdf | null {
   if (!/Extrato do Corretor/i.test(texto) || !/Apolice \/ Bilhete/i.test(texto)) return null;
   const linhas: LinhaExtrato[] = [];
+  const textos: string[] = [];
+  const campos: string[][] = [];
   let nomePendente: string[] = [];
   let dentro = false;
   for (const l of linhasDoTexto(texto)) {
@@ -43,6 +45,8 @@ export function parseTokioPdf(texto: string): ExtratoPdf | null {
     if (!m) continue;
     const [, nome, negocio, ramo, apolice, endosso, tipo, parc, , negP, premio, pct, negC, com] = m;
     const cliente = nome.trim() || null;
+    textos.push(m[0]);
+    campos.push([nome.trim(), negocio, ramo.trim(), apolice, endosso, tipo.trim(), `${parc}/${m[8]}`, `${negP}R$ ${premio}`, `${pct}%`, `${negC}R$ ${com}`]);
     nomePendente = [];
     linhas.push({
       n: linhas.length + 1, tipo: tipo.trim(), apolice, proposta: negocio !== "0" ? negocio : null, endosso: endosso !== "0" ? endosso : null,
@@ -59,7 +63,7 @@ export function parseTokioPdf(texto: string): ExtratoPdf | null {
   const cnpj = /CPF\/CNPJ: ([\d./-]+)/.exec(cab)?.[1]?.replace(/\D/g, "") ?? null;
   const numero = /Extrato n[ºo°]\s*(\d+)/i.exec(cab)?.[1] ?? null;
   const codCorretor = /Cod\. Corretor:\s*(\d+)/i.exec(cab)?.[1]?.replace(/^0+/, "") ?? null;
-  return { linhas, total_bruto: credito ? valor(credito[2]) : soma(linhas), total_liquido: liquido, pago_em: dataBr(credito?.[1]), corretora_cnpj: cnpj, numero, cod_corretor: codCorretor };
+  return { linhas, total_bruto: credito ? valor(credito[2]) : soma(linhas), total_liquido: liquido, pago_em: dataBr(credito?.[1]), corretora_cnpj: cnpj, numero, cod_corretor: codCorretor, linhas_texto: textos, linhas_campos: campos };
 }
 
 // No texto extraído a coluna Marca sai grudada no fim do Tipo ("46-RESTITUICAO DE PREMIOPorto").

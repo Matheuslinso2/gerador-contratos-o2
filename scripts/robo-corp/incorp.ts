@@ -6,7 +6,13 @@
 //   duplo clique entra) → "Enviar Arquivos" abre o seletor de arquivos do navegador (comando "enviar").
 //   Ícone da seguradora na barra → linhas que o InCorp leu (branca = apólice apta, laranja = endosso apto,
 //   amarela = não encontrada, verde = já baixada, vermelha = estorno); combo "Extrato" (240,702) lista os arquivos.
-//   Importar (947,50) grava a baixa (pede Dt. Recebimento e Dt. Prev. Repasse = dia 15 do mês seguinte).
+//   Importar (947,50) → "Tem certeza que deseja baixar as N comissões marcadas?" → [x] Alterar as Datas (464,416) →
+//   [x] Data de Recebimento (481,453) campo (712,451) e [x] Data de Previsão de Repasse (481,481) campo (712,479):
+//   clicar no dia, digitar dd, Seta→, mm, Seta→, aaaa e DAR TAB antes do ✓ (660,522) — 26/10 a previsão digitada não
+//   foi gravada (ficou igual ao recebimento) porque o cursor ainda estava no campo. "Importação realizada com sucesso" → OK.
+//   Histórico de Comissões (487,95): período em campo com máscara (Ctrl+A, Delete, Home, ddmmaaaa) → funil (760,155).
+//   Arquivo da Tokio: gerar com gerarTxtTokioIncorp (src/lib/erp/incorpTxt.ts) — layout de colunas fixas da equipe.
+//   Arquivo recusado vira COM_<nome> na pasta; excluir pelo botão direito → Excluir com SÓ ele selecionado (clique simples antes).
 // uso: npx tsx scripts/robo-corp/incorp.ts   (comandos em %TEMP%\corp-incorp\cmd.json; resposta em ok.json)
 //   [{"clique":[x,y]},{"duplo":[x,y]},{"tecla":"Enter"},{"texto":"08/09/2026"},{"espera":1500},{"foto":"nome"},
 //    {"rolar":[x,y,n]},{"enviar":"C:\\...\\0809.txt","clique":[x,y]},{"baixar":"nome.txt","clique":[x,y]},{"sair":true}]
@@ -76,10 +82,24 @@ async function main() {
             continue;
           }
           if (c.baixar && c.clique) {
-            const [dl] = await Promise.all([page.waitForEvent("download", { timeout: 60_000 }), c.duplo ? page.mouse.dblclick(c.clique[0], c.clique[1]) : page.mouse.click(c.clique[0], c.clique[1])]);
+            // "Salvar..." do Corp também sai por fora: download em qualquer aba ou aba nova com o conteúdo
             const destino = path.join(PASTA, c.baixar);
-            await dl.saveAs(destino);
-            feitas.push(`baixado: ${destino}`);
+            let salvo = false;
+            const antes = new Set(ctx.pages());
+            const ouvir = (p: import("playwright").Page) => p.on("download", async (dl) => { if (!salvo) { salvo = true; await dl.saveAs(destino); } });
+            ctx.pages().forEach(ouvir);
+            ctx.on("page", ouvir);
+            await page.mouse.click(c.clique[0], c.clique[1]);
+            for (let i = 0; i < 25 && !salvo; i++) {
+              await espera(1000);
+              for (const p of ctx.pages()) {
+                if (antes.has(p) || salvo) continue;
+                await p.waitForLoadState("domcontentloaded").catch(() => {});
+                const texto = await p.evaluate(() => document.body?.innerText ?? "").catch(() => "");
+                if (texto && texto.length > 20) { fs.writeFileSync(destino, texto); salvo = true; feitas.push(`conteúdo da aba ${p.url().slice(0, 80)}`); }
+              }
+            }
+            feitas.push(salvo ? `baixado: ${destino}` : "não baixou (nem download nem aba com conteúdo)");
             continue;
           }
           if (c.direito) await page.mouse.click(c.direito[0], c.direito[1], { button: "right" });
