@@ -33,7 +33,10 @@ export type ItemDocumento = {
 export function adivinharTipo(nomeArquivo: string): TipoDocumentoAuditoria {
   const n = nomeArquivo.toLowerCase();
   if (/(cota[cç][aã]o|proposta)/.test(n)) return "cotacao";
-  if (/(certificado|assinatura|clicksign|zapsign|d4sign|docusign)/.test(n)) return "certificado";
+  if (/certificado/.test(n)) return "certificado";
+  // Nome da plataforma (DocuSign etc.) vem também no CONTRATO assinado
+  // ("(DOCUSIGN) CONTRATO ..."): só vira certificado se não falar em contrato.
+  if (/(assinatura|clicksign|zapsign|d4sign|docusign)/.test(n) && !/contrato|aditivo|loca[cç][aã]o/.test(n)) return "certificado";
   if (/(vistoria|laudo)/.test(n)) return "outro";
   return "contrato";
 }

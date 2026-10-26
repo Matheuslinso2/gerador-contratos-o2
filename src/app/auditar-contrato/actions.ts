@@ -272,7 +272,11 @@ function normalizarRelatorio(relatorio: RelatorioAuditoria): RelatorioAuditoria 
   return relatorio;
 }
 
-export async function auditar(formData: FormData) {
+// Erros voltam como { erro } para a própria tela (26/10/2026): com
+// redirect(?erro=) a página mostrava a mensagem no topo, mas o botão ficava
+// travado em "Analisando..." para sempre (o formulário não é remontado).
+// Só o sucesso redireciona (?ultimo=<id>).
+export async function auditar(formData: FormData): Promise<{ erro: string } | void> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -280,16 +284,13 @@ export async function auditar(formData: FormData) {
   if (!user) redirect("/login");
 
   const imobiliaria = await buscarImobiliariaDoUsuario(supabase, user);
-  if (!imobiliaria) {
-    redirect(`/auditar-contrato?erro=${encodeURIComponent("Cadastre sua imobiliária primeiro.")}`);
-  }
+  if (!imobiliaria) return { erro: "Cadastre sua imobiliária primeiro." };
 
   let dados;
   try {
     dados = await montarDocumentosEBiblioteca(supabase, formData);
   } catch (e) {
-    const mensagem = e instanceof Error ? e.message : "Falha ao processar os documentos.";
-    redirect(`/auditar-contrato?erro=${encodeURIComponent(mensagem)}`);
+    return { erro: e instanceof Error ? e.message : "Falha ao processar os documentos." };
   }
   const { documentos, nomeArquivo, textosContrato, bibliotecaClausulas } = dados;
 
@@ -297,8 +298,8 @@ export async function auditar(formData: FormData) {
   try {
     relatorio = await comLimiteDeTempo(auditarContrato(documentos, bibliotecaClausulas), LIMITE_TEMPO_ANALISE_MS);
   } catch (e) {
-    const mensagem = e instanceof Error ? e.message : "Falha ao analisar o contrato.";
-    redirect(`/auditar-contrato?erro=${encodeURIComponent(mensagem)}`);
+    console.error("[auditor] falha na análise:", e);
+    return { erro: e instanceof Error ? e.message : "Falha ao analisar o contrato." };
   }
   relatorio = normalizarRelatorio(relatorio);
 
@@ -319,7 +320,7 @@ export async function auditar(formData: FormData) {
     })
     .select("id")
     .single();
-  if (error) redirect(`/auditar-contrato?erro=${encodeURIComponent(error.message)}`);
+  if (error) return { erro: error.message };
 
   redirect(`/auditar-contrato?ultimo=${auditoria.id}`);
 }

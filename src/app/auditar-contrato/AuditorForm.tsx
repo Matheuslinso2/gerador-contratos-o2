@@ -106,16 +106,22 @@ function Formulario({ userId, sucessoInicial }: { userId: string; sucessoInicial
       }
 
       setEtapa("analisando");
-      await auditar(dados);
-      // auditar() redireciona em caso de sucesso ou erro; se chegar aqui sem
-      // redirecionar (não deveria), só destrava o botão.
+      const resposta = await auditar(dados);
+      // Sucesso redireciona (?ultimo=); erro volta aqui e destrava o botão,
+      // mantendo os documentos na lista para tentar de novo.
+      if (resposta?.erro) setErro(resposta.erro);
       setEtapa("parado");
     } catch (e) {
       // auditar() usa redirect() internamente (sucesso ou erro do servidor);
       // isso lança um sinal especial do Next que precisa continuar subindo,
       // não ser tratado como um erro de verdade.
       unstable_rethrow(e);
-      setErro(e instanceof Error ? e.message : "Falha ao enviar os arquivos.");
+      // Sem resposta do servidor (ex.: análise passou do tempo máximo).
+      setErro(
+        e instanceof Error && !/unexpected response|fetch/i.test(e.message)
+          ? e.message
+          : "A análise não terminou a tempo. Os documentos continuam na lista: tente de novo, ou envie menos arquivos por vez."
+      );
       setEtapa("parado");
     }
   }
