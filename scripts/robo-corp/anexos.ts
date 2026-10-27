@@ -1,7 +1,10 @@
 // Robô dos anexos do Corp (24/10/2026, pedido do Matheus): para cada Nosso Nº da
 // fila, abre o documento no Corp (Consultar Documentos → Busca), vai na aba Anexos,
-// e baixa cada anexo do tipo "Apólice" pelo "Visualizar Anexo" (o Corp abre o PDF
-// numa aba em s07.corpnuvem.com/Downloads/..., que baixa sem login).
+// e baixa TODOS os anexos (27/10: "pode baixar todos os arquivos em anexo e não só a
+// apólice") pelo "Visualizar Anexo" (o Corp abre o arquivo numa aba em
+// s07.corpnuvem.com/Downloads/..., que baixa sem login). Os do tipo "Apólice" vão para
+// pdfs/<nn>__<n>.pdf (entram no acervo pela carga); os demais (proposta, boleto,
+// endosso...) para outros/<nn>/<k>__<nome> — guardados só aqui até o Matheus decidir.
 // Não altera nada no Corp: só busca, abre, olha e fecha a janela.
 //
 // uso: npx tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/robo-corp/anexos.ts [opções]
@@ -17,6 +20,7 @@ process.loadEnvFile(".env.local");
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import sharp from "sharp";
 import { chromium, type BrowserContext, type Page } from "playwright";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -26,14 +30,29 @@ const args = process.argv.slice(2);
 const arg = (n: string) => (args.includes(n) ? args[args.indexOf(n) + 1] : null);
 const PASTA = process.env.APOLICES_CORP || path.join(os.tmpdir(), "o2-apolices-corp");
 const PDFS = path.join(PASTA, "pdfs");
+const OUTROS = path.join(PASTA, "outros");
+// Rótulo de tipo de cada linha ("Apólice", "Proposta"...): o Corp é imagem, então guarda o recorte
+// (sem dado pessoal) para dar nome aos tipos depois, exatamente como o Corp mostra.
+const ROTULOS = path.join(PASTA, "rotulos");
+// versão 2 = visita que baixou todos os anexos; a fila revisita quem foi visitado antes disso.
+const VERSAO_VISITA = 2;
 const FILA = path.join(PASTA, "fila.json");
 const ESTADO = path.join(PASTA, "estado.json");
 const PRIORIDADE = path.join(PASTA, "prioridade.json");
 fs.mkdirSync(PDFS, { recursive: true });
+fs.mkdirSync(OUTROS, { recursive: true });
+fs.mkdirSync(ROTULOS, { recursive: true });
 
 type Item = { nn: string; produto: string; fim_vig: string };
 /** por Nosso Nº: resultado da visita ao Corp */
-type Estado = Record<string, { quando: string; resultado: "baixado" | "sem_anexo_apolice" | "nao_achou" | "erro"; arquivos?: string[]; erro?: string }>;
+type Estado = Record<string, {
+  quando: string; versao?: number;
+  resultado: "baixado" | "sem_anexo" | "sem_anexo_apolice" | "nao_achou" | "erro";
+  arquivos?: string[]; outros?: string[]; erro?: string;
+  /** por linha da lista, na ordem do Corp: imagem do rótulo de tipo (rotulos/<id>.png) */
+  rotulos?: string[];
+}>;
+const aVisitar = (e: Estado[string] | undefined) => !e || e.resultado === "erro" || (e.versao ?? 1) < VERSAO_VISITA;
 const lerJson = <T>(f: string, padrao: T): T => (fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, "utf8")) : padrao);
 
 // ------------------------------------------------------------ fila
@@ -104,6 +123,11 @@ async function temLinhaNoResultado(page: Page): Promise<boolean> {
   return escuros > 15;
 }
 
+/** Imagem da célula Nosso Nº da 1ª linha do resultado (para saber quando a busca respondeu). */
+async function colunaNossoNumero(page: Page): Promise<Buffer> {
+  return page.screenshot({ clip: { x: 12, y: 168, width: 60, height: 14 } });
+}
+
 /** O Ctrl+A não seleciona o texto da busca do Corp: apaga com End + Backspace. */
 async function limparBusca(page: Page) {
   // O programa é remoto e perde tecla rápida: pausas entre as teclas.
@@ -120,8 +144,15 @@ async function abrirDocumento(page: Page, nn: string): Promise<boolean> {
   await espera(400);
   await limparBusca(page);
   await page.keyboard.type(nn, { delay: 60 });
+  // A linha do resultado anterior continua na tela até a busca nova responder (à noite o Corp
+  // chega a levar vários segundos): espera a coluna Nosso Nº MUDAR antes de decidir, senão
+  // abriria o documento anterior (anexo no Nosso Nº errado) ou daria "não achou" falso.
+  const antes = await colunaNossoNumero(page);
   await page.keyboard.press("Enter");
-  await espera(3000);
+  const fimEspera = Date.now() + 10_000;
+  await espera(1500);
+  while (Date.now() < fimEspera && (await colunaNossoNumero(page)).equals(antes)) await espera(700);
+  await espera(800);
   if (process.env.ANEXOS_DEBUG) await foto(page, `busca-${nn}`);
   if (!(await temLinhaNoResultado(page))) return false;
   // Às vezes o Corp responde "Não posso abrir a área de transferência" (o Windows estava com
@@ -148,40 +179,83 @@ async function fecharDocumento(page: Page) {
   await espera(1500);
 }
 
-/** Na aba Anexos: baixa cada anexo do tipo Apólice. Devolve os arquivos salvos. */
-async function baixarApolices(page: Page, nn: string): Promise<string[]> {
+// Linhas da lista de anexos (tela 1366×768): 40 px de altura, a 1ª com o ícone em y 208–240.
+const LINHA0 = 208, ALTURA_LINHA = 40, MAX_LINHAS = 9;
+/** Linhas preenchidas na lista: ícone do arquivo (qualquer tipo) na coluna x 467–499. */
+async function linhasDeAnexo(page: Page): Promise<number> {
+  let n = 0;
+  for (let k = 0; k < MAX_LINHAS; k++) {
+    const { data } = await sharp(await page.screenshot({ clip: { x: 467, y: LINHA0 + k * ALTURA_LINHA, width: 32, height: 32 } })).greyscale().raw().toBuffer({ resolveWithObject: true });
+    let marcados = 0;
+    for (const v of data) if (v < 200) marcados++;
+    if (marcados < 60) break;
+    n++;
+  }
+  return n;
+}
+
+const nomeSeguro = (s: string) => s.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").slice(0, 120);
+
+/** Na aba Anexos: baixa todos os anexos. Os do tipo Apólice (rótulo na linha) vão para pdfs/. */
+async function baixarAnexos(page: Page, nn: string): Promise<{ apolices: string[]; outros: string[]; rotulos: string[] }> {
   const aba = await esperarModelo(page, "doc-aba-anexos", 10_000);
   await page.mouse.click(aba.x, aba.y);
   await espera(2500);
   // Rótulo "Apólice" na coluna de tipo: a linha selecionada (a 1ª, ao abrir) tem fundo azul-claro.
   const area = { x0: 900, y0: 190, x1: 1150, y1: 610 };
-  const rotulos = [...(await acharTodos(page, "anexo-tipo-apolice-sel", 14, area)), ...(await acharTodos(page, "anexo-tipo-apolice", 14, area))]
-    .filter((p, i, xs) => xs.findIndex((q) => Math.abs(q.y - p.y) < 10) === i)
-    .sort((p, q) => p.y - q.y);
-  const salvos: string[] = [];
-  for (const [i, r] of rotulos.entries()) {
-    await page.mouse.click(r.x - 450, r.y); // nome do arquivo, na mesma linha
+  const rotulos = [...(await acharTodos(page, "anexo-tipo-apolice-sel", 14, area)), ...(await acharTodos(page, "anexo-tipo-apolice", 14, area))];
+  const total = await linhasDeAnexo(page);
+  if (total >= MAX_LINHAS) log(`${nn}: ${total}+ anexos — a lista pode ter mais abaixo (só os visíveis foram baixados)`);
+  const apolices: string[] = [], outros: string[] = [], rotulosLinha: string[] = [];
+  for (let k = 0; k < total; k++) {
+    const yLinha = LINHA0 + k * ALTURA_LINHA + 16;
+    const ehApolice = rotulos.some((r) => Math.abs(r.y - yLinha) < 18);
+    const recorte = await page.screenshot({ clip: { x: 960, y: yLinha - 8, width: 140, height: 18 } });
+    const idRotulo = createHash("sha1").update(recorte).digest("hex").slice(0, 12);
+    if (!fs.existsSync(path.join(ROTULOS, `${idRotulo}.png`))) fs.writeFileSync(path.join(ROTULOS, `${idRotulo}.png`), recorte);
+    rotulosLinha.push(idRotulo);
+    await page.mouse.click(700, yLinha - 10); // nome do arquivo, na linha
     await espera(700);
     const olho = await esperarModelo(page, "anexo-visualizar", 5000);
-    const [aba] = await Promise.all([
-      page.context().waitForEvent("page", { timeout: 30_000 }),
-      page.mouse.click(olho.x, olho.y),
+    // PDF e imagem abrem numa aba; Word/Excel etc. viram download direto.
+    const evento = Promise.race([
+      page.context().waitForEvent("page", { timeout: 30_000 }).then((p) => ({ aba: p, download: null })),
+      page.waitForEvent("download", { timeout: 30_000 }).then((d) => ({ aba: null, download: d })),
     ]);
-    await aba.waitForLoadState("domcontentloaded").catch(() => {});
-    const url = aba.url();
-    await aba.close();
-    if (!/^https:\/\/[\w.-]+\.corpnuvem\.com\/Downloads\//.test(url)) throw new Error(`endereço inesperado do anexo: ${url.slice(0, 60)}`);
-    const r2 = await fetch(url);
-    if (!r2.ok) throw new Error(`download ${r2.status}`);
-    const buf = Buffer.from(await r2.arrayBuffer());
-    if (buf.subarray(0, 4).toString() !== "%PDF") throw new Error("anexo não é PDF");
-    const arq = path.join(PDFS, `${nn}__${i + 1}.pdf`);
-    fs.writeFileSync(arq, buf);
-    fs.writeFileSync(arq.replace(/\.pdf$/, ".nome.txt"), decodeURIComponent(url.split("/").pop() ?? ""));
-    salvos.push(path.basename(arq));
+    await page.mouse.click(olho.x, olho.y);
+    const { aba, download } = await evento;
+    let buf: Buffer, nome: string;
+    if (download) {
+      nome = download.suggestedFilename();
+      const tmp = path.join(OUTROS, `_baixando-${process.pid}`);
+      await download.saveAs(tmp);
+      buf = fs.readFileSync(tmp);
+      fs.rmSync(tmp);
+    } else {
+      await aba!.waitForLoadState("domcontentloaded").catch(() => {});
+      const url = aba!.url();
+      await aba!.close();
+      if (!/^https:\/\/[\w.-]+\.corpnuvem\.com\/Downloads\//.test(url)) throw new Error(`endereço inesperado do anexo: ${url.slice(0, 60)}`);
+      const r2 = await fetch(url);
+      if (!r2.ok) throw new Error(`download ${r2.status}`);
+      buf = Buffer.from(await r2.arrayBuffer());
+      nome = decodeURIComponent(url.split("/").pop() ?? `anexo-${k + 1}`);
+    }
+    if (ehApolice && buf.subarray(0, 4).toString() === "%PDF") {
+      const arq = path.join(PDFS, `${nn}__${apolices.length + 1}.pdf`);
+      fs.writeFileSync(arq, buf);
+      fs.writeFileSync(arq.replace(/\.pdf$/, ".nome.txt"), nome);
+      apolices.push(path.basename(arq));
+    } else {
+      const pasta = path.join(OUTROS, nn);
+      fs.mkdirSync(pasta, { recursive: true });
+      const arq = path.join(pasta, `${k + 1}__${nomeSeguro(nome)}`);
+      fs.writeFileSync(arq, buf);
+      outros.push(path.basename(arq));
+    }
     await espera(800);
   }
-  return salvos;
+  return { apolices, outros, rotulos: rotulosLinha };
 }
 
 // ------------------------------------------------------------ rodada
@@ -268,19 +342,23 @@ async function rodada(
     const naPrioridade = new Set(prioridade.map((i) => i.nn));
     const fila = [...prioridade, ...lerJson<Item[]>(FILA, []).filter((i) => !naPrioridade.has(i.nn))];
     if (!fila.length) throw new Error("fila vazia: rode com --fila fianca-vigentes");
-    if (prioridade.length) log(`prioridade: ${prioridade.filter((i) => !estado0[i.nn] || estado0[i.nn].resultado === "erro").length} de ${prioridade.length} ainda a visitar`);
+    if (prioridade.length) log(`prioridade: ${prioridade.filter((i) => aVisitar(estado0[i.nn])).length} de ${prioridade.length} ainda a visitar`);
     const estado = estado0;
-    const pendentes = fila.filter((i) => !estado[i.nn] || estado[i.nn].resultado === "erro");
+    const pendentes = fila.filter((i) => aVisitar(estado[i.nn]));
     log(`fila: ${fila.length} | já visitados: ${fila.length - pendentes.length} | nesta rodada: até ${Math.min(limite, pendentes.length)}`);
     let feitos = 0, erros = 0, limiteHorario = false;
     for (const item of pendentes.slice(0, limite)) {
       if (pararEm && new Date() >= pararEm) { log(`horário-limite ${ate}: parando`); limiteHorario = true; break; }
       const t0 = Date.now();
       try {
-        if (!(await abrirDocumento(page, item.nn))) estado[item.nn] = { quando: new Date().toISOString(), resultado: "nao_achou" };
+        // Não achou: reabre a Consulta e busca de novo antes de desistir (na noite de 25/10 a
+        // busca voltou vazia para 1.138 documentos seguidos — tela fora do lugar, não documento sumido).
+        let achou = await abrirDocumento(page, item.nn);
+        if (!achou) { await abrirConsultaDocumentos(page); achou = await abrirDocumento(page, item.nn); }
+        if (!achou) estado[item.nn] = { quando: new Date().toISOString(), versao: VERSAO_VISITA, resultado: "nao_achou" };
         else {
-          const arquivos = await baixarApolices(page, item.nn);
-          estado[item.nn] = { quando: new Date().toISOString(), resultado: arquivos.length ? "baixado" : "sem_anexo_apolice", arquivos };
+          const { apolices, outros, rotulos } = await baixarAnexos(page, item.nn);
+          estado[item.nn] = { quando: new Date().toISOString(), versao: VERSAO_VISITA, resultado: apolices.length || outros.length ? "baixado" : "sem_anexo", arquivos: apolices, outros, rotulos };
           await fecharDocumento(page);
         }
         erros = 0;
@@ -298,7 +376,8 @@ async function rodada(
       }
       fs.writeFileSync(ESTADO, JSON.stringify(estado));
       feitos++;
-      log(`${item.nn}: ${estado[item.nn].resultado}${estado[item.nn].arquivos?.length ? ` (${estado[item.nn].arquivos!.length})` : ""} em ${Math.round((Date.now() - t0) / 1000)} s`);
+      const e = estado[item.nn];
+      log(`${item.nn}: ${e.resultado}${e.resultado === "baixado" ? ` (${e.arquivos?.length ?? 0} apólice, ${e.outros?.length ?? 0} outros)` : ""} em ${Math.round((Date.now() - t0) / 1000)} s`);
     }
     const r: Record<string, number> = {};
     for (const v of Object.values(estado)) r[v.resultado] = (r[v.resultado] ?? 0) + 1;
