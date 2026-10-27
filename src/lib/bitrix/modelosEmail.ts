@@ -190,7 +190,7 @@ export const MODELOS_EMAIL: ModeloEmail[] = [
       "<p>O prazo das cartas aprovadas tem validade " + destSub("até o dia [DD/MM].") + "</p>",
       "<p><b>(PANORAMA DISPONÍVEL EM ANEXO)</b></p>",
       "<p>" + destSub("✅ Atenção:") + "<br>As cláusulas obrigatórias para inclusão no contrato e as condições gerais encontram-se no link abaixo:<br>" +
-        "<a href=\"https://drive.google.com/drive/folders/1E8vR_TdZ0uIeiX6f9iEBQf66DhKUlbP3\">https://drive.google.com/drive/folders/1E8vR_TdZ0uIeiX6f9iEBQf66DhKUlbP3</a></p>",
+        "<a href=\"https://drive.google.com/drive/folders/1E-ZupsEkMThKurjRip5Kdw1pNpQYybQk\">https://drive.google.com/drive/folders/1E-ZupsEkMThKurjRip5Kdw1pNpQYybQk</a></p>",
       "<p>Atenciosamente,</p>",
     ].join(""),
   },

@@ -13,8 +13,9 @@ export const AVISO_LEGAL =
   "Esta mensagem é destinada exclusivamente para a(s) pessoa(s) a quem é dirigida, podendo conter informação confidencial e/ou legalmente privilegiada. Se você não for o destinatário desta mensagem, desde já fica notificado de abster-se a divulgar, copiar, distribuir, examinar ou, de qualquer forma, utilizar a informação contida nesta mensagem, por ser ilegal. Caso você tenha recebido esta mensagem por engano, pedimos que nos retorne este E-Mail, promovendo, desde logo, a eliminação do seu conteúdo em sua base de dados, registros ou sistema de controle.";
 
 // Pasta única com cláusulas e condições gerais de TODAS as seguradoras --
-// conferido em 16/10: os 5 e-mails reais usam este mesmo link.
-export const LINK_CLAUSULAS = "https://drive.google.com/drive/folders/1E8vR_TdZ0uIeiX6f9iEBQf66DhKUlbP3";
+// conferido em 16/10; trocado em 27/10/2026 pelo link certo das cláusulas
+// de aprovado (enviado ao Matheus pela equipe).
+export const LINK_CLAUSULAS = "https://drive.google.com/drive/folders/1E-ZupsEkMThKurjRip5Kdw1pNpQYybQk";
 
 export const EMAIL_FIANCA = "fianca@o2seguros.com.br";
 
