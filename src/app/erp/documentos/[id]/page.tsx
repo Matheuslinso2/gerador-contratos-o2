@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
+import EmailsDoDocumento from "./EmailsDoDocumento";
 import { formatarData, formatarReais } from "@/lib/sinistros/regras";
 import RascunhoAutomatico from "@/components/RascunhoAutomatico";
 import { ligarEndossoApolice } from "./actions";
@@ -118,6 +119,9 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
           <span className={d.cadeia.cliente ? "font-medium" : "text-gray-400"}>{d.cadeia.cliente ?? "cliente não ligado"}</span>
           <span className="text-gray-500"> ({d.partes_apolice.length ? "cliente no Corp" : "segurado"})</span>
         </div>
+
+        {/* botão "E-mails (n)": só equipe O2 (a página já confere acima); some quando não há e-mail nem PDF ligado ao documento */}
+        <EmailsDoDocumento documentoId={d.id} codigoO2={String(d.nosso_numero)} />
 
         {d.partes_apolice.length > 0 && (
           <div className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm">
