@@ -21,7 +21,9 @@ export async function GET(request: NextRequest) {
     const { data: partesAcervo } = await sb.rpc("erp_atualizar_partes_acervo");
     // fila de Emissão (propostas pendentes) e KPIs dos últimos 6 meses — tabelas prontas da etapa Emissão
     const { data: emissao } = await sb.rpc("erp_atualizar_emissao");
-    return NextResponse.json({ ok: true, desde, ...faturas, vencimentos, partesAcervo, emissao });
+    // KPIs do mês de cada etapa (tela Início)
+    const { data: inicio } = await sb.rpc("erp_atualizar_inicio");
+    return NextResponse.json({ ok: true, desde, ...faturas, vencimentos, partesAcervo, emissao, inicio });
   } catch (e) {
     return NextResponse.json({ ok: false, erro: (e as Error).message }, { status: 500 });
   }

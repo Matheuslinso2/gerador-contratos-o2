@@ -19,3 +19,9 @@
 --   sucesso do card no Bitrix; sem card, dt_proposta do Corp; por último vigencia_inicio.
 -- erp_emissao_kpis(mes) → erp_emissao_kpis_pronta (6 meses): efetivados, emitidos (têm nº), pendentes (digitado sem nº), encerradas_sem_numero, bitrix, corp.
 -- erp_atualizar_emissao() recalcula as duas tabelas; chamada pelo cron /api/cron/erp-faturas (xx:50). Índice erp_documentos_dtproposta_idx.
+
+-- 27/10/2026 — Início com KPIs do mês (migrations erp_inicio_kpis, erp_inicio_kpis_sinistro_abertura).
+-- erp_inicio_kpis(mes) → erp_inicio_kpis_pronta (3 meses; erp_atualizar_inicio() no cron erp-faturas): faturas (itens, entram/saem/ficam entre o mês e o
+--   anterior da mesma fatura, boletos que não batem), parcelas, baixa (erp_corp_comissoes: recebida × pendente, última baixa), apólices, sinistros
+--   (abertura pela data da seguradora; created_at é a data da carga) e renovações. Descoberta: erp_corp_comissoes.dt_emissao tem a data de emissão do Corp
+--   para ~51 mil documentos (há valores absurdos, ex.: 2076): candidata à data de emissão do ERP, depois de limpar.

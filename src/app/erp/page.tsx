@@ -3,22 +3,54 @@ import { createClient } from "@/lib/supabase/server";
 import { CADASTROS, ETAPAS } from "@/lib/erp/processo";
 
 export const metadata = { title: { absolute: "ERP O2" } };
+export const dynamic = "force-dynamic";
 
-// Tela inicial do ERP O2: a barra do processo (Matheus 26/10: telas por lógica de processo, da esquerda para a
-// direita) com o número que pede ação em cada etapa, e os avisos. Só contagens leves e tabelas prontas.
-export default async function ErpInicio() {
+// Tela inicial do ERP O2: o processo da esquerda para a direita (Matheus 26/10), agora com os KPIs do mês corrente de cada
+// etapa (27/10). Só tabelas prontas (erp_inicio_kpis_pronta, erp_emissao_kpis_pronta), recalculadas a cada hora pelo cron erp-faturas.
+// Nunca inventa: etapa sem dado ou sem tela aparece como "em breve".
+
+type Kpis = {
+  faturas: { competencia: string; faturas: number; itens: number; boletos: number; boletos_divergentes: number; faturas_novas_no_mes: number; entradas: number; saidas: number; remanescentes: number };
+  parcelas: { vencem: number; quitadas: number; vencidas_abertas: number; valor_vencidas_abertas: number };
+  baixa: { recebida_n: number; recebida_valor: number; pendente_n: number; pendente_valor: number; ultima_baixa: string | null };
+  apolices: { vigentes: number; canceladas_no_mes: number };
+  sinistros: { abertos_seguradora_no_mes: number; em_andamento: number };
+  renovacoes: { vencem: number };
+  renovacoes_cadastradas: number;
+};
+type KpisEmissao = { efetivados: number; emitidos: number; pendentes: number; bitrix: number; corp: number };
+
+const n = (v: number | null | undefined) => (v ?? 0).toLocaleString("pt-BR");
+const brl = (v: number | null | undefined) => (v ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+const data = (d: string | null | undefined) => (d ? d.slice(8, 10) + "/" + d.slice(5, 7) : "—");
+const dia = (d: Date) => d.toISOString().slice(0, 10);
+const somar = (hoje: Date, k: number) => dia(new Date(hoje.getTime() + k * 86400000));
+
+export default async function ErpInicio({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const sp = await searchParams;
+  const hoje = new Date();
+  const atual = new Date(Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth(), 1));
+  const pedido = typeof sp.mes === "string" && /^\d{4}-\d{2}$/.test(sp.mes) ? sp.mes : null;
+  const mes = pedido ?? dia(atual).slice(0, 7);
+  const ini = `${mes}-01`;
+  const meses = [0, 1, 2].map((k) => dia(new Date(Date.UTC(atual.getUTCFullYear(), atual.getUTCMonth() - k, 1))).slice(0, 7));
+
   const supabase = await createClient();
-  const [{ data: atrasos }, { data: alertas }, { count: revisao }, { count: emEmissao }, { count: vigentes }, { count: foraFaturas }, { count: estornos }, { count: vencDiv }] = await Promise.all([
+  const [{ data: atrasos }, { data: alertas }, { count: revisao }, { count: estornos }, { count: vencDiv }, { data: kRow }, { data: eRow }, { count: p5 }, { count: p10 }, { count: p15 }] = await Promise.all([
     supabase.from("erp_baixa_corp_atraso_pronto").select("mes, seguradora, situacao"),
     supabase.rpc("erp_contar_alertas_fatura"),
     supabase.from("erp_documentos").select("id", { count: "exact", head: true }).eq("revisao_pendente", true),
-    supabase.from("erp_documentos").select("id", { count: "exact", head: true }).eq("situacao", "digitado"),
-    supabase.from("erp_documentos").select("id", { count: "exact", head: true }).eq("situacao", "vigente"),
-    // faturas cujo boleto não bate com a soma das linhas (fora da fatura NÃO é pendência — Matheus 26/10)
-    supabase.from("erp_fatura_meses").select("id", { count: "exact", head: true }).not("valor_boleto", "is", null).filter("valor_boleto", "gt", 0),
     supabase.from("erp_estornos_endosso_pronto").select("alerta", { count: "exact", head: true }),
     supabase.from("erp_vencimentos_pronto").select("parcela_id", { count: "exact", head: true }),
+    supabase.from("erp_inicio_kpis_pronta").select("dados, calculado_em").eq("mes", ini).maybeSingle(),
+    supabase.from("erp_emissao_kpis_pronta").select("dados").eq("mes", ini).maybeSingle(),
+    supabase.from("erp_emissao_fila_pronta").select("id", { count: "exact", head: true }).lt("data_efetivacao", somar(hoje, -5)),
+    supabase.from("erp_emissao_fila_pronta").select("id", { count: "exact", head: true }).lt("data_efetivacao", somar(hoje, -10)),
+    supabase.from("erp_emissao_fila_pronta").select("id", { count: "exact", head: true }).lt("data_efetivacao", somar(hoje, -15)),
   ]);
+  const k = (kRow?.dados ?? null) as Kpis | null;
+  const e = (eRow?.dados ?? null) as KpisEmissao | null;
+
   const nAtraso = (atrasos ?? []).length;
   const mesesAtraso = [...new Set((atrasos ?? []).map((a: { mes: string }) => a.mes))].sort().reverse();
   const contagem = ((alertas ?? []) as { alerta: string; n: number }[]).reduce<Record<string, number>>((acc, a) => ({ ...acc, [a.alerta]: Number(a.n) }), {});
@@ -40,6 +72,39 @@ export default async function ErpInicio() {
     },
   ].filter(Boolean) as { cor: string; texto: string; href: string }[];
 
+  const rotuloMes = new Date(Date.UTC(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)) - 1, 1)).toLocaleDateString("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" });
+  const baixaAtrasada = k?.baixa.ultima_baixa ? `baixa do Corp até ${data(k.baixa.ultima_baixa)}` : "sem baixa registrada";
+
+  // linhas de KPI de cada etapa; vazio = a etapa ainda não tem dado ou tela ("em breve")
+  const linhas: Record<string, { texto: string; forte?: boolean }[]> = {};
+  if (e) {
+    linhas.emissao = [
+      { texto: `${n(e.pendentes)} pendentes · ${n(e.emitidos)} emitidas · ${n(e.efetivados)} efetivadas`, forte: true },
+      { texto: `pendentes há +5 dias: ${n(p5)} · +10: ${n(p10)} · +15: ${n(p15)} (todas as épocas)` },
+    ];
+  }
+  if (k) {
+    linhas.faturas = k.faturas.faturas
+      ? [
+          { texto: `${n(k.faturas.faturas)} faturas · ${n(k.faturas.itens)} apólices · ${brl(k.faturas.boletos)}`, forte: true },
+          { texto: `entram ${n(k.faturas.entradas)} · saem ${n(k.faturas.saidas)} · ficam ${n(k.faturas.remanescentes)} (${n(k.faturas.faturas_novas_no_mes)} faturas novas, sem mês anterior)` },
+          ...(k.faturas.boletos_divergentes ? [{ texto: `${n(k.faturas.boletos_divergentes)} boleto(s) não batem com as linhas` }] : []),
+        ]
+      : [{ texto: "nenhuma fatura carregada neste mês" }];
+    linhas.apolices = [{ texto: `${n(k.apolices.vigentes)} vigentes · ${n(k.apolices.canceladas_no_mes)} canceladas no mês`, forte: true }];
+    linhas.parcelas = [
+      { texto: `${n(k.parcelas.vencem)} vencem no mês · ${n(k.parcelas.quitadas)} quitadas`, forte: true },
+      { texto: `${n(k.parcelas.vencidas_abertas)} vencidas em aberto (${brl(k.parcelas.valor_vencidas_abertas)}) · ${baixaAtrasada}` },
+      { texto: `${n(vencDiv)} vencimentos divergentes do Corp` },
+    ];
+    linhas.baixa = [
+      { texto: `${brl(k.baixa.recebida_valor)} baixados (${n(k.baixa.recebida_n)}) · ${brl(k.baixa.pendente_valor)} pendentes (${n(k.baixa.pendente_n)})`, forte: true },
+      { texto: `${baixaAtrasada} · ${n(estornos)} estornos a ver` },
+    ];
+    linhas.sinistro = [{ texto: `${n(k.sinistros.em_andamento)} em andamento · ${n(k.sinistros.abertos_seguradora_no_mes)} abertos na seguradora no mês`, forte: true }];
+    if (k.renovacoes_cadastradas > 0) linhas.renovacao = [{ texto: `${n(k.renovacoes.vencem)} a vencer no mês`, forte: true }];
+  }
+
   return (
     <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-6 p-8">
       <div>
@@ -57,41 +122,48 @@ export default async function ErpInicio() {
         </section>
       )}
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">O processo, da efetivação à renovação</h2>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9">
-          {ETAPAS.map((e, i) => {
-            const numero: Record<string, { n: number | null; rotulo: string } | undefined> = {
-              emissao: { n: emEmissao ?? 0, rotulo: "em emissão" },
-              faturas: { n: foraFaturas ?? 0, rotulo: "faturas-mês carregadas" },
-              apolices: { n: vigentes ?? 0, rotulo: "vigentes" },
-              parcelas: { n: vencDiv ?? 0, rotulo: "vencimentos divergentes" },
-              baixa: { n: (atrasos ?? []).length + (estornos ?? 0), rotulo: "atrasos + estornos a ver" },
-            };
-            const k = numero[e.chave];
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">O processo em {rotuloMes}, da efetivação à renovação</h2>
+          <div className="flex gap-1 text-xs">
+            {meses.map((m) => (
+              <Link key={m} href={m === meses[0] ? "/erp" : `/erp?mes=${m}`} className={`rounded-full border px-3 py-1 font-medium ${m === mes ? "border-o2-navy bg-o2-navy text-white" : "border-gray-300 text-gray-700"}`}>
+                {m === meses[0] ? "mês atual" : `${m.slice(5, 7)}/${m.slice(0, 4)}`}
+              </Link>
+            ))}
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {ETAPAS.map((et, i) => {
+            const ls = linhas[et.chave];
             const corpo = (
               <>
                 <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Etapa {i + 1}</p>
-                <p className="font-semibold text-o2-navy">{e.label}{e.externo ? " ↗" : ""}</p>
-                {k ? (
-                  <p className="mt-1 text-sm"><span className="text-lg font-semibold text-o2-navy">{k.n?.toLocaleString("pt-BR")}</span> <span className="text-gray-500">{k.rotulo}</span></p>
+                <p className="font-semibold text-o2-navy">{et.label}{et.externo ? " ↗" : ""}</p>
+                {ls ? (
+                  <div className="mt-1 space-y-0.5">
+                    {ls.map((l) => (
+                      <p key={l.texto} className={l.forte ? "text-sm font-medium text-gray-800" : "text-xs text-gray-500"}>{l.texto}</p>
+                    ))}
+                  </div>
                 ) : (
-                  <p className="mt-1 text-xs text-gray-500">{e.href ? e.descricao : "em breve"}</p>
+                  <p className="mt-1 text-xs text-gray-500">{et.href ? et.descricao : "em breve"}</p>
                 )}
               </>
             );
-            return e.href ? (
-              <Link key={e.chave} href={e.href} target={e.externo ? "_blank" : undefined} className="rounded-xl border border-gray-200 bg-white p-3 transition hover:border-o2-coral hover:shadow-sm" title={e.descricao}>
+            return et.href ? (
+              <Link key={et.chave} href={et.href} target={et.externo ? "_blank" : undefined} className="rounded-xl border border-gray-200 bg-white p-3 transition hover:border-o2-coral hover:shadow-sm" title={et.descricao}>
                 {corpo}
               </Link>
             ) : (
-              <div key={e.chave} className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-3 opacity-70" title={e.descricao}>
+              <div key={et.chave} className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-3 opacity-70" title={et.descricao}>
                 {corpo}
               </div>
             );
           })}
         </div>
         <p className="text-xs text-gray-500">
-          Cotações ficam no Workspace; o ERP começa na efetivação. Cadastros:{" "}
+          Números do mês escolhido, atualizados a cada hora{kRow?.calculado_em ? ` (última atualização ${new Date(kRow.calculado_em).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })})` : ""}.
+          Parcelas e Baixa dependem da baixa do Corp estar em dia. Cotações ficam no Workspace; o ERP começa na efetivação. Cadastros:{" "}
           {CADASTROS.map((c, i) => (
             <span key={c.href}>{i > 0 ? " · " : ""}<Link href={c.href} className="underline">{c.label}</Link></span>
           ))}
