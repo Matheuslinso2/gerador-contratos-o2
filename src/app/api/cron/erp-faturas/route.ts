@@ -19,7 +19,9 @@ export async function GET(request: NextRequest) {
     const { data: vencimentos } = await sb.rpc("erp_atualizar_vencimentos");
     // partes da apólice do acervo (segurado = proprietário, garantido = inquilino) já ligadas ao documento, para os filtros e a ficha
     const { data: partesAcervo } = await sb.rpc("erp_atualizar_partes_acervo");
-    return NextResponse.json({ ok: true, desde, ...faturas, vencimentos, partesAcervo });
+    // fila de Emissão (propostas pendentes) e KPIs dos últimos 6 meses — tabelas prontas da etapa Emissão
+    const { data: emissao } = await sb.rpc("erp_atualizar_emissao");
+    return NextResponse.json({ ok: true, desde, ...faturas, vencimentos, partesAcervo, emissao });
   } catch (e) {
     return NextResponse.json({ ok: false, erro: (e as Error).message }, { status: 500 });
   }

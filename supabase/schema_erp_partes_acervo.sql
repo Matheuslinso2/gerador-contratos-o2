@@ -12,3 +12,10 @@
 --   início de vigência a até p_dias, 1 para 1, Corp ainda sem card). Aplicado em 27/10: 47 pares (34 com a mesma vigência, máx. 12 dias).
 --   Ao aplicar: chave externa, origem, itens, e-mails, anexos e eventos passam para o documento do Corp; o do card vira 'duplicado'.
 --   Ficaram fora, para decisão do Matheus: 12 pares com vigência >= 14 dias de diferença e o 2º card do Renato Santos de Oliveira (L3).
+
+-- 27/10/2026 — etapa Emissão (migrations erp_emissao_fila_e_kpis, erp_emissao_tabelas_prontas, erp_emissao_kpis_*).
+-- Proposta pendente = situacao 'digitado' sem numero_apolice e sem numero_endosso. dt_emissao está vazia no Corp e no Bitrix: o nº prova a emissão.
+-- erp_emissao_fila (view, security_invoker) → erp_emissao_fila_pronta (tabela, RLS select colaborador). Data da efetivação = último evento de
+--   sucesso do card no Bitrix; sem card, dt_proposta do Corp; por último vigencia_inicio.
+-- erp_emissao_kpis(mes) → erp_emissao_kpis_pronta (6 meses): efetivados, emitidos (têm nº), pendentes (digitado sem nº), encerradas_sem_numero, bitrix, corp.
+-- erp_atualizar_emissao() recalcula as duas tabelas; chamada pelo cron /api/cron/erp-faturas (xx:50). Índice erp_documentos_dtproposta_idx.

@@ -29,12 +29,12 @@ export type DocumentoLista = {
 
 export const SITUACOES: Record<string, string> = {
   cotacao: "Cotação",
-  proposta: "Proposta",
+  proposta: "Cotação (em negociação)",
   recusado: "Recusado (cotação)",
   perdido: "Perdido (negociação)",
-  digitado: "Efetivada · em emissão",
+  digitado: "Proposta (em emissão)",
   emitido: "Emitido",
-  vigente: "Vigente",
+  vigente: "Apólice vigente",
   vencido: "Vencido",
   cancelado: "Cancelado",
   devolvido: "Devolvido",
