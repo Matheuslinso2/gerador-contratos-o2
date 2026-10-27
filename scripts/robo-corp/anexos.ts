@@ -8,7 +8,8 @@
 // Não altera nada no Corp: só busca, abre, olha e fecha a janela.
 //
 // uso: npx tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/robo-corp/anexos.ts [opções]
-//   --fila fianca-vigentes   monta a fila no banco (Fiança vigente sem PDF no acervo) e sai
+//   --fila todos             monta a fila com TODOS os documentos do Corp (vigentes primeiro) e sai
+//   --fila fianca-vigentes   (antiga) Fiança vigente sem PDF no acervo
 //   --fila fora-faturas      monta a fila de PRIORIDADE (prioridade.json): apólices "fora das últimas faturas" do ERP
 //                            (Expan/Tokio primeiro) — a rodada visita a prioridade antes da fila normal
 //   --limite N               processa no máximo N documentos nesta rodada
@@ -35,7 +36,8 @@ const OUTROS = path.join(PASTA, "outros");
 // (sem dado pessoal) para dar nome aos tipos depois, exatamente como o Corp mostra.
 const ROTULOS = path.join(PASTA, "rotulos");
 // versão 2 = visita que baixou todos os anexos; a fila revisita quem foi visitado antes disso.
-const VERSAO_VISITA = 2;
+// 3 = guarda também a lista na ordem do Corp (para o ERP mostrar igual), 27/10.
+const VERSAO_VISITA = 3;
 const FILA = path.join(PASTA, "fila.json");
 const ESTADO = path.join(PASTA, "estado.json");
 const PRIORIDADE = path.join(PASTA, "prioridade.json");
@@ -45,12 +47,15 @@ fs.mkdirSync(ROTULOS, { recursive: true });
 
 type Item = { nn: string; produto: string; fim_vig: string };
 /** por Nosso Nº: resultado da visita ao Corp */
+export type LinhaAnexo = { ordem: number; nome: string; rotulo: string; arquivo: string; apolice: boolean; bytes: number };
 type Estado = Record<string, {
   quando: string; versao?: number;
   resultado: "baixado" | "sem_anexo" | "sem_anexo_apolice" | "nao_achou" | "erro";
   arquivos?: string[]; outros?: string[]; erro?: string;
   /** por linha da lista, na ordem do Corp: imagem do rótulo de tipo (rotulos/<id>.png) */
   rotulos?: string[];
+  /** a aba Anexos como o Corp mostra: ordem, nome do arquivo, recorte do tipo e onde o arquivo ficou (relativo à pasta) */
+  lista?: LinhaAnexo[];
 }>;
 const aVisitar = (e: Estado[string] | undefined) => !e || e.resultado === "erro" || (e.versao ?? 1) < VERSAO_VISITA;
 const lerJson = <T>(f: string, padrao: T): T => (fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, "utf8")) : padrao);
@@ -58,6 +63,7 @@ const lerJson = <T>(f: string, padrao: T): T => (fs.existsSync(f) ? JSON.parse(f
 // ------------------------------------------------------------ fila
 async function montarFila(qual: string) {
   if (qual === "fora-faturas") return montarPrioridadeForaFaturas();
+  if (qual === "todos") return montarFilaTodos();
   if (qual !== "fianca-vigentes") throw new Error(`fila desconhecida: ${qual}`);
   const sb = createServiceClient();
   const hoje = new Date().toISOString().slice(0, 10);
@@ -81,6 +87,35 @@ async function montarFila(qual: string) {
   const fila: Item[] = nns.filter((nn) => !temPdf.has(nn)).sort((a, b) => Number(b) - Number(a)).map((nn) => ({ nn, produto: "fianca", fim_vig: fimDe.get(nn)! }));
   fs.writeFileSync(FILA, JSON.stringify(fila));
   log(`fila: ${fila.length} Fianças vigentes sem PDF no acervo (de ${nns.length} vigentes) → ${FILA}`);
+}
+
+// Todos os documentos do Corp (Matheus 27/10: "não perder nenhum documento"), de qualquer
+// produto e tipo (apólice, renovação, endosso, fatura...): os vigentes primeiro, depois o resto,
+// sempre do Nosso Nº mais novo para o mais antigo. Remontada a cada rodada (pega os novos);
+// quem já foi visitado na versão atual fica de fora pelo estado.json.
+async function montarFilaTodos() {
+  const sb = createServiceClient();
+  const hoje = new Date().toISOString().slice(0, 10);
+  const fim = new Map<string, string>();
+  const ramo = new Map<string, string>();
+  for (let de = 0; ; de += 1000) {
+    const { data, error } = await sb.from("corp_grade").select("nosso_numero,ramo,fim_vig").order("id").range(de, de + 999);
+    if (error) throw new Error(error.message);
+    for (const g of data ?? []) {
+      const nn = String(g.nosso_numero);
+      if (!fim.has(nn) || (g.fim_vig ?? "") > fim.get(nn)!) fim.set(nn, g.fim_vig ?? "");
+      ramo.set(nn, g.ramo);
+    }
+    if (!data || data.length < 1000) break;
+  }
+  const nns = [...fim.keys()].sort((a, b) => {
+    const va = fim.get(a)! >= hoje ? 0 : 1, vb = fim.get(b)! >= hoje ? 0 : 1;
+    return va - vb || Number(b) - Number(a);
+  });
+  const fila: Item[] = nns.map((nn) => ({ nn, produto: ramo.get(nn) ?? "?", fim_vig: fim.get(nn)! }));
+  fs.writeFileSync(FILA, JSON.stringify(fila));
+  const vig = fila.filter((i) => i.fim_vig >= hoje).length;
+  log(`fila: ${fila.length} documentos do Corp (${vig} vigentes primeiro) → ${FILA}`);
 }
 
 // Prioridade (Matheus 25/10): as apólices que o ERP acusa "fora das últimas faturas" (ex.: 149 Incêndio Tokio da
@@ -197,7 +232,7 @@ async function linhasDeAnexo(page: Page): Promise<number> {
 const nomeSeguro = (s: string) => s.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").slice(0, 120);
 
 /** Na aba Anexos: baixa todos os anexos. Os do tipo Apólice (rótulo na linha) vão para pdfs/. */
-async function baixarAnexos(page: Page, nn: string): Promise<{ apolices: string[]; outros: string[]; rotulos: string[] }> {
+async function baixarAnexos(page: Page, nn: string): Promise<{ apolices: string[]; outros: string[]; rotulos: string[]; lista: LinhaAnexo[] }> {
   const aba = await esperarModelo(page, "doc-aba-anexos", 10_000);
   await page.mouse.click(aba.x, aba.y);
   await espera(2500);
@@ -207,6 +242,7 @@ async function baixarAnexos(page: Page, nn: string): Promise<{ apolices: string[
   const total = await linhasDeAnexo(page);
   if (total >= MAX_LINHAS) log(`${nn}: ${total}+ anexos — a lista pode ter mais abaixo (só os visíveis foram baixados)`);
   const apolices: string[] = [], outros: string[] = [], rotulosLinha: string[] = [];
+  const lista: LinhaAnexo[] = [];
   for (let k = 0; k < total; k++) {
     const yLinha = LINHA0 + k * ALTURA_LINHA + 16;
     const ehApolice = rotulos.some((r) => Math.abs(r.y - yLinha) < 18);
@@ -246,16 +282,18 @@ async function baixarAnexos(page: Page, nn: string): Promise<{ apolices: string[
       fs.writeFileSync(arq, buf);
       fs.writeFileSync(arq.replace(/\.pdf$/, ".nome.txt"), nome);
       apolices.push(path.basename(arq));
+      lista.push({ ordem: k + 1, nome, rotulo: idRotulo, arquivo: path.relative(PASTA, arq), apolice: true, bytes: buf.length });
     } else {
       const pasta = path.join(OUTROS, nn);
       fs.mkdirSync(pasta, { recursive: true });
       const arq = path.join(pasta, `${k + 1}__${nomeSeguro(nome)}`);
       fs.writeFileSync(arq, buf);
       outros.push(path.basename(arq));
+      lista.push({ ordem: k + 1, nome, rotulo: idRotulo, arquivo: path.relative(PASTA, arq), apolice: false, bytes: buf.length });
     }
     await espera(800);
   }
-  return { apolices, outros, rotulos: rotulosLinha };
+  return { apolices, outros, rotulos: rotulosLinha, lista };
 }
 
 // ------------------------------------------------------------ rodada
@@ -357,8 +395,8 @@ async function rodada(
         if (!achou) { await abrirConsultaDocumentos(page); achou = await abrirDocumento(page, item.nn); }
         if (!achou) estado[item.nn] = { quando: new Date().toISOString(), versao: VERSAO_VISITA, resultado: "nao_achou" };
         else {
-          const { apolices, outros, rotulos } = await baixarAnexos(page, item.nn);
-          estado[item.nn] = { quando: new Date().toISOString(), versao: VERSAO_VISITA, resultado: apolices.length || outros.length ? "baixado" : "sem_anexo", arquivos: apolices, outros, rotulos };
+          const { apolices, outros, rotulos, lista } = await baixarAnexos(page, item.nn);
+          estado[item.nn] = { quando: new Date().toISOString(), versao: VERSAO_VISITA, resultado: apolices.length || outros.length ? "baixado" : "sem_anexo", arquivos: apolices, outros, rotulos, lista };
           await fecharDocumento(page);
         }
         erros = 0;

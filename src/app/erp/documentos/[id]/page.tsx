@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { formatarData, formatarReais } from "@/lib/sinistros/regras";
 import RascunhoAutomatico from "@/components/RascunhoAutomatico";
@@ -25,6 +26,32 @@ function Campo({ rotulo, valor }: { rotulo: string; valor: React.ReactNode }) {
 const AGENTE: Record<string, string> = { imob: "Imobiliária", parceiro: "Parceiro", pessoa: "Pessoa", canal: "Canal", marcador: "Marcador", o2: "O2 (venda direta)" };
 
 export const metadata = { title: "Documento" };
+
+// Aba Anexos do Corp (27/10/2026): arquivos trazidos pelo robô (scripts/robo-corp/anexos.ts),
+// na mesma ordem e com o mesmo nome do Corp. Bucket privado: o servidor (já conferido que é
+// da equipe O2) gera link assinado de 10 min para cada arquivo e para o recorte do tipo.
+async function anexosDoCorp(nossoNumero: string) {
+  const sb = createServiceClient();
+  const { data } = await sb
+    .from("corp_anexos")
+    .select("ordem, nome, bytes, storage_path, visto_em, corp_anexos_tipos(tipo, imagem_path)")
+    .eq("nosso_numero", nossoNumero)
+    .order("ordem");
+  const linhas = (data ?? []) as unknown as { ordem: number; nome: string; bytes: number | null; storage_path: string; visto_em: string; corp_anexos_tipos: { tipo: string | null; imagem_path: string } | null }[];
+  if (!linhas.length) return [];
+  const caminhos = [...new Set([...linhas.map((l) => l.storage_path), ...linhas.filter((l) => !l.corp_anexos_tipos?.tipo && l.corp_anexos_tipos).map((l) => l.corp_anexos_tipos!.imagem_path)])];
+  const { data: assinados } = await sb.storage.from("corp-anexos").createSignedUrls(caminhos, 600);
+  const url = new Map((assinados ?? []).map((a) => [a.path, a.signedUrl]));
+  return linhas.map((l) => ({
+    ordem: l.ordem,
+    nome: l.nome,
+    bytes: l.bytes,
+    vistoEm: l.visto_em,
+    tipo: l.corp_anexos_tipos?.tipo ?? null,
+    tipoImagem: l.corp_anexos_tipos ? url.get(l.corp_anexos_tipos.imagem_path) ?? null : null,
+    url: url.get(l.storage_path) ?? null,
+  }));
+}
 
 const AVISO_VINCULO: Record<string, string> = {
   ok: "Endosso ligado à apólice.",
@@ -52,6 +79,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
     await supabase.from("erp_acesso_clientes_log").insert({ locatario_id: d.locatario_id, usuario_email: user.email, tela: "erp/documentos/ficha" });
   }
 
+  const anexosCorp = d.nosso_numero_corp ? await anexosDoCorp(String(d.nosso_numero_corp)) : [];
   const totalParcelas = d.parcelas.reduce((s, p) => s + p.valor, 0);
   const totalComissao = d.parcelas.reduce((s, p) => s + p.comissao_prevista, 0);
 
@@ -335,6 +363,47 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
               Parcelas estimadas a partir do Corp (quantidade e prêmio total; vencimento = 30 dias + dia fixo da seguradora). A baixa real entra na Fase 2.
             </p>
           )}
+        </section>
+
+        <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Anexos (como no Corp)</h2>
+          {!d.nosso_numero_corp ? (
+            <p className="text-xs text-gray-500">Documento nascido no ERP: não tem aba Anexos no Corp.</p>
+          ) : anexosCorp.length === 0 ? (
+            <p className="text-xs text-gray-500">O robô ainda não trouxe a aba Anexos deste documento do Corp (ou ela está vazia).</p>
+          ) : (
+            <table className="w-full text-xs">
+              <thead className="text-left text-[11px] uppercase tracking-wide text-gray-500">
+                <tr>
+                  <th className="w-8 py-1">#</th>
+                  <th className="py-1">Arquivo</th>
+                  <th className="py-1">Tipo</th>
+                  <th className="py-1 text-right">Tamanho</th>
+                  <th className="py-1" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {anexosCorp.map((a) => (
+                  <tr key={a.ordem}>
+                    <td className="py-1.5 text-gray-400">{a.ordem}</td>
+                    <td className="py-1.5 text-gray-900">{a.nome}</td>
+                    <td className="py-1.5">
+                      {a.tipo ?? (a.tipoImagem ? <img src={a.tipoImagem} alt="tipo como no Corp" className="h-[18px]" /> : "—")}
+                    </td>
+                    <td className="py-1.5 text-right text-gray-500">{a.bytes ? `${Math.max(1, Math.round(a.bytes / 1024))} KB` : "—"}</td>
+                    <td className="py-1.5 text-right">
+                      {a.url && (
+                        <a href={a.url} target="_blank" rel="noreferrer" className="font-semibold text-o2-navy underline">
+                          Abrir
+                        </a>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {anexosCorp.length > 0 && <p className="text-[11px] text-gray-400">Cópia da aba Anexos do Corp, trazida pelo robô em {formatarData(anexosCorp[0].vistoEm)}.</p>}
         </section>
 
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
