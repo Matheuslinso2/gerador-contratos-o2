@@ -160,6 +160,7 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
             <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
               <tr>
                 <th className="px-3 py-2">Código O2</th>
+                <th className="px-3 py-2">Nosso nº Corp</th>
                 <th className="px-3 py-2">Tipo</th>
                 <th className="px-3 py-2">Origem</th>
                 <th className="px-3 py-2">Titular</th>
@@ -182,6 +183,7 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
                     <td className="px-3 py-2 font-medium">
                       <Link href={`/erp/documentos/${d.id}`} className="text-o2-navy hover:underline">{d.nosso_numero}</Link>
                     </td>
+                    <td className="px-3 py-2 text-gray-600">{d.nosso_numero_corp ?? <span className="text-gray-300" title="ainda não existe no Corp">—</span>}</td>
                     <td className="px-3 py-2"><span className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-medium ${tipo.cor}`}>{tipo.nome}</span></td>
                     <td className="px-3 py-2">
                       <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${d.origem === "bitrix" ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-700"}`}>{d.origem === "bitrix" ? "Bitrix" : "Corp"}</span>
@@ -210,7 +212,7 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
         </Link>
       )}
       <p className="text-xs text-gray-500">
-        Efetivada = card concluído com sucesso no funil (data do card; sem card, a data da proposta do Corp). Emitida = tem nº de apólice ou de endosso.
+        Efetivada = card concluído com sucesso no funil (data do card; sem card, a data da proposta do Corp). Emitida = tem nº de apólice ou de endosso (por enquanto o nº é a prova; a data de emissão e o anexo da apólice entram com os e-mails, faturas e boletos).
         Cotações em negociação ficam só no Workspace. Os números se atualizam a cada hora.
       </p>
     </main>
