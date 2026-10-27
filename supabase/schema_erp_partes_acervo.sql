@@ -25,3 +25,8 @@
 --   anterior da mesma fatura, boletos que não batem), parcelas, baixa (erp_corp_comissoes: recebida × pendente, última baixa), apólices, sinistros
 --   (abertura pela data da seguradora; created_at é a data da carga) e renovações. Descoberta: erp_corp_comissoes.dt_emissao tem a data de emissão do Corp
 --   para ~51 mil documentos (há valores absurdos, ex.: 2076): candidata à data de emissão do ERP, depois de limpar.
+
+-- 27/10/2026 — ficha completa (item 4). erp_cliente_kpis(pessoa): todo o histórico do titular (segurado do Fiança via erp_doc_partes_acervo, ou o cliente do
+-- documento): documentos, vigentes, produtos, prêmio total e comissão. Repasse por parcela calculado no código (src/lib/erp/repasseParcelas.ts):
+-- percentual em parcelas iguais; repasse FIXO (percentual 0 e valor > 0; 1.231 linhas, média R$ 68) pago uma única vez, na 1ª parcela; dia 15 do mês seguinte.
+-- Todas as linhas de erp_documento_produtores têm forma_repasse 'parcelado'; o fixo é detectado pelo percentual zero com valor.

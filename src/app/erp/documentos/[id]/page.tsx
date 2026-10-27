@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import EmailsDoDocumento from "./EmailsDoDocumento";
+import { dataDoRepasse, repasseEhFixo, repassePorParcela } from "@/lib/erp/repasseParcelas";
 import { formatarData, formatarReais } from "@/lib/sinistros/regras";
 import RascunhoAutomatico from "@/components/RascunhoAutomatico";
 import { ligarEndossoApolice } from "./actions";
@@ -83,6 +84,20 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
   const anexosCorp = d.nosso_numero_corp ? await anexosDoCorp(String(d.nosso_numero_corp)) : [];
   const totalParcelas = d.parcelas.reduce((s, p) => s + p.valor, 0);
   const totalComissao = d.parcelas.reduce((s, p) => s + p.comissao_prevista, 0);
+  // demonstrativo: repasse previsto por parcela (parcelas iguais; fixo = 1 vez na 1ª parcela) e baixa real da grade do Corp
+  const repasses = repassePorParcela(d.produtores, d.parcelas.length);
+  const totalRepasse = Math.round(repasses.reduce((s, v) => s + v, 0) * 100) / 100;
+  const temFixo = d.produtores.some(repasseEhFixo);
+  const corpPorParcela = new Map<number, { recebida: number; pendente: number }>();
+  for (const c of d.comissoes_corp) {
+    if (c.parcela_n === null) continue;
+    const x = corpPorParcela.get(c.parcela_n) ?? { recebida: 0, pendente: 0 };
+    if (c.situacao === "recebida") x.recebida += 1; else x.pendente += 1;
+    corpPorParcela.set(c.parcela_n, x);
+  }
+  const recebidoCorp = d.comissoes_corp.filter((c) => c.situacao === "recebida").reduce((s, c) => s + c.valor, 0);
+  const aReceberCorp = d.comissoes_corp.filter((c) => c.situacao !== "recebida").reduce((s, c) => s + c.valor, 0);
+  const titularNome = d.partes_apolice.find((p) => p.papel === "segurado")?.nome ?? d.cliente;
 
   return (
     <>
@@ -120,8 +135,28 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
           <span className="text-gray-500"> ({d.partes_apolice.length ? "cliente no Corp" : "segurado"})</span>
         </div>
 
+        {d.cliente_kpis && d.cliente_kpis.documentos > 0 && (
+          <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm">
+            <div className="text-[11px] uppercase tracking-wide text-gray-500">Cliente · todo o histórico na O2</div>
+            <div className="mt-0.5 font-medium text-gray-800">{titularNome ?? "titular não ligado"}</div>
+            <div className="mt-1 grid grid-cols-2 gap-3 md:grid-cols-4">
+              <Campo rotulo="Documentos" valor={`${d.cliente_kpis.documentos} (${d.cliente_kpis.vigentes} vigentes)`} />
+              <Campo rotulo="Produtos" valor={d.cliente_kpis.produtos.length ? d.cliente_kpis.produtos.join(", ") : "—"} />
+              <Campo rotulo="Prêmio total gerado" valor={formatarReais(d.cliente_kpis.premio_total)} />
+              <Campo rotulo="Comissão gerada" valor={`${formatarReais(d.cliente_kpis.comissao)}${d.cliente_kpis.desde ? ` · cliente desde ${formatarData(d.cliente_kpis.desde)}` : ""}`} />
+            </div>
+          </div>
+        )}
+
         {/* botão "E-mails (n)": só equipe O2 (a página já confere acima); some quando não há e-mail nem PDF ligado ao documento */}
         <EmailsDoDocumento documentoId={d.id} codigoO2={String(d.nosso_numero)} />
+
+        <nav className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
+          <span className="text-[11px] uppercase tracking-wide text-gray-500">Anexos e vínculos:</span>
+          <a href="#anexos-corp" className="rounded-full border border-gray-300 px-3 py-1 hover:bg-gray-50">Aba Anexos do Corp ({anexosCorp.length})</a>
+          <a href="#anexos-acervo" className="rounded-full border border-gray-300 px-3 py-1 hover:bg-gray-50">Acervo de apólices ({d.anexos.length})</a>
+          <a href="#origem-bitrix" className="rounded-full border border-gray-300 px-3 py-1 hover:bg-gray-50">Card do Bitrix ({d.origens.length})</a>
+        </nav>
 
         {d.partes_apolice.length > 0 && (
           <div className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm">
@@ -338,6 +373,14 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
 
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Parcelas e comissões</h2>
+          {d.parcelas.length > 0 && (
+            <div className="grid grid-cols-2 gap-3 rounded-lg bg-gray-50 p-3 md:grid-cols-4">
+              <Campo rotulo="Comissão já recebida (Corp)" valor={formatarReais(recebidoCorp)} />
+              <Campo rotulo="Comissão a receber (Corp)" valor={d.comissoes_corp.length ? formatarReais(aReceberCorp) : "sem baixa do Corp"} />
+              <Campo rotulo="Repasse previsto" valor={`${formatarReais(totalRepasse)}${temFixo ? " (inclui fixo)" : ""}`} />
+              <Campo rotulo="Repasse já pago" valor="em breve (Nibo)" />
+            </div>
+          )}
           {d.parcelas.length === 0 ? (
             <p className="text-xs text-gray-500">Sem parcelas carregadas (histórico anterior a 2024 entra só com os totais).</p>
           ) : (
@@ -349,20 +392,24 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
                   <th className="py-1 pr-3 text-right">Valor da parcela</th>
                   <th className="py-1 pr-3">Quitação</th>
                   <th className="py-1 pr-3 text-right">Comissão prevista</th>
+                  <th className="py-1 pr-3 text-right">Repasse previsto</th>
                   <th className="py-1 pr-3">Previsão receb.</th>
-                  <th className="py-1 pr-3">Status</th>
+                  <th className="py-1 pr-3">Repasse em</th>
+                  <th className="py-1 pr-3">Comissão no Corp</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {d.parcelas.map((p) => (
+                {d.parcelas.map((p, i) => (
                   <tr key={p.id}>
                     <td className="py-1 pr-3">{p.n}</td>
                     <td className="py-1 pr-3">{formatarData(p.vencimento)}</td>
                     <td className="py-1 pr-3 text-right">{formatarReais(p.valor)}</td>
                     <td className="py-1 pr-3">{p.quitada_em ? `${formatarData(p.quitada_em)} · ${formatarReais(p.valor_quitado)}` : <span className="text-gray-400">em aberto</span>}</td>
                     <td className="py-1 pr-3 text-right">{formatarReais(p.comissao_prevista)}</td>
+                    <td className="py-1 pr-3 text-right">{repasses[i] > 0 ? formatarReais(repasses[i]) : <span className="text-gray-300">—</span>}</td>
                     <td className="py-1 pr-3">{formatarData(p.comissao_previsao)}</td>
-                    <td className="py-1 pr-3">{p.comissao_status ?? "—"}</td>
+                    <td className="py-1 pr-3">{repasses[i] > 0 && dataDoRepasse(p.comissao_previsao) ? formatarData(dataDoRepasse(p.comissao_previsao)) : <span className="text-gray-300">—</span>}</td>
+                    <td className="py-1 pr-3">{(() => { const c = corpPorParcela.get(p.n); return c ? (c.recebida > 0 && c.pendente === 0 ? "recebida" : "a receber") : <span className="text-gray-400">{p.comissao_status ?? "—"}</span>; })()}</td>
                   </tr>
                 ))}
                 <tr className="font-semibold">
@@ -372,10 +419,17 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
                   <td className="py-1 pr-3 text-right">{formatarReais(totalParcelas)}</td>
                   <td />
                   <td className="py-1 pr-3 text-right">{formatarReais(totalComissao)}</td>
-                  <td colSpan={2} />
+                  <td className="py-1 pr-3 text-right">{formatarReais(totalRepasse)}</td>
+                  <td colSpan={3} />
                 </tr>
               </tbody>
             </table>
+          )}
+          {d.parcelas.length > 0 && (
+            <p className="text-[11px] text-gray-500">
+              Repasse: prêmio líquido × % de repasse × % de participação, em parcelas iguais (também no esgotamento); o repasse fixo é pago uma única vez, na 1ª parcela.
+              Pago no dia 15 do mês seguinte ao do recebimento da comissão, antes do desconto de 18% do relatório de repasse. Comissão no Corp = grade de comissões do Corp (baixa real).
+            </p>
           )}
           {d.parcelas.some((p) => p.origem === "estimada_corp") && (
             <p className="text-[11px] text-gray-500">
@@ -385,7 +439,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
         </section>
 
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Anexos (como no Corp)</h2>
+          <h2 id="anexos-corp" className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Anexos (como no Corp)</h2>
           {!d.nosso_numero_corp ? (
             <p className="text-xs text-gray-500">Documento nascido no ERP: não tem aba Anexos no Corp.</p>
           ) : anexosCorp.length === 0 ? (
@@ -426,7 +480,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
         </section>
 
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Anexos (acervo de apólices)</h2>
+          <h2 id="anexos-acervo" className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Anexos (acervo de apólices)</h2>
           {d.anexos.length === 0 ? (
             <p className="text-xs text-gray-500">Nenhum PDF ligado a este documento no acervo ainda.</p>
           ) : (
@@ -442,7 +496,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
 
         {d.origens.map((o) => (
           <section key={o.id} className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Origem no Bitrix</h2>
+            <h2 id="origem-bitrix" className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Origem no Bitrix</h2>
             <p className="text-xs text-gray-700">
               Card {o.item_id} · {o.titulo ?? "—"} · etapa {o.etapa_id ?? "—"} · criado {formatarData(o.card_criado_em)} · atualizado {formatarData(o.card_atualizado_em)}
               {o.url && (

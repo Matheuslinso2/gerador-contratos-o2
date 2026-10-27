@@ -230,7 +230,11 @@ export type DocumentoFicha = DocumentoLista & {
   modo_cobranca: string;
   locatario_id: string | null;
   /** Partes lidas na apólice do acervo (Fiança): segurado = locador = proprietário; garantido = locatário. */
-  partes_apolice: { papel: "segurado" | "garantido"; nome: string | null; cpf: string | null }[];
+  partes_apolice: { papel: "segurado" | "garantido"; locatario_id: string | null; nome: string | null; cpf: string | null }[];
+  /** Linhas da grade de comissões do Corp deste documento (baixa real): situação recebida/pendente por parcela. */
+  comissoes_corp: { parcela_n: number | null; situacao: string; valor: number; data: string | null }[];
+  /** Todo o histórico do titular (segurado do Fiança ou cliente do documento) na O2. */
+  cliente_kpis: { documentos: number; vigentes: number; produtos: string[]; premio_total: number; comissao: number; desde: string | null } | null;
   numero_proposta: string | null;
   numero_endosso: string | null;
   dt_proposta: string | null;
@@ -395,7 +399,7 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
     documento_pai_id: string | null;
   };
 
-  const [{ data: prods }, { data: parcs }, { data: anexos }, { data: eventos }, { data: renovadoDe }, { data: renovadoPor }, { data: itens }, { data: origens }, { data: familia }, { data: endossos }, { data: mae }, { data: partesAcervo }] = await Promise.all([
+  const [{ data: prods }, { data: parcs }, { data: anexos }, { data: eventos }, { data: renovadoDe }, { data: renovadoPor }, { data: itens }, { data: origens }, { data: familia }, { data: endossos }, { data: mae }, { data: partesAcervo }, { data: comCorp }] = await Promise.all([
     sb
       .from("erp_documento_produtores")
       .select("id, imobiliaria_id, produtor_corp_codigo, produtor_corp_nome, agente, principal, pct_participacao, repasse_pct, repasse_valor_previsto, repasse_pct_esperado, motivo_diferenca, forma_repasse, imobiliaria:imobiliarias(nome)")
@@ -434,8 +438,14 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
     d.documento_pai_id
       ? sb.from("erp_documentos").select("id, nosso_numero, numero_apolice, vigencia_inicio, vigencia_fim").eq("id", d.documento_pai_id).maybeSingle()
       : Promise.resolve({ data: null }),
-    sb.from("erp_doc_partes_acervo").select("papel, locatario:locatarios(nome, cpf)").eq("documento_id", id),
+    sb.from("erp_doc_partes_acervo").select("papel, locatario:locatarios(id, nome, cpf)").eq("documento_id", id),
+    sb.from("erp_corp_comissoes").select("parcela_n, situacao, valor, data").eq("documento_id", id).limit(400),
   ]);
+
+  // titular para o quadro do cliente: segurado (locador) da apólice de Fiança; nos demais produtos, o cliente do documento
+  const partesBrutas = (partesAcervo ?? []) as unknown as { papel: "segurado" | "garantido"; locatario: { id: string; nome: string | null; cpf: string | null } | null }[];
+  const pessoaTitular = partesBrutas.find((p) => p.papel === "segurado")?.locatario?.id ?? d.locatario_id;
+  const { data: kpiCliente } = pessoaTitular ? await sb.rpc("erp_cliente_kpis", { p_pessoa: pessoaTitular }) : { data: null };
 
   type ProdBruto = Omit<ProdutorDoc, "imobiliaria"> & { imobiliaria: { nome: string } | null };
   type ParcBruta = Omit<ParcelaDoc, "comissao_prevista" | "comissao_status" | "comissao_previsao"> & {
@@ -448,8 +458,10 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
     tipo_contratacao: d.tipo_contratacao,
     modo_cobranca: d.modo_cobranca,
     locatario_id: d.locatario_id,
-    partes_apolice: ((partesAcervo ?? []) as unknown as { papel: "segurado" | "garantido"; locatario: { nome: string | null; cpf: string | null } | null }[])
-      .map((p) => ({ papel: p.papel, nome: p.locatario?.nome ?? null, cpf: p.locatario?.cpf ?? null }))
+    comissoes_corp: ((comCorp ?? []) as { parcela_n: number | null; situacao: string; valor: number | string; data: string | null }[]).map((c) => ({ parcela_n: c.parcela_n, situacao: c.situacao, valor: Number(c.valor), data: c.data })),
+    cliente_kpis: (kpiCliente as DocumentoFicha["cliente_kpis"]) ?? null,
+    partes_apolice: partesBrutas
+      .map((p) => ({ papel: p.papel, locatario_id: p.locatario?.id ?? null, nome: p.locatario?.nome ?? null, cpf: p.locatario?.cpf ?? null }))
       .sort((a, b) => (a.papel === b.papel ? 0 : a.papel === "segurado" ? -1 : 1)),
     numero_proposta: d.numero_proposta,
     numero_endosso: d.numero_endosso,
