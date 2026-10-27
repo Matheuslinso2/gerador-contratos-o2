@@ -61,7 +61,7 @@ export async function salvarConfigMetas(campanhaId: string, formData: FormData) 
 export async function salvarMetaParticipante(
   campanhaId: string,
   alvo: { tipo: "imobiliaria" | "grupo"; id: string },
-  dados: { meta: string; custo: string; observacao: string; responsavel: string }
+  dados: { meta: string; custo: string; observacao: string; responsavel: string; gestor: string }
 ) {
   const supabase = await createClient();
   const {
@@ -78,6 +78,7 @@ export async function salvarMetaParticipante(
     custo_premiacao: custo,
     observacao: dados.observacao.trim() || null,
     responsavel_email: dados.responsavel.trim().toLowerCase() || null,
+    gestor_conta_email: dados.gestor.trim().toLowerCase() || null,
     updated_at: new Date().toISOString(),
   };
   const coluna = alvo.tipo === "grupo" ? "grupo_id" : "imobiliaria_id";

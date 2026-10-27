@@ -60,7 +60,7 @@ export function montarEmailParcial(programa: ConfigDesempenho, linha: LinhaDesem
 
   const numeros =
     linhaCampo("Meta da campanha", `${formatar(meta, metrica.moeda)}${metrica.moeda ? "" : ` ${unidade}`}`) +
-    linhaCampo("Realizado até agora", `${formatar(linha.realizado, metrica.moeda)}${metrica.moeda ? "" : ` ${unidade}`}`) +
+    linhaCampo("Realizado até agora (contratos novos)",`${formatar(linha.realizado, metrica.moeda)}${metrica.moeda ? "" : ` ${unidade}`}`) +
     (atingiu ? linhaCampo("Situação", "Meta atingida! 🏆") : linhaCampo("Faltam", `${formatar(linha.faltam ?? 0, metrica.moeda)}${metrica.moeda ? "" : ` ${unidade}`}`)) +
     linhaCampo("Dias até o fim da campanha", diasRestantes > 0 ? `${diasRestantes} dias (até ${dataBr(programa.fim)})` : "Campanha encerrada") +
     (linha.funil.emAndamento > 0 ? linhaCampo("Cotações em andamento", String(linha.funil.emAndamento)) : "");

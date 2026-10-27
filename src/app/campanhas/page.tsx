@@ -62,10 +62,14 @@ export default async function CampanhasPage({
   const { data: campanhasData } = await query;
   const todasCampanhas = (campanhasData ?? []) as CampanhaRow[];
   const { data: filhosData } = todasCampanhas.length
-    ? await supabase.from("campanhas").select("campanha_pai_id").in("campanha_pai_id", todasCampanhas.map((c) => c.id))
+    ? await supabase.from("campanhas").select("id, campanha_pai_id").in("campanha_pai_id", todasCampanhas.map((c) => c.id))
     : { data: [] };
   const filhosPorCampanha = new Map<string, number>();
-  for (const f of (filhosData ?? []) as { campanha_pai_id: string }[]) filhosPorCampanha.set(f.campanha_pai_id, (filhosPorCampanha.get(f.campanha_pai_id) ?? 0) + 1);
+  const idsFilhosPorPai = new Map<string, string[]>();
+  for (const f of (filhosData ?? []) as { id: string; campanha_pai_id: string }[]) {
+    filhosPorCampanha.set(f.campanha_pai_id, (filhosPorCampanha.get(f.campanha_pai_id) ?? 0) + 1);
+    idsFilhosPorPai.set(f.campanha_pai_id, [...(idsFilhosPorPai.get(f.campanha_pai_id) ?? []), f.id]);
+  }
 
   // Pedido do Matheus, 15/09/2026: campanha agendada fica sempre no topo
   // da lista, com destaque -- não dá pra esquecer que tem um disparo
@@ -117,24 +121,33 @@ export default async function CampanhasPage({
   // campanha, ver src/app/campanhas/[id]/page.tsx -- a equipe interna
   // pode ser destinatária, mas não é quem a métrica quer medir).
   const campanhasRealizadas = campanhas.filter((c) => c.status === "enviando" || c.status === "concluida");
-  const idsRealizadas = campanhasRealizadas.map((c) => c.id);
-  const [{ count: totalEnviadosExterno }, { count: totalAbertosExterno }] = idsRealizadas.length
-    ? await Promise.all([
-        supabase
-          .from("campanhas_envios")
-          .select("id", { count: "exact", head: true })
-          .in("campanha_id", idsRealizadas)
-          .eq("status", "enviado")
-          .not("email", "ilike", `%${DOMINIO_O2}`),
-        supabase
-          .from("campanhas_envios")
-          .select("id", { count: "exact", head: true })
-          .in("campanha_id", idsRealizadas)
-          .not("aberto_em", "is", null)
-          .not("email", "ilike", `%${DOMINIO_O2}`),
-      ])
-    : [{ count: 0 }, { count: 0 }];
-  const taxaAberturaMedia = totalEnviadosExterno ? ((totalAbertosExterno ?? 0) / totalEnviadosExterno) * 100 : 0;
+  // Ajuste de 27/10/2026: os envios de uma campanha com vários e-mails (Clube
+  // Elite: boas-vindas, parciais...) ficam nas campanhas FILHAS; somar só o pai
+  // dava zero. Os cards somam pai + filhos, respeitando os mesmos filtros.
+  const idsRealizadas = campanhasRealizadas.flatMap((c) => [c.id, ...(idsFilhosPorPai.get(c.id) ?? [])]);
+  let totalEnviadosExterno = 0;
+  let totalAbertosExterno = 0;
+  for (let i = 0; i < idsRealizadas.length; i += 100) {
+    const lote = idsRealizadas.slice(i, i + 100);
+    const [enviados, abertos] = await Promise.all([
+      supabase
+        .from("campanhas_envios")
+        .select("id", { count: "exact", head: true })
+        .in("campanha_id", lote)
+        .eq("status", "enviado")
+        .not("email", "ilike", `%${DOMINIO_O2}`),
+      supabase
+        .from("campanhas_envios")
+        .select("id", { count: "exact", head: true })
+        .in("campanha_id", lote)
+        .not("aberto_em", "is", null)
+        .not("email", "ilike", `%${DOMINIO_O2}`),
+    ]);
+    totalEnviadosExterno += enviados.count ?? 0;
+    totalAbertosExterno += abertos.count ?? 0;
+  }
+  const emailsDisparados = campanhasRealizadas.reduce((s, c) => s + Math.max(1, idsFilhosPorPai.get(c.id)?.length ?? 0), 0);
+  const taxaAberturaMedia = totalEnviadosExterno ? (totalAbertosExterno / totalEnviadosExterno) * 100 : 0;
 
   return (
     <>
@@ -187,13 +200,14 @@ export default async function CampanhasPage({
             <div className="bg-quadro p-4 text-center">
               <p className="text-2xl font-bold text-o2-navy">{campanhasRealizadas.length}</p>
               <p className="text-xs text-gray-500">Campanhas realizadas</p>
+              <p className="text-[11px] text-gray-400">{emailsDisparados} e-mail(s) no total</p>
             </div>
             <div className="bg-quadro p-4 text-center">
-              <p className="text-2xl font-bold text-green-700">{totalEnviadosExterno ?? 0}</p>
-              <p className="text-xs text-gray-500">E-mails enviados</p>
+              <p className="text-2xl font-bold text-green-700">{totalEnviadosExterno}</p>
+              <p className="text-xs text-gray-500">E-mails enviados (destinatários externos)</p>
             </div>
             <div className="bg-quadro p-4 text-center">
-              <p className="text-2xl font-bold text-o2-navy">{totalAbertosExterno ?? 0}</p>
+              <p className="text-2xl font-bold text-o2-navy">{totalAbertosExterno}</p>
               <p className="text-xs text-gray-500">Aberturas (fora da O2)</p>
             </div>
             <div className="bg-quadro p-4 text-center">

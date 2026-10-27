@@ -13,6 +13,8 @@ export type EmailFilho = {
   agendado_para: string | null;
   total_enviados: number;
   abertos: number;
+  falhas: number;
+  cliques: number;
 };
 
 const quando = (iso: string) => new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" });
@@ -59,7 +61,10 @@ export default function EmailsDaCampanha({
                 <th className="py-1 pr-3">Situação</th>
                 <th className="py-1 pr-3">Quando</th>
                 <th className="py-1 pr-3 text-right">Enviados</th>
-                <th className="py-1 text-right">Abertos</th>
+                <th className="py-1 pr-3 text-right">Falhas</th>
+                <th className="py-1 pr-3 text-right">Abertos</th>
+                <th className="py-1 pr-3 text-right">Cliques</th>
+                <th className="py-1 text-right">Template</th>
               </tr>
             </thead>
             <tbody>
@@ -79,7 +84,14 @@ export default function EmailsDaCampanha({
                     {f.status === "agendada" && f.agendado_para ? `agendado ${quando(f.agendado_para)}` : f.disparada_em ? quando(f.disparada_em) : `criado ${quando(f.created_at)}`}
                   </td>
                   <td className="py-1 pr-3 text-right tabular-nums">{f.total_enviados}</td>
-                  <td className="py-1 text-right tabular-nums">{f.abertos}</td>
+                  <td className="py-1 pr-3 text-right tabular-nums">{f.falhas}</td>
+                  <td className="py-1 pr-3 text-right tabular-nums">{f.abertos}</td>
+                  <td className="py-1 pr-3 text-right tabular-nums">{f.cliques}</td>
+                  <td className="py-1 text-right">
+                    <Link href={`/campanhas/${f.id}`} className="text-xs text-o2-coral hover:underline">
+                      ver template
+                    </Link>
+                  </td>
                 </tr>
               ))}
             </tbody>

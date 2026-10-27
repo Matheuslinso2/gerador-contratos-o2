@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { salvarMetaParticipante } from "./actions";
-import { COR_FAROL, ROTULO_FAROL, type LinhaDesempenho } from "@/lib/campanhas/desempenho";
+import { COR_FAROL, ROTULO_FAROL, valorDaMetrica, type LinhaDesempenho } from "@/lib/campanhas/desempenho";
 import { COR_STATUS_ENVIO, ROTULO_STATUS_ENVIO, normalizarBusca, type ResumoStatusEnvio } from "@/lib/campanhas/producaoStatus";
 import type { UltimosContatos } from "@/lib/campanhas/contatosTipos";
 import ContatoImobiliaria from "./ContatoImobiliaria";
@@ -25,6 +25,8 @@ export default function LinhaMeta({
   campanhaId,
   linha,
   moeda,
+  metrica,
+  periodo,
   statusEnvio,
   responsaveis,
   contatos,
@@ -32,6 +34,8 @@ export default function LinhaMeta({
   campanhaId: string;
   linha: LinhaDesempenho;
   moeda: boolean;
+  metrica: string;
+  periodo: string;
   statusEnvio: ResumoStatusEnvio | null;
   responsaveis: string[];
   contatos: UltimosContatos | null;
@@ -41,23 +45,25 @@ export default function LinhaMeta({
   const [custo, setCusto] = useState(paraCampo(linha.custoPremiacao));
   const [obs, setObs] = useState(linha.observacao ?? "");
   const [resp, setResp] = useState(linha.responsavelEmail ?? "");
+  const [gestor, setGestor] = useState(linha.gestorContaEmail ?? "");
   const [erro, setErro] = useState<string | null>(null);
   const [pendente, setPendente] = useState(false);
   const alterado =
-    meta !== paraCampo(linha.meta) || custo !== paraCampo(linha.custoPremiacao) || obs !== (linha.observacao ?? "") || resp !== (linha.responsavelEmail ?? "");
+    meta !== paraCampo(linha.meta) || custo !== paraCampo(linha.custoPremiacao) || obs !== (linha.observacao ?? "") || resp !== (linha.responsavelEmail ?? "") || gestor !== (linha.gestorContaEmail ?? "");
   const fmt = (n: number | null) => (n === null ? "—" : moeda ? brl.format(n) : umaCasa.format(n));
   const opcoes = [...new Set([...responsaveis, ...(linha.responsavelEmail ? [linha.responsavelEmail] : [])])].sort();
+  const opcoesGestor = [...new Set([...responsaveis, ...(linha.gestorContaEmail ? [linha.gestorContaEmail] : [])])].sort();
 
   // `responsavel` explícito: a troca do responsável salva na hora (o botão
   // Salvar fica no fim da tabela, fora da tela -- pedido do Matheus 22/10).
-  async function salvar(responsavel = resp) {
+  async function salvar(responsavel = resp, gestorConta = gestor) {
     setErro(null);
     setPendente(true);
     try {
       await salvarMetaParticipante(
         campanhaId,
         linha.grupoId ? { tipo: "grupo", id: linha.grupoId } : { tipo: "imobiliaria", id: linha.imobiliariaId as string },
-        { meta, custo, observacao: obs, responsavel }
+        { meta, custo, observacao: obs, responsavel, gestor: gestorConta }
       );
       router.refresh();
     } catch (e) {
@@ -122,7 +128,7 @@ export default function LinhaMeta({
           title="Salva na hora ao escolher"
           onChange={(e) => {
             setResp(e.target.value);
-            salvar(e.target.value);
+            salvar(e.target.value, gestor);
           }}
           className="w-28 rounded border border-gray-300 px-1 py-1 text-xs focus:border-o2-coral focus:outline-none">
           <option value="">—</option>
@@ -133,11 +139,34 @@ export default function LinhaMeta({
           ))}
         </select>
       </td>
+      <td className="p-2">
+        <select
+          value={gestor}
+          disabled={pendente}
+          title="Salva na hora ao escolher"
+          onChange={(e) => {
+            setGestor(e.target.value);
+            salvar(resp, e.target.value);
+          }}
+          className="w-28 rounded border border-gray-300 px-1 py-1 text-xs focus:border-o2-coral focus:outline-none">
+          <option value="">—</option>
+          {opcoesGestor.map((e) => (
+            <option key={e} value={e} title={e}>
+              {nomeResponsavel(e)}
+            </option>
+          ))}
+        </select>
+      </td>
       <td className="p-2 text-right tabular-nums text-gray-500">{fmt(linha.base)}</td>
       <td className="p-2 text-right">
         <input value={meta} onChange={(e) => setMeta(e.target.value)} inputMode="decimal" placeholder="—" className={campo} />
+        <div className="mt-0.5 text-[11px] leading-tight text-gray-500">total · {periodo}</div>
+        {linha.metaMensal !== null && <div className="text-[11px] leading-tight text-gray-500">≈ {fmt(linha.metaMensal)}/mês</div>}
       </td>
-      <td className="p-2 text-right font-semibold tabular-nums text-o2-navy">{fmt(linha.realizado)}</td>
+      <td className="p-2 text-right tabular-nums">
+        <div className="font-semibold text-o2-navy">{fmt(linha.realizado)}</div>
+        <div className="text-[11px] leading-tight text-gray-500">no mês: {fmt(linha.realizadoMes)}</div>
+      </td>
       <td className="p-2 text-right tabular-nums">
         {linha.percentual === null ? (
           "—"
@@ -156,6 +185,7 @@ export default function LinhaMeta({
       <td className="p-2">
         <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${COR_FAROL[linha.farol]}`}>{ROTULO_FAROL[linha.farol]}</span>
       </td>
+      <td className="p-2 text-right tabular-nums text-gray-600">{fmt(valorDaMetrica(linha.funil.renovacoes, metrica))}</td>
       <td className="p-2 text-right tabular-nums">{inteiro.format(linha.funil.emAndamento)}</td>
       <td className="whitespace-nowrap p-2 text-right tabular-nums">
         {inteiro.format(linha.corp.documentos)} · {brl.format(linha.corp.premio)}

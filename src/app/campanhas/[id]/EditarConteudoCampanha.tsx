@@ -66,6 +66,7 @@ export function EditarConteudoCampanha({
           <p className="border-b border-o2-navy/10 bg-quadro px-4 py-2 text-xs font-medium uppercase tracking-wide text-o2-navy">Assunto: {campanha.assunto}</p>
           <div className="max-h-[480px] overflow-y-auto" dangerouslySetInnerHTML={{ __html: htmlEmail }} />
         </div>
+        <p className="text-xs text-gray-500">Na prévia, o nome do destinatário aparece como um nome de exemplo; no envio real vai o nome de cada pessoa.</p>
       </section>
     );
   }

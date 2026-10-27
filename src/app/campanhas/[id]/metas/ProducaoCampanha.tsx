@@ -6,13 +6,17 @@ import { Cartao } from "@/components/kpiUi";
 import {
   DIAS_APROVADA_PARADA,
   DIAS_SEM_COTACAO_ALERTA,
+  FATOR_ABAIXO_BASE,
+  FATOR_ATENCAO_FAROL,
   METRICAS_META,
   ROTULO_FAROL,
   metricaInfo,
   montarDesempenhoCampanha,
   produtosBaseDaCampanha,
   rotuloProdutoBase,
+  valorDaMetrica,
 } from "@/lib/campanhas/desempenho";
+import { resolverPretendentes } from "@/lib/campanhas/pretendentes";
 import { participantesDaCampanha } from "@/lib/campanhas/metasCampanha";
 import { imobiliariasDaCampanha } from "@/lib/campanhas/imobiliariasDaCampanha";
 import { ROTULO_STATUS_ENVIO, normalizarBusca, type ResumoStatusEnvio } from "@/lib/campanhas/producaoStatus";
@@ -92,6 +96,12 @@ export default async function ProducaoCampanha({
         })
       : null;
   const t = desempenho?.totais;
+
+  // Nome do pretendente das oportunidades (título do card / locatário). Falha
+  // aqui deixa "—" e mantém o link do card; nunca derruba o quadro.
+  if (desempenho) await resolverPretendentes(db, desempenho.linhas.flatMap((l) => l.oportunidades)).catch(() => undefined);
+  const periodo = campanha.valido_de && campanha.valido_ate ? `${dataBr(campanha.valido_de).slice(0, 5)}–${dataBr(campanha.valido_ate)}` : "";
+  const pct = (f: number) => `${Math.round(f * 100)}%`;
 
   // Últimos contatos (Bitrix: ligações, WhatsApp, e-mails, reuniões + e-mails
   // da campanha enviados pelo Workspace). Falha no Bitrix não derruba o quadro.
@@ -203,14 +213,19 @@ export default async function ProducaoCampanha({
   const dadosExcel = (desempenho?.linhas ?? []).map((l) => ({
     Imobiliária: l.nome,
     "Status do e-mail": l.imobiliariaId ? ROTULO_STATUS_ENVIO[statusPorImobiliaria.get(l.imobiliariaId)?.chave ?? "aguardando"] : "—",
-    Responsável: l.responsavelEmail ?? "",
+    "Responsável O2": l.responsavelEmail ?? "",
+    "Gestor da conta": l.gestorContaEmail ?? "",
     "Último contato": contatosDaLinha(l)?.ultimo?.slice(0, 10) ?? "",
     "Dias sem contato": contatosDaLinha(l)?.diasSemContato ?? "",
     "Base/mês": Number(l.base.toFixed(1)),
-    Meta: l.meta ?? "",
+    "Meta total": l.meta ?? "",
+    "Meta mensal": l.metaMensal === null ? "" : Number(l.metaMensal.toFixed(1)),
     Realizado: l.realizado,
+    "Realizado no mês": l.realizadoMes,
+    "Renovações (fora da meta)": valorDaMetrica(l.funil.renovacoes, metrica.valor),
     "%": l.percentual === null ? "" : Math.round(l.percentual),
     Faltam: l.faltam ?? "",
+    "Ritmo necessário/sem.": l.ritmoSemana === null ? "" : Number(l.ritmoSemana.toFixed(1)),
     Projeção: l.projecao === null ? "" : Number(l.projecao.toFixed(1)),
     Farol: ROTULO_FAROL[l.farol],
     "Em andamento": l.funil.emAndamento,
@@ -239,7 +254,7 @@ export default async function ProducaoCampanha({
             <Cartao
               rotulo="Meta × realizado"
               valor={t.percentual === null ? "Sem metas" : `${inteiro.format(t.percentual)}%`}
-              linhas={[`Realizado: ${fmt(t.realizado)}`, `Meta total: ${t.meta ? fmt(t.meta) : "—"}`, `Projeção no fim: ${fmt(t.projecao)}`]}
+              linhas={[`Realizado: ${fmt(t.realizado)} (no mês: ${fmt(t.realizadoMes)})`, `Meta total: ${t.meta ? fmt(t.meta) : "—"}${t.meta ? ` · ≈ ${fmt(t.metaMensal)}/mês` : ""}`, `Projeção no fim: ${fmt(t.projecao)}`, "Só contratos novos"]}
             />
             <Cartao
               rotulo="No ritmo"
@@ -260,7 +275,7 @@ export default async function ProducaoCampanha({
             <p className="text-xs text-gray-500">
               Produtos: {produtosBase.map(rotuloProdutoBase).join(" + ")} · realizado pelo funil (Bitrix e planilhas), conferido com o Corp
               <InfoLegenda titulo="Como ler o quadro">
-                Base = média por mês da métrica nos 6 meses antes do início (só referência para a meta). Meta = individual, definida uma a uma. Realizado = funil no período (contratação no mês da efetivação). Faltam e ritmo por semana até o fim. Farol: no ritmo (projeção ≥ meta), atenção (≥ 80%), em risco (abaixo). Em andamento = cotações abertas. Corp = documentos novos não cancelados do código de produtor; comissão e repasse do Corp. Resultado = comissão − repasse − custo da premiação da linha. Alertas: sem cotação há {DIAS_SEM_COTACAO_ALERTA}+ dias, aprovada parada há {DIAS_APROVADA_PARADA}+ dias, ritmo abaixo de 70% da própria base.
+                Base = média por mês da métrica nos 6 meses antes do início (só referência para a meta). Meta = individual, definida uma a uma, e conta só contratos NOVOS (renovações aparecem à parte, fora da meta). Realizado = funil no período (contratação no mês da efetivação). Faltam e ritmo por semana até o fim. Farol: no ritmo (projeção ≥ meta), atenção (≥ {pct(FATOR_ATENCAO_FAROL)}), em risco (abaixo). Em andamento = cotações abertas. Corp = documentos novos não cancelados do código de produtor; comissão e repasse do Corp. Resultado = comissão − repasse − custo da premiação da linha. Alertas: sem cotação há {DIAS_SEM_COTACAO_ALERTA}+ dias, aprovada parada há {DIAS_APROVADA_PARADA}+ dias, ritmo abaixo de {pct(FATOR_ABAIXO_BASE)} da própria base.
               </InfoLegenda>
             </p>
             <ExportarQuadro quadroId="quadro-producao-campanha" nomeArquivo={`producao-${campanha.nome}`} dadosExcel={dadosExcel} nomeAbaExcel="Produção" />
@@ -304,15 +319,59 @@ export default async function ProducaoCampanha({
                       Contatos com a imobiliária nos últimos 90 dias: ligações, WhatsApp, e-mails e reuniões registrados no Bitrix (na empresa e nos negócios dela) e os contatos feitos por fora do Bitrix lançados aqui em &quot;+ Registrar contato&quot; (telefone ou WhatsApp particular, visita). O contador de dias olha o último contato do RESPONSÁVEL da imobiliária; sem responsável, o último de qualquer pessoa da equipe. Os contatos do responsável aparecem em destaque. O e-mail automático da campanha aparece à parte e não conta como contato. Fica vermelho quando passa de {DIAS_SEM_CONTATO_ALERTA} dias.
                     </InfoLegenda>
                   </th>
-                  <th className="p-2">Responsável O2</th>
-                  <th className="p-2 text-right">Base/mês</th>
-                  <th className="p-2 text-right">Meta</th>
-                  <th className="p-2 text-right">Realizado</th>
+                  <th className="p-2">
+                    Responsável O2
+                    <InfoLegenda titulo="Responsável O2">Quem da O2 acompanha a imobiliária nesta campanha (contatos, cobrança de meta).</InfoLegenda>
+                  </th>
+                  <th className="p-2">
+                    Gestor da conta
+                    <InfoLegenda titulo="Gestor da conta">Quem da O2 é o gestor da conta da imobiliária. Fica só dentro desta campanha e é separado do Responsável O2.</InfoLegenda>
+                  </th>
+                  <th className="p-2 text-right">
+                    Base/mês
+                    <InfoLegenda titulo="Base/mês">Média por mês da métrica nos 6 meses antes do início da campanha, só contratos novos. Serve de referência para definir a meta.</InfoLegenda>
+                  </th>
+                  <th className="p-2 text-right">
+                    Meta
+                    <InfoLegenda titulo="Meta total × mensal">
+                      A meta que você digita é a TOTAL do período da campanha ({periodo}). A mensal exibida é a total dividida pelo número de meses do período ({desempenho.mesesDoPeriodo}) — é só uma referência, o farol e a projeção usam a meta total. Conta só contratos novos; renovações ficam fora da meta.
+                    </InfoLegenda>
+                  </th>
+                  <th className="p-2 text-right">
+                    Realizado
+                    <InfoLegenda titulo="Realizado">
+                      Total acumulado desde o início da campanha até hoje (só contratos novos), na métrica da meta. Abaixo, &quot;no mês&quot; mostra só o mês corrente, dentro do período.
+                    </InfoLegenda>
+                  </th>
                   <th className="p-2 text-right">%</th>
-                  <th className="p-2 text-right">Faltam</th>
-                  <th className="p-2 text-right">Ritmo/sem.</th>
-                  <th className="p-2 text-right">Projeção</th>
-                  <th className="p-2">Farol</th>
+                  <th className="p-2 text-right">
+                    Faltam
+                    <InfoLegenda titulo="Faltam">Meta total menos o realizado. Zera quando a meta é atingida.</InfoLegenda>
+                  </th>
+                  <th className="p-2 text-right">
+                    Ritmo necessário/sem.
+                    <InfoLegenda titulo="Ritmo necessário por semana">
+                      Quanto precisa ser feito por semana, daqui até o fim da campanha, para atingir a meta: faltam ÷ semanas restantes. Não é o ritmo atual, é o que falta cumprir.
+                    </InfoLegenda>
+                  </th>
+                  <th className="p-2 text-right">
+                    Projeção
+                    <InfoLegenda titulo="Projeção">
+                      Realizado ÷ dias decorridos × dias totais do período: mantém o ritmo médio até agora e projeta o resultado no fim da campanha.
+                    </InfoLegenda>
+                  </th>
+                  <th className="p-2">
+                    Farol
+                    <InfoLegenda titulo="Farol">
+                      Meta atingida: realizado ≥ meta. No ritmo: projeção ≥ meta. Atenção: projeção ≥ {pct(FATOR_ATENCAO_FAROL)} da meta. Em risco: abaixo disso. Não atingida: prazo acabou sem bater a meta. Sem meta: não há meta definida. Não iniciada: a campanha ainda não começou.
+                    </InfoLegenda>
+                  </th>
+                  <th className="p-2 text-right">
+                    Renovações (fora da meta)
+                    <InfoLegenda titulo="Renovações">
+                      Renovações fechadas no período, na mesma métrica da meta. Aparecem à parte e NÃO entram em meta, realizado, projeção nem farol.
+                    </InfoLegenda>
+                  </th>
                   <th className="p-2 text-right">Em andamento</th>
                   <th className="p-2 text-right">Corp (doc · prêmio)</th>
                   <th className="p-2 text-right">Comissão</th>
@@ -329,6 +388,8 @@ export default async function ProducaoCampanha({
                     campanhaId={campanha.id}
                     linha={l}
                     moeda={metrica.moeda}
+                    metrica={metrica.valor}
+                    periodo={periodo}
                     statusEnvio={l.imobiliariaId ? (statusPorImobiliaria.get(l.imobiliariaId) ?? null) : null}
                     responsaveis={responsaveis}
                     contatos={contatosDaLinha(l)}
@@ -343,7 +404,7 @@ export default async function ProducaoCampanha({
               <h3 className="text-xs font-semibold text-o2-navy">
                 Oportunidades em aberto
                 <InfoLegenda titulo="Oportunidades em aberto">
-                  Cotações das imobiliárias da campanha que ainda não fecharam: aprovadas primeiro, depois em análise, das mais antigas para as mais novas. O link abre o card no Bitrix.
+                  Cotações das imobiliárias da campanha que ainda não fecharam: aprovadas primeiro, depois em análise, das mais antigas para as mais novas. Pretendente = nome do card no Bitrix (ou do locatário, nas planilhas); &quot;—&quot; quando a origem não informa o nome. Renovações aparecem marcadas e não contam na meta. O link abre o card no Bitrix.
                 </InfoLegenda>
               </h3>
               {desempenho.linhas
@@ -364,7 +425,9 @@ export default async function ProducaoCampanha({
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b text-left text-xs text-gray-500">
+                            <th className="py-1 pr-3">Pretendente</th>
                             <th className="py-1 pr-3">Produto</th>
+                            <th className="py-1 pr-3">Tipo</th>
                             <th className="py-1 pr-3">Situação</th>
                             <th className="py-1 pr-3">Entrou em</th>
                             <th className="py-1 pr-3 text-right">Dias</th>
@@ -375,7 +438,9 @@ export default async function ProducaoCampanha({
                         <tbody>
                           {l.oportunidades.map((o, i) => (
                             <tr key={i} className="border-b last:border-0">
+                              <td className="py-1 pr-3 font-medium text-o2-navy">{o.pretendente ?? "—"}</td>
                               <td className="py-1 pr-3">{rotuloProdutoBase(o.produto)}</td>
+                              <td className="py-1 pr-3 text-xs text-gray-600">{o.tipo === "renovacao" ? "Renovação" : "Novo"}</td>
                               <td className="py-1 pr-3">
                                 <span className={`rounded-full px-2 py-0.5 text-xs ${o.status === "Aprovado" ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-700"}`}>{o.status}</span>
                               </td>

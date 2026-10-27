@@ -18,6 +18,7 @@ import SubmitButton from "@/components/SubmitButton";
 import { CampanhaProgresso } from "./CampanhaProgresso";
 import { GerenciarDestinatarios } from "./GerenciarDestinatarios";
 import { EditarConteudoCampanha } from "./EditarConteudoCampanha";
+import { ResumoEnvios, type NumerosEmail } from "./ResumoEnvios";
 import { ReenviarCampanha } from "./ReenviarCampanha";
 import { FiltroProducao } from "./FiltroProducao";
 import { EmailsEnviados } from "../EmailsEnviados";
@@ -189,7 +190,7 @@ export default async function CampanhaDetalhePage({
         ? supabase.from("campanhas").select("id, nome").eq("id", campanha.campanha_pai_id).maybeSingle()
         : Promise.resolve({ data: null }),
     ]);
-  const filhosBrutos = (filhosData ?? []) as Omit<EmailFilho, "abertos">[];
+  const filhosBrutos = (filhosData ?? []) as Omit<EmailFilho, "abertos" | "falhas" | "cliques">[];
   const { data: enviosFilhosData } = filhosBrutos.length
     ? await supabase
         .from("campanhas_envios")
@@ -202,8 +203,46 @@ export default async function CampanhaDetalhePage({
   const filhos: EmailFilho[] = filhosBrutos.map((f) => ({
     ...f,
     abertos: (enviosFilhosData ?? []).filter((e) => e.campanha_id === f.id && e.aberto_em && !String(e.email).toLowerCase().endsWith(DOMINIO_O2)).length,
+    falhas: (enviosFilhosData ?? []).filter((e) => e.campanha_id === f.id && e.status === "falhou").length,
+    cliques: (enviosFilhosData ?? []).filter((e) => e.campanha_id === f.id && e.clicado_em && !String(e.email).toLowerCase().endsWith(DOMINIO_O2)).length,
   }));
   const campanhaPai = paiData as { id: string; nome: string } | null;
+
+  // Campanha com vários e-mails (27/10/2026): os envios ficam nas filhas, então
+  // o resumo soma pai + filhos e deixa escolher um e-mail só. Antes mostrava
+  // total_enviados do pai (71) com 0 aberturas, porque o pai não tem envios.
+  const temEmailsFilhos = filhos.length > 0;
+  const { data: descadastrosEmailsData } = temEmailsFilhos
+    ? await supabase.from("campanhas_descadastros").select("origem_campanha_id").in("origem_campanha_id", [id, ...filhos.map((f) => f.id)])
+    : { data: [] };
+  type EnvioNumeros = { email: unknown; status: string; aberto_em: string | null; clicado_em: string | null };
+  const numerosDoEmail = (emailId: string, rotulo: string, envios: EnvioNumeros[]): NumerosEmail => {
+    const externos = envios.filter((e) => !String(e.email).toLowerCase().endsWith(DOMINIO_O2));
+    return {
+      id: emailId,
+      rotulo,
+      destinatarios: envios.length,
+      enviados: envios.filter((e) => e.status === "enviado").length,
+      enviadosExternos: externos.filter((e) => e.status === "enviado").length,
+      falhas: envios.filter((e) => e.status === "falhou").length,
+      abriram: externos.filter((e) => e.aberto_em).length,
+      clicaram: externos.filter((e) => e.clicado_em).length,
+      descadastros: (descadastrosEmailsData ?? []).filter((d) => d.origem_campanha_id === emailId).length,
+    };
+  };
+  const emailsResumo: NumerosEmail[] = temEmailsFilhos
+    ? [
+        ...((enviosData ?? []).length ? [numerosDoEmail(id, `${campanha.nome} (e-mail principal)`, (enviosData ?? []) as EnvioNumeros[])] : []),
+        ...filhos.map((f) =>
+          numerosDoEmail(
+            f.id,
+            f.nome,
+            (enviosFilhosData ?? []).filter((e) => e.campanha_id === f.id) as EnvioNumeros[]
+          )
+        ),
+      ].filter((n) => n.destinatarios > 0 || n.id !== id)
+    : [];
+  const mostrarResumoAgregado = temEmailsFilhos && emailsResumo.some((n) => n.destinatarios > 0);
   const responsaveis = (await buscarEmailsEquipeInterna(supabase)).filter((e) => e.endsWith(DOMINIO_O2) && !e.startsWith("comercial@"));
 
   // Status de envio/abertura por imobiliária (pedido do Matheus,
@@ -376,8 +415,11 @@ export default async function CampanhaDetalhePage({
             </>
           )}
 
+          {mostrarResumoAgregado && <ResumoEnvios key={id} emails={emailsResumo} />}
+
           {jaEnviadaOuEnviando && (
             <>
+              {!mostrarResumoAgregado && (<>
               <div className="grid grid-cols-3 gap-1 overflow-hidden rounded-xl border border-o2-navy/10 bg-gray-200 shadow-sm">
                 <div className="bg-quadro p-4 text-center">
                   <p className="text-2xl font-bold text-o2-navy">{campanha.total_destinatarios}</p>
@@ -413,6 +455,7 @@ export default async function CampanhaDetalhePage({
                   <p className="text-xs text-gray-500">Descadastros</p>
                 </div>
               </div>
+              </>)}
 
               {campanha.status === "enviando" && (
                 <div className="h-2 overflow-hidden rounded-full bg-gray-200">
@@ -478,7 +521,13 @@ export default async function CampanhaDetalhePage({
           }}
           htmlEmail={htmlEmail}
           rascunho={rascunho}
-          tituloSecao={jaEnviadaOuEnviando ? "Template do e-mail enviado" : "Prévia do e-mail"}
+          tituloSecao={
+            mostrarResumoAgregado && !campanhaPai
+              ? "E-mail principal da campanha (modelo)"
+              : jaEnviadaOuEnviando
+                ? "Template do e-mail enviado"
+                : "Prévia do e-mail"
+          }
         />
 
         {/* Produção gerada -- sempre presente (mesmo motivo do Resumo do
