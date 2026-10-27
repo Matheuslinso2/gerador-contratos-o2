@@ -623,3 +623,141 @@ end;
 $$;
 revoke execute on function buscar_apolices_sinistro(text) from anon, public;
 grant execute on function buscar_apolices_sinistro(text) to authenticated;
+
+-- Problemas apontados pela equipe (27/10/2026): a busca da apólice também acha
+-- pelo nº da apólice na seguradora (grade do Corp).
+create index if not exists corp_grade_numero_apolice_idx on corp_grade (numero_apolice) where numero_apolice is not null;
+
+create or replace function buscar_apolices_sinistro(p_q text)
+returns table (
+  nosso_numero text, produto text, ramo text, seguradora text, numero_apolice text, vigencia_inicio date, vigencia_fim date,
+  imobiliaria_texto text, imobiliaria_id uuid, cliente_nome text, cliente_documento text,
+  cliente_email text, cliente_telefone text, data_efetivacao date, status text,
+  imovel_logradouro text, imovel_numero text, imovel_complemento text, imovel_bairro text, imovel_cidade text, imovel_uf text, imovel_cep text,
+  apolice_arquivo_id text, apolice_local_risco text, locatarios_apolice jsonb
+)
+language plpgsql stable security definer set search_path to 'public'
+as $$
+declare
+  termo text := trim(coalesce(p_q, ''));
+  dig text := regexp_replace(coalesce(p_q, ''), '\D', '', 'g');
+  o2 boolean := is_colaborador_o2();
+begin
+  if length(termo) < 3 then return; end if;
+  return query
+  with alvo_loc as (
+    select l.id from locatarios l
+    where (length(dig) in (11, 14) and l.cpf = dig)
+       or (termo ~ '^\d{1,9}$' and l.codigo_corp_cliente = termo)
+       or (termo ~ '[A-Za-zÀ-ú]' and length(termo) >= 4 and l.nome ilike '%' || termo || '%')
+    limit 30
+  ),
+  cand as (
+    select p.* from producao_unificada p
+    where p.fonte = 'corp' and p.produto in ('fianca', 'capitalizacao', 'automovel', 're') and p.origem_corp_numero = termo
+    union
+    select p.* from producao_unificada p join alvo_loc a on a.id = p.locatario_id where p.fonte = 'corp'
+    union
+    select p.* from producao_unificada p
+    join apolice_partes ap on ap.nosso_numero = p.origem_corp_numero and ap.papel = 'garantido'
+    join alvo_loc a on a.id = ap.locatario_id
+    where p.fonte = 'corp'
+    union
+    -- nº da apólice na seguradora (com ou sem zeros à esquerda)
+    select p.* from producao_unificada p
+    where p.fonte = 'corp' and length(dig) >= 5
+      and p.origem_corp_numero in (
+        select g.nosso_numero::text from corp_grade g
+        where g.numero_apolice in (termo, dig, ltrim(dig, '0'), lpad(ltrim(dig, '0'), 9, '0'), lpad(ltrim(dig, '0'), 10, '0'))
+      )
+  ),
+  vinc as (
+    select distinct on (trim(v.nome_original)) trim(v.nome_original) nome, v.imobiliaria_id
+    from imobiliaria_registros_fonte v
+    where v.fonte = 'corp_produtor' and v.situacao = 'confirmado' and v.imobiliaria_id is not null
+      and trim(v.nome_original) in (select distinct trim(c.imobiliaria_texto) from cand c)
+    order by trim(v.nome_original), v.confirmado_em desc nulls last
+  ),
+  res as (
+    select c.*, coalesce(imobiliaria_por_apolice_corp(c.origem_corp_numero), vi.imobiliaria_id) imob,
+      (select g.numero_apolice from corp_grade g
+        where c.origem_corp_numero ~ '^\d{1,18}$' and g.nosso_numero = c.origem_corp_numero::bigint and g.numero_apolice is not null
+        order by g.incluir_corretora desc, g.id limit 1) apolice
+    from cand c left join vinc vi on vi.nome = trim(c.imobiliaria_texto)
+  )
+  select r.origem_corp_numero, produto_sinistro_de_ramo(r.produto, r.ramo_padrao), r.ramo_padrao, r.seguradora, r.apolice,
+    (r.extras ->> 'vigencia_inicio')::date, (r.extras ->> 'vigencia_fim')::date,
+    trim(r.imobiliaria_texto), r.imob, l.nome, l.cpf, l.email, l.telefone, r.data_efetivacao, r.status_padrao,
+    e.logradouro, e.numero, e.complemento, e.bairro, e.cidade, e.uf, e.cep,
+    d.arquivo_id, d.local_texto,
+    (select jsonb_agg(jsonb_build_object('ordem', ap.ordem, 'nome', g.nome, 'documento', g.cpf, 'telefone', g.telefone, 'email', g.email) order by ap.ordem)
+       from apolice_partes ap join locatarios g on g.id = ap.locatario_id
+      where ap.documento_id = d.id and ap.papel = 'garantido')
+  from res r
+  left join locatarios l on l.id = r.locatario_id
+  left join lateral (
+    select pe.* from producao_enderecos pe where pe.nosso_numero = r.origem_corp_numero order by pe.importado_em desc limit 1
+  ) e on true
+  left join lateral (
+    select ad.id, ad.arquivo_id, ad.local_risco ->> 'texto' local_texto from apolice_documentos ad
+    where ad.nosso_numero = r.origem_corp_numero and ad.situacao = 'certa'
+    order by exists (select 1 from apolice_partes x where x.documento_id = ad.id and x.papel = 'garantido') desc, ad.arquivo_criado_em desc nulls last
+    limit 1
+  ) d on true
+  where o2 or r.imob in (select imobiliarias_do_usuario())
+  order by r.data_efetivacao desc nulls last
+  limit 15;
+end;
+$$;
+revoke execute on function buscar_apolices_sinistro(text) from anon, public;
+grant execute on function buscar_apolices_sinistro(text) to authenticated;
+
+-- Cards trazidos do Corp ficavam sem ocorrência, vigência, local de risco,
+-- locatário, observações e pagamentos (problema apontado pela equipe,
+-- 27/10/2026). Preenche só o que está vazio; idempotente.
+update sinistros s set data_ocorrencia = sc.dt_ocorrencia
+from sinistros_corp sc
+where s.origem = 'corp' and sc.id = s.sinistro_corp_id and s.data_ocorrencia is null and sc.dt_ocorrencia is not null;
+
+update sinistros s set
+  vigencia_inicio = coalesce(s.vigencia_inicio, (p.extras ->> 'vigencia_inicio')::date),
+  vigencia_fim = coalesce(s.vigencia_fim, (p.extras ->> 'vigencia_fim')::date)
+from (
+  select distinct on (origem_corp_numero) origem_corp_numero, extras from producao_unificada
+  where fonte = 'corp' and extras ->> 'vigencia_fim' is not null
+  order by origem_corp_numero, (extras ->> 'vigencia_fim')::date desc
+) p
+where s.origem = 'corp' and p.origem_corp_numero = s.nosso_numero and (s.vigencia_inicio is null or s.vigencia_fim is null);
+
+update sinistros s set
+  imovel_logradouro = e.logradouro, imovel_numero = e.numero, imovel_complemento = e.complemento,
+  imovel_bairro = e.bairro, imovel_cidade = e.cidade, imovel_uf = e.uf, imovel_cep = coalesce(s.imovel_cep, e.cep)
+from (
+  select distinct on (nosso_numero) * from producao_enderecos order by nosso_numero, importado_em desc
+) e
+where s.origem = 'corp' and e.nosso_numero = s.nosso_numero and s.imovel_logradouro is null;
+
+update sinistros s set
+  locatario_nome = g.nome, locatario_documento = g.cpf, locatario_email = coalesce(s.locatario_email, g.email), locatario_telefone = coalesce(s.locatario_telefone, g.telefone)
+from (
+  select distinct on (ap.nosso_numero) ap.nosso_numero, l.nome, l.cpf, l.email, l.telefone
+  from apolice_partes ap join locatarios l on l.id = ap.locatario_id
+  where ap.papel = 'garantido' order by ap.nosso_numero, ap.ordem
+) g
+where s.origem = 'corp' and g.nosso_numero = s.nosso_numero and s.locatario_nome is null;
+
+-- Observações do Corp (tratativas, locatário, alertas) viram evento interno.
+insert into sinistro_historico (sinistro_id, autor_tipo, referente, visivel_imobiliaria, data_evento, texto)
+select s.id, 'sistema', 'interno', false, coalesce(sc.dt_aviso, s.created_at::date), 'Observações do Corp:' || E'\n' || sc.observacoes
+from sinistros s join sinistros_corp sc on sc.id = s.sinistro_corp_id
+where s.origem = 'corp' and sc.observacoes is not null
+  and not exists (select 1 from sinistro_historico h where h.sinistro_id = s.id and h.texto like 'Observações do Corp:%');
+
+-- Total indenizado acumulado no Corp (o Corp não traz o detalhe por mês): vira
+-- um lançamento no histórico de pagamento, para o saldo do LMI fechar. O total
+-- do dashboard não muda (já usava o valor do Corp quando não havia lançamentos).
+insert into sinistro_indenizacoes (sinistro_id, pago_em, valor, observacao)
+select s.id, null, sc.vl_indenizado, 'Total indenizado acumulado trazido do Corp (sem detalhe por mês)'
+from sinistros s join sinistros_corp sc on sc.id = s.sinistro_corp_id
+where s.origem = 'corp' and coalesce(sc.vl_indenizado, 0) > 0
+  and not exists (select 1 from sinistro_indenizacoes i where i.sinistro_id = s.id);

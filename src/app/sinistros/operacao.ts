@@ -558,3 +558,36 @@ export async function excluirEventoInterno(fd: FormData) {
   await supabase.from("sinistro_historico").delete().eq("id", texto(fd, "evento_id")!).eq("sinistro_id", id).eq("visivel_imobiliaria", false);
   voltar(id, { aba: "interno", ctx });
 }
+
+// Favorecido: ao digitar o CPF/CNPJ, traz o nome / razão social. CNPJ: base da
+// Receita (BrasilAPI); CPF: só o que já está nas bases do Workspace (locatários
+// e sinistros) -- não existe consulta pública de CPF. Pedido da equipe, 27/10/2026.
+export async function buscarNomePorDocumento(documento: string): Promise<{ nome: string | null; origem: string | null }> {
+  const { supabase } = await contexto();
+  const d = documento.replace(/\D/g, "");
+  if (d.length !== 11 && d.length !== 14) return { nome: null, origem: null };
+  const { data: loc } = await supabase.from("locatarios").select("nome").eq("cpf", d).limit(1).maybeSingle();
+  if (loc?.nome) return { nome: loc.nome, origem: "cadastro O2" };
+  const { data: sin } = await supabase
+    .from("sinistros")
+    .select("locador_nome, locatario_nome, locador_documento, locatario_documento")
+    .or(`locador_documento.eq.${d},locatario_documento.eq.${d}`)
+    .limit(1)
+    .maybeSingle();
+  if (sin) {
+    const n = (sin.locador_documento ?? "").replace(/\D/g, "") === d ? sin.locador_nome : sin.locatario_nome;
+    if (n) return { nome: n, origem: "sinistros anteriores" };
+  }
+  if (d.length === 14) {
+    try {
+      const resp = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${d}`, { cache: "no-store", headers: { "User-Agent": "O2-Workspace/1.0 (o2seguros.com.br)", Accept: "application/json" } });
+      if (resp.ok) {
+        const j = (await resp.json()) as { razao_social?: string };
+        if (j.razao_social) return { nome: j.razao_social, origem: "Receita Federal" };
+      }
+    } catch {
+      /* sem rede: segue sem nome */
+    }
+  }
+  return { nome: null, origem: null };
+}

@@ -68,8 +68,8 @@ export default async function SinistrosPage({
     if (!imob) redirect("/imobiliaria");
   }
 
-  const r = await listarSinistros(supabase, parametros, { interno, userEmail: user.email });
-  const { sinistros, nomeFiltroImob, produtos, seguradoras, resp, q, encerrados, imob, ordem, etapa } = r;
+  const r = await listarSinistros(supabase, parametros, { interno, userEmail: user.email, comIndenizado: true });
+  const { sinistros, nomeFiltroImob, produtos, seguradoras, resp, q, encerrados, imob, ordem, etapa, avisoDe, avisoAte, encDe, encAte } = r;
   const { data: equipeBruta } = interno ? await supabase.from("sinistros_equipe").select("chave, nome, email, ativo").order("nome") : { data: [] };
   const equipe = (equipeBruta ?? []) as Membro[];
   const nomes = Object.fromEntries(equipe.map((m) => [m.chave, m.nome]));
@@ -111,7 +111,7 @@ export default async function SinistrosPage({
           <input
             name="q"
             defaultValue={q ?? ""}
-            placeholder={interno ? "Buscar segurado, locatário, apólice, nº, imobiliária…" : "Buscar locatário, endereço, apólice ou nº do sinistro…"}
+            placeholder={interno ? "Buscar nº do aviso, nº da apólice, locatário, segurado, imobiliária…" : "Buscar locatário, endereço, apólice ou nº do sinistro…"}
             className="min-w-64 flex-1 rounded-lg border border-gray-300 px-3 py-2"
           />
           {imob && <input type="hidden" name="imob" value={imob} />}
@@ -164,6 +164,16 @@ export default async function SinistrosPage({
           <label className="flex items-center gap-1 text-gray-600">
             <input type="checkbox" name="encerrados" value="1" defaultChecked={encerrados === "1"} /> incluir encerrados
           </label>
+          <fieldset className="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-xs text-gray-600">
+            <legend className="px-1 font-semibold text-o2-navy">Data do aviso</legend>
+            de <input type="date" name="aviso_de" defaultValue={avisoDe ?? ""} className="rounded border border-gray-300 px-1 py-1" />
+            até <input type="date" name="aviso_ate" defaultValue={avisoAte ?? ""} className="rounded border border-gray-300 px-1 py-1" />
+          </fieldset>
+          <fieldset className="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-xs text-gray-600">
+            <legend className="px-1 font-semibold text-o2-navy">Encerramento</legend>
+            de <input type="date" name="enc_de" defaultValue={encDe ?? ""} className="rounded border border-gray-300 px-1 py-1" />
+            até <input type="date" name="enc_ate" defaultValue={encAte ?? ""} className="rounded border border-gray-300 px-1 py-1" />
+          </fieldset>
           <button className="rounded-full bg-o2-navy px-4 py-2 font-semibold text-white">Filtrar</button>
         </form>
 
@@ -236,9 +246,10 @@ function ListaO2({ sinistros, nomes, equipe, ctx, volta }: { sinistros: any[]; n
               <th className="px-3 py-2">Produto / seguradora</th>
               <th className="px-3 py-2">Etapa</th>
               <th className="px-3 py-2">Responsável</th>
-              <th className="px-3 py-2">Próxima ação</th>
+              <th className="px-3 py-2">Data do aviso</th>
+              <th className="px-3 py-2">Encerramento</th>
               <th className="px-3 py-2 text-right">Dias</th>
-              <th className="px-3 py-2 text-right">Avisado</th>
+              <th className="px-3 py-2 text-right">Indenizado</th>
             </tr>
           </thead>
           <tbody>
@@ -270,11 +281,10 @@ function ListaO2({ sinistros, nomes, equipe, ctx, volta }: { sinistros: any[]; n
                     <EtiquetaEtapa etapa={s.etapa} visao="o2" />
                   </td>
                   <td className="px-3 py-2 text-xs">{s.responsavel_o2 ? nomes[s.responsavel_o2] ?? s.responsavel_o2 : <span className="text-orange-700">sem responsável</span>}</td>
-                  <td className={`px-3 py-2 text-xs ${atrasada ? "font-semibold text-red-700" : pa === hoje ? "font-semibold text-orange-800" : "text-gray-600"}`}>
-                    {pa ? `${formatarData(pa)}${s.proxima_acao_descricao ? ` · ${s.proxima_acao_descricao}` : ""}` : <span className="text-gray-400">—</span>}
-                  </td>
+                  <td className="px-3 py-2 text-xs text-gray-700">{aviso ? formatarData(aviso) : "—"}</td>
+                  <td className="px-3 py-2 text-xs text-gray-700">{s.encerrado_em ? formatarData(s.encerrado_em) : "—"}</td>
                   <td className="px-3 py-2 text-right text-xs">{dias ?? "—"}</td>
-                  <td className="px-3 py-2 text-right text-xs">{s.valor_avisado ? formatarReais(s.valor_avisado) : "—"}</td>
+                  <td className="px-3 py-2 text-right text-xs">{s.total_indenizado ? formatarReais(s.total_indenizado) : "—"}</td>
                 </tr>
               );
             })}
@@ -379,7 +389,7 @@ function ListaImobiliaria({ sinistros }: { sinistros: any[] }) {
                 <th className="px-3 py-2">Tipo</th>
                 <th className="px-3 py-2">Etapa</th>
                 <th className="px-3 py-2">Próximo passo</th>
-                <th className="px-3 py-2 text-right">Avisado</th>
+                <th className="px-3 py-2 text-right">Indenizado</th>
               </tr>
             </thead>
             <tbody>
@@ -400,7 +410,7 @@ function ListaImobiliaria({ sinistros }: { sinistros: any[] }) {
                       <EtiquetaEtapa etapa={s.etapa} visao="imobiliaria" />
                     </td>
                     <td className={`px-3 py-2 text-xs ${p.urgente ? "font-semibold text-orange-800" : "text-gray-600"}`}>{p.texto}</td>
-                    <td className="px-3 py-2 text-right text-xs">{s.valor_avisado ? formatarReais(s.valor_avisado) : "—"}</td>
+                    <td className="px-3 py-2 text-right text-xs">{s.total_indenizado ? formatarReais(s.total_indenizado) : "—"}</td>
                   </tr>
                 );
               })}

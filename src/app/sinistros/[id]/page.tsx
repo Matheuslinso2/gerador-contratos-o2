@@ -53,6 +53,7 @@ import { ChecklistDocumentos, type Documento, type RegistroHistorico } from "./b
 import { AnexosPorPasta, CabecalhoSinistro, ChatLateral, HistoricoInterno } from "./visualizacao";
 import { AnexarPagamento, CampoAnexoPagamento } from "./AnexoPagamento";
 import FormLmi from "./FormLmi";
+import CamposFavorecido from "./CamposFavorecido";
 
 export const dynamic = "force-dynamic";
 
@@ -209,6 +210,7 @@ export default async function SinistroPage({
 
         {modoAssistente ? (
           <Assistente
+            interno={interno}
             s={s}
             passo={passo}
             debitos={listaDebitos}
@@ -256,6 +258,7 @@ type Props = {
 // ---------- Assistente (rascunho / pendência) ----------
 
 function Assistente({
+  interno,
   s,
   passo,
   debitos,
@@ -265,7 +268,7 @@ function Assistente({
   imobiliarias,
   reaproveitaveis,
   favorecidoPadrao,
-}: Props & { passo: number; imobiliarias?: { id: string; nome: string }[]; reaproveitaveis: Reaproveitaveis; favorecidoPadrao: Record<string, unknown> | null }) {
+}: Props & { interno: boolean; passo: number; imobiliarias?: { id: string; nome: string }[]; reaproveitaveis: Reaproveitaveis; favorecidoPadrao: Record<string, unknown> | null }) {
   // Favorecido vazio: sugere o usado no último sinistro da mesma imobiliária.
   const usarPadrao = !!favorecidoPadrao && !s.favorecido_banco && !s.favorecido_nome;
   const sFavorecido = usarPadrao ? { ...s, ...favorecidoPadrao, codigo: s.codigo } : s;
@@ -296,7 +299,7 @@ function Assistente({
             id={s.id}
             itens={checklist}
             documentos={docs}
-            modo="imobiliaria"
+            modo={interno ? "o2" : "imobiliaria"}
             editavel
             passo={3}
             reaproveitaveis={reaproveitaveis}
@@ -346,15 +349,7 @@ function PassoFavorecido({ s }: { s: any }) {
         <p className="text-xs text-gray-500">
           Se for o representante, a seguradora exige o contrato de administração ou a procuração (pedidos na etapa 3).
         </p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Campo nome="favorecido_nome" rotulo="Nome do favorecido" valor={s.favorecido_nome} />
-          <Campo nome="favorecido_documento" rotulo="CPF/CNPJ do favorecido" valor={s.favorecido_documento} />
-          <Campo nome="favorecido_banco" rotulo="Banco" valor={s.favorecido_banco} />
-          <div className="grid grid-cols-2 gap-3">
-            <Campo nome="favorecido_agencia" rotulo="Agência" valor={s.favorecido_agencia} />
-            <Campo nome="favorecido_conta" rotulo="Conta" valor={s.favorecido_conta} />
-          </div>
-        </div>
+        <CamposFavorecido s={s} />
       </section>
       <div className="flex justify-end">
         <SubmitButton className={botaoPrimario} textoCarregando="Salvando…">
@@ -365,7 +360,7 @@ function PassoFavorecido({ s }: { s: any }) {
   );
 }
 
-// Etapa 5 -- validação da documentação e envio. A resposta "Acionamento
+// Etapa 5 -- resumo do aviso e envio (a validação dos documentos é da O2). A resposta "Acionamento
 // autorizado?" é da O2, depois do envio (ficha da equipe).
 function PassoEnviar({ s, debitos, docs }: { s: any; debitos: Debito[]; docs: Documento[] }) {
   const pendencia = s.etapa === "pendencia_imobiliaria";
@@ -381,7 +376,7 @@ function PassoEnviar({ s, debitos, docs }: { s: any; debitos: Debito[]; docs: Do
       <input type="hidden" name="id" value={s.id} />
 
       <section className={cartao}>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-o2-navy">Validação da documentação</h2>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-o2-navy">Resumo do aviso</h2>
         <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
           <Item rotulo="Seguradora / apólice" valor={[s.seguradora, s.numero_apolice].filter(Boolean).join(" · ")} />
           <Item rotulo="Data da ocorrência (1ª inadimplência)" valor={formatarData(s.data_ocorrencia)} />
@@ -482,15 +477,6 @@ function PassoEnviar({ s, debitos, docs }: { s: any; debitos: Debito[]; docs: Do
         </SubmitButton>
       </div>
     </form>
-  );
-}
-
-function Campo({ nome, rotulo, valor }: { nome: string; rotulo: string; valor: string | null }) {
-  return (
-    <div>
-      <label className={labelClass}>{rotulo}</label>
-      <input name={nome} defaultValue={valor ?? ""} className={inputClass} />
-    </div>
   );
 }
 

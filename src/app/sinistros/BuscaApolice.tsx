@@ -20,7 +20,32 @@ type DaApolice = { arquivoId: string | null; local: string | null; locatarios: N
 // locatário) e preenche o formulário em volta -- evita redigitar o que o
 // Workspace já sabe (21/10/2026). Só preenche campos vazios, exceto os
 // ocultos de vínculo (Nosso Nº).
-export default function BuscaApolice({ nossoNumeroInicial }: { nossoNumeroInicial?: string | null }) {
+// CEP pelo endereço (ViaCEP por UF/cidade/rua) quando a base não tem o CEP --
+// só 108 das Fianças vigentes têm CEP no Corp (27/10/2026).
+async function cepPeloEndereco(uf: string, cidade: string, logradouro: string, bairro: string | null): Promise<string | null> {
+  const semAcento = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().trim();
+  const rua = semAcento(logradouro).replace(/^(R|RUA|AV|AVENIDA|EST|ESTRADA|TV|TRAV|TRAVESSA|AL|ALAMEDA|PC|PCA|PRACA|ROD|RODOVIA|LGO|LARGO)\.?\s+/, "");
+  if (rua.length < 3 || !uf || !cidade) return null;
+  try {
+    const resp = await fetch(`https://viacep.com.br/ws/${encodeURIComponent(uf)}/${encodeURIComponent(cidade)}/${encodeURIComponent(rua)}/json/`);
+    if (!resp.ok) return null;
+    const lista = (await resp.json()) as { cep: string; bairro: string }[];
+    if (!Array.isArray(lista) || !lista.length) return null;
+    const doBairro = bairro ? lista.find((x) => semAcento(x.bairro) === semAcento(bairro)) : null;
+    return (doBairro ?? lista[0]).cep;
+  } catch {
+    return null;
+  }
+}
+
+export default function BuscaApolice({
+  nossoNumeroInicial,
+  onPreenchido,
+}: {
+  nossoNumeroInicial?: string | null;
+  /** Avisado depois de preencher pela busca (o formulário trava os dados da apólice). */
+  onPreenchido?: () => void;
+}) {
   // O Nosso Nº fica num campo oculto controlado aqui: com defaultValue o React
   // reaplica o valor original a cada redesenho e apagava o preenchido.
   const [nossoNumero, setNossoNumero] = useState(nossoNumeroInicial ?? "");
@@ -110,8 +135,19 @@ export default function BuscaApolice({ nossoNumeroInicial }: { nossoNumeroInicia
       definir("cidade", a.imovel_cidade);
       definir("uf", a.imovel_uf);
     } else definir("cep", cepDoTexto(a.apolice_local_risco), false, true, true);
+    // Sem CEP na base: procura pelo endereço e preenche só o CEP (não troca a rua).
+    if (!a.imovel_cep && a.imovel_logradouro && a.imovel_uf && a.imovel_cidade) {
+      const campoCep = form.elements.namedItem("cep") as HTMLInputElement | null;
+      cepPeloEndereco(a.imovel_uf, a.imovel_cidade, a.imovel_logradouro, a.imovel_bairro).then((cep) => {
+        if (!cep || !campoCep || campoCep.value) return;
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(campoCep, cep);
+        campoCep.dataset.semBusca = "1";
+        campoCep.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    }
     if (a.imobiliaria_id) definir("imobiliaria_id", a.imobiliaria_id);
     setResultados(null);
+    onPreenchido?.();
     const temLocatario = !!a.locatarios_apolice?.length;
     setDaApolice(temLocatario || a.apolice_local_risco ? { arquivoId: a.apolice_arquivo_id, local: a.apolice_local_risco, locatarios: a.locatarios_apolice ?? [] } : null);
     setAviso(

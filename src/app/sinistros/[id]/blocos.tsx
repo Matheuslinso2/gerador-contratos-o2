@@ -151,46 +151,51 @@ export function ChecklistDocumentos({
                         {modo === "imobiliaria" && d.situacao === "recusado" ? "Pendente" : ROTULO[d.situacao] ?? d.situacao}
                       </span>
                       {modo === "o2" && (
-                        <div className="mt-1 flex flex-col gap-1">
-                          {d.situacao !== "aprovado" && (
-                            <form action={analisarDocumento} className="flex flex-wrap items-center gap-1">
-                              <input type="hidden" name="id" value={id} />
-                              <input type="hidden" name="documento_id" value={d.id} />
-                              <input type="hidden" name="decisao" value="aprovado" />
-                              <input name="observacao" placeholder="observação (opcional)" className="w-36 rounded border border-gray-300 px-1 py-0.5" />
-                              <button className="rounded-full bg-green-600 px-3 py-0.5 font-semibold text-white hover:opacity-90">Aceitar</button>
-                            </form>
-                          )}
+                        <form id={`val-${d.id}`} action={analisarDocumento} className="mt-1 flex flex-col gap-1">
+                          <input type="hidden" name="id" value={id} />
+                          <input type="hidden" name="documento_id" value={d.id} />
                           {d.situacao !== "recusado" && (
-                            <form action={analisarDocumento} className="flex flex-wrap items-center gap-1">
-                              <input type="hidden" name="id" value={id} />
-                              <input type="hidden" name="documento_id" value={d.id} />
-                              <input type="hidden" name="decisao" value="recusado" />
-                              <select name="motivo_lista" defaultValue="" className="w-36 rounded border border-gray-300 px-1 py-0.5">
-                                <option value="">Motivo…</option>
-                                {MOTIVOS_RECUSA.map((m) => (
-                                  <option key={m}>{m}</option>
-                                ))}
-                              </select>
-                              <input name="motivo_texto" placeholder="detalhe (opcional)" className="w-36 rounded border border-gray-300 px-1 py-0.5" />
-                              <button className="rounded-full bg-red-600 px-3 py-0.5 font-semibold text-white hover:opacity-90">Recusar</button>
-                            </form>
+                            <select name="motivo_lista" defaultValue="" className="w-40 rounded border border-gray-300 px-1 py-0.5">
+                              <option value="">Motivo (se recusar)…</option>
+                              {MOTIVOS_RECUSA.map((m) => (
+                                <option key={m}>{m}</option>
+                              ))}
+                            </select>
                           )}
-                          {d.situacao !== "enviado" && (
-                            <form action={analisarDocumento}>
-                              <input type="hidden" name="id" value={id} />
-                              <input type="hidden" name="documento_id" value={d.id} />
-                              <input type="hidden" name="decisao" value="desfazer" />
-                              <button className="text-gray-500 hover:underline">desfazer</button>
-                            </form>
-                          )}
-                        </div>
+                          <div className="flex flex-wrap items-center gap-1">
+                            {d.situacao !== "aprovado" && (
+                              <button name="decisao" value="aprovado" className="rounded-full bg-green-600 px-3 py-0.5 font-semibold text-white hover:opacity-90">
+                                Aceitar
+                              </button>
+                            )}
+                            {d.situacao !== "recusado" && (
+                              <button name="decisao" value="recusado" className="rounded-full bg-red-600 px-3 py-0.5 font-semibold text-white hover:opacity-90">
+                                Recusar
+                              </button>
+                            )}
+                            {d.situacao !== "enviado" && (
+                              <button name="decisao" value="desfazer" className="text-gray-500 hover:underline">
+                                desfazer
+                              </button>
+                            )}
+                          </div>
+                        </form>
                       )}
                     </>
                   )}
                 </td>
                 <td className={`px-3 py-2 align-top text-xs ${d?.situacao === "recusado" ? "font-semibold text-red-700" : "text-gray-700"}`}>
-                  {d?.motivo_recusa ?? ""}
+                  {modo === "o2" && d ? (
+                    <input
+                      form={`val-${d.id}`}
+                      name="observacao"
+                      defaultValue={d.motivo_recusa ?? ""}
+                      placeholder="observação"
+                      className="w-full min-w-32 rounded border border-gray-300 px-1.5 py-1 font-normal text-gray-800"
+                    />
+                  ) : (
+                    (d?.motivo_recusa ?? "")
+                  )}
                 </td>
               </tr>
             ));

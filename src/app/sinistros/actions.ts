@@ -422,7 +422,7 @@ export async function analisarDocumento(fd: FormData) {
   const id = texto(fd, "id")!;
   const docId = texto(fd, "documento_id")!;
   const decisao = texto(fd, "decisao");
-  const motivo = [texto(fd, "motivo_lista"), texto(fd, "motivo_texto")].filter(Boolean).join(" — ");
+  const motivo = [texto(fd, "motivo_lista"), texto(fd, "motivo_texto") ?? texto(fd, "observacao")].filter(Boolean).join(" — ");
   if (decisao === "recusado" && !motivo) voltar(id, null, "Escolha ou escreva o motivo da recusa.");
   await supabase
     .from("sinistro_documentos")
@@ -434,8 +434,9 @@ export async function analisarDocumento(fd: FormData) {
       analisado_em: new Date().toISOString(),
     })
     .eq("id", docId);
-  // Volta para a aba Anexos (a validação fica lá).
-  redirect(`/sinistros/${id}?aba=anexos`);
+  // Volta para onde estava: etapa 3 se o caso ainda é rascunho; senão a aba Anexos.
+  const { data: sin } = await supabase.from("sinistros").select("etapa").eq("id", id).maybeSingle();
+  redirect(sin?.etapa === "rascunho" ? `/sinistros/${id}?passo=3` : `/sinistros/${id}?aba=anexos`);
 }
 
 export async function assumirSinistro(fd: FormData) {

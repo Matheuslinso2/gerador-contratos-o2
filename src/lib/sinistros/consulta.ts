@@ -7,7 +7,7 @@ import { lista } from "./periodo";
 /* eslint-disable @typescript-eslint/no-explicit-any -- linhas do Supabase sem tipos gerados */
 
 export const CAMPOS_GESTAO =
-  "id, codigo, produto, origem, locador_nome, data_abertura_seguradora, enviado_em, created_at, tipo, etapa, seguradora, numero_apolice, nosso_numero, locatario_nome, imovel_logradouro, imovel_numero, imovel_complemento, data_primeiro_vencimento, data_segundo_vencimento, data_entrega_chaves, prazo_aviso, aviso_fora_prazo, valor_avisado, responsavel_o2, pre_analise_desde, pendencia_prazo, documentacao_completa_em, numero_sinistro_seguradora, proxima_acao_em, proxima_acao_descricao, updated_at, ultima_msg_imob_em, ultimo_doc_imob_em, visto_o2_em, imobiliarias(nome, apelido)";
+  "id, codigo, produto, origem, locador_nome, data_abertura_seguradora, enviado_em, created_at, tipo, etapa, seguradora, numero_apolice, nosso_numero, locatario_nome, locatario_documento, locador_documento, encerrado_em, imovel_logradouro, imovel_numero, imovel_complemento, data_primeiro_vencimento, data_segundo_vencimento, data_entrega_chaves, prazo_aviso, aviso_fora_prazo, valor_avisado, responsavel_o2, pre_analise_desde, pendencia_prazo, documentacao_completa_em, numero_sinistro_seguradora, proxima_acao_em, proxima_acao_descricao, updated_at, ultima_msg_imob_em, ultimo_doc_imob_em, visto_o2_em, imobiliarias(nome, apelido)";
 
 // Selos da Gestão: mensagem no chat / documento novo da imobiliária que a O2
 // ainda não viu (a ficha marca visto_o2_em ao abrir).
@@ -32,9 +32,22 @@ export function dataDoAviso(s: any): string | null {
   return s.enviado_em?.slice(0, 10) ?? s.data_abertura_seguradora ?? s.created_at?.slice(0, 10) ?? null;
 }
 
-export async function listarSinistros(supabase: any, parametros: Params, opcoes: { interno: boolean; userEmail: string | null | undefined }) {
+// Texto sem acento/caixa; e só os dígitos, para achar nº de aviso/apólice mesmo
+// digitado com pontos, traços ou zeros à esquerda (pedido da equipe, 27/10/2026).
+const normaliza = (v: unknown) => String(v ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+const digitos = (v: unknown) => String(v ?? "").replace(/\D/g, "");
+
+export async function listarSinistros(
+  supabase: any,
+  parametros: Params,
+  opcoes: { interno: boolean; userEmail: string | null | undefined; comIndenizado?: boolean }
+) {
   const { interno, userEmail } = opcoes;
-  const [q, resp, encerrados, imob, ordem, etapa] = ["q", "resp", "encerrados", "imob", "ordem", "etapa"].map((k) => um(parametros[k]));
+  const [q, resp, encerradosParam, imob, ordem, etapa, avisoDe, avisoAte, encDe, encAte] = [
+    "q", "resp", "encerrados", "imob", "ordem", "etapa", "aviso_de", "aviso_ate", "enc_de", "enc_ate",
+  ].map((k) => um(parametros[k]));
+  // Filtrar por data de encerramento só faz sentido com os encerrados na lista.
+  const encerrados = encerradosParam === "1" || encDe || encAte ? "1" : encerradosParam;
   const produtos = lista(parametros.prod);
   const seguradoras = lista(parametros.seg);
 
@@ -70,15 +83,31 @@ export async function listarSinistros(supabase: any, parametros: Params, opcoes:
   const { data } = await consulta;
   let sinistros = (data ?? []) as any[];
   if (q) {
-    const termo = q.toLowerCase();
-    sinistros = sinistros.filter((s) =>
-      [
-        s.locatario_nome, s.locador_nome, s.numero_apolice, s.nosso_numero, s.numero_sinistro_seguradora, `sin-${s.codigo}`,
-        s.imovel_logradouro, s.imobiliarias?.nome, s.imobiliarias?.apelido,
-      ]
-        .filter(Boolean)
-        .some((v: string) => String(v).toLowerCase().includes(termo))
-    );
+    const termo = normaliza(q).trim();
+    const numeros = digitos(q);
+    sinistros = sinistros.filter((s) => {
+      const textos = [s.locatario_nome, s.locador_nome, s.imovel_logradouro, s.imobiliarias?.nome, s.imobiliarias?.apelido, `sin-${s.codigo}`];
+      if (textos.some((v) => v && normaliza(v).includes(termo))) return true;
+      // Nº do aviso, nº da apólice, Nosso Nº e CPF/CNPJ: por texto e só pelos dígitos.
+      const codigos = [s.numero_sinistro_seguradora, s.numero_apolice, s.nosso_numero, s.locatario_documento, s.locador_documento];
+      if (codigos.some((v) => v && normaliza(v).includes(termo))) return true;
+      return numeros.length >= 3 && codigos.some((v) => digitos(v).includes(numeros) || digitos(v).replace(/^0+/, "").includes(numeros.replace(/^0+/, "")));
+    });
+  }
+  // Datas: aviso e encerramento (início e fim, ambos opcionais).
+  const dentro = (d: string | null, de?: string, ate?: string) => (!de || (!!d && d >= de)) && (!ate || (!!d && d <= ate));
+  if (avisoDe || avisoAte) sinistros = sinistros.filter((s) => dentro(dataDoAviso(s), avisoDe, avisoAte));
+  if (encDe || encAte) sinistros = sinistros.filter((s) => dentro(s.encerrado_em ?? null, encDe, encAte));
+
+  // Indenizado = soma dos lançamentos do histórico de pagamento.
+  if (opcoes.comIndenizado && sinistros.length) {
+    const soma: Record<string, number> = {};
+    const ids = sinistros.map((s) => s.id);
+    for (let i = 0; i < ids.length; i += 150) {
+      const { data: pags } = await supabase.from("sinistro_indenizacoes").select("sinistro_id, valor").in("sinistro_id", ids.slice(i, i + 150));
+      for (const x of pags ?? []) soma[x.sinistro_id] = (soma[x.sinistro_id] ?? 0) + Number(x.valor);
+    }
+    for (const s of sinistros) s.total_indenizado = soma[s.id] ?? 0;
   }
 
   const chave = (ordem as string) || "agenda";
@@ -91,5 +120,5 @@ export async function listarSinistros(supabase: any, parametros: Params, opcoes:
     return porData(a.proxima_acao_em, b.proxima_acao_em) || porData(dataDoAviso(a), dataDoAviso(b));
   });
 
-  return { sinistros, nomeFiltroImob, produtos, seguradoras, resp, q, encerrados, imob, ordem: chave, etapa };
+  return { sinistros, nomeFiltroImob, produtos, seguradoras, resp, q, encerrados, imob, ordem: chave, etapa, avisoDe, avisoAte, encDe, encAte };
 }

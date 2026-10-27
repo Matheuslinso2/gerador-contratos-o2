@@ -74,7 +74,7 @@ export default async function NovoSinistroPage({ searchParams }: { searchParams:
               >
                 <span className="block font-semibold text-o2-navy">{p.rotulo}</span>
                 <span className="text-xs text-gray-500">
-                  {p.chave === "fianca" ? "Assistente em 5 etapas: identificação, coberturas, documentos, favorecido e validação." : "Formulário único com os dados do caso."}
+                  {p.chave === "fianca" ? "Assistente em 5 etapas: identificação, coberturas, documentos, favorecido e resumo do aviso." : "Formulário único com os dados do caso."}
                 </span>
               </Link>
             ))}

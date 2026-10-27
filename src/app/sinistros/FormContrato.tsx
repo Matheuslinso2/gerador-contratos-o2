@@ -68,11 +68,18 @@ export default function FormContrato({
     d.tipo === "ocupado" ? "ocupado" : d.tipo ? "desocupado" : ""
   );
   const seguradoraConhecida = !d.seguradora || SEGURADORAS.includes(d.seguradora);
+  // Problemas da equipe (27/10/2026): dados da apólice vindos da busca ficam
+  // travados (sem edição). A equipe O2 pode destravar para corrigir.
+  const [travado, setTravado] = useState(!!d.nosso_numero && !!d.numero_apolice);
+  const podeDestravar = !!imobiliarias || !!extras;
+  const trava = travado ? " cursor-not-allowed bg-gray-100 text-gray-700" : "";
+  const semEdicao = { readOnly: travado, tabIndex: travado ? -1 : undefined };
 
-  async function aoMudarCep(valor: string) {
+  async function aoMudarCep(valor: string, soCep = false) {
     const f = formatarCEP(valor);
     setCep(f);
-    if (f.replace(/\D/g, "").length === 8) {
+    // CEP achado pelo endereço da apólice: não troca a rua/bairro já preenchidos.
+    if (!soCep && f.replace(/\D/g, "").length === 8) {
       const r = await buscarEnderecoPorCep(f);
       if (r) setEnd({ logradouro: r.logradouro ?? "", bairro: r.bairro ?? "", cidade: r.localidade ?? "", uf: r.uf ?? "" });
     }
@@ -84,7 +91,7 @@ export default function FormContrato({
       {d.id && <input type="hidden" name="id" value={d.id} />}
       <input type="hidden" name="tipo_atual" value={d.tipo ?? ""} />
       {extras}
-      <BuscaApolice nossoNumeroInicial={d.nosso_numero} />
+      <BuscaApolice nossoNumeroInicial={d.nosso_numero} onPreenchido={() => setTravado(true)} />
 
       {imobiliarias && (
         <section className="space-y-2 rounded-xl border border-blue-200 bg-blue-50 p-4">
@@ -113,11 +120,27 @@ export default function FormContrato({
       )}
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Apólice</h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Apólice</h2>
+          {travado && (
+            <span className="text-xs text-gray-500">
+              🔒 dados da apólice (vindos da busca) sem edição
+              {podeDestravar && (
+                <button type="button" onClick={() => setTravado(false)} className="ml-2 text-o2-blue underline">
+                  destravar para corrigir
+                </button>
+              )}
+            </span>
+          )}
+        </div>
         <div className="grid gap-3 sm:grid-cols-4">
           <div className="sm:col-span-2">
             <label className={labelClass}>Seguradora</label>
-            <select name="seguradora" className={inputClass} defaultValue={seguradoraConhecida ? d.seguradora ?? "" : "Outra"}>
+            <select
+              name="seguradora"
+              className={inputClass + trava + (travado ? " pointer-events-none" : "")}
+              tabIndex={travado ? -1 : undefined}
+              aria-readonly={travado} defaultValue={seguradoraConhecida ? d.seguradora ?? "" : "Outra"}>
               <option value="">— não informada —</option>
               {SEGURADORAS.map((s) => (
                 <option key={s}>{s}</option>
@@ -126,18 +149,20 @@ export default function FormContrato({
           </div>
           <div className="sm:col-span-2">
             <label className={labelClass}>Nº da apólice</label>
-            <input name="numero_apolice" defaultValue={d.numero_apolice ?? ""} className={inputClass} placeholder="Se souber" />
+            <input name="numero_apolice" defaultValue={d.numero_apolice ?? ""} className={inputClass + trava} placeholder="Se souber" {...semEdicao} />
           </div>
           <div className="sm:col-span-2">
             <label className={labelClass}>Início da vigência</label>
-            <input type="date" name="vigencia_inicio" defaultValue={d.vigencia_inicio ?? ""} onChange={(e) => setVig((v0) => ({ ...v0, ini: e.target.value }))} className={inputClass} />
+            <input type="date" name="vigencia_inicio" defaultValue={d.vigencia_inicio ?? ""} onChange={(e) => setVig((v0) => ({ ...v0, ini: e.target.value }))} className={inputClass + trava} {...semEdicao} />
           </div>
           <div className="sm:col-span-2">
             <label className={labelClass}>Fim da vigência</label>
-            <input type="date" name="vigencia_fim" defaultValue={d.vigencia_fim ?? ""} onChange={(e) => setVig((v0) => ({ ...v0, fim: e.target.value }))} className={inputClass} />
+            <input type="date" name="vigencia_fim" defaultValue={d.vigencia_fim ?? ""} onChange={(e) => setVig((v0) => ({ ...v0, fim: e.target.value }))} className={inputClass + trava} {...semEdicao} />
           </div>
           <div className="sm:col-span-2">
-            <label className={labelClass}>Data da ocorrência – primeira inadimplência</label>
+            <label className={labelClass}>
+              Data da ocorrência – primeiro vencimento em aberto <span className="text-red-600">*</span>
+            </label>
             <input type="date" name="data_ocorrencia" defaultValue={d.data_ocorrencia ?? ""} onChange={(e) => setVig((v0) => ({ ...v0, ocorrencia: e.target.value }))} className={inputClass} />
           </div>
           {foraDaVigencia && (
@@ -218,7 +243,14 @@ export default function FormContrato({
         <div className="grid gap-3 sm:grid-cols-6">
           <div className="sm:col-span-2">
             <label className={labelClass}>CEP</label>
-            <input name="cep" value={cep} onChange={(e) => aoMudarCep(e.target.value)} className={inputClass} placeholder="00000-000" />
+            <input
+              name="cep"
+              value={cep}
+              onChange={(e) => {
+                const soCep = e.target.dataset.semBusca === "1";
+                delete e.target.dataset.semBusca;
+                aoMudarCep(e.target.value, soCep);
+              }} className={inputClass} placeholder="00000-000" />
           </div>
           <div className="sm:col-span-4">
             <label className={labelClass}>Logradouro</label>
