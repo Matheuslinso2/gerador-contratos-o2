@@ -45,7 +45,11 @@ const CAMPOS = {
   numeroApolice: "ufCrm12NumApolice",
   competencia: "ufCrm12CompetenciaOperacional",
   fimVigencia: "ufCrm12FimVigencia",
+  // "Prêmio total" = VALOR COTADO (novos: o cotado; renovações: o do ano
+  // passado). "Valor contratado" (campo novo de 27/10/2026) = o que foi
+  // efetivamente contratado, em novos e renovações.
   premioTotal: "ufCrm12PremioTotal",
+  valorContratado: "ufCrm12_1793041875676",
   // Achado real (2026-09-10): não existe campo "ufCrm12Comissao"/"ufCrm12Repasse"
   // nessa SPA -- o card só guarda o PERCENTUAL de cada um ("Comissão (%)" /
   // "Repasse (%)", campos type:"double"), confirmado via crm.item.fields. O
@@ -254,6 +258,11 @@ function gravarDadosCard(linha: CelulaGoogle[], coluna: number, item: BitrixItem
   // Empresa do card: chave do vínculo com a base unificada de imobiliárias
   // (imobiliaria_registros_fonte, fonte bitrix_empresa).
   linha[coluna + 4] = Number(item.companyId) || null;
+  // Valor contratado (vazio = ainda não preenchido; o painel usa o cotado).
+  const contratado = dinheiro(item[CAMPOS.valorContratado]);
+  linha[coluna + 5] = contratado > 0 ? contratado : null;
+  linha[coluna + 6] = contratado > 0 ? valorComissao(item, contratado) : null;
+  linha[coluna + 7] = contratado > 0 ? valorRepasse(item, contratado) : null;
 }
 
 function linhaNovo(params: {
@@ -270,7 +279,7 @@ function linhaNovo(params: {
   desfechoNoMes: boolean;
 }): CelulaGoogle[] {
   const { item, status, origem, produto, seguradora, imobiliaria, responsavel, competencia, eventos, agora, desfechoNoMes } = params;
-  const linha: CelulaGoogle[] = Array(COLUNA_CARD_NOVO + 5).fill(null);
+  const linha: CelulaGoogle[] = Array(COLUNA_CARD_NOVO + 8).fill(null);
   const criadaEm = dataValida(item.createdTime);
   const duracao = duracaoEmDias(item, eventos, agora);
   linha[0] = status;
@@ -307,7 +316,7 @@ function linhaRenovacao(params: {
   desfechoNoMes: boolean;
 }): CelulaGoogle[] {
   const { item, status, origem, produto, seguradora, imobiliaria, responsavel, eventos, desfechoNoMes } = params;
-  const linha: CelulaGoogle[] = Array(COLUNA_CARD_RENOVACAO + 5).fill(null);
+  const linha: CelulaGoogle[] = Array(COLUNA_CARD_RENOVACAO + 8).fill(null);
   linha[0] = status;
   linha[1] = origem;
   linha[2] = texto(item[CAMPOS.numeroApolice]);

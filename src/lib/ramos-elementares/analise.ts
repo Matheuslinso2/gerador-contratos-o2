@@ -156,7 +156,17 @@ type RegistroBase = {
   itensCotadosInformado: boolean;
   itensContratados: number | null;
   companyId: number | null;
+  // Campo "Valor contratado" do card (27/10/2026): quando preenchido, é o
+  // prêmio/comissão/repasse do EFETIVADO; o "Prêmio total" segue sendo o cotado.
+  premioContratado: number | null;
+  comissaoContratada: number | null;
+  repasseContratado: number | null;
 };
+
+// Prêmio/comissão/repasse do efetivado: o contratado quando informado, senão o cotado.
+const premioEf = (r: RegistroBase) => r.premioContratado ?? r.premioTotal;
+const comissaoEf = (r: RegistroBase) => r.comissaoContratada ?? r.comissao;
+const repasseEf = (r: RegistroBase) => r.repasseContratado ?? r.repasse;
 
 type RegistroNovo = RegistroBase & {
   origem: string;
@@ -560,9 +570,16 @@ export const ramoInformado = (ramo: string) => !!ramo && ramo !== "NÃO INFORMAD
 function dadosCard(linha: CelulaGoogle[], coluna: number, efetivado: boolean, ramo: string) {
   const id = numeroOpcional(linha[coluna]);
   if (id === null) {
-    return { idCard: null, tituloCard: "", itensCotados: 1, itensCotadosInformado: true, itensContratados: efetivado ? 1 : null, companyId: null };
+    return { idCard: null, tituloCard: "", itensCotados: 1, itensCotadosInformado: true, itensContratados: efetivado ? 1 : null, companyId: null, premioContratado: null, comissaoContratada: null, repasseContratado: null };
   }
-  const base = { idCard: id, tituloCard: texto(linha[coluna + 1]), companyId: numeroOpcional(linha[coluna + 4]) };
+  const base = {
+    idCard: id,
+    tituloCard: texto(linha[coluna + 1]),
+    companyId: numeroOpcional(linha[coluna + 4]),
+    premioContratado: efetivado ? numeroOpcional(linha[coluna + 5]) : null,
+    comissaoContratada: efetivado ? numeroOpcional(linha[coluna + 6]) : null,
+    repasseContratado: efetivado ? numeroOpcional(linha[coluna + 7]) : null,
+  };
   if (ramoInformado(ramo) && ramo !== RAMO_COM_LOTE) {
     return { ...base, itensCotados: 1, itensCotadosInformado: true, itensContratados: efetivado ? 1 : null };
   }
@@ -613,10 +630,10 @@ function agrupar(registros: RegistroBase[], obterNome: (registro: RegistroBase) 
         efetivados: efetivados.length,
         conversao: itens.length ? (efetivados.length / itens.length) * 100 : null,
         comissao: itens.reduce((soma, item) => soma + item.comissao, 0),
-        comissaoEfetivada: efetivados.reduce((soma, item) => soma + item.comissao, 0),
+        comissaoEfetivada: efetivados.reduce((soma, item) => soma + comissaoEf(item), 0),
         emAndamento: itens.length - efetivados.length - encerrados,
         encerrados,
-        premioEfetivado: efetivados.reduce((soma, item) => soma + item.premioTotal, 0),
+        premioEfetivado: efetivados.reduce((soma, item) => soma + premioEf(item), 0),
         ...somarItens(itens),
       };
     })
@@ -662,14 +679,14 @@ function resumir(registros: (RegistroNovo | RegistroRenovacao)[]): ResumoPopulac
     .map((registro) => ("tempoGasto" in registro ? registro.tempoGasto : null))
     .filter((valor): valor is number => typeof valor === "number" && valor >= 0);
   const comissaoPotencial = registros.reduce((soma, registro) => soma + registro.comissao, 0);
-  const comissaoEfetivada = efetivados.reduce((soma, registro) => soma + registro.comissao, 0);
-  const repasseEfetivado = efetivados.reduce((soma, registro) => soma + registro.repasse, 0);
+  const comissaoEfetivada = efetivados.reduce((soma, registro) => soma + comissaoEf(registro), 0);
+  const repasseEfetivado = efetivados.reduce((soma, registro) => soma + repasseEf(registro), 0);
   return {
     total: registros.length,
     efetivados: efetivados.length,
     conversao: registros.length ? (efetivados.length / registros.length) * 100 : null,
     premioTotal: registros.reduce((soma, registro) => soma + registro.premioTotal, 0),
-    premioEfetivado: efetivados.reduce((soma, registro) => soma + registro.premioTotal, 0),
+    premioEfetivado: efetivados.reduce((soma, registro) => soma + premioEf(registro), 0),
     comissaoPotencial,
     comissaoEfetivada,
     repasseEfetivado,
@@ -777,8 +794,8 @@ export function montarAnaliseRamosElementares(fonte: FonteRamosBruta, agora = ne
   const todosComerciais: (RegistroNovo | RegistroRenovacao)[] = [...novosConsolidados, ...rnAtual];
   const efetivados = todosComerciais.filter((registro) => registro.efetivado);
   const comissaoPotencial = todosComerciais.reduce((soma, registro) => soma + registro.comissao, 0);
-  const comissaoEfetivada = efetivados.reduce((soma, registro) => soma + registro.comissao, 0);
-  const repasseEstimado = efetivados.reduce((soma, registro) => soma + registro.repasse, 0);
+  const comissaoEfetivada = efetivados.reduce((soma, registro) => soma + comissaoEf(registro), 0);
+  const repasseEstimado = efetivados.reduce((soma, registro) => soma + repasseEf(registro), 0);
 
   const origemDireta = (registro: RegistroNovo | RegistroRenovacao) =>
     ("origem" in registro && registro.origem === "SEGIMOB") ||
