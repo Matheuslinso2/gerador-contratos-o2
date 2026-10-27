@@ -5,3 +5,10 @@
 --   só produto fianca; recalculada por erp_atualizar_partes_acervo() no cron /api/cron/erp-faturas (xx:50). RLS: is_colaborador_o2().
 -- erp_docs_por_partes(inquilino, proprietario, imovel, limite): inquilino = cliente do documento + item locatario/garantido + garantido do acervo;
 --   proprietário = item proprietario + segurado do acervo. Medido: nome completo ~75 ms; primeiro nome+sobrenome comum ~0,7–1 s.
+
+-- 27/10/2026 — junção card do Bitrix × documento do Corp (migration erp_juntar_cards_corp).
+-- erp_documentos.situacao ganhou 'duplicado' (documento do card já juntado ao do Corp; nunca apagado, fora das listas por padrão).
+-- erp_juntar_cards_corp(p_dias int=13, p_aplicar bool=false): casa card concluído (digitado, origem bitrix) com documento do Corp (mesmo locatário,
+--   início de vigência a até p_dias, 1 para 1, Corp ainda sem card). Aplicado em 27/10: 47 pares (34 com a mesma vigência, máx. 12 dias).
+--   Ao aplicar: chave externa, origem, itens, e-mails, anexos e eventos passam para o documento do Corp; o do card vira 'duplicado'.
+--   Ficaram fora, para decisão do Matheus: 12 pares com vigência >= 14 dias de diferença e o 2º card do Renato Santos de Oliveira (L3).

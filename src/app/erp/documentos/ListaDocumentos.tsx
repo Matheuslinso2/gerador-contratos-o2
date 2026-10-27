@@ -23,6 +23,7 @@ const COR_SITUACAO: Record<string, string> = {
   vencido: "bg-gray-100 text-gray-600",
   cancelado: "bg-red-100 text-red-700",
   devolvido: "bg-red-100 text-red-700",
+  duplicado: "bg-gray-100 text-gray-500",
 };
 
 

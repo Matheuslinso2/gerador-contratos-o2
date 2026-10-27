@@ -38,6 +38,7 @@ export const SITUACOES: Record<string, string> = {
   vencido: "Vencido",
   cancelado: "Cancelado",
   devolvido: "Devolvido",
+  duplicado: "Duplicado (juntado ao documento do Corp)",
 };
 
 export const TIPOS_DOCUMENTO: Record<string, string> = {
@@ -163,6 +164,7 @@ export async function buscarDocumentos(sb: SupabaseClient, f: FiltrosBusca): Pro
   // sem filtro a tela mostra os mais recentes e total = null
   let q = sb.from("erp_documentos").select(SELECT_LISTA, filtrado ? { count: "exact" } : undefined);
   if (f.situacao) q = q.eq("situacao", f.situacao);
+  else q = q.neq("situacao", "duplicado"); // card do Bitrix já juntado ao documento do Corp: só aparece se pedirem a situação
   if (f.tipo) q = q.eq("tipo", f.tipo);
   if (f.forma) q = q.eq("modo_cobranca", f.forma);
   if (f.canal) q = q.eq("canal_id", f.canal);
@@ -184,8 +186,8 @@ export async function buscarDocumentos(sb: SupabaseClient, f: FiltrosBusca): Pro
     if (!ids.length) return { linhas: [], total: 0 };
     q = q.in("imobiliaria_principal_id", ids);
   }
-  // setor imobiliário (Matheus 25/10): inquilino (cliente do documento ou parte "locatário"), proprietário (parte
-  // "proprietário" ou "garantido" — no Fiança o garantido é o locador) e imóvel (endereço/CEP). Resolvido no banco
+  // setor imobiliário (Matheus 25/10): inquilino = garantido da apólice (cliente do documento, parte "locatário"/"garantido"
+  // ou garantido do acervo), proprietário = segurado/locador (parte "proprietário" ou segurado do acervo) e imóvel (endereço/CEP). Resolvido no banco
   // (erp_docs_por_partes, até 400 documentos mais recentes) para não montar listas enormes de ids na URL.
   if (f.inquilino || f.proprietario || f.imovel) {
     const { data: ids, error: e } = await sb.rpc("erp_docs_por_partes", {
