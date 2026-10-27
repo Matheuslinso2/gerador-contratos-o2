@@ -52,7 +52,10 @@ function sanitizarHtmlSimples(html: string): string {
     .replace(/<style[\s\S]*?<\/style>/gi, "")
     .replace(/\son\w+="[^"]*"/gi, "")
     .replace(/\son\w+='[^']*'/gi, "")
-    .replace(/javascript:/gi, "");
+    .replace(/javascript:/gi, "")
+    // Imagem só vale por endereço https (as da tela vão pro bucket email-imagens);
+    // data:/blob: não abrem no e-mail de quem recebe.
+    .replace(/<img\b[^>]*\ssrc=["'](?!https:\/\/)[^"']*["'][^>]*>/gi, "");
 }
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

@@ -223,6 +223,8 @@ export async function POST(request: NextRequest) {
       <button type="button" data-cmd="italic" title="Itálico">I</button>
       <button type="button" data-cmd="insertUnorderedList" title="Lista">•—</button>
       <button type="button" data-cmd="createLink" title="Link">🔗</button>
+      <button type="button" id="btn-inserir-imagem" title="Inserir imagem (ou cole a imagem direto na mensagem)" style="width:auto;padding:0 8px;font-weight:600;">🖼️ Imagem</button>
+      <input id="input-imagem" type="file" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none;" />
       <button type="button" data-destaque="fundo" title="Destaque: fundo laranja, letra branca (igual aos modelos)" style="background:#ff9900;color:#fff;border-color:#ff9900;">A</button>
       <button type="button" data-destaque="texto" title="Texto laranja em negrito (igual aos modelos)" style="color:#ff9900;">A</button>
       <button type="button" data-destaque="limpar" title="Tirar cor/destaque do trecho selecionado" style="font-weight:400;">⌫</button>
@@ -583,9 +585,107 @@ export async function POST(request: NextRequest) {
       var dados = evento.clipboardData || window.clipboardData;
       if (!dados) return;
       var texto = dados.getData("text/plain");
-      if (!texto) return; // ex.: colar imagem -- deixa o padrão do navegador
+      if (!texto) {
+        // Colar imagem (print, imagem copiada de site/Word): sobe pro armazenamento e
+        // entra no texto como link -- imagem embutida no próprio texto não chega no e-mail.
+        var imagens = imagensDe(dados.files);
+        if (imagens.length) {
+          evento.preventDefault();
+          imagens.forEach(inserirImagem);
+        }
+        return;
+      }
       evento.preventDefault();
       document.execCommand("insertText", false, texto);
+    });
+
+    // Imagens no corpo da mensagem: colar, arrastar pra dentro ou botão "Imagem".
+    // O arquivo sobe pro bucket público email-imagens (URL assinada pelo servidor)
+    // e a mensagem leva a imagem pelo endereço dela.
+    var BUCKET_IMAGENS = "email-imagens";
+    var TAMANHO_MAXIMO_IMAGEM = 5 * 1024 * 1024;
+    var TIPOS_IMAGEM = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+    var ultimaSelecaoCorpo = null;
+    var imagensEnviando = 0;
+
+    function imagensDe(arquivos) {
+      return Array.prototype.slice.call(arquivos || []).filter(function (a) { return a && /^image\\//.test(a.type); });
+    }
+
+    document.addEventListener("selectionchange", function () {
+      var corpoEl = document.getElementById("corpo");
+      var sel = window.getSelection();
+      if (sel && sel.rangeCount && corpoEl.contains(sel.anchorNode)) ultimaSelecaoCorpo = sel.getRangeAt(0).cloneRange();
+    });
+
+    function inserirImagem(arquivo) {
+      var mensagem = document.getElementById("mensagem");
+      mensagem.className = "";
+      mensagem.textContent = "";
+      if (TIPOS_IMAGEM.indexOf(arquivo.type) === -1) {
+        mensagem.className = "erro";
+        mensagem.textContent = "Formato de imagem não aceito (use PNG, JPG, GIF ou WebP).";
+        return;
+      }
+      if (arquivo.size > TAMANHO_MAXIMO_IMAGEM) {
+        mensagem.className = "erro";
+        mensagem.textContent = "Imagem maior que 5 MB.";
+        return;
+      }
+      imagensEnviando++;
+      document.getElementById("botao-enviar").disabled = true;
+      mensagem.textContent = "Enviando imagem…";
+      var auth = BX24.getAuth();
+      fetch("/bitrix-app/imagem-upload-url", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ authId: auth && auth.access_token, entityTypeId: entityTypeId, itemId: Number(itemId), tipo: arquivo.type, tamanho: arquivo.size }),
+      })
+        .then(function (resp) { return resp.json(); })
+        .then(function (r) {
+          if (!r.ok) throw new Error(r.erro || "Falha ao preparar o envio da imagem.");
+          return supabaseClient.storage.from(BUCKET_IMAGENS).uploadToSignedUrl(r.caminho, r.token, arquivo, { contentType: arquivo.type }).then(function (up) {
+            if (up.error) throw up.error;
+            return supabaseClient.storage.from(BUCKET_IMAGENS).getPublicUrl(r.caminho).data.publicUrl;
+          });
+        })
+        .then(function (url) {
+          var corpoEl = document.getElementById("corpo");
+          corpoEl.focus();
+          if (ultimaSelecaoCorpo) {
+            var sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(ultimaSelecaoCorpo);
+          }
+          document.execCommand("insertHTML", false, '<img src="' + url + '" alt="Imagem" style="max-width:100%;height:auto;" />');
+          mensagem.textContent = "";
+        })
+        .catch(function (erro) {
+          mensagem.className = "erro";
+          mensagem.textContent = "Falha ao enviar a imagem: " + (erro && erro.message ? erro.message : "tente de novo.");
+        })
+        .finally(function () {
+          imagensEnviando--;
+          if (!imagensEnviando) document.getElementById("botao-enviar").disabled = false;
+        });
+    }
+
+    var botaoImagem = document.getElementById("btn-inserir-imagem");
+    botaoImagem.addEventListener("mousedown", function (evento) { evento.preventDefault(); }); // não perde o ponto do texto
+    botaoImagem.addEventListener("click", function () { document.getElementById("input-imagem").click(); });
+    document.getElementById("input-imagem").addEventListener("change", function (evento) {
+      var escolhidas = imagensDe(evento.target.files);
+      evento.target.value = "";
+      escolhidas.forEach(inserirImagem);
+    });
+    document.getElementById("corpo").addEventListener("dragover", function (evento) {
+      if (evento.dataTransfer && Array.prototype.indexOf.call(evento.dataTransfer.types || [], "Files") !== -1) evento.preventDefault();
+    });
+    document.getElementById("corpo").addEventListener("drop", function (evento) {
+      var imagens = imagensDe(evento.dataTransfer && evento.dataTransfer.files);
+      if (!imagens.length) return;
+      evento.preventDefault();
+      imagens.forEach(inserirImagem);
     });
 
     function renderizarAnexos() {
@@ -732,7 +832,19 @@ export async function POST(request: NextRequest) {
             return;
           }
 
-          if (!corpoEl.textContent.trim()) {
+          if (imagensEnviando) {
+            mensagem.className = "erro";
+            mensagem.textContent = "Aguarde terminar de enviar a imagem.";
+            return;
+          }
+          // Imagem que ficou "dentro" do texto (data:/blob:) não chega no e-mail: avisa em vez de enviar sem ela.
+          if (corpoEl.querySelector('img[src^="data:"], img[src^="blob:"], img[src^="file:"]')) {
+            mensagem.className = "erro";
+            mensagem.textContent = "Há uma imagem que não foi enviada corretamente. Apague-a e insira de novo (botão Imagem ou colando).";
+            return;
+          }
+
+          if (!corpoEl.textContent.trim() && !corpoEl.querySelector("img")) {
             mensagem.className = "erro";
             mensagem.textContent = "Escreva uma mensagem.";
             corpoEl.focus();
