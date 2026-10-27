@@ -17,7 +17,9 @@ export async function GET(request: NextRequest) {
     const faturas = await carregarItensFaturas(sb, { desde });
     // conferência dos vencimentos das parcelas (Corp × cobrado pela seguradora) — etapa Parcelas
     const { data: vencimentos } = await sb.rpc("erp_atualizar_vencimentos");
-    return NextResponse.json({ ok: true, desde, ...faturas, vencimentos });
+    // partes da apólice do acervo (segurado = proprietário, garantido = inquilino) já ligadas ao documento, para os filtros e a ficha
+    const { data: partesAcervo } = await sb.rpc("erp_atualizar_partes_acervo");
+    return NextResponse.json({ ok: true, desde, ...faturas, vencimentos, partesAcervo });
   } catch (e) {
     return NextResponse.json({ ok: false, erro: (e as Error).message }, { status: 500 });
   }

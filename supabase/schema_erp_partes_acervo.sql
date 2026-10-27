@@ -1,0 +1,7 @@
+-- ERP O2 — partes da apólice do acervo (27/10/2026). Aplicado via MCP (migrations erp_docs_por_partes_papeis_fianca*, erp_doc_partes_acervo_pronta, erp_docs_por_partes_usa_tabela_pronta).
+-- Fiança (10 apólices reais lidas: Porto, Pottencial, Tokio, Too): Segurado = Locador = PROPRIETÁRIO (contratante, CPF explícito);
+-- Garantido = LOCATÁRIO (inquilino); Estipulante = imobiliária. Corrige o filtro de 25/10, que tratava garantido como proprietário.
+-- erp_doc_partes_acervo (documento_id, papel segurado|garantido, locatario_id): tabela pronta de apolice_partes × erp_documentos (nosso_numero_corp),
+--   só produto fianca; recalculada por erp_atualizar_partes_acervo() no cron /api/cron/erp-faturas (xx:50). RLS: is_colaborador_o2().
+-- erp_docs_por_partes(inquilino, proprietario, imovel, limite): inquilino = cliente do documento + item locatario/garantido + garantido do acervo;
+--   proprietário = item proprietario + segurado do acervo. Medido: nome completo ~75 ms; primeiro nome+sobrenome comum ~0,7–1 s.

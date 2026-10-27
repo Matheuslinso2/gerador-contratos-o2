@@ -227,6 +227,8 @@ export type DocumentoFicha = DocumentoLista & {
   tipo_contratacao: string | null;
   modo_cobranca: string;
   locatario_id: string | null;
+  /** Partes lidas na apólice do acervo (Fiança): segurado = locador = proprietário; garantido = locatário. */
+  partes_apolice: { papel: "segurado" | "garantido"; nome: string | null; cpf: string | null }[];
   numero_proposta: string | null;
   numero_endosso: string | null;
   dt_proposta: string | null;
@@ -391,7 +393,7 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
     documento_pai_id: string | null;
   };
 
-  const [{ data: prods }, { data: parcs }, { data: anexos }, { data: eventos }, { data: renovadoDe }, { data: renovadoPor }, { data: itens }, { data: origens }, { data: familia }, { data: endossos }, { data: mae }] = await Promise.all([
+  const [{ data: prods }, { data: parcs }, { data: anexos }, { data: eventos }, { data: renovadoDe }, { data: renovadoPor }, { data: itens }, { data: origens }, { data: familia }, { data: endossos }, { data: mae }, { data: partesAcervo }] = await Promise.all([
     sb
       .from("erp_documento_produtores")
       .select("id, imobiliaria_id, produtor_corp_codigo, produtor_corp_nome, agente, principal, pct_participacao, repasse_pct, repasse_valor_previsto, repasse_pct_esperado, motivo_diferenca, forma_repasse, imobiliaria:imobiliarias(nome)")
@@ -430,6 +432,7 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
     d.documento_pai_id
       ? sb.from("erp_documentos").select("id, nosso_numero, numero_apolice, vigencia_inicio, vigencia_fim").eq("id", d.documento_pai_id).maybeSingle()
       : Promise.resolve({ data: null }),
+    sb.from("erp_doc_partes_acervo").select("papel, locatario:locatarios(nome, cpf)").eq("documento_id", id),
   ]);
 
   type ProdBruto = Omit<ProdutorDoc, "imobiliaria"> & { imobiliaria: { nome: string } | null };
@@ -443,6 +446,9 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
     tipo_contratacao: d.tipo_contratacao,
     modo_cobranca: d.modo_cobranca,
     locatario_id: d.locatario_id,
+    partes_apolice: ((partesAcervo ?? []) as unknown as { papel: "segurado" | "garantido"; locatario: { nome: string | null; cpf: string | null } | null }[])
+      .map((p) => ({ papel: p.papel, nome: p.locatario?.nome ?? null, cpf: p.locatario?.cpf ?? null }))
+      .sort((a, b) => (a.papel === b.papel ? 0 : a.papel === "segurado" ? -1 : 1)),
     numero_proposta: d.numero_proposta,
     numero_endosso: d.numero_endosso,
     dt_proposta: d.dt_proposta,

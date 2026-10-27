@@ -16,8 +16,8 @@ export type CampoFiltro =
   | "periodo" // de / ate (datas) — cada tela diz qual data é
   | "mes" // AAAA-MM
   // setor imobiliário (Matheus 25/10): partes do contrato de locação e o imóvel
-  | "inquilino" // nome ou CPF/CNPJ do locatário (cliente do documento ou parte "locatário" do item)
-  | "proprietario" // nome ou CPF/CNPJ do proprietário/locador (parte "proprietário" ou "garantido" do item)
+  | "inquilino" // nome ou CPF/CNPJ do locatário = GARANTIDO da apólice (cliente do documento, parte "locatário"/"garantido" do item ou garantido do acervo)
+  | "proprietario" // nome ou CPF/CNPJ do proprietário = LOCADOR = SEGURADO da apólice de Fiança (parte "proprietário" do item ou segurado do acervo)
   | "imovel"; // endereço ou CEP do imóvel segurado
 
 export type ValoresFiltro = Partial<Record<(typeof CHAVES)[number], string>>;

@@ -116,8 +116,23 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
           </span>
           <span className="text-gray-400"> → </span>
           <span className={d.cadeia.cliente ? "font-medium" : "text-gray-400"}>{d.cadeia.cliente ?? "cliente não ligado"}</span>
-          <span className="text-gray-500"> (segurado)</span>
+          <span className="text-gray-500"> ({d.partes_apolice.length ? "cliente no Corp" : "segurado"})</span>
         </div>
+
+        {d.partes_apolice.length > 0 && (
+          <div className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm">
+            <div className="text-[11px] uppercase tracking-wide text-gray-500">Partes da apólice (lidas no PDF)</div>
+            <div className="mt-1 grid gap-x-6 gap-y-1 md:grid-cols-2">
+              {d.partes_apolice.map((p, i) => (
+                <div key={`${p.papel}-${i}`}>
+                  <span className="text-[11px] uppercase tracking-wide text-gray-500">{p.papel === "segurado" ? "Segurado = locador = proprietário" : "Garantido = locatário"}: </span>
+                  <span className="font-medium text-gray-800">{p.nome ?? "—"}</span>
+                  {p.cpf ? <span className="text-gray-500"> · {p.cpf.length === 14 ? p.cpf.replace(/^(d{2})(d{3})(d{3})(d{4})(d{2})$/, "$1.$2.$3/$4-$5") : p.cpf.replace(/^(d{3})(d{3})(d{3})(d{2})$/, "$1.$2.$3-$4")}</span> : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Documento</h2>
