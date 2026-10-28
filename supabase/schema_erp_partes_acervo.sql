@@ -48,3 +48,8 @@
 -- 28/10: busca principal por TITULAR (nome, CPF/CNPJ ou CLI-000123): erp_docs_por_titular(p_busca, p_limite) acha o documento pelo cliente do documento,
 -- pelo segurado/garantido da apólice lida (erp_doc_partes_acervo) e pelas partes do card (erp_item_partes). Índices trigram em locatarios.nome e erp_item_partes.nome
 -- (Silva: 1,5 s -> 80 ms). Definição aplicada via migration erp_docs_por_titular / erp_trgm_nome_titular.
+
+-- 28/10: tela de Renovação. erp_renovacao_documentos(p_de, p_ate, p_produto, p_seguradora, p_imobiliaria, p_busca): documentos VIGENTES por fim de vigência,
+-- com a chave do card (lote 'L|imobiliária|seguradora|AAAA-MM' no ramo imobiliário; 'I|documento' nos demais) e o funil de destino
+-- (Fiança SPA 1042 cat. 32 · Capitalização SPA 1048 cat. 38 · Automóvel SPA 1050 cat. 30 · demais SPA 1046 cat. 34). Índice parcial erp_documentos_vigente_fim_idx.
+-- Aplicada via migration erp_renovacao_documentos. A tabela erp_renovacoes recebeu 837 linhas 'a_renovar' (base de teste jan/2027).
