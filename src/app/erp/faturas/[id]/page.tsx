@@ -33,7 +33,7 @@ function Tabela({ linhas }: { linhas: LinhaFatura[] }) {
         {linhas.map((l) => (
           <tr key={l.id}>
             <td className="px-3 py-1">
-              {l.ramo ? <span className="text-gray-400" title={l.ramo_nome ? `ramo ${l.ramo}` : "nome do ramo ainda não identificado"}>{l.ramo_nome ?? `ramo ${l.ramo}`} </span> : null}
+              {l.ramo_nome ? <span className="text-gray-400">{l.ramo_nome} </span> : null}
               {l.apolice}
               {l.endosso ? <span className="text-amber-700"> · endosso {l.endosso}</span> : null}
             </td>
@@ -99,7 +99,7 @@ export default async function ErpFaturaPage({ params, searchParams }: { params: 
           )}
         </div>
         <p className="text-sm text-gray-600">
-          {fatura.corretora ?? "corretora a confirmar"} · {"ramo_nome" in fatura && fatura.ramo_nome ? <>{fatura.ramo_nome} <span className="text-gray-400">(código do ramo na seguradora: {fatura.ramo})</span></> : <>ramo (código na seguradora) {fatura.ramo ?? "—"}</>}
+          {fatura.corretora ?? "corretora a confirmar"} · {"ramo_nome" in fatura && fatura.ramo_nome ? <>{fatura.ramo_nome}</> : <>produto ainda não identificado</>}
           {mes?.vencimento ? ` · vencimento ${formatarData(mes.vencimento)}` : ""}
         </p>
       </div>

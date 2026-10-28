@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { buscarRegrasRepasse } from "@/lib/erp/documentos";
+import { nomesProdutoDasFaturas } from "@/lib/erp/faturaTela";
 import { formatarDocumento } from "@/lib/erp/clientes";
 import { formatarReais } from "@/lib/sinistros/regras";
 import RegrasRepasseErp from "../RegrasRepasseErp";
@@ -50,6 +51,7 @@ export default async function ErpImobiliaria({ params }: { params: Promise<{ id:
   const producao = ((prodBruta ?? []) as { produto: string; seguradora: string; docs: number | string; premio: number | string; comissao: number | string }[]).map((p): Producao => ({ produto: p.produto, seguradora: p.seguradora, docs: Number(p.docs), premio: Number(p.premio), comissao: Number(p.comissao) }));
   const membros = ((membrosBrutos ?? []) as Membro[]).filter((m) => m.id !== id);
   const faturaAtiva = (faturas ?? []).length > 0;
+  const nomesProduto = await nomesProdutoDasFaturas(supabase, (faturas ?? []).map((f: { id: string }) => f.id));
 
   return (
     <main className="mx-auto w-full max-w-[1000px] flex-1 space-y-6 p-8">
@@ -144,7 +146,7 @@ export default async function ErpImobiliaria({ params }: { params: Promise<{ id:
           <ul className="space-y-1 text-xs">
             {(faturas ?? []).map((f: { id: string; seguradora: string; chave: string; codigo_corretor: string | null; corretora: string | null; ramo: string | null }) => (
               <li key={f.id}>
-                <Link href={`/erp/faturas/${f.id}`} className="text-o2-navy hover:underline">{f.seguradora}{f.ramo ? ` · ${f.ramo}` : ""}</Link>
+                <Link href={`/erp/faturas/${f.id}`} className="text-o2-navy hover:underline">{f.seguradora}{nomesProduto.get(f.id) ? ` · ${nomesProduto.get(f.id)}` : ""}</Link>
                 <span className="text-gray-400"> · {f.corretora ?? "corretora não informada"}{f.codigo_corretor ? ` · código ${f.codigo_corretor}` : ""}</span>
               </li>
             ))}

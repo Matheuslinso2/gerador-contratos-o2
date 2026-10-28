@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { nomeProduto } from "@/lib/erp/documentos";
 
 // ERP O2 — dados da tela de uma fatura (fase B, Matheus 26/10): movimento mês a mês (entradas e saídas explicadas
 // sozinhas quando o ERP sabe o motivo) e as linhas com o valor cobrado pela seguradora e a comissão do extrato.
@@ -24,6 +25,27 @@ export type LinhaFatura = {
 export type Saida = { apolice: string; documento_id: string | null; codigo_o2: number | null; cliente: string | null; valor_anterior: number; explicacao: string | null; registrado?: { motivo: string; observacao: string | null; referencia: string | null; usuario_email: string | null; criado_em: string } };
 export type MesFatura = { id: string; competencia: string; vencimento: string | null; valor_boleto: number | null; valor_itens: number; qtd_itens: number };
 
+/** Nome do produto de cada fatura (o código do ramo vem da seguradora e não diz nada ao usuário): vem dos documentos ligados às linhas. */
+export async function nomesProdutoDasFaturas(sb: SupabaseClient, faturaIds: string[]): Promise<Map<string, string>> {
+  const mapa = new Map<string, string>();
+  for (const id of faturaIds) {
+    const { data } = await sb
+      .from("erp_fatura_itens")
+      .select("doc:erp_documentos!erp_fatura_itens_documento_id_fkey(ramo:erp_ramos(nome, produto)), mes:erp_fatura_meses!inner(fatura_id)")
+      .eq("mes.fatura_id", id)
+      .not("documento_id", "is", null)
+      .limit(40);
+    const cont = new Map<string, number>();
+    for (const x of (data ?? []) as unknown as { doc: { ramo: { nome: string; produto: string | null } | null } | null }[]) {
+      const r = x.doc?.ramo;
+      if (r) { const n = nomeProduto(r.nome, r.produto) ?? r.nome; cont.set(n, (cont.get(n) ?? 0) + 1); }
+    }
+    const top = [...cont.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+    if (top) mapa.set(id, top);
+  }
+  return mapa;
+}
+
 export async function fichaFatura(sb: SupabaseClient, faturaId: string, competencia?: string) {
   const { data: fatura } = await sb
     .from("erp_faturas")
@@ -41,11 +63,11 @@ export async function fichaFatura(sb: SupabaseClient, faturaId: string, competen
   const carregar = async (mesId: string) => {
     const { data } = await sb
       .from("erp_fatura_itens")
-      .select("id, ramo, apolice, endosso, parcela_n, parcelas_total, valor, documento_id, doc:erp_documentos!erp_fatura_itens_documento_id_fkey(nosso_numero, situacao, ramo:erp_ramos(nome), vigencia_fim, modo_cobranca, cliente:locatarios!erp_documentos_locatario_id_fkey(nome))")
+      .select("id, ramo, apolice, endosso, parcela_n, parcelas_total, valor, documento_id, doc:erp_documentos!erp_fatura_itens_documento_id_fkey(nosso_numero, situacao, ramo:erp_ramos(nome, produto), vigencia_fim, modo_cobranca, cliente:locatarios!erp_documentos_locatario_id_fkey(nome))")
       .eq("fatura_mes_id", mesId)
       .order("apolice");
     type Bruta = Omit<LinhaFatura, "codigo_o2" | "cliente" | "situacao_doc" | "comissao_extrato" | "ramo_nome"> & {
-      doc: { ramo: { nome: string } | null; nosso_numero: number; situacao: string; vigencia_fim: string | null; modo_cobranca: string | null; cliente: { nome: string } | null } | null;
+      doc: { ramo: { nome: string; produto: string | null } | null; nosso_numero: number; situacao: string; vigencia_fim: string | null; modo_cobranca: string | null; cliente: { nome: string } | null } | null;
     };
     return (data ?? []) as unknown as Bruta[];
   };
@@ -65,7 +87,7 @@ export async function fichaFatura(sb: SupabaseClient, faturaId: string, competen
   const linhas: LinhaFatura[] = atual.map((l) => ({
     id: l.id,
     ramo: l.ramo,
-    ramo_nome: l.doc?.ramo?.nome ?? null,
+    ramo_nome: l.doc?.ramo ? nomeProduto(l.doc.ramo.nome, l.doc.ramo.produto) : null,
     apolice: l.apolice,
     endosso: l.endosso,
     parcela_n: l.parcela_n,
