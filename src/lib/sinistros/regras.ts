@@ -557,3 +557,11 @@ export function proximoVencimentoAluguel(s: DadosAcordo, hoje: string): string |
   }
   return null;
 }
+
+// Texto padrão enviado à imobiliária quando a O2 autoriza o acionamento
+// (chat + e-mail), pedido do Matheus em 28/10/2026.
+export const TEXTO_PRAZO_ANALISE = [
+  "O prazo para retorno de análise da documentação é de 10 dias úteis, podendo ser reprovada caso não esteja dentro dos parâmetros solicitados pela Seguradora.",
+  "Sendo aprovada, a previsão para pagamento é de 4 dias úteis após a data de conclusão.",
+  "Caso haja retorno antecipado ao prazo informado, sinalizaremos de imediato. 📆",
+];
