@@ -61,7 +61,7 @@ export const FONTES: Fonte[] = [
 export const num = (v: unknown): number | null => {
   if (v === null || v === undefined || v === "") return null;
   if (typeof v === "number") return Number.isFinite(v) ? v : null;
-  const s = String(v).trim().replace(/\./g, "").replace(",", ".");
+  const s = String(v).replace(/ /g, " ").trim().replace(/^(-?)\s*R\$\s*/i, "$1").replace(/\./g, "").replace(",", ".");
   const n = Number(s);
   return Number.isFinite(n) ? n : null;
 };

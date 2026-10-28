@@ -100,7 +100,11 @@ export async function listarArquivosExtratos(api = clienteDrive()): Promise<Arqu
       }
     }
   }
-  return saida;
+  // A equipe às vezes salva o mesmo extrato em PDF e em planilha (Allianz, 28/10): lê só o PDF e ignora a planilha gêmea
+  // (mesmo nome sem extensão, mesma pasta), senão a comissão do dia entra em dobro.
+  const base = (c: string) => c.replace(/\.[^./]+$/, "").toLowerCase();
+  const comPdf = new Set(saida.filter((a) => /\.pdf$/i.test(a.nome)).map((a) => base(a.caminho)));
+  return saida.filter((a) => !(/\.(xlsx?|csv)$/i.test(a.nome) && comPdf.has(base(a.caminho))));
 }
 
 async function baixar(api: drive_v3.Drive, a: Arquivo): Promise<{ buf: Buffer; tipo: "planilha" | "pdf" | "texto" | "outro" }> {
