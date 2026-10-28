@@ -9,6 +9,7 @@ export const TOLERANCIA_FATURA = 1;
 export type LinhaFatura = {
   id: number;
   ramo: string | null;
+  ramo_nome: string | null;
   apolice: string;
   endosso: string | null;
   parcela_n: number | null;
@@ -40,11 +41,11 @@ export async function fichaFatura(sb: SupabaseClient, faturaId: string, competen
   const carregar = async (mesId: string) => {
     const { data } = await sb
       .from("erp_fatura_itens")
-      .select("id, ramo, apolice, endosso, parcela_n, parcelas_total, valor, documento_id, doc:erp_documentos!erp_fatura_itens_documento_id_fkey(nosso_numero, situacao, vigencia_fim, modo_cobranca, cliente:locatarios!erp_documentos_locatario_id_fkey(nome))")
+      .select("id, ramo, apolice, endosso, parcela_n, parcelas_total, valor, documento_id, doc:erp_documentos!erp_fatura_itens_documento_id_fkey(nosso_numero, situacao, ramo:erp_ramos(nome), vigencia_fim, modo_cobranca, cliente:locatarios!erp_documentos_locatario_id_fkey(nome))")
       .eq("fatura_mes_id", mesId)
       .order("apolice");
-    type Bruta = Omit<LinhaFatura, "codigo_o2" | "cliente" | "situacao_doc" | "comissao_extrato"> & {
-      doc: { nosso_numero: number; situacao: string; vigencia_fim: string | null; modo_cobranca: string | null; cliente: { nome: string } | null } | null;
+    type Bruta = Omit<LinhaFatura, "codigo_o2" | "cliente" | "situacao_doc" | "comissao_extrato" | "ramo_nome"> & {
+      doc: { ramo: { nome: string } | null; nosso_numero: number; situacao: string; vigencia_fim: string | null; modo_cobranca: string | null; cliente: { nome: string } | null } | null;
     };
     return (data ?? []) as unknown as Bruta[];
   };
@@ -64,6 +65,7 @@ export async function fichaFatura(sb: SupabaseClient, faturaId: string, competen
   const linhas: LinhaFatura[] = atual.map((l) => ({
     id: l.id,
     ramo: l.ramo,
+    ramo_nome: l.doc?.ramo?.nome ?? null,
     apolice: l.apolice,
     endosso: l.endosso,
     parcela_n: l.parcela_n,
@@ -106,7 +108,11 @@ export async function fichaFatura(sb: SupabaseClient, faturaId: string, competen
     const reg = registrados.get(l.apolice);
     saidas.push({ apolice: l.apolice, documento_id: l.documento_id, codigo_o2: l.doc?.nosso_numero ?? null, cliente: l.doc?.cliente?.nome ?? null, valor_anterior: Number(l.valor), explicacao: explicacao ?? (reg ? reg.motivo : null), registrado: reg });
   }
-  return { fatura, meses, mes, anterior, linhas, entradas, saidas };
+  // o código do ramo (ex.: 140) vem da seguradora; o nome do ramo vem dos documentos ligados (o mais frequente)
+  const contagem = new Map<string, number>();
+  for (const l of linhas) if (l.ramo_nome) contagem.set(l.ramo_nome, (contagem.get(l.ramo_nome) ?? 0) + 1);
+  const ramo_nome = [...contagem.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  return { fatura: { ...fatura, ramo_nome }, meses, mes, anterior, linhas, entradas, saidas };
 }
 
 /** Lista de faturas com o último mês (para a etapa Faturas). */
