@@ -268,7 +268,11 @@ export async function buscarDocumentos(sb: SupabaseClient, f: FiltrosBusca): Pro
   // sem filtro a tela mostra os mais recentes e total = null
   let q = sb.from("erp_documentos").select(SELECT_LISTA, filtrado ? { count: "exact" } : undefined);
   if (f.situacao) q = q.eq("situacao", f.situacao);
-  else q = q.neq("situacao", "duplicado"); // card do Bitrix já juntado ao documento do Corp: só aparece se pedirem a situação
+  else {
+    q = q.neq("situacao", "duplicado"); // card do Bitrix já juntado ao documento do Corp: só aparece se pedirem a situação
+    // a tela Apólices não lista cotação (ainda é negociação, vive no Bitrix): só aparece se pedirem a situação ou buscarem por nome/código (Matheus 28/10)
+    if (!termo) q = q.neq("situacao", "cotacao");
+  }
   if (f.tipo) q = q.eq("tipo", f.tipo);
   if (f.forma) q = q.eq("modo_cobranca", f.forma);
   if (f.canal) q = q.eq("canal_id", f.canal);
