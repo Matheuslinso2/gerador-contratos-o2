@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { buscarDefinicaoCampos, chamarBitrix, listarHistoricoEtapas, listarItensSpa, type BitrixDefinicaoCampo, type BitrixItemRaw, type BitrixStageHistoryEvent } from "@/lib/bitrix/client";
 import { gerarLinkCard } from "@/lib/bitrix/entidadesCard";
 import { SEGURADORAS as SEGURADORAS_FIANCA } from "@/lib/bitrix/seguroFianca";
+import { garantirCliente, tipoDoDocumento } from "@/lib/erp/clientes";
 
 // ERP O2 — Fase 1b / T2: todo card do Bitrix vira documento do ERP, em todos os produtos.
 //
@@ -494,8 +495,29 @@ export async function sincronizarSpa(sb: SupabaseClient, cfg: ConfigSpa, o: Opco
       if (!itemExistente && (x.item || x.partes.length || x.coberturas.length)) {
         const { data: it, error: eIt } = await sb.from("erp_documento_itens").insert({ documento_id: docId, item_n: 1, contrato_inicio: x.vigIni, contrato_fim: x.vigFim, ...(x.item ?? {}) }).select("id").single();
         if (eIt) throw new Error(eIt.message);
-        if (x.partes.length) await sb.from("erp_item_partes").insert(x.partes.map((p) => ({ ...p, item_id: it.id, locatario_id: p.documento_numero && p.documento_numero === x.cliente.documento ? locatarioId : null })));
+        if (x.partes.length) {
+          // cadastro de clientes como no Corp (Matheus 27/10): toda parte com CPF/CNPJ válido existe no cadastro (é criada se for nova) e fica ligada
+          const partesGravar = [];
+          for (const p of x.partes) {
+            let pessoa: string | null = p.documento_numero && p.documento_numero === x.cliente.documento ? locatarioId : null;
+            if (!pessoa && o.gravar) pessoa = (await garantirCliente(sb, { documento: p.documento_numero, nome: p.nome, fonte: `bitrix:${chave}` }))?.id ?? null;
+            partesGravar.push({ ...p, item_id: it.id, locatario_id: pessoa });
+          }
+          await sb.from("erp_item_partes").insert(partesGravar);
+        }
         if (x.coberturas.length) await sb.from("erp_item_coberturas").insert(x.coberturas.map((c) => ({ ...c, item_id: it.id })));
+      }
+
+      // partes já gravadas que ainda não têm cliente (o card ganhou o CPF/CNPJ depois): cria o cliente se for novo e liga
+      if (o.gravar && x.partes.some((p) => tipoDoDocumento(p.documento_numero))) {
+        const { data: it2 } = await sb.from("erp_documento_itens").select("id").eq("documento_id", docId).eq("item_n", 1).maybeSingle();
+        if (it2) {
+          const { data: soltas } = await sb.from("erp_item_partes").select("id, nome, documento_numero").eq("item_id", it2.id).is("locatario_id", null);
+          for (const p of soltas ?? []) {
+            const g = await garantirCliente(sb, { documento: p.documento_numero, nome: p.nome, fonte: `bitrix:${chave}` });
+            if (g) await sb.from("erp_item_partes").update({ locatario_id: g.id }).eq("id", p.id);
+          }
+        }
       }
 
       const eventos = (eventosPorCard.get(id) ?? []).sort((a, b) => a.CREATED_TIME.localeCompare(b.CREATED_TIME)).map((e) => ({ quando: e.CREATED_TIME, categoria: e.CATEGORY_ID, etapa: etapas.get(e.STAGE_ID)?.nome ?? e.STAGE_ID, semantica: e.STAGE_SEMANTIC_ID }));

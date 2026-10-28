@@ -25,6 +25,7 @@ export const ETAPAS: Etapa[] = [
 ];
 
 export const CADASTROS = [
+  { href: "/erp/clientes", label: "Clientes" },
   { href: "/erp/imobiliarias", label: "Imobiliárias" },
   { href: "/erp/seguradoras", label: "Seguradoras" },
 ];

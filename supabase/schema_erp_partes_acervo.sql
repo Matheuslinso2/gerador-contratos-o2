@@ -30,3 +30,10 @@
 -- documento): documentos, vigentes, produtos, prêmio total e comissão. Repasse por parcela calculado no código (src/lib/erp/repasseParcelas.ts):
 -- percentual em parcelas iguais; repasse FIXO (percentual 0 e valor > 0; 1.231 linhas, média R$ 68) pago uma única vez, na 1ª parcela; dia 15 do mês seguinte.
 -- Todas as linhas de erp_documento_produtores têm forma_repasse 'parcelado'; o fixo é detectado pelo percentual zero com valor.
+
+-- 27/10/2026 — cadastro de clientes como no Corp (migrations erp_vincular_clientes, locatarios_codigo_cliente, locatarios_cadastro_incompleto, erp_clientes_resumo).
+-- locatarios (compartilhada com o Workspace de contratos) ganhou: codigo_cliente (sequência, único, CLI-000001, todos os 37.176 cadastros), cadastro_incompleto
+-- (coluna calculada: sem CPF/CNPJ de 11/14 dígitos ou sem e-mail e sem telefone; 15.776 hoje). Regra do cadastro novo: CPF/CNPJ válido (dígitos verificadores)
+-- sempre + e-mail ou telefone. erp_vincular_clientes(aplicar) fez o backfill (1.044 docs do Corp por CPF, 117 partes, 164 clientes novos criados).
+-- erp_clientes_resumo (1 linha) guarda total/incompletos, atualizada por erp_atualizar_clientes_resumo() no cron erp-faturas. O sincronizador do Bitrix
+-- (bitrixOrigem.ts) passou a criar/ligar toda parte com CPF/CNPJ válido (src/lib/erp/clientes.ts: garantirCliente).
