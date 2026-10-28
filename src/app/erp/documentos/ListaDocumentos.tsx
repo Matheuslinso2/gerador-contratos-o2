@@ -87,7 +87,7 @@ export default async function ListaDocumentos({
           campos={["busca", "seguradora", "produto", "situacao", "imobiliaria", "inquilino", "periodo", "proprietario", "imovel", "tipo", "forma_pagamento", "canal"]}
           avancados={["proprietario", "imovel", "tipo", "forma_pagamento", "canal"]}
           valores={f}
-          placeholderBusca="133632 · 0004640286 · Mario Imares"
+          placeholderBusca="Nome do titular · CPF/CNPJ · CLI-000123 · Código O2 do documento · Nosso nº do Corp · Nº da apólice"
           rotuloPeriodo="Início de vigência"
           situacoes={SITUACOES}
           tipos={TIPOS_DOCUMENTO}

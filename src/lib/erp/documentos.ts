@@ -151,8 +151,8 @@ export type FiltrosBusca = {
 };
 
 /**
- * Busca de documentos. Número puro = Nosso Nº ou nº da apólice; texto = nome do
- * cliente (cofre) ou da imobiliária. Sem busca, mostra os mais recentes por início
+ * Busca de documentos. Número puro = Código O2 do documento, Nosso nº do Corp ou Nº da apólice; texto, CPF/CNPJ ou CLI-000123 = TITULAR
+ * (cliente do documento, segurado/garantido da apólice, partes do card) e, se ninguém casar, nome da imobiliária. Sem busca, mostra os mais recentes por início
  * de vigência. Os demais filtros recortam pelos níveis da tela (seguradora, produto,
  * situação, tipo, imobiliária, forma de pagamento, canal, período de vigência).
  */
@@ -201,22 +201,29 @@ export async function buscarDocumentos(sb: SupabaseClient, f: FiltrosBusca): Pro
     q = q.in("id", lista);
   }
 
-  if (termo && /^\d+$/.test(termo)) {
-    q = q.or(`nosso_numero.eq.${termo},nosso_numero_corp.eq.${termo},numero_apolice.eq.${termo}`);
-  } else if (termo) {
-    // nomes: até 300 ids de clientes + imobiliárias que casam com o termo
-    const like = `%${termo.replace(/[%_]/g, "")}%`;
-    const [{ data: cli }, { data: imobs }] = await Promise.all([
-      sb.from("locatarios").select("id").ilike("nome", like).limit(300),
-      sb.from("imobiliarias").select("id").or(`nome.ilike.${like},apelido.ilike.${like}`).limit(50),
-    ]);
-    const idsCli = (cli ?? []).map((c) => c.id);
-    const idsImob = (imobs ?? []).map((i) => i.id);
-    if (!idsCli.length && !idsImob.length) return { linhas: [], total: 0 };
-    const partes: string[] = [];
-    if (idsCli.length) partes.push(`locatario_id.in.(${idsCli.join(",")})`);
-    if (idsImob.length) partes.push(`imobiliaria_principal_id.in.(${idsImob.join(",")})`);
-    q = q.or(partes.join(","));
+  // Busca principal = TITULAR primeiro (Matheus 27-28/10): quem está com o nome da proposta/apólice. Aceita nome, CPF/CNPJ ou Código do
+  // cliente (CLI-000123); acha pelo cliente do documento, pelo segurado/garantido da apólice lida e pelas partes do card. Só se ninguém
+  // casar é que vale o resto: Nº da apólice / Código O2 do documento / Nosso nº do Corp (número puro) ou nome da imobiliária.
+  if (termo) {
+    const digitos = termo.replace(/\D/g, "");
+    const pareceCpf = (digitos.length === 11 || digitos.length === 14) && /^[0-9.\-\/ ]+$/.test(termo);
+    const pareceCli = /^cli-?\d+$/i.test(termo);
+    const pareceNumero = /^\d+$/.test(termo);
+    if (!pareceNumero || pareceCpf) {
+      const { data: ids, error: e } = await sb.rpc("erp_docs_por_titular", { p_busca: termo });
+      if (e) throw new Error(`erp_docs_por_titular: ${e.message}`);
+      const lista = ((ids ?? []) as unknown[]).map((x) => (typeof x === "string" ? x : (Object.values(x as object)[0] as string)));
+      if (lista.length) q = q.in("id", lista);
+      else if (pareceCli || pareceCpf) return { linhas: [], total: 0 };
+      else {
+        const like = `%${termo.replace(/[%_]/g, "")}%`;
+        const { data: imobs } = await sb.from("imobiliarias").select("id").or(`nome.ilike.${like},apelido.ilike.${like}`).limit(50);
+        const idsImob = (imobs ?? []).map((i) => i.id);
+        if (!idsImob.length) return { linhas: [], total: 0 };
+        q = q.in("imobiliaria_principal_id", idsImob);
+      }
+    }
+    if (pareceNumero && !pareceCpf) q = q.or(`nosso_numero.eq.${termo},nosso_numero_corp.eq.${termo},numero_apolice.eq.${termo}`);
   }
 
   const { data, count, error } = await q.order("vigencia_inicio", { ascending: false }).order("nosso_numero", { ascending: false }).limit(limite);
