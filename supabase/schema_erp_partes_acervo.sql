@@ -37,3 +37,10 @@
 -- sempre + e-mail ou telefone. erp_vincular_clientes(aplicar) fez o backfill (1.044 docs do Corp por CPF, 117 partes, 164 clientes novos criados).
 -- erp_clientes_resumo (1 linha) guarda total/incompletos, atualizada por erp_atualizar_clientes_resumo() no cron erp-faturas. O sincronizador do Bitrix
 -- (bitrixOrigem.ts) passou a criar/ligar toda parte com CPF/CNPJ válido (src/lib/erp/clientes.ts: garantirCliente).
+
+-- 28/10/2026 — tela Imobiliárias do ERP (migrations erp_imobiliarias_resumo, erp_imobiliaria_producao). Pedido do Matheus: a base de imobiliárias é a MESMA do
+-- Workspace, do ERP e do Power BI; a tela do ERP mostra o que é pertinente à gestão. Só leitura; nada altera a base única.
+-- erp_imobiliarias_resumo (por imobiliária): documentos, vigentes, prêmio/comissão vigente, produtos, seguradoras, propostas pendentes de emissão, faturas e
+--   seguradoras com fatura; recalculada por erp_atualizar_imobiliarias_resumo() no cron erp-faturas (depois da fila de Emissão).
+-- erp_imobiliaria_producao(id): produção vigente por produto e seguradora. Índice erp_documentos_imob_principal_idx.
+-- Achado: imobiliarias.fatura_habilitada está FALSE para as 705 fichas, embora 135 tenham fatura no ERP: a tela passou a derivar "fatura" de erp_faturas.

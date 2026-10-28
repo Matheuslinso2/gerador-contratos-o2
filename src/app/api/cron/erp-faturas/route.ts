@@ -25,7 +25,9 @@ export async function GET(request: NextRequest) {
     const { data: inicio } = await sb.rpc("erp_atualizar_inicio");
     // contagens da tela Clientes (total e cadastros incompletos)
     const { data: clientes } = await sb.rpc("erp_atualizar_clientes_resumo");
-    return NextResponse.json({ ok: true, desde, ...faturas, vencimentos, partesAcervo, emissao, inicio, clientes });
+    // resumo por imobiliária (produção vigente, propostas pendentes, faturas) — depende da fila de Emissão acima
+    const { data: imobiliarias } = await sb.rpc("erp_atualizar_imobiliarias_resumo");
+    return NextResponse.json({ ok: true, desde, ...faturas, vencimentos, partesAcervo, emissao, inicio, clientes, imobiliarias });
   } catch (e) {
     return NextResponse.json({ ok: false, erro: (e as Error).message }, { status: 500 });
   }
