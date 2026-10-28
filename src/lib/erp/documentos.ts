@@ -405,6 +405,8 @@ export type DocumentoFicha = DocumentoLista & {
   familia: FamiliaDoc[];
   /** endossos desta apólice (filhos por documento_pai_id), do mais antigo ao mais novo */
   endossos: EndossoDoc[];
+  /** parcelas dos endossos desta apólice, cobradas em paralelo às da apólice (Matheus 28/10) */
+  parcelas_endossos: { documento_id: string; n: number; vencimento: string; valor: number; quitada_em: string | null; valor_quitado: number | null }[];
   /** quando o documento é um endosso: a apólice que ele altera */
   apolice_mae: { id: string; nosso_numero: number; numero_apolice: string | null; vigencia_inicio: string | null; vigencia_fim: string | null } | null;
   cadeia: { canal: string | null; imobiliaria: string | null; grupo: string | null; cliente: string | null };
@@ -670,6 +672,14 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
     })),
     origens: (origens ?? []) as unknown as OrigemDoc[],
     cadeia: { canal: d.canal?.nome ?? null, imobiliaria: d.imobiliaria?.nome ?? null, grupo: d.imob_grupo?.grupo?.nome ?? null, cliente: d.cliente?.nome ?? null },
+    parcelas_endossos: await (async () => {
+      const idsEnd = ((endossos ?? []) as { id: string }[]).map((e) => e.id);
+      if (!idsEnd.length) return [];
+      const { data: pe } = await sb.from("erp_parcelas").select("documento_id, n, vencimento, valor, quitada_em, valor_quitado").in("documento_id", idsEnd).order("vencimento");
+      return ((pe ?? []) as { documento_id: string; n: number; vencimento: string; valor: number | string; quitada_em: string | null; valor_quitado: number | string | null }[]).map((p) => ({
+        ...p, valor: Number(p.valor), valor_quitado: p.valor_quitado === null ? null : Number(p.valor_quitado),
+      }));
+    })(),
     endossos: ((endossos ?? []) as EndossoDoc[]).map((e) => ({
       ...e,
       nosso_numero: Number(e.nosso_numero),

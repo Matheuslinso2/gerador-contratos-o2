@@ -435,6 +435,38 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
               Pago no dia 15 do mês seguinte ao do recebimento da comissão, antes do desconto de 18% do relatório de repasse. Comissão no Corp = grade de comissões do Corp (baixa real).
             </p>
           )}
+          {d.parcelas_endossos.length > 0 && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs">
+              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-amber-800">
+                Parcelas dos endossos desta apólice — cobradas em paralelo às da apólice
+              </div>
+              <table className="w-full">
+                <thead className="text-left text-[11px] uppercase tracking-wide text-gray-500">
+                  <tr><th className="py-1 pr-3">Endosso</th><th className="py-1 pr-3">Parcela</th><th className="py-1 pr-3">Vencimento</th><th className="py-1 pr-3 text-right">Valor</th><th className="py-1 pr-3">Quitação</th></tr>
+                </thead>
+                <tbody className="divide-y divide-amber-100">
+                  {d.parcelas_endossos.map((p) => {
+                    const e = d.endossos.find((x) => x.id === p.documento_id);
+                    return (
+                      <tr key={`${p.documento_id}-${p.n}`}>
+                        <td className="py-1 pr-3"><Link href={`/erp/documentos/${p.documento_id}`} className="text-o2-navy hover:underline">Código O2 {e?.nosso_numero ?? "—"}</Link></td>
+                        <td className="py-1 pr-3">{p.n}</td>
+                        <td className="py-1 pr-3">{formatarData(p.vencimento)}</td>
+                        <td className={`py-1 pr-3 text-right ${p.valor < 0 ? "text-red-700" : ""}`}>{formatarReais(p.valor)}</td>
+                        <td className="py-1 pr-3">{p.quitada_em ? `${formatarData(p.quitada_em)} · ${formatarReais(p.valor_quitado)}` : <span className="text-gray-400">em aberto</span>}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {d.apolice_mae && d.tipo === "C" && d.parcelas.length === 0 && (
+            <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-900">
+              Parcelas a informar: este endosso de cobrança ainda não tem parcelas. Elas nascem quando o card trouxer o valor do endosso, o nº de parcelas e o 1º vencimento.
+              {" "}Apólice-mãe: <Link href={`/erp/documentos/${d.apolice_mae.id}`} className="font-medium underline">Código O2 {d.apolice_mae.nosso_numero}</Link>.
+            </p>
+          )}
           {d.parcelas.some((p) => p.origem === "estimada_corp") && (
             <p className="text-[11px] text-gray-500">
               Parcelas estimadas a partir do Corp (quantidade e prêmio total; vencimento = 30 dias + dia fixo da seguradora). A baixa real entra na Fase 2.

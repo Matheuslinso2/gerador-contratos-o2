@@ -105,6 +105,15 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
   const total = linhasRes.count ?? linhas.length;
   // cabeçalho padrão (Matheus 28/10): tipo, titular, produto, seguradora e vigência
   const cab = await dadosDeCabecalhoPorId(supabase, linhas.map((l) => l.id));
+  // endosso de cobrança sem parcelas: avisa "parcelas a informar" (as parcelas nascem quando o card traz valor, nº de parcelas e 1º vencimento)
+  const idsComParcela = new Set<string>();
+  {
+    const idsEnd = linhas.filter((l) => l.tipo === "C" && l.tipo_corp === "END").map((l) => l.id);
+    if (idsEnd.length) {
+      const { data: pp } = await supabase.from("erp_parcelas").select("documento_id").in("documento_id", idsEnd);
+      for (const x of (pp ?? []) as { documento_id: string }[]) idsComParcela.add(x.documento_id);
+    }
+  }
 
   const href = (extra: Record<string, string | undefined>) => {
     const p = new URLSearchParams(Object.entries({ ...f, origem, faixa, atraso: atraso ? "1" : undefined, ...extra }).filter(([, v]) => v) as [string, string][]);
@@ -188,6 +197,7 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
                     <td className="px-3 py-2">
                       <span className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-semibold ${tipo.cor}`}>{tipo.nome}</span>
                       {tipo.detalhe ? <span className="ml-1 text-[10px] text-gray-500">{tipo.detalhe}</span> : null}
+                      {d.tipo === "C" && d.tipo_corp === "END" && !idsComParcela.has(d.id) ? <span className="mt-0.5 block w-fit rounded bg-amber-100 px-1.5 text-[10px] font-medium text-amber-800">parcelas a informar</span> : null}
                     </td>
                     <td className="px-3 py-2">
                       {(c?.titular ?? d.cliente) ? <span className="font-medium text-gray-900">{c?.titular ?? d.cliente}</span> : <span className="text-gray-400">titular não ligado</span>}
