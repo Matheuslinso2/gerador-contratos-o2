@@ -23,18 +23,23 @@ function ehAmbienteLocal() {
 
 // cap = sinistro de Capitalização: o grupo cap@ recebe junto (nos e-mails para a
 // O2 como destinatário; nos e-mails para a imobiliária, em cópia oculta).
+// Todo e-mail enviado à imobiliária leva cópia oculta para a caixa sinistro@ --
+// a equipe reclamou (28/10/2026) que o "Acionamento autorizado" chegou só no
+// e-mail cadastrado da imobiliária, sem passar pela caixa de sinistro.
 async function enviar(para: string[], assunto: string, html: string, cap = false) {
-  const paraO2 = para.some((e) => e.trim().toLowerCase() === EMAIL_O2.toLowerCase());
-  let destinos = [...new Set([...para, ...(cap && paraO2 ? [EMAIL_CAP] : [])].map((e) => e.trim().toLowerCase()).filter(Boolean))];
-  // Imobiliária sem e-mail cadastrado: o grupo da Capitalização ainda recebe.
-  if (!destinos.length && cap) destinos = [EMAIL_CAP.toLowerCase()];
-  if (!destinos.length) return;
-  const bcc = cap && !paraO2 && !destinos.includes(EMAIL_CAP.toLowerCase()) ? [EMAIL_CAP] : undefined;
+  const norm = (e: string) => e.trim().toLowerCase();
+  const paraO2 = para.some((e) => norm(e) === norm(EMAIL_O2));
+  let destinos = [...new Set([...para, ...(cap && paraO2 ? [EMAIL_CAP] : [])].map(norm).filter(Boolean))];
+  // Imobiliária sem e-mail cadastrado: a caixa da O2 (e o grupo cap) ainda recebem.
+  if (!destinos.length) destinos = [norm(EMAIL_O2), ...(cap ? [norm(EMAIL_CAP)] : [])];
+  const interno = paraO2 || para.some((e) => norm(e) === norm(EMAIL_CAP));
+  const copias = interno ? [] : [EMAIL_O2, ...(cap ? [EMAIL_CAP] : [])];
+  const bcc = [...new Set(copias.map(norm))].filter((e) => !destinos.includes(e));
   if (ehAmbienteLocal()) {
-    console.log(`[sinistros] e-mail (local, não enviado) para ${destinos.join(", ")}${bcc ? ` (cco ${bcc.join(", ")})` : ""}: ${assunto}`);
+    console.log(`[sinistros] e-mail (local, não enviado) para ${destinos.join(", ")}${bcc.length ? ` (cco ${bcc.join(", ")})` : ""}: ${assunto}`);
     return;
   }
-  await enviarEmail({ para: destinos, bcc, assunto, html, remetente: "O2 Seguros — Sinistros", replyTo: EMAIL_O2 });
+  await enviarEmail({ para: destinos, bcc: bcc.length ? bcc : undefined, assunto, html, remetente: "O2 Seguros — Sinistros", replyTo: EMAIL_O2 });
 }
 
 export type SinistroEmail = {
