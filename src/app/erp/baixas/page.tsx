@@ -197,8 +197,8 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
                     <tr>
                       <th className="px-2 py-1">Extrato</th>
                       <th className="px-2 py-1">Classificação</th>
-                      <th className="px-2 py-1">Nº Corp</th>
-                      <th className="px-2 py-1">Apólice</th>
+                      <th className="px-2 py-1">Nosso nº do Corp</th>
+                      <th className="px-2 py-1">Nº da apólice</th>
                       <th className="px-2 py-1">Parc.</th>
                       <th className="px-2 py-1">Cliente</th>
                       <th className="px-2 py-1">Imobiliária</th>
@@ -332,8 +332,8 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
                   <tr>
                     <th className="px-2 py-1">Classificação</th>
                     <th className="px-2 py-1">Seg.</th>
-                    <th className="px-2 py-1">Nº Corp</th>
-                    <th className="px-2 py-1">Apólice</th>
+                    <th className="px-2 py-1">Nosso nº do Corp</th>
+                    <th className="px-2 py-1">Nº da apólice</th>
                     <th className="px-2 py-1">Parc.</th>
                     <th className="px-2 py-1 text-right">Valor</th>
                     <th className="px-2 py-1 text-right">Esperado</th>
@@ -454,8 +454,8 @@ function ExtratoCard({ e, linhas, aberto }: { e: Extrato; linhas: LinhaExtrato[]
               <tr>
                 <th className="px-2 py-1">#</th>
                 <th className="px-2 py-1">Classificação</th>
-                <th className="px-2 py-1">Nº Corp</th>
-                <th className="px-2 py-1">Apólice</th>
+                <th className="px-2 py-1">Nosso nº do Corp</th>
+                <th className="px-2 py-1">Nº da apólice</th>
                 <th className="px-2 py-1">Parc.</th>
                 <th className="px-2 py-1 text-right">Prêmio</th>
                 <th className="px-2 py-1 text-right">% doc</th>

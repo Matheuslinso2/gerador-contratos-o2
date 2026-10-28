@@ -33,7 +33,7 @@ export default async function ListaDocumentos({
   searchParams,
   caminho = "/erp/documentos",
   titulo = "ERP O2 — Apólices",
-  subtitulo = "Apólices, endossos e faturas carregados do Corp. Busque pelo Código O2, pelo nosso número do Corp, nº da apólice, cliente ou imobiliária.",
+  subtitulo = "Apólices, endossos e faturas carregados do Corp. Busque pelo Código O2 do documento, pelo nosso nº do Corp, pelo nº da apólice, pelo cliente ou pela imobiliária.",
   padrao = {},
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -106,15 +106,15 @@ export default async function ListaDocumentos({
             <table className="w-full text-xs">
               <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
                 <tr>
-                  <th className="px-3 py-2">Código O2</th>
-                  <th className="px-3 py-2">Nº Corp</th>
+                  <th className="px-3 py-2">Código O2 do documento</th>
+                  <th className="px-3 py-2">Nosso nº do Corp</th>
                   <th className="px-3 py-2">Situação</th>
                   <th className="px-3 py-2">Tipo</th>
                   <th className="px-3 py-2">Cliente</th>
                   <th className="px-3 py-2">Imobiliária</th>
                   <th className="px-3 py-2">Seg.</th>
                   <th className="px-3 py-2">Ramo</th>
-                  <th className="px-3 py-2">Apólice</th>
+                  <th className="px-3 py-2">Nº da apólice</th>
                   <th className="px-3 py-2">Início vig.</th>
                   <th className="px-3 py-2">Fim vig.</th>
                   <th className="px-3 py-2 text-right">Pr. líquido</th>

@@ -15,7 +15,7 @@ export default async function FiltrosErp({
   avancados = [],
   valores,
   rotuloBusca = "Buscar",
-  placeholderBusca = "Código O2, Nosso Nº, apólice, cliente…",
+  placeholderBusca = "Código O2 do documento, nosso nº do Corp, nº da apólice, cliente…",
   rotuloPeriodo = "Período",
   situacoes,
   tipos,

@@ -122,7 +122,7 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
         campos={["busca", "mes", "seguradora", "produto", "imobiliaria", "tipo"]}
         avancados={["tipo"]}
         valores={{ ...f, mes }}
-        placeholderBusca="Código O2 · nosso nº do Corp · nome do titular"
+        placeholderBusca="Código O2 do documento · nosso nº do Corp · nome do titular"
         tipos={TIPOS_DOCUMENTO}
         resumo={<>{atraso ? `atraso de meses anteriores a ${rotuloMes}` : `efetivadas em ${rotuloMes}`} · {total.toLocaleString("pt-BR")} pendente(s)</>}
       />
@@ -159,8 +159,8 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
           <table className="w-full text-xs">
             <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
               <tr>
-                <th className="px-3 py-2">Código O2</th>
-                <th className="px-3 py-2">Nosso nº Corp</th>
+                <th className="px-3 py-2">Código O2 do documento</th>
+                <th className="px-3 py-2">Nosso nº do Corp</th>
                 <th className="px-3 py-2">Tipo</th>
                 <th className="px-3 py-2">Origem</th>
                 <th className="px-3 py-2">Titular</th>

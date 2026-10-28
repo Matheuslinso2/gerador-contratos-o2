@@ -100,7 +100,7 @@ export default async function ErpImobiliarias({ searchParams }: { searchParams: 
         campos={["busca", "seguradora"]}
         valores={f}
         rotuloBusca="Imobiliária"
-        placeholderBusca="Nome, apelido, grupo do Power BI, Código O2 ou do Corp"
+        placeholderBusca="Nome, apelido, grupo do Power BI, cód. O2 da imobiliária ou cód. no Corp"
         resumo="Seguradora: imobiliárias com fatura nessa seguradora ou com pró-labore pago direto por ela."
       />
       <p className="text-xs text-gray-500">{(count ?? lista.length).toLocaleString("pt-BR")} imobiliária(s){lista.length < (count ?? 0) ? ` · mostrando ${lista.length}` : ""} · ordenadas pelo prêmio das apólices vigentes</p>
@@ -110,7 +110,7 @@ export default async function ErpImobiliarias({ searchParams }: { searchParams: 
             <tr>
               <th className="px-3 py-2">Imobiliária</th>
               <th className="px-3 py-2">Grupo</th>
-              <th className="px-3 py-2">Cód. O2 / Corp</th>
+              <th className="px-3 py-2">Cód. O2 / no Corp (da imobiliária)</th>
               <th className="px-3 py-2 text-right">Vigentes</th>
               <th className="px-3 py-2 text-right">Prêmio vigente</th>
               <th className="px-3 py-2 text-right">Pend. emissão</th>

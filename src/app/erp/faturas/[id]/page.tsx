@@ -20,8 +20,8 @@ function Tabela({ linhas }: { linhas: LinhaFatura[] }) {
     <table className="w-full text-xs">
       <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
         <tr>
-          <th className="px-3 py-1.5">Apólice</th>
-          <th className="px-3 py-1.5">Código O2</th>
+          <th className="px-3 py-1.5">Nº da apólice</th>
+          <th className="px-3 py-1.5">Código O2 do documento</th>
           <th className="px-3 py-1.5">Cliente</th>
           <th className="px-3 py-1.5">Parcela</th>
           <th className="px-3 py-1.5 text-right">Cobrado na fatura</th>
@@ -149,8 +149,8 @@ export default async function ErpFaturaPage({ params, searchParams }: { params: 
           <table className="w-full text-xs">
             <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
               <tr>
-                <th className="px-3 py-1.5">Apólice</th>
-                <th className="px-3 py-1.5">Código O2</th>
+                <th className="px-3 py-1.5">Nº da apólice</th>
+                <th className="px-3 py-1.5">Código O2 do documento</th>
                 <th className="px-3 py-1.5">Cliente</th>
                 <th className="px-3 py-1.5 text-right">Valor no mês anterior</th>
                 <th className="px-3 py-1.5">Por que saiu</th>

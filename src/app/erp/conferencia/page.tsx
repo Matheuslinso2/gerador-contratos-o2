@@ -245,8 +245,8 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
                 <thead className="sticky top-0 bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
                   <tr>
                     <th className="px-2 py-1">Alerta</th>
-                    <th className="px-2 py-1">Código O2</th>
-                    <th className="px-2 py-1">Nº Corp</th>
+                    <th className="px-2 py-1">Código O2 do documento</th>
+                    <th className="px-2 py-1">Nosso nº do Corp</th>
                     <th className="px-2 py-1">Imobiliária</th>
                     <th className="px-2 py-1">Seg.</th>
                     <th className="px-2 py-1">Situação</th>
@@ -296,9 +296,9 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
               <table className="w-full text-xs">
                 <thead className="sticky top-0 bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
                   <tr>
-                    <th className="px-2 py-1">Código O2</th>
-                    <th className="px-2 py-1">Nº Corp</th>
-                    <th className="px-2 py-1">Apólice</th>
+                    <th className="px-2 py-1">Código O2 do documento</th>
+                    <th className="px-2 py-1">Nosso nº do Corp</th>
+                    <th className="px-2 py-1">Nº da apólice</th>
                     <th className="px-2 py-1">Imobiliária</th>
                     <th className="px-2 py-1">Seg.</th>
                     <th className="px-2 py-1">Produto</th>
@@ -423,7 +423,7 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
               {g.linhas.length > 0 && (
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
-                    <tr><th className="px-3 py-1">Seguradora</th><th className="px-3 py-1">Código O2</th><th className="px-3 py-1">Apólice / endosso</th><th className="px-3 py-1">Cliente</th><th className="px-3 py-1">Data</th><th className="px-3 py-1 text-right">Comissão</th></tr>
+                    <tr><th className="px-3 py-1">Seguradora</th><th className="px-3 py-1">Código O2 do documento</th><th className="px-3 py-1">Nº da apólice / do endosso</th><th className="px-3 py-1">Cliente</th><th className="px-3 py-1">Data</th><th className="px-3 py-1 text-right">Comissão</th></tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {g.linhas.map((l, i) => (
@@ -444,17 +444,17 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
           <details className="rounded-lg border border-gray-100">
             <summary className="cursor-pointer px-3 py-2 text-sm">
               <span className="font-medium text-o2-navy">Endossos sem apólice ligada</span> · {semMae.length}
-              <span className="ml-2 text-xs text-gray-500">a ligação automática (seguradora + nº da apólice) não achou uma apólice única; abra o endosso e informe o Código O2 da apólice</span>
+              <span className="ml-2 text-xs text-gray-500">a ligação automática (seguradora + nº da apólice) não achou uma apólice única; abra o endosso e informe o Código O2 do documento da apólice</span>
             </summary>
             {semMae.length > 0 && (
               <table className="w-full text-xs">
                 <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
-                  <tr><th className="px-3 py-1">Endosso</th><th className="px-3 py-1">Tipo</th><th className="px-3 py-1">Seguradora</th><th className="px-3 py-1">Nº apólice informado</th><th className="px-3 py-1">Cliente</th><th className="px-3 py-1">Início</th><th className="px-3 py-1 text-right">Prêmio</th></tr>
+                  <tr><th className="px-3 py-1">Endosso</th><th className="px-3 py-1">Tipo</th><th className="px-3 py-1">Seguradora</th><th className="px-3 py-1">Nº da apólice informado</th><th className="px-3 py-1">Cliente</th><th className="px-3 py-1">Início</th><th className="px-3 py-1 text-right">Prêmio</th></tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {semMae.map((e) => (
                     <tr key={e.id}>
-                      <td className="px-3 py-1"><Link href={`/erp/documentos/${e.id}`} className="text-o2-navy hover:underline">Código O2 {e.nosso_numero}</Link></td>
+                      <td className="px-3 py-1"><Link href={`/erp/documentos/${e.id}`} className="text-o2-navy hover:underline">Código O2 do documento {e.nosso_numero}</Link></td>
                       <td className="px-3 py-1">{e.tipo}</td>
                       <td className="px-3 py-1">{e.seguradora?.nome ?? "—"}</td>
                       <td className="px-3 py-1">{e.numero_apolice && e.numero_apolice !== "0" ? e.numero_apolice : "—"}</td>

@@ -83,10 +83,10 @@ export default async function ErpParcelasPage({ searchParams }: { searchParams: 
         <table className="w-full text-xs">
           <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
             <tr>
-              <th className="px-3 py-2">Código O2</th>
-              <th className="px-3 py-2">Nº Corp</th>
+              <th className="px-3 py-2">Código O2 do documento</th>
+              <th className="px-3 py-2">Nosso nº do Corp</th>
               <th className="px-3 py-2">Seg.</th>
-              <th className="px-3 py-2">Apólice</th>
+              <th className="px-3 py-2">Nº da apólice</th>
               <th className="px-3 py-2">Imobiliária</th>
               <th className="px-3 py-2">Parcela</th>
               <th className="px-3 py-2">Vencimento no Corp</th>

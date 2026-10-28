@@ -57,9 +57,9 @@ async function anexosDoCorp(nossoNumero: string) {
 
 const AVISO_VINCULO: Record<string, string> = {
   ok: "Endosso ligado à apólice.",
-  dados: "Informe o Código O2 da apólice.",
+  dados: "Informe o Código O2 do documento da apólice.",
   nao_endosso: "Este documento é uma apólice, não um endosso.",
-  nao_achou: "Não achei apólice (ou fatura) com esse Código O2.",
+  nao_achou: "Não achei apólice (ou fatura) com esse Código O2 do documento.",
   seguradora: "A apólice informada é de outra seguradora.",
   gravar: "Não consegui gravar; tente de novo.",
 };
@@ -109,7 +109,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
           <div className="flex flex-wrap items-baseline gap-3">
             <span className={`rounded-md px-2.5 py-1 text-sm font-semibold uppercase tracking-wide ${nomeTipoDocumento(d.tipo, d.tipo_corp).cor}`}>{nomeTipoDocumento(d.tipo, d.tipo_corp).nome}</span>
             <h1 className="text-xl font-semibold text-o2-navy">
-              Código O2 {d.nosso_numero} · {d.cliente ?? "cliente não ligado"}
+              Código O2 do documento {d.nosso_numero} · {d.cliente ?? "cliente não ligado"}
             </h1>
             <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">{SITUACOES[d.situacao] ?? d.situacao}</span>
             {d.revisao_pendente && <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-800">pré-cadastro · revisão pendente</span>}
@@ -118,7 +118,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
           </div>
           <p className="text-sm text-gray-500">
             {TIPOS_DOCUMENTO[d.tipo] ?? d.tipo} · {d.tipo_corp ? TIPO_CORP[d.tipo_corp] ?? d.tipo_corp : ""} · {d.seguradora} · {d.ramo} · {d.corretora}
-            {d.nosso_numero_corp ? ` · nosso número no Corp ${d.nosso_numero_corp}` : " · nasceu no ERP"}
+            {d.nosso_numero_corp ? ` · nosso nº do Corp ${d.nosso_numero_corp}` : " · nasceu no ERP"}
           </p>
         </div>
 
@@ -191,7 +191,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
             </div>
             <Campo rotulo="Dt. proposta" valor={formatarData(d.dt_proposta)} />
             <Campo rotulo="Dt. emissão" valor={formatarData(d.dt_emissao)} />
-            <Campo rotulo="Nº apólice" valor={d.numero_apolice ?? "0 (não emitida)"} />
+            <Campo rotulo="Nº da apólice" valor={d.numero_apolice ?? "0 (não emitida)"} />
             <Campo rotulo="Nº endosso / proposta" valor={`${d.numero_endosso ?? "0"} / ${d.numero_proposta ?? "—"}`} />
             <Campo rotulo="Vigência" valor={`${formatarData(d.vigencia_inicio)} a ${formatarData(d.vigencia_fim)}`} />
             <Campo rotulo="Competência" valor={formatarData(d.competencia)} />
@@ -216,7 +216,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
                   <li key={f.id} className={f.id === d.id ? "font-semibold text-o2-navy" : ""}>
                     {f.id === d.id ? "▶ " : "· "}
                     <Link href={`/erp/documentos/${f.id}`} className="hover:underline">
-                      Código O2 {f.nosso_numero}
+                      Código O2 do documento {f.nosso_numero}
                     </Link>
                     {f.nosso_numero_corp ? ` (Corp ${f.nosso_numero_corp})` : ""} · {f.tipo_corp ? TIPO_CORP[f.tipo_corp] ?? f.tipo_corp : "—"} · {SITUACOES[f.situacao] ?? f.situacao} · {formatarData(f.vigencia_inicio)} a {formatarData(f.vigencia_fim)}
                     {f.numero_apolice ? ` · apólice ${f.numero_apolice}` : ""}
@@ -243,7 +243,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
             <p className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-gray-700">
               Endosso da apólice{" "}
               <Link className="font-semibold text-o2-navy underline" href={`/erp/documentos/${d.apolice_mae.id}`}>
-                Código O2 {d.apolice_mae.nosso_numero}
+                Código O2 do documento {d.apolice_mae.nosso_numero}
               </Link>
               {d.apolice_mae.numero_apolice ? ` · nº ${d.apolice_mae.numero_apolice}` : ""} · vigência {formatarData(d.apolice_mae.vigencia_inicio)} a {formatarData(d.apolice_mae.vigencia_fim)}
               {d.imobiliaria ? ` · imobiliária ${d.imobiliaria}` : ""}
@@ -253,7 +253,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
             <form action={ligarEndossoApolice} className="flex flex-wrap items-center gap-2 rounded-lg border border-orange-100 bg-orange-50/60 p-3 text-xs">
               <RascunhoAutomatico sufixo={d.id} />
               <input type="hidden" name="id" value={d.id} />
-              <span className="font-medium text-gray-700">{d.apolice_mae ? "Corrigir a apólice deste endosso:" : "Endosso sem apólice ligada. Código O2 da apólice:"}</span>
+              <span className="font-medium text-gray-700">{d.apolice_mae ? "Corrigir a apólice deste endosso:" : "Endosso sem apólice ligada. Código O2 do documento da apólice:"}</span>
               <input name="codigo_o2" inputMode="numeric" placeholder="ex.: 200629" className="w-28 rounded border border-gray-300 px-2 py-1" />
               <button className="rounded bg-o2-navy px-3 py-1 text-white hover:bg-o2-indigo">Ligar</button>
               {vinculo && AVISO_VINCULO[vinculo] && <span className={vinculo === "ok" ? "text-green-700" : "text-red-700"}>{AVISO_VINCULO[vinculo]}</span>}
@@ -271,7 +271,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
                     <tr key={e.id}>
                       <td className="py-1 pr-2">
                         <Link href={`/erp/documentos/${e.id}`} className="text-o2-navy hover:underline">
-                          Código O2 {e.nosso_numero}
+                          Código O2 do documento {e.nosso_numero}
                         </Link>
                       </td>
                       <td className="py-1 pr-2">

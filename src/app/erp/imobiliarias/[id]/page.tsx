@@ -78,7 +78,8 @@ export default async function ErpImobiliaria({ params }: { params: Promise<{ id:
         <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Cadastro (base única, só leitura aqui)</h2>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <Campo rotulo="CNPJ / CPF" valor={imob.cnpj ? `${formatarDocumento(imob.cnpj)}${imob.tipo_pessoa ? ` · ${imob.tipo_pessoa.toLowerCase()}` : ""}` : null} />
-          <Campo rotulo="Código O2 / Corp" valor={`${imob.codigo_o2 ?? "—"} / ${imob.codigo_produtor_corp ?? "—"}`} />
+          <Campo rotulo="Cód. O2 da imobiliária (produtor)" valor={imob.codigo_o2 ?? null} />
+          <Campo rotulo="Cód. da imobiliária no Corp (produtor)" valor={imob.codigo_produtor_corp ?? null} />
           <Campo rotulo="Grupo no Power BI" valor={imob.centralizador_power_bi} />
           <Campo rotulo="Canal / origem" valor={[canal?.nome, imob.origem_comercial].filter(Boolean).join(" · ") || null} />
           <Campo rotulo="Cidade" valor={[imob.bairro, imob.cidade, imob.uf].filter(Boolean).join(" · ") || null} />

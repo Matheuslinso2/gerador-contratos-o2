@@ -101,7 +101,7 @@ export default async function ErpClientesPage({ searchParams }: { searchParams: 
         <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
           <table className="w-full text-xs">
             <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
-              <tr><th className="px-3 py-2">Código</th><th className="px-3 py-2">Nome</th><th className="px-3 py-2">CPF/CNPJ</th><th className="px-3 py-2">E-mail</th><th className="px-3 py-2">Telefone</th><th className="px-3 py-2">Cadastro</th></tr>
+              <tr><th className="px-3 py-2">Código do cliente</th><th className="px-3 py-2">Nome</th><th className="px-3 py-2">CPF/CNPJ</th><th className="px-3 py-2">E-mail</th><th className="px-3 py-2">Telefone</th><th className="px-3 py-2">Cadastro</th></tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {lista.linhas.map((c) => (

@@ -20,7 +20,7 @@ export default function JanelaEmails({ codigoO2, emails, anexos }: { codigoO2: s
       <dialog ref={ref} className="m-auto w-[min(920px,94vw)] rounded-lg border border-gray-300 p-0 shadow-xl backdrop:bg-black/40">
         <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
           <div>
-            <div className="text-sm font-semibold text-gray-900">Conversa do documento · Código O2 {codigoO2}</div>
+            <div className="text-sm font-semibold text-gray-900">Conversa do documento · Código O2 do documento {codigoO2}</div>
             <div className="text-xs text-gray-500">Só cabeçalho e trecho das mensagens. O texto completo continua na caixa de e-mail.</div>
           </div>
           <button type="button" onClick={() => ref.current?.close()} className="rounded px-2 py-1 text-sm text-gray-600 hover:bg-gray-100">Fechar</button>

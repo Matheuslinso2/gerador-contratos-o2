@@ -111,7 +111,7 @@ export default async function ErpClienteFichaPage({ params, searchParams }: { pa
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="text-left text-[11px] uppercase tracking-wide text-gray-500">
-                <tr><th className="py-1 pr-3">Código O2</th><th className="py-1 pr-3">Tipo</th><th className="py-1 pr-3">Situação</th><th className="py-1 pr-3">Imobiliária</th><th className="py-1 pr-3">Seg.</th><th className="py-1 pr-3">Ramo</th><th className="py-1 pr-3">Apólice</th><th className="py-1 pr-3">Início vig.</th><th className="py-1 pr-3 text-right">Prêmio total</th></tr>
+                <tr><th className="py-1 pr-3">Código O2 do documento</th><th className="py-1 pr-3">Tipo</th><th className="py-1 pr-3">Situação</th><th className="py-1 pr-3">Imobiliária</th><th className="py-1 pr-3">Seg.</th><th className="py-1 pr-3">Ramo</th><th className="py-1 pr-3">Nº da apólice</th><th className="py-1 pr-3">Início vig.</th><th className="py-1 pr-3 text-right">Prêmio total</th></tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {docs.map((d) => {

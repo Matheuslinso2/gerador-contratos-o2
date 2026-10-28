@@ -31,7 +31,7 @@ export default function RegrasRepasseErp({
       <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">ERP — Produtor e regras de repasse</h2>
       <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs">
         <span>
-          <span className="text-gray-500">Código O2 do produtor:</span> <b>{codigoO2 ?? "—"}</b>
+          <span className="text-gray-500">Cód. O2 da imobiliária (produtor):</span> <b>{codigoO2 ?? "—"}</b>
         </span>
         <span>
           <span className="text-gray-500">Código no Corp:</span> {codigoCorp ?? "—"}
