@@ -5,7 +5,7 @@ import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import PageHeader from "@/components/PageHeader";
 import { IconReport } from "@/components/icons";
 import { formatarData, formatarReais } from "@/lib/sinistros/regras";
-import { nomeTipoDocumento, TIPOS_DOCUMENTO } from "@/lib/erp/documentos";
+import { dadosDeCabecalhoPorId, tipoDoCabecalho, TIPOS_DOCUMENTO } from "@/lib/erp/documentos";
 import { lerFiltros } from "@/lib/erp/filtros";
 import FiltrosErp from "../FiltrosErp";
 
@@ -102,6 +102,8 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
   const kpi = (kpiRow?.dados ?? null) as Kpis | null;
   const linhas = (linhasRes.data ?? []) as Linha[];
   const total = linhasRes.count ?? linhas.length;
+  // cabeçalho padrão (Matheus 28/10): tipo, titular, produto, seguradora e vigência
+  const cab = await dadosDeCabecalhoPorId(supabase, linhas.map((l) => l.id));
 
   const href = (extra: Record<string, string | undefined>) => {
     const p = new URLSearchParams(Object.entries({ ...f, origem, faixa, atraso: atraso ? "1" : undefined, ...extra }).filter(([, v]) => v) as [string, string][]);
@@ -119,8 +121,8 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
 
       <FiltrosErp
         caminho="/erp/emissao"
-        campos={["busca", "mes", "seguradora", "produto", "imobiliaria", "tipo"]}
-        avancados={["tipo"]}
+        campos={["busca", "mes", "produto", "imobiliaria", "tipo", "seguradora"]}
+        avancados={["seguradora"]}
         valores={{ ...f, mes }}
         placeholderBusca="Código O2 do documento · nosso nº do Corp · nome do titular"
         tipos={TIPOS_DOCUMENTO}
@@ -159,17 +161,16 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
           <table className="w-full text-xs">
             <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
               <tr>
-                <th className="px-3 py-2">Código O2 do documento</th>
-                <th className="px-3 py-2">Nosso nº do Corp</th>
-                <th className="px-3 py-2">Tipo</th>
-                <th className="px-3 py-2">Origem</th>
-                <th className="px-3 py-2">Titular</th>
-                <th className="px-3 py-2">Imobiliária</th>
-                <th className="px-3 py-2">Seg.</th>
-                <th className="px-3 py-2">Ramo</th>
+                <th className="px-3 py-2">Tipo de documento</th>
+                <th className="px-3 py-2">Titular do seguro</th>
+                <th className="px-3 py-2">Produto</th>
+                <th className="px-3 py-2">Seguradora</th>
+                <th className="px-3 py-2">Vigência</th>
                 <th className="px-3 py-2">Efetivada em</th>
                 <th className="px-3 py-2 text-right">Dias</th>
-                <th className="px-3 py-2">Início vig.</th>
+                <th className="px-3 py-2">Código O2 do documento</th>
+                <th className="px-3 py-2">Origem</th>
+                <th className="px-3 py-2">Imobiliária</th>
                 <th className="px-3 py-2 text-right">Pr. líquido</th>
                 <th className="px-3 py-2">Card</th>
               </tr>
@@ -177,26 +178,33 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
             <tbody className="divide-y divide-gray-100">
               {linhas.map((d) => {
                 const dias = diasEntre(d.data_efetivacao, hoje);
-                const tipo = nomeTipoDocumento(d.tipo, d.tipo_corp);
+                const c = cab.get(d.id);
+                const tipo = tipoDoCabecalho({ tipo: d.tipo, tipo_corp: d.tipo_corp, situacao: "proposta", modo_cobranca: c?.modo_cobranca ?? null });
                 return (
                   <tr key={d.id} className="hover:bg-gray-50">
+                    <td className="px-3 py-2">
+                      <span className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-semibold ${tipo.cor}`}>{tipo.nome}</span>
+                      {tipo.detalhe ? <span className="ml-1 text-[10px] text-gray-500">{tipo.detalhe}</span> : null}
+                    </td>
+                    <td className="px-3 py-2">
+                      {(c?.titular ?? d.cliente) ? <span className="font-medium text-gray-900">{c?.titular ?? d.cliente}</span> : <span className="text-gray-400">titular não ligado</span>}
+                      {c?.inquilino && c.inquilino !== (c.titular ?? d.cliente) ? <span className="block text-[10px] text-gray-500">inquilino: {c.inquilino}</span> : null}
+                    </td>
+                    <td className="px-3 py-2">{c?.produto_nome ?? d.ramo ?? "—"}</td>
+                    <td className="px-3 py-2">{c?.seguradora_nome ?? d.seguradora ?? "—"}</td>
+                    <td className="whitespace-nowrap px-3 py-2">{c?.vigencia_inicio || c?.vigencia_fim ? `${formatarData(c?.vigencia_inicio ?? null)} a ${formatarData(c?.vigencia_fim ?? null)}` : formatarData(d.vigencia_inicio)}</td>
+                    <td className="px-3 py-2" title={`data vinda de: ${d.fonte_data}`}>{formatarData(d.data_efetivacao)}<span className="block text-[10px] text-gray-400">{d.fonte_data}</span></td>
+                    <td className="px-3 py-2 text-right"><span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${corDias(dias)}`}>{dias}</span></td>
                     <td className="px-3 py-2 font-medium">
                       <Link href={`/erp/documentos/${d.id}`} className="text-o2-navy hover:underline">{d.nosso_numero}</Link>
+                      <span className="block text-[10px] font-normal text-gray-400">{d.nosso_numero_corp ? `Corp ${d.nosso_numero_corp}` : "ainda não existe no Corp"}</span>
                     </td>
-                    <td className="px-3 py-2 text-gray-600">{d.nosso_numero_corp ?? <span className="text-gray-300" title="ainda não existe no Corp">—</span>}</td>
-                    <td className="px-3 py-2"><span className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-medium ${tipo.cor}`}>{tipo.nome}</span></td>
                     <td className="px-3 py-2">
                       <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${d.origem === "bitrix" ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-700"}`}>{d.origem === "bitrix" ? "Bitrix" : "Corp"}</span>
                     </td>
-                    <td className="px-3 py-2">{d.cliente ?? <span className="text-gray-400">sem titular ligado</span>}</td>
                     <td className="px-3 py-2">
                       {d.imobiliaria_id ? <Link href={`/admin/imobiliarias/${d.imobiliaria_id}`} className="hover:underline">{d.imobiliaria}</Link> : <span className="text-gray-400">{d.canal_venda ?? "—"}</span>}
                     </td>
-                    <td className="px-3 py-2">{d.seguradora ?? "—"}</td>
-                    <td className="px-3 py-2">{d.ramo ?? "—"}</td>
-                    <td className="px-3 py-2" title={`data vinda de: ${d.fonte_data}`}>{formatarData(d.data_efetivacao)}<span className="block text-[10px] text-gray-400">{d.fonte_data}</span></td>
-                    <td className="px-3 py-2 text-right"><span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${corDias(dias)}`}>{dias}</span></td>
-                    <td className="px-3 py-2">{formatarData(d.vigencia_inicio)}</td>
                     <td className="px-3 py-2 text-right">{formatarReais(d.premio_liquido)}</td>
                     <td className="px-3 py-2">{d.card_url ? <a href={d.card_url} target="_blank" rel="noreferrer" className="text-o2-navy hover:underline">abrir</a> : <span className="text-gray-300">—</span>}</td>
                   </tr>

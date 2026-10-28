@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import RascunhoAutomatico from "@/components/RascunhoAutomatico";
 import { formatarData, formatarReais } from "@/lib/sinistros/regras";
-import { nomeTipoDocumento, SITUACOES } from "@/lib/erp/documentos";
+import { dadosDeCabecalhoPorId, SITUACOES, tipoDoCabecalho } from "@/lib/erp/documentos";
 import { codigoCliente, formatarDocumento, tipoDoDocumento } from "@/lib/erp/clientes";
 import { atualizarCliente } from "../actions";
 
@@ -42,6 +42,8 @@ export default async function ErpClienteFichaPage({ params, searchParams }: { pa
         .order("vigencia_inicio", { ascending: false, nullsFirst: false })
     : { data: [] };
   const docs = (docsBrutos ?? []) as unknown as Doc[];
+  // cabeçalho padrão (Matheus 28/10): tipo, titular, produto, seguradora e vigência
+  const cab = await dadosDeCabecalhoPorId(supabase, docs.map((d) => d.id));
   const kpi = kpiBruto as Kpis | null;
   const incompleto = c.cadastro_incompleto as boolean;
   const documentoValido = !!tipoDoDocumento(c.cpf);
@@ -111,21 +113,26 @@ export default async function ErpClienteFichaPage({ params, searchParams }: { pa
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="text-left text-[11px] uppercase tracking-wide text-gray-500">
-                <tr><th className="py-1 pr-3">Código O2 do documento</th><th className="py-1 pr-3">Tipo</th><th className="py-1 pr-3">Situação</th><th className="py-1 pr-3">Imobiliária</th><th className="py-1 pr-3">Seg.</th><th className="py-1 pr-3">Ramo</th><th className="py-1 pr-3">Nº da apólice</th><th className="py-1 pr-3">Início vig.</th><th className="py-1 pr-3 text-right">Prêmio total</th></tr>
+                <tr><th className="py-1 pr-3">Tipo de documento</th><th className="py-1 pr-3">Titular do seguro</th><th className="py-1 pr-3">Produto</th><th className="py-1 pr-3">Seguradora</th><th className="py-1 pr-3">Vigência</th><th className="py-1 pr-3">Situação</th><th className="py-1 pr-3">Código O2 do documento</th><th className="py-1 pr-3">Nº da apólice</th><th className="py-1 pr-3">Imobiliária</th><th className="py-1 pr-3 text-right">Prêmio total</th></tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {docs.map((d) => {
-                  const t = nomeTipoDocumento(d.tipo, d.tipo_corp);
+                  const k = cab.get(d.id);
+                  const t = tipoDoCabecalho({ tipo: d.tipo, tipo_corp: d.tipo_corp, situacao: d.situacao, modo_cobranca: k?.modo_cobranca ?? null });
                   return (
                     <tr key={d.id} className="hover:bg-gray-50">
-                      <td className="py-1.5 pr-3 font-medium"><Link href={`/erp/documentos/${d.id}`} className="text-o2-navy hover:underline">{d.nosso_numero}</Link></td>
-                      <td className="py-1.5 pr-3"><span className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-medium ${t.cor}`}>{t.nome}</span></td>
+                      <td className="py-1.5 pr-3"><span className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-semibold ${t.cor}`}>{t.nome}</span></td>
+                      <td className="py-1.5 pr-3">
+                        {k?.titular ?? c.nome ? <span className="font-medium text-gray-900">{k?.titular ?? c.nome}</span> : "—"}
+                        {k?.inquilino && k.inquilino !== (k.titular ?? c.nome) ? <span className="block text-[10px] text-gray-500">inquilino: {k.inquilino}</span> : null}
+                      </td>
+                      <td className="py-1.5 pr-3">{k?.produto_nome ?? d.ramo?.abreviacao ?? "—"}</td>
+                      <td className="py-1.5 pr-3">{k?.seguradora_nome ?? d.seguradora?.abreviacao ?? "—"}</td>
+                      <td className="whitespace-nowrap py-1.5 pr-3">{d.vigencia_inicio || k?.vigencia_fim ? `${formatarData(d.vigencia_inicio)} a ${formatarData(k?.vigencia_fim ?? null)}` : "—"}</td>
                       <td className="py-1.5 pr-3">{SITUACOES[d.situacao] ?? d.situacao}</td>
-                      <td className="py-1.5 pr-3">{d.imobiliaria?.nome ?? <span className="text-gray-300">—</span>}</td>
-                      <td className="py-1.5 pr-3">{d.seguradora?.abreviacao ?? "—"}</td>
-                      <td className="py-1.5 pr-3">{d.ramo?.abreviacao ?? "—"}</td>
+                      <td className="py-1.5 pr-3 font-medium"><Link href={`/erp/documentos/${d.id}`} className="text-o2-navy hover:underline">{d.nosso_numero}</Link></td>
                       <td className="py-1.5 pr-3">{d.numero_apolice ?? <span className="text-gray-300">0</span>}</td>
-                      <td className="py-1.5 pr-3">{formatarData(d.vigencia_inicio)}</td>
+                      <td className="py-1.5 pr-3">{d.imobiliaria?.nome ?? <span className="text-gray-300">—</span>}</td>
                       <td className="py-1.5 pr-3 text-right">{formatarReais(d.premio_total)}</td>
                     </tr>
                   );

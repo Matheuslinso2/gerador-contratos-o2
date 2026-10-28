@@ -8,6 +8,7 @@ import { formatarData, formatarReais } from "@/lib/sinistros/regras";
 import { lerFiltros } from "@/lib/erp/filtros";
 import FiltrosErp from "../FiltrosErp";
 import { urlCard } from "@/lib/erp/renovacaoCards";
+import { dadosDeCabecalhoPorId, tipoDoCabecalho } from "@/lib/erp/documentos";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Renovação" };
@@ -73,6 +74,8 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
   // complementos por documento: Nosso nº do Corp, abreviação do ramo e canais (Segimob/Superlógica/Base Software/Sohtec) vindos dos produtores do Corp
   const extra = new Map<string, Extra>();
   const ids = docs.map((d) => d.documento_id);
+  // cabeçalho padrão (Matheus 28/10): tipo, titular, produto, seguradora e vigência
+  const cab = await dadosDeCabecalhoPorId(supabase, ids);
   for (const l of lotes(ids, 120)) {
     const [{ data: dd }, { data: pp }] = await Promise.all([
       supabase.from("erp_documentos").select("id, nosso_numero_corp, ramo:erp_ramos(abreviacao)").in("id", l),
@@ -294,13 +297,14 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
                     <table className="w-full text-xs">
                       <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
                         <tr>
+                          <th className="px-3 py-2">Tipo de documento</th>
+                          <th className="px-3 py-2">Titular do seguro</th>
+                          <th className="px-3 py-2">Produto</th>
+                          <th className="px-3 py-2">Seguradora</th>
+                          <th className="px-3 py-2">Vigência</th>
                           <th className="px-3 py-2">Código O2 do documento</th>
                           <th className="px-3 py-2">Nº da apólice</th>
-                          <th className="px-3 py-2">Cliente</th>
                           <th className="px-3 py-2">Imobiliária</th>
-                          <th className="px-3 py-2">Seg.</th>
-                          <th className="px-3 py-2">Ramo</th>
-                          <th className="px-3 py-2">Fim vig.</th>
                           <th className="px-3 py-2 text-right">Pr. líquido</th>
                           <th className="px-3 py-2 text-right">Com. %</th>
                           <th className="px-3 py-2">Renovação</th>
@@ -309,25 +313,34 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {c.docs.map((d) => (
+                        {c.docs.map((d) => {
+                          const k = cab.get(d.documento_id);
+                          const t = tipoDoCabecalho({ tipo: "A", tipo_corp: null, situacao: "vigente", modo_cobranca: k?.modo_cobranca ?? null });
+                          const titular = k?.titular ?? d.cliente;
+                          return (
                           <tr key={d.documento_id} className="hover:bg-gray-50">
+                            <td className="px-3 py-1.5"><span className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-semibold ${t.cor}`}>{t.nome}</span></td>
+                            <td className="px-3 py-1.5">
+                              {titular ? <span className="font-medium text-gray-900">{titular}</span> : <span className="text-gray-400">titular não ligado</span>}
+                              {d.cliente_incompleto && <span className="ml-1 rounded bg-yellow-100 px-1 text-[10px] text-yellow-800">cadastro incompleto</span>}
+                              {k?.inquilino && k.inquilino !== titular ? (
+                                <span className="block text-[10px] text-gray-500">inquilino: {d.cliente_id ? <Link href={`/erp/clientes/${d.cliente_id}`} className="hover:underline">{k.inquilino}</Link> : k.inquilino}</span>
+                              ) : null}
+                            </td>
+                            <td className="px-3 py-1.5">{k?.produto_nome ?? d.ramo}</td>
+                            <td className="px-3 py-1.5">{k?.seguradora_nome ?? d.seguradora ?? "—"}</td>
+                            <td className="whitespace-nowrap px-3 py-1.5">{formatarData(d.vigencia_inicio)} a {formatarData(d.vigencia_fim)}</td>
                             <td className="px-3 py-1.5 font-medium"><Link href={`/erp/documentos/${d.documento_id}`} className="text-o2-navy hover:underline">{d.nosso_numero}</Link></td>
                             <td className="px-3 py-1.5">{d.numero_apolice ?? <span className="text-gray-300">0</span>}</td>
-                            <td className="px-3 py-1.5">
-                              {d.cliente_id ? <Link href={`/erp/clientes/${d.cliente_id}`} className="hover:underline">{d.cliente}</Link> : <span className="text-gray-400">sem cliente</span>}
-                              {d.cliente_incompleto && <span className="ml-1 rounded bg-yellow-100 px-1 text-[10px] text-yellow-800">cadastro incompleto</span>}
-                            </td>
                             <td className="px-3 py-1.5">{d.imobiliaria ?? <span className="text-gray-400">—</span>}</td>
-                            <td className="px-3 py-1.5">{d.seguradora ?? "—"}</td>
-                            <td className="px-3 py-1.5">{d.ramo}</td>
-                            <td className="px-3 py-1.5">{formatarData(d.vigencia_fim)}</td>
                             <td className="px-3 py-1.5 text-right">{formatarReais(d.premio_liquido)}</td>
                             <td className="px-3 py-1.5 text-right">{d.comissao_pct != null ? Number(d.comissao_pct).toLocaleString("pt-BR") : "—"}</td>
                             <td className="px-3 py-1.5">{d.status_renovacao ? STATUS[d.status_renovacao] ?? d.status_renovacao : "—"}</td>
                             <td className="px-3 py-1.5">{extra.get(d.documento_id)?.card ? <a href={urlCard(extra.get(d.documento_id)!.card!.entity, extra.get(d.documento_id)!.card!.id)} target="_blank" rel="noreferrer" className="text-o2-navy hover:underline">#{extra.get(d.documento_id)!.card!.id}</a> : <span className="text-gray-300">sem card</span>}</td>
                             <td className="px-3 py-1.5 text-right">{d.anexos > 0 ? d.anexos : <span className="text-gray-300">0</span>}</td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

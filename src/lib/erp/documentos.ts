@@ -29,6 +29,7 @@ export type DocumentoLista = {
   seguradora_nome: string | null;
   produto_nome: string | null;
   produto: string | null;
+  documento_pai_id: string | null;
   modo_cobranca: string | null;
   /** titular do seguro: Fiança = proprietário (segurado/locador); demais produtos = segurado/cliente do documento */
   titular: string | null;
@@ -129,7 +130,7 @@ export const MODO_COBRANCA: Record<string, string> = {
 };
 
 const SELECT_LISTA =
-  "id, nosso_numero, nosso_numero_corp, tipo, tipo_corp, numero_apolice, vigencia_inicio, vigencia_fim, premio_liquido, premio_total, comissao_valor, situacao, canal_venda, imobiliaria_principal_id, modo_cobranca, seguradora:erp_seguradoras(abreviacao, nome), ramo:erp_ramos(abreviacao, nome, produto), cliente:locatarios!erp_documentos_locatario_id_fkey(nome), imobiliaria:imobiliarias!erp_documentos_imobiliaria_principal_id_fkey(nome)";
+  "id, nosso_numero, nosso_numero_corp, tipo, tipo_corp, numero_apolice, vigencia_inicio, vigencia_fim, premio_liquido, premio_total, comissao_valor, situacao, canal_venda, imobiliaria_principal_id, modo_cobranca, documento_pai_id, seguradora:erp_seguradoras(abreviacao, nome), ramo:erp_ramos(abreviacao, nome, produto), cliente:locatarios!erp_documentos_locatario_id_fkey(nome), imobiliaria:imobiliarias!erp_documentos_imobiliaria_principal_id_fkey(nome)";
 
 type LinhaBruta = {
   id: string;
@@ -147,6 +148,7 @@ type LinhaBruta = {
   canal_venda: string | null;
   imobiliaria_principal_id: string | null;
   modo_cobranca: string | null;
+  documento_pai_id: string | null;
   seguradora: { abreviacao: string; nome: string } | null;
   ramo: { abreviacao: string; nome: string; produto: string } | null;
   cliente: { nome: string } | null;
@@ -179,6 +181,7 @@ function mapear(r: LinhaBruta): DocumentoLista {
     titular: r.cliente?.nome ?? null,
     inquilino: null,
     produto: r.ramo?.produto ?? null,
+    documento_pai_id: r.documento_pai_id ?? null,
   };
 }
 
@@ -187,8 +190,9 @@ async function completarTitulares(sb: SupabaseClient, linhas: DocumentoLista[]) 
   const fianca = linhas.filter((l) => l.produto === "fianca");
   const semTitular = linhas.filter((l) => l.produto !== "fianca" && !l.titular);
   if (!fianca.length && !semTitular.length) return;
-  const idsFianca = fianca.map((l) => l.id);
-  const ids = [...idsFianca, ...semTitular.map((l) => l.id)];
+  const idsPai = fianca.map((l) => l.documento_pai_id).filter((x): x is string => !!x);
+  const idsFianca = [...new Set([...fianca.map((l) => l.id), ...idsPai])];
+  const ids = [...new Set([...idsFianca, ...semTitular.map((l) => l.id)])];
   const [{ data: acervo }, { data: itens }] = await Promise.all([
     idsFianca.length ? sb.from("erp_doc_partes_acervo").select("documento_id, papel, locatario:locatarios(nome)").in("documento_id", idsFianca) : Promise.resolve({ data: [] }),
     sb.from("erp_documento_itens").select("documento_id, partes:erp_item_partes(papel, nome, ordem)").in("documento_id", ids),
@@ -208,13 +212,28 @@ async function completarTitulares(sb: SupabaseClient, linhas: DocumentoLista[]) 
     }
   }
   for (const l of fianca) {
-    l.titular = seg.get(l.id) ?? prop.get(l.id) ?? null;
-    l.inquilino = gar.get(l.id) ?? loc.get(l.id) ?? l.cliente;
+    // endosso: herda o titular e o inquilino da apólice-mãe quando o próprio endosso não os traz
+    const pai = l.documento_pai_id;
+    l.titular = seg.get(l.id) ?? prop.get(l.id) ?? (pai ? seg.get(pai) ?? prop.get(pai) ?? null : null);
+    l.inquilino = gar.get(l.id) ?? loc.get(l.id) ?? (pai ? gar.get(pai) ?? loc.get(pai) ?? null : null) ?? l.cliente;
   }
   // card ainda sem cliente cadastrado (sem CPF): mostra a pessoa informada no card
   // (o nome do card às vezes vem com o prefixo "NOVO - " / "RENOVAÇÃO - ")
   const limpo = (n: string | undefined) => (n ? n.replace(/^s*(novo|renova[cç][aã]o)s*-s*/i, "").trim() || null : null);
   for (const l of semTitular) l.titular = limpo(prop.get(l.id) ?? loc.get(l.id) ?? first.get(l.id));
+}
+
+/** Dados do cabeçalho padrão (tipo, titular, produto, seguradora, vigência) para qualquer tela que já tenha os ids dos documentos. */
+export async function dadosDeCabecalhoPorId(sb: SupabaseClient, ids: string[]): Promise<Map<string, DocumentoLista>> {
+  const mapa = new Map<string, DocumentoLista>();
+  const unicos = [...new Set(ids)];
+  for (let i = 0; i < unicos.length; i += 120) {
+    const { data } = await sb.from("erp_documentos").select(SELECT_LISTA).in("id", unicos.slice(i, i + 120));
+    const linhas = ((data ?? []) as unknown as LinhaBruta[]).map(mapear);
+    await completarTitulares(sb, linhas);
+    for (const l of linhas) mapa.set(l.id, l);
+  }
+  return mapa;
 }
 
 export type FiltrosBusca = {
