@@ -44,3 +44,7 @@
 --   seguradoras com fatura; recalculada por erp_atualizar_imobiliarias_resumo() no cron erp-faturas (depois da fila de Emissão).
 -- erp_imobiliaria_producao(id): produção vigente por produto e seguradora. Índice erp_documentos_imob_principal_idx.
 -- Achado: imobiliarias.fatura_habilitada está FALSE para as 705 fichas, embora 135 tenham fatura no ERP: a tela passou a derivar "fatura" de erp_faturas.
+
+-- 28/10: busca principal por TITULAR (nome, CPF/CNPJ ou CLI-000123): erp_docs_por_titular(p_busca, p_limite) acha o documento pelo cliente do documento,
+-- pelo segurado/garantido da apólice lida (erp_doc_partes_acervo) e pelas partes do card (erp_item_partes). Índices trigram em locatarios.nome e erp_item_partes.nome
+-- (Silva: 1,5 s -> 80 ms). Definição aplicada via migration erp_docs_por_titular / erp_trgm_nome_titular.
