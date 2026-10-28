@@ -175,6 +175,7 @@ export type LinhaDesempenho = {
   custoPremiacao: number;
   realizado: number; // no período todo da campanha, só contratos novos
   realizadoMes: number; // no mês de referência (ver DesempenhoCampanha.janelaMes), só novos
+  cotacoesMes: number; // cotações recebidas no mês de referência (só novos)
   metaMensal: number | null; // meta total ÷ meses do período
   base: number; // média mensal da métrica nos 6 meses antes do início (só novos)
   percentual: number | null;
@@ -207,6 +208,7 @@ export type DesempenhoCampanha = {
     metaMensal: number;
     realizado: number;
     realizadoMes: number;
+    cotacoesMes: number;
     percentual: number | null;
     projecao: number | null;
     participantesComMeta: number;
@@ -582,6 +584,7 @@ export async function montarDesempenhoCampanha(
       custoPremiacao: Number(p.custo_premiacao) || 0,
       realizado,
       realizadoMes,
+      cotacoesMes: funilMes.cotacoes,
       metaMensal: meta !== null && meta > 0 ? meta / mesesDoPeriodo : null,
       base: valorDaMetrica(base, programa.metrica) / MESES_BASE,
       percentual: meta && meta > 0 ? (realizado / meta) * 100 : null,
@@ -612,6 +615,7 @@ export async function montarDesempenhoCampanha(
   const metaTotal = comMeta.reduce((s, l) => s + (l.meta ?? 0), 0);
   const realizadoTotal = linhas.reduce((s, l) => s + l.realizado, 0);
   const realizadoMesTotal = linhas.reduce((s, l) => s + l.realizadoMes, 0);
+  const cotacoesMesTotal = linhas.reduce((s, l) => s + l.cotacoesMes, 0);
   const metaMensalTotal = comMeta.reduce((s, l) => s + (l.metaMensal ?? 0), 0);
   const funilTotal = linhas.reduce((s, l) => somarFunil(s, l.funil), zeroFunil());
   const corpTotal = linhas.reduce(
@@ -633,6 +637,7 @@ export async function montarDesempenhoCampanha(
       metaMensal: metaMensalTotal,
       realizado: realizadoTotal,
       realizadoMes: realizadoMesTotal,
+      cotacoesMes: cotacoesMesTotal,
       percentual: metaTotal > 0 ? (comMeta.reduce((s, l) => s + l.realizado, 0) / metaTotal) * 100 : null,
       projecao: diasDecorridos > 0 ? (realizadoTotal / diasDecorridos) * diasTotais : null,
       participantesComMeta: comMeta.length,

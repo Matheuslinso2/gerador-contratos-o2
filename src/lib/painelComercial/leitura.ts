@@ -2,6 +2,7 @@ import "server-only";
 import { buscarTodasPaginasFlat, chamarBitrix, listarHistoricoEtapas } from "@/lib/bitrix/client";
 import { createServiceClient } from "@/lib/supabase/service";
 import { buscarLeadsAoVivo } from "@/lib/bitrix/crmLeads";
+import { montarDatasetsCampanhas } from "./campanhas";
 import { construirDatasets, mesesDoPeriodo, type AtividadeBruta, type Datasets, type DealBruto, type EmpresaBruta, type HistoricoBruto } from "./construir";
 
 // Leitura do Bitrix (SOMENTE LEITURA: crm.*.list/fields) para o Painel Comercial
@@ -76,6 +77,13 @@ export async function calcularDatasetsAoVivo(): Promise<Datasets> {
 
   const datasets = construirDatasets({ agora, deals, historico, empresas, atividades, nomesEtapas12, metasPersonalizadas, mesesCongelados });
   Object.assign(datasets, await lerCrmLeads());
+  // Aba Campanhas: junta o CRM com metas/produção da área Campanhas. Se falhar, o resto segue.
+  try {
+    Object.assign(datasets, await montarDatasetsCampanhas(db, datasets.camp_cards ?? []));
+  } catch (e) {
+    console.error("Integração de Campanhas indisponível no Painel Comercial:", e);
+    datasets.camp_erros = [{ erro: e instanceof Error ? e.message : "falha na integração de Campanhas" }];
+  }
   return datasets;
 }
 

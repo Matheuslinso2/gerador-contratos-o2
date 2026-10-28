@@ -54,6 +54,10 @@ export function filtrarPorPerfil(dados: Datasets, perfil: Perfil): Datasets {
   saida.kpi = (dados.kpi ?? []).map((r) => (CHAVES_COMISSAO_KPI.has(String(r.chave)) && !pode(r.vendedora) ? { ...r, valor: null } : r));
   saida.equipe = (dados.equipe ?? []).map((r) => (pode(r.vendedora) ? r : { ...r, comissao_vend: null }));
   saida.ativ_vendedoras = (dados.ativ_vendedoras ?? []).map((r) => (pode(r.vendedora) ? r : { ...r, valor_05: null, comissao_o2_convertida: null }));
+  // Financeiro das campanhas (comissão, repasse, custo e resultado): só diretoria e supervisão.
+  if (!veTudo(perfil)) {
+    saida.camp_def = (dados.camp_def ?? []).map((r) => ({ ...r, comissao: null, repasse: null, custo_premiacao: null, resultado: null, corp_premio: null, corp_documentos: null }));
+  }
   return saida;
 }
 
