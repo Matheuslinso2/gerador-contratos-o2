@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { buscarDefinicaoCampos, chamarBitrix, listarHistoricoEtapas, listarItensSpa, type BitrixDefinicaoCampo, type BitrixItemRaw, type BitrixStageHistoryEvent } from "@/lib/bitrix/client";
 import { gerarLinkCard } from "@/lib/bitrix/entidadesCard";
 import { SEGURADORAS as SEGURADORAS_FIANCA } from "@/lib/bitrix/seguroFianca";
+import { gerarParcelasEndosso } from "@/lib/erp/parcelasEndosso";
 import { separarPremio } from "./premio";
 import { garantirCliente, tipoDoDocumento } from "@/lib/erp/clientes";
 
@@ -558,6 +559,8 @@ export async function sincronizarSpa(sb: SupabaseClient, cfg: ConfigSpa, o: Opco
         const v = await vincularEndossoAoPai(sb, { cfg, item, x, docId, seg, escrever });
         if (v.pai) r.endossos_ligados++; else r.endossos_sem_apolice++;
         if (v.avisou) r.avisos_no_bitrix++;
+        // parcelas e cobrança próprias do endosso (campos do card pelo título; sem 1º vencimento não nasce parcela)
+        if (o.gravar) await gerarParcelasEndosso(sb, docId, item as unknown as Record<string, unknown>, defs);
       }
     } catch (e) {
       r.erros.push({ card: id, erro: (e as Error).message });
