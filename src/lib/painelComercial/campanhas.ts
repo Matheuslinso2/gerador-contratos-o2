@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   DIAS_APROVADA_PARADA,
   ROTULO_FAROL,
+  ritmoEFarolNoPrazo,
   hojeBrasilia,
   metricaInfo,
   montarDesempenhoCampanha,
@@ -132,6 +133,7 @@ export async function montarDatasetsCampanhas(db: SupabaseClient, cardsCrm: Linh
     const empId = String(card.empresa_id ?? "");
     const imobId = empresaParaImob.get(empId) ?? null;
     const achado = imobId ? escolher(imobId, card.campanha) : undefined;
+    const fimCrm = typeof card.campanha_crm_fim === "string" ? card.campanha_crm_fim : null;
     const base = { card: card.card, cliente: card.cliente, vendedora: card.vendedora, gestor: card.gestor, etapa: card.etapa, dias_etapa: card.dias_etapa, situacao: card.situacao, dias_sem_ativ: card.dias_sem_ativ, produtos: card.produtos, empresa_id: empId };
     if (!achado) {
       const motivo = !imobId ? (situacaoDoVinculo.get(empId) ? `Vínculo ${situacaoDoVinculo.get(empId)} (não confirmado)` : "Empresa sem vínculo com a base de imobiliárias") : "Imobiliária fora das campanhas com meta";
@@ -141,6 +143,10 @@ export async function montarDatasetsCampanhas(db: SupabaseClient, cardsCrm: Linh
     }
     const { calc, linha } = achado;
     const m = metricaInfo(calc.campanha.meta_metrica);
+    // Prazo do cliente: o fim do campo Campanha do card no CRM (Expan, Silvério e Adjuve = 2 meses,
+    // os demais = 3). Só vale quando cabe dentro da campanha cadastrada.
+    const fimCliente = fimCrm && fimCrm < calc.campanha.valido_ate && fimCrm > calc.campanha.valido_de ? fimCrm : calc.campanha.valido_ate;
+    const proprio = fimCliente !== calc.campanha.valido_ate ? ritmoEFarolNoPrazo(linha.meta, linha.realizado, calc.campanha.valido_de, fimCliente) : null;
     const novas = linha.oportunidades.filter((o) => o.tipo === "novo");
     const resumoEmail = linha.unidadeIds.map((id) => calc.emails.get(id)).filter((x): x is NonNullable<typeof x> => !!x);
     const temEmail = resumoEmail.length > 0;
@@ -156,19 +162,24 @@ export async function montarDatasetsCampanhas(db: SupabaseClient, cardsCrm: Linh
       responsavel_o2: linha.responsavelEmail,
       gestor_conta: linha.gestorContaEmail,
       campanha_inicio: calc.campanha.valido_de,
-      campanha_fim: calc.campanha.valido_ate,
+      campanha_fim: fimCliente,
+      campanha_fim_cadastrada: calc.campanha.valido_ate,
+      prazo_proprio: proprio ? "Sim" : "Não",
+      dias_restantes: proprio ? proprio.diasRestantes : calc.desempenho.diasRestantes,
+      dias_total: proprio ? proprio.diasTotais : calc.desempenho.diasTotais,
+      dias_decorridos: proprio ? proprio.diasDecorridos : calc.desempenho.diasDecorridos,
       unidade: m.rotulo,
       moeda: m.moeda ? "Sim" : "Não",
       meta: cobreMetrica(linha.meta, m.moeda),
       realizado: cobreMetrica(linha.realizado, m.moeda),
       realizado_mes: cobreMetrica(linha.realizadoMes, m.moeda),
-      meta_mensal: cobreMetrica(linha.metaMensal, m.moeda),
+      meta_mensal: cobreMetrica(proprio ? proprio.metaMensal : linha.metaMensal, m.moeda),
       faltam: cobreMetrica(linha.faltam, m.moeda),
       pct: linha.percentual === null ? null : Math.round(linha.percentual * 10) / 10,
-      ritmo_semana: linha.ritmoSemana === null ? null : Math.round(linha.ritmoSemana * 10) / 10,
-      projecao: cobreMetrica(linha.projecao, m.moeda),
-      farol: ROTULO_FAROL[linha.farol],
-      farol_chave: linha.farol,
+      ritmo_semana: (proprio ? proprio.ritmoSemana : linha.ritmoSemana) === null ? null : Math.round((proprio ? proprio.ritmoSemana : linha.ritmoSemana)! * 10) / 10,
+      projecao: cobreMetrica(proprio ? proprio.projecao : linha.projecao, m.moeda),
+      farol: ROTULO_FAROL[proprio ? proprio.farol : linha.farol],
+      farol_chave: proprio ? proprio.farol : linha.farol,
       email_enviados: resumoEmail.reduce((s, r) => s + r.totalEmails, 0),
       email_abertos: resumoEmail.reduce((s, r) => s + r.emailsAbertos, 0),
       email_status: pior ? ROTULO_STATUS_ENVIO[pior.chave] : "Aguardando envio",

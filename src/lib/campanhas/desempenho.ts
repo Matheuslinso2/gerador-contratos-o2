@@ -419,6 +419,32 @@ function alertasDe(a: {
   return alertas;
 }
 
+// Mesmas fórmulas de projeção, ritmo necessário e farol da linha do quadro, para
+// um prazo PRÓPRIO do cliente (ex.: Expan, Silvério e Adjuve têm campanha de
+// 2 meses dentro de uma campanha de 3). Usada pelo Painel Comercial quando o
+// fim no CRM difere do fim cadastrado na campanha.
+export function ritmoEFarolNoPrazo(meta: number | null, realizado: number, inicio: string, fim: string, agora = new Date()) {
+  const hoje = hojeBrasilia(agora);
+  const fimEfetivo = hoje < fim ? hoje : fim;
+  const diasTotais = diasEntre(inicio, fim) + 1;
+  const diasDecorridos = Math.max(0, Math.min(diasTotais, diasEntre(inicio, fimEfetivo) + 1));
+  const diasRestantes = Math.max(0, diasEntre(hoje, fim));
+  const projecao = diasDecorridos > 0 ? (realizado / diasDecorridos) * diasTotais : null;
+  const faltam = meta !== null ? Math.max(0, meta - realizado) : null;
+  const semanas = diasRestantes / 7;
+  const ritmoSemana = faltam !== null && faltam > 0 && semanas > 0 ? faltam / semanas : null;
+  const mesesDoPeriodo = Math.max(1, Math.round(diasTotais / 30.4375));
+  return {
+    diasTotais,
+    diasDecorridos,
+    diasRestantes,
+    projecao,
+    ritmoSemana,
+    farol: farolDe(meta, realizado, projecao, diasDecorridos, diasRestantes),
+    metaMensal: meta !== null && meta > 0 ? meta / mesesDoPeriodo : null,
+  };
+}
+
 export async function montarDesempenhoCampanha(
   db: SupabaseClient,
   programa: ConfigDesempenho,

@@ -600,6 +600,8 @@ export function construirDatasets(entrada: EntradaConstrucao): Datasets {
         dias_sem_ativ: c.diasSemAtividade,
         situacao: c.diasEtapa === null ? "Sem data de entrada" : c.parado ? "Parado" : "Em movimento",
         empresa_id: c.empresaId,
+        campanha_crm_inicio: c.campanha?.inicio ?? null,
+        campanha_crm_fim: c.campanha?.fim ?? null,
         meta_personalizada: meta?.meta ?? null,
         meta_unidade: meta?.unidade ?? null,
         meta_prazo: meta?.prazo ?? null,

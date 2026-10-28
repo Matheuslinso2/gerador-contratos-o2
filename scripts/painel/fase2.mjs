@@ -128,7 +128,7 @@ export function aplicarFase2(entrada) {
     const link=el('a','Abrir card no Bitrix');link.href='https://o2seguros.bitrix24.com.br/crm/deal/details/'+r.card+'/';link.target='_blank';link.rel='noopener noreferrer';
     const unid=r.unidade||'';
     box.append(
-      col('Card e campanha',['Card '+r.card+' · empresa '+r.empresa_id,link,'Campanha: '+(r.campanha||'—')+(r.campanha_inicio?' ('+dBrA(r.campanha_inicio)+' a '+dBrA(r.campanha_fim)+')':''),'Produtos no CRM: '+(r.produtos||'—')]),
+      col('Card e campanha',['Card '+r.card+' · empresa '+r.empresa_id,link,'Campanha: '+(r.campanha||'—')+(r.campanha_inicio?' ('+dBrA(r.campanha_inicio)+' a '+dBrA(r.campanha_fim)+')':'')+(r.prazo_proprio==='Sim'?' · prazo do cliente (CRM); a campanha cadastrada vai até '+dBrA(r.campanha_fim_cadastrada):''),'Produtos no CRM: '+(r.produtos||'—')]),
       col('Papéis',['Vendedor(a) no CRM: '+r.vendedora,'Gestor da conta no CRM: '+r.gestor,'Responsável O2 na campanha: '+nomeEmail(r.responsavel_o2),'Gestor da conta na campanha: '+nomeEmail(r.gestor_conta)]),
       col('Etapa',[r.etapa+' · '+fmt(r.dias_etapa,'dd')+(typeof r.dias_etapa==='number'?' dia(s)':'')+(r.situacao==='Parado'?' (parado)':''),'Dias sem atividade no card: '+(r.dias_sem_ativ===null||r.dias_sem_ativ===undefined?'—':r.dias_sem_ativ)]),
       col('Contatos',['Último do(a) vendedor(a) responsável: '+(r.ultimo_contato_vend?dBr(r.ultimo_contato_vend)+' ('+r.dias_sem_contato_vend+' dias)':'Sem contato registrado'),'Último de qualquer colaborador: '+(r.ultimo_contato_qualquer?dBr(r.ultimo_contato_qualquer)+' · '+(ROT_CANAL[r.ultimo_contato_qualquer_canal]||'')+' · '+(r.ultimo_contato_qualquer_quem||'não identificado'):'—'),...((r.contatos||[]).slice(0,6).map(e=>'• '+dBr(e.data)+' · '+(ROT_CANAL[e.canal]||e.canal)+' · '+e.quem+(e.origem==='manual'?' (lançado por fora)':'')))]),
@@ -164,19 +164,23 @@ export function aplicarFase2(entrada) {
     else{const m=comMeta.reduce((s,r)=>s+r.meta,0),rl=comMeta.reduce((s,r)=>s+(r.realizado||0),0);
       set('ct-meta',fmtM(rl,moedaSel)+' / '+fmtM(m,moedaSel)+' · '+Math.round(rl/m*100)+'%');
       set('ct-meta-s',comMeta.length===un.length?'Todos os '+un.length+' clientes têm meta':'Cobertura: '+comMeta.length+' de '+un.length+' clientes com meta (consolidado só deles)');}
-    const prazos=d.defsSel.slice().sort((a,b)=>a.dias_restantes-b.dias_restantes);
-    if(!prazos.length){set('ct-prazo','—');set('ct-prazo-s','Sem campanha com meta e período');}
-    else{set('ct-prazo',prazos[0].dias_restantes>0?prazos[0].dias_restantes+' dias':'Encerrada');
-      set('ct-prazo-s',(d.defsSel.length>1?'Próximo vencimento. ':'')+prazos.map(p=>p.nome.slice(0,28)+': até '+dBrA(p.fim)+' ('+p.dias_restantes+' d)').join(' · '));}
+    // Prazo por grupo de cliente: o fim vem do campo Campanha do card no CRM (ex.: Expan, Silvério e Adjuve = 2 meses; os demais = 3).
+    const grupos=new Map();un.forEach(r=>{const k=r.campanha_id+'|'+r.campanha_fim;if(!grupos.has(k))grupos.set(k,{k,nome:r.campanha,inicio:r.campanha_inicio,fim:r.campanha_fim,dias_restantes:r.dias_restantes,dias_total:r.dias_total,dias_decorridos:r.dias_decorridos,clientes:[]});grupos.get(k).clientes.push(r);});
+    const gl=[...grupos.values()].sort((x,y)=>x.dias_restantes-y.dias_restantes);
+    if(!gl.length){set('ct-prazo','—');set('ct-prazo-s','Sem campanha com meta e período');}
+    else{set('ct-prazo',gl[0].dias_restantes>0?gl[0].dias_restantes+' dias':'Encerrada');
+      set('ct-prazo-s',(gl.length>1?'Próximo vencimento. ':'')+gl.map(g=>g.nome.slice(0,26)+': até '+dBrA(g.fim)+' ('+g.dias_restantes+' d, '+g.clientes.length+' cliente(s))').join(' · '));}
     set('ct-cotacoes','Cotações recebidas no mês: '+fmt(un.reduce((s,r)=>s+(r.cotacoes_mes||0),0),'int')+' · recebidas no mês, só negócios novos; fonte: funil da área Campanhas (não é contratação).');
     // 3. prazo x resultado (uma linha por campanha)
     const bars=document.getElementById('camp-bars');bars.replaceChildren();
-    d.defsSel.forEach(c=>{
-      const t=el('h4',c.nome+' · '+dBrA(c.inicio)+' a '+dBrA(c.fim)+' · '+(d.rows.filter(r=>r.campanha_id===c.id).length)+' card(s) no CRM');bars.appendChild(t);
-      bars.appendChild(barRow('Prazo decorrido',[[c.pct_prazo||0,'var(--cds-chart-muted)']],100,fmt((c.pct_prazo||0)/100,'pct')+' · faltam '+c.dias_restantes+' dias'));
-      bars.appendChild(barRow('Meta atingida',[[Math.min(100,c.pct_meta||0),dash.colors[1]]],100,c.pct_meta===null?'meta não definida':fmtM(c.realizado,c.moeda)+' / '+fmtM(c.meta_total,c.moeda)+' · '+Math.round(c.pct_meta)+'%'));
+    gl.forEach(g=>{
+      const cm=g.clientes.filter(r=>r.meta!==null&&r.meta>0);const mt=cm.reduce((x,r)=>x+r.meta,0),rl=cm.reduce((x,r)=>x+(r.realizado||0),0);
+      const pz=g.dias_total?Math.round(g.dias_decorridos/g.dias_total*100):0;
+      bars.appendChild(el('h4',g.nome+' · '+dBrA(g.inicio)+' a '+dBrA(g.fim)+' · '+g.clientes.length+' cliente(s)'));
+      bars.appendChild(barRow('Prazo decorrido',[[pz,'var(--cds-chart-muted)']],100,pz+'% · faltam '+g.dias_restantes+' dias'));
+      bars.appendChild(barRow('Meta atingida',[[mt?Math.min(100,rl/mt*100):0,dash.colors[1]]],100,mt?fmtM(rl,moedaSel)+' / '+fmtM(mt,moedaSel)+' · '+Math.round(rl/mt*100)+'%'+(cm.length<g.clientes.length?' ('+cm.length+' de '+g.clientes.length+' com meta)':''):'meta não definida'));
     });
-    if(!d.defsSel.length) bars.appendChild(el('p','Nenhuma campanha com meta e período neste recorte.','muted'));
+    if(!gl.length) bars.appendChild(el('p','Nenhuma campanha com meta e período neste recorte.','muted'));
     // 4. alertas
     set('ca-contato',fmt(d.rows.filter(temAlerta.contato).length,'int'));
     set('ca-parado',fmt(d.rows.filter(temAlerta.parado).length,'int'));
