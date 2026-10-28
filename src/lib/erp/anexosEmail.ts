@@ -80,7 +80,7 @@ export function avaliar(t: string, c: DocAlvo, soConfirmada = false): Avaliacao 
 
 export async function guardarAnexo(
   sb: SupabaseClient,
-  o: { doc: Pick<DocAlvo, "id">; pdf: Buffer; nome: string; messageId: string; tipo: string; av: Avaliacao; extra?: Record<string, unknown>; origem?: "email" | "bitrix" }
+  o: { doc: Pick<DocAlvo, "id">; pdf: Buffer; nome: string; messageId: string; tipo: string; av: Avaliacao; extra?: Record<string, unknown>; origem?: "email" | "bitrix" | "drive" }
 ): Promise<void> {
   const sha = createHash("sha256").update(o.pdf).digest("hex");
   const caminho = `${sha}.pdf`;

@@ -120,7 +120,8 @@ type Doc = { id: string; nosso_numero: number; nosso_numero_corp: number | null;
         continue;
       }
     }
-    if (d.documento_renovado_id || renovados.has(d.id)) { duvidosos.push({ cod, motivo: "renovação ligada", detalhe: `ini ${dIni} d, fim ${dFim} d` }); bump("renovação ligada (listado)"); continue; }
+    // com --congelados-sem-mudar-mes, o Matheus confirmou (28/10) que os congelados que não mudam de mês entram mesmo com renovação ligada
+    if ((d.documento_renovado_id || renovados.has(d.id)) && !(d.congelado && CONGELADOS_SEM_MUDAR_MES)) { duvidosos.push({ cod, motivo: "renovação ligada", detalhe: `ini ${dIni} d, fim ${dFim} d` }); bump("renovação ligada (listado)"); continue; }
     if (Math.abs(dIni) > LIMITE_DIAS || Math.abs(dFim) > LIMITE_DIAS) { duvidosos.push({ cod, motivo: `diferença maior que ${LIMITE_DIAS} dias`, detalhe: `ini ${dIni} d, fim ${dFim} d (${p.fonte})` }); bump("diferença grande (listado)"); continue; }
     mudar.push({ doc: d, ini: p.ini, fim: p.fim!, dIni, dFim, fonte: p.fonte, ref: p.ref });
     r.gravar++;
