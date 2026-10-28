@@ -592,7 +592,7 @@ export async function vincularEndossoAoPai(
   sb: SupabaseClient,
   a: { cfg: ConfigSpa; item: BitrixItemRaw; x: Extraido; docId: string; seg: string | null; escrever: boolean },
 ): Promise<{ pai: Apolice | null; motivo: string | null; avisou: boolean }> {
-  const { data: doc } = await sb.from("erp_documentos").select("documento_pai_id").eq("id", a.docId).single();
+  const { data: doc } = await sb.from("erp_documentos").select("documento_pai_id, dt_proposta, vigencia_inicio, vigencia_fim").eq("id", a.docId).single();
   let pai: Apolice | null = null;
   let motivo: string | null = null;
   // Cap: o Corp guarda o nº do título em numero_apolice; o card de endosso traz o título atual na "Proposta anterior"
@@ -626,6 +626,15 @@ export async function vincularEndossoAoPai(
   if (pai && pai.id !== a.docId && pai.id !== doc?.documento_pai_id) {
     const { error } = await sb.from("erp_documentos").update({ documento_pai_id: pai.id }).eq("id", a.docId);
     if (error) throw new Error(error.message);
+  }
+  // vigência própria do endosso (Matheus 28/10): da efetivação até o fim da apólice-mãe (ex.: troca de veículo no 6º mês
+  // = endosso de 6 meses). Só quando o card não traz vigência e a apólice-mãe tem fim; o início é a data da efetivação.
+  if (pai?.vigencia_fim && doc && !doc.vigencia_fim) {
+    const inicio = doc.vigencia_inicio ?? a.x.vigIni ?? doc.dt_proposta ?? String(a.item.createdTime).slice(0, 10);
+    if (inicio <= pai.vigencia_fim) {
+      const { error } = await sb.from("erp_documentos").update({ vigencia_inicio: inicio, vigencia_fim: pai.vigencia_fim }).eq("id", a.docId);
+      if (error) throw new Error(error.message);
+    }
   }
   if (!a.escrever) return { pai, motivo, avisou: false };
 
