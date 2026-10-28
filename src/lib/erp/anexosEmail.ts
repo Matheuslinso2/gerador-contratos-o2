@@ -80,7 +80,7 @@ export function avaliar(t: string, c: DocAlvo, soConfirmada = false): Avaliacao 
 
 export async function guardarAnexo(
   sb: SupabaseClient,
-  o: { doc: DocAlvo; pdf: Buffer; nome: string; messageId: string; tipo: string; av: Avaliacao; extra?: Record<string, unknown> }
+  o: { doc: Pick<DocAlvo, "id">; pdf: Buffer; nome: string; messageId: string; tipo: string; av: Avaliacao; extra?: Record<string, unknown>; origem?: "email" | "bitrix" }
 ): Promise<void> {
   const sha = createHash("sha256").update(o.pdf).digest("hex");
   const caminho = `${sha}.pdf`;
@@ -88,7 +88,7 @@ export async function guardarAnexo(
   if (eu && !/exist|duplicate/i.test(eu.message)) throw new Error(`upload: ${eu.message}`);
   const { error } = await sb.from("erp_documento_anexos").upsert(
     {
-      documento_id: o.doc.id, tipo: o.tipo, origem: "email", storage_path: caminho, nome_arquivo: o.nome, sha256: sha, message_id: o.messageId,
+      documento_id: o.doc.id, tipo: o.tipo, origem: o.origem ?? "email", storage_path: caminho, nome_arquivo: o.nome, sha256: sha, message_id: o.messageId,
       tamanho: o.pdf.length, situacao: o.av.situacao,
       lido: { cpf_confere: o.av.cpf, numero_confere: o.av.num, vigencia_confere: o.av.vig, ...(o.extra ?? {}) },
     },

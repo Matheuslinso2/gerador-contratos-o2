@@ -6,13 +6,15 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createServiceClient } from "@/lib/supabase/service";
-import { textoDoPdf } from "@/lib/erp/anexosEmail";
+import { guardarAnexo, textoDoPdf } from "@/lib/erp/anexosEmail";
 import { chamadorBitrix, lerChatDaTarefa, listarTarefas } from "@/lib/erp/tarefaCadastro";
 import { carregarCapVigentes, ehCertificado, lerCertificado, ligarCertificado } from "./certificadoCap";
 
 const arg = (n: string) => { const i = process.argv.indexOf(`--${n}`); return i >= 0 ? process.argv[i + 1] : undefined; };
 const DESDE = arg("desde") ?? "2024-05-01";
 const SAIDA = arg("saida") ?? path.join(os.tmpdir(), "certificados-bitrix.json");
+const GUARDAR = process.argv.includes("--guardar"); // guarda os PDFs de vínculo confirmado como anexo do documento
+let guardados = 0;
 const bx = chamadorBitrix(process.env.BITRIX_WEBHOOK_URL_TAREFAS!);
 const sb = createServiceClient();
 const pausa = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -46,6 +48,11 @@ async function comRetry<T>(fn: () => Promise<T>): Promise<T> { for (let t = 0; ;
         const ligs = ligarCertificado(ind, texto.replace(/\s+/g, " "), c);
         if (!ligs.length) { r.semNumeroEmDoc++; continue; }
         for (const l of ligs) {
+          // --guardar: só vínculo CONFIRMADO vira anexo do documento (bucket privado + erp_documento_anexos, origem bitrix)
+          if (GUARDAR && l.situacao === "confirmada") {
+            await comRetry(() => guardarAnexo(sb, { doc: { id: l.doc.id }, pdf: buf, nome: f.name, messageId: `bitrix:tarefa:${t.id}:arquivo:${f.id}`, tipo: "certificado", origem: "bitrix", av: { situacao: "confirmada", cpf: l.porCpf, num: l.via === "numero", vig: l.porData }, extra: { fonte: "tarefa Bitrix", tarefa: Number(t.id), inicio: c.inicio, meses: c.meses } }));
+            guardados++;
+          }
           const antes = achados.get(l.doc.id);
           if (!antes || (antes.situacao === "provavel" && l.situacao === "confirmada"))
             achados.set(l.doc.id, { nosso_numero: l.doc.nosso_numero, situacao: l.situacao, tarefa: Number(t.id), arquivo: f.name, inicio: c.inicio, meses: c.meses, fim_calculado: c.fim, fim_erp: l.doc.vigencia_fim, fim_confere: l.fimConfere });
@@ -62,6 +69,7 @@ async function comRetry<T>(fn: () => Promise<T>): Promise<T> { for (let t = 0; ;
   for (const d of ind.vigentes) { const k = ind.nomeSeguradora.get(d.seguradora_id!) ?? "?"; const q = (quadro[k] ??= { vigentes: 0, ligados: 0 }); q.vigentes++; if (achados.has(d.id)) q.ligados++; }
   fs.writeFileSync(SAIDA, JSON.stringify(lista, null, 1));
   console.log(JSON.stringify(r));
+  if (GUARDAR) console.log(`ANEXOS GUARDADOS (vínculo confirmado): ${guardados}`);
   console.log(`LIGADOS pelos chats do Bitrix: ${lista.length} documentos vigentes (confirmada ${conf}, provável ${lista.length - conf}) de ${ind.vigentes.length}`);
   console.log("POR SEGURADORA:", JSON.stringify(quadro));
   console.log(`MODO DE REAPLICAÇÃO (meses): ${JSON.stringify(modos)} | fim calculado = fim do ERP em ${comFim.filter((x) => x.fim_confere).length} de ${comFim.length}`);

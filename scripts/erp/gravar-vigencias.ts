@@ -16,6 +16,7 @@ import path from "node:path";
 import { createServiceClient } from "@/lib/supabase/service";
 
 const GRAVAR = process.argv.includes("--gravar");
+const CONGELADOS_SEM_MUDAR_MES = process.argv.includes("--congelados-sem-mudar-mes");
 const iFontes = process.argv.indexOf("--fontes");
 const FONTES = new Set((iFontes >= 0 ? process.argv[iFontes + 1] : "cap,acervo,tarefas").split(","));
 const LIMITE_DIAS = 31;
@@ -108,10 +109,16 @@ type Doc = { id: string; nosso_numero: number; nosso_numero_corp: number | null;
     if (!p) continue;
     const dIni = dias(p.ini, d.vigencia_inicio), dFim = dias(p.fim!, d.vigencia_fim);
     if (dIni === 0 && dFim === 0) { r.semDiferenca++; continue; }
+    const mudaMesInicio = d.vigencia_inicio.slice(0, 7) !== p.ini.slice(0, 7), mudaMesFim = d.vigencia_fim.slice(0, 7) !== p.fim!.slice(0, 7);
     if (d.congelado) {
-      duvidosos.push({ cod, motivo: "documento congelado", detalhe: `ini ${dIni} d, fim ${dFim} d` }); bump("congelado (listado)");
-      congelados.push({ produto: `${nSeg.get(d.seguradora_id!) ?? "?"} / ${nRamo.get(d.ramo_id!) ?? "?"}`, dIni, dFim, mudaMesInicio: d.vigencia_inicio.slice(0, 7) !== p.ini.slice(0, 7), mudaMesFim: d.vigencia_fim.slice(0, 7) !== p.fim!.slice(0, 7), fonte: p.fonte });
-      continue;
+      // --congelados-sem-mudar-mes (autorizado pelo Matheus em 28/10): congelado só entra se início e fim ficam no MESMO mês de competência;
+      // renovação ligada e diferença > 31 dias continuam sendo checadas logo abaixo.
+      if (!CONGELADOS_SEM_MUDAR_MES || mudaMesInicio || mudaMesFim) {
+        duvidosos.push({ cod, motivo: CONGELADOS_SEM_MUDAR_MES ? "congelado e a correção muda o mês" : "documento congelado", detalhe: `ini ${dIni} d, fim ${dFim} d` });
+        bump(CONGELADOS_SEM_MUDAR_MES ? "congelado que muda de mês (listado)" : "congelado (listado)");
+        congelados.push({ produto: `${nSeg.get(d.seguradora_id!) ?? "?"} / ${nRamo.get(d.ramo_id!) ?? "?"}`, dIni, dFim, mudaMesInicio, mudaMesFim, fonte: p.fonte });
+        continue;
+      }
     }
     if (d.documento_renovado_id || renovados.has(d.id)) { duvidosos.push({ cod, motivo: "renovação ligada", detalhe: `ini ${dIni} d, fim ${dFim} d` }); bump("renovação ligada (listado)"); continue; }
     if (Math.abs(dIni) > LIMITE_DIAS || Math.abs(dFim) > LIMITE_DIAS) { duvidosos.push({ cod, motivo: `diferença maior que ${LIMITE_DIAS} dias`, detalhe: `ini ${dIni} d, fim ${dFim} d (${p.fonte})` }); bump("diferença grande (listado)"); continue; }
@@ -159,7 +166,7 @@ type Doc = { id: string; nosso_numero: number; nosso_numero_corp: number | null;
   console.log("backup dos valores antigos:", fBak);
   let ok = 0, falhas = 0;
   for (const m of mudar) {
-    const { error, count } = await sb.from("erp_documentos").update({ vigencia_inicio: m.ini, vigencia_fim: m.fim }, { count: "exact" }).eq("id", m.doc.id).eq("vigencia_inicio", m.doc.vigencia_inicio!).eq("vigencia_fim", m.doc.vigencia_fim!).eq("congelado", false);
+    const { error, count } = await sb.from("erp_documentos").update({ vigencia_inicio: m.ini, vigencia_fim: m.fim }, { count: "exact" }).eq("id", m.doc.id).eq("vigencia_inicio", m.doc.vigencia_inicio!).eq("vigencia_fim", m.doc.vigencia_fim!).eq("congelado", m.doc.congelado);
     if (error || !count) { falhas++; if (falhas <= 5) console.log("falha:", m.doc.nosso_numero, error?.message ?? "nenhuma linha (mudou no meio?)"); } else ok++;
   }
   console.log(`GRAVADOS: ${ok} documentos | falhas: ${falhas}`);

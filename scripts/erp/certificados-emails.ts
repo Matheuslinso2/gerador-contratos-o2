@@ -24,7 +24,7 @@ const dataGmail = (iso: string, diasAntes: number) => { const d = new Date(Date.
   const porSeg: Record<string, number> = {};
   for (const d of ind.vigentes) { const k = ind.nomeSeguradora.get(d.seguradora_id!) ?? "?"; porSeg[k] = (porSeg[k] ?? 0) + 1; }
   console.log(`Capitalização vigente no ERP: ${ind.vigentes.length} | ${JSON.stringify(porSeg)}`);
-  const achados = new Map<string, { nosso_numero: number; situacao: string; caixa: string; arquivo: string; inicio: string | null; meses: number | null; fim_calculado: string | null; fim_erp: string | null; fim_confere: boolean | null }>();
+  const achados = new Map<string, { nosso_numero: number; situacao: string; caixa: string; mensagem: string; arquivo: string; inicio: string | null; meses: number | null; fim_calculado: string | null; fim_erp: string | null; fim_confere: boolean | null }>();
   const r = { buscas: 0, mensagensAchadas: 0, pdfs: 0, certificadosLidos: 0, erros: 0 };
   // --restante: só o que as passadas anteriores (e-mail e Bitrix) não acharam; busca o número nos dois formatos (puro e com pontos,
   // como a Icatu escreve "01.609.754-9") e também o CPF/CNPJ das partes do documento; liga por número ou por CPF + início de vigência.
@@ -63,7 +63,7 @@ const dataGmail = (iso: string, diasAntes: number) => { const d = new Date(Date.
               if (!RESTANTE && l.doc.id !== d.id) continue; // só o documento procurado nesta busca (na passada restante vale qualquer vigente)
               const antes = achados.get(l.doc.id);
               if (!antes || (antes.situacao === "provavel" && l.situacao === "confirmada"))
-                achados.set(l.doc.id, { nosso_numero: l.doc.nosso_numero, situacao: l.situacao, caixa, arquivo: a.nome, inicio: c.inicio, meses: c.meses, fim_calculado: c.fim, fim_erp: l.doc.vigencia_fim, fim_confere: l.fimConfere });
+                achados.set(l.doc.id, { nosso_numero: l.doc.nosso_numero, situacao: l.situacao, caixa, mensagem: m.message_id, arquivo: a.nome, inicio: c.inicio, meses: c.meses, fim_calculado: c.fim, fim_erp: l.doc.vigencia_fim, fim_confere: l.fimConfere });
             }
           }
         }
