@@ -95,8 +95,9 @@ export function compararDias(extratos: ExtratoDia[], entradas: EntradaNibo[]): M
   return saida;
 }
 
-export type SituacaoCaixa = { codigo: "bate" | "banco_acima" | "extrato_acima" | "sem_banco" | "sem_extrato"; texto: string; cor: string };
+export type SituacaoCaixa = { codigo: "bate" | "banco_acima" | "extrato_acima" | "sem_banco" | "sem_extrato" | "aguardando"; texto: string; cor: string };
 const SIT: Record<SituacaoCaixa["codigo"], SituacaoCaixa> = {
+  aguardando: { codigo: "aguardando", texto: "Esperado, ainda não pagou", cor: "bg-gray-100 text-gray-700" },
   bate: { codigo: "bate", texto: "Bate com o banco", cor: "bg-green-100 text-green-800" },
   banco_acima: { codigo: "banco_acima", texto: "Banco acima do extrato", cor: "bg-orange-100 text-orange-800" },
   extrato_acima: { codigo: "extrato_acima", texto: "Extrato acima do banco", cor: "bg-red-100 text-red-700" },
@@ -105,8 +106,11 @@ const SIT: Record<SituacaoCaixa["codigo"], SituacaoCaixa> = {
 };
 
 // esperado = líquido do extrato antes do desconto da seguradora (é assim que o Nibo registra)
-export function situacaoCaixa(esperado: number | null, banco: number | null): SituacaoCaixa {
-  if (esperado == null || esperado === 0) return banco && banco > 0 ? SIT.sem_extrato : SIT.bate;
+export function situacaoCaixa(esperado: number | null, banco: number | null, previsto: number | null = null): SituacaoCaixa {
+  if (esperado == null || esperado === 0) {
+    if (banco && banco > 0) return SIT.sem_extrato;
+    return previsto && previsto > TOLERANCIA_CAIXA ? SIT.aguardando : SIT.bate;
+  }
   if (banco == null || banco === 0) return SIT.sem_banco;
   const dif = banco - esperado;
   if (Math.abs(dif) <= TOLERANCIA_CAIXA) return SIT.bate;
