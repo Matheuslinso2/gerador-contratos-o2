@@ -23,6 +23,8 @@ type Seg = {
   prazo_pagamento_dias: number;
   dia_fixo_parcela: number | null;
   canal_demonstrativo: string | null;
+  extrato_fonte: string | null;
+  extrato_lido_erp: string | null;
   regra_confirmada_em: string | null;
   regra_observacao: string | null;
   docs: number;
@@ -70,7 +72,7 @@ export default async function ErpSeguradorasPage({ searchParams }: { searchParam
   const [{ data: segs, error }, { data: contagem }, { data: regrasProd }] = await Promise.all([
     supabase
       .from("erp_seguradoras")
-      .select("id, nome, abreviacao, regra_comissao, esgotamento_ate_parcelas, prazo_pagamento_dias, dia_fixo_parcela, canal_demonstrativo, regra_confirmada_em, regra_observacao")
+      .select("id, nome, abreviacao, regra_comissao, esgotamento_ate_parcelas, prazo_pagamento_dias, dia_fixo_parcela, canal_demonstrativo, extrato_fonte, extrato_lido_erp, regra_confirmada_em, regra_observacao")
       .eq("ativa", true)
       .order("nome"),
     supabase.rpc("erp_docs_por_seguradora_2026"),
@@ -227,7 +229,8 @@ export default async function ErpSeguradorasPage({ searchParams }: { searchParam
                 <th className="px-3 py-2">Esgot. até (parc.)</th>
                 <th className="px-3 py-2">Paga em (dias)</th>
                 <th className="px-3 py-2">Dia fixo</th>
-                <th className="px-3 py-2">Demonstrativo</th>
+                <th className="px-3 py-2">Onde está o extrato</th>
+                <th className="px-3 py-2">Lido pelo ERP</th>
                 <th className="px-3 py-2">Observação</th>
                 <th className="px-3 py-2">Confirmada</th>
                 <th className="px-3 py-2"></th>
@@ -255,7 +258,8 @@ export default async function ErpSeguradorasPage({ searchParams }: { searchParam
                   <td className="px-3 py-2">
                     <input name="dia_fixo_parcela" form={`f-${s.id}`} type="number" min={1} max={28} defaultValue={s.dia_fixo_parcela ?? ""} placeholder="—" className={`${inputClass} w-16`} />
                   </td>
-                  <td className="px-3 py-2 text-gray-500">{s.canal_demonstrativo ?? "—"}</td>
+                  <td className="px-3 py-2 max-w-xs text-gray-500">{s.extrato_fonte ?? "—"}</td>
+                  <td className="px-3 py-2 text-gray-500">{s.extrato_lido_erp ? ({ portal: "Sim (portal)", drive: "Sim (Drive)", gmail: "Sim (e-mail)", nao: "Ainda não" } as Record<string, string>)[s.extrato_lido_erp] ?? s.extrato_lido_erp : "—"}</td>
                   <td className="px-3 py-2">
                     <input name="regra_observacao" form={`f-${s.id}`} defaultValue={s.regra_observacao ?? ""} placeholder="ex.: conferido no doc 133210" className={`${inputClass} w-56`} />
                   </td>
