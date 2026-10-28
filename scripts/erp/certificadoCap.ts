@@ -54,15 +54,17 @@ export function lerCertificado(texto: string): CertificadoLido {
 
 export type IndiceCap = { vigentes: CapVigente[]; porNumero: Map<string, CapVigente[]>; docsCpf: Map<string, DocAlvo>; nomeSeguradora: Map<string, string> };
 
-export async function carregarCapVigentes(sb: SupabaseClient, comCpf = true): Promise<IndiceCap> {
+export async function carregarCapVigentes(sb: SupabaseClient, comCpf = true, codigosO2?: number[]): Promise<IndiceCap> {
   const { data: ramos } = await sb.from("erp_ramos").select("id,nome");
   const idsRamo = (ramos ?? []).filter((r) => /capitaliza/i.test(r.nome)).map((r) => r.id);
   const { data: segs } = await sb.from("erp_seguradoras").select("id,nome");
   const vigentes: CapVigente[] = [];
   for (let de = 0; ; de += 1000) {
-    const { data } = await sb.from("erp_documentos").select("id,nosso_numero,numero_apolice,seguradora_id,vigencia_inicio,vigencia_fim").in("ramo_id", idsRamo).eq("situacao", "vigente").order("id").range(de, de + 999);
+    let q = sb.from("erp_documentos").select("id,nosso_numero,numero_apolice,seguradora_id,vigencia_inicio,vigencia_fim").in("ramo_id", idsRamo);
+    q = codigosO2 ? q.in("nosso_numero", codigosO2) : q.eq("situacao", "vigente"); // codigosO2: documentos específicos (ex.: anteriores vencidos), qualquer situação
+    const { data } = await q.order("id").range(de, de + 999);
     vigentes.push(...((data ?? []) as CapVigente[]));
-    if ((data ?? []).length < 1000) break;
+    if ((data ?? []).length < 1000 || codigosO2) break;
   }
   const porNumero = new Map<string, CapVigente[]>();
   for (const d of vigentes) { const n = sd(String(d.numero_apolice ?? "").replace(/\D/g, "")); if (n.length >= 4) (porNumero.get(n) ?? porNumero.set(n, []).get(n)!).push(d); }

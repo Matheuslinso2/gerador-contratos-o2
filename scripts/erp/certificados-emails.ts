@@ -15,12 +15,14 @@ import { carregarCapVigentes, ehCertificado, lerCertificado, ligarCertificado } 
 const arg = (n: string) => { const i = process.argv.indexOf(`--${n}`); return i >= 0 ? process.argv[i + 1] : undefined; };
 const caixas = (arg("caixas")?.split(",") ?? ["natalia@o2seguros.com.br", "patricia@o2seguros.com.br"]).filter((c) => CAIXAS_O2.includes(c));
 const LIMITE = Number(arg("limite-docs") ?? 5000);
-const SAIDA = path.join(os.tmpdir(), process.argv.includes("--restante") ? "certificados-emails-2.json" : "certificados-emails.json");
+const ANT = arg("anteriores-csv"); // CSV dos documentos anteriores (vencidos) a procurar; Código O2 na 3ª coluna
+const SAIDA = path.join(os.tmpdir(), ANT ? "certificados-emails-anteriores.json" : process.argv.includes("--restante") ? "certificados-emails-2.json" : "certificados-emails.json");
 const sb = createServiceClient();
 const dataGmail = (iso: string, diasAntes: number) => { const d = new Date(Date.parse(iso) - diasAntes * 864e5); return `${d.getUTCFullYear()}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${String(d.getUTCDate()).padStart(2, "0")}`; };
 
 (async () => {
-  const ind = await carregarCapVigentes(sb);
+  const codigos = ANT ? fs.readFileSync(ANT, "utf8").split("\n").slice(1).map((l) => Number(l.split(";")[2]?.replace(/"/g, ""))).filter(Boolean) : undefined;
+  const ind = await carregarCapVigentes(sb, true, codigos);
   const porSeg: Record<string, number> = {};
   for (const d of ind.vigentes) { const k = ind.nomeSeguradora.get(d.seguradora_id!) ?? "?"; porSeg[k] = (porSeg[k] ?? 0) + 1; }
   console.log(`Capitalização vigente no ERP: ${ind.vigentes.length} | ${JSON.stringify(porSeg)}`);
@@ -28,9 +30,9 @@ const dataGmail = (iso: string, diasAntes: number) => { const d = new Date(Date.
   const r = { buscas: 0, mensagensAchadas: 0, pdfs: 0, certificadosLidos: 0, erros: 0 };
   // --restante: só o que as passadas anteriores (e-mail e Bitrix) não acharam; busca o número nos dois formatos (puro e com pontos,
   // como a Icatu escreve "01.609.754-9") e também o CPF/CNPJ das partes do documento; liga por número ou por CPF + início de vigência.
-  const RESTANTE = process.argv.includes("--restante");
+  const RESTANTE = process.argv.includes("--restante") || !!ANT;
   const jaAchados = new Set<number>();
-  if (RESTANTE) for (const f of ["certificados-bitrix.json", "certificados-emails.json"]) { const p = path.join(os.tmpdir(), f); if (fs.existsSync(p)) for (const x of JSON.parse(fs.readFileSync(p, "utf8"))) jaAchados.add(x.nosso_numero); }
+  if (RESTANTE && !ANT) for (const f of ["certificados-bitrix.json", "certificados-emails.json"]) { const p = path.join(os.tmpdir(), f); if (fs.existsSync(p)) for (const x of JSON.parse(fs.readFileSync(p, "utf8"))) jaAchados.add(x.nosso_numero); }
   const alvos = ind.vigentes.filter((d) => (RESTANTE ? !jaAchados.has(d.nosso_numero) : String(d.numero_apolice ?? "").replace(/\D/g, "").length >= 4)).slice(0, LIMITE);
   if (RESTANTE) console.log(`passada restante: ${alvos.length} documentos sem certificado nas passadas anteriores`);
   const pontuado = (n: string) => (n.length === 9 ? `${n.slice(0, 2)}.${n.slice(2, 5)}.${n.slice(5, 8)}-${n.slice(8)}` : null);
