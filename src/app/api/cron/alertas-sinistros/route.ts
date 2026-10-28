@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
   }
   const supabase = createServiceClient();
   const hoje = hojeSP();
-  const itensEquipe: { id: string; codigo: number; texto: string }[] = [];
+  const itensEquipe: { id: string; codigo: number; texto: string; produto?: string | null }[] = [];
   let emailsImobiliaria = 0;
 
   // 1. vigência da apólice (só ocupados, sem entrega das chaves)
@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
     }
     await supabase.from("sinistros").update(atualizar).eq("id", s.id);
     await supabase.from("sinistro_historico").insert({ sinistro_id: s.id, autor_tipo: "sistema", referente: "interno", visivel_imobiliaria: false, texto: `⚠ Alerta automático: ${alerta.texto}` });
-    itensEquipe.push({ id: s.id, codigo: s.codigo, texto: alerta.texto });
+    itensEquipe.push({ id: s.id, codigo: s.codigo, texto: alerta.texto, produto: s.produto });
     if (alerta.fase === "vence") {
       const destinos = destinosImobiliaria(s);
       if (destinos.length) {
@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
   // 2. parcelas de acordo
   const { data: acordos, error: e2 } = await supabase
     .from("sinistros")
-    .select("id, codigo, proxima_acao_em, acordo_primeira_parcela, acordo_ultima_parcela, acordo_vencimento_aluguel, acordo_alerta_ultimo")
+    .select("id, codigo, produto, proxima_acao_em, acordo_primeira_parcela, acordo_ultima_parcela, acordo_vencimento_aluguel, acordo_alerta_ultimo")
     .eq("etapa", "acordo_judicial")
     .or("acordo_vencimento_aluguel.not.is.null,acordo_primeira_parcela.not.is.null");
   if (e2) return NextResponse.json({ erro: e2.message }, { status: 500 });
@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
       .update({ acordo_alerta_ultimo: hoje, proxima_acao_em: hoje, proxima_acao_descricao: `Conferir pagamento do aluguel de ${mesRef} (acordo)` })
       .eq("id", s.id);
     await supabase.from("sinistro_historico").insert({ sinistro_id: s.id, autor_tipo: "sistema", referente: "interno", visivel_imobiliaria: false, texto: `⚠ Alerta automático: ${texto}.` });
-    itensEquipe.push({ id: s.id, codigo: s.codigo, texto });
+    itensEquipe.push({ id: s.id, codigo: s.codigo, texto, produto: s.produto });
   }
 
   await emailAlertasParaO2(itensEquipe);

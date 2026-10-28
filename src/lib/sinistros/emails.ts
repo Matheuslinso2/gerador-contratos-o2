@@ -5,6 +5,10 @@ import { ETAPAS, tituloTipo, formatarData, formatarReais, type EtapaSinistro, ty
 // Caixa do Setor de Garantias -- é pra onde os avisos de sinistro já vão
 // hoje por e-mail (Manual de Abertura de Sinistro, ago/2026).
 const EMAIL_O2 = process.env.SINISTROS_EMAIL_O2 || "sinistro@o2seguros.com.br";
+// Grupo da Capitalização: entra em toda notificação de sinistro de Capitalização
+// (inclusive resgate) -- pedido do Matheus, 28/10/2026.
+const EMAIL_CAP = process.env.SINISTROS_EMAIL_CAP || "cap@o2seguros.com.br";
+const ehCap = (s: { produto?: string | null }) => s.produto === "capitalizacao";
 
 function urlSinistro(id: string) {
   const base = process.env.NEXT_PUBLIC_SITE_URL || "https://gerador-contratos-o2.vercel.app";
@@ -17,20 +21,27 @@ function ehAmbienteLocal() {
   return (process.env.NEXT_PUBLIC_SITE_URL || "").includes("localhost");
 }
 
-async function enviar(para: string[], assunto: string, html: string) {
-  const destinos = [...new Set(para.map((e) => e.trim().toLowerCase()).filter(Boolean))];
+// cap = sinistro de Capitalização: o grupo cap@ recebe junto (nos e-mails para a
+// O2 como destinatário; nos e-mails para a imobiliária, em cópia oculta).
+async function enviar(para: string[], assunto: string, html: string, cap = false) {
+  const paraO2 = para.some((e) => e.trim().toLowerCase() === EMAIL_O2.toLowerCase());
+  let destinos = [...new Set([...para, ...(cap && paraO2 ? [EMAIL_CAP] : [])].map((e) => e.trim().toLowerCase()).filter(Boolean))];
+  // Imobiliária sem e-mail cadastrado: o grupo da Capitalização ainda recebe.
+  if (!destinos.length && cap) destinos = [EMAIL_CAP.toLowerCase()];
   if (!destinos.length) return;
+  const bcc = cap && !paraO2 && !destinos.includes(EMAIL_CAP.toLowerCase()) ? [EMAIL_CAP] : undefined;
   if (ehAmbienteLocal()) {
-    console.log(`[sinistros] e-mail (local, não enviado) para ${destinos.join(", ")}: ${assunto}`);
+    console.log(`[sinistros] e-mail (local, não enviado) para ${destinos.join(", ")}${bcc ? ` (cco ${bcc.join(", ")})` : ""}: ${assunto}`);
     return;
   }
-  await enviarEmail({ para: destinos, assunto, html, remetente: "O2 Seguros — Sinistros", replyTo: EMAIL_O2 });
+  await enviarEmail({ para: destinos, bcc, assunto, html, remetente: "O2 Seguros — Sinistros", replyTo: EMAIL_O2 });
 }
 
 export type SinistroEmail = {
   id: string;
   codigo: number;
   tipo: TipoSinistro | null;
+  produto?: string | null;
   etapa: EtapaSinistro;
   seguradora: string | null;
   numero_apolice: string | null;
@@ -97,7 +108,7 @@ export async function emailNovoSinistroParaO2(s: SinistroEmail, imobiliariaNome:
     protocolo: `SIN-${s.codigo}`,
     origem: "Módulo Sinistro",
   });
-  await enviar([EMAIL_O2], `Novo sinistro SIN-${s.codigo} — ${imobiliariaNome} — ${s.locatario_nome ?? "locatário não informado"}`, html);
+  await enviar([EMAIL_O2], `Novo sinistro SIN-${s.codigo} — ${imobiliariaNome} — ${s.locatario_nome ?? "locatário não informado"}`, html, ehCap(s));
 }
 
 export async function emailRespostaPendenciaParaO2(s: SinistroEmail, imobiliariaNome: string, mensagem: string) {
@@ -109,7 +120,7 @@ export async function emailRespostaPendenciaParaO2(s: SinistroEmail, imobiliaria
     protocolo: `SIN-${s.codigo}`,
     origem: "Módulo Sinistro",
   });
-  await enviar([EMAIL_O2], `Pendência respondida SIN-${s.codigo} — ${imobiliariaNome}`, html);
+  await enviar([EMAIL_O2], `Pendência respondida SIN-${s.codigo} — ${imobiliariaNome}`, html, ehCap(s));
 }
 
 export async function emailPendenciaParaImobiliaria(
@@ -127,7 +138,7 @@ export async function emailPendenciaParaImobiliaria(
     protocolo: `SIN-${s.codigo}`,
     origem: "Módulo Sinistro",
   });
-  await enviar(destinos, `Pendência no sinistro SIN-${s.codigo} — ${s.locatario_nome ?? "locatário não informado"}`, html);
+  await enviar(destinos, `Pendência no sinistro SIN-${s.codigo} — ${s.locatario_nome ?? "locatário não informado"}`, html, ehCap(s));
 }
 
 export async function emailAtualizacaoParaImobiliaria(s: SinistroEmail, destinos: string[], titulo: string, texto: string, itens: string[] = []) {
@@ -139,13 +150,20 @@ export async function emailAtualizacaoParaImobiliaria(s: SinistroEmail, destinos
     protocolo: `SIN-${s.codigo}`,
     origem: "Módulo Sinistro",
   });
-  await enviar(destinos, `${titulo} — SIN-${s.codigo} — ${s.locatario_nome ?? "locatário não informado"}`, html);
+  await enviar(destinos, `${titulo} — SIN-${s.codigo} — ${s.locatario_nome ?? "locatário não informado"}`, html, ehCap(s));
 }
 
 // Resumo diário dos alertas automáticos (vencimento da apólice e parcelas de
 // acordo) para a caixa do Setor de Garantias -- reunião 21/10/2026.
-export async function emailAlertasParaO2(itens: { id: string; codigo: number; texto: string }[]) {
+export async function emailAlertasParaO2(itens: { id: string; codigo: number; texto: string; produto?: string | null }[]) {
   if (!itens.length) return;
+  // Cópia só com os alertas de Capitalização para o grupo cap@.
+  const dosCap = itens.filter((i) => i.produto === "capitalizacao");
+  if (dosCap.length) await enviarResumoAlertas(dosCap, [EMAIL_CAP]);
+  await enviarResumoAlertas(itens, [EMAIL_O2]);
+}
+
+async function enviarResumoAlertas(itens: { id: string; codigo: number; texto: string }[], para: string[]) {
   const base = (process.env.NEXT_PUBLIC_SITE_URL || "https://gerador-contratos-o2.vercel.app").replace(/\/$/, "");
   const html = envolverEmailO2({
     badge: "Alertas de sinistros",
@@ -157,7 +175,7 @@ export async function emailAlertasParaO2(itens: { id: string; codigo: number; te
     protocolo: "Alertas",
     origem: "Módulo Sinistro",
   });
-  await enviar([EMAIL_O2], `Sinistros — ${itens.length} alerta(s) para hoje`, html);
+  await enviar(para, `Sinistros — ${itens.length} alerta(s) para hoje`, html);
 }
 
 // Tela de visualização (22/10/2026): notificação de mensagem recebida no chat
@@ -179,5 +197,5 @@ export async function emailNovidadeParaO2(
     protocolo,
     origem: "Módulo Sinistro",
   });
-  await enviar([EMAIL_O2], `${mensagem ? "Mensagem no chat" : "Novo documento para validação"} — ${protocolo} — ${imobiliariaNome}`, html);
+  await enviar([EMAIL_O2], `${mensagem ? "Mensagem no chat" : "Novo documento para validação"} — ${protocolo} — ${imobiliariaNome}`, html, ehCap(s));
 }
