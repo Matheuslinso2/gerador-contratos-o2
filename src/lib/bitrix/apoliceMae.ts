@@ -112,8 +112,15 @@ export async function buscarApolicesMae(
 ): Promise<DocumentoLista[]> {
   const temFiltro = !!(f.busca.trim() || f.imovel.trim());
   if (!temFiltro && !(f.soDaImobiliaria && card.imobiliariaNome)) return [];
+  // Card com mais de uma apólice no campo ("2166636/9791158"): busca cada número.
+  const partes = f.busca.split(/s+es+|[/,;]/i).map((p) => p.trim()).filter(Boolean);
+  if (partes.length > 1 && partes.every((p) => /^[d.-s]+$/.test(p))) {
+    const listas = await Promise.all(partes.map((p) => buscarApolicesMae(sb, funil, card, { ...f, busca: p.replace(/D/g, "") })));
+    const vistos = new Set<string>();
+    return listas.flat().filter((d) => (vistos.has(d.id) ? false : (vistos.add(d.id), true)));
+  }
   const { linhas } = await buscarDocumentos(sb, {
-    busca: f.busca,
+    busca: f.busca.trim(),
     imovel: f.imovel.trim() || undefined,
     imobiliaria: f.soDaImobiliaria && card.imobiliariaNome ? card.imobiliariaNome : undefined,
     produto: funil.entityTypeId === 1046 ? undefined : funil.entityTypeId === 1042 ? "fianca" : "capitalizacao",
