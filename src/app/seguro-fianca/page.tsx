@@ -38,6 +38,12 @@ import {
 } from "@/lib/bitrix/renovacaoFianca";
 import RenovacaoAba from "./RenovacaoAba";
 import {
+  buscarPainelEndossoAoVivo,
+  painelEndossoVazio,
+  type PainelEndosso,
+} from "@/lib/bitrix/endossoFianca";
+import EndossoAba from "./EndossoAba";
+import {
   classificarGrupoPrioridade,
   ROTULO_GRUPO_PRIORIDADE,
   ACAO_GRUPO_PRIORIDADE,
@@ -139,6 +145,8 @@ const ABAS: DefinicaoAba[] = [
   // Funil de Renovação (categoria 32, 01/10/2026) -- só renovação; as
   // outras abas continuam só com contratação nova.
   { id: "renovacao", label: "Renovação" },
+  // Funil Endossos (categoria 42, 28/10/2026) -- só endossos.
+  { id: "endossos", label: "Endossos" },
 ];
 
 function fmtDuracao(minutosTotais: number): string {
@@ -306,6 +314,53 @@ async function carregarRenovacao(
     return {
       dados: (await lerRetrato()) ?? painelRenovacaoVazio(competencia),
       erro: e instanceof Error ? e.message : "Falha ao buscar a Renovação no Bitrix.",
+    };
+  }
+}
+
+// Aba "Endossos" -- mesmo esquema da Renovação (retrato do mês atual
+// renovado a cada carga, mês fechado congelado).
+async function carregarEndossos(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  competencia: string,
+  ehCompetenciaAtual: boolean,
+  forcarAtualizacao: boolean,
+): Promise<{ dados: PainelEndosso; erro: string | null }> {
+  const lerRetratoCompleto = async () => {
+    const { data } = await supabase
+      .from("seguro_fianca_endosso_snapshots")
+      .select("payload, atualizado_em")
+      .eq("competencia", competencia)
+      .maybeSingle();
+    return data
+      ? { dados: data.payload as PainelEndosso, atualizadoEm: data.atualizado_em as string }
+      : null;
+  };
+  const lerRetrato = async () => (await lerRetratoCompleto())?.dados ?? null;
+  if (!ehCompetenciaAtual) {
+    return { dados: (await lerRetrato()) ?? painelEndossoVazio(competencia), erro: null };
+  }
+  if (!forcarAtualizacao) {
+    const salvo = await lerRetratoCompleto();
+    if (salvo && retratoRecente(salvo.atualizadoEm)) return { dados: salvo.dados, erro: null };
+  }
+  try {
+    const dados = await comLimiteDeTempo(
+      buscarPainelEndossoAoVivo(competencia, supabase),
+      LIMITE_TEMPO_AO_VIVO_MS,
+    );
+    const { error } = await supabase
+      .from("seguro_fianca_endosso_snapshots")
+      .upsert(
+        { competencia, atualizado_em: new Date().toISOString(), payload: dados },
+        { onConflict: "competencia" },
+      );
+    if (error) console.error("Falha ao salvar snapshot dos Endossos:", error);
+    return { dados, erro: null };
+  } catch (e) {
+    return {
+      dados: (await lerRetrato()) ?? painelEndossoVazio(competencia),
+      erro: e instanceof Error ? e.message : "Falha ao buscar os Endossos no Bitrix.",
     };
   }
 }
@@ -700,6 +755,12 @@ export default async function SeguroFiancaPage({
     ehCompetenciaAtual,
     forcarAtualizacao,
   );
+  const endossosPromessa = carregarEndossos(
+    supabase,
+    competencia,
+    ehCompetenciaAtual,
+    forcarAtualizacao,
+  );
 
   let gerencial: (AnaliseGerencial & { totalMovimentacoes: number }) | null =
     null;
@@ -844,6 +905,7 @@ export default async function SeguroFiancaPage({
   // uma métrica por competência selecionada (ver classificacaoImobiliarias.ts).
   const classificacao = await montarClassificacaoImobiliarias(supabase);
   const renovacao = await renovacaoPromessa;
+  const endossos = await endossosPromessa;
 
   // Tendência do quadro de status da aba Renovação -- mesmo raciocínio da
   // Tendência acima, lendo o retrato de Renovação do mês anterior.
@@ -3974,6 +4036,33 @@ export default async function SeguroFiancaPage({
                   }
                   classificacaoPorImobiliaria={classificacao.porImobiliaria}
                 />
+              </AbaSlot>
+
+              <AbaSlot aba="endossos">
+                {endossos.erro && (
+                  <div
+                    className={
+                      styles.stampPanel + " " + styles.stampPanelWarning
+                    }
+                    style={{ marginBottom: 24 }}
+                  >
+                    <div
+                      className={
+                        styles.stampBadge + " " + styles.stampBadgeWarning
+                      }
+                    >
+                      ERRO
+                    </div>
+                    <div className={styles.stampList}>
+                      <div>
+                        Não consegui buscar os Endossos no Bitrix agora:{" "}
+                        {endossos.erro} — mostrando o último retrato salvo, se
+                        existir.
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <EndossoAba dados={endossos.dados} competencia={competencia} />
               </AbaSlot>
 
               <footer className={styles.footer}>

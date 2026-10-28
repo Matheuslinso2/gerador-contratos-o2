@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { buscarAnaliseGerencialAoVivo } from "@/lib/bitrix/seguroFianca";
 import { buscarPainelRenovacaoAoVivo } from "@/lib/bitrix/renovacaoFianca";
+import { buscarPainelEndossoAoVivo } from "@/lib/bitrix/endossoFianca";
 import { buscarKpisComercialAoVivo } from "@/lib/bitrix/comercial";
 import {
   competenciaAnterior,
@@ -55,6 +56,13 @@ const PAINEIS = {
     async salvar(competencia: string) {
       const payload = await buscarPainelRenovacaoAoVivo(competencia);
       return { tabela: "seguro_fianca_renovacao_snapshots", payload, atualizadoEm: new Date().toISOString(), extra: {} };
+    },
+  },
+  "fianca-endossos": {
+    nome: "Seguro Fiança — Endossos",
+    async salvar(competencia: string, supabase: Supabase) {
+      const payload = await buscarPainelEndossoAoVivo(competencia, supabase);
+      return { tabela: "seguro_fianca_endosso_snapshots", payload, atualizadoEm: new Date().toISOString(), extra: {} };
     },
   },
   comercial: {

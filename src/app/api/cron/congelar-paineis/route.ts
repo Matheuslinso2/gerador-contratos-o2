@@ -5,6 +5,7 @@ import { buscarKpisComercialAoVivo } from "@/lib/bitrix/comercial";
 import { montarPainelCapitalizacao } from "@/lib/capitalizacao/painel";
 import { montarPainelSeguroAuto } from "@/lib/seguroAuto/painel";
 import { buscarPainelRenovacaoAoVivo } from "@/lib/bitrix/renovacaoFianca";
+import { buscarPainelEndossoAoVivo } from "@/lib/bitrix/endossoFianca";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -45,7 +46,7 @@ export async function GET(request: NextRequest) {
   // pode impedir o congelamento do Seguro Fiança (e vice-versa). Ambos usam
   // o mesmo CRON_SECRET e a mesma janela de execução (dia 1º às 00h de
   // Brasília, ver vercel.json).
-  const [fianca, comercial, capitalizacao, seguroAuto, renovacao] = await Promise.all([
+  const [fianca, comercial, capitalizacao, seguroAuto, renovacao, endossos] = await Promise.all([
     (async () => {
       try {
         const gerencial = await buscarAnaliseGerencialAoVivo(competencia);
@@ -109,11 +110,24 @@ export async function GET(request: NextRequest) {
         return { ok: false, erro: erro instanceof Error ? erro.message : String(erro) };
       }
     })(),
+    // Aba "Endossos" do painel Seguro Fiança (funil categoria 42).
+    (async () => {
+      try {
+        const dados = await buscarPainelEndossoAoVivo(competencia, supabase);
+        const { error } = await supabase
+          .from("seguro_fianca_endosso_snapshots")
+          .upsert({ competencia, atualizado_em: new Date().toISOString(), payload: dados }, { onConflict: "competencia" });
+        if (error) return { ok: false, erro: error.message };
+        return { ok: true, total: dados.kpis.total };
+      } catch (erro) {
+        return { ok: false, erro: erro instanceof Error ? erro.message : String(erro) };
+      }
+    })(),
   ]);
 
-  const ok = fianca.ok && comercial.ok && capitalizacao.ok && seguroAuto.ok && renovacao.ok;
+  const ok = fianca.ok && comercial.ok && capitalizacao.ok && seguroAuto.ok && renovacao.ok && endossos.ok;
   return NextResponse.json(
-    { ok, competencia, seguroFianca: fianca, comercial, capitalizacao, seguroAuto, renovacao },
+    { ok, competencia, seguroFianca: fianca, comercial, capitalizacao, seguroAuto, renovacao, endossos },
     { status: ok ? 200 : 500 }
   );
 }
