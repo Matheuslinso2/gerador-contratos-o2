@@ -267,7 +267,7 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
       })}
 
       <p className="text-xs text-gray-500">
-        Só entram apólices vigentes (propostas ainda digitadas não aparecem). Prêmio líquido conforme o Corp; a regra de prêmio total (líquido + IOF + adicional de fracionamento) vale na ficha do documento.
+        Só entram apólices vigentes (propostas, que ainda não viraram apólice, não aparecem). Prêmio líquido conforme o Corp; a regra de prêmio total (líquido + IOF + adicional de fracionamento) vale na ficha do documento.
         Os títulos de Fiança, Capitalização e Automóvel seguem o padrão dos cards já existentes em cada funil e ainda precisam ser confirmados.
       </p>
     </main>

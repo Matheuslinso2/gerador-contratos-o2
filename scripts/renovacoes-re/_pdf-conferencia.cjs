@@ -39,14 +39,14 @@ ul{margin:3px 0 6px 16px;padding:0}li{margin:1px 0}small{color:#5b6777}</style>
 <tr><td>Documentos no relatório do Corp (fim de vigência em jan/2027)</td><td class=n>${f(R.corpLinhas)}</td></tr>
 <tr><td>… que existem no ERP (cruzamento por Nosso nº do Corp)</td><td class=n>${f(R.achadosNoErp)}</td></tr>
 <tr><td>… que NÃO existem no ERP</td><td class=n>${R.naoNoErp}</td></tr>
-<tr><td>No ERP com situação diferente de vigente/digitado</td><td class=n>${R.div.situacao}</td></tr>
+<tr><td>No ERP com situação diferente de vigente ou proposta</td><td class=n>${R.div.situacao}</td></tr>
 <tr><td>No ERP com início ou fim de vigência diferente</td><td class=n>${R.div.inicio + R.div.fim}</td></tr>
 <tr><td>% de comissão diferente · Nº da apólice diferente</td><td class=n>${R.div.pct} · ${R.div.apolice}</td></tr>
 <tr><td>Prêmio total / líquido diferente</td><td class=n>${R.div.premioTotal} / ${R.div.premioLiquido}</td></tr>
-<tr><td>Apólices no ERP (vigentes ou digitadas, fim em jan/2027) que o relatório do Corp não trouxe</td><td class=n>${R.erpAMais}</td></tr>
+<tr><td>Apólices no ERP (vigentes ou propostas, fim em jan/2027) que o relatório do Corp não trouxe</td><td class=n>${R.erpAMais}</td></tr>
 <tr><td>Endossos vigentes no ERP com fim em jan/2027 (fora da regra, só informativo)</td><td class=n>${R.endossosVigentesNoMes}</td></tr>
 <tr><td>Documentos cancelados no relatório · com sinistro</td><td class=n>${R.div.canceladoNoCorp} · ${R.div.comSinistro}</td></tr></table>
-<small>Observação: o ERP lista 837 apólices <b>vigentes</b> em janeiro; o relatório do Corp também traz ${digitadas} propostas já digitadas (situação “digitado”), por isso o total do Corp é ${f(R.corpLinhas)} (${f(R.corpLinhas - digitadas)} vigentes + ${digitadas} digitadas). Em dezembro, o mesmo método bateu 1.100 de 1.100.</small>
+<small>Observação: o ERP lista 837 apólices <b>vigentes</b> em janeiro; o relatório do Corp também traz ${digitadas} propostas (ainda não viraram apólice), por isso o total do Corp é ${f(R.corpLinhas)} (${f(R.corpLinhas - digitadas)} vigentes + ${digitadas} propostas). Em dezembro, o mesmo método bateu 1.100 de 1.100.</small>
 
 <h2>2. Por produto (como o ERP agrupa) e funil de destino</h2>
 <table><tr><th>Produto</th><th>Ramos do Corp</th><th>No Corp</th><th>No ERP</th><th>Faltam</th><th>Prêmio total</th><th>Funil do card</th></tr>${linhasProd}
@@ -78,7 +78,7 @@ ul{margin:3px 0 6px 16px;padding:0}li{margin:1px 0}small{color:#5b6777}</style>
 
 <h2>6. Os ${R.erpAMais} do ERP que o Corp não trouxe</h2>
 <table><tr><th>Código O2 do documento</th><th>Nosso nº do Corp</th><th>Produto</th><th>Fim</th><th>Situação</th><th>O que é</th></tr>
-${aMaisDet.map((d) => `<tr><td>${d["Código O2 do documento"]}</td><td>${d["Nosso nº do Corp"] || "—"}</td><td>${d["Seguradora"]} ${d["Ramo"]}</td><td>${d["Fim vig."]}</td><td>${d["Situação"]}</td><td>${!d["Nosso nº do Corp"] ? "Vem do Bitrix (Capitalização), ainda não digitada no Corp — esperado" : "Fiança com vigência longa (2,5 a 3 anos); o motivo de o Corp não listar ainda não foi encontrado — olhar no Corp"}</td></tr>`).join("")}</table>
+${aMaisDet.map((d) => `<tr><td>${d["Código O2 do documento"]}</td><td>${d["Nosso nº do Corp"] || "—"}</td><td>${d["Seguradora"]} ${d["Ramo"]}</td><td>${d["Fim vig."]}</td><td>${d["Situação"]}</td><td>${!d["Nosso nº do Corp"] ? "Vem do Bitrix (Capitalização), proposta ainda não lançada no Corp — esperado" : "Fiança com vigência longa (2,5 a 3 anos); o motivo de o Corp não listar ainda não foi encontrado — olhar no Corp"}</td></tr>`).join("")}</table>
 
 <h2>7. O que falta decidir (Matheus)</h2>
 <ul><li><b>Cadastro incompleto de cliente (${R.lig.clienteIncompleto}) e sem CPF no Corp (${R.lig.semCpfCorp}):</b> limpar antes de gerar cards? Capitalização é onde mais pesa (${incP.capitalizacao || 0}).</li>
