@@ -9,6 +9,7 @@ import { lerFiltros } from "@/lib/erp/filtros";
 import FiltrosErp from "../FiltrosErp";
 import { urlCard } from "@/lib/erp/renovacaoCards";
 import { dadosDeCabecalhoPorId, tipoDoCabecalho } from "@/lib/erp/documentos";
+import BotaoVerDocumento from "../BotaoVerDocumento";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Renovação" };
@@ -297,6 +298,7 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
                     <table className="w-full text-xs">
                       <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
                         <tr>
+                          <th className="px-3 py-2">Abrir</th>
                           <th className="px-3 py-2">Tipo de documento</th>
                           <th className="px-3 py-2">Titular do seguro</th>
                           <th className="px-3 py-2">Produto</th>
@@ -319,6 +321,7 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
                           const titular = k?.titular ?? d.cliente;
                           return (
                           <tr key={d.documento_id} className="hover:bg-gray-50">
+                            <td className="px-3 py-1.5"><BotaoVerDocumento id={d.documento_id} /></td>
                             <td className="px-3 py-1.5"><span className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-semibold ${t.cor}`}>{t.nome}</span></td>
                             <td className="px-3 py-1.5">
                               {titular ? <span className="font-medium text-gray-900">{titular}</span> : <span className="text-gray-400">titular não ligado</span>}

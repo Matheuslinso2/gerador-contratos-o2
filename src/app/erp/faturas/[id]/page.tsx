@@ -5,6 +5,7 @@ import { formatarData, formatarReais } from "@/lib/sinistros/regras";
 import { fichaFatura, TOLERANCIA_FATURA, type LinhaFatura } from "@/lib/erp/faturaTela";
 import RascunhoAutomatico from "@/components/RascunhoAutomatico";
 import { registrarMovimentacao } from "./actions";
+import BotaoVerDocumento from "../../BotaoVerDocumento";
 
 const MOTIVOS = ["Entrega de chaves", "Fim de contrato", "Cancelamento a pedido", "Sinistro", "Litígio", "Troca de administradora", "Renovação em outra fatura", "Erro da seguradora", "Outro"];
 
@@ -20,6 +21,7 @@ function Tabela({ linhas }: { linhas: LinhaFatura[] }) {
     <table className="w-full text-xs">
       <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
         <tr>
+          <th className="px-3 py-1.5">Abrir</th>
           <th className="px-3 py-1.5">Nº da apólice</th>
           <th className="px-3 py-1.5">Código O2 do documento</th>
           <th className="px-3 py-1.5">Cliente</th>
@@ -32,6 +34,7 @@ function Tabela({ linhas }: { linhas: LinhaFatura[] }) {
       <tbody className="divide-y divide-gray-100">
         {linhas.map((l) => (
           <tr key={l.id}>
+            <td className="px-3 py-1"><BotaoVerDocumento id={l.documento_id} /></td>
             <td className="px-3 py-1">
               {l.ramo_nome ? <span className="text-gray-400">{l.ramo_nome} </span> : null}
               {l.apolice}

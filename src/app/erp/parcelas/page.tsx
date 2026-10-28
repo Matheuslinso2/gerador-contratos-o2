@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatarData, formatarReais } from "@/lib/sinistros/regras";
 import { lerFiltros, limitesMes } from "@/lib/erp/filtros";
 import FiltrosErp from "../FiltrosErp";
+import BotaoVerDocumento from "../BotaoVerDocumento";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Parcelas" };
@@ -83,6 +84,7 @@ export default async function ErpParcelasPage({ searchParams }: { searchParams: 
         <table className="w-full text-xs">
           <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
             <tr>
+              <th className="px-3 py-2">Abrir</th>
               <th className="px-3 py-2">Código O2 do documento</th>
               <th className="px-3 py-2">Nosso nº do Corp</th>
               <th className="px-3 py-2">Seg.</th>
@@ -98,6 +100,7 @@ export default async function ErpParcelasPage({ searchParams }: { searchParams: 
           <tbody className="divide-y divide-gray-100">
             {linhas.slice(0, 500).map((l) => (
               <tr key={l.parcela_id}>
+                <td className="px-3 py-1"><BotaoVerDocumento id={l.documento_id} /></td>
                 <td className="px-3 py-1">
                   <Link href={`/erp/documentos/${l.documento_id}`} className="text-o2-navy hover:underline">
                     {l.nosso_numero}

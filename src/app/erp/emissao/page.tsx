@@ -8,6 +8,7 @@ import { formatarData, formatarReais } from "@/lib/sinistros/regras";
 import { dadosDeCabecalhoPorId, tipoDoCabecalho, TIPOS_DOCUMENTO } from "@/lib/erp/documentos";
 import { lerFiltros } from "@/lib/erp/filtros";
 import FiltrosErp from "../FiltrosErp";
+import BotaoVerDocumento from "../BotaoVerDocumento";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Emissão" };
@@ -161,6 +162,7 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
           <table className="w-full text-xs">
             <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
               <tr>
+                <th className="px-3 py-2">Abrir</th>
                 <th className="px-3 py-2">Tipo de documento</th>
                 <th className="px-3 py-2">Titular do seguro</th>
                 <th className="px-3 py-2">Produto</th>
@@ -182,6 +184,7 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
                 const tipo = tipoDoCabecalho({ tipo: d.tipo, tipo_corp: d.tipo_corp, situacao: "proposta", modo_cobranca: c?.modo_cobranca ?? null });
                 return (
                   <tr key={d.id} className="hover:bg-gray-50">
+                    <td className="px-3 py-2"><BotaoVerDocumento id={d.id} /></td>
                     <td className="px-3 py-2">
                       <span className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-semibold ${tipo.cor}`}>{tipo.nome}</span>
                       {tipo.detalhe ? <span className="ml-1 text-[10px] text-gray-500">{tipo.detalhe}</span> : null}
