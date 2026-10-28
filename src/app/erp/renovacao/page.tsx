@@ -7,6 +7,7 @@ import { IconReport } from "@/components/icons";
 import { formatarData, formatarReais } from "@/lib/sinistros/regras";
 import { lerFiltros } from "@/lib/erp/filtros";
 import FiltrosErp from "../FiltrosErp";
+import { urlCard } from "@/lib/erp/renovacaoCards";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Renovação" };
@@ -22,7 +23,7 @@ type Doc = {
   vigencia_inicio: string | null; vigencia_fim: string; premio_liquido: number | null; comissao_pct: number | null; forma: string | null;
   destino: string; tipo_card: "lote" | "individual"; chave_card: string; status_renovacao: string | null; anexos: number;
 };
-type Extra = { corp: number | null; abrev: string; canais: string[] };
+type Extra = { corp: number | null; abrev: string; canais: string[]; card: { entity: number; id: number } | null };
 type BlocoId = "fianca" | "cap" | "auto" | "re_lotes" | "re_demais";
 type Card = { chave: string; tipo: "lote" | "individual"; titulo: string; docs: Doc[]; fim: string; premio: number; comissaoMin: number | null; segimob: boolean; canais: string[] };
 
@@ -79,7 +80,13 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
     ]);
     for (const x of (dd ?? []) as unknown as { id: string; nosso_numero_corp: number | null; ramo: { abreviacao: string } | { abreviacao: string }[] | null }[]) {
       const r = Array.isArray(x.ramo) ? x.ramo[0] : x.ramo;
-      extra.set(x.id, { corp: x.nosso_numero_corp, abrev: r?.abreviacao ?? "", canais: [] });
+      extra.set(x.id, { corp: x.nosso_numero_corp, abrev: r?.abreviacao ?? "", canais: [], card: null });
+    }
+    const { data: rn } = await supabase.from("erp_renovacoes").select("documento_id, bitrix_card_id").in("documento_id", l).not("bitrix_card_id", "is", null);
+    for (const r of (rn ?? []) as { documento_id: string; bitrix_card_id: string }[]) {
+      const [entity, id] = r.bitrix_card_id.split(":").map(Number);
+      const e = extra.get(r.documento_id);
+      if (e && entity && id) e.card = { entity, id };
     }
     for (const p of (pp ?? []) as { documento_id: string; produtor_corp_nome: string | null }[]) {
       const n = (p.produtor_corp_nome ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
@@ -179,6 +186,8 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
         const incompletos = todos.filter((d) => d.cliente_incompleto).length;
         const semNumero = todos.filter((d) => !d.numero_apolice || !/[1-9]/.test(d.numero_apolice)).length;
         const jaRenov = todos.filter((d) => d.status_renovacao && d.status_renovacao !== "a_renovar").length;
+        const comCard = todos.filter((d) => extra.get(d.documento_id)?.card).length;
+        const cardsNovos = lista.filter((c) => c.docs.some((d) => !extra.get(d.documento_id)?.card)).length;
         const premio = lista.reduce((s, c) => s + c.premio, 0);
         const segCards = lista.filter((c) => c.segimob).length;
         return (
@@ -196,12 +205,13 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
                   {semPremio > 0 && <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-medium text-red-700">{semPremio} sem prêmio</span>}
                   {semNumero > 0 && <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-medium text-red-700">{semNumero} sem Nº da apólice</span>}
                   {incompletos > 0 && <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-[11px] font-medium text-yellow-800">{incompletos} cliente(s) com cadastro incompleto</span>}
+                  {comCard > 0 && <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-medium text-green-800">{comCard} já com card no Bitrix</span>}
                   {jaRenov > 0 && <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-blue-800">{jaRenov} já em andamento/renovada(s)</span>}
                 </div>
               </div>
               <div className="text-right">
                 <button type="button" disabled title="A criação no Bitrix ainda não está ligada. Nesta fase a tela só mostra a prévia." className="cursor-not-allowed rounded-lg bg-gray-300 px-4 py-2 text-sm font-semibold text-white">
-                  Autorizar criação dos {lista.length} card(s)
+                  Autorizar criação dos {cardsNovos} card(s) novo(s)
                 </button>
                 <p className="mt-1 max-w-[260px] text-[11px] text-gray-500">Autorização ainda não ligada ao Bitrix: nada é criado a partir desta tela.</p>
               </div>
@@ -234,6 +244,7 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
                           <th className="px-3 py-2 text-right">Pr. líquido</th>
                           <th className="px-3 py-2 text-right">Com. %</th>
                           <th className="px-3 py-2">Renovação</th>
+                          <th className="px-3 py-2">Card no Bitrix</th>
                           <th className="px-3 py-2 text-right">Anexos</th>
                         </tr>
                       </thead>
@@ -253,6 +264,7 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
                             <td className="px-3 py-1.5 text-right">{formatarReais(d.premio_liquido)}</td>
                             <td className="px-3 py-1.5 text-right">{d.comissao_pct != null ? Number(d.comissao_pct).toLocaleString("pt-BR") : "—"}</td>
                             <td className="px-3 py-1.5">{d.status_renovacao ? STATUS[d.status_renovacao] ?? d.status_renovacao : "—"}</td>
+                            <td className="px-3 py-1.5">{extra.get(d.documento_id)?.card ? <a href={urlCard(extra.get(d.documento_id)!.card!.entity, extra.get(d.documento_id)!.card!.id)} target="_blank" rel="noreferrer" className="text-o2-navy hover:underline">#{extra.get(d.documento_id)!.card!.id}</a> : <span className="text-gray-300">sem card</span>}</td>
                             <td className="px-3 py-1.5 text-right">{d.anexos > 0 ? d.anexos : <span className="text-gray-300">0</span>}</td>
                           </tr>
                         ))}
