@@ -40,7 +40,7 @@ export async function fichaFatura(sb: SupabaseClient, faturaId: string, competen
   const carregar = async (mesId: string) => {
     const { data } = await sb
       .from("erp_fatura_itens")
-      .select("id, ramo, apolice, endosso, parcela_n, parcelas_total, valor, documento_id, doc:erp_documentos!erp_fatura_itens_documento_id_fkey(nosso_numero, situacao, vigencia_fim, modo_cobranca, cliente:locatarios(nome))")
+      .select("id, ramo, apolice, endosso, parcela_n, parcelas_total, valor, documento_id, doc:erp_documentos!erp_fatura_itens_documento_id_fkey(nosso_numero, situacao, vigencia_fim, modo_cobranca, cliente:locatarios!erp_documentos_locatario_id_fkey(nome))")
       .eq("fatura_mes_id", mesId)
       .order("apolice");
     type Bruta = Omit<LinhaFatura, "codigo_o2" | "cliente" | "situacao_doc" | "comissao_extrato"> & {

@@ -166,7 +166,7 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
     (() => {
       let q = supabase
         .from("erp_documentos")
-        .select("id, nosso_numero, tipo, numero_apolice, numero_endosso, vigencia_inicio, premio_liquido, seguradora:erp_seguradoras(nome), cliente:locatarios(nome)")
+        .select("id, nosso_numero, tipo, numero_apolice, numero_endosso, vigencia_inicio, premio_liquido, seguradora:erp_seguradoras(nome), cliente:locatarios!erp_documentos_locatario_id_fkey(nome)")
         .in("tipo", ["C", "D", "I", "M", "R", "X"])
         .is("documento_pai_id", null)
         .gte("vigencia_inicio", "2021-01-01");
