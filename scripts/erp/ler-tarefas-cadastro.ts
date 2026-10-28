@@ -37,14 +37,20 @@ async function documentosDoNome(nomeBruto: string): Promise<{ id: string; vigenc
 }
 
 (async () => {
-  const todas = await listarTarefas(bx, arg("titulo") ?? "CADASTRO FIANÇA CORP", 200);
+  const filtroSo = arg("so") ? new RegExp(arg("so")!, "i") : null;
+  const todas = (await listarTarefas(bx, arg("titulo") ?? "CADASTRO FIANÇA CORP", 2000)).filter((t) => !filtroSo || filtroSo.test(t.title));
   const ids = arg("ids")?.split(",").map(Number);
   const tarefas = ids ? todas.filter((t) => ids.includes(Number(t.id))) : todas.slice(0, Number(arg("tarefas") ?? 3));
-  console.log(`ENSAIO: ${tarefas.length} tarefas: ${tarefas.map((t) => `${t.id} ${t.title}`).join(" | ")}`);
+  console.log(`ENSAIO: ${tarefas.length} tarefas`);
   const propostas: PropostaCadastro[] = [];
-  let mensagens = 0, arquivos = 0;
+  const catDaTarefa = new Map<number, string>();
+  for (const t of tarefas) catDaTarefa.set(Number(t.id), t.title.toUpperCase().replace(/\b(JANEIRO|FEVEREIRO|MAR[CÇ]O|ABRIL|MAIO|JUNHO|JULHO|AGOSTO|SETEMBRO|OUTUBRO|NOVEMBRO|DEZEMBRO)\b/g, "").replace(/[\d/\-–]+/g, " ").replace(/\s+/g, " ").trim());
+  const porCat = new Map<string, { propostas: number; ligadas: number; soNome: number; nenhum: number }>();
+  let mensagens = 0, arquivos = 0, feitas = 0;
   for (const t of tarefas) {
-    const chat = await lerChatDaTarefa(bx, Number(t.id));
+    if (++feitas % 20 === 0) console.log(`lendo ${feitas}/${tarefas.length}`);
+    let chat: Awaited<ReturnType<typeof lerChatDaTarefa>>;
+    try { chat = await lerChatDaTarefa(bx, Number(t.id)); } catch (e) { console.log(`erro tarefa ${t.id}: ${(e as Error).message.slice(0, 80)}`); continue; }
     mensagens += chat.mensagens.length;
     arquivos += chat.arquivos.size;
     for (const m of chat.mensagens) {
@@ -71,9 +77,15 @@ async function documentosDoNome(nomeBruto: string): Promise<{ id: string; vigenc
       como = perto.length ? "nome+vigencia" : docs.length ? "so-nome" : "nenhum";
       if (perto.length) { if (perto.some((d) => !d.numero_apolice)) r.pendentes++; else r.jaEmitidos++; }
     }
+    const cat = catDaTarefa.get(p.tarefa_id) ?? "?";
+    const c = porCat.get(cat) ?? porCat.set(cat, { propostas: 0, ligadas: 0, soNome: 0, nenhum: 0 }).get(cat)!;
+    c.propostas++;
+    if (como === "nome+vigencia" || como === "proposta") c.ligadas++; else if (como === "so-nome") c.soNome++; else c.nenhum++;
     if (como === "proposta") r.porProposta++; else if (como === "nome+vigencia") r.porNomeEVigencia++; else if (como === "so-nome") r.soNome++; else r.nenhum++;
     if (amostra.length < 8) amostra.push(`${mascara(p.nome)} | ${p.imobiliaria?.slice(0, 22) ?? "-"} | seg ${p.seg ? p.seg.slice(0, 2) + "****" : "-"} | vig ${p.vigencia_inicio ?? "-"}→${p.vigencia_fim ?? "-"} | ${p.seguradora_plano ?? "-"} | com ${p.comissao_pct ?? "-"}% | repasses ${p.repasses.length} | pdfs ${p.arquivos} | ligação: ${como}`);
   }
   console.log(JSON.stringify(r));
+  console.log("POR TIPO DE TAREFA:");
+  for (const [k, v] of [...porCat].sort((a, b) => b[1].propostas - a[1].propostas)) console.log(`  ${k}: ${JSON.stringify(v)}`);
   console.log(amostra.join("\n"));
 })();

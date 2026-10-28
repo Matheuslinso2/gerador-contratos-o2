@@ -4,6 +4,7 @@
 //   NOME - IMOBILIÁRIA / == / SEG: nº / == / CADASTRAR COM A VIGENCIA: dd/mm/aaaa A dd/mm/aaaa / OBS / = / SEGURADORA PLANO /
 //   = / COMISSÃO: n% / REPASSE ...: R$ ou % / DESCONTO ...
 // Nada é inventado: campo que não aparece fica null.
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type PropostaCadastro = {
   nome: string | null;
@@ -14,6 +15,9 @@ export type PropostaCadastro = {
   seguradora_plano: string | null;
   comissao_pct: number | null;
   repasses: { quem: string | null; valor: string }[];
+  assunto_email: string | null; // "ASSUNTO DO E-MAIL:" — chave para achar o e-mail na base indexada
+  campos: Record<string, string>; // todos os "CHAVE: valor" da mensagem, como escritos
+  sem_repasse: boolean;
   arquivos: number;
   data_mensagem: string | null;
   mensagem_id: number;
@@ -25,8 +29,15 @@ const num = (s: string) => Number(s.replace(",", "."));
 
 export function lerMensagemCadastro(texto: string, extra: { arquivos: number; data: string | null; id: number; tarefa: number }): PropostaCadastro | null {
   const t = texto.replace(/\r/g, "");
-  if (/criou \[URL=/.test(t) || !/CADASTRAR COM A VIGENCIA|SEG:/i.test(t)) return null; // aviso do sistema ou mensagem sem dados
+  if (/^\s*\[USER=\d+\]/.test(t) || /\[TIMESTAMP=|\[URL=\/company/.test(t)) return null; // aviso do sistema (tarefa criada, lista de verificação, prazo…)
   const linhas = t.split("\n").map((l) => l.trim());
+  const campos: Record<string, string> = {};
+  for (const l of linhas) {
+    const m = /^([A-ZÀ-Ú][A-ZÀ-Ú0-9 ()/.\-]{1,34}):\s*(.*)$/.exec(l);
+    if (m) campos[m[1].trim().toUpperCase()] = m[2].trim();
+  }
+  const conhecida = /CADASTRAR COM A VIGENCIA|SEG:|COMISS[AÃ]O|REPASSE|ASSUNTO DO E-?MAIL|IMOB(ILI[AÁ]RIA)?:|CONTRATA[CÇ][AÃ]O|SEM REPASSE/i.test(t);
+  if (!conhecida) return null; // mensagem sem dados de cadastro (ex.: só o título do arquivo)
   const primeira = linhas.find((l) => l && !/^=+$/.test(l)) ?? "";
   const [nome, ...resto] = primeira.split(/\s+-\s+/);
   const vig = /VIG[EÊ]NCIA:?\s*([\d/]{10})\s*A\s*([\d/]{10})/i.exec(t.replace(/\n/g, " "));
@@ -42,6 +53,9 @@ export function lerMensagemCadastro(texto: string, extra: { arquivos: number; da
       return m ? { quem: m[1].trim() || null, valor: m[2].trim() } : { quem: null, valor: l };
     });
   return {
+    assunto_email: campos["ASSUNTO DO E-MAIL"] || campos["ASSUNTO DO EMAIL"] || null,
+    campos,
+    sem_repasse: /SEM REPASSE/i.test(t),
     nome: nome?.trim() || null,
     imobiliaria: resto.join(" - ").trim() || null,
     seg: seg?.[1] ?? null,
@@ -59,8 +73,26 @@ export function lerMensagemCadastro(texto: string, extra: { arquivos: number; da
 
 type Chamar = (metodo: string, params?: Record<string, unknown>) => Promise<{ result?: any; error?: string; error_description?: string; next?: number; total?: number }>;
 
-export const chamadorBitrix = (baseUrl: string): Chamar => (metodo, params = {}) =>
-  fetch(baseUrl.replace(/\/?$/, "/") + metodo + ".json", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(params) }).then((r) => r.json());
+/** Chamador com intervalo mínimo entre chamadas (o Bitrix em nuvem aceita ~2 por segundo por webhook) e nova tentativa se limitar. */
+export const chamadorBitrix = (baseUrl: string): Chamar => {
+  let ultima = 0;
+  return async (metodo, params = {}) => {
+    for (let t = 0; ; t++) {
+      const espera = Math.max(0, ultima + 600 - Date.now());
+      if (espera) await new Promise((r) => setTimeout(r, espera));
+      ultima = Date.now();
+      let r: Awaited<ReturnType<Chamar>>;
+      try {
+        r = await fetch(baseUrl.replace(/\/?$/, "/") + metodo + ".json", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(params), signal: AbortSignal.timeout(30_000) }).then((x) => x.json());
+      } catch (e) {
+        if (t < 5) { await new Promise((x) => setTimeout(x, 2000 * (t + 1))); continue; } // queda de conexão: tenta de novo
+        throw e;
+      }
+      if ((r.error === "QUERY_LIMIT_EXCEEDED" || r.error === "OPERATION_TIME_LIMIT") && t < 5) { await new Promise((x) => setTimeout(x, 2000 * (t + 1))); continue; }
+      return r;
+    }
+  };
+};
 
 /** Tarefas cujo título tem o texto dado (todas as páginas). */
 export async function listarTarefas(bx: Chamar, titulo: string, limite = 1000) {
@@ -93,4 +125,40 @@ export async function lerChatDaTarefa(bx: Chamar, tarefaId: number) {
     ultimo = Math.min(...ms.map((m) => m.id));
   }
   return { chatId: Number(chatId), mensagens, arquivos };
+}
+
+// ---------- ligação ao documento do ERP ----------
+export const normNome = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z ]+/g, " ").replace(/\s+/g, " ").trim();
+
+export type DocDoNome = {
+  id: string; nosso_numero: number | null; numero_apolice: string | null; numero_proposta: string | null; situacao: string; tipo: string;
+  vigencia_inicio: string | null; vigencia_fim: string | null; comissao_pct: number | null; seguradora_id: string | null; ramo_id: string | null; premio_total: number | null; premio_liquido: number | null; iof: number | null; premio_adicional: number | null; qtd_parcelas: number | null; dt_emissao: string | null; dt_proposta: string | null; via: string;
+};
+export const COLS_DOC = "id,nosso_numero,numero_apolice,numero_proposta,situacao,tipo,vigencia_inicio,vigencia_fim,comissao_pct,seguradora_id,ramo_id,premio_total,premio_liquido,iof,premio_adicional,qtd_parcelas,dt_emissao,dt_proposta";
+const COLS = COLS_DOC;
+
+/** Documentos do ERP em que o nome (inteiro, ou cada pessoa de "A E B") aparece como cliente ou como parte do item. */
+export async function documentosDoNome(sb: SupabaseClient, nomeBruto: string): Promise<DocDoNome[]> {
+  const n = normNome(nomeBruto);
+  const pessoas = [...new Set([n, ...n.split(/ E /).map((x) => x.trim())])].filter((x) => x.split(" ").length >= 2);
+  const achados = new Map<string, DocDoNome>();
+  for (const nome of pessoas) {
+    const toks = nome.split(" ");
+    const { data: ls } = await sb.from("locatarios").select("id").eq("nome_normalizado", nome).limit(5);
+    if (ls?.length) {
+      const { data: ds } = await sb.from("erp_documentos").select(COLS).in("locatario_id", ls.map((l) => l.id));
+      for (const d of ds ?? []) achados.set(d.id, { ...(d as Omit<DocDoNome, "via">), via: "cliente" });
+    }
+    const { data: ps } = await sb.from("erp_item_partes").select("item_id,nome").ilike("nome", `%${toks[0]}%${toks[toks.length - 1]}%`).limit(40);
+    const exatos = (ps ?? []).filter((x) => normNome(x.nome ?? "") === nome).map((x) => x.item_id);
+    if (exatos.length) {
+      const { data: its } = await sb.from("erp_documento_itens").select("documento_id").in("id", exatos);
+      const docIds = [...new Set((its ?? []).map((i) => i.documento_id))];
+      if (docIds.length) {
+        const { data: ds } = await sb.from("erp_documentos").select(COLS).in("id", docIds);
+        for (const d of ds ?? []) if (!achados.has(d.id)) achados.set(d.id, { ...(d as Omit<DocDoNome, "via">), via: "parte do item" });
+      }
+    }
+  }
+  return [...achados.values()];
 }
