@@ -110,9 +110,12 @@ export const CONFIGS: ConfigSpa[] = [
     entityTypeId: 1042,
     nome: "Seguro Fiança",
     renovacaoCategorias: [32],
-    endossoCategorias: [],
+    endossoCategorias: [42],
     extrair: (it, defs) => {
       const r = it as Raw;
+      // funil Endossos (cat 42, 28/10): Cadastrado = endosso efetivado → ERP como endosso em emissão
+      const endosso = Number(it.categoryId) === 42;
+      const tipoEnd = endosso ? rotulo(defs, "ufCrm10_1793216247", r.ufCrm10_1793216247) : null;
       const segNome = rotulo(defs, "ufCrm10_1776352200", r.ufCrm10_1776352200);
       const cfg = SEGURADORAS_FIANCA.find((s) => segNome && segNome.toLowerCase().includes(s.nome.toLowerCase()));
       const parcelas = cfg?.parcelas ? num(r[cfg.parcelas]) : null;
@@ -122,17 +125,20 @@ export const CONFIGS: ConfigSpa[] = [
       const cpf1 = documento(r.ufCrm10_1776351609);
       const voceE = rotulo(defs, "ufCrm10_1781120236", r.ufCrm10_1781120236) ?? "";
       return {
-        produto: "fianca", ramoAbrev: null, corretora: "corretora", tipo: "A", tipo_corp: "NOVO",
+        produto: "fianca", ramoAbrev: null, corretora: "corretora", tipo: endosso ? "C" : "A", tipo_corp: endosso ? "END" : "NOVO",
+        // tipos do funil → Corp (Matheus 28/10): encerra a garantia = X; troca de parte/correção = M
+        tipoEndosso: endosso ? (/chave|desist|sinistro|garantia/i.test(tipoEnd ?? "") ? "X" : /bito|administradora|corre/i.test(tipoEnd ?? "") ? "M" : tipoEndossoDoRotulo(tipoEnd)) : undefined,
         seguradoraNome: segNome, premio, parcelas,
         comissaoPct: num(r.ufCrm10_1779820737) ?? (cfg?.comissao ? num(r[cfg.comissao]) : null), repassePct: null,
         vigIni: data(r.ufCrm10_1779821934), vigFim: data(r.ufCrm10_1779821962),
-        nnCorp: num(r.ufCrm10_1778258392), numeroApolice: null, numeroProposta: null,
+        // no endosso, "Apolice" é a apólice-mãe (liga o endosso a ela no ERP)
+        nnCorp: num(r.ufCrm10_1778258392), numeroApolice: endosso ? texto(r.ufCrm10_1778258366) : null, numeroProposta: null,
         anterior: { apolice: texto(r.ufCrm10_1790800677), proposta: null },
         cliente: { documento: cpf1, nome: texto(r.ufCrm10_1776354897), email: texto(r.ufCrm10_1783366659), telefone: texto(r.ufCrm10_1783366668) },
         imobTexto: texto(r.ufCrm10_1783371296),
         tipoContratacao: it.companyId ? "indicacao_imobiliaria" : voceE.includes("Pretendente") || voceE.includes("Proprietário") ? "venda_direta" : null,
         canalVenda: null, modoCobranca: "nao_informado", formaPagamento: null,
-        observacoes: texto(r.ufCrm10_1776352503),
+        observacoes: [texto(r.ufCrm10_1776352503), tipoEnd ? `Endosso: ${tipoEnd}` : null, endosso && texto(r.ufCrm10_1793216356) ? `Pendências: ${texto(r.ufCrm10_1793216356)}` : null].filter(Boolean).join("\n") || null,
         item: {
           administrado: (() => { const a = rotulo(defs, "ufCrm10_1781116076", r.ufCrm10_1781116076); if (a === "Sim") return true; if (a === "Não") return false; if (r.ufCrm10_1788957284213 === "Y" || r.ufCrm10_1788957828053 === "Y") return true; if (r.ufCrm10_1788957284213 === "N") return false; return null; })(),
           tipo_imovel: tipoLoc.includes("comerc") ? "comercial" : tipoLoc.includes("resid") ? "residencial" : null,
@@ -282,7 +288,7 @@ export function situacaoDoCard(cfg: ConfigSpa, it: BitrixItemRaw, etapas: Map<st
     return { situacao: "proposta" };
   }
   if (sem === "F") {
-    const perdido = /perd|desist|não renov|nao renov|sem emiss|s\/ retorno|não realizado|nao realizado/.test(nome);
+    const perdido = /perd|desist|não renov|nao renov|sem emiss|s\/ retorno|sem retorno|não realizado|nao realizado/.test(nome);
     return { situacao: perdido ? "perdido" : "recusado", motivo: et?.nome ?? "recusado/perdido" };
   }
   // em andamento (qualquer etapa aberta, inclusive negociação/contratação) = cotação
