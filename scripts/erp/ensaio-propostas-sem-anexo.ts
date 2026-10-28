@@ -1,4 +1,4 @@
-// Ensaio (SÓ LEITURA, nada gravado): para as propostas em emissão (situacao digitado/proposta, sem nº de apólice, sem anexo em
+// Ensaio (SÓ LEITURA, nada gravado): para as propostas em emissão (situacao proposta, sem nº de apólice, sem anexo em
 // erp_documento_anexos), mostra de que FONTE já existe o PDF/e-mail da proposta, por seguradora e produto:
 //   corp  = corp_anexos pelo nosso nº do Corp (chave oficial; já aparece na aba de anexos do Corp, então NÃO se copia)
 //   tarefa = PDF anexado nas tarefas CADASTRO … CORP do Bitrix, ligado por CPF+vigência (lê o CSV de auditoria-tarefas-pdf)
@@ -23,7 +23,7 @@ const em = <T,>(xs: T[], n = 100) => Array.from({ length: Math.ceil(xs.length / 
 
 (async () => {
   const docs = [
-    ...(await todos((a, b) => sb.from("erp_documentos").select("id,nosso_numero,nosso_numero_corp,situacao,origem,seguradora_id,ramo_id").eq("situacao", "digitado").is("numero_apolice", null).order("id").range(a, b))),
+    ...(await todos((a, b) => sb.from("erp_documentos").select("id,nosso_numero,nosso_numero_corp,situacao,origem,seguradora_id,ramo_id").eq("situacao", "proposta").is("numero_apolice", null).order("id").range(a, b))),
     ...(await todos((a, b) => sb.from("erp_documentos").select("id,nosso_numero,nosso_numero_corp,situacao,origem,seguradora_id,ramo_id").eq("situacao", "proposta").is("numero_apolice", null).order("id").range(a, b))),
   ];
   const comAnexo = new Set<string>();

@@ -1,4 +1,4 @@
-// Propostas pendentes (situacao='digitado', sem nº de apólice): procura nas 34 caixas O2 PDFs enviados por seguradoras
+// Propostas pendentes (situacao='proposta', sem nº de apólice): procura nas 34 caixas O2 PDFs enviados por seguradoras
 // (apólice, endosso, cotação, proposta) e liga ao documento quando o PDF o confirma. SÓ LEITURA do Gmail. uso:
 //   npx tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/erp/anexos-seguradoras.ts [--meses 30] [--caixas a@...] [--paralelo 4] [--gravar]
 // Sem --gravar é ensaio. Aqui só vale 'confirmada' (CPF/CNPJ do documento + nº ou início da vigência no PDF): CPF sozinho
@@ -33,7 +33,7 @@ function janelas() {
   // alvos: propostas pendentes; índice CPF/CNPJ -> documentos
   const ids: string[] = [];
   for (let de = 0; ; de += 1000) {
-    const { data } = await sb.from("erp_documentos").select("id").eq("situacao", "digitado").is("numero_apolice", null).order("id").range(de, de + 999);
+    const { data } = await sb.from("erp_documentos").select("id").eq("situacao", "proposta").is("numero_apolice", null).order("id").range(de, de + 999);
     ids.push(...(data ?? []).map((d) => d.id));
     if ((data ?? []).length < 1000) break;
   }

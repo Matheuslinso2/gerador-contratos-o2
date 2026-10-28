@@ -19,7 +19,8 @@ import FiltrosErp from "../FiltrosErp";
 
 const COR_SITUACAO: Record<string, string> = {
   vigente: "bg-green-100 text-green-800",
-  digitado: "bg-yellow-100 text-yellow-800",
+  cotacao: "bg-orange-100 text-orange-800",
+  proposta: "bg-yellow-100 text-yellow-800",
   emitido: "bg-blue-100 text-blue-800",
   vencido: "bg-gray-100 text-gray-600",
   cancelado: "bg-red-100 text-red-700",

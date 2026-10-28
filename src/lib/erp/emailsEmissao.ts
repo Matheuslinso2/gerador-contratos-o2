@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { CAIXAS_O2, lerCaixa, type EmailLido } from "@/lib/erp/emails";
 
 // ERP O2 — prova de emissão nos e-mails (27/10/2026), SÓ LEITURA do Gmail e SEM escrever em erp_documentos.
-// Alvo: propostas pendentes (situacao='digitado' e sem nº de apólice). Procura nas caixas O2 e-mails de fora da O2 com
+// Alvo: propostas pendentes (situacao='proposta' e sem nº de apólice). Procura nas caixas O2 e-mails de fora da O2 com
 // "apólice/endosso/emitida/emissão" e liga ao documento pelo nº da proposta ou pelo nome do segurado. A evidência vai para
 // erp_emails (ligacao 'emissao') + erp_emails_evidencia_emissao; quem decide gravar é o Matheus, depois de ver a taxa de acerto.
 
@@ -36,7 +36,7 @@ async function lerTudo<T>(pagina: (de: number, ate: number) => PromiseLike<{ dat
 export async function carregarAlvos(sb: SupabaseClient): Promise<{ alvos: Alvo[]; desde: string }> {
   const docs = await lerTudo<{ id: string; tipo: string; origem: string; numero_proposta: string | null; locatario_id: string | null; dt_proposta: string | null; created_at: string }>(
     (a, b) =>
-      sb.from("erp_documentos").select("id,tipo,origem,numero_proposta,locatario_id,dt_proposta,created_at").eq("situacao", "digitado").is("numero_apolice", null).order("id").range(a, b)
+      sb.from("erp_documentos").select("id,tipo,origem,numero_proposta,locatario_id,dt_proposta,created_at").eq("situacao", "proposta").is("numero_apolice", null).order("id").range(a, b)
   );
   const nomes = new Map<string, Set<string>>();
   const add = (id: string, n: string | null) => {

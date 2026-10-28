@@ -269,7 +269,8 @@ async function listarEtapas(entityTypeId: number): Promise<Map<string, Etapa>> {
   return m;
 }
 
-/** Situação do ERP pelo funil/etapa. Cotação → proposta (negociação) → digitado (efetivado); recusado/perdido quando falha. */
+/** Situação do ERP pelo funil/etapa (Matheus 28/10): cotação (tomada de preços, inclui a negociação) → efetivada = PROPOSTA (em emissão) → apólice vigente (Corp).
+ *  Não existe 'digitado'. Perdido/recusado não entram no ERP de fato: ficam só no workspace. */
 export function situacaoDoCard(cfg: ConfigSpa, it: BitrixItemRaw, etapas: Map<string, Etapa>): { situacao: string; motivo?: string } {
   const et = etapas.get(it.stageId);
   const sem = et?.semantica ?? (it.stageId.endsWith(":SUCCESS") ? "S" : it.stageId.endsWith(":FAIL") ? "F" : "P");
@@ -278,15 +279,14 @@ export function situacaoDoCard(cfg: ConfigSpa, it: BitrixItemRaw, etapas: Map<st
   if (sem === "S") {
     // Fiança: SUCESSO na Análise (cat 18) é cotação aprovada, ainda não efetivada
     if (cfg.entityTypeId === 1042 && cat === 18) return { situacao: "cotacao" };
-    return { situacao: "digitado" };
+    return { situacao: "proposta" };
   }
   if (sem === "F") {
     const perdido = /perd|desist|não renov|nao renov|sem emiss|s\/ retorno|não realizado|nao realizado/.test(nome);
     return { situacao: perdido ? "perdido" : "recusado", motivo: et?.nome ?? "recusado/perdido" };
   }
-  // em andamento: negociação/contratação = proposta; o resto = cotação
-  const emProposta = /negoci|contrat|emiss|contrato|proposta|pagamento|boleto|cadastr|transmit|vistoria|desconto/.test(nome) || (cfg.entityTypeId === 1042 && cat === 20);
-  return { situacao: emProposta ? "proposta" : "cotacao" };
+  // em andamento (qualquer etapa aberta, inclusive negociação/contratação) = cotação
+  return { situacao: "cotacao" };
 }
 
 export function dadosLegiveis(item: BitrixItemRaw, defs: Defs): Record<string, unknown> {
@@ -430,9 +430,15 @@ export async function sincronizarSpa(sb: SupabaseClient, cfg: ConfigSpa, o: Opco
         if (escolhido) { docId = escolhido.id; modo = "ligado"; }
       }
       // prêmio padronizado pelo LÍQUIDO (regra por produto em ./premio.ts): o valor do card é líquido na Fiança e total no incêndio
-      const sep = separarPremio(x.produto, x.premio ?? 0);
+      // proteção (Matheus 28/10): prêmio absurdo no card (ex.: nº de orçamento digitado no campo de valor = R$ 117 milhões) não é gravado; Capitalização tem prêmios altos (até R$ 1,6 mi), limite maior
+      const limitePremio = x.produto === "capitalizacao" ? 5_000_000 : 1_000_000;
+      const premioSuspeito = (x.premio ?? 0) > limitePremio;
+      if (premioSuspeito) r.erros.push({ card: Number(id), erro: `prêmio ${x.premio} acima do limite (${limitePremio}); valor ignorado, conferir o campo no Bitrix` });
+      const sep = separarPremio(x.produto, premioSuspeito ? 0 : x.premio ?? 0);
       const premio = sep.liquido;
       const comissaoPct = x.comissaoPct ?? 0;
+      // Matheus 28/10: card perdido/recusado fica só no workspace; não cria documento novo no ERP (os que já existem ficam como histórico escondido)
+      if (!docId && (sit.situacao === "perdido" || sit.situacao === "recusado")) continue;
       if (!docId) {
         modo = "criado";
         if (!o.gravar) { r.criados++; continue; }
@@ -541,7 +547,7 @@ export async function sincronizarSpa(sb: SupabaseClient, cfg: ConfigSpa, o: Opco
       if (eOri) throw new Error(eOri.message);
 
       if (ehEndosso) {
-        const aberto = sit.situacao === "cotacao" || sit.situacao === "proposta";
+        const aberto = sit.situacao === "cotacao";
         const escrever = o.escreverNoBitrix === "todos" || (o.escreverNoBitrix === "abertos" && aberto);
         const v = await vincularEndossoAoPai(sb, { cfg, item, x, docId, seg, escrever });
         if (v.pai) r.endossos_ligados++; else r.endossos_sem_apolice++;
@@ -597,7 +603,7 @@ export async function vincularEndossoAoPai(
       // o card às vezes traz zeros à esquerda (07764752) que o Corp não guarda (7764752)
       const variantes = [...new Set([bruto, bruto.replace(/[\s.\-]/g, ""), digitos(bruto), digitos(bruto).replace(/^0+/, "")].filter(Boolean))];
       const { data } = await sb.from("erp_documentos").select(COLS_APOLICE).in("tipo", ["A", "F"]).eq("seguradora_id", a.seg)
-        .in("numero_apolice", variantes).not("situacao", "in", "(cotacao,proposta,recusado,perdido)").limit(50);
+        .in("numero_apolice", variantes).not("situacao", "in", "(cotacao,recusado,perdido)").limit(50);
       let cands = (data ?? []) as Apolice[];
       // a apólice do Corp vale mais que o card de produção que ainda não foi ligado a ela
       if (cands.some((c) => c.origem === "corp_import")) cands = cands.filter((c) => c.origem === "corp_import");
