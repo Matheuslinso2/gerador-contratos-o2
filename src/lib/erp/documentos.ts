@@ -270,8 +270,9 @@ export async function buscarDocumentos(sb: SupabaseClient, f: FiltrosBusca): Pro
   if (f.situacao) q = q.eq("situacao", f.situacao);
   else {
     q = q.neq("situacao", "duplicado"); // card do Bitrix já juntado ao documento do Corp: só aparece se pedirem a situação
-    // a tela Apólices não lista cotação (ainda é negociação, vive no Bitrix): só aparece se pedirem a situação ou buscarem por nome/código (Matheus 28/10)
-    if (!termo) q = q.neq("situacao", "cotacao");
+    // Apólices só traz o que já é apólice (vigente, vencida, cancelada, endosso, fatura). Cotação vive no Bitrix e proposta fica em Emissão
+    // até virar apólice (Matheus 28/10): só aparecem se pedirem a situação ou buscarem por nome/código
+    if (!termo) q = q.not("situacao", "in", "(cotacao,proposta)");
   }
   if (f.tipo) q = q.eq("tipo", f.tipo);
   if (f.forma) q = q.eq("modo_cobranca", f.forma);
