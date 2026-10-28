@@ -11,6 +11,31 @@ const sb = createServiceClient();
 const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z ]+/g, " ").replace(/\s+/g, " ").trim();
 const mascara = (n: string | null) => (n ? n.split(" ")[0] + " …" : "-");
 
+/** Documentos do ERP em que o nome da proposta (inteiro ou cada pessoa de "A E B") aparece como cliente ou como parte do item. */
+async function documentosDoNome(nomeBruto: string): Promise<{ id: string; vigencia_inicio: string | null; situacao: string; numero_apolice: string | null; via: string }[]> {
+  const pessoas = [...new Set([norm(nomeBruto), ...norm(nomeBruto).split(/ E /).map((x) => x.trim())])].filter((x) => x.split(" ").length >= 2);
+  const achados = new Map<string, { id: string; vigencia_inicio: string | null; situacao: string; numero_apolice: string | null; via: string }>();
+  for (const nome of pessoas) {
+    const toks = nome.split(" ");
+    const { data: ls } = await sb.from("locatarios").select("id").eq("nome_normalizado", nome).limit(5);
+    if (ls?.length) {
+      const { data: ds } = await sb.from("erp_documentos").select("id,vigencia_inicio,situacao,numero_apolice").in("locatario_id", ls.map((l) => l.id));
+      for (const d of ds ?? []) achados.set(d.id, { ...d, via: "cliente" });
+    }
+    const { data: ps } = await sb.from("erp_item_partes").select("item_id,nome").ilike("nome", `%${toks[0]}%${toks[toks.length - 1]}%`).limit(40);
+    const exatos = (ps ?? []).filter((x) => norm(x.nome ?? "") === nome).map((x) => x.item_id);
+    if (exatos.length) {
+      const { data: its } = await sb.from("erp_documento_itens").select("documento_id").in("id", exatos);
+      const docIds = [...new Set((its ?? []).map((i) => i.documento_id))];
+      if (docIds.length) {
+        const { data: ds } = await sb.from("erp_documentos").select("id,vigencia_inicio,situacao,numero_apolice").in("id", docIds);
+        for (const d of ds ?? []) if (!achados.has(d.id)) achados.set(d.id, { ...d, via: "parte do item" });
+      }
+    }
+  }
+  return [...achados.values()];
+}
+
 (async () => {
   const todas = await listarTarefas(bx, arg("titulo") ?? "CADASTRO FIANÇA CORP", 200);
   const ids = arg("ids")?.split(",").map(Number);
@@ -28,7 +53,7 @@ const mascara = (n: string | null) => (n ? n.split(" ")[0] + " …" : "-");
     }
   }
   console.log(`mensagens ${mensagens} | arquivos ${arquivos} | propostas lidas ${propostas.length}`);
-  const r = { semNome: 0, semVigencia: 0, semComissao: 0, semSeguradora: 0, porProposta: 0, porNomeEVigencia: 0, soNome: 0, nenhum: 0 };
+  const r = { pendentes: 0, jaEmitidos: 0, semNome: 0, semVigencia: 0, semComissao: 0, semSeguradora: 0, porProposta: 0, porNomeEVigencia: 0, soNome: 0, nenhum: 0 };
   const amostra: string[] = [];
   for (const p of propostas) {
     if (!p.nome) r.semNome++;
@@ -41,13 +66,10 @@ const mascara = (n: string | null) => (n ? n.split(" ")[0] + " …" : "-");
       if (data?.length) como = "proposta";
     }
     if (como === "nenhum" && p.nome) {
-      const { data: ls } = await sb.from("locatarios").select("id").eq("nome_normalizado", norm(p.nome)).limit(5);
-      const ids2 = (ls ?? []).map((l) => l.id);
-      if (ids2.length) {
-        const { data: docs } = await sb.from("erp_documentos").select("id,vigencia_inicio,situacao,numero_apolice").in("locatario_id", ids2);
-        const perto = (docs ?? []).filter((d) => d.vigencia_inicio && p.vigencia_inicio && Math.abs(Date.parse(d.vigencia_inicio) - Date.parse(p.vigencia_inicio)) <= 5 * 864e5);
-        como = perto.length ? "nome+vigencia" : docs?.length ? "so-nome" : "nenhum";
-      }
+      const docs = await documentosDoNome(p.nome);
+      const perto = docs.filter((d) => d.vigencia_inicio && p.vigencia_inicio && Math.abs(Date.parse(d.vigencia_inicio) - Date.parse(p.vigencia_inicio)) <= 5 * 864e5);
+      como = perto.length ? "nome+vigencia" : docs.length ? "so-nome" : "nenhum";
+      if (perto.length) { if (perto.some((d) => !d.numero_apolice)) r.pendentes++; else r.jaEmitidos++; }
     }
     if (como === "proposta") r.porProposta++; else if (como === "nome+vigencia") r.porNomeEVigencia++; else if (como === "so-nome") r.soNome++; else r.nenhum++;
     if (amostra.length < 8) amostra.push(`${mascara(p.nome)} | ${p.imobiliaria?.slice(0, 22) ?? "-"} | seg ${p.seg ? p.seg.slice(0, 2) + "****" : "-"} | vig ${p.vigencia_inicio ?? "-"}→${p.vigencia_fim ?? "-"} | ${p.seguradora_plano ?? "-"} | com ${p.comissao_pct ?? "-"}% | repasses ${p.repasses.length} | pdfs ${p.arquivos} | ligação: ${como}`);
