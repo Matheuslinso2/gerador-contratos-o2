@@ -6,7 +6,7 @@ import PageHeader from "@/components/PageHeader";
 import { IconReport } from "@/components/icons";
 import { formatarData, formatarReais } from "@/lib/sinistros/regras";
 import { buscarDocumentos, SITUACOES, tipoDoCabecalho, TIPOS_DOCUMENTO } from "@/lib/erp/documentos";
-import { lerFiltros } from "@/lib/erp/filtros";
+import { lerFiltros, VISOES } from "@/lib/erp/filtros";
 import { codigoCliente } from "@/lib/erp/clientes";
 import FiltrosErp from "../FiltrosErp";
 
@@ -47,6 +47,15 @@ export default async function ListaDocumentos({
 }) {
   const sp = { ...padrao, ...(await searchParams) };
   const f = lerFiltros(sp);
+  // Apólices (Matheus 28/10): abre em "Apólices vigentes"; as demais visões abrem no mês atual (regra: toda tela abre no mês vigente)
+  const visao = f.visao && VISOES[f.visao] ? f.visao : "vigentes";
+  if (visao !== "vigentes" && !f.de && !f.ate && !f.q) {
+    const h = new Date();
+    const ini = new Date(Date.UTC(h.getFullYear(), h.getMonth(), 1)).toISOString().slice(0, 10);
+    const fim = new Date(Date.UTC(h.getFullYear(), h.getMonth() + 1, 0)).toISOString().slice(0, 10);
+    f.de = ini;
+    f.ate = fim;
+  }
   const limite = typeof sp.limite === "string" ? sp.limite : undefined;
   const situacao = f.situacao;
   const supabase = await createClient();
@@ -58,6 +67,7 @@ export default async function ListaDocumentos({
   const busca = f.q ?? "";
   const { linhas, total } = await buscarDocumentos(supabase, {
     busca,
+    visao,
     situacao,
     seguradora: f.seguradora,
     produto: f.produto,
@@ -90,11 +100,11 @@ export default async function ListaDocumentos({
 
         <FiltrosErp
           caminho={caminho}
-          campos={["busca", "produto", "situacao", "tipo", "imobiliaria", "inquilino", "imovel", "seguradora", "periodo", "proprietario", "forma_pagamento", "canal"]}
-          avancados={["inquilino", "imovel", "seguradora", "periodo", "proprietario", "forma_pagamento", "canal"]}
+          campos={["busca", "visao", "periodo", "produto", "imobiliaria", "inquilino", "imovel", "seguradora", "proprietario", "forma_pagamento", "canal"]}
+          avancados={["inquilino", "imovel", "seguradora", "proprietario", "forma_pagamento", "canal"]}
           valores={f}
           placeholderBusca="Nome do titular · CPF/CNPJ · CLI-000123 · Código O2 do documento · Nosso nº do Corp · Nº da apólice"
-          rotuloPeriodo="Início de vigência"
+          rotuloPeriodo="Período"
           situacoes={SITUACOES}
           tipos={TIPOS_DOCUMENTO}
           resumo={

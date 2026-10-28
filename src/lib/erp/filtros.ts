@@ -8,6 +8,7 @@ export type CampoFiltro =
   | "seguradora" // abreviação de erp_seguradoras (TOKI, PORT, POTT…)
   | "corretora" // O2 Corretora | O2 Capitalização
   | "produto" // erp_ramos.produto (fianca, incendio, capitalizacao…)
+  | "visao" // Apólices (Matheus 28/10): vigentes · início de vigência no período · faturas do período · endossos do período
   | "situacao"
   | "tipo"
   | "imobiliaria" // nome (ou parte) — resolvido na base única de imobiliárias
@@ -20,9 +21,17 @@ export type CampoFiltro =
   | "proprietario" // nome ou CPF/CNPJ do proprietário = LOCADOR = SEGURADO da apólice de Fiança (parte "proprietário" do item ou segurado do acervo)
   | "imovel"; // endereço ou CEP do imóvel segurado
 
+/** Visões da tela Apólices: cruzam o período escolhido com o tipo de documento (nunca proposta nem cotação). */
+export const VISOES: Record<string, string> = {
+  vigentes: "Apólices vigentes",
+  inicio: "Apólices com início de vigência no período",
+  faturas: "Faturas do período",
+  endossos: "Endossos do período",
+};
+
 export type ValoresFiltro = Partial<Record<(typeof CHAVES)[number], string>>;
 
-const CHAVES = ["q", "seguradora", "corretora", "produto", "situacao", "tipo", "imobiliaria", "forma", "canal", "de", "ate", "mes", "inquilino", "proprietario", "imovel"] as const;
+const CHAVES = ["q", "visao", "seguradora", "corretora", "produto", "situacao", "tipo", "imobiliaria", "forma", "canal", "de", "ate", "mes", "inquilino", "proprietario", "imovel"] as const;
 
 /** Lê os filtros da URL (só os conhecidos, aparados, vazios descartados). */
 export function lerFiltros(sp: Record<string, string | string[] | undefined>): ValoresFiltro {
@@ -44,6 +53,7 @@ export const PARAMS_DO_CAMPO: Record<CampoFiltro, (keyof ValoresFiltro)[]> = {
   seguradora: ["seguradora"],
   corretora: ["corretora"],
   produto: ["produto"],
+  visao: ["visao"],
   situacao: ["situacao"],
   tipo: ["tipo"],
   imobiliaria: ["imobiliaria"],

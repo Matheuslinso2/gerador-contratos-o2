@@ -1,7 +1,7 @@
 import { Fragment } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { CORRETORAS, FORMAS_PAGAMENTO, PARAMS_DO_CAMPO, PRODUTOS, type CampoFiltro, type ValoresFiltro } from "@/lib/erp/filtros";
+import { CORRETORAS, FORMAS_PAGAMENTO, PARAMS_DO_CAMPO, PRODUTOS, VISOES, type CampoFiltro, type ValoresFiltro } from "@/lib/erp/filtros";
 
 // Barra de filtros padrão do ERP O2: mesmos nomes, rótulos e comportamento em todas as telas; cada tela escolhe
 // os campos (níveis) que fazem sentido para ela. Formulário GET (filtros ficam na URL, dá para compartilhar o link).
@@ -90,6 +90,17 @@ export default async function FiltrosErp({
         return campo("Proprietário", busca("proprietario", "nome ou CPF/CNPJ"));
       case "imovel":
         return campo("Endereço ou CEP", busca("imovel", "rua, bairro ou CEP"));
+      case "visao":
+        return campo(
+          "Listar",
+          <select name="visao" defaultValue={valores.visao ?? "vigentes"} className={input}>
+            {Object.entries(VISOES).map(([v, r]) => (
+              <option key={v} value={v}>
+                {r}
+              </option>
+            ))}
+          </select>
+        );
       case "situacao":
         return situacoes ? campo("Situação", select("situacao", Object.entries(situacoes))) : null;
       case "tipo":

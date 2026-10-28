@@ -238,6 +238,8 @@ export async function dadosDeCabecalhoPorId(sb: SupabaseClient, ids: string[]): 
 
 export type FiltrosBusca = {
   busca: string;
+  /** tela Apólices: vigentes | inicio | faturas | endossos — cruza o período (de/ate) com o tipo de documento; nunca cotação/proposta */
+  visao?: string;
   situacao?: string;
   limite?: number;
   // filtros padronizados do ERP (src/lib/erp/filtros.ts)
@@ -263,22 +265,39 @@ export type FiltrosBusca = {
 export async function buscarDocumentos(sb: SupabaseClient, f: FiltrosBusca): Promise<{ linhas: DocumentoLista[]; total: number | null }> {
   const limite = Math.min(Math.max(f.limite ?? 50, 10), 200);
   const termo = f.busca.trim();
-  const filtrado = !!(termo || f.situacao || f.seguradora || f.produto || f.tipo || f.imobiliaria || f.forma || f.canal || f.de || f.ate || f.inquilino || f.proprietario || f.imovel);
+  const filtrado = !!(termo || f.visao || f.situacao || f.seguradora || f.produto || f.tipo || f.imobiliaria || f.forma || f.canal || f.de || f.ate || f.inquilino || f.proprietario || f.imovel);
   // premissa de desempenho do ERP: contagem só quando há filtro (contar/estimar os 120 mil com os vínculos custava 2–8 s);
   // sem filtro a tela mostra os mais recentes e total = null
   let q = sb.from("erp_documentos").select(SELECT_LISTA, filtrado ? { count: "exact" } : undefined);
-  if (f.situacao) q = q.eq("situacao", f.situacao);
+  const visao = f.visao;
+  if (visao) {
+    // só o que já é documento oficial: fora cotação, proposta (vive em Emissão até virar apólice) e o que não entra no ERP
+    q = q.not("situacao", "in", "(cotacao,proposta,duplicado,perdido,recusado)");
+    // com busca por nome/código vale o histórico todo; sem busca, a visão cruza período × tipo (como no Corp)
+    if (!termo) {
+      const tipos = visao === "faturas" ? ["F"] : visao === "endossos" ? ["C", "D", "I", "M", "R", "X"] : ["A"];
+      q = q.in("tipo", tipos);
+      if (visao === "vigentes") {
+        if (f.de || f.ate) {
+          // vigente em algum dia do período escolhido
+          q = q.in("situacao", ["vigente", "vencido"]);
+          if (f.ate) q = q.lte("vigencia_inicio", f.ate);
+          if (f.de) q = q.gte("vigencia_fim", f.de);
+        } else q = q.eq("situacao", "vigente");
+      } else {
+        if (f.de) q = q.gte("vigencia_inicio", f.de);
+        if (f.ate) q = q.lte("vigencia_inicio", f.ate);
+      }
+    }
+  } else if (f.situacao) q = q.eq("situacao", f.situacao);
   else {
     q = q.neq("situacao", "duplicado"); // card do Bitrix já juntado ao documento do Corp: só aparece se pedirem a situação
-    // Apólices só traz o que já é apólice (vigente, vencida, cancelada, endosso, fatura). Cotação vive no Bitrix e proposta fica em Emissão
-    // até virar apólice (Matheus 28/10): só aparecem se pedirem a situação ou buscarem por nome/código
-    if (!termo) q = q.not("situacao", "in", "(cotacao,proposta)");
   }
-  if (f.tipo) q = q.eq("tipo", f.tipo);
+  if (f.tipo && !visao) q = q.eq("tipo", f.tipo);
   if (f.forma) q = q.eq("modo_cobranca", f.forma);
   if (f.canal) q = q.eq("canal_id", f.canal);
-  if (f.de) q = q.gte("vigencia_inicio", f.de);
-  if (f.ate) q = q.lte("vigencia_inicio", f.ate);
+  if (f.de && !visao) q = q.gte("vigencia_inicio", f.de);
+  if (f.ate && !visao) q = q.lte("vigencia_inicio", f.ate);
   if (f.seguradora) {
     const { data: s } = await sb.from("erp_seguradoras").select("id").eq("abreviacao", f.seguradora).maybeSingle();
     if (!s) return { linhas: [], total: 0 };
