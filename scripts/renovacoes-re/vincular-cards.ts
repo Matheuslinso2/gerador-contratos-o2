@@ -16,7 +16,7 @@ const GRAVAR = process.argv.includes("--gravar");
   const docs = await lerDocumentosParaLigar(sb);
   const { ligacoes, cardsSemDocumento } = casarCardsComDocumentos(cards, docs);
   const doc = new Map(docs.map((d) => [d.id, d]));
-  console.log(`cards lidos: ${cards.length} · documentos vigentes: ${docs.length} · ligações: ${ligacoes.length} · cards sem documento: ${cardsSemDocumento.length}`);
+  console.log(`cards lidos: ${cards.length} · documentos (todas as situações): ${docs.length} · ligações: ${ligacoes.length} · cards sem documento: ${cardsSemDocumento.length}`);
   const porFunil: Record<string, number> = {}, porVia: Record<string, number> = {}, porStatus: Record<string, number> = {};
   for (const l of ligacoes) { porFunil[l.card.funil] = (porFunil[l.card.funil] ?? 0) + 1; porVia[l.via] = (porVia[l.via] ?? 0) + 1; const s = statusPelaEtapa(l.card.etapa); porStatus[s] = (porStatus[s] ?? 0) + 1; }
   console.log("por funil:", porFunil, "| por via:", porVia, "| status pela etapa:", porStatus);
@@ -33,7 +33,7 @@ const GRAVAR = process.argv.includes("--gravar");
     const valor = { bitrix_card_id: `${l.card.entity}:${l.card.id}`, status: statusPelaEtapa(l.card.etapa), vence_em: d.vigencia_fim, updated_at: new Date().toISOString() };
     const { data: ex } = await sb.from("erp_renovacoes").select("id,bitrix_card_id").eq("documento_id", l.documentoId).limit(1);
     if (ex?.length) { if (ex[0].bitrix_card_id !== valor.bitrix_card_id) { await sb.from("erp_renovacoes").update(valor).eq("id", ex[0].id); atualizados++; } }
-    else { const { error } = await sb.from("erp_renovacoes").insert({ documento_id: l.documentoId, ...valor, observacoes: `Ligado ao card #${l.card.id} (${l.card.funil}) pelo ${l.via === "apolice" ? "Nº da apólice" : l.via === "nosso_numero_corp" ? "Nosso nº do Corp" : "nome do cliente e fim da vigência"}` }); if (error) console.log("erro", error.message); else novos++; }
+    else { const { error } = await sb.from("erp_renovacoes").insert({ documento_id: l.documentoId, ...valor, observacoes: `Ligado ao card #${l.card.id} (${l.card.funil}) pelo ${l.via === "apolice" ? "Nº da apólice" : l.via === "nosso_numero_corp" ? "Nosso nº do Corp" : l.via === "apolice_parcial" ? "Nº da apólice (final dos dígitos)" : l.via === "imobiliaria_seguradora_mes" ? "imobiliária, seguradora e mês do título" : "nome do cliente e fim da vigência"}` }); if (error) console.log("erro", error.message); else novos++; }
   }
   console.log(`gravado: ${novos} novos, ${atualizados} atualizados`);
 })();

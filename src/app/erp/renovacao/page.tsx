@@ -127,6 +127,19 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
   }
   const cards = [...porChave.values()].sort((a, b) => a.fim.localeCompare(b.fim) || a.titulo.localeCompare(b.titulo));
 
+  // Renovações ainda SEM DESFECHO de apólices que já não estão vigentes: continuam sendo acompanhadas até Renovado ou Não renovado (Matheus 28/10/2026)
+  type Aberta = { bitrix_card_id: string; status: string; vence_em: string; doc: { id: string; nosso_numero: number; numero_apolice: string | null; situacao: string; loc: { nome: string } | { nome: string }[] | null; ramo: { produto: string } | { produto: string }[] | null } | null };
+  const { data: abertasRaw } = await supabase
+    .from("erp_renovacoes")
+    .select("bitrix_card_id, status, vence_em, doc:erp_documentos!erp_renovacoes_documento_id_fkey(id, nosso_numero, numero_apolice, situacao, loc:locatarios!erp_documentos_locatario_id_fkey(nome), ramo:erp_ramos(produto))")
+    .in("status", ["a_renovar", "em_cotacao"])
+    .not("bitrix_card_id", "is", null)
+    .order("vence_em")
+    .limit(1500);
+  const abertas = ((abertasRaw ?? []) as unknown as Aberta[]).filter((a) => a.doc && a.doc.situacao !== "vigente");
+  const abertasPorCard = new Map<string, Aberta[]>();
+  for (const a of abertas) abertasPorCard.set(a.bitrix_card_id, [...(abertasPorCard.get(a.bitrix_card_id) ?? []), a]);
+
   // atalhos de mês: o mês atual +1 até +4
   const hoje = new Date();
   const atalhos = [1, 2, 3, 4].map((n) => {
@@ -173,6 +186,37 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
           );
         })}
       </div>
+
+      {abertasPorCard.size > 0 && (
+        <section className="space-y-2 rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
+          <h2 className="text-base font-semibold text-gray-900">Em acompanhamento até o desfecho</h2>
+          <p className="text-xs text-gray-600">
+            {abertasPorCard.size} card(s) de renovação ainda sem desfecho (nem Renovado nem Não renovado), cuja apólice já não está vigente. Continuam aqui até o card chegar ao fim do funil.
+          </p>
+          <div className="overflow-x-auto rounded-xl border border-amber-100 bg-white">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+                <tr><th className="px-3 py-2">Card no Bitrix</th><th className="px-3 py-2">Apólices</th><th className="px-3 py-2">Cliente</th><th className="px-3 py-2">Venceu em</th><th className="px-3 py-2">Situação</th></tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {[...abertasPorCard.entries()].slice(0, 120).map(([cardId, lista]) => {
+                  const [entity, id] = cardId.split(":").map(Number);
+                  const loc0 = lista[0].doc?.loc; const nome = Array.isArray(loc0) ? loc0[0]?.nome : loc0?.nome;
+                  return (
+                    <tr key={cardId} className="hover:bg-gray-50">
+                      <td className="px-3 py-1.5"><a href={urlCard(entity, id)} target="_blank" rel="noreferrer" className="text-o2-navy hover:underline">#{id}</a> <span className="text-gray-400">SPA {entity}</span></td>
+                      <td className="px-3 py-1.5">{lista.length === 1 ? (lista[0].doc?.numero_apolice ?? lista[0].doc?.nosso_numero) : `${lista.length} apólices (lote)`}</td>
+                      <td className="px-3 py-1.5">{lista.length === 1 ? nome ?? "—" : "—"}</td>
+                      <td className="px-3 py-1.5">{formatarData(lista[0].vence_em)}</td>
+                      <td className="px-3 py-1.5">{STATUS[lista[0].status] ?? lista[0].status}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       {cards.length === 0 && <p className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">Nenhuma apólice vigente com fim de vigência nesse período e filtros.</p>}
 
