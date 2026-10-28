@@ -66,7 +66,7 @@ async function main() {
     if (/mais de uma/.test(l["Imobiliária (situação)"] || "")) alertas.push("imobiliária casa com mais de uma ficha (grupo)");
     if (venda) alertas.push("venda direta O2 (sem imobiliária)");
     if (superlogica) alertas.push("via Superlógica");
-    if (l["Situação no ERP"] === "digitado") alertas.push("proposta (ainda não virou apólice)");
+    if (l["Situação no ERP"] === "proposta") alertas.push("proposta (ainda não virou apólice)");
 
     let k: string, titulo: string, origem = segimob ? "Segimob" : superlogica ? "Outro" : "Ficha", agrupa = false;
     if (funil === F_RE && (ramo === "IMOB" || ramo === "2IMO") && imob) { agrupa = true; k = `RE|${imob}|${seg}`; titulo = `RENOVAÇÃO - ${imob} - ${seg} - ${mesBr}`; }

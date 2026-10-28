@@ -74,7 +74,7 @@ const norm = (t: string) => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCa
 const mesmoProdutoDoFunil = (c: CardBitrix, d: DocMin) => (c.produto === "re" ? !["fianca", "capitalizacao", "automovel"].includes(d.produto) : d.produto === c.produto);
 const SEG_TITULO: [RegExp, string][] = [[/TOKIO/, "TOKI"], [/YELL?UM/, "YELU"], [/PORTO/, "PORT"], [/ALLIANZ/, "ALLI"], [/ZURICH/, "ZURI"], [/SULAMERICA/, "SULA"], [/ALFA/, "ALF"], [/BRADESCO/, "BRAD"]];
 /** título tipo "RENOVAÇÃO [RAMO] - IMOBILIÁRIA - [SEG/]SEGURADORA - MM.AAAA": o documento é do lote? */
-function loteDoTitulo(c: CardBitrix, d: DocMin): boolean {
+export function loteDoTitulo(c: CardBitrix, d: DocMin): boolean {
   if (!mesmoProdutoDoFunil(c, d) || !d.vigencia_fim) return false;
   const t = norm(c.titulo);
   const m = c.titulo.match(/(\d{2})\.(\d{4})/);
@@ -83,8 +83,9 @@ function loteDoTitulo(c: CardBitrix, d: DocMin): boolean {
   if (seg && !d.seg.startsWith(seg)) return false;
   const partes = c.titulo.replace(/^RENOVA[^-]*-\s*/i, "").replace(/\s*-\s*\d{2}\.\d{4}.*$/, "").split(/\s+-\s+/).map(norm)
     .filter((p) => p.length >= 5 && !SEG_TITULO.some(([r]) => r.test(p)) && !/SEM PARCERIA|^SEG /.test(p));
-  const alvo = norm(d.imob) + " | " + norm(d.cliente);
-  return partes.some((p) => alvo.includes(p));
+  // o nome do título pode ser mais longo ("RIO CAPITAL IMOBILIARIA") ou mais curto que o da ficha ("RIO CAPITAL"): vale a inclusão nos dois sentidos
+  const alvos = [...d.imob.split(" | "), d.cliente].map(norm).filter((a) => a.length >= 5);
+  return partes.some((p) => alvos.some((a) => a.includes(p) || p.includes(a)));
 }
 const dias = (a: string, b: string) => Math.abs(Date.parse(a) - Date.parse(b)) / 864e5;
 

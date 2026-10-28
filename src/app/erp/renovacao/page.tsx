@@ -99,8 +99,20 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
   const blocoDe = (d: Doc): BlocoId =>
     d.produto === "fianca" ? "fianca" : d.produto === "capitalizacao" ? "cap" : d.produto === "automovel" ? "auto" : d.tipo_card === "lote" ? "re_lotes" : "re_demais";
 
+  // Apólice cancelada não renova: situação "cancelado" ou endosso de cancelamento (tipo X) já lançado/proposto na apólice (Matheus 28/10/2026)
+  const comCancelamento = async (idsDocs: string[]) => {
+    const set = new Set<string>();
+    for (const l of lotes(idsDocs, 150)) {
+      const { data } = await supabase.from("erp_documentos").select("documento_pai_id").in("documento_pai_id", l).eq("tipo", "X").in("situacao", ["vigente", "proposta", "cancelado"]);
+      for (const x of (data ?? []) as { documento_pai_id: string }[]) set.add(x.documento_pai_id);
+    }
+    return set;
+  };
+  const cancelando = await comCancelamento(ids);
+  let canceladosFora = 0;
   const porChave = new Map<string, Card & { bloco: BlocoId }>();
   for (const d of docs) {
+    if (cancelando.has(d.documento_id)) { canceladosFora++; continue; }
     const ex = extra.get(d.documento_id);
     const bloco = blocoDe(d);
     const segimob = bloco === "re_lotes" && !!ex?.canais.includes("SEGIMOB");
@@ -136,7 +148,9 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
     .not("bitrix_card_id", "is", null)
     .order("vence_em")
     .limit(1500);
-  const abertas = ((abertasRaw ?? []) as unknown as Aberta[]).filter((a) => a.doc && a.doc.situacao !== "vigente");
+  const abertasCand = ((abertasRaw ?? []) as unknown as Aberta[]).filter((a) => a.doc && a.doc.situacao !== "vigente" && a.doc.situacao !== "cancelado");
+  const abertasCancel = await comCancelamento(abertasCand.map((a) => a.doc!.id));
+  const abertas = abertasCand.filter((a) => !abertasCancel.has(a.doc!.id));
   const abertasPorCard = new Map<string, Aberta[]>();
   for (const a of abertas) abertasPorCard.set(a.bitrix_card_id, [...(abertasPorCard.get(a.bitrix_card_id) ?? []), a]);
 
@@ -217,6 +231,8 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
           </div>
         </section>
       )}
+
+      {canceladosFora > 0 && <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">{canceladosFora} apólice(s) deste período têm endosso de cancelamento e não entram na renovação.</p>}
 
       {cards.length === 0 && <p className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">Nenhuma apólice vigente com fim de vigência nesse período e filtros.</p>}
 

@@ -158,7 +158,7 @@ async function main() {
     if (!d) { div.naoNoErp++; dv.push("NÃO EXISTE NO ERP"); } else {
       achados++;
       if (docs.length > 1) div.noErpVariosDocs++;
-      if (!["vigente", "digitado"].includes(d.situacao)) { div.situacao++; dv.push(`situação no ERP = ${d.situacao}`); }
+      if (!["vigente", "proposta"].includes(d.situacao)) { div.situacao++; dv.push(`situação no ERP = ${d.situacao}`); }
       if (d.vigencia_fim !== fimCorp) { div.fim++; dv.push(`fim de vigência: Corp ${fimCorp} × ERP ${d.vigencia_fim}`); }
       if (d.vigencia_inicio !== iniCorp) { div.inicio++; dv.push(`início de vigência: Corp ${iniCorp} × ERP ${d.vigencia_inicio}`); }
       if (Math.abs((d.premio_total ?? 0) - totalCorp) > 0.01) { div.premioTotal++; dv.push(`prêmio total: Corp ${totalCorp} × ERP ${d.premio_total}`); }
@@ -219,7 +219,7 @@ async function main() {
   }
 
   // ERP a mais
-  const vivos = (d: Doc) => ["vigente", "digitado"].includes(d.situacao) && !corpNossos.has(Number(d.nosso_numero_corp));
+  const vivos = (d: Doc) => ["vigente", "proposta"].includes(d.situacao) && !corpNossos.has(Number(d.nosso_numero_corp));
   const erpAMais = doMes.filter((d) => !ehEndosso(d) && !ehFatura(d) && d.tipo !== "X" && vivos(d));
   const endossosDoMes = doMes.filter((d) => ehEndosso(d) && vivos(d));
   const tiposErp: Record<string, number> = {};

@@ -23,7 +23,7 @@ const lista = (o) => Object.entries(o).sort((a, b) => b[1] - a[1]).map(([k, n]) 
 const cliDif = L.filter((l) => /cliente do ERP/.test(l["Divergências"]));
 const premDif = L.filter((l) => /prêmio/.test(l["Divergências"]));
 const sinis = cnt((l) => l["Sinistros (Corp)"] > 0 ? l["Ramo"] : "_"); delete sinis._;
-const digitadas = L.filter((l) => l["Situação no ERP"] === "digitado").length;
+const digitadas = L.filter((l) => l["Situação no ERP"] === "proposta").length;
 const html = `<!doctype html><html lang=pt-BR><meta charset=utf-8><style>
 @page{size:A4;margin:16mm 14mm}body{font:10.5px/1.45 Poppins,Segoe UI,Arial,sans-serif;color:#1c2330}
 h1{font-size:19px;margin:0 0 2px;color:#0b2a4a}h2{font-size:13px;margin:16px 0 5px;color:#0b2a4a;border-bottom:2px solid #e6edf5;padding-bottom:3px}
