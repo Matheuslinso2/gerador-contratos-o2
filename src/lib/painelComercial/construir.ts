@@ -761,7 +761,7 @@ function origens(hoje: string): Linha[] {
     ["perdas", "Perdas", "Cards perdidos no mês. Fechamento em lote em Analisar falha é encerramento de ciclo, não perda."],
     ["apolices", "Apólices", "Empresa vinculada › Resultado Financeiro (Nº de apólices), pela DATA - RESULTADO COMERCIAL GERADO no mês."],
     ["comissao_o2", "Comissão O2", "Empresa vinculada › Resultado Financeiro (Comissão O2), pela DATA - RESULTADO COMERCIAL GERADO no mês."],
-    ["comissao_vend", "Comissão da vendedora", "Out/26 em diante: R$ 50 por call/visita realizada + R$ 50 se gerar oportunidade + 0,5% da Comissão O2 de quem fechou. Set/26 fechado pela regra de 14/10."],
+    ["comissao_vend", "Comissão do(a) vendedor(a)", "Out/26 em diante: R$ 50 por call/visita realizada + R$ 50 se gerar oportunidade + 0,5% da Comissão O2 de quem fechou. Set/26 fechado pela regra de 14/10."],
     ["meta_taxa", "Meta 60%", "Calls/visitas realizadas no mês (Sucesso, Campanhas e Ativação, sem treinamento) que geraram oportunidade. 60% = 100% da meta."],
     ["cotacoes_mes", "Cotações do mês", "Calls/visitas de clientes da campanha com resultado \"Oportunidade de cotação gerada\" no mês."],
     ["apolices_mes", "Apólices do mês", "Resultado Financeiro da Empresa com data no mês, só clientes da campanha."],

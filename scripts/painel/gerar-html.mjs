@@ -4,6 +4,7 @@
 // (nada é publicado diferente do que está descrito aqui).
 //   node scripts/painel/gerar-html.mjs <caminho do index.html do pacote>
 import fs from "fs";
+import { aplicarFase1 } from "./fase1.mjs";
 
 const origem = process.argv[2];
 if (!origem) throw new Error("Informe o caminho do index.html do pacote.");
@@ -94,5 +95,6 @@ trocar("const draw=()=>{nivel();", `const iniciar=()=>{
 trocar("document.querySelectorAll('.sx .fm').forEach(b=>b.addEventListener('click',()=>{S.mes=b.dataset.m;press('.sx .fm','m',S.mes);draw();}));\n", "");
 // visão não é mais clicável
 trocarRegex(/  document\.querySelectorAll\('\.sx \.fa'\)[\s\S]*?draw\(\);\}\)\);\n/, "");
+h = aplicarFase1(h);
 fs.writeFileSync("src/lib/painelComercial/painelHtml.ts", `// GERADO por scripts/painel/gerar-html.mjs a partir do index.html oficial (painel_v5_2026-10-28). Não editar à mão.\nexport const PAINEL_FRAGMENTO = ${JSON.stringify(h)};\n`);
 console.log("painelHtml.ts gerado:", h.length, "caracteres");

@@ -58,8 +58,9 @@ export function filtrarPorPerfil(dados: Datasets, perfil: Perfil): Datasets {
 }
 
 /** Rótulo da visão para o painel (substitui o seletor de simulação). */
-export function visaoDoPerfil(p: Perfil): "dir" | "sup" | "Dayane" | "Livia" {
+export function visaoDoPerfil(p: Perfil): "dir" | "sup" | "equipe" | "Dayane" | "Livia" {
   if (p.tipo === "vendedora") return p.vendedora;
+  if (p.tipo === "equipe") return "equipe";
   return p.tipo === "supervisao" ? "sup" : "dir";
 }
 

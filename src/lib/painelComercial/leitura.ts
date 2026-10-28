@@ -1,6 +1,7 @@
 import "server-only";
 import { buscarTodasPaginasFlat, chamarBitrix, listarHistoricoEtapas } from "@/lib/bitrix/client";
 import { createServiceClient } from "@/lib/supabase/service";
+import { buscarLeadsAoVivo } from "@/lib/bitrix/crmLeads";
 import { construirDatasets, mesesDoPeriodo, type AtividadeBruta, type Datasets, type DealBruto, type EmpresaBruta, type HistoricoBruto } from "./construir";
 
 // Leitura do Bitrix (SOMENTE LEITURA: crm.*.list/fields) para o Painel Comercial
@@ -73,5 +74,37 @@ export async function calcularDatasetsAoVivo(): Promise<Datasets> {
   const mesesCongelados: Datasets = { kpi: [] };
   for (const f of (fechadosRes.data ?? []) as { mes: string; kpi: Record<string, unknown>[] }[]) mesesCongelados.kpi.push(...f.kpi);
 
-  return construirDatasets({ agora, deals, historico, empresas, atividades, nomesEtapas12, metasPersonalizadas, mesesCongelados });
+  const datasets = construirDatasets({ agora, deals, historico, empresas, atividades, nomesEtapas12, metasPersonalizadas, mesesCongelados });
+  Object.assign(datasets, await lerCrmLeads());
+  return datasets;
+}
+
+// CRM Leads (Prioridades, Prospecção, Cadastro e caminhos): mesma fonte e regras
+// do painel anterior (crm.lead.* dos responsáveis de prospecção). Se o Bitrix de
+// Leads falhar, só essas três visões ficam sem dados: o resto do painel segue.
+async function lerCrmLeads(): Promise<Datasets> {
+  try {
+    const d = await buscarLeadsAoVivo();
+    return {
+      crm_leads: d.linhas.map((l) => ({
+        id: l.id,
+        nome: l.nome,
+        link: l.link,
+        responsavel: l.responsavelNome,
+        etapa: l.etapaNome,
+        stage_id: l.stageId,
+        prioridade: l.prioridade,
+        prazo: l.prazo,
+        assunto: l.assunto,
+        decisor: l.decisorRegistrado ? "Sim" : "Não",
+        email_inicial: l.emailInicialEnviado ? "Sim" : "Não",
+        cadastro: l.cadastroConcluido ? "Sim" : "Não",
+        caminho: l.caminho,
+      })),
+      crm_leads_info: [{ atualizado_em: d.ultimaAtualizacao }],
+    };
+  } catch (e) {
+    console.error("CRM Leads indisponível no Painel Comercial:", e);
+    return { crm_leads_erro: [{ erro: e instanceof Error ? e.message : "falha ao buscar Leads" }] };
+  }
 }
