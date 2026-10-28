@@ -77,7 +77,7 @@ async function main() {
     } else if (funil === F_FIANCA) { titulo = `${l["Cliente (Corp)"]}${imob ? " - " + imob : ""}`; k = `FI|${l["Nosso nº do Corp"]}`; }
     else if (funil === F_CAP) { titulo = `VENCE ${dataBr(l["Fim vig. (Corp)"])} | ${l["Cliente (Corp)"]} | CORP ${l["Nosso nº do Corp"]}`; k = `CA|${l["Nosso nº do Corp"]}`; }
     else { titulo = `RENOVAÇÃO - ${l["Cliente (Corp)"]}`; k = `AU|${l["Nosso nº do Corp"]}`; }
-    const c = cards.get(k) ?? { funil: funil.nome, entity: funil.entity, cat: funil.cat, chave: k, titulo, produto, ramos: "", seguradora: seg, imobiliaria: imob ?? "", origem, itens: 0, fim: l["Fim vig. (Corp)"], comissaoMin: null, premioAnterior: 0, apolices: [], nossos: [], clientes: [], alertas: [] };
+    const c = cards.get(k) ?? { funil: funil.nome, entity: funil.entity, cat: funil.cat, chave: k, titulo, produto, ramos: "", seguradora: seg, imobiliaria: imob ?? "", origem, itens: 0, fim: l["Fim vig. (Corp)"], comissaoMin: null, premioAnterior: 0, apolices: [] as string[], nossos: [] as number[], clientes: [] as string[], alertas: [] as string[] };
     c.itens++;
     if (!c.ramos.split(", ").includes(ramo)) c.ramos = c.ramos ? `${c.ramos}, ${ramo}` : ramo;
     if (l["Fim vig. (Corp)"] < c.fim) c.fim = l["Fim vig. (Corp)"];
