@@ -9,6 +9,7 @@ import { formatarData } from "@/lib/sinistros/regras";
 import { aprovarBaixa, salvarTratativa } from "./actions";
 import FiltrosErp from "../FiltrosErp";
 import { lerFiltros, idsImobiliarias } from "@/lib/erp/filtros";
+import { entradasNibo, compararDias, situacaoCaixa, TOLERANCIA_CAIXA, type DiaCaixa, type ExtratoDia, type SituacaoCaixa } from "@/lib/erp/caixaNibo";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +48,13 @@ const CLASSE: Record<string, { texto: string; cor: string }> = {
   nao_encontrada: { texto: "Não encontrada", cor: "bg-red-100 text-red-700" },
 };
 const PARA_TRATAR = ["estorno", "divergente", "nao_encontrada"];
+
+// Conferência de caixa (28/10): uma linha por corretora × seguradora × mês, com o banco (Nibo) ao lado do extrato.
+type LinhaCaixa = {
+  chave: string; mes: string; corretora: string; seg: string; segNome: string; m: Mensal | null;
+  banco: number | null; esperado: number | null; sit: SituacaoCaixa; dias: DiaCaixa[];
+};
+const COLUNAS_CAIXA = "grid grid-cols-[64px_minmax(110px,1fr)_minmax(120px,1.3fr)_84px_repeat(4,minmax(96px,1fr))_minmax(150px,1.2fr)] items-center gap-x-2";
 
 const brl = (v: number | null | undefined) => (v == null ? "—" : Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
 const pct = (v: number | null | undefined) => (v == null ? "—" : `${Number(v).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`);
@@ -123,6 +131,52 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
 
   const extratoPorId = Object.fromEntries(extratos.map((e) => [e.id, e]));
   const meses = [...new Set(mensais.map((m) => m.mes))];
+
+  // Conferência de caixa: o banco (Nibo, categoria 1.1) é o fiel da balança. Só leitura; nada é gravado no Nibo.
+  const mesesOrd = [...meses].map((m) => m.slice(0, 7)).sort();
+  let linhasCaixa: LinhaCaixa[] = [];
+  if (mesesOrd.length) {
+    const [anoF, mesF] = mesesOrd[mesesOrd.length - 1].split("-").map(Number);
+    const desdeCaixa = `${mesesOrd[0]}-01`;
+    const ateCaixa = new Date(Date.UTC(anoF, mesF, 4)).toISOString().slice(0, 10); // + alguns dias: fim de semana cai na segunda
+    let qDias = supabase.from("erp_baixa_assistida_resumo")
+      .select("seg_abrev, corretora, data_recebimento, total_extrato, soma_linhas, liquido_sem_desconto, linhas")
+      .neq("tipo", "resumo_mensal").gte("data_recebimento", desdeCaixa).lte("data_recebimento", ateCaixa).limit(5000);
+    if (filtros.seguradora) qDias = qDias.eq("seg_abrev", filtros.seguradora);
+    if (filtros.corretora) qDias = qDias.eq("corretora", filtros.corretora);
+    const [{ data: diasBrutos }, entradas, { data: segsBrutas }] = await Promise.all([
+      qDias, entradasNibo(supabase, desdeCaixa, ateCaixa), supabase.from("erp_seguradoras").select("abreviacao, nome"),
+    ]);
+    const extratosDia: ExtratoDia[] = ((diasBrutos ?? []) as Record<string, unknown>[]).map((e) => ({
+      seg: String(e.seg_abrev), corretora: (e.corretora as string | null) ?? null, dia: String(e.data_recebimento),
+      liquido: Number(e.liquido_sem_desconto ?? 0), bruto: Number(e.total_extrato ?? e.soma_linhas ?? 0), linhas: Number(e.linhas ?? 0),
+    }));
+    const porDia = compararDias(extratosDia, entradas);
+    const nomeSeg = new Map(((segsBrutas ?? []) as { abreviacao: string; nome: string }[]).map((s) => [s.abreviacao, s.nome]));
+    const bancoMes = new Map<string, number>();
+    for (const n of entradas) {
+      if (filtros.seguradora && n.seg !== filtros.seguradora) continue;
+      if (filtros.corretora && n.corretora !== filtros.corretora) continue;
+      const k = `${n.corretora}|${n.seg}|${n.dia.slice(0, 7)}`;
+      bancoMes.set(k, (bancoMes.get(k) ?? 0) + n.valor);
+    }
+    const r2 = (v: number) => Math.round(v * 100) / 100;
+    const vistos = new Set<string>();
+    for (const m of mensais) {
+      const k = `${m.corretora}|${m.seg_abrev}|${m.mes.slice(0, 7)}`;
+      vistos.add(k);
+      const banco = bancoMes.has(k) ? r2(bancoMes.get(k)!) : null;
+      const esperado = r2(Number(m.liquido_esperado) + Number(m.desconto));
+      linhasCaixa.push({ chave: k, mes: m.mes, corretora: m.corretora ?? "—", seg: m.seg_abrev, segNome: m.seguradora, m, banco, esperado, sit: situacaoCaixa(esperado, banco), dias: porDia.get(k) ?? [] });
+    }
+    // dinheiro que entrou no banco de uma seguradora sem nenhum extrato lido no ERP
+    for (const [k, v] of bancoMes) {
+      const [corretora, seg, mes] = k.split("|");
+      if (vistos.has(k) || !mesesOrd.includes(mes)) continue;
+      linhasCaixa.push({ chave: k, mes: `${mes}-01`, corretora, seg, segNome: nomeSeg.get(seg) ?? (seg === "OUTRAS" ? "Outras (sem seguradora reconhecida)" : seg), m: null, banco: r2(v), esperado: null, sit: situacaoCaixa(null, r2(v)), dias: porDia.get(k) ?? [] });
+    }
+    linhasCaixa = linhasCaixa.sort((a, b) => b.mes.localeCompare(a.mes) || a.corretora.localeCompare(b.corretora) || a.segNome.localeCompare(b.segNome));
+  }
   const pendentes = extratos.filter((e) => !e.baixa_aprovada_em && e.tipo !== "resumo_mensal");
   const aprovados = extratos.filter((e) => e.baixa_aprovada_em);
   const idsAprovados = aprovados.map((e) => e.id);
@@ -153,8 +207,8 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
       <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-6 p-8">
         <PageHeader
           icon={<IconReport />}
-          titulo="ERP O2 — Baixa de comissão assistida"
-          subtitulo="Cada extrato da seguradora conferido apólice por apólice. Você confere o resumo e aprova; o ERP grava o recebimento e monta a lista para lançar no Corp."
+          titulo="ERP O2 — Conferência de baixa de comissão"
+          subtitulo="O resumo mostra, por seguradora e mês, o extrato contra o que entrou no banco (Nibo) e o que falta baixar. Abra uma linha para ver os dias; os extratos, a aprovação da baixa e a lista do Corp ficam logo abaixo."
         />
         <p className="text-sm text-gray-600">
           <Link href="/erp/conferencia" className="underline">← Conferência</Link>. Os extratos chegam de hora em hora pelo e-mail e pela pasta oficial do Drive “- RELATÓRIO COMISSÃO SEGURADORAS” (seguradora → ano → mês).
@@ -236,67 +290,110 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
           </section>
         )}
 
-        <section className="space-y-2 rounded-xl border border-gray-200 bg-white p-4 text-xs text-gray-600">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Como cada linha é classificada</h2>
-          <ul className="grid gap-1 sm:grid-cols-2">
-            <li><span className={`rounded-full px-2 py-0.5 ${CLASSE.cheia.cor}`}>Cheia</span> recebido = prêmio × % de comissão do documento.</li>
-            <li><span className={`rounded-full px-2 py-0.5 ${CLASSE.pro_labore_direto.cor}`}>Pró-labore conferido</span> faltou exatamente o pró-labore que a seguradora paga direto à imobiliária.</li>
-            <li><span className={`rounded-full px-2 py-0.5 ${CLASSE.estorno.cor}`}>Estorno</span> valor negativo (endosso de cancelamento/restituição).</li>
-            <li><span className={`rounded-full px-2 py-0.5 ${CLASSE.divergente.cor}`}>Divergente</span> % pago diferente do documento, ou endosso.</li>
-            <li><span className={`rounded-full px-2 py-0.5 ${CLASSE.nao_encontrada.cor}`}>Não encontrada</span> apólice/parcela que o ERP não conhece.</li>
-            <li>Ao aprovar, só <b>cheia</b> e <b>pró-labore conferido</b> viram recebimento no ERP; o resto vai para “Para tratar”. Para o Corp vale o extrato inteiro menos as não encontradas.</li>
-          </ul>
-        </section>
-
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Resumo por corretora × seguradora × mês</h2>
           <p className="text-xs text-gray-500">
-            Bruto = soma dos extratos do mês. Líquido esperado = bruto − imposto retido − desconto da seguradora (ex.: empréstimo Porto). “Entrou no banco” será preenchido pela integração com o Nibo.
+            O banco (Nibo, receita de seguros) é a referência: cada entrada do Nibo é a soma dos extratos pagos naquele dia. “Líquido do extrato” = bruto − imposto retido, antes do desconto da seguradora
+            (o Nibo lança o desconto, como o empréstimo da Porto, como receita). Fim de semana conta na segunda-feira. Clique numa linha para ver os dias e os detalhes; até R$ {TOLERANCIA_CAIXA.toLocaleString("pt-BR")} de diferença é considerado igual.
           </p>
           <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
-                <tr>
-                  <th className="px-2 py-1">Mês</th>
-                  <th className="px-2 py-1">Corretora</th>
-                  <th className="px-2 py-1">Seguradora</th>
-                  <th className="px-2 py-1">Extratos</th>
-                  <th className="px-2 py-1">Linhas</th>
-                  <th className="px-2 py-1 text-right">Bruto</th>
-                  <th className="px-2 py-1 text-right">Imposto</th>
-                  <th className="px-2 py-1 text-right">Desconto</th>
-                  <th className="px-2 py-1 text-right">Líquido esperado</th>
-                  <th className="px-2 py-1 text-right">A baixar</th>
-                  <th className="px-2 py-1">Conta fecha</th>
-                  <th className="px-2 py-1">Entrou no banco</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {mensais.map((m) => (
-                  <tr key={`${m.mes}-${m.corretora}-${m.seg_abrev}`}>
-                    <td className="px-2 py-1">{mesTexto(m.mes)}</td>
-                    <td className="px-2 py-1">{m.corretora ?? "—"}</td>
-                    <td className="px-2 py-1">{m.seguradora}</td>
-                    <td className="px-2 py-1">
-                      {m.aprovados}/{m.extratos - m.so_total} aprovados{m.so_total > 0 ? <span className="text-gray-400"> · só total do mês</span> : null}
-                    </td>
-                    <td className="px-2 py-1"><Chips e={m} /></td>
-                    <td className="px-2 py-1 text-right">{brl(m.bruto)}</td>
-                    <td className="px-2 py-1 text-right">{brl(m.imposto)} <span className="text-gray-400">({pct(m.imposto_pct)})</span></td>
-                    <td className="px-2 py-1 text-right">{Number(m.desconto) ? brl(m.desconto) : "—"}</td>
-                    <td className="px-2 py-1 text-right font-semibold">{brl(m.liquido_esperado)}</td>
-                    <td className="px-2 py-1 text-right">{m.so_total === m.extratos ? "—" : brl(m.valor_a_baixar)}</td>
-                    <td className="px-2 py-1">{m.so_total === m.extratos ? <span className="text-gray-400">só total</span> : m.conta_fecha ? <span className="text-green-700">✓</span> : <span className="font-semibold text-red-700">não fecha</span>}</td>
-                    <td className="px-2 py-1">{m.entrou_banco_valor != null ? `${brl(m.entrou_banco_valor)} em ${formatarData(m.entrou_banco_em ?? "")}` : <span className="text-gray-400">aguardando Nibo</span>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="min-w-[980px] space-y-1">
+              <div className={`${COLUNAS_CAIXA} px-2 py-1 text-[11px] uppercase tracking-wide text-gray-500`}>
+                <span>Mês</span><span>Corretora</span><span>Seguradora</span><span>Extratos</span>
+                <span className="text-right">Líquido do extrato</span><span className="text-right">Entrou no banco</span><span className="text-right">Diferença</span><span className="text-right">A baixar</span><span>Situação</span>
+              </div>
+              {linhasCaixa.length === 0 && <p className="px-2 py-2 text-xs text-gray-500">Nenhum extrato no período.</p>}
+              {linhasCaixa.map((c) => {
+                const dif = c.banco != null || c.esperado != null ? Math.round(((c.banco ?? 0) - (c.esperado ?? 0)) * 100) / 100 : null;
+                const ruins = c.dias.filter((d) => Math.abs(d.dif) > TOLERANCIA_CAIXA);
+                const soTotal = c.m != null && c.m.so_total === c.m.extratos;
+                return (
+                  <details key={c.chave} className="group rounded-lg border border-gray-200 bg-white open:border-o2-navy">
+                    <summary className={`${COLUNAS_CAIXA} cursor-pointer list-none px-2 py-1.5 text-xs hover:bg-gray-50`}>
+                      <span>{mesTexto(c.mes)}</span>
+                      <span>{c.corretora}</span>
+                      <span className="font-medium">{c.segNome}</span>
+                      <span className="text-gray-600">{c.m ? `${c.m.aprovados}/${c.m.extratos - c.m.so_total}` : "—"}</span>
+                      <span className="text-right">{c.esperado != null ? brl(c.esperado) : "—"}</span>
+                      <span className="text-right font-semibold">{c.banco != null ? brl(c.banco) : <span className="font-normal text-gray-400">—</span>}</span>
+                      <span className={`text-right ${dif != null && Math.abs(dif) > TOLERANCIA_CAIXA ? "font-semibold text-red-700" : "text-gray-500"}`}>{dif != null ? brl(dif) : "—"}</span>
+                      <span className="text-right">{c.m && !soTotal ? brl(c.m.valor_a_baixar) : "—"}</span>
+                      <span className="flex items-center gap-1">
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] ${c.sit.cor}`}>{c.sit.texto}</span>
+                        <span className="text-gray-400 group-open:rotate-90">▸</span>
+                      </span>
+                    </summary>
+                    <div className="grid gap-4 border-t border-gray-100 p-3 text-xs md:grid-cols-[minmax(220px,1fr)_2fr]">
+                      <div className="space-y-1">
+                        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Do extrato</h3>
+                        {c.m ? (
+                          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+                            <dt className="text-gray-500">Bruto</dt><dd className="text-right">{brl(c.m.bruto)}</dd>
+                            <dt className="text-gray-500">Imposto retido</dt><dd className="text-right">{brl(c.m.imposto)} <span className="text-gray-400">({pct(c.m.imposto_pct)})</span></dd>
+                            <dt className="text-gray-500">Desconto da seguradora</dt><dd className="text-right">{Number(c.m.desconto) ? brl(c.m.desconto) : "—"}</dd>
+                            <dt className="text-gray-500">Líquido depois do desconto</dt><dd className="text-right font-semibold">{brl(c.m.liquido_esperado)}</dd>
+                            <dt className="text-gray-500">Extratos</dt><dd className="text-right">{c.m.aprovados}/{c.m.extratos - c.m.so_total} aprovados{c.m.so_total > 0 ? " · só total do mês" : ""}</dd>
+                            <dt className="text-gray-500">Soma × extrato</dt><dd className="text-right">{soTotal ? <span className="text-gray-400">só total</span> : c.m.conta_fecha ? <span className="text-green-700">✓ fecha</span> : <span className="font-semibold text-red-700">não fecha</span>}</dd>
+                          </dl>
+                        ) : (
+                          <p className="text-gray-600">Entrou dinheiro no banco, mas o ERP não tem extrato desta seguradora neste mês. Falta salvar o extrato na pasta do Drive ou o ERP ainda não o lê.</p>
+                        )}
+                        {c.m && <div className="pt-1"><Chips e={c.m} /></div>}
+                        {c.m && <p className="pt-1 text-[11px] text-gray-500"><a href={`#extratos-pendentes`} className="underline">ver os extratos e as linhas</a> (mais abaixo, em “Extratos pendentes” e “Baixas aprovadas”).</p>}
+                      </div>
+                      <div className="space-y-1">
+                        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                          Banco × extrato, dia a dia{c.dias.length ? ` · ${c.dias.length - ruins.length} de ${c.dias.length} dia(s) batem` : ""}
+                        </h3>
+                        {ruins.length === 0 ? (
+                          <p className="text-green-700">{c.dias.length ? "Todos os dias batem." : "Sem pagamentos no período."}</p>
+                        ) : (
+                          <table className="w-full">
+                            <thead className="text-left text-[11px] uppercase tracking-wide text-gray-500">
+                              <tr><th className="px-1 py-0.5">Dia</th><th className="px-1 py-0.5 text-right">Banco</th><th className="px-1 py-0.5 text-right">Extrato</th><th className="px-1 py-0.5 text-right">Diferença</th><th className="px-1 py-0.5">Leitura</th></tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                              {ruins.map((d) => (
+                                <tr key={d.dia}>
+                                  <td className="px-1 py-0.5">{formatarData(d.dia)}</td>
+                                  <td className="px-1 py-0.5 text-right">{d.banco ? brl(d.banco) : "—"}</td>
+                                  <td className="px-1 py-0.5 text-right">{d.extrato ? brl(d.extrato) : "—"}</td>
+                                  <td className="px-1 py-0.5 text-right font-semibold text-red-700">{brl(d.dif)}</td>
+                                  <td className="px-1 py-0.5 text-gray-600">{d.extrato === 0 && d.banco > 0 ? "entrou no banco, sem extrato lido" : d.banco === 0 && d.extrato > 0 ? "extrato sem entrada no banco" : "valores diferentes"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                        {c.dias.length > ruins.length && ruins.length > 0 && (
+                          <details className="pt-1">
+                            <summary className="cursor-pointer text-[11px] text-o2-navy underline">ver também os {c.dias.length - ruins.length} dia(s) que batem</summary>
+                            <table className="mt-1 w-full">
+                              <tbody className="divide-y divide-gray-100">
+                                {c.dias.filter((d) => Math.abs(d.dif) <= TOLERANCIA_CAIXA).map((d) => (
+                                  <tr key={d.dia} className="text-gray-600">
+                                    <td className="px-1 py-0.5">{formatarData(d.dia)}</td>
+                                    <td className="px-1 py-0.5 text-right">{brl(d.banco)}</td>
+                                    <td className="px-1 py-0.5 text-right">{brl(d.extrato)}</td>
+                                    <td className="px-1 py-0.5 text-right">{brl(d.dif)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </details>
+                        )}
+                      </div>
+                    </div>
+                  </details>
+                );
+              })}
+            </div>
           </div>
         </section>
 
-        <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Extratos pendentes de baixa ({pendentes.length})</h2>
+        <details id="extratos-pendentes" open={pendentes.some((e) => e.id === extratoAberto)} className="rounded-xl border border-gray-200 bg-white p-4">
+          <summary className="cursor-pointer text-sm font-semibold uppercase tracking-wide text-o2-navy">Extratos pendentes de baixa ({pendentes.length})</summary>
+          <div className="mt-3 space-y-3">
           <p className="text-xs text-gray-500">Clique em “ver linhas” para conferir o extrato apólice por apólice. “Já baixada no Corp” = a parcela já aparece nas comissões recebidas do Corp (não lançar de novo).</p>
           {meses.map((mes) => {
             const doMes = pendentes.filter((e) => e.mes === mes);
@@ -316,10 +413,12 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
               Tokio manda por e-mail só o total do mês (sem apólices): aparece no resumo acima, mas não tem linhas para aprovar. Quando o extrato por apólice do mesmo mês estiver na pasta do Drive, o total do e-mail sai da soma (não conta duas vezes).
             </p>
           )}
-        </section>
+          </div>
+        </details>
 
-        <section id="para-tratar" className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Para tratar ({paraTratar.length}{paraTratar.length === 500 ? "+" : ""})</h2>
+        <details id="para-tratar" className="rounded-xl border border-gray-200 bg-white p-4">
+          <summary className="cursor-pointer text-sm font-semibold uppercase tracking-wide text-o2-navy">Para tratar ({paraTratar.length}{paraTratar.length === 500 ? "+" : ""})</summary>
+          <div className="mt-3 space-y-3">
           <p className="text-xs text-gray-500">
             Linhas de extratos já aprovados que não viraram baixa (estorno, divergente, não encontrada). Escreva o motivo/o que foi feito e marque “resolvida”. {tratadas ?? 0} já resolvida(s).
           </p>
@@ -367,10 +466,12 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
               </table>
             </div>
           )}
-        </section>
+          </div>
+        </details>
 
-        <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Lista pronta para o Corp</h2>
+        <details className="rounded-xl border border-gray-200 bg-white p-4">
+          <summary className="cursor-pointer text-sm font-semibold uppercase tracking-wide text-o2-navy">Lista pronta para o Corp</summary>
+          <div className="mt-3 space-y-3">
           <p className="text-xs text-gray-500">
             Tudo o que o InCorp do Corp aceita dos extratos aprovados (apólices e endossos/estornos; divergentes vão marcados para conferir), na ordem Seguradora → Nosso Nº → Parcela, com valor bruto,
             data de recebimento e previsão de repasse (dia 15 do mês seguinte). Ficam de fora só as “não encontradas” (= linhas amarelas do InCorp, pendência de cadastro/emissão).
@@ -383,16 +484,31 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
               <a key={m} href={`/erp/baixas/lista-corp?mes=${m.slice(0, 7)}`} className="rounded-lg border border-gray-300 px-3 py-1.5 text-gray-700">{mesTexto(m)}</a>
             ))}
           </div>
-        </section>
+          </div>
+        </details>
 
-        <section className="space-y-2 rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Baixas aprovadas ({aprovados.length})</h2>
-          {aprovados.length === 0 ? (
-            <p className="text-xs text-gray-500">Nenhuma ainda.</p>
-          ) : (
-            aprovados.map(card)
-          )}
-        </section>
+        <details open={aprovados.some((e) => e.id === extratoAberto)} className="rounded-xl border border-gray-200 bg-white p-4">
+          <summary className="cursor-pointer text-sm font-semibold uppercase tracking-wide text-o2-navy">Baixas aprovadas ({aprovados.length})</summary>
+          <div className="mt-3 space-y-2">
+            {aprovados.length === 0 ? (
+              <p className="text-xs text-gray-500">Nenhuma ainda.</p>
+            ) : (
+              aprovados.map(card)
+            )}
+          </div>
+        </details>
+
+        <details className="rounded-xl border border-gray-200 bg-white p-4 text-xs text-gray-600">
+          <summary className="cursor-pointer text-sm font-semibold uppercase tracking-wide text-o2-navy">Como cada linha é classificada</summary>
+          <ul className="mt-3 grid gap-1 sm:grid-cols-2">
+            <li><span className={`rounded-full px-2 py-0.5 ${CLASSE.cheia.cor}`}>Cheia</span> recebido = prêmio × % de comissão do documento.</li>
+            <li><span className={`rounded-full px-2 py-0.5 ${CLASSE.pro_labore_direto.cor}`}>Pró-labore conferido</span> faltou exatamente o pró-labore que a seguradora paga direto à imobiliária.</li>
+            <li><span className={`rounded-full px-2 py-0.5 ${CLASSE.estorno.cor}`}>Estorno</span> valor negativo (endosso de cancelamento/restituição).</li>
+            <li><span className={`rounded-full px-2 py-0.5 ${CLASSE.divergente.cor}`}>Divergente</span> % pago diferente do documento, ou endosso.</li>
+            <li><span className={`rounded-full px-2 py-0.5 ${CLASSE.nao_encontrada.cor}`}>Não encontrada</span> apólice/parcela que o ERP não conhece.</li>
+            <li>Ao aprovar, só <b>cheia</b> e <b>pró-labore conferido</b> viram recebimento no ERP; o resto vai para “Para tratar”. Para o Corp vale o extrato inteiro menos as não encontradas.</li>
+          </ul>
+        </details>
       </main>
     </>
   );
@@ -427,7 +543,7 @@ function ExtratoCard({ e, linhas, aberto }: { e: Extrato; linhas: LinhaExtrato[]
         <span>Imposto {brl(e.imposto)} · líquido {brl(e.liquido_sem_desconto)}</span>
         <span className="font-semibold">A baixar {brl(e.valor_a_baixar)}</span>
         {e.ja_baixadas_corp > 0 && <span className="text-gray-500">{e.ja_baixadas_corp} já baixada(s) no Corp</span>}
-        <span className="text-gray-400">{e.entrou_banco_valor != null ? `banco: ${brl(e.entrou_banco_valor)}` : "banco: aguardando Nibo"}</span>
+        <span className="text-gray-400">{e.entrou_banco_valor != null ? `banco: ${brl(e.entrou_banco_valor)}` : "banco: ver no resumo"}</span>
         <Link href={aberto ? `/erp/baixas#extrato-${e.id}` : `/erp/baixas?extrato=${e.id}#extrato-${e.id}`} className="ml-auto text-o2-navy underline">{aberto ? "fechar" : "ver linhas"}</Link>
       </div>
       <div className="space-y-2 border-t border-gray-100 p-3">
