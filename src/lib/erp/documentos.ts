@@ -560,7 +560,7 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
   // titular para o quadro do cliente: segurado (locador) da apólice de Fiança; nos demais produtos, o cliente do documento
   const partesBrutas = (partesAcervo ?? []) as unknown as { papel: "segurado" | "garantido"; locatario: { id: string; nome: string | null; cpf: string | null } | null }[];
   const pessoaTitular = partesBrutas.find((p) => p.papel === "segurado")?.locatario?.id ?? d.locatario_id;
-  const { data: kpiCliente } = pessoaTitular ? await sb.rpc("erp_cliente_kpis", { p_pessoa: pessoaTitular }) : { data: null };
+  void pessoaTitular; // os KPIs do cliente ficam só na ficha do cliente (Matheus 28/10)
 
   type ProdBruto = Omit<ProdutorDoc, "imobiliaria"> & { imobiliaria: { nome: string } | null };
   type ParcBruta = Omit<ParcelaDoc, "comissao_prevista" | "comissao_status" | "comissao_previsao"> & {
@@ -574,7 +574,7 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
     modo_cobranca: d.modo_cobranca,
     locatario_id: d.locatario_id,
     comissoes_corp: ((comCorp ?? []) as { parcela_n: number | null; situacao: string; valor: number | string; data: string | null }[]).map((c) => ({ parcela_n: c.parcela_n, situacao: c.situacao, valor: Number(c.valor), data: c.data })),
-    cliente_kpis: (kpiCliente as DocumentoFicha["cliente_kpis"]) ?? null,
+    cliente_kpis: null,
     local_risco: (() => {
       const v = ((anexos ?? []) as { local_risco?: unknown }[]).find((x) => x.local_risco)?.local_risco;
       if (!v) return null;

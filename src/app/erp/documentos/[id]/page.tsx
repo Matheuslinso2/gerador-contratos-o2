@@ -98,7 +98,6 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
   }
   const recebidoCorp = d.comissoes_corp.filter((c) => c.situacao === "recebida").reduce((s, c) => s + c.valor, 0);
   const aReceberCorp = d.comissoes_corp.filter((c) => c.situacao !== "recebida").reduce((s, c) => s + c.valor, 0);
-  const titularNome = d.partes_apolice.find((p) => p.papel === "segurado")?.nome ?? d.cliente;
   // cabeçalho padrão (Matheus 28/10): titular = proprietário na Fiança; segurado/cliente nos demais produtos
   const fianca = d.produto === "fianca";
   const partesItens = d.itens.flatMap((i) => i.partes);
@@ -152,19 +151,6 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
           <span className={d.cadeia.cliente ? "font-medium" : "text-gray-400"}>{d.cadeia.cliente ?? "cliente não ligado"}</span>
           <span className="text-gray-500"> ({d.partes_apolice.length ? "cliente no Corp" : "segurado"})</span>
         </div>
-
-        {d.cliente_kpis && d.cliente_kpis.documentos > 0 && (
-          <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm">
-            <div className="text-[11px] uppercase tracking-wide text-gray-500">Cliente · todo o histórico na O2</div>
-            <div className="mt-0.5 font-medium text-gray-800">{titularNome ?? "titular não ligado"}</div>
-            <div className="mt-1 grid grid-cols-2 gap-3 md:grid-cols-4">
-              <Campo rotulo="Documentos" valor={`${d.cliente_kpis.documentos} (${d.cliente_kpis.vigentes} vigentes)`} />
-              <Campo rotulo="Produtos" valor={d.cliente_kpis.produtos.length ? d.cliente_kpis.produtos.join(", ") : "—"} />
-              <Campo rotulo="Prêmio total gerado" valor={formatarReais(d.cliente_kpis.premio_total)} />
-              <Campo rotulo="Comissão gerada" valor={`${formatarReais(d.cliente_kpis.comissao)}${d.cliente_kpis.desde ? ` · cliente desde ${formatarData(d.cliente_kpis.desde)}` : ""}`} />
-            </div>
-          </div>
-        )}
 
         {/* botão "E-mails (n)": só equipe O2 (a página já confere acima); some quando não há e-mail nem PDF ligado ao documento */}
         <EmailsDoDocumento documentoId={d.id} codigoO2={String(d.nosso_numero)} />
