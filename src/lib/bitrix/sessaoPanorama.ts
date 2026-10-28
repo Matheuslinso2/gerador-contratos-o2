@@ -74,3 +74,27 @@ export async function emailDoUsuarioBitrix(authId: string): Promise<string | nul
     return null;
   }
 }
+
+// Passe genérico para outras abas do card (ex.: "Apólice-mãe", 28/10/2026):
+// amarrado a uma chave (aba + entidade + card) em vez de só ao id do card,
+// porque o mesmo id existe em paralelo em cada SPA.
+export function emitirPasseCard(chave: string, email: string): string {
+  const dados = Buffer.from(JSON.stringify({ chave, email, exp: Date.now() + VALIDADE_MS })).toString("base64url");
+  return `${dados}.${assinar(dados)}`;
+}
+
+export function validarPasseCard(passe: string | null | undefined, chave: string): string | null {
+  if (!passe) return null;
+  const [dados, assinatura] = passe.split(".");
+  if (!dados || !assinatura) return null;
+  const esperada = Buffer.from(assinar(dados));
+  const recebida = Buffer.from(assinatura);
+  if (esperada.length !== recebida.length || !timingSafeEqual(esperada, recebida)) return null;
+  try {
+    const p = JSON.parse(Buffer.from(dados, "base64url").toString()) as { chave: string; email: string; exp: number };
+    if (p.chave !== chave || p.exp < Date.now() || !p.email.endsWith(DOMINIO_O2)) return null;
+    return p.email;
+  } catch {
+    return null;
+  }
+}

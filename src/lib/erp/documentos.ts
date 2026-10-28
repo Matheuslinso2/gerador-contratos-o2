@@ -314,7 +314,7 @@ export async function buscarDocumentos(sb: SupabaseClient, f: FiltrosBusca): Pro
     const pareceCli = /^cli-?\d+$/i.test(termo);
     const pareceNumero = /^\d+$/.test(termo);
     if (!pareceNumero || pareceCpf) {
-      const { data: ids, error: e } = await sb.rpc("erp_docs_por_titular", { p_busca: termo });
+      const { data: ids, error: e } = await sb.rpc("erp_docs_por_titular", { p_busca: termo, p_limite: 150 }); // 400 ids estouravam o tamanho da URL do .in() ("fetch failed") em nomes comuns
       if (e) throw new Error(`erp_docs_por_titular: ${e.message}`);
       const lista = ((ids ?? []) as unknown[]).map((x) => (typeof x === "string" ? x : (Object.values(x as object)[0] as string)));
       if (lista.length) q = q.in("id", lista);

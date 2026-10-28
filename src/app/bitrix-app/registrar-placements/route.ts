@@ -14,8 +14,12 @@ export const dynamic = "force-dynamic";
 // que pode variar entre portais/versões do Bitrix. Só registra de verdade
 // (placement.bind) quando chamado com ?executar=1, e só pros placements
 // que realmente apareceram na lista.
-const HANDLER = "https://contratos.o2seguros.com.br/bitrix-app/card-email";
-const TITLE = "E-mail";
+// ?aba=apolice-mae (28/10/2026): registra a aba "Apólice-mãe" nas SPAs que
+// têm funil de endosso (Fiança, Ramos, Capitalização) em vez do E-mail.
+const ABAS = {
+  email: { handler: "https://contratos.o2seguros.com.br/bitrix-app/card-email", titulo: "E-mail", entidades: null as number[] | null },
+  "apolice-mae": { handler: "https://contratos.o2seguros.com.br/bitrix-app/card-apolice-mae", titulo: "Apólice-mãe", entidades: [1042, 1046, 1048] },
+} as const;
 
 const ALVOS = [
   { rotulo: "Lead", padrao: "CRM_LEAD_DETAIL_TAB" },
@@ -31,6 +35,10 @@ type PlacementBindResposta = { result: boolean };
 
 export async function GET(request: NextRequest) {
   const executar = request.nextUrl.searchParams.get("executar") === "1";
+  const aba = ABAS[(request.nextUrl.searchParams.get("aba") ?? "email") as keyof typeof ABAS] ?? ABAS.email;
+  const HANDLER = aba.handler;
+  const TITLE = aba.titulo;
+  const alvos = aba.entidades ? ALVOS.filter((a) => aba.entidades!.some((e) => a.padrao.includes(`_${e}_`))) : ALVOS;
 
   const listaBruta = await chamarBitrixComoApp<PlacementListResposta>("placement.list");
   const disponiveis = listaBruta.result ?? [];
@@ -38,7 +46,7 @@ export async function GET(request: NextRequest) {
   const encontrados: { rotulo: string; placement: string }[] = [];
   const naoEncontrados: string[] = [];
 
-  for (const alvo of ALVOS) {
+  for (const alvo of alvos) {
     if (disponiveis.includes(alvo.padrao)) {
       encontrados.push({ rotulo: alvo.rotulo, placement: alvo.padrao });
     } else {
