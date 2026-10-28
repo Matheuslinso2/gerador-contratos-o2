@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { buscarDefinicaoCampos, chamarBitrix, listarHistoricoEtapas, listarItensSpa, type BitrixDefinicaoCampo, type BitrixItemRaw, type BitrixStageHistoryEvent } from "@/lib/bitrix/client";
 import { gerarLinkCard } from "@/lib/bitrix/entidadesCard";
 import { SEGURADORAS as SEGURADORAS_FIANCA } from "@/lib/bitrix/seguroFianca";
+import { separarPremio } from "./premio";
 import { garantirCliente, tipoDoDocumento } from "@/lib/erp/clientes";
 
 // ERP O2 — Fase 1b / T2: todo card do Bitrix vira documento do ERP, em todos os produtos.
@@ -428,7 +429,9 @@ export async function sincronizarSpa(sb: SupabaseClient, cfg: ConfigSpa, o: Opco
         const escolhido = exatos.length === 1 ? exatos[0] : bons.length === 1 ? bons[0] : null;
         if (escolhido) { docId = escolhido.id; modo = "ligado"; }
       }
-      const premio = x.premio ?? 0;
+      // prêmio padronizado pelo LÍQUIDO (regra por produto em ./premio.ts): o valor do card é líquido na Fiança e total no incêndio
+      const sep = separarPremio(x.produto, x.premio ?? 0);
+      const premio = sep.liquido;
       const comissaoPct = x.comissaoPct ?? 0;
       if (!docId) {
         modo = "criado";
@@ -440,7 +443,7 @@ export async function sincronizarSpa(sb: SupabaseClient, cfg: ConfigSpa, o: Opco
           tipo_contratacao: x.tipoContratacao, modo_cobranca: x.modoCobranca === "fatura" && !imobId ? "nao_informado" : x.modoCobranca,
           numero_apolice: x.numeroApolice, numero_proposta: x.numeroProposta, forma_pagamento: null,
           dt_proposta: String(item.createdTime).slice(0, 10), vigencia_inicio: x.vigIni, vigencia_fim: x.vigFim,
-          qtd_parcelas: x.parcelas, premio_liquido: premio, premio_total: premio,
+          qtd_parcelas: x.parcelas, premio_liquido: sep.liquido, iof: sep.iof, premio_total: sep.total,
           comissao_pct: comissaoPct, comissao_valor: Math.round(premio * comissaoPct) / 100,
           situacao: sit.situacao, motivo_cancelamento: sit.motivo ?? null, competencia,
           origem: "bitrix", origem_ref: chave, observacoes: [x.observacoes, x.formaPagamento ? `Forma de pagamento: ${x.formaPagamento}` : null].filter(Boolean).join("\n") || null,
@@ -454,7 +457,7 @@ export async function sincronizarSpa(sb: SupabaseClient, cfg: ConfigSpa, o: Opco
         const patch: Record<string, unknown> = {};
         if (atual?.origem === "bitrix") {
           Object.assign(patch, { tipo_corp: x.tipo_corp, ...(x.tipo_corp === "END" ? { tipo: x.tipoEndosso ?? "C" } : {}), situacao: sit.situacao, motivo_cancelamento: sit.motivo ?? null, vigencia_inicio: x.vigIni, vigencia_fim: x.vigFim, seguradora_id: seg ?? atual.seguradora_id, qtd_parcelas: x.parcelas, numero_apolice: x.numeroApolice ?? atual.numero_apolice, numero_proposta: x.numeroProposta ?? atual.numero_proposta });
-          if (premio) { patch.premio_liquido = premio; patch.premio_total = premio; patch.comissao_valor = Math.round(premio * comissaoPct) / 100; }
+          if (premio) { patch.premio_liquido = sep.liquido; patch.iof = sep.iof; patch.premio_total = sep.total; patch.comissao_valor = Math.round(premio * comissaoPct) / 100; }
           if (comissaoPct) patch.comissao_pct = comissaoPct;
         }
         if (!atual?.locatario_id && locatarioId) patch.locatario_id = locatarioId;
