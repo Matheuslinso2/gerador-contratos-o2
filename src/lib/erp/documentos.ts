@@ -25,6 +25,15 @@ export type DocumentoLista = {
   cliente: string | null;
   imobiliaria: string | null;
   imobiliaria_id: string | null;
+  /** cabeçalho padrão (Matheus 28/10): nomes comerciais */
+  seguradora_nome: string | null;
+  produto_nome: string | null;
+  produto: string | null;
+  modo_cobranca: string | null;
+  /** titular do seguro: Fiança = proprietário (segurado/locador); demais produtos = segurado/cliente do documento */
+  titular: string | null;
+  /** Fiança: inquilino (garantido); demais produtos: null */
+  inquilino: string | null;
 };
 
 export const SITUACOES: Record<string, string> = {
@@ -64,6 +73,43 @@ export function nomeTipoDocumento(tipo: string, tipoCorp: string | null): { nome
   return { nome: nomes[tipo] ?? tipo, cor: tipo === "X" || tipo === "I" ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-800" };
 }
 
+/** Tipo de documento do cabeçalho (Matheus 28/10): Proposta · Apólice · Apólice na Fatura · Endosso · Fatura. */
+export function tipoDoCabecalho(d: { tipo: string; tipo_corp: string | null; situacao: string; modo_cobranca: string | null }): { nome: string; detalhe: string | null; cor: string } {
+  if (d.situacao === "cotacao") return { nome: "Cotação", detalhe: null, cor: "bg-orange-100 text-orange-800" };
+  if (d.situacao === "proposta" && d.tipo === "A") return { nome: "Proposta", detalhe: d.tipo_corp === "RENV" ? "renovação" : "nova", cor: "bg-yellow-100 text-yellow-800" };
+  if (d.tipo === "F") return { nome: "Fatura", detalhe: null, cor: "bg-sky-100 text-sky-800" };
+  if (d.tipo === "A") return { nome: d.modo_cobranca === "fatura" ? "Apólice na Fatura" : "Apólice", detalhe: d.tipo_corp === "RENV" ? "renovação" : "nova", cor: "bg-green-100 text-green-800" };
+  const nomes: Record<string, string> = { C: "cobrança", D: "devolução", I: "cancelamento de item", M: "sem prêmio", R: "restituição", X: "cancelamento da apólice" };
+  return { nome: "Endosso", detalhe: nomes[d.tipo] ?? null, cor: d.tipo === "X" || d.tipo === "I" ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-800" };
+}
+
+const SEGURADORA_COMERCIAL: Record<string, string> = {
+  PORT: "Porto Seguro", PESS: "Porto Essencial", POTT: "Pottencial", YELU: "Yelum", BRAS: "Brasilcap", TOKI: "Tokio Marine", TOO: "Too Seguros",
+  ICAT: "Icatu", ALLI: "Allianz", ALFA: "Alfa", ALF: "Alfa", BRAD: "Bradesco Seguros", HDI: "HDI", MAPF: "Mapfre", SUHA: "Suhai", AZUL: "Azul",
+  SULA: "SulAmérica", ZURI: "Zurich", MARI: "Sompo", MITS: "Mitsui Sumitomo", ITAU: "Itaú Seguros",
+};
+const titulo = (s: string) => s.toLowerCase().replace(/(^|[\s(])([a-zà-ú])/g, (_m, a, b) => a + b.toUpperCase());
+/** Nome comercial da seguradora (Pottencial, Porto Seguro, Yelum, Brasilcap…). */
+export function nomeSeguradora(abreviacao: string | null, nome: string | null): string | null {
+  if (abreviacao && SEGURADORA_COMERCIAL[abreviacao]) return SEGURADORA_COMERCIAL[abreviacao];
+  return nome ? titulo(nome) : abreviacao;
+}
+
+const PRODUTO_POR_RAMO: Record<string, string> = {
+  "IMOBILIARIO": "Incêndio Imobiliário", "2 IMOBILIARIO": "Incêndio Imobiliário", "RESIDENCIAL": "Incêndio Residencial Individual", "EMPRESARIAL": "Incêndio Empresarial Individual",
+  "CONTEÚDO RESIDENCIAL": "Conteúdo Residencial", "CONTEÚDO COMERCIAL": "Conteúdo Comercial", "CONDOMINIO": "Condomínio", "BIKE": "Seguro Bike",
+  "FIANCA LOCATICIA": "Seguro Fiança", "2 FIANÇA": "Seguro Fiança", "CAPITALIZAÇÃO": "Título de Capitalização", "2 CAPITALIZAÇÃO": "Título de Capitalização",
+  "AUTOMOVEL": "Automóvel", "RC PROFISSIONAL": "RC Profissional", "RESPONSABILIDADE CIV": "RC (Responsabilidade Civil)", "SEGURO VIAGEM": "Seguro Viagem",
+  "EQUIP. PORTÁTEIS": "Equipamentos Portáteis", "2 EQUIP. PORTÁTEIS": "Equipamentos Portáteis", "VIDA INDIVIDUAL": "Vida Individual", "VIDA GRUPO": "Vida em Grupo",
+  "VIDA CONVENÇAO": "Vida Convenção", "API": "Acidentes Pessoais", "PRESTAMISTA": "Prestamista", "PREVIDÊNCIA": "Previdência", "SAÚDE": "Saúde", "ODONTO": "Odontológico",
+  "PET": "Seguro Pet", "ADESÃO": "Saúde (adesão)",
+};
+/** Nome do produto no cabeçalho: só o produto (Automóvel, Seguro Fiança, Título de Capitalização, Incêndio Imobiliário…). */
+export function nomeProduto(ramoNome: string | null, produto: string | null): string | null {
+  if (ramoNome && PRODUTO_POR_RAMO[ramoNome.toUpperCase()]) return PRODUTO_POR_RAMO[ramoNome.toUpperCase()];
+  return ramoNome ? titulo(ramoNome) : produto;
+}
+
 export const TIPO_CORP: Record<string, string> ={ NOVO: "Novo", RENV: "Renovação", END: "Endosso", FAT: "Fatura", CANC: "Cancelamento" };
 
 // Decisão 3 do Matheus (25/10): nem todo produto tem imobiliária; só o modo fatura exige produtor.
@@ -83,7 +129,7 @@ export const MODO_COBRANCA: Record<string, string> = {
 };
 
 const SELECT_LISTA =
-  "id, nosso_numero, nosso_numero_corp, tipo, tipo_corp, numero_apolice, vigencia_inicio, vigencia_fim, premio_liquido, premio_total, comissao_valor, situacao, canal_venda, imobiliaria_principal_id, seguradora:erp_seguradoras(abreviacao), ramo:erp_ramos(abreviacao), cliente:locatarios!erp_documentos_locatario_id_fkey(nome), imobiliaria:imobiliarias!erp_documentos_imobiliaria_principal_id_fkey(nome)";
+  "id, nosso_numero, nosso_numero_corp, tipo, tipo_corp, numero_apolice, vigencia_inicio, vigencia_fim, premio_liquido, premio_total, comissao_valor, situacao, canal_venda, imobiliaria_principal_id, modo_cobranca, seguradora:erp_seguradoras(abreviacao, nome), ramo:erp_ramos(abreviacao, nome, produto), cliente:locatarios!erp_documentos_locatario_id_fkey(nome), imobiliaria:imobiliarias!erp_documentos_imobiliaria_principal_id_fkey(nome)";
 
 type LinhaBruta = {
   id: string;
@@ -100,8 +146,9 @@ type LinhaBruta = {
   situacao: string;
   canal_venda: string | null;
   imobiliaria_principal_id: string | null;
-  seguradora: { abreviacao: string } | null;
-  ramo: { abreviacao: string } | null;
+  modo_cobranca: string | null;
+  seguradora: { abreviacao: string; nome: string } | null;
+  ramo: { abreviacao: string; nome: string; produto: string } | null;
   cliente: { nome: string } | null;
   imobiliaria: { nome: string } | null;
 };
@@ -126,7 +173,48 @@ function mapear(r: LinhaBruta): DocumentoLista {
     cliente: r.cliente?.nome ?? null,
     imobiliaria: r.imobiliaria?.nome ?? null,
     imobiliaria_id: r.imobiliaria_principal_id,
+    seguradora_nome: nomeSeguradora(r.seguradora?.abreviacao ?? null, r.seguradora?.nome ?? null),
+    produto_nome: nomeProduto(r.ramo?.nome ?? null, r.ramo?.produto ?? null),
+    modo_cobranca: r.modo_cobranca,
+    titular: r.cliente?.nome ?? null,
+    inquilino: null,
+    produto: r.ramo?.produto ?? null,
   };
+}
+
+/** Titular da lista (Matheus 28/10): Fiança = proprietário (segurado/locador) e inquilino = garantido; demais produtos = cliente do documento. */
+async function completarTitulares(sb: SupabaseClient, linhas: DocumentoLista[]) {
+  const fianca = linhas.filter((l) => l.produto === "fianca");
+  const semTitular = linhas.filter((l) => l.produto !== "fianca" && !l.titular);
+  if (!fianca.length && !semTitular.length) return;
+  const idsFianca = fianca.map((l) => l.id);
+  const ids = [...idsFianca, ...semTitular.map((l) => l.id)];
+  const [{ data: acervo }, { data: itens }] = await Promise.all([
+    idsFianca.length ? sb.from("erp_doc_partes_acervo").select("documento_id, papel, locatario:locatarios(nome)").in("documento_id", idsFianca) : Promise.resolve({ data: [] }),
+    sb.from("erp_documento_itens").select("documento_id, partes:erp_item_partes(papel, nome, ordem)").in("documento_id", ids),
+  ]);
+  const seg = new Map<string, string>(), gar = new Map<string, string>();
+  for (const a of (acervo ?? []) as unknown as { documento_id: string; papel: string; locatario: { nome: string | null } | null }[]) {
+    if (!a.locatario?.nome) continue;
+    (a.papel === "segurado" ? seg : gar).set(a.documento_id, a.locatario.nome);
+  }
+  const prop = new Map<string, string>(), loc = new Map<string, string>(), first = new Map<string, string>();
+  for (const it of (itens ?? []) as unknown as { documento_id: string; partes: { papel: string; nome: string | null; ordem: number }[] | null }[]) {
+    for (const p of [...(it.partes ?? [])].sort((x, y) => x.ordem - y.ordem)) {
+      if (!p.nome) continue;
+      if (!first.has(it.documento_id)) first.set(it.documento_id, p.nome);
+      if (p.papel === "proprietario" && !prop.has(it.documento_id)) prop.set(it.documento_id, p.nome);
+      if ((p.papel === "locatario" || p.papel === "garantido") && !loc.has(it.documento_id)) loc.set(it.documento_id, p.nome);
+    }
+  }
+  for (const l of fianca) {
+    l.titular = seg.get(l.id) ?? prop.get(l.id) ?? null;
+    l.inquilino = gar.get(l.id) ?? loc.get(l.id) ?? l.cliente;
+  }
+  // card ainda sem cliente cadastrado (sem CPF): mostra a pessoa informada no card
+  // (o nome do card às vezes vem com o prefixo "NOVO - " / "RENOVAÇÃO - ")
+  const limpo = (n: string | undefined) => (n ? n.replace(/^s*(novo|renova[cç][aã]o)s*-s*/i, "").trim() || null : null);
+  for (const l of semTitular) l.titular = limpo(prop.get(l.id) ?? loc.get(l.id) ?? first.get(l.id));
 }
 
 export type FiltrosBusca = {
@@ -225,7 +313,9 @@ export async function buscarDocumentos(sb: SupabaseClient, f: FiltrosBusca): Pro
 
   const { data, count, error } = await q.order("vigencia_inicio", { ascending: false }).order("nosso_numero", { ascending: false }).limit(limite);
   if (error) throw new Error(`erp_documentos: ${error.message}`);
-  return { linhas: ((data ?? []) as unknown as LinhaBruta[]).map(mapear), total: count };
+  const linhas = ((data ?? []) as unknown as LinhaBruta[]).map(mapear);
+  await completarTitulares(sb, linhas);
+  return { linhas, total: count };
 }
 
 export type DocumentoFicha = DocumentoLista & {
@@ -234,6 +324,8 @@ export type DocumentoFicha = DocumentoLista & {
   modo_cobranca: string;
   locatario_id: string | null;
   /** Partes lidas na apólice do acervo (Fiança): segurado = locador = proprietário; garantido = locatário. */
+  /** endereço do risco lido na apólice do acervo (quando o documento não tem item com endereço) */
+  local_risco: string | null;
   partes_apolice: { papel: "segurado" | "garantido"; locatario_id: string | null; nome: string | null; cpf: string | null }[];
   /** Linhas da grade de comissões do Corp deste documento (baixa real): situação recebida/pendente por parcela. */
   comissoes_corp: { parcela_n: number | null; situacao: string; valor: number; data: string | null }[];
@@ -366,7 +458,7 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
     .from("erp_documentos")
     .select(
       SELECT_LISTA +
-        ", corretora:erp_corretoras(apelido), canal:erp_canais(nome), imob_grupo:imobiliarias!erp_documentos_imobiliaria_principal_id_fkey(grupo:imobiliaria_grupos(nome)), tipo_contratacao, modo_cobranca, revisao_pendente, revisado_por_email, locatario_id, numero_proposta, numero_endosso, dt_proposta, dt_emissao, qtd_parcelas, forma_pagamento, premio_adicional, iof, comissao_pct, comissao_base, premiacao_valor, cancelado_em, competencia, congelado, fora_regra_pbi, origem, observacoes, digitado_em, documento_renovado_id, documento_pai_id"
+        ", corretora:erp_corretoras(apelido), canal:erp_canais(nome), imob_grupo:imobiliarias!erp_documentos_imobiliaria_principal_id_fkey(grupo:imobiliaria_grupos(nome)), tipo_contratacao, revisao_pendente, revisado_por_email, locatario_id, numero_proposta, numero_endosso, dt_proposta, dt_emissao, qtd_parcelas, forma_pagamento, premio_adicional, iof, comissao_pct, comissao_base, premiacao_valor, cancelado_em, competencia, congelado, fora_regra_pbi, origem, observacoes, digitado_em, documento_renovado_id, documento_pai_id"
     )
     .eq("id", id)
     .maybeSingle();
@@ -416,8 +508,8 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
       .order("n"),
     // acervo de PDFs (apolice_documentos) ligado pelo Nosso Nº do Corp — o ERP ainda não grava erp_documento_anexos na carga
     d.nosso_numero_corp
-      ? sb.from("apolice_documentos").select("id, arquivo_nome, fonte, numero_apolice, produto").eq("nosso_numero", String(d.nosso_numero_corp)).limit(10)
-      : Promise.resolve({ data: [] as { id: string; arquivo_nome: string | null; fonte: string | null; numero_apolice: string | null; produto: string | null }[] }),
+      ? sb.from("apolice_documentos").select("id, arquivo_nome, fonte, numero_apolice, produto, local_risco").eq("nosso_numero", String(d.nosso_numero_corp)).limit(10)
+      : Promise.resolve({ data: [] as { id: string; arquivo_nome: string | null; fonte: string | null; numero_apolice: string | null; produto: string | null; local_risco?: string | null }[] }),
     sb.from("erp_documento_eventos").select("id, tipo, data, canal, destinatario, usuario_email").eq("documento_id", id).order("data", { ascending: false }).limit(50),
     d.documento_renovado_id ? sb.from("erp_documentos").select("id, nosso_numero").eq("id", d.documento_renovado_id).maybeSingle() : Promise.resolve({ data: null }),
     sb.from("erp_documentos").select("id, nosso_numero").eq("documento_renovado_id", id).limit(10),
@@ -464,6 +556,13 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
     locatario_id: d.locatario_id,
     comissoes_corp: ((comCorp ?? []) as { parcela_n: number | null; situacao: string; valor: number | string; data: string | null }[]).map((c) => ({ parcela_n: c.parcela_n, situacao: c.situacao, valor: Number(c.valor), data: c.data })),
     cliente_kpis: (kpiCliente as DocumentoFicha["cliente_kpis"]) ?? null,
+    local_risco: (() => {
+      const v = ((anexos ?? []) as { local_risco?: unknown }[]).find((x) => x.local_risco)?.local_risco;
+      if (!v) return null;
+      if (typeof v === "string") return v;
+      const t = (v as { texto?: unknown }).texto;
+      return typeof t === "string" ? t : null;
+    })(),
     partes_apolice: partesBrutas
       .map((p) => ({ papel: p.papel, locatario_id: p.locatario?.id ?? null, nome: p.locatario?.nome ?? null, cpf: p.locatario?.cpf ?? null }))
       .sort((a, b) => (a.papel === b.papel ? 0 : a.papel === "segurado" ? -1 : 1)),
@@ -508,7 +607,7 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
         comissao_previsao: c?.previsao_recebimento ?? null,
       };
     }),
-    anexos: ((anexos ?? []) as { id: string; arquivo_nome: string | null; fonte: string | null; numero_apolice: string | null; produto: string | null }[]).map((a) => ({
+    anexos: ((anexos ?? []) as { id: string; arquivo_nome: string | null; fonte: string | null; numero_apolice: string | null; produto: string | null; local_risco?: string | null }[]).map((a) => ({
       id: a.id,
       tipo: "apolice",
       arquivo_nome: a.arquivo_nome,

@@ -89,7 +89,7 @@ export default async function FiltrosErp({
       case "proprietario":
         return campo("Proprietário", busca("proprietario", "nome ou CPF/CNPJ"));
       case "imovel":
-        return campo("Imóvel", busca("imovel", "rua, bairro ou CEP"));
+        return campo("Endereço ou CEP", busca("imovel", "rua, bairro ou CEP"));
       case "situacao":
         return situacoes ? campo("Situação", select("situacao", Object.entries(situacoes))) : null;
       case "tipo":

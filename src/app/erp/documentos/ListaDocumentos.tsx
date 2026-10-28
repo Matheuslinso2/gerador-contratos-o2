@@ -5,7 +5,7 @@ import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import PageHeader from "@/components/PageHeader";
 import { IconReport } from "@/components/icons";
 import { formatarData, formatarReais } from "@/lib/sinistros/regras";
-import { buscarDocumentos, nomeTipoDocumento, SITUACOES, TIPOS_DOCUMENTO } from "@/lib/erp/documentos";
+import { buscarDocumentos, SITUACOES, tipoDoCabecalho, TIPOS_DOCUMENTO } from "@/lib/erp/documentos";
 import { lerFiltros } from "@/lib/erp/filtros";
 import { codigoCliente } from "@/lib/erp/clientes";
 import FiltrosErp from "../FiltrosErp";
@@ -90,8 +90,8 @@ export default async function ListaDocumentos({
 
         <FiltrosErp
           caminho={caminho}
-          campos={["busca", "seguradora", "produto", "situacao", "imobiliaria", "inquilino", "periodo", "proprietario", "imovel", "tipo", "forma_pagamento", "canal"]}
-          avancados={["proprietario", "imovel", "tipo", "forma_pagamento", "canal"]}
+          campos={["busca", "produto", "situacao", "tipo", "imobiliaria", "inquilino", "imovel", "seguradora", "periodo", "proprietario", "forma_pagamento", "canal"]}
+          avancados={["inquilino", "imovel", "seguradora", "periodo", "proprietario", "forma_pagamento", "canal"]}
           valores={f}
           placeholderBusca="Nome do titular · CPF/CNPJ · CLI-000123 · Código O2 do documento · Nosso nº do Corp · Nº da apólice"
           rotuloPeriodo="Início de vigência"
@@ -128,57 +128,61 @@ export default async function ListaDocumentos({
             <table className="w-full text-xs">
               <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
                 <tr>
-                  <th className="px-3 py-2">Código O2 do documento</th>
-                  <th className="px-3 py-2">Nosso nº do Corp</th>
+                  <th className="px-3 py-2">Tipo de documento</th>
+                  <th className="px-3 py-2">Titular do seguro</th>
+                  <th className="px-3 py-2">Produto</th>
+                  <th className="px-3 py-2">Seguradora</th>
+                  <th className="px-3 py-2">Vigência</th>
                   <th className="px-3 py-2">Situação</th>
-                  <th className="px-3 py-2">Tipo</th>
-                  <th className="px-3 py-2">Cliente</th>
-                  <th className="px-3 py-2">Imobiliária</th>
-                  <th className="px-3 py-2">Seg.</th>
-                  <th className="px-3 py-2">Ramo</th>
+                  <th className="px-3 py-2">Código O2 do documento</th>
                   <th className="px-3 py-2">Nº da apólice</th>
-                  <th className="px-3 py-2">Início vig.</th>
-                  <th className="px-3 py-2">Fim vig.</th>
+                  <th className="px-3 py-2">Imobiliária</th>
                   <th className="px-3 py-2 text-right">Pr. líquido</th>
                   <th className="px-3 py-2 text-right">Comissão</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {linhas.map((d) => (
-                  <tr key={d.id} className="hover:bg-gray-50">
-                    <td className="px-3 py-2 font-medium">
-                      <Link href={`/erp/documentos/${d.id}`} className="text-o2-navy hover:underline">
-                        {d.nosso_numero}
-                      </Link>
-                    </td>
-                    <td className="px-3 py-2 text-gray-500">{d.nosso_numero_corp ?? "—"}</td>
-                    <td className="px-3 py-2">
-                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${COR_SITUACAO[d.situacao] ?? "bg-gray-100"}`}>
-                        {SITUACOES[d.situacao] ?? d.situacao}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2" title={`${d.tipo} · ${TIPOS_DOCUMENTO[d.tipo] ?? d.tipo}`}>
-                      <span className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-medium ${nomeTipoDocumento(d.tipo, d.tipo_corp).cor}`}>{nomeTipoDocumento(d.tipo, d.tipo_corp).nome}</span>
-                    </td>
-                    <td className="px-3 py-2">{d.cliente ?? <span className="text-gray-400">sem cliente ligado</span>}</td>
-                    <td className="px-3 py-2">
-                      {d.imobiliaria_id ? (
-                        <Link href={`/admin/imobiliarias/${d.imobiliaria_id}`} className="hover:underline">
-                          {d.imobiliaria}
+                {linhas.map((d) => {
+                  const t = tipoDoCabecalho(d);
+                  return (
+                    <tr key={d.id} className="hover:bg-gray-50">
+                      <td className="px-3 py-2" title={`${d.tipo} · ${TIPOS_DOCUMENTO[d.tipo] ?? d.tipo}`}>
+                        <span className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-semibold ${t.cor}`}>{t.nome}</span>
+                        {t.detalhe ? <span className="ml-1 text-[10px] text-gray-500">{t.detalhe}</span> : null}
+                      </td>
+                      <td className="px-3 py-2">
+                        {d.titular ? <span className="font-medium text-gray-900">{d.titular}</span> : <span className="text-gray-400">titular não ligado</span>}
+                        {d.inquilino && d.inquilino !== d.titular ? <span className="block text-[10px] text-gray-500">inquilino: {d.inquilino}</span> : null}
+                      </td>
+                      <td className="px-3 py-2">{d.produto_nome ?? "—"}</td>
+                      <td className="px-3 py-2">{d.seguradora_nome ?? "—"}</td>
+                      <td className="whitespace-nowrap px-3 py-2">
+                        {d.vigencia_inicio || d.vigencia_fim ? `${formatarData(d.vigencia_inicio)} a ${formatarData(d.vigencia_fim)}` : "—"}
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${COR_SITUACAO[d.situacao] ?? "bg-gray-100"}`}>{SITUACOES[d.situacao] ?? d.situacao}</span>
+                      </td>
+                      <td className="px-3 py-2 font-medium">
+                        <Link href={`/erp/documentos/${d.id}`} className="text-o2-navy hover:underline">
+                          {d.nosso_numero}
                         </Link>
-                      ) : (
-                        <span className="text-gray-400">{d.canal_venda ?? "—"}</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">{d.seguradora ?? "—"}</td>
-                    <td className="px-3 py-2">{d.ramo ?? "—"}</td>
-                    <td className="px-3 py-2">{d.numero_apolice ?? <span className="text-gray-400">0</span>}</td>
-                    <td className="px-3 py-2">{formatarData(d.vigencia_inicio)}</td>
-                    <td className="px-3 py-2">{formatarData(d.vigencia_fim)}</td>
-                    <td className="px-3 py-2 text-right">{formatarReais(d.premio_liquido)}</td>
-                    <td className="px-3 py-2 text-right">{formatarReais(d.comissao_valor)}</td>
-                  </tr>
-                ))}
+                        {d.nosso_numero_corp ? <span className="block text-[10px] font-normal text-gray-400">Corp {d.nosso_numero_corp}</span> : null}
+                      </td>
+                      <td className="px-3 py-2">{d.numero_apolice ?? <span className="text-gray-400">0</span>}</td>
+                      <td className="px-3 py-2">
+                        {d.imobiliaria_id ? (
+                          <Link href={`/admin/imobiliarias/${d.imobiliaria_id}`} className="hover:underline">
+                            {d.imobiliaria}
+                          </Link>
+                        ) : (
+                          <span className="text-gray-400">{d.canal_venda ?? "—"}</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-right">{formatarReais(d.premio_liquido)}</td>
+                      <td className="px-3 py-2 text-right">{formatarReais(d.comissao_valor)}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

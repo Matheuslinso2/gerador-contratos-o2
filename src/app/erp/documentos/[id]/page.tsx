@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import EmailsDoDocumento from "./EmailsDoDocumento";
+import CabecalhoDocumento from "../CabecalhoDocumento";
 import { dataDoRepasse, repasseEhFixo, repassePorParcela } from "@/lib/erp/repasseParcelas";
 import { formatarData, formatarReais } from "@/lib/sinistros/regras";
 import RascunhoAutomatico from "@/components/RascunhoAutomatico";
@@ -98,6 +99,36 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
   const recebidoCorp = d.comissoes_corp.filter((c) => c.situacao === "recebida").reduce((s, c) => s + c.valor, 0);
   const aReceberCorp = d.comissoes_corp.filter((c) => c.situacao !== "recebida").reduce((s, c) => s + c.valor, 0);
   const titularNome = d.partes_apolice.find((p) => p.papel === "segurado")?.nome ?? d.cliente;
+  // cabeçalho padrão (Matheus 28/10): titular = proprietário na Fiança; segurado/cliente nos demais produtos
+  const fianca = d.produto === "fianca";
+  const partesItens = d.itens.flatMap((i) => i.partes);
+  const proprietarioItem = partesItens.find((p) => p.papel === "proprietario")?.nome ?? null;
+  const inquilinoItem = partesItens.find((p) => p.papel === "locatario" || p.papel === "garantido")?.nome ?? null;
+  const item1 = d.itens[0];
+  const imovel = item1 ? [[item1.logradouro, item1.numero].filter(Boolean).join(", "), item1.complemento, [item1.cidade, item1.uf].filter(Boolean).join("/"), item1.cep ? "CEP " + item1.cep : null].filter(Boolean).join(" · ") || null : null;
+  const imovelFinal = imovel ?? d.local_risco;
+  const cabecalho = {
+    tipo: d.tipo,
+    tipo_corp: d.tipo_corp,
+    situacao: d.situacao,
+    modo_cobranca: d.modo_cobranca,
+    nosso_numero: d.nosso_numero,
+    nosso_numero_corp: d.nosso_numero_corp,
+    numero_apolice: d.numero_apolice,
+    titular: fianca ? d.partes_apolice.find((p) => p.papel === "segurado")?.nome ?? proprietarioItem : d.cliente,
+    titularPapel: fianca ? "Proprietário (segurado e locador)" : "Segurado",
+    produto_nome: d.produto_nome,
+    seguradora_nome: d.seguradora_nome,
+    vigencia_inicio: d.vigencia_inicio,
+    vigencia_fim: d.vigencia_fim,
+    inquilino: fianca ? d.partes_apolice.find((p) => p.papel === "garantido")?.nome ?? inquilinoItem ?? d.cliente : null,
+    imovel: imovelFinal,
+    extras: [
+      ...(d.revisao_pendente ? [{ texto: "pré-cadastro · revisão pendente", cor: "bg-orange-100 text-orange-800" }] : []),
+      ...(d.fora_regra_pbi ? [{ texto: "fora da conta do Power BI", cor: "bg-yellow-100 text-yellow-800" }] : []),
+      ...(d.congelado ? [{ texto: "mês fechado", cor: "bg-blue-50 text-blue-800" }] : []),
+    ],
+  };
 
   return (
     <>
@@ -106,20 +137,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
           <Link href="/erp/documentos" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-o2-navy hover:underline">
             ← Documentos
           </Link>
-          <div className="flex flex-wrap items-baseline gap-3">
-            <span className={`rounded-md px-2.5 py-1 text-sm font-semibold uppercase tracking-wide ${nomeTipoDocumento(d.tipo, d.tipo_corp).cor}`}>{nomeTipoDocumento(d.tipo, d.tipo_corp).nome}</span>
-            <h1 className="text-xl font-semibold text-o2-navy">
-              Código O2 do documento {d.nosso_numero} · {d.cliente ?? "cliente não ligado"}
-            </h1>
-            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">{SITUACOES[d.situacao] ?? d.situacao}</span>
-            {d.revisao_pendente && <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-800">pré-cadastro · revisão pendente</span>}
-            {d.fora_regra_pbi && <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-xs text-yellow-800">fora da conta do Power BI</span>}
-            {d.congelado && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-800">mês fechado</span>}
-          </div>
-          <p className="text-sm text-gray-500">
-            {TIPOS_DOCUMENTO[d.tipo] ?? d.tipo} · {d.tipo_corp ? TIPO_CORP[d.tipo_corp] ?? d.tipo_corp : ""} · {d.seguradora} · {d.ramo} · {d.corretora}
-            {d.nosso_numero_corp ? ` · nosso nº do Corp ${d.nosso_numero_corp}` : " · nasceu no ERP"}
-          </p>
+          <CabecalhoDocumento c={cabecalho} />
         </div>
 
         <div className="rounded-xl border border-o2-navy/20 bg-blue-50/40 px-4 py-2 text-sm">
