@@ -25,7 +25,7 @@ export default async function PainelComercialPage() {
   return (
     <>
       <AppHeader userEmail={user.email} logoutAction={signOut} />
-      <main className="mx-auto max-w-7xl flex-1 space-y-4 p-6">
+      <main className="mx-auto w-full max-w-[1600px] flex-1 space-y-4 p-6">
         <Link href="/" className="text-sm font-medium text-o2-navy hover:underline">
           ← Voltar ao início
         </Link>
