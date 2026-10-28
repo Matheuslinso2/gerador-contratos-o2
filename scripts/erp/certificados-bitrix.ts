@@ -12,7 +12,8 @@ import { carregarCapVigentes, ehCertificado, lerCertificado, ligarCertificado } 
 
 const arg = (n: string) => { const i = process.argv.indexOf(`--${n}`); return i >= 0 ? process.argv[i + 1] : undefined; };
 const DESDE = arg("desde") ?? "2024-05-01";
-const SAIDA = arg("saida") ?? path.join(os.tmpdir(), "certificados-bitrix.json");
+const ANT = arg("anteriores-csv"); // CSV dos documentos anteriores (vencidos) a procurar; Código O2 na 3ª coluna
+const SAIDA = arg("saida") ?? path.join(os.tmpdir(), ANT ? "certificados-bitrix-anteriores.json" : "certificados-bitrix.json");
 const GUARDAR = process.argv.includes("--guardar"); // guarda os PDFs de vínculo confirmado como anexo do documento
 let guardados = 0;
 const bx = chamadorBitrix(process.env.BITRIX_WEBHOOK_URL_TAREFAS!);
@@ -21,7 +22,8 @@ const pausa = (ms: number) => new Promise((r) => setTimeout(r, ms));
 async function comRetry<T>(fn: () => Promise<T>): Promise<T> { for (let t = 0; ; t++) { try { return await fn(); } catch (e) { if (t >= 4) throw e; await pausa(2000 * (t + 1)); } } }
 
 (async () => {
-  const ind = await carregarCapVigentes(sb);
+  const codigos = ANT ? fs.readFileSync(ANT, "utf8").split("\n").slice(1).map((l) => Number(l.split(";")[2]?.replace(/"/g, ""))).filter(Boolean) : undefined;
+  const ind = await carregarCapVigentes(sb, true, codigos);
   const porSeg: Record<string, number> = {};
   for (const d of ind.vigentes) { const k = ind.nomeSeguradora.get(d.seguradora_id!) ?? "?"; porSeg[k] = (porSeg[k] ?? 0) + 1; }
   console.log(`Capitalização vigente no ERP: ${ind.vigentes.length} | ${JSON.stringify(porSeg)}`);
