@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
   const { data } = await q.order("nosso_numero_corp").order("parcela_n").limit(20000);
   const br = (d: string | null) => (d ? d.split("-").reverse().join("/") : "");
   const linhas = [
-    "Código O2;Nosso Nº Corp;Seguradora;Apólice;Imobiliária;Parcela;Vencimento no Corp;Vencimento correto (seguradora);Diferença (meses);Comissão prevista",
+    "Código O2 do documento;Nosso nº do Corp;Seguradora;Nº da apólice;Imobiliária;Parcela;Vencimento no Corp;Vencimento correto (seguradora);Diferença (meses);Comissão prevista",
     ...(data ?? []).map((l) =>
       [l.nosso_numero, l.nosso_numero_corp ?? "", l.seguradora, l.apolice, `"${(l.imobiliaria ?? "").replace(/"/g, "'")}"`, `${l.parcela_n}${l.parcelas_total ? `/${l.parcelas_total}` : ""}`, br(l.venc_corp), br(l.venc_seguradora), l.dif_meses, String(l.comissao_prevista ?? "").replace(".", ",")].join(";")
     ),

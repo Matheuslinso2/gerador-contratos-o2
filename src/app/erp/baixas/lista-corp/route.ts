@@ -53,9 +53,9 @@ export async function GET(request: Request) {
   }
 
   const cabecalho = [
-    "Seguradora", "Nosso Nº (Corp)", "Parcela", "Apólice", "Cliente", "Prêmio (base)", "% comissão documento", "% pago",
+    "Seguradora", "Nosso nº do Corp", "Parcela", "Nº da apólice", "Cliente", "Prêmio (base)", "% comissão documento", "% pago",
     "Valor a baixar (bruto)", "Data de recebimento", "Previsão de repasse", "Classificação", "Observação", "Já baixada no Corp?", "Como lançar",
-    "Corretora", "Competência", "Código O2", "Aprovado por", "Aprovado em", "Arquivo do extrato",
+    "Corretora", "Competência", "Código O2 do documento", "Aprovado por", "Aprovado em", "Arquivo do extrato",
   ];
   const corpo = linhas.map((l) =>
     [
