@@ -508,7 +508,7 @@ function Dados({ s, interno }: { s: any; interno: boolean }) {
           <>
             <Item rotulo="Produto" valor={rotuloProduto(s.produto)} />
             <Item rotulo="Data da ocorrência" valor={formatarData(s.data_ocorrencia)} />
-            <Item rotulo="Nosso Nº (Corp)" valor={s.nosso_numero} />
+            <Item rotulo="Nosso nº do Corp" valor={s.nosso_numero} />
           </>
         ) : s.tipo === "ocupado" ? (
           <Item rotulo="Vencimentos em aberto" valor={`1º ${formatarData(s.data_primeiro_vencimento)} · 2º ${formatarData(s.data_segundo_vencimento)}`} />

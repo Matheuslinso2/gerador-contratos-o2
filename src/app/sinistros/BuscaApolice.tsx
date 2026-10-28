@@ -151,9 +151,9 @@ export default function BuscaApolice({
     const temLocatario = !!a.locatarios_apolice?.length;
     setDaApolice(temLocatario || a.apolice_local_risco ? { arquivoId: a.apolice_arquivo_id, local: a.apolice_local_risco, locatarios: a.locatarios_apolice ?? [] } : null);
     setAviso(
-      `Preenchido a partir do Nosso Nº ${a.nosso_numero} (${preenchidos.length} campo(s)).` +
+      `Preenchido a partir do Nosso nº do Corp ${a.nosso_numero} (${preenchidos.length} campo(s)).` +
         (lidosDaApolice.length ? " Os campos em amarelo foram lidos da apólice em PDF." : "") +
-        (a.produto === "fianca" && !temLocatario ? " O garantido (locatário) não vem do Corp e não há apólice em PDF lida para este Nosso Nº: preencha à mão." : "") +
+        (a.produto === "fianca" && !temLocatario ? " O garantido (locatário) não vem do Corp e não há apólice em PDF lida para este Nosso nº do Corp: preencha à mão." : "") +
         " Confira e complete o resto."
     );
   }
@@ -172,7 +172,7 @@ export default function BuscaApolice({
               buscar();
             }
           }}
-          placeholder="Nosso Nº, código do cliente no Corp, CPF/CNPJ ou nome do segurado ou do inquilino"
+          placeholder="Nosso nº do Corp, código do cliente no Corp, CPF/CNPJ ou nome do segurado ou do inquilino"
           className="min-w-64 flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
         />
         <button type="button" onClick={buscar} disabled={carregando || termo.trim().length < 3} className="rounded-full bg-o2-navy px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
@@ -198,7 +198,7 @@ export default function BuscaApolice({
             // PDF achado no próprio Corp ("corp:<Nosso Nº>:<n>"), num anexo da caixa do Matheus
             // ("gmail:<mensagem>:<parte>") ou no Drive.
             (daApolice.arquivoId.startsWith("corp:") ? (
-              <p className="font-semibold">PDF anexado no Corp (aba Anexos do Nosso Nº {daApolice.arquivoId.split(":")[1]})</p>
+              <p className="font-semibold">PDF anexado no Corp (aba Anexos do Nosso nº do Corp {daApolice.arquivoId.split(":")[1]})</p>
             ) : daApolice.arquivoId.startsWith("gmail:") ? (
               <a href={`https://mail.google.com/mail/u/?authuser=matheus@o2seguros.com.br#all/${daApolice.arquivoId.split(":")[1]}`} target="_blank" rel="noreferrer" className="font-semibold underline">
                 Abrir o e-mail com a apólice (caixa do Matheus)
@@ -218,7 +218,7 @@ export default function BuscaApolice({
                 <span className="font-semibold text-o2-navy">{a.cliente_nome ?? "—"}</span>
                 <span className="text-gray-600">
                   {" "}
-                  · {rotuloProduto(a.produto)} · {a.seguradora ?? "—"}{a.numero_apolice ? ` · apólice ${a.numero_apolice}` : ""} · Nosso Nº {a.nosso_numero}
+                  · {rotuloProduto(a.produto)} · {a.seguradora ?? "—"}{a.numero_apolice ? ` · apólice ${a.numero_apolice}` : ""} · Nosso nº do Corp {a.nosso_numero}
                 </span>
                 <span className="block text-xs text-gray-500">
                   Vigência {dataBr(a.vigencia_inicio)} a {dataBr(a.vigencia_fim)} · {a.imobiliaria_texto ?? "sem imobiliária"}

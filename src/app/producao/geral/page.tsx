@@ -78,7 +78,7 @@ export default async function ProducaoGeralPage({ searchParams }: { searchParams
 
         {c && (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-            <Cartao rotulo="Documentos mês" valor={num(c.mes.docs)} legenda="Apólices, faturas e endossos com início de vigência no mês (cada Nosso Nº conta uma vez, na regra de prioridade do cadastro de produtores).">
+            <Cartao rotulo="Documentos mês" valor={num(c.mes.docs)} legenda="Apólices, faturas e endossos com início de vigência no mês (cada Nosso nº do Corp conta uma vez, na regra de prioridade do cadastro de produtores).">
               <p>AH mês: {num(c.mes_ant.docs)} <Variacao v={ah(c.mes.docs, c.mes_ant.docs)} /></p>
               <p>AH ano: {num(c.ano_ant.docs)} <Variacao v={ah(c.mes.docs, c.ano_ant.docs)} /></p>
             </Cartao>

@@ -64,13 +64,13 @@ export default async function InconsistenciasPage() {
 
         {inc && (
           <div className="grid gap-4 lg:grid-cols-2">
-            <Quadro titulo="Duplicidades de cadastro" legenda="Nosso Nº que ficaram com mais de uma linha na conta da corretora depois da regra ENTRA > TRATAR N1 > TRATAR N2 — acontece quando dois produtores da mesma apólice estão marcados como ENTRA. Ajuste no cadastro de produtores do SharePoint.">
+            <Quadro titulo="Duplicidades de cadastro" legenda="Nosso nº do Corp que ficaram com mais de uma linha na conta da corretora depois da regra ENTRA > TRATAR N1 > TRATAR N2 — acontece quando dois produtores da mesma apólice estão marcados como ENTRA. Ajuste no cadastro de produtores do SharePoint.">
               <Total rotulo="Total de duplicidades" valor={porNosso.size} bom={porNosso.size === 0} />
               {porNosso.size ? (
                 <table className="w-full text-right text-xs tabular-nums">
                   <thead className="border-b border-o2-coral/40 text-[11px] uppercase text-gray-500">
                     <tr>
-                      <th className="py-1 text-left">Nosso Nº</th>
+                      <th className="py-1 text-left">Nosso nº do Corp</th>
                       <th className="text-left">Produtor</th>
                       <th>Ramo</th>
                       <th>Ini. vig.</th>

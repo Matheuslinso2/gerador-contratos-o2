@@ -344,7 +344,7 @@ function Conteudo({ d, periodoRotulo, filtros, meses, produtos }: { d: Dashboard
           valor={pct(t.recorrencia)}
           linhas={[`${r.recorrentes_24m} de ${r.contratos_24m} contratos com 2+ sinistros`]}
           carteira={tCart ? pct(tCart.recorrencia) : null}
-          legenda="Nos 24 meses até o fim do período: contratos (Nosso Nº do Corp) com 2 ou mais sinistros ÷ contratos com algum sinistro."
+          legenda="Nos 24 meses até o fim do período: contratos (Nosso nº do Corp) com 2 ou mais sinistros ÷ contratos com algum sinistro."
         />
       </section>
 
