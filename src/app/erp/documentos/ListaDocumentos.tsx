@@ -7,6 +7,7 @@ import { IconReport } from "@/components/icons";
 import { formatarData, formatarReais } from "@/lib/sinistros/regras";
 import { buscarDocumentos, nomeTipoDocumento, SITUACOES, TIPOS_DOCUMENTO } from "@/lib/erp/documentos";
 import { lerFiltros } from "@/lib/erp/filtros";
+import { codigoCliente } from "@/lib/erp/clientes";
 import FiltrosErp from "../FiltrosErp";
 
 
@@ -70,6 +71,10 @@ export default async function ListaDocumentos({
     imovel: f.imovel,
     limite: Number(limite) || 50,
   });
+  // Cliente achado pelo nome/CPF/CLI mas SEM documento vigente (Matheus 28/10): aparece avisado, não some da busca.
+  const buscaDeTitular = !!busca && (!/^\d+$/.test(busca) || busca.replace(/\D/g, "").length === 11 || busca.replace(/\D/g, "").length === 14);
+  const { data: semVigenteBruto } = buscaDeTitular ? await supabase.rpc("erp_clientes_sem_vigente", { p_busca: busca, p_limite: 20 }) : { data: [] };
+  const semVigente = (semVigenteBruto ?? []) as { id: string; codigo_cliente: number; nome: string; cpf: string | null; documentos: number }[];
   const paramsMais = new URLSearchParams(Object.entries(f).filter(([, v]) => v) as [string, string][]);
   paramsMais.set("limite", String(linhas.length + 50));
 
@@ -99,8 +104,24 @@ export default async function ListaDocumentos({
           }
         />
 
+        {semVigente.length > 0 && (
+          <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-3">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-yellow-800">Cliente sem documento vigente</div>
+            <ul className="divide-y divide-yellow-100 text-xs">
+              {semVigente.map((c) => (
+                <li key={c.id} className="flex flex-wrap items-center gap-3 py-1.5">
+                  <Link href={`/erp/clientes/${c.id}`} className="font-medium text-o2-navy hover:underline">{codigoCliente(c.codigo_cliente)}</Link>
+                  <span>{c.nome}</span>
+                  <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-[11px] font-semibold uppercase text-yellow-900">CLIENTE SEM DOCUMENTO VIGENTE</span>
+                  <span className="text-gray-500">{c.documentos > 0 ? `${c.documentos} documento(s) no histórico` : "nenhum documento no histórico"}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {linhas.length === 0 ? (
-          <p className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">Nenhum documento encontrado.</p>
+          <p className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">{semVigente.length > 0 ? "Nenhum documento vigente encontrado para essa busca." : "Nenhum documento encontrado."}</p>
         ) : (
           <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
             <table className="w-full text-xs">
