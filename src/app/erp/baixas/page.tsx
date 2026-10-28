@@ -9,7 +9,7 @@ import { formatarData } from "@/lib/sinistros/regras";
 import { aprovarBaixa, salvarTratativa } from "./actions";
 import FiltrosErp from "../FiltrosErp";
 import { lerFiltros, idsImobiliarias, CORRETORAS } from "@/lib/erp/filtros";
-import { entradasNibo, compararDias, situacaoCaixa, TOLERANCIA_CAIXA, type DiaCaixa, type ExtratoDia, type SituacaoCaixa } from "@/lib/erp/caixaNibo";
+import { entradasNibo, compararDias, situacaoCaixa, motivosProvaveis, TOLERANCIA_CAIXA, type DiaCaixa, type ExtratoDia, type SituacaoCaixa } from "@/lib/erp/caixaNibo";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +52,7 @@ const PARA_TRATAR = ["estorno", "divergente", "nao_encontrada"];
 // Conferência de caixa (28/10): uma linha por corretora × seguradora × mês, com o banco (Nibo) ao lado do extrato.
 type LinhaCaixa = {
   chave: string; mes: string; corretora: string; seg: string; segNome: string; m: Mensal | null;
-  banco: number | null; esperado: number | null; previsto: number | null; porVencimento: number | null; sit: SituacaoCaixa; dias: DiaCaixa[];
+  banco: number | null; esperado: number | null; previsto: number | null; porVencimento: number | null; sit: SituacaoCaixa; dias: DiaCaixa[]; motivos: string[];
 };
 const COLUNAS_CAIXA = "grid grid-cols-[minmax(150px,1.5fr)_64px_repeat(5,minmax(100px,1fr))_minmax(150px,1.2fr)] items-center gap-x-2";
 
@@ -157,10 +157,17 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
       .neq("tipo", "resumo_mensal").gte("data_recebimento", desdeCaixa).lte("data_recebimento", ateCaixa).limit(5000);
     if (filtros.seguradora) qDias = qDias.eq("seg_abrev", filtros.seguradora);
     qDias = qDias.eq("corretora", corretoraSel);
-    const [{ data: diasBrutos }, entradas, { data: segsBrutas }, { data: previsaoBruta }] = await Promise.all([
+    const [{ data: diasBrutos }, entradas, { data: segsBrutas }, { data: previsaoBruta }, { data: nfsBrutas }] = await Promise.all([
       qDias, entradasNibo(supabase, desdeCaixa, ateCaixa), supabase.from("erp_seguradoras").select("abreviacao, nome"),
       supabase.rpc("erp_previsao_caixa_mensal", { p_de: desdeCaixa, p_ate: fimCaixa }),
+      supabase.from("erp_extratos_seguradora").select("nf_numero, nf_emitida_em, seguradora:erp_seguradoras!inner(abreviacao)").in("seguradora.abreviacao", ["POTT", "TOO"]).gte("competencia", desdeCaixa).lte("competencia", fimCaixa),
     ]);
+    // nota fiscal registrada (Pottencial e Too só pagam depois dela) e data do último extrato lido de cada seguradora
+    const nfPorSeg = new Set<string>();
+    for (const x of (nfsBrutas ?? []) as unknown as { nf_numero: string | null; nf_emitida_em: string | null; seguradora: { abreviacao: string } | { abreviacao: string }[] | null }[]) {
+      const ab = Array.isArray(x.seguradora) ? x.seguradora[0]?.abreviacao : x.seguradora?.abreviacao;
+      if (ab && (x.nf_numero || x.nf_emitida_em)) nfPorSeg.add(ab);
+    }
     // comissão que DEVERIA CAIR no mês conforme a experiência de cada seguradora (vencimento + prazo mediano dos últimos 16 meses)
     const previsao = new Map<string, { esperado: number; porVencimento: number }>();
     for (const p of (previsaoBruta ?? []) as { corretora: string; seg_abrev: string; mes: string; previsto_liquido: number | string; venc_liquido: number | string }[]) {
@@ -187,6 +194,14 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
       bancoMes.set(k, (bancoMes.get(k) ?? 0) + n.valor);
     }
     const r2 = (v: number) => Math.round(v * 100) / 100;
+    const ultimoExtrato = new Map<string, string>();
+    for (const e of extratosDia) if (!ultimoExtrato.has(e.seg) || e.dia > ultimoExtrato.get(e.seg)!) ultimoExtrato.set(e.seg, e.dia);
+    const motivosDe = (seg: string, esperado: number | null, banco: number | null, previsto: number | null, m: Mensal | null, dias: DiaCaixa[]) =>
+      motivosProvaveis({
+        seg, mesAtual: !usaPeriodo && mesSel === mesAtual, esperado, banco, previsto,
+        desconto: m ? Number(m.desconto) : 0, proLabore: m ? Number(m.pro_labore_pago_direto) : 0, nEstorno: m ? Number(m.n_estorno) : 0,
+        dias, ultimoExtrato: ultimoExtrato.get(seg) ?? null, nfRegistrada: seg === "POTT" || seg === "TOO" ? nfPorSeg.has(seg) : null,
+      });
     const vistos = new Set<string>();
     for (const m of mensais) {
       const k = `${m.corretora}|${m.seg_abrev}|${m.mes.slice(0, 7)}`;
@@ -197,7 +212,7 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
       const dias = porDia.get(k) ?? [];
       const esperado = dias.some((d) => d.extrato) ? r2(dias.reduce((s, d) => s + d.extrato, 0)) : r2(Number(m.liquido_esperado) + Number(m.desconto));
       const prev = previsao.get(k);
-      linhasCaixa.push({ chave: k, mes: m.mes, corretora: m.corretora ?? "—", seg: m.seg_abrev, segNome: m.seguradora, m, banco, esperado, previsto: prev ? r2(prev.esperado) : null, porVencimento: prev ? r2(prev.porVencimento) : null, sit: situacaoCaixa(esperado, banco, prev?.esperado ?? null), dias: porDia.get(k) ?? [] });
+      linhasCaixa.push({ chave: k, mes: m.mes, corretora: m.corretora ?? "—", seg: m.seg_abrev, segNome: m.seguradora, m, banco, esperado, previsto: prev ? r2(prev.esperado) : null, porVencimento: prev ? r2(prev.porVencimento) : null, sit: situacaoCaixa(esperado, banco, prev?.esperado ?? null), dias, motivos: motivosDe(m.seg_abrev, esperado, banco, prev ? r2(prev.esperado) : null, m, dias) });
     }
     // dinheiro que entrou no banco de uma seguradora sem nenhum extrato lido no ERP
     for (const [k, v] of bancoMes) {
@@ -205,13 +220,13 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
       if (vistos.has(k) || !mesesOrd.includes(mes)) continue;
       vistos.add(k);
       const prev = previsao.get(k);
-      linhasCaixa.push({ chave: k, mes: `${mes}-01`, corretora, seg, segNome: nomeSeg.get(seg) ?? (seg === "OUTRAS" ? "Outras (sem seguradora reconhecida)" : seg), m: null, banco: r2(v), esperado: null, previsto: prev ? r2(prev.esperado) : null, porVencimento: prev ? r2(prev.porVencimento) : null, sit: situacaoCaixa(null, r2(v), prev?.esperado ?? null), dias: porDia.get(k) ?? [] });
+      linhasCaixa.push({ chave: k, mes: `${mes}-01`, corretora, seg, segNome: nomeSeg.get(seg) ?? (seg === "OUTRAS" ? "Outras (sem seguradora reconhecida)" : seg), m: null, banco: r2(v), esperado: null, previsto: prev ? r2(prev.esperado) : null, porVencimento: prev ? r2(prev.porVencimento) : null, sit: situacaoCaixa(null, r2(v), prev?.esperado ?? null), dias: porDia.get(k) ?? [], motivos: motivosDe(seg, null, r2(v), prev ? r2(prev.esperado) : null, null, porDia.get(k) ?? []) });
     }
     // deveria cair mas ainda não há extrato nem entrada no banco (só vale a pena mostrar acima de R$ 50)
     for (const [k, p] of previsao) {
       const [corretora, seg, mes] = k.split("|");
       if (vistos.has(k) || !mesesOrd.includes(mes) || p.esperado < 50) continue;
-      linhasCaixa.push({ chave: k, mes: `${mes}-01`, corretora, seg, segNome: nomeSeg.get(seg) ?? seg, m: null, banco: null, esperado: null, previsto: r2(p.esperado), porVencimento: r2(p.porVencimento), sit: situacaoCaixa(null, null, p.esperado), dias: [] });
+      linhasCaixa.push({ chave: k, mes: `${mes}-01`, corretora, seg, segNome: nomeSeg.get(seg) ?? seg, m: null, banco: null, esperado: null, previsto: r2(p.esperado), porVencimento: r2(p.porVencimento), sit: situacaoCaixa(null, null, p.esperado), dias: [], motivos: motivosDe(seg, null, null, r2(p.esperado), null, []) });
     }
     linhasCaixa = linhasCaixa.sort((a, b) => b.mes.localeCompare(a.mes) || a.segNome.localeCompare(b.segNome));
   }
@@ -390,7 +405,10 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
                 return (
                   <details key={c.chave} className="group rounded-lg border border-gray-200 bg-white open:border-o2-navy">
                     <summary className={`${COLUNAS_CAIXA} cursor-pointer list-none px-2 py-1.5 text-xs hover:bg-gray-50`}>
-                      <span className="font-medium">{c.segNome}</span>
+                      <span className="min-w-0">
+                        <span className="block font-medium">{c.segNome}</span>
+                        {c.motivos[0] && c.sit.codigo !== "bate" && <span className="block truncate text-[11px] font-normal text-gray-500" title={c.motivos.join(" ")}>{c.motivos[0]}</span>}
+                      </span>
                       <span className="text-gray-600" title="extratos com baixa aprovada / extratos do mês">{c.m ? `${c.m.aprovados}/${c.m.extratos - c.m.so_total}` : "—"}</span>
                       <span className="text-right">{c.esperado != null ? brl(c.esperado) : "—"}</span>
                       <span className="text-right text-gray-700">{c.previsto != null ? brl(c.previsto) : "—"}</span>
@@ -402,6 +420,12 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
                         <span className="text-gray-400 group-open:rotate-90">▸</span>
                       </span>
                     </summary>
+                    {c.motivos.length > 0 && (
+                      <div className="border-t border-gray-100 bg-amber-50/50 px-3 py-2 text-xs">
+                        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Motivo provável (hipótese para investigar)</h3>
+                        <ul className="mt-1 list-disc space-y-0.5 pl-4 text-gray-700">{c.motivos.map((t, i) => <li key={i}>{t}</li>)}</ul>
+                      </div>
+                    )}
                     <div className="grid gap-4 border-t border-gray-100 p-3 text-xs md:grid-cols-[minmax(220px,1fr)_2fr]">
                       <div className="space-y-1">
                         <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Do extrato</h3>
