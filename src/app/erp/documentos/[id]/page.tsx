@@ -106,6 +106,14 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
     if (c.situacao === "recebida") x.recebida += 1; else x.pendente += 1;
     corpPorParcela.set(c.parcela_n, x);
   }
+  // Repasse: PREVISÃO pela parcela (previsão de recebimento da comissão); CONFIRMAÇÃO só quando a comissão da parcela foi realmente recebida,
+  // e então vale a data real do recebimento (dia 15 do mês seguinte a ele), não o vencimento. Parcela não paga pelo cliente nunca confirma.
+  const recebidaEmPorParcela = new Map<number, string>();
+  for (const c of d.comissoes_corp) {
+    if (c.parcela_n === null || c.situacao !== "recebida" || !(c.valor > 0) || !c.data) continue;
+    const ant = recebidaEmPorParcela.get(c.parcela_n);
+    if (!ant || c.data > ant) recebidaEmPorParcela.set(c.parcela_n, c.data);
+  }
   const recebidoCorp = d.comissoes_corp.filter((c) => c.situacao === "recebida").reduce((s, c) => s + c.valor, 0);
   const aReceberCorp = d.comissoes_corp.filter((c) => c.situacao !== "recebida").reduce((s, c) => s + c.valor, 0);
   // cabeçalho padrão (Matheus 28/10): titular = proprietário na Fiança; segurado/cliente nos demais produtos
@@ -424,7 +432,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
                   <th className="py-1 pr-3 text-right">Comissão prevista</th>
                   <th className="py-1 pr-3 text-right">Repasse previsto</th>
                   <th className="py-1 pr-3">Previsão receb.</th>
-                  <th className="py-1 pr-3">Repasse em</th>
+                  <th className="py-1 pr-3">Repasse (previsto / confirmado)</th>
                   <th className="py-1 pr-3">Comissão no Corp</th>
                 </tr>
               </thead>
@@ -441,7 +449,14 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
                     <td className="py-1 pr-3 text-right">{formatarReais(p.comissao_prevista)}</td>
                     <td className="py-1 pr-3 text-right">{repasses[i] > 0 ? formatarReais(repasses[i]) : <span className="text-gray-300">—</span>}</td>
                     <td className="py-1 pr-3">{formatarData(p.comissao_previsao)}</td>
-                    <td className="py-1 pr-3">{repasses[i] > 0 && dataDoRepasse(p.comissao_previsao) ? formatarData(dataDoRepasse(p.comissao_previsao)) : <span className="text-gray-300">—</span>}</td>
+                    <td className="py-1 pr-3">{(() => {
+                      if (!(repasses[i] > 0)) return <span className="text-gray-300">—</span>;
+                      const real = recebidaEmPorParcela.get(p.n);
+                      if (real && dataDoRepasse(real)) return <span className="font-medium text-green-700" title={"Comissão recebida em " + formatarData(real)}>confirmado · {formatarData(dataDoRepasse(real))}</span>;
+                      const prev = dataDoRepasse(p.comissao_previsao);
+                      if (!prev) return <span className="text-gray-300">—</span>;
+                      return <span className="text-gray-500" title="Previsão: só se confirma quando a comissão for recebida">previsto · {formatarData(prev)}</span>;
+                    })()}</td>
                     <td className="py-1 pr-3">{(() => { const c = corpPorParcela.get(p.n); return c ? (c.recebida > 0 && c.pendente === 0 ? "recebida" : "a receber") : <span className="text-gray-400">{p.comissao_status ?? "—"}</span>; })()}</td>
                   </tr>
                 ))}
