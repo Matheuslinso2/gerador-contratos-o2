@@ -399,7 +399,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
             <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Coberturas contratadas ({d.coberturas_contratadas.length})</h2>
             <table className="w-full text-xs">
               <thead className="text-left text-[11px] uppercase tracking-wide text-gray-500">
-                <tr><th className="py-1 pr-3">Cobertura</th><th className="py-1 pr-3 text-right">Limite máximo (LMI)</th><th className="py-1 pr-3 text-right">Verba</th></tr>
+                <tr><th className="py-1 pr-3">Cobertura</th><th className="py-1 pr-3 text-right">Limite máximo (LMI)</th><th className="py-1 pr-3 text-right">Verba / prêmio</th></tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {d.coberturas_contratadas.map((c, i) => (

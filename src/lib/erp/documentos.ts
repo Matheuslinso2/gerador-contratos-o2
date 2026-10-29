@@ -675,6 +675,14 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
     origens: (origens ?? []) as unknown as OrigemDoc[],
     cadeia: { canal: d.canal?.nome ?? null, imobiliaria: d.imobiliaria?.nome ?? null, grupo: d.imob_grupo?.grupo?.nome ?? null, cliente: d.cliente?.nome ?? null },
     coberturas_contratadas: await (async () => {
+      // 1º as coberturas lidas por produto (erp_documento_coberturas: Incêndio...), depois as da Fiança (acervo)
+      const { data: lidas } = await sb.from("erp_documento_coberturas").select("nome, tipo, lmi, premio").eq("documento_id", id).order("ordem");
+      if ((lidas ?? []).length) {
+        const peso: Record<string, number> = { basica: 0, adicional: 1, servico: 2 };
+        return (lidas as { nome: string; tipo: string; lmi: number | string | null; premio: number | string | null }[])
+          .sort((a, b) => (peso[a.tipo] ?? 1) - (peso[b.tipo] ?? 1))
+          .map((c) => ({ cobertura: c.nome + (c.tipo === "basica" ? " (básica)" : c.tipo === "servico" ? " (serviço)" : ""), lmi: c.lmi == null ? null : Number(c.lmi), verba: c.premio == null ? null : Number(c.premio) }));
+      }
       if (!d.nosso_numero_corp) return [];
       const { data: ac } = await sb.from("apolice_documentos").select("coberturas").eq("nosso_numero", String(d.nosso_numero_corp)).eq("situacao", "certa").not("coberturas", "is", null).limit(1);
       const lista = ((ac ?? [])[0]?.coberturas ?? []) as { cobertura?: string; lmi?: number | string | null; verba?: number | string | null }[];
