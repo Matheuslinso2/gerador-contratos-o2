@@ -75,7 +75,7 @@ function janelas() {
               ligadosDocs.add(d.id);
               const tipo = tipoDoPdf(t, a.nome);
               if (amostra.length < 15) amostra.push(`${tipo.padEnd(8)} cod.O2 ${d.nosso_numero}  ${a.nome.slice(0, 40)}  [nº:${av.num ? "s" : "n"} vig:${av.vig ? "s" : "n"}]  ${m.assunto.slice(0, 50)}`);
-              if (GRAVAR) await guardarAnexo(sb, { doc: d, pdf: a.buffer, nome: a.nome, messageId: m.message_id, tipo, av, extra: { fonte: "seguradora" } });
+              if (GRAVAR) await guardarAnexo(sb, { doc: d, pdf: a.buffer, nome: a.nome, messageId: m.message_id, tipo, av, texto: t, extra: { fonte: "seguradora" } });
             }
             if (!ligou) r.semCandidato++;
           }

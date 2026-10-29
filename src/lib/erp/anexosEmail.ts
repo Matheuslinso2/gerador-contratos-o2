@@ -33,8 +33,12 @@ export async function textoDoPdf(pdf: Buffer, cpfsParaSenha: string[], formatos:
   return { t: null, protegido: true };
 }
 
+/** PDF da Alfa Seguradora (apólices no formato 01.0114.000xxxxxx, "Certificado.pdf" dos e-mails de faturamento). A Alfa NÃO tem Seguro Fiança. */
+export const ehAlfa = (t: string): boolean => /\b01\.0114\.\d{6,}/.test(t) || /ALFA\s+(SEGURADORA|SEGUROS)/i.test(t.slice(0, 6000));
+
 export function tipoDoPdf(t: string, nomeArquivo: string): "apolice" | "endosso" | "cotacao" | "proposta" | "certificado" | "outro" {
   const T = t.toUpperCase();
+  if (/^certificado/i.test(nomeArquivo) && ehAlfa(t)) return "outro"; // certificado de faturamento da Alfa não é apólice (regra do Matheus, 29/10)
   const cab = T.slice(0, 3000);
   if (/ENDOSSO/.test(T.slice(0, 600)) || /ENDOSSO/i.test(nomeArquivo)) return "endosso";
   if (/COTA[ÇC][ÃA]O/.test(cab) && !/AP[ÓO]LICE N/.test(T.slice(0, 6000))) return "cotacao";
@@ -80,8 +84,13 @@ export function avaliar(t: string, c: DocAlvo, soConfirmada = false): Avaliacao 
 
 export async function guardarAnexo(
   sb: SupabaseClient,
-  o: { doc: Pick<DocAlvo, "id">; pdf: Buffer; nome: string; messageId: string; tipo: string; av: Avaliacao; extra?: Record<string, unknown>; origem?: "email" | "bitrix" | "drive" }
+  o: { doc: Pick<DocAlvo, "id">; pdf: Buffer; nome: string; messageId: string; tipo: string; av: Avaliacao; extra?: Record<string, unknown>; origem?: "email" | "bitrix" | "drive"; texto?: string }
 ): Promise<void> {
+  // Regra: anexo da Alfa nunca é ligado a documento de Fiança (a Alfa não tem Fiança). Quem lê o texto do PDF passa `texto`.
+  if (o.texto && ehAlfa(o.texto)) {
+    const { data: d } = await sb.from("erp_documentos").select("ramo:erp_ramos(nome)").eq("id", o.doc.id).maybeSingle();
+    if (/fian[çc]a/i.test((d as unknown as { ramo: { nome: string } | null } | null)?.ramo?.nome ?? "")) return;
+  }
   const sha = createHash("sha256").update(o.pdf).digest("hex");
   const caminho = `${sha}.pdf`;
   const { error: eu } = await sb.storage.from("anexos-documentos").upload(caminho, o.pdf, { contentType: "application/pdf", upsert: false });
