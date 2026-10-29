@@ -272,7 +272,8 @@ export async function buscarDocumentos(sb: SupabaseClient, f: FiltrosBusca): Pro
   const visao = f.visao;
   if (visao) {
     // só o que já é documento oficial: fora cotação, proposta (vive em Emissão até virar apólice) e o que não entra no ERP
-    q = q.not("situacao", "in", "(cotacao,proposta,duplicado,perdido,recusado)");
+    // fatura não passa por emissão (Matheus 29/10): documento tipo F nunca está "proposta"; some só cotação/duplicado/perdido/recusado
+    q = q.not("situacao", "in", visao === "faturas" ? "(cotacao,duplicado,perdido,recusado)" : "(cotacao,proposta,duplicado,perdido,recusado)");
     // com busca por nome/código vale o histórico todo; sem busca, a visão cruza período × tipo (como no Corp)
     if (!termo) {
       const tipos = visao === "faturas" ? ["F"] : visao === "endossos" ? ["C", "D", "I", "M", "R", "X"] : ["A"];
