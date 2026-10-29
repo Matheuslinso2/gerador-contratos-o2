@@ -394,6 +394,27 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
           </p>
         </section>
 
+        {d.coberturas_contratadas.length > 0 && (
+          <section className="space-y-2 rounded-xl border border-gray-200 bg-white p-4">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Coberturas contratadas ({d.coberturas_contratadas.length})</h2>
+            <table className="w-full text-xs">
+              <thead className="text-left text-[11px] uppercase tracking-wide text-gray-500">
+                <tr><th className="py-1 pr-3">Cobertura</th><th className="py-1 pr-3 text-right">Limite máximo (LMI)</th><th className="py-1 pr-3 text-right">Verba</th></tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {d.coberturas_contratadas.map((c, i) => (
+                  <tr key={i}>
+                    <td className="py-1 pr-3">{c.cobertura}</td>
+                    <td className="py-1 pr-3 text-right">{c.lmi === null ? "—" : formatarReais(c.lmi)}</td>
+                    <td className="py-1 pr-3 text-right">{c.verba === null ? "—" : formatarReais(c.verba)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="text-[11px] text-gray-500">Lidas do PDF da apólice (acervo). Documento oficial prevalece.</p>
+          </section>
+        )}
+
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Parcelas e comissões</h2>
           {d.parcelas.length > 0 && (
