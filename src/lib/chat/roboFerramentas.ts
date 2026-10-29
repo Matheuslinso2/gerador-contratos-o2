@@ -131,7 +131,7 @@ async function buscarImobiliaria(e: { nome: string }, verComissao: boolean): Pro
     grupo,
     fichas: linhas,
     totalDoGrupo: { docsTotal: soma("docsTotal"), docsVigentesNaFichaDoErp: soma("docsVigentesNaFichaDoErp"), premioVigente: Math.round(soma("premioVigente") * 100) / 100 },
-    nota: "docsVigentesNaFichaDoErp conta TODO documento vigente (apólices, endossos, faturas). Para 'apólices vigentes' use contar_documentos_erp com tipo ['A'] e situacao ['vigente'].",
+    nota: "docsVigentesNaFichaDoErp conta TODO documento vigente (apólices, endossos, faturas). Para separar apólices (tipo A) de endossos (C, D, I, M, R, X) vigentes, use contar_documentos_erp com situacao ['vigente'] e agrupar_por 'tipo'.",
   });
 }
 
