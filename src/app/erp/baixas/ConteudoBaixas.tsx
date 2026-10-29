@@ -67,20 +67,6 @@ type InadInfo = { esperadas: number; comEvidencia: number; sem: number; valorEsp
 type LinhaInad = { documento_id: string | null; nosso_numero_corp: number | null; apolice: string | null; cliente: string | null; parcela_texto: string | null; venc_parcela: string; dias_atraso: number; valor: number | string };
 type ConfInfo = { abertas: number; valor: number; regularizadas: number; semParcela: number };
 type LinhaConf = { documento_id: string | null; nosso_numero_corp: number | null; apolice: string; cliente: string | null; parcela_n: number; vencimento_original: string; dias_atraso: number; valor: number | string | null; previsao_cancelamento: string | null; situacao: string };
-type TotaisExtrato = {
-  extrato_id: string; soma_identificada: number | string; soma_nao_parcela: number | string; soma_pendente_sem_parcela: number | string; qtd_identificada: number; qtd_nao_parcela: number;
-  qtd_pendente: number; idade_max_pendente_dias: number | null; bloqueado_para_aprovar: boolean; diferenca: number | string; erp_identifica_corp_nao: number | string;
-};
-type EstadoLinha = { linha_id: string; estado: string; idade_dias: number | null; fora_tipo: string | null; candidato_imobiliaria: string | null; candidato_cliente: string | null; ja_no_corp: boolean | null };
-type LinhaPendente = {
-  linha_id: string; extrato_id: string; n: number; seguradora_abrev: string; corretora: string; pago_em: string | null; valor_comissao: number | string; apolice: string | null;
-  idade_dias: number | null; candidato_imobiliaria: string | null; candidato_cliente: string | null; tentativas_identificacao: number | null;
-};
-const ESTADO_LINHA: Record<string, { t: string; cor: string }> = {
-  identificada: { t: "parcela identificada", cor: "bg-green-100 text-green-800" },
-  nao_parcela_confirmada: { t: "não é parcela (confirmado)", cor: "bg-blue-100 text-blue-800" },
-  pendente_identificacao: { t: "pendente de identificação", cor: "bg-red-100 text-red-700" },
-};
 type PontoDia = { dia: number; previsto: number; recebido: number };
 type LinhaTopo = { seg: string; nome: string; prevista: number; extratos: number; baixadas: number; nibo: number };
 const COLUNAS_CAIXA = "grid grid-cols-[minmax(150px,1.5fr)_64px_repeat(5,minmax(100px,1fr))_minmax(150px,1.2fr)] items-center gap-x-2";
@@ -341,28 +327,6 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
       c.inad = { esperadas: i.esperadas, comEvidencia: i.com_evidencia, sem: i.sem_evidencia, valorEsperado: i.valor_esperado, valorSem: i.valor_sem_evidencia, conclusivo: porque === "", porque };
     }
   }
-  // Gestão: estado das linhas e totais por extrato (views só de leitura da baixa assistida; sempre filtradas por lista de extratos, por desempenho)
-  const totaisPor = new Map<string, TotaisExtrato>();
-  const estadosAberto = new Map<string, EstadoLinha>();
-  let pendentesLinhas: LinhaPendente[] = [];
-  const outrasEntradas = new Map<string, number>();
-  if (modo === "gestao" && extratos.length) {
-    const lotes = <T,>(xs: T[], n: number) => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
-    const rt = await Promise.all(lotes(extratos.map((e) => e.id), 60).map((l) => supabase.from("erp_baixa_extrato_totais").select("*").in("extrato_id", l)));
-    for (const r of rt) for (const t of (r.data ?? []) as TotaisExtrato[]) totaisPor.set(t.extrato_id, t);
-    const comPend = [...totaisPor.values()].filter((t) => Number(t.qtd_pendente) > 0).map((t) => t.extrato_id);
-    const lp = await Promise.all(lotes(comPend, 40).map((l) =>
-      supabase.from("erp_baixa_linha_estado").select("linha_id, extrato_id, n, seguradora_abrev, corretora, pago_em, valor_comissao, apolice, idade_dias, candidato_imobiliaria, candidato_cliente, tentativas_identificacao").in("extrato_id", l).eq("estado", "pendente_identificacao").limit(600)));
-    pendentesLinhas = lp.flatMap((r) => (r.data ?? []) as LinhaPendente[]).sort((a, b) => (b.idade_dias ?? 0) - (a.idade_dias ?? 0));
-    if (extratoAberto && extratoPorId[extratoAberto]) {
-      const { data: es } = await supabase.from("erp_baixa_linha_estado").select("linha_id, estado, idade_dias, fora_tipo, candidato_imobiliaria, candidato_cliente, ja_no_corp").eq("extrato_id", extratoAberto);
-      for (const l of (es ?? []) as EstadoLinha[]) estadosAberto.set(l.linha_id, l);
-    }
-    // entradas do Nibo no mês que NÃO são receita de seguros (empréstimo, estorno, transferência…): ficam fora de todos os totais
-    const [aN, mN] = mesSel.split("-").map(Number);
-    const { data: ne } = await supabase.from("erp_nibo_lancamentos").select("categoria, valor").eq("tipo", "recebimento").gte("data", `${mesSel}-01`).lte("data", new Date(Date.UTC(aN, mN, 0)).toISOString().slice(0, 10)).neq("categoria", "1.1 - RECEITA DE SEGUROS").limit(2000);
-    for (const n of (ne ?? []) as { categoria: string | null; valor: number | string }[]) outrasEntradas.set(n.categoria ?? "sem categoria", (outrasEntradas.get(n.categoria ?? "sem categoria") ?? 0) + Number(n.valor));
-  }
   const pendentes = extratos.filter((e) => !e.baixa_aprovada_em && e.tipo !== "resumo_mensal");
   const aprovados = extratos.filter((e) => e.baixa_aprovada_em);
   const idsAprovados = aprovados.map((e) => e.id);
@@ -400,21 +364,17 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
   const baseCard = hrefTela({});
   const diasDe = (e: Extrato) => linhasCaixa.find((x) => x.corretora === e.corretora && x.seg === e.seg_abrev)?.dias;
   const resumoGestao = {
-    manual: extratos.filter((e) => !e.baixa_aprovada_em && e.tipo !== "resumo_mensal" && !avaliarBaixaAutomatica(e, bancoDoExtrato(diasDe(e), e.data_recebimento).situacao, Number(totaisPor.get(e.id)?.qtd_pendente ?? 0)).seria).length,
-    auto: extratos.filter((e) => avaliarBaixaAutomatica(e, bancoDoExtrato(diasDe(e), e.data_recebimento).situacao, Number(totaisPor.get(e.id)?.qtd_pendente ?? 0)).seria).length,
+    manual: extratos.filter((e) => !e.baixa_aprovada_em && e.tipo !== "resumo_mensal" && !avaliarBaixaAutomatica(e, bancoDoExtrato(diasDe(e), e.data_recebimento).situacao).seria).length,
+    auto: extratos.filter((e) => avaliarBaixaAutomatica(e, bancoDoExtrato(diasDe(e), e.data_recebimento).situacao).seria).length,
     aTratar: extratos.filter((e) => !e.baixa_aprovada_em && Number(e.tratar_em_aberto) > 0).length,
     bancoSemExtrato: linhasCaixa.reduce((t, c) => t + c.dias.filter((d) => d.extrato === 0 && d.banco > 0.005).length, 0),
-  };
-  const resumoIdent = {
-    qtd: [...totaisPor.values()].reduce((t, x) => t + Number(x.qtd_pendente), 0),
-    valor: Math.round([...totaisPor.values()].reduce((t, x) => t + Number(x.soma_pendente_sem_parcela), 0) * 100) / 100,
   };
   let saldoAbertoTotal = 0;
   if (modo === "gestao") {
     const { data: sd } = await supabase.from("erp_saldo_cobrar_seguradora").select("valor").eq("situacao", "aberto");
     saldoAbertoTotal = Math.round(((sd ?? []) as { valor: number | string }[]).reduce((t, x) => t + Number(x.valor), 0) * 100) / 100;
   }
-  const card = (e: Extrato) => <ExtratoCard key={e.id} e={e} aberto={e.id === extratoAberto} linhas={e.id === extratoAberto ? linhasAbertas : []} base={baseCard} tot={totaisPor.get(e.id)} estados={e.id === extratoAberto ? estadosAberto : undefined} />;
+  const card = (e: Extrato) => <ExtratoCard key={e.id} e={e} aberto={e.id === extratoAberto} linhas={e.id === extratoAberto ? linhasAbertas : []} base={baseCard} />;
   const SITUACOES: Record<string, string> = {
     a_aprovar: "Extrato a aprovar", aprovada: "Extrato com baixa aprovada",
     cheia: "Linha: cheia", pro_labore_direto: "Linha: pró-labore conferido", estorno: "Linha: estorno", divergente: "Linha: divergente", nao_encontrada: "Linha: não encontrada",
@@ -509,67 +469,13 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
         />
 
         {erroLinhasAbertas && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">Não consegui carregar as linhas do extrato: {erroLinhasAbertas.message}</p>}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
-          <Cartao rotulo="Para identificar" valor={`${resumoIdent.qtd} · ${brl(resumoIdent.valor)}`} cor={resumoIdent.qtd ? "text-red-700" : "text-gray-700"} sub="recebido, ainda sem parcela (bloqueia aprovar)" />
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
           <Cartao rotulo="A baixar à mão" valor={resumoGestao.manual} cor={resumoGestao.manual ? "text-red-700" : "text-gray-700"} sub="extratos que dependem de ação humana" />
           <Cartao rotulo="Seriam automáticos" valor={resumoGestao.auto} cor="text-green-700" sub="no padrão (baixa automática desligada, em teste)" />
           <Cartao rotulo="Com linhas a tratar" valor={resumoGestao.aTratar} cor={resumoGestao.aTratar ? "text-orange-700" : "text-gray-700"} sub="estorno, divergente ou não encontrada" />
           <Cartao rotulo="Banco sem extrato" valor={resumoGestao.bancoSemExtrato} cor={resumoGestao.bancoSemExtrato ? "text-red-700" : "text-gray-700"} sub="dias com entrada no Nibo e sem extrato lido" />
           <Cartao rotulo="Saldo a cobrar" valor={brl(saldoAbertoTotal)} cor={saldoAbertoTotal ? "text-o2-navy" : "text-gray-700"} sub="que as seguradoras ainda devem" />
         </div>
-
-        {modo === "gestao" && pendentesLinhas.length > 0 && (
-          <section className="space-y-2 rounded-xl border border-red-200 bg-white p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-red-700">Para identificar: recebido, ainda sem parcela</h2>
-              <Link href="/erp/baixas/fila" className="text-xs text-o2-navy underline">abrir a fila de identificação →</Link>
-            </div>
-            <p className="text-xs text-gray-600">Toda linha de extrato é parcela até se provar o contrário. Enquanto não for identificada (ou confirmada como não-parcela), o valor conta como recebido e bloqueia a aprovação do extrato.</p>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500"><tr><th className="px-2 py-1">Empresa</th><th className="px-2 py-1">Seguradora</th><th className="px-2 py-1 text-right">Linhas</th><th className="px-2 py-1 text-right">Valor</th><th className="px-2 py-1 text-right">Mais antiga (dias)</th></tr></thead>
-                <tbody className="divide-y divide-gray-100">
-                  {Object.entries(pendentesLinhas.reduce<Record<string, { corretora: string; seg: string; qtd: number; valor: number; idade: number }>>((acc, l) => {
-                    const k = `${l.corretora}|${l.seguradora_abrev}`;
-                    const x = acc[k] ?? { corretora: l.corretora, seg: l.seguradora_abrev, qtd: 0, valor: 0, idade: 0 };
-                    x.qtd += 1; x.valor += Number(l.valor_comissao); x.idade = Math.max(x.idade, l.idade_dias ?? 0);
-                    acc[k] = x; return acc;
-                  }, {})).sort((a, b) => b[1].idade - a[1].idade).map(([k, x]) => (
-                    <tr key={k}><td className="px-2 py-1">{x.corretora}</td><td className="px-2 py-1 font-medium">{NOME_CURTO[x.seg] ?? x.seg}</td><td className="px-2 py-1 text-right">{x.qtd}</td><td className="px-2 py-1 text-right">{brl(Math.round(x.valor * 100) / 100)}</td><td className="px-2 py-1 text-right">{x.idade}</td></tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <details>
-              <summary className="cursor-pointer text-xs text-o2-navy underline">ver as {Math.min(pendentesLinhas.length, 40)} linhas mais antigas</summary>
-              <div className="mt-2 max-h-[320px] overflow-auto">
-                <table className="w-full text-xs">
-                  <thead className="sticky top-0 bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500"><tr><th className="px-2 py-1">Crédito</th><th className="px-2 py-1">Empresa · seguradora</th><th className="px-2 py-1">Extrato</th><th className="px-2 py-1">Nº da apólice</th><th className="px-2 py-1 text-right">Valor</th><th className="px-2 py-1 text-right">Dias</th><th className="px-2 py-1">Candidato</th></tr></thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {pendentesLinhas.slice(0, 40).map((l) => (
-                      <tr key={l.linha_id}>
-                        <td className="whitespace-nowrap px-2 py-1">{formatarData(l.pago_em)}</td>
-                        <td className="px-2 py-1">{l.corretora} · {NOME_CURTO[l.seguradora_abrev] ?? l.seguradora_abrev}</td>
-                        <td className="px-2 py-1"><Link href={`${hrefTela({ extrato: l.extrato_id })}#extrato-${l.extrato_id}`} className="text-o2-navy hover:underline">linha {l.n}</Link></td>
-                        <td className="px-2 py-1">{l.apolice ?? "—"}</td>
-                        <td className="px-2 py-1 text-right">{brl(Number(l.valor_comissao))}</td>
-                        <td className="px-2 py-1 text-right">{l.idade_dias ?? "—"}</td>
-                        <td className="px-2 py-1 text-gray-600">{l.candidato_imobiliaria || l.candidato_cliente ? [l.candidato_imobiliaria, l.candidato_cliente].filter(Boolean).join(" · ") : "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </details>
-          </section>
-        )}
-
-        {modo === "gestao" && outrasEntradas.size > 0 && (
-          <p className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-600">
-            <b>Entradas do Nibo neste mês que não são receita de seguros</b> (não entram em nenhum total desta tela): {[...outrasEntradas.entries()].map(([cat, v]) => `${cat} ${brl(Math.round(v * 100) / 100)}`).join(" · ")}.
-            Transferência entre as duas empresas também fica de fora.
-          </p>
-        )}
 
         {filtroLinha && (
           <section className="space-y-2 rounded-xl border border-o2-navy bg-white p-4">
@@ -830,28 +736,6 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
                     </div>
                     {modo === "gestao" && (
                       <>
-                        {(() => {
-                          const doBloco = extratos.filter((e) => e.corretora === c.corretora && e.seg_abrev === c.seg).map((e) => ({ e, t: totaisPor.get(e.id) })).filter((x): x is { e: Extrato; t: TotaisExtrato } => Boolean(x.t));
-                          if (doBloco.length === 0) return null;
-                          const fator = (x: { e: Extrato }) => 1 - Number(x.e.imposto_pct) / 100;
-                          const soma = (f2: (t: TotaisExtrato) => number | string) => Math.round(doBloco.reduce((t, x) => t + Number(f2(x.t)) * fator(x), 0) * 100) / 100;
-                          const ident = soma((t) => t.soma_identificada), naoParc = soma((t) => t.soma_nao_parcela), pend = soma((t) => t.soma_pendente_sem_parcela), erpNaoCorp = soma((t) => t.erp_identifica_corp_nao);
-                          const erpLiq = Math.round((ident + naoParc + pend) * 100) / 100;
-                          const nParc = doBloco.reduce((t, x) => t + Number(x.t.qtd_identificada), 0);
-                          const tol = TOLERANCIA_CAIXA * Math.max(1, nParc);
-                          const difB = c.banco == null ? null : Math.round((c.banco - erpLiq) * 100) / 100;
-                          const fecha = difB != null && Math.abs(difB) <= tol;
-                          return (
-                            <div className="space-y-1 border-t border-gray-100 bg-gray-50/60 px-3 py-2 text-xs text-gray-700">
-                              <p>
-                                <b>ERP (líquido do imposto)</b>: parcelas identificadas <b>{brl(ident)}</b> + não é parcela <b>{brl(naoParc)}</b> + recebido sem parcela <b>{brl(pend)}</b> = <b>{brl(erpLiq)}</b>
-                                {" · "}banco (Nibo) <b>{brl(c.banco)}</b>{" · "}
-                                {difB == null ? <span className="text-red-700">sem entrada no banco</span> : fecha ? <span className="font-semibold text-green-700">fecha com o banco (tolerância {brl(tol)})</span> : <span className="font-semibold text-red-700">não fecha: {difB > 0 ? "banco a mais" : "banco a menos"} {brl(Math.abs(difB))} (tolerância {brl(tol)})</span>}
-                              </p>
-                              {erpNaoCorp > 0 && <p className="text-blue-800">O ERP identifica {brl(erpNaoCorp)} que o Corp não reconhece (ainda não aparece como recebido no Corp).</p>}
-                            </div>
-                          );
-                        })()}
                         <Suspense fallback={<p className="border-t border-gray-100 px-3 py-2 text-xs text-gray-400">carregando histórico e anotações…</p>}>
                           <PainelControleBloco seg={c.seg} corretora={c.corretora} mes={mesSel} ancora={`bloco-${c.chave.replace(/\W/g, "")}`} />
                         </Suspense>
@@ -859,10 +743,10 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
                           <h4 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Extratos desta seguradora no mês — conferir linhas e aprovar a baixa</h4>
                           {extratos.filter((e) => e.corretora === c.corretora && e.seg_abrev === c.seg).sort((a, b) => Number(Boolean(a.baixa_aprovada_em)) - Number(Boolean(b.baixa_aprovada_em))).map((e) => {
                             const { situacao: banco, dia: bancoDia } = bancoDoExtrato(c.dias, e.data_recebimento);
-                            const auto = avaliarBaixaAutomatica(e, banco, Number(totaisPor.get(e.id)?.qtd_pendente ?? 0));
+                            const auto = avaliarBaixaAutomatica(e, banco);
                             return (
                               <div key={e.id}>
-                                <ControleExtrato extratoId={e.id} seguradora_id={e.seguradora_id} corretora_id={e.corretora_id ?? ""} mes={mesSel} ancora={`extrato-${e.id}`} banco={banco} bancoDia={bancoDia} aprovada={Boolean(e.baixa_aprovada_em)} seria={auto.seria} faltas={auto.faltas} tot={totaisPor.get(e.id) ? { qtdPendente: Number(totaisPor.get(e.id)!.qtd_pendente), somaPendente: Number(totaisPor.get(e.id)!.soma_pendente_sem_parcela), idadeMax: totaisPor.get(e.id)!.idade_max_pendente_dias, erpNaoCorp: Number(totaisPor.get(e.id)!.erp_identifica_corp_nao) } : undefined} />
+                                <ControleExtrato extratoId={e.id} seguradora_id={e.seguradora_id} corretora_id={e.corretora_id ?? ""} mes={mesSel} ancora={`extrato-${e.id}`} banco={banco} bancoDia={bancoDia} aprovada={Boolean(e.baixa_aprovada_em)} seria={auto.seria} faltas={auto.faltas} />
                                 {card(e)}
                               </div>
                             );
@@ -989,8 +873,7 @@ function quandoBaixar(e: Extrato): string | null {
   return null;
 }
 
-function ExtratoCard({ e, linhas, aberto, base, tot, estados }: { e: Extrato; linhas: LinhaExtrato[]; aberto: boolean; base: string; tot?: TotaisExtrato; estados?: Map<string, EstadoLinha> }) {
-  const bloqueado = Boolean(tot?.bloqueado_para_aprovar);
+function ExtratoCard({ e, linhas, aberto, base }: { e: Extrato; linhas: LinhaExtrato[]; aberto: boolean; base: string }) {
   return (
     <div id={`extrato-${e.id}`} className={`scroll-mt-4 rounded-lg border ${aberto ? "border-o2-navy" : "border-gray-200"}`}>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 text-xs">
@@ -1003,7 +886,7 @@ function ExtratoCard({ e, linhas, aberto, base, tot, estados }: { e: Extrato; li
           {e.conta_fecha ? <span className="text-green-700">✓ fecha</span> : <span className="font-semibold text-red-700">não fecha</span>}
         </span>
         <span>Imposto {brl(e.imposto)} · líquido {brl(e.liquido_sem_desconto)}</span>
-        {e.n_cheia + e.n_pro_labore === 0 ? <span className="font-semibold text-red-700" title="Nenhuma linha deste extrato foi reconhecida como parcela do ERP: nada a baixar até identificar as linhas">nenhuma linha reconhecida como parcela</span> : <span className="font-semibold">A baixar {brl(e.valor_a_baixar)}</span>}
+        <span className="font-semibold">A baixar {brl(e.valor_a_baixar)}</span>
         {e.ja_baixadas_corp > 0 && <span className="text-gray-500">{e.ja_baixadas_corp} já baixada(s) no Corp</span>}
         <span className="text-gray-400">{e.entrou_banco_valor != null ? `banco: ${brl(e.entrou_banco_valor)}` : "banco: ver no resumo"}</span>
         <Link href={aberto ? `${base}#extrato-${e.id}` : `${base}${base.includes("?") ? "&" : "?"}extrato=${e.id}#extrato-${e.id}`} className="ml-auto text-o2-navy underline">{aberto ? "fechar" : "ver linhas"}</Link>
@@ -1018,8 +901,7 @@ function ExtratoCard({ e, linhas, aberto, base, tot, estados }: { e: Extrato; li
           {quandoBaixar(e) && <p className="rounded bg-yellow-50 px-2 py-1 text-[11px] text-yellow-800">{quandoBaixar(e)}</p>}
           <form action={aprovarBaixa} className="flex items-center gap-3">
             <input type="hidden" name="extrato_id" value={e.id} />
-            <button disabled={bloqueado} title={bloqueado ? "Bloqueada: há linhas pendentes de identificação neste extrato" : undefined} className={`rounded-lg px-3 py-1.5 text-xs font-semibold text-white ${bloqueado ? "cursor-not-allowed bg-gray-400" : "bg-o2-coral"}`}>Aprovar baixa</button>
-            {bloqueado && <span className="text-[11px] font-medium text-red-700">Bloqueada: {tot?.qtd_pendente} linha(s) pendente(s) de identificação ({brl(Number(tot?.soma_pendente_sem_parcela ?? 0))}). Identifique pela <a href="/erp/baixas/fila" className="underline">fila</a> antes de aprovar.</span>}
+            <button className="rounded-lg bg-o2-coral px-3 py-1.5 text-xs font-semibold text-white">Aprovar baixa</button>
             <span className="text-[11px] text-gray-500">
               Grava {e.n_cheia + e.n_pro_labore} recebimento(s) ({brl(e.valor_a_baixar)}) no ERP e quita as parcelas; {e.n_estorno + e.n_divergente + e.n_nao_encontrada} linha(s) vão para “Para tratar”.
             </span>
@@ -1033,7 +915,6 @@ function ExtratoCard({ e, linhas, aberto, base, tot, estados }: { e: Extrato; li
               <tr>
                 <th className="px-2 py-1">#</th>
                 <th className="px-2 py-1">Classificação</th>
-                <th className="px-2 py-1">Estado</th>
                 <th className="px-2 py-1">Nosso nº do Corp</th>
                 <th className="px-2 py-1">Nº da apólice</th>
                 <th className="px-2 py-1">Parc.</th>
@@ -1050,7 +931,6 @@ function ExtratoCard({ e, linhas, aberto, base, tot, estados }: { e: Extrato; li
                 <tr key={l.id}>
                   <td className="px-2 py-1 text-gray-400">{l.n}</td>
                   <td className="px-2 py-1"><span className={`rounded-full px-2 py-0.5 ${CLASSE[l.conferencia ?? ""]?.cor ?? "bg-gray-100"}`}>{CLASSE[l.conferencia ?? ""]?.texto ?? "—"}</span></td>
-                  <td className="px-2 py-1">{(() => { const st = estados?.get(l.id); if (!st) return <span className="text-gray-300">—</span>; const x = ESTADO_LINHA[st.estado]; return <><span className={`rounded-full px-2 py-0.5 text-[11px] ${x?.cor ?? "bg-gray-100"}`}>{x?.t ?? st.estado}</span>{st.estado === "pendente_identificacao" && st.idade_dias != null && <div className="text-[10px] text-gray-500">{st.idade_dias} dia(s){st.candidato_imobiliaria ? ` · talvez ${st.candidato_imobiliaria}` : ""}</div>}{st.estado === "nao_parcela_confirmada" && st.fora_tipo && <div className="text-[10px] text-gray-500">{st.fora_tipo}</div>}</>; })()}</td>
                   <td className="px-2 py-1">{l.documento_id ? <Link href={`/erp/documentos/${l.documento_id}`} className="text-o2-navy hover:underline">{l.documento?.nosso_numero_corp ?? "ver"}</Link> : "—"}</td>
                   <td className="px-2 py-1">{l.apolice}</td>
                   <td className="px-2 py-1">{l.parcela ?? "—"}</td>

@@ -34,14 +34,13 @@ export function bancoDoExtrato(dias: DiaCaixa[] | undefined, dataRecebimento: st
   return { situacao: Math.abs(perto.dif) <= TOLERANCIA_CAIXA ? "bate" : "diferente", dia: perto };
 }
 
-export function avaliarBaixaAutomatica(e: ExtratoParaAvaliar, banco: SituacaoBanco, qtdPendenteIdentificacao = 0): { seria: boolean; faltas: string[] } {
+export function avaliarBaixaAutomatica(e: ExtratoParaAvaliar, banco: SituacaoBanco): { seria: boolean; faltas: string[] } {
   if (e.baixa_aprovada_em) return { seria: false, faltas: [] };
   const faltas: string[] = [];
   if (e.tipo === "resumo_mensal" || e.linhas === 0) faltas.push("sem linhas para baixar (só o total do mês)");
   if (banco === "sem_banco") faltas.push("o valor não aparece no banco no dia");
   else if (banco === "diferente") faltas.push("o banco difere do extrato");
-  if (qtdPendenteIdentificacao > 0) faltas.push(`${qtdPendenteIdentificacao} linha(s) recebida(s) sem parcela (pendente de identificação)`);
-  else if (e.n_nao_encontrada > 0) faltas.push(`${e.n_nao_encontrada} linha(s) sem apólice/parcela no ERP`);
+  if (e.n_nao_encontrada > 0) faltas.push(`${e.n_nao_encontrada} linha(s) sem apólice/parcela no ERP`);
   if (e.n_divergente > 0) faltas.push(`${e.n_divergente} linha(s) diferem do previsto`);
   if (e.n_estorno > 0) faltas.push(`${e.n_estorno} estorno(s)`);
   if (e.tratar_em_aberto > 0) faltas.push(`${e.tratar_em_aberto} linha(s) em tratativa`);
