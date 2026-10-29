@@ -4,6 +4,8 @@ import Footer from "@/components/Footer";
 import BotaoWhatsApp from "@/components/BotaoWhatsApp";
 import AvisoNovaVersao from "@/components/AvisoNovaVersao";
 import ForaDoErp from "@/components/ForaDoErp";
+import ChatGate from "@/components/chat/ChatGate";
+import { Suspense } from "react";
 import "./globals.css";
 
 const poppins = Poppins({
@@ -30,6 +32,9 @@ export default function RootLayout({
           <Footer />
           <BotaoWhatsApp />
         </ForaDoErp>
+        <Suspense fallback={null}>
+          <ChatGate />
+        </Suspense>
         <AvisoNovaVersao />
       </body>
     </html>
