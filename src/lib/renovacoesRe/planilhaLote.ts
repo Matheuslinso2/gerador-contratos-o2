@@ -15,9 +15,9 @@ import { separarEndereco, type DocumentoPdf } from "@/lib/renovacoesRe/pdfItensG
 // em branco.
 
 export const COLUNAS_SPECIAL = [
-  "STATUS", "FIM DE VIGÊNCIA", "APÓLICE", "NOME DO LOCADOR", "CPF / CNPJ", "CEP", "ENDEREÇO", "Nº",
+  "STATUS", "RENOVA?", "FIM DE VIGÊNCIA", "APÓLICE", "NOME DO LOCADOR", "CPF / CNPJ", "CEP", "ENDEREÇO", "Nº",
   "COMPLEMENTO", "BAIRRO", "OCUPAÇÃO", "LMI DE INCÊNDIO", "LMI DE ALUGUEL", "DANOS ELÉTRICOS", "PLANO",
-  "PARCELAS (X)", "PARCELAS", "VALOR 2025", "VALOR 2026", "ORÇAMENTO", "CM", "RP", "AGRAVO", "OBS",
+  "PARCELAS (X)", "PARCELAS", "VALOR 2025", "VALOR 2026", "ORÇAMENTO", "% COMISSÃO", "CM", "RP", "AGRAVO", "OBS",
 ] as const;
 type LinhaSpecial = Record<(typeof COLUNAS_SPECIAL)[number], string | number>;
 
@@ -236,6 +236,7 @@ export function montarLinha(ap: ApoliceCorp, kamila: ItemRenovacao | undefined, 
     fonteLmi,
     linha: {
       STATUS: "AG COTAÇÃO",
+      "RENOVA?": "", // Renova / Não renova — preenchido pela equipe; o ERP lê de volta (Matheus 29/10)
       "FIM DE VIGÊNCIA": dataBr(ap.fimVigencia),
       APÓLICE: ap.apolice,
       "NOME DO LOCADOR": ap.cliente,
@@ -255,6 +256,7 @@ export function montarLinha(ap: ApoliceCorp, kamila: ItemRenovacao | undefined, 
       "VALOR 2025": ap.premioTotal,
       "VALOR 2026": "",
       ORÇAMENTO: "",
+      "% COMISSÃO": "", // % negociado na renovação (CM = % do ano anterior, vindo do Corp)
       CM: ap.percentualComissao || "",
       RP: "",
       AGRAVO: "",
