@@ -23,7 +23,7 @@ export type LinhaFatura = {
   comissao_extrato: number | null;
 };
 export type Saida = { apolice: string; documento_id: string | null; codigo_o2: number | null; cliente: string | null; valor_anterior: number; explicacao: string | null; registrado?: { motivo: string; observacao: string | null; referencia: string | null; usuario_email: string | null; criado_em: string } };
-export type MesFatura = { id: string; competencia: string; vencimento: string | null; valor_boleto: number | null; valor_itens: number; qtd_itens: number };
+export type MesFatura = { arquivos?: string[] | null; numero_fatura?: string | null; id: string; competencia: string; vencimento: string | null; valor_boleto: number | null; valor_itens: number; qtd_itens: number };
 
 /** Nome do produto de cada fatura (o código do ramo vem da seguradora e não diz nada ao usuário): vem dos documentos ligados às linhas. */
 export async function nomesProdutoDasFaturas(sb: SupabaseClient, faturaIds: string[]): Promise<Map<string, string>> {
@@ -46,6 +46,17 @@ export async function nomesProdutoDasFaturas(sb: SupabaseClient, faturaIds: stri
   return mapa;
 }
 
+/** Nº da fatura (Matheus 29/10): o número do documento da fatura/boleto da seguradora, lido do arquivo (faturas.numero_documento) de cada mês. */
+export async function numerosDasFaturas(sb: SupabaseClient, arquivoIds: string[]): Promise<Map<string, string>> {
+  const mapa = new Map<string, string>();
+  const ids = [...new Set(arquivoIds)];
+  for (let i = 0; i < ids.length; i += 150) {
+    const { data } = await sb.from("faturas").select("id, numero_documento").in("id", ids.slice(i, i + 150));
+    for (const x of (data ?? []) as { id: string; numero_documento: string | null }[]) if (x.numero_documento) mapa.set(x.id, x.numero_documento);
+  }
+  return mapa;
+}
+
 export async function fichaFatura(sb: SupabaseClient, faturaId: string, competencia?: string) {
   const { data: fatura } = await sb
     .from("erp_faturas")
@@ -53,7 +64,7 @@ export async function fichaFatura(sb: SupabaseClient, faturaId: string, competen
     .eq("id", faturaId)
     .maybeSingle();
   if (!fatura) return null;
-  const { data: mesesBrutos } = await sb.from("erp_fatura_meses").select("id, competencia, vencimento, valor_boleto, valor_itens, qtd_itens").eq("fatura_id", faturaId).order("competencia");
+  const { data: mesesBrutos } = await sb.from("erp_fatura_meses").select("id, competencia, vencimento, valor_boleto, valor_itens, qtd_itens, arquivos").eq("fatura_id", faturaId).order("competencia");
   const meses = ((mesesBrutos ?? []) as MesFatura[]).map((m) => ({ ...m, valor_boleto: m.valor_boleto === null ? null : Number(m.valor_boleto), valor_itens: Number(m.valor_itens) }));
   if (!meses.length) return { fatura, meses, mes: null, anterior: null, linhas: [], entradas: [], saidas: [] };
   const idx = competencia ? Math.max(0, meses.findIndex((m) => m.competencia === competencia)) : meses.length - 1;
@@ -134,23 +145,27 @@ export async function fichaFatura(sb: SupabaseClient, faturaId: string, competen
   const contagem = new Map<string, number>();
   for (const l of linhas) if (l.ramo_nome) contagem.set(l.ramo_nome, (contagem.get(l.ramo_nome) ?? 0) + 1);
   const ramo_nome = [...contagem.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
-  return { fatura: { ...fatura, ramo_nome }, meses, mes, anterior, linhas, entradas, saidas };
+  const nums = await numerosDasFaturas(sb, (mes.arquivos ?? []) as string[]);
+  const numero_fatura = [...new Set((mes.arquivos ?? []).map((a) => nums.get(a)).filter(Boolean))].join(", ") || null;
+  return { fatura: { ...fatura, ramo_nome }, meses, mes: { ...mes, numero_fatura }, anterior, linhas, entradas, saidas };
 }
 
 /** Lista de faturas com o último mês (para a etapa Faturas). */
 export async function listarFaturas(sb: SupabaseClient, f: { seguradora?: string; imobiliaria?: string; mes?: string }) {
   let q = sb
     .from("erp_fatura_meses")
-    .select("id, competencia, vencimento, valor_boleto, valor_itens, qtd_itens, fatura:erp_faturas!inner(id, seguradora, chave, corretora, imobiliaria:imobiliarias!inner(nome))")
+    .select("id, competencia, vencimento, valor_boleto, valor_itens, qtd_itens, arquivos, fatura:erp_faturas!inner(id, seguradora, chave, corretora, imobiliaria:imobiliarias!inner(nome))")
     .order("competencia", { ascending: false });
   if (f.seguradora) q = q.eq("fatura.seguradora", ({ TOKI: "TOKIO", PORT: "PORTO", POTT: "POTTENCIAL", TOO: "TOO", YELU: "YELUM" } as Record<string, string>)[f.seguradora] ?? "—");
   if (f.imobiliaria) q = q.ilike("fatura.imobiliaria.nome", `%${f.imobiliaria.replace(/[%_,()]/g, "")}%`);
   if (f.mes) q = q.eq("competencia", f.mes);
   const { data } = await q.limit(2000);
-  type Linha = { id: string; competencia: string; vencimento: string | null; valor_boleto: number | null; valor_itens: number; qtd_itens: number; fatura: { id: string; seguradora: string; chave: string; corretora: string | null; imobiliaria: { nome: string } } };
+  type Linha = { arquivos: string[] | null; id: string; competencia: string; vencimento: string | null; valor_boleto: number | null; valor_itens: number; qtd_itens: number; fatura: { id: string; seguradora: string; chave: string; corretora: string | null; imobiliaria: { nome: string } } };
   const ultimo = new Map<string, Linha & { anterior_itens: number | null }>();
   const porFatura = new Map<string, Linha[]>();
   for (const l of (data ?? []) as unknown as Linha[]) porFatura.set(l.fatura.id, [...(porFatura.get(l.fatura.id) ?? []), l]);
   for (const [id, ls] of porFatura) ultimo.set(id, { ...ls[0], anterior_itens: ls[1]?.qtd_itens ?? null });
+  const nums = await numerosDasFaturas(sb, [...ultimo.values()].flatMap((l) => l.arquivos ?? []));
+  for (const l of ultimo.values()) (l as { numero_fatura?: string | null }).numero_fatura = [...new Set((l.arquivos ?? []).map((a) => nums.get(a)).filter(Boolean))].join(", ") || null;
   return [...ultimo.values()].sort((a, b) => a.fatura.imobiliaria.nome.localeCompare(b.fatura.imobiliaria.nome) || a.fatura.seguradora.localeCompare(b.fatura.seguradora));
 }

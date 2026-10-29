@@ -104,6 +104,7 @@ export default async function ErpFaturaPage({ params, searchParams }: { params: 
         <p className="text-sm text-gray-600">
           {fatura.corretora ?? "corretora a confirmar"} · {"ramo_nome" in fatura && fatura.ramo_nome ? <>{fatura.ramo_nome}</> : <>produto ainda não identificado</>}
           {mes?.vencimento ? ` · vencimento ${formatarData(mes.vencimento)}` : ""}
+          {mes?.numero_fatura ? ` · Nº da fatura ${mes.numero_fatura}` : ""}
         </p>
       </div>
 

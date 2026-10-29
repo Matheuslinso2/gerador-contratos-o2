@@ -50,6 +50,7 @@ export default async function ErpFaturasPage({ searchParams }: { searchParams: P
             <tr>
               <th className="px-3 py-2">Imobiliária</th>
               <th className="px-3 py-2">Seguradora · fatura</th>
+              <th className="px-3 py-2">Nº da fatura</th>
               <th className="px-3 py-2">Corretora</th>
               <th className="px-3 py-2">Último mês</th>
               <th className="px-3 py-2 text-right">Apólices</th>
@@ -71,6 +72,7 @@ export default async function ErpFaturasPage({ searchParams }: { searchParams: P
                   <td className="px-3 py-1.5">
                     {l.fatura.seguradora} <span className="text-xs text-gray-500">{l.fatura.chave}</span>
                   </td>
+                  <td className="px-3 py-1.5 text-xs font-medium">{(l as { numero_fatura?: string | null }).numero_fatura ?? <span className="text-gray-300">—</span>}</td>
                   <td className="px-3 py-1.5 text-xs">{l.fatura.corretora ?? "—"}</td>
                   <td className="px-3 py-1.5">{mesBr(l.competencia)}</td>
                   <td className="px-3 py-1.5 text-right">
