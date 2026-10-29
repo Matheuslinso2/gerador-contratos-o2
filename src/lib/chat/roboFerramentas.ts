@@ -64,7 +64,7 @@ export const FERRAMENTAS_ERP: Anthropic.Tool[] = [
   {
     name: "contar_documentos_erp",
     description:
-      "Conta (e soma prêmio) documentos do ERP, com os mesmos filtros das telas do ERP. tipo: A=Apólice, C=Endosso de cobrança, D=Devolução, F=Fatura, I=End. cancelamento de item, M=Endosso sem prêmio, R=Endosso de restituição, X=End. cancelamento de apólice. situacao: vigente, vencido, cancelado, proposta, cotacao, recusado, perdido. 'Apólices vigentes' = tipo ['A'] + situacao ['vigente'] (a mesma regra da tela ERP > Apólices > Vigentes). Sem 'imobiliaria', conta a empresa toda (só use com apenas filtros e sem agrupar_por 'imobiliaria').",
+      "Conta (e soma prêmio) documentos do ERP, com os mesmos filtros das telas do ERP. tipo: A=Apólice, C=Endosso de cobrança, D=Devolução, F=Fatura, I=End. cancelamento de item, M=Endosso sem prêmio, R=Endosso de restituição, X=End. cancelamento de apólice. situacao: vigente, vencido, cancelado (cotação, proposta, perdido e recusado NÃO são apólice e são recusados aqui). 'Apólices vigentes' = tipo ['A'] + situacao ['vigente'] (a mesma regra da tela ERP > Apólices > Vigentes). Sem 'imobiliaria', conta a empresa toda (só use com apenas filtros e sem agrupar_por 'imobiliaria').",
     input_schema: {
       type: "object",
       properties: {
@@ -117,7 +117,7 @@ async function buscarImobiliaria(e: { nome: string }, verComissao: boolean): Pro
       docsVigentesNaFichaDoErp: r?.docs_vigentes ?? 0,
       premioVigente: r?.premio_vigente != null ? Number(r.premio_vigente) : 0,
       ...(verComissao ? { comissaoVigente: r?.comissao_vigente != null ? Number(r.comissao_vigente) : 0 } : {}),
-      propostasPendentes: r?.propostas_pendentes ?? 0,
+      propostasEmEmissao: r?.propostas_pendentes ?? 0,
       faturas: r?.faturas ?? 0,
       produtosVigentes: r?.produtos ?? [],
       seguradorasVigentes: r?.seguradoras ?? [],
@@ -136,6 +136,14 @@ async function buscarImobiliaria(e: { nome: string }, verComissao: boolean): Pro
 }
 
 async function contarDocumentos(e: EntradaContar, verComissao: boolean): Promise<string> {
+  // Cotação e proposta não são apólice (glossário do Matheus, 27/10): cotação vive nos painéis do Workspace e
+  // proposta em Emissão (propostasEmEmissao de buscar_imobiliaria). Perdido/recusado ficam fora do ERP.
+  const NAO_APOLICE = ["cotacao", "proposta", "perdido", "recusado", "duplicado"];
+  const barradas = (e.situacao ?? []).filter((s) => NAO_APOLICE.includes(s));
+  if (barradas.length)
+    return JSON.stringify({
+      erro: `Situação(ões) ${barradas.join(", ")} não são apólice. Cotação = painéis do Workspace (consultar_painel); proposta = propostasEmEmissao de buscar_imobiliaria.`,
+    });
   const sb = createServiceClient();
   let ids: string[] | null = null;
   let nomes = new Map<string, string>();
@@ -175,6 +183,7 @@ async function contarDocumentos(e: EntradaContar, verComissao: boolean): Promise
     if (ids) q = q.in("imobiliaria_principal_id", ids);
     if (e.tipo?.length) q = q.in("tipo", e.tipo);
     if (e.situacao?.length) q = q.in("situacao", e.situacao);
+    else q = q.not("situacao", "in", `(${NAO_APOLICE.join(",")})`);
     if (segIds) q = q.in("seguradora_id", segIds);
     if (ramoIds) q = q.in("ramo_id", ramoIds);
     if (e.vigencia_inicio_de) q = q.gte("vigencia_inicio", e.vigencia_inicio_de);
