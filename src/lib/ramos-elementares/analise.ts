@@ -13,6 +13,8 @@ export type ItemAgrupado = {
   emAndamento?: number;
   encerrados?: number;
   premioEfetivado?: number;
+  // Prêmio total COTADO (todos os cards do recorte) -- reunião Kamila 29/10/2026: ver cotado × efetivado.
+  premioCotado?: number;
   itensCotados?: number;
   itensContratados?: number;
   // Itens COTADOS dos cards efetivados (cotou 10, efetivou 5 do lote): serve para
@@ -641,6 +643,7 @@ function agrupar(registros: RegistroBase[], obterNome: (registro: RegistroBase) 
         emAndamento: itens.length - efetivados.length - encerrados,
         encerrados,
         premioEfetivado: efetivados.reduce((soma, item) => soma + premioEf(item), 0),
+        premioCotado: itens.reduce((soma, item) => soma + item.premioTotal, 0),
         ...somarItens(itens),
       };
     })

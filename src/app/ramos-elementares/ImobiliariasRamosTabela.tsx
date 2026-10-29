@@ -22,6 +22,7 @@ type Coluna =
   | "efetivados"
   | "itensCotados"
   | "itensContratados"
+  | "premioCotado"
   | "premioEfetivado"
   | "comissaoEfetivada";
 
@@ -164,6 +165,7 @@ export default function ImobiliariasRamosTabela({
               {temItens && (
                 <Th ordenacao={ordenacao} onOrdenar={alternar} coluna="itensContratados" titulo="Itens contratados — soma de &quot;Endereços contratados&quot; dos cards efetivados. ⚠ = efetivados sem o campo preenchido (ficam de fora da soma)">Itens contr.</Th>
               )}
+              <Th ordenacao={ordenacao} onOrdenar={alternar} coluna="premioCotado" titulo="Prêmio total cotado — soma do prêmio total de todos os cards da imobiliária no recorte (efetivados ou não)">Prêmio cotado</Th>
               <Th ordenacao={ordenacao} onOrdenar={alternar} coluna="premioEfetivado" titulo="Prêmio total dos cards efetivados">Prêmio efet.</Th>
               <Th ordenacao={ordenacao} onOrdenar={alternar} coluna="comissaoEfetivada" titulo="Comissão estimada dos cards efetivados">Comissão efet.</Th>
             </tr>
@@ -205,13 +207,14 @@ export default function ImobiliariasRamosTabela({
                     )}
                   </td>
                 )}
+                <td className={styles.numCol}>{i.premioCotado === undefined ? "—" : brl(i.premioCotado)}</td>
                 <td className={styles.numCol}>{i.premioEfetivado === undefined ? "—" : brl(i.premioEfetivado)}</td>
                 <td className={styles.numCol}>{brl(i.comissaoEfetivada)}</td>
               </tr>
             ))}
             {filtradas.length === 0 && (
               <tr>
-                <td colSpan={11} className={styles.zeroState}>
+                <td colSpan={12} className={styles.zeroState}>
                   {busca ? "Nenhuma imobiliária encontrada com esse nome." : "Nenhuma imobiliária neste recorte — 0"}
                 </td>
               </tr>

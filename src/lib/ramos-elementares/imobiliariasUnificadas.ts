@@ -103,6 +103,7 @@ function somar(a: ImobiliariaUnificada, b: ItemAgrupado): ImobiliariaUnificada {
     emAndamento: soma(a.emAndamento, b.emAndamento),
     encerrados: soma(a.encerrados, b.encerrados),
     premioEfetivado: soma(a.premioEfetivado, b.premioEfetivado),
+    premioCotado: soma(a.premioCotado, b.premioCotado),
     itensCotados: soma(a.itensCotados, b.itensCotados),
     itensContratados: soma(a.itensContratados, b.itensContratados),
     efetivadosSemItensContratados: soma(a.efetivadosSemItensContratados, b.efetivadosSemItensContratados),
