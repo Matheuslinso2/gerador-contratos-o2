@@ -83,6 +83,9 @@ export type AnaliseRamosElementares = {
   fonte: FonteRamosBruta["planilha"];
   avisosFonte: string[];
   semAmostra: boolean;
+  // Pro relatório diário do WhatsApp ("Ontem"): cards recebidos/enviados e
+  // efetivados por dia da competência. Retratos antigos não têm.
+  porDia?: { data: string; novos: number; concluidos: number }[];
   visaoGeral: {
     novasEntradas: number;
     pendenciasAnteriores: number;
@@ -1029,6 +1032,29 @@ export function montarAnaliseRamosElementares(fonte: FonteRamosBruta, agora = ne
           ]),
     ],
     semAmostra: novosConsolidados.length + rnAtual.length + rnFutura.length + endossos.length === 0,
+    porDia: (() => {
+      const dias = new Map<string, { data: string; novos: number; concluidos: number }>();
+      const linha = (d: string) => {
+        let l = dias.get(d);
+        if (!l) dias.set(d, (l = { data: d, novos: 0, concluidos: 0 }));
+        return l;
+      };
+      const noMes = (d: string | null): d is string => d !== null && d.startsWith(fonte.competencia);
+      for (const r of novosConsolidados) {
+        const rec = isoDeSerial(r.dataRecebida);
+        if (noMes(rec)) linha(rec).novos++;
+      }
+      for (const r of rnAtual) {
+        const env = isoDeSerial(r.dataEnvio);
+        if (noMes(env)) linha(env).novos++;
+      }
+      for (const r of [...novosConsolidados, ...rnAtual]) {
+        if (!r.efetivado) continue;
+        const ef = isoDeSerial(r.dataEfetivacao);
+        if (noMes(ef)) linha(ef).concluidos++;
+      }
+      return [...dias.values()].sort((a, b) => a.data.localeCompare(b.data));
+    })(),
     visaoGeral: {
       novasEntradas: novosMes.length,
       pendenciasAnteriores: pendentes.length,

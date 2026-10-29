@@ -239,7 +239,7 @@ async function montarParaPeriodo(periodo: PeriodoRelatorio): Promise<RelatorioDi
     secao<AnaliseRamosElementares, Extract<RelatorioDiario["ramos"], { ok: true }>["dados"]>(
       "ramos_elementares_snapshots",
       periodo,
-      (doMes) => {
+      (doMes, todos) => {
         const { novosEfetivados, renovacoesEfetivadas, comissaoEfetivada } = doMes.visaoGeral;
         const efetivados = novosEfetivados + renovacoesEfetivadas;
         const bloco = (r: ResumoPopulacao): BlocoMes => ({
@@ -253,7 +253,8 @@ async function montarParaPeriodo(periodo: PeriodoRelatorio): Promise<RelatorioDi
         return {
           novos: bloco(doMes.novos.consolidado),
           renovacoes: bloco(doMes.renovacoes.atual),
-          ontemEfetivados: null,
+          ontemEfetivados: efetivadosNoPeriodo([...todos.values()], periodo.dias),
+          solicitacoes: { ontem: novosNoPeriodo([...todos.values()], periodo.dias), mes: doMes.novos.consolidado.total + doMes.renovacoes.atual.total, rotulo: ["card", "cards"] },
           novosEfetivados,
           renovacoesEfetivadas,
           efetivados,
@@ -499,7 +500,7 @@ export function parametrosModeloV3(r: RelatorioDiario): string[] {
     const ontem =
       d.ontemEfetivados === null && !p
         ? `${rotuloOntem}: —`
-        : `${rotuloOntem}: ${p ? `${p.ontem === null ? "—" : plural(p.ontem, "cotação", "cotações")} · ` : ""}${d.ontemEfetivados === null ? "—" : `${d.ontemEfetivados} efetivados`}`;
+        : `${rotuloOntem}: ${p ? `${p.ontem === null ? "—" : ramos ? plural(p.ontem, "card", "cards") : plural(p.ontem, "cotação", "cotações")} · ` : ""}${d.ontemEfetivados === null ? "—" : `${d.ontemEfetivados} efetivados`}`;
     return [ontem, linhaBloco("No mês, novos", d.novos, ramos), linhaBloco("No mês, renovações", d.renovacoes, ramos)];
   }
 
