@@ -18,3 +18,15 @@
 -- 88%=285, 90%=300, 93%=315, 95%=330, 98%=345, 100%=365); confirmar como tratar % fora da tabela (o levantamento diz "faixa de cima") antes de programar.
 -- 29/10 (noite): parcela dentro de FATURA UNIFICADA usa o vencimento do BOLETO da fatura (erp_fatura_meses.vencimento quando valor_boleto = soma dos itens), não o do Corp;
 -- nelas a regra de cancelamento por parcela individual não se aplica (máximo "urgente"). Colunas novas: venc_corp, via_fatura. Janela: -180 a +60 dias.
+
+-- 29/10 (Matheus): padrão por produto para seguradoras SEM Condição Geral/regra cadastrada.
+-- Tabela erp_regras_cancelamento_padrao (produto, aplica_parcela, dias_em_aberto, fonte). A view erp_parcelas_cobranca só usa o padrão
+-- quando a seguradora não tem NENHUMA regra própria naquele produto (a regra específica sempre vence). Padrões: 1ª parcela = 0 dia em
+-- fiança, incêndio, condomínio, empresarial, RC e auto; demais parcelas = 30 dias na fiança e 20 dias no incêndio; auto sem padrão para as
+-- parcelas seguintes (Tabela de Prazo Curto, sem dias fixos). Migration: erp_regras_cancelamento_padrao_por_produto.
+
+-- 30/10 (Matheus: "1 - sim cadastrar"): regras da pasta CONDIÇÕES GERAIS do Drive cadastradas em erp_regras_cancelamento:
+-- 1ª parcela não paga cancela em Auto (Tokio, Porto, Allianz, Yelum, Mapfre; Suhai e Azul já existiam) e Suhai Auto 90 dias (qualquer parcela).
+-- HDI Auto (28 dias no boleto) NÃO cadastrada: vem de manual do corretor, certeza média.
+-- 30/10 (Matheus): 973 apólices vigentes com modo_cobranca 'nao_informado' que aparecem em faturas de set/out passaram a 'fatura'
+-- (regra dele: se está nos itens de uma fatura, é fatura; fatura do mês corrente ainda sem itens fica como está).
