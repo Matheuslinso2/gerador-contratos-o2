@@ -82,6 +82,16 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
     await supabase.from("erp_acesso_clientes_log").insert({ locatario_id: d.locatario_id, usuario_email: user.email, tela: "erp/documentos/ficha" });
   }
 
+  // Parcelas que a própria seguradora avisou como não pagas (e-mails/relatórios de inadimplência): sem pagamento do cliente não há comissão nem repasse.
+  const { data: inadBruta } = await supabase
+    .from("erp_parcelas_inadimplencia")
+    .select("parcela_n, vencimento_original, valor, data_comunicado, previsao_cancelamento")
+    .eq("documento_id", id)
+    .eq("situacao", "aberta")
+    .order("vencimento_original");
+  const avisadas = (inadBruta ?? []) as { parcela_n: number; vencimento_original: string; valor: number | string | null; data_comunicado: string; previsao_cancelamento: string | null }[];
+  const avisoPorParcela = new Map(avisadas.filter((a) => a.parcela_n > 0).map((a) => [a.parcela_n, a]));
+  const totalAvisado = avisadas.reduce((t, a) => t + Number(a.valor ?? 0), 0);
   const anexosCorp = d.nosso_numero_corp ? await anexosDoCorp(String(d.nosso_numero_corp)) : [];
   const totalParcelas = d.parcelas.reduce((s, p) => s + p.valor, 0);
   const totalComissao = d.parcelas.reduce((s, p) => s + p.comissao_prevista, 0);
@@ -123,6 +133,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
     inquilino: fianca ? d.partes_apolice.find((p) => p.papel === "garantido")?.nome ?? inquilinoItem ?? d.cliente : null,
     imovel: imovelFinal,
     extras: [
+      ...(avisadas.length ? [{ texto: `${avisadas.length} parcela(s) em aberto na seguradora${totalAvisado > 0 ? " · " + formatarReais(totalAvisado) : ""}`, cor: "bg-red-100 text-red-800" }] : []),
       ...(d.revisao_pendente ? [{ texto: "pré-cadastro · revisão pendente", cor: "bg-orange-100 text-orange-800" }] : []),
       ...(d.fora_regra_pbi ? [{ texto: "fora da conta do Power BI", cor: "bg-yellow-100 text-yellow-800" }] : []),
       ...(d.congelado ? [{ texto: "mês fechado", cor: "bg-blue-50 text-blue-800" }] : []),
@@ -385,6 +396,21 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
               <Campo rotulo="Repasse já pago" valor="em breve (Nibo)" />
             </div>
           )}
+          {avisadas.length > 0 && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-900">
+              <p className="font-semibold">A {d.seguradora_nome ?? "seguradora"} avisou que estas parcelas não foram pagas pelo cliente</p>
+              <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                {avisadas.map((a, i) => (
+                  <li key={i}>
+                    Parcela {a.parcela_n > 0 ? a.parcela_n : "(número não informado)"} · vencimento {formatarData(a.vencimento_original)}
+                    {a.valor !== null ? ` · ${formatarReais(Number(a.valor))}` : ""} · avisada em {formatarData(a.data_comunicado)}
+                    {a.previsao_cancelamento ? ` · cancelamento previsto em ${formatarData(a.previsao_cancelamento)}` : ""}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1 text-red-800">Sem pagamento do cliente não há comissão; o repasse só acontece depois que a comissão for recebida (competência do recebimento real).</p>
+            </div>
+          )}
           {d.parcelas.length === 0 ? (
             <p className="text-xs text-gray-500">Sem parcelas carregadas (histórico anterior a 2024 entra só com os totais).</p>
           ) : (
@@ -405,7 +431,10 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
               <tbody className="divide-y divide-gray-100">
                 {d.parcelas.map((p, i) => (
                   <tr key={p.id}>
-                    <td className="py-1 pr-3">{p.n}</td>
+                    <td className="py-1 pr-3">
+                      {p.n}
+                      {avisoPorParcela.has(p.n) && <span className="ml-1 rounded bg-red-100 px-1 text-[10px] font-medium text-red-800" title="Avisada como não paga pela seguradora">em aberto na seguradora</span>}
+                    </td>
                     <td className="py-1 pr-3">{formatarData(p.vencimento)}</td>
                     <td className="py-1 pr-3 text-right">{formatarReais(p.valor)}</td>
                     <td className="py-1 pr-3">{p.quitada_em ? `${formatarData(p.quitada_em)} · ${formatarReais(p.valor_quitado)}` : <span className="text-gray-400">em aberto</span>}</td>
