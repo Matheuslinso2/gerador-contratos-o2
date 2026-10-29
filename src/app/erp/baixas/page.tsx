@@ -10,6 +10,7 @@ import { aprovarBaixa, salvarTratativa } from "./actions";
 import FiltrosErp from "../FiltrosErp";
 import { lerFiltros, idsImobiliarias, CORRETORAS } from "@/lib/erp/filtros";
 import { entradasNibo, compararDias, situacaoCaixa, motivosProvaveis, TOLERANCIA_CAIXA, type DiaCaixa, type ExtratoDia, type SituacaoCaixa } from "@/lib/erp/caixaNibo";
+import { podeVerBaixas } from "@/lib/erp/acessoBaixas";
 
 export const dynamic = "force-dynamic";
 
@@ -105,7 +106,7 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!isAdmin(user?.email) && !isColaboradorO2(user?.email)) redirect("/");
+  if (!podeVerBaixas(user?.email)) redirect("/erp");
 
   // Premissa de velocidade do ERP: resumos vêm das views por extrato (agregado por índice em extrato_id); as linhas só
   // do extrato aberto (?extrato=), as "para tratar" em aberto e as que casam com a busca/imobiliária/classificação.

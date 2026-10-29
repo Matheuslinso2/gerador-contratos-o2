@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
+import { podeVerBaixas } from "@/lib/erp/acessoBaixas";
 
 // ERP O2 — baixa de comissão assistida. Nada é escrito no Corp: aprovar grava o recebimento no ERP
 // (erp_aprovar_baixa_extrato registra quem aprovou e quando) e alimenta a "lista pronta para o Corp".
@@ -13,7 +14,7 @@ async function exigirColaborador() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!isAdmin(user?.email) && !isColaboradorO2(user?.email)) redirect("/");
+  if (!podeVerBaixas(user?.email)) redirect("/erp");
   return { supabase, user };
 }
 

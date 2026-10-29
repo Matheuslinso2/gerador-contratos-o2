@@ -6,7 +6,7 @@ import { CADASTROS, ETAPAS } from "@/lib/erp/processo";
 
 // Menu do ERP O2 — aplicativo à parte do Workspace (Matheus 25/10) organizado pela lógica do processo, da esquerda
 // para a direita (26/10). Etapas ainda não construídas aparecem apagadas ("em breve"); Cadastros à direita.
-export default function ErpNav() {
+export default function ErpNav({ mostrarBaixa = true }: { mostrarBaixa?: boolean }) {
   const pathname = usePathname();
   const ativo = (href: string, rotas: string[] = []) => [href, ...rotas].some((r) => pathname === r || pathname.startsWith(r + "/"));
   const classe = (on: boolean) =>
@@ -18,7 +18,7 @@ export default function ErpNav() {
       </Link>
       <span className="text-white/20">|</span>
       {ETAPAS.map((e, i) =>
-        e.href ? (
+        !mostrarBaixa && e.chave === "baixa" ? null : e.href ? (
           <Link key={e.chave} href={e.href} target={e.externo ? "_blank" : undefined} className={classe(!e.externo && ativo(e.href, e.rotas))} title={e.descricao}>
             <span className="mr-1 text-white/40">{i + 1}</span>
             {e.curto}

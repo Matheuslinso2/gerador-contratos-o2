@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
+import { podeVerBaixas } from "@/lib/erp/acessoBaixas";
 
 // Lista pronta para o financeiro lançar a baixa no Corp (até a baixa automática existir).
 // Só linhas de extratos com baixa APROVADA, na ordem Seguradora → Nosso Nº → Parcela. Vai tudo o que o InCorp do Corp
@@ -29,7 +30,7 @@ export async function GET(request: Request) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!isAdmin(user?.email) && !isColaboradorO2(user?.email)) return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
+  if (!podeVerBaixas(user?.email)) return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
 
   const url = new URL(request.url);
   const mes = url.searchParams.get("mes");

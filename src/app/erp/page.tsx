@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { CADASTROS, ETAPAS } from "@/lib/erp/processo";
+import { podeVerBaixas } from "@/lib/erp/acessoBaixas";
 
 export const metadata = { title: { absolute: "ERP O2" } };
 export const dynamic = "force-dynamic";
@@ -36,6 +37,8 @@ export default async function ErpInicio({ searchParams }: { searchParams: Promis
   const meses = [0, 1, 2].map((k) => dia(new Date(Date.UTC(atual.getUTCFullYear(), atual.getUTCMonth() - k, 1))).slice(0, 7));
 
   const supabase = await createClient();
+  const { data: { user: usuario } } = await supabase.auth.getUser();
+  const verBaixa = podeVerBaixas(usuario?.email);
   const [{ data: atrasos }, { data: alertas }, { count: revisao }, { count: estornos }, { count: vencDiv }, { data: kRow }, { data: eRow }, { count: p5 }, { count: p10 }, { count: p15 }] = await Promise.all([
     supabase.from("erp_baixa_corp_atraso_pronto").select("mes, seguradora, situacao"),
     supabase.rpc("erp_contar_alertas_fatura"),
@@ -134,6 +137,7 @@ export default async function ErpInicio({ searchParams }: { searchParams: Promis
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {ETAPAS.map((et, i) => {
+            if (!verBaixa && et.chave === "baixa") return null;
             const ls = linhas[et.chave];
             const corpo = (
               <>

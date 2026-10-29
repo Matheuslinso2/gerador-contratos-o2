@@ -7,6 +7,7 @@ import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import PageHeader from "@/components/PageHeader";
 import { IconReport } from "@/components/icons";
 import { formatarData, formatarReais } from "@/lib/sinistros/regras";
+import { podeVerBaixas } from "@/lib/erp/acessoBaixas";
 
 export const dynamic = "force-dynamic";
 
@@ -106,7 +107,7 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!isAdmin(user?.email) && !isColaboradorO2(user?.email)) redirect("/");
+  if (!podeVerBaixas(user?.email)) redirect("/erp");
 
   // filtros padronizados do ERP: cada seção aplica os níveis que tem (seguradora, corretora, imobiliária, mês)
   const { data: segFiltro } = f.seguradora ? await supabase.from("erp_seguradoras").select("nome").eq("abreviacao", f.seguradora).maybeSingle() : { data: null };
