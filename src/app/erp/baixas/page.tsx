@@ -406,8 +406,14 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
 
         <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-4">
           <h2 className="text-sm font-bold uppercase tracking-wide text-o2-navy">Comportamento diário de comissões - previsão de receitas versus recebido por vencimento de parcelas</h2>
-          <GraficoDiario titulo="O2 Corretora de Seguros : 20001784000180" pontos={graficoTopo["O2 Corretora"] ?? []} />
-          <GraficoDiario titulo="o2 Capitalização e Seguros" pontos={graficoTopo["O2 Capitalização"] ?? []} />
+          <GraficoDiario titulo="Consolidado · O2 Corretora + O2 Capitalização" pontos={consolidarDias(graficoTopo["O2 Corretora"] ?? [], graficoTopo["O2 Capitalização"] ?? [])} />
+          <details className="rounded-lg border border-gray-200">
+            <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-o2-navy">Ver o comportamento diário de cada empresa separadamente</summary>
+            <div className="space-y-4 p-3">
+              <GraficoDiario titulo="O2 Corretora de Seguros : 20001784000180" pontos={graficoTopo["O2 Corretora"] ?? []} />
+              <GraficoDiario titulo="o2 Capitalização e Seguros" pontos={graficoTopo["O2 Capitalização"] ?? []} />
+            </div>
+          </details>
           <p className="text-[11px] leading-relaxed text-gray-500">
             <b>Previsto do dia</b>: comissão das parcelas que vencem naquele dia (todas as seguradoras e produtos, líquida do imposto retido). <b>Recebido no dia</b>: o que entrou na conta naquele dia (Nibo, receita de seguros).
             O previsto marca o vencimento; as seguradoras costumam pagar alguns dias depois, por isso os picos não coincidem. A escala é por faixas de valor.
@@ -926,6 +932,16 @@ function ExtratoCard({ e, linhas, aberto, base }: { e: Extrato; linhas: LinhaExt
 }
 
 // Soma as duas empresas por seguradora (foco na seguradora, não no produto): mesmas colunas e mesma regra dos quadros por CNPJ.
+// Soma, dia a dia, o previsto e o recebido (Nibo) das duas empresas numa série única.
+function consolidarDias(a: PontoDia[], b: PontoDia[]): PontoDia[] {
+  const m = new Map<number, PontoDia>();
+  for (const p of [...a, ...b]) {
+    const x = m.get(p.dia);
+    if (x) { x.previsto += p.previsto; x.recebido += p.recebido; } else m.set(p.dia, { ...p });
+  }
+  return [...m.values()].sort((x, y) => x.dia - y.dia).map((p) => ({ dia: p.dia, previsto: Math.round(p.previsto * 100) / 100, recebido: Math.round(p.recebido * 100) / 100 }));
+}
+
 function consolidarQuadros(a: LinhaTopo[], b: LinhaTopo[]): LinhaTopo[] {
   const m = new Map<string, LinhaTopo>();
   for (const l of [...a, ...b]) {
