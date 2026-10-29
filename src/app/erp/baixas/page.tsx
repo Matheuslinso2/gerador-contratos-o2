@@ -54,6 +54,11 @@ type LinhaCaixa = {
   chave: string; mes: string; corretora: string; seg: string; segNome: string; m: Mensal | null;
   banco: number | null; esperado: number | null; previsto: number | null; porVencimento: number | null; sit: SituacaoCaixa; dias: DiaCaixa[]; motivos: string[];
 };
+const NOME_CURTO: Record<string, string> = {
+  ALFA: "Alfa", ALLI: "Allianz", AZUL: "Azul", BRAD: "Bradesco", BRAS: "Brasilcap", HDI: "HDI", ICAT: "Icatu", KLIN: "Klini",
+  MAPF: "Mapfre", PORT: "Porto Seguro", POTT: "Pottencial", SUHA: "Suhai", SULA: "Sulamérica", TOKI: "Tokio Marine", TOO: "Too", YELU: "Yelum", ZURI: "Zurich",
+};
+type LinhaTopo = { seg: string; nome: string; prevista: number; extratos: number; baixadas: number; nibo: number };
 const COLUNAS_CAIXA = "grid grid-cols-[minmax(150px,1.5fr)_64px_repeat(5,minmax(100px,1fr))_minmax(150px,1.2fr)] items-center gap-x-2";
 
 const brl = (v: number | null | undefined) => (v == null ? "—" : Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
@@ -147,20 +152,20 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
   // Conferência de caixa: o banco (Nibo, categoria 1.1) é o fiel da balança. Só leitura; nada é gravado no Nibo.
   const mesesOrd = usaPeriodo ? [...meses].map((m) => m.slice(0, 7)).sort() : [mesSel];
   let linhasCaixa: LinhaCaixa[] = [];
+  const quadroTopo: Record<string, LinhaTopo[]> = {};
   if (mesesOrd.length) {
     const [anoF, mesF] = mesesOrd[mesesOrd.length - 1].split("-").map(Number);
     const desdeCaixa = `${mesesOrd[0]}-01`;
     const fimCaixa = new Date(Date.UTC(anoF, mesF, 0)).toISOString().slice(0, 10); // último dia do último mês
     const ateCaixa = new Date(Date.UTC(anoF, mesF, 4)).toISOString().slice(0, 10); // + alguns dias: fim de semana cai na segunda
-    let qDias = supabase.from("erp_baixa_assistida_resumo")
+    const qDias = supabase.from("erp_baixa_assistida_resumo")
       .select("seg_abrev, corretora, data_recebimento, total_extrato, soma_linhas, liquido_sem_desconto, linhas")
       .neq("tipo", "resumo_mensal").gte("data_recebimento", desdeCaixa).lte("data_recebimento", ateCaixa).limit(5000);
-    if (filtros.seguradora) qDias = qDias.eq("seg_abrev", filtros.seguradora);
-    qDias = qDias.eq("corretora", corretoraSel);
-    const [{ data: diasBrutos }, entradas, { data: segsBrutas }, { data: previsaoBruta }, { data: nfsBrutas }] = await Promise.all([
+    const [{ data: diasBrutos }, entradas, { data: segsBrutas }, { data: previsaoBruta }, { data: nfsBrutas }, { data: baixadasBrutas }] = await Promise.all([
       qDias, entradasNibo(supabase, desdeCaixa, ateCaixa), supabase.from("erp_seguradoras").select("abreviacao, nome"),
       supabase.rpc("erp_previsao_caixa_mensal", { p_de: desdeCaixa, p_ate: fimCaixa }),
       supabase.from("erp_extratos_seguradora").select("nf_numero, nf_emitida_em, seguradora:erp_seguradoras!inner(abreviacao)").in("seguradora.abreviacao", ["POTT", "TOO"]).gte("competencia", desdeCaixa).lte("competencia", fimCaixa),
+      supabase.rpc("erp_baixadas_corp_mensal", { p_de: desdeCaixa, p_ate: fimCaixa }),
     ]);
     // nota fiscal registrada (Pottencial e Too só pagam depois dela) e data do último extrato lido de cada seguradora
     const nfPorSeg = new Set<string>();
@@ -186,6 +191,32 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
     });
     const porDia = compararDias(extratosDia, entradas);
     const nomeSeg = new Map(((segsBrutas ?? []) as { abreviacao: string; nome: string }[]).map((s) => [s.abreviacao, s.nome]));
+    // ---- Quadro do topo (planilha CONTROLE MENSAL DE BAIXA DE COMISSÃO): uma tabela por empresa, uma linha por seguradora ----
+    const mesTopo = mesesOrd[0];
+    const baixadasMap = new Map<string, number>();
+    for (const b of (baixadasBrutas ?? []) as { corretora: string; seg_abrev: string; mes: string; liquido: number | string }[]) baixadasMap.set(`${b.corretora}|${b.seg_abrev}|${b.mes}`, Number(b.liquido));
+    const prevTodas = new Map<string, number>();
+    for (const p of (previsaoBruta ?? []) as { corretora: string; seg_abrev: string; mes: string; previsto_liquido: number | string }[]) prevTodas.set(`${p.corretora}|${p.seg_abrev}|${p.mes}`, Number(p.previsto_liquido));
+    const rd = (v: number) => Math.round(v * 100) / 100;
+    for (const corr of CORRETORAS) {
+      const segsEmp = new Set<string>();
+      for (const k of [...porDia.keys(), ...prevTodas.keys(), ...baixadasMap.keys()]) {
+        const [c, sg, mm] = k.split("|");
+        if (c === corr && mm === mesTopo) segsEmp.add(sg);
+      }
+      const linhas: LinhaTopo[] = [];
+      for (const sg of segsEmp) {
+        const k = `${corr}|${sg}|${mesTopo}`;
+        const dias = porDia.get(k) ?? [];
+        const l: LinhaTopo = {
+          seg: sg, nome: NOME_CURTO[sg] ?? nomeSeg.get(sg) ?? (sg === "OUTRAS" ? "Outras" : sg),
+          prevista: rd(prevTodas.get(k) ?? 0), extratos: rd(dias.reduce((t, d) => t + d.extrato, 0)),
+          baixadas: rd(baixadasMap.get(k) ?? 0), nibo: rd(dias.reduce((t, d) => t + d.banco, 0)),
+        };
+        if ([l.prevista, l.extratos, l.baixadas, l.nibo].some((v) => Math.abs(v) >= 0.005)) linhas.push(l);
+      }
+      quadroTopo[corr] = linhas.sort((a, b) => a.nome.localeCompare(b.nome));
+    }
     const bancoMes = new Map<string, number>();
     for (const n of entradas) {
       if (filtros.seguradora && n.seg !== filtros.seguradora) continue;
@@ -272,16 +303,13 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
 
   return (
     <>
-      <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-6 p-8">
+      <main className="mx-auto w-full max-w-[1500px] flex-1 space-y-6 p-6">
         <PageHeader
           icon={<IconReport />}
           titulo="ERP O2 — Conferência de baixa de comissão"
-          subtitulo="O resumo mostra, por seguradora e mês, o extrato contra o que entrou no banco (Nibo) e o que falta baixar. Abra uma linha para ver os dias; os extratos, a aprovação da baixa e a lista do Corp ficam logo abaixo."
+          subtitulo="Controle do mês por empresa e seguradora; o detalhe, os extratos e a aprovação da baixa ficam logo abaixo do quadro."
         />
-        <p className="text-sm text-gray-600">
-          <Link href="/erp/conferencia" className="underline">← Conferência</Link>. Os extratos chegam de hora em hora pelo e-mail e pela pasta oficial do Drive “- RELATÓRIO COMISSÃO SEGURADORAS” (seguradora → ano → mês).
-          Nada é lançado no Corp por aqui: a lista pronta sai em planilha para o financeiro (baixa pelo valor bruto, previsão de repasse dia 15 do mês seguinte).
-        </p>
+
 
         {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">Não deu certo: {erro === "dados" ? "dados incompletos" : erro}</p>}
         {aprovado != null && (
@@ -291,23 +319,50 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
         )}
         {sucesso && <p className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-800">Salvo.</p>}
 
-        <nav className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border border-gray-200 bg-white p-3 text-sm">
-          <div className="flex gap-1" aria-label="Empresa">
-            {CORRETORAS.map((c) => (
-              <Link key={c} href={hrefTela({ corretora: c })} className={`rounded-lg px-3 py-1.5 font-medium ${c === corretoraSel ? "bg-o2-navy text-white" : "border border-gray-300 text-gray-700 hover:bg-gray-50"}`}>
-                {c}
-              </Link>
-            ))}
+        <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-sm font-bold uppercase tracking-wide text-o2-navy">Controle mensal de baixa de comissão - Corp - ERP O2</h2>
+            {!usaPeriodo ? (
+              <div className="flex items-center gap-2 text-sm" aria-label="Mês">
+                <Link href={hrefTela({ mes: somaMes(mesSel, -1) })} className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-gray-700 hover:bg-gray-50" title="mês anterior">◀</Link>
+                <span className="min-w-[88px] text-center font-semibold text-o2-navy">{mesTexto(`${mesSel}-01`)}</span>
+                <Link href={hrefTela({ mes: somaMes(mesSel, 1) })} className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-gray-700 hover:bg-gray-50" title="próximo mês">▶</Link>
+                {mesSel !== mesAtual && <Link href={hrefTela({ mes: undefined })} className="text-xs text-o2-navy underline">voltar ao mês atual</Link>}
+              </div>
+            ) : (
+              <Link href={hrefTela({ de: undefined, ate: undefined, mes: undefined })} className="text-xs text-o2-navy underline">sair do período por datas e voltar ao mês atual</Link>
+            )}
           </div>
-          {!usaPeriodo && (
-            <div className="flex items-center gap-2" aria-label="Mês">
-              <Link href={hrefTela({ mes: somaMes(mesSel, -1) })} className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-gray-700 hover:bg-gray-50" title="mês anterior">◀</Link>
-              <span className="min-w-[88px] text-center font-semibold text-o2-navy">{mesTexto(`${mesSel}-01`)}</span>
-              <Link href={hrefTela({ mes: somaMes(mesSel, 1) })} className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-gray-700 hover:bg-gray-50" title="próximo mês">▶</Link>
-              {mesSel !== mesAtual && <Link href={hrefTela({ mes: undefined })} className="text-xs text-o2-navy underline">voltar ao mês atual</Link>}
+          <div className="grid gap-4 xl:grid-cols-2">
+            <TabelaControle titulo="O2 Corretora de Seguros : 20001784000180" linhas={quadroTopo["O2 Corretora"] ?? []} />
+            <TabelaControle titulo="o2 Capitalização e Seguros" linhas={quadroTopo["O2 Capitalização"] ?? []} />
+          </div>
+          <p className="text-[11px] leading-relaxed text-gray-500">
+            Valores líquidos do imposto retido, como entram na conta. <b>Comissão prevista</b>: o que as parcelas do mês deveriam render conforme a experiência de cada seguradora (vencimento + prazo que ela costuma levar).
+            <b> Extratos de comissão</b>: o que a seguradora pagou segundo os extratos lidos. <b>Baixadas</b>: o que já foi baixado no Corp no mês (data da quitação). <b>Nibo</b>: o que entrou na conta (receita de seguros).
+            <b> Diferença</b> = Nibo − Baixadas: o que entrou no banco e ainda não foi baixado (negativo: baixado a mais do que entrou). Até R$ {TOLERANCIA_CAIXA} é considerado igual.
+          </p>
+        </section>
+
+        <p className="text-xs text-gray-600">
+          <Link href="/erp/conferencia" className="underline">← Conferência</Link>. Os extratos chegam de hora em hora pelo e-mail e pela pasta oficial do Drive “- RELATÓRIO COMISSÃO SEGURADORAS” (seguradora → ano → mês).
+          Nada é lançado no Corp por aqui: a lista pronta sai em planilha para o financeiro (baixa pelo valor bruto, previsão de repasse dia 15 do mês seguinte).
+        </p>
+
+        <details id="detalhe" open={Boolean(extratoAberto) || filtroLinha || sp.detalhe === "1"} className="rounded-xl border border-gray-200 bg-gray-50/60 p-4">
+          <summary className="cursor-pointer text-sm font-semibold uppercase tracking-wide text-o2-navy">Detalhe por seguradora: motivos, dias, extratos, aprovação da baixa e lista do Corp</summary>
+          <div className="mt-4 space-y-6">
+        <nav className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border border-gray-200 bg-white p-3 text-sm">
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            Detalhe de uma empresa por vez:
+            <div className="flex gap-1" aria-label="Empresa">
+              {CORRETORAS.map((c) => (
+                <Link key={c} href={hrefTela({ corretora: c, detalhe: "1" })} className={`rounded-lg px-3 py-1.5 text-sm font-medium ${c === corretoraSel ? "bg-o2-navy text-white" : "border border-gray-300 text-gray-700 hover:bg-gray-50"}`}>
+                  {c}
+                </Link>
+              ))}
             </div>
-          )}
-          {usaPeriodo && <Link href={hrefTela({ de: undefined, ate: undefined, mes: undefined })} className="text-xs text-o2-navy underline">sair do período por datas e voltar ao mês atual</Link>}
+          </div>
         </nav>
 
         <FiltrosErp
@@ -621,6 +676,8 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
             <li>Ao aprovar, só <b>cheia</b> e <b>pró-labore conferido</b> viram recebimento no ERP; o resto vai para “Para tratar”. Para o Corp vale o extrato inteiro menos as não encontradas.</li>
           </ul>
         </details>
+          </div>
+        </details>
       </main>
     </>
   );
@@ -717,6 +774,57 @@ function ExtratoCard({ e, linhas, aberto, base }: { e: Extrato; linhas: LinhaExt
         </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function TabelaControle({ titulo, linhas }: { titulo: string; linhas: LinhaTopo[] }) {
+  const soma = (f: (l: LinhaTopo) => number) => Math.round(linhas.reduce((t, l) => t + f(l), 0) * 100) / 100;
+  const dif = (l: { nibo: number; baixadas: number }) => Math.round((l.nibo - l.baixadas) * 100) / 100;
+  const tot = { prevista: soma((l) => l.prevista), extratos: soma((l) => l.extratos), baixadas: soma((l) => l.baixadas), nibo: soma((l) => l.nibo) };
+  const th = "whitespace-nowrap px-2 py-1.5 text-right font-semibold";
+  const cel = (v: number) => (Math.abs(v) < 0.005 ? <span className="text-gray-300">—</span> : brl(v));
+  const difCel = (v: number) => (
+    <span className={Math.abs(v) > TOLERANCIA_CAIXA ? "font-semibold text-red-700" : "text-gray-500"}>{Math.abs(v) < 0.005 ? "—" : brl(v)}</span>
+  );
+  return (
+    <div className="overflow-x-auto rounded-lg border border-gray-300">
+      <table className="w-full text-xs">
+        <caption className="bg-o2-navy px-3 py-2 text-left text-sm font-bold text-white">{titulo}</caption>
+        <thead className="bg-gray-100 text-[11px] uppercase tracking-wide text-gray-600">
+          <tr>
+            <th className="px-2 py-1.5 text-left font-semibold">Seguradora</th>
+            <th className={th} title="Comissão que deveria cair no mês, conforme a experiência de cada seguradora">Comissão<br />prevista</th>
+            <th className={th} title="O que a seguradora pagou, segundo os extratos lidos pelo ERP">Extratos de<br />comissão</th>
+            <th className={th} title="Já baixado no Corp no mês (data da quitação)">Baixadas</th>
+            <th className={th} title="O que entrou na conta (Nibo, receita de seguros)">Nibo</th>
+            <th className={th} title="Nibo − Baixadas">Diferença</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100">
+          {linhas.length === 0 && <tr><td colSpan={6} className="px-2 py-3 text-center text-gray-500">Nada neste mês.</td></tr>}
+          {linhas.map((l) => (
+            <tr key={l.seg}>
+              <td className="whitespace-nowrap px-2 py-1 font-medium text-gray-800">{l.nome}</td>
+              <td className="whitespace-nowrap px-2 py-1 text-right">{cel(l.prevista)}</td>
+              <td className="whitespace-nowrap px-2 py-1 text-right">{cel(l.extratos)}</td>
+              <td className="whitespace-nowrap px-2 py-1 text-right">{cel(l.baixadas)}</td>
+              <td className="whitespace-nowrap px-2 py-1 text-right">{cel(l.nibo)}</td>
+              <td className="whitespace-nowrap px-2 py-1 text-right">{difCel(dif(l))}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot className="bg-gray-100 font-bold text-o2-navy">
+          <tr>
+            <td className="px-2 py-1.5">TOTAIS</td>
+            <td className="px-2 py-1.5 text-right">{brl(tot.prevista)}</td>
+            <td className="px-2 py-1.5 text-right">{brl(tot.extratos)}</td>
+            <td className="px-2 py-1.5 text-right">{brl(tot.baixadas)}</td>
+            <td className="px-2 py-1.5 text-right">{brl(tot.nibo)}</td>
+            <td className="px-2 py-1.5 text-right">{difCel(dif(tot))}</td>
+          </tr>
+        </tfoot>
+      </table>
     </div>
   );
 }
