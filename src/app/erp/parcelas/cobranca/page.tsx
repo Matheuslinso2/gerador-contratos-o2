@@ -26,7 +26,7 @@ const SITUACOES = Object.fromEntries(Object.entries(STATUS).map(([k, v]) => [k, 
 type Linha = {
   parcela_id: string; documento_id: string; nosso_numero_corp: number | null; apolice: string | null; cliente: string | null; parcela_texto: string | null;
   venc_parcela: string; valor: number; corretora: string | null; seg: string; ramo: string | null; produto: string | null; dias: number;
-  prazo_normal: number; limite: number; dias_cancelamento: number | null; status: string; urgencia: number; via_fatura: boolean; venc_corp: string;
+  prazo_normal: number; limite: number; dias_cancelamento: number | null; status: string; urgencia: number; via_fatura: boolean; venc_corp: string; pct_pago: number | null; cobertura_ate_min: string | null; cobertura_ate_max: string | null;
 };
 type Resumo = { seg: string; produto: string; status: string; urgencia: number; parcelas: number; valor: number };
 
@@ -146,7 +146,8 @@ export default async function ParcelasCobrancaPage({ searchParams }: { searchPar
                   {l.via_fatura && <span className="block text-[10px] text-sky-700" title={`Fatura unificada: a parcela só fica em aberto depois do vencimento do boleto da fatura (no Corp consta ${formatarData(l.venc_corp)})`}>boleto da fatura · Corp {formatarData(l.venc_corp)}</span>}
                 </td>
                 <td className="px-3 py-1.5 text-right">{l.dias > 0 ? l.dias : `em ${-l.dias}`}</td>
-                <td className="px-3 py-1.5 text-right text-gray-500">{l.prazo_normal} / {l.limite} dias{l.dias_cancelamento ? ` · cancela em ${l.dias_cancelamento}` : ""}</td>
+                <td className="px-3 py-1.5 text-right text-gray-500">{l.prazo_normal} / {l.limite} dias{l.dias_cancelamento ? ` · cancela em ${l.dias_cancelamento}` : ""}
+                  {l.cobertura_ate_max && <span className="block text-[10px] text-gray-500" title="Tabela de Prazo Curto: dias de cobertura contados do início da vigência, conforme a % do prêmio já paga; a primeira data usa a faixa de baixo da tabela e a segunda a de cima">pago {l.pct_pago}% · cobertura até {l.cobertura_ate_min === l.cobertura_ate_max ? formatarData(l.cobertura_ate_max) : `${formatarData(l.cobertura_ate_min)} a ${formatarData(l.cobertura_ate_max)}`}</span>}</td>
                 <td className="px-3 py-1.5 text-right">{formatarReais(Number(l.valor))}</td>
               </tr>
             ))}
@@ -159,6 +160,7 @@ export default async function ParcelasCobrancaPage({ searchParams }: { searchPar
         Apólices aglomeradas numa fatura unificada só ficam em aberto depois do vencimento do BOLETO da fatura (marcado "boleto da fatura"), não pelo vencimento cadastrado no Corp; nelas o status não passa de "urgente" até a regra de cancelamento por fatura em atraso ser levantada.
         O prazo normal e o limite já incluem uma tolerância de 2 dias (1 por questões operacionais do banco e 1 para não cobrar o cliente no dia seguinte e ele já ter pago).
         "Risco de cancelamento" aparece onde a regra da seguradora está cadastrada: 1ª parcela não paga em Alfa e Yelum (Incêndio), Suhai (Auto) e Tokio (Fiança); mais de 30 dias na Too (Fiança) e de 20 dias na Allianz (Residência).
+        Onde a Condição Geral manda usar a Tabela de Prazo Curto (Auto de Porto, Allianz, Yelum, Suhai, Mapfre, Azul e HDI; Fiança da Tokio com vigência de até 12 parcelas), a tela mostra "pago X% · cobertura até" e marca risco de cancelamento só quando a data da faixa de CIMA da tabela já passou (mais 2 dias de tolerância) e nenhuma parcela posterior tem prova de pagamento. Os dias contam do início da vigência.
       </p>
     </main>
   );

@@ -30,3 +30,10 @@
 -- HDI Auto (28 dias no boleto) NÃO cadastrada: vem de manual do corretor, certeza média.
 -- 30/10 (Matheus): 973 apólices vigentes com modo_cobranca 'nao_informado' que aparecem em faturas de set/out passaram a 'fatura'
 -- (regra dele: se está nos itens de uma fatura, é fatura; fatura do mês corrente ainda sem itens fica como está).
+
+-- 30/10 (Matheus: "5 - aplicá-la e só me alertar se algo for muito fora da curva"): Tabela de Prazo Curto na view erp_parcelas_cobranca.
+-- Tabelas erp_prazo_curto_tabela (padrão 13%=15 dias … 100%=365; Suhai +7%=7) e erp_prazo_curto_escopo (Auto: Porto, Allianz, Yelum, Suhai, Mapfre, Azul, HDI; Tokio Fiança);
+-- função erp_prazo_curto_dias(seg, pct, faixa_de_cima). Colunas novas no fim da view: pct_pago (base paga ÷ base total das parcelas do documento, só com prova),
+-- cobertura_ate_min (faixa de baixo) e cobertura_ate_max (faixa de cima), contadas do INÍCIO da vigência. Risco de cancelamento só se hoje > cobertura_ate_max + 2 dias,
+-- sem prova na parcela e SEM parcela posterior com prova (senão é lacuna de baixa), só vigência de até 12 parcelas (a tabela é anual) e nunca dentro de fatura unificada.
+-- Migrations: erp_prazo_curto_tabela_e_cobranca, erp_prazo_curto_so_sem_parcela_posterior_paga, erp_prazo_curto_so_vigencia_ate_12_parcelas.
