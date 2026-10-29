@@ -10,6 +10,7 @@ import { textoDoPdf } from "@/lib/erp/anexosEmail";
 const arg = (n: string) => { const i = process.argv.indexOf(`--${n}`); return i >= 0 ? process.argv[i + 1] : undefined; };
 const GRAVAR = process.argv.includes("--gravar");
 const SO_VIGENTES = process.argv.includes("--so-vigentes");
+const MESCLAR = process.argv.includes("--mesclar"); // aplica a mescla de cliente-fragmento no cliente completo (rpc mesclar_cliente_fragmento, desfazível: erp_clientes_mesclados)
 const LIMITE = Number(arg("limite") ?? 1e9);
 const sb = createServiceClient();
 
@@ -74,11 +75,12 @@ function documentosPertoDoNome(texto: string, nome: string): string[] {
     if (!pdfs.length) { semPdf++; continue; }
     lidos++;
     const candidatos = new Set<string>();
+    const textos: string[] = [];
     for (const pdf of pdfs.slice(0, 4)) {
       const { data: blob } = await sb.storage.from(pdf.bucket).download(pdf.path);
       if (!blob) continue;
       const { t } = await textoDoPdf(Buffer.from(await blob.arrayBuffer()), []);
-      if (t) for (const d of documentosPertoDoNome(t, c.nome)) candidatos.add(d);
+      if (t) { textos.push(t); for (const d of documentosPertoDoNome(t, c.nome)) candidatos.add(d); }
       if (candidatos.size) break;
     }
     if (candidatos.size === 0) { semNome++; continue; }
@@ -86,7 +88,22 @@ function documentosPertoDoNome(texto: string, nome: string): string[] {
     const doc = [...candidatos][0];
     achou++;
     const { data: outro } = await sb.from("locatarios").select("id, nome").eq("cpf", doc).neq("id", c.id).maybeSingle();
-    if (outro) { duplicado++; detalhes.push(`DUPLICADO ${c.nome} (${doc}) já é o cliente "${outro.nome}" — decidir mescla`); continue; }
+    if (outro) {
+      duplicado++;
+      // regra de mescla (Matheus 29/10): o nome do fragmento é o INÍCIO ou o FIM (palavras inteiras, em sequência) do nome completo do cliente que já tem esse CPF/CNPJ,
+      // e o nome completo também aparece no mesmo PDF. Fora disso fica só listado para decisão.
+      const tf = semAcento(c.nome).split(" "), td = semAcento(outro.nome).split(" ");
+      const sequencia = (a: string[], b: string[]) => a.length <= b.length && (a.every((x, i) => b[i] === x) || a.every((x, i) => b[b.length - a.length + i] === x));
+      const pdfTemCompleto = textos.some((x) => semAcento(x).includes(semAcento(outro.nome)));
+      const regraOk = tf.length >= 2 && sequencia(tf, td) && pdfTemCompleto;
+      detalhes.push(`${regraOk ? "MESCLA" : "DECIDIR"} ${c.nome} → ${outro.nome} (${doc.length === 11 ? "CPF" : "CNPJ"} ${doc}${regraOk ? "" : "; " + (tf.length < 2 ? "fragmento com 1 palavra" : !sequencia(tf, td) ? "nome não é início/fim do completo" : "nome completo não está no PDF")})`);
+      if (regraOk && MESCLAR) {
+        const { data: r, error: em } = await sb.rpc("mesclar_cliente_fragmento", { p_fragmento: c.id, p_destino: outro.id, p_evidencia: `PDF da apólice traz o nome completo "${outro.nome}" e ${doc.length === 11 ? "CPF" : "CNPJ"} ${doc}; fragmento "${c.nome}" é início/fim desse nome` });
+        detalhes.push(em ? `  erro na mescla: ${em.message}` : `  mesclado: ${JSON.stringify(r)}`);
+        if (!em) feito++;
+      }
+      continue;
+    }
     detalhes.push(`OK ${c.nome} → ${doc.length === 11 ? "CPF" : "CNPJ"} ${doc}`);
     if (GRAVAR) {
       const { error } = await sb.from("locatarios").update({ cpf: doc, tipo_documento: doc.length === 11 ? "cpf" : "cnpj", identificacao: "documento" }).eq("id", c.id);
