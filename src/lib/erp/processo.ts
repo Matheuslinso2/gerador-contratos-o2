@@ -19,7 +19,7 @@ export const ETAPAS: Etapa[] = [
   { chave: "apolices", curto: "Apólices", label: "Apólices", href: "/erp/documentos", descricao: "Apólices, endossos e faturas, com ficha e linha do tempo." },
   { chave: "parcelas", curto: "Parcelas", label: "Parcelas", href: "/erp/parcelas", descricao: "Vencimentos do Corp × cobrado pela seguradora; inadimplência em seguida." },
   { chave: "baixa", curto: "Baixa", label: "Baixa de comissão", href: "/erp/baixas", rotas: ["/erp/conferencia"], descricao: "Extratos conferidos, baixa assistida, atraso e estornos de endosso." },
-  { chave: "repasses", curto: "Repasses", label: "Repasses", href: null, descricao: "Relatório do que será pago a cada imobiliária no dia 15 (em breve)." },
+  { chave: "repasses", curto: "Repasses", label: "Repasses", href: "/erp/repasses", descricao: "Relatório do que será pago a cada imobiliária no dia 15 (simulação, só leitura)." },
   { chave: "sinistro", curto: "Sinistro", label: "Sinistro", href: "/sinistros", externo: true, descricao: "Módulo de sinistros do Workspace." },
   { chave: "renovacao", curto: "Renovação", label: "Renovação", href: "/erp/renovacao", descricao: "Vigentes por fim de vigência, agrupados como os cards (lote imobiliária + seguradora ou 1 por seguro); conferência antes de criar o card da próxima vigência." },
 ];
