@@ -1,0 +1,10 @@
+-- ERP O2 (29/10/2026): inadimplência CONFIRMADA pelas seguradoras (e-mails Allianz, Pottencial, Alfa, Too) em erp_parcelas_inadimplencia.
+-- Aplicado via MCP (migrations erp_inadimplencia_seguradora_estrutura e erp_inadimplencia_confirmada_rpc). Leitor: src/lib/erp/inadimplenciaSeguradoras.ts
+-- Carga: npx tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/erp/carregar-inadimplencia-seguradoras.ts --gravar
+--
+-- Colunas novas: corretora, cliente, cpf_cnpj, comissao, previsao_cancelamento, ultima_vez_visto, apolice_digitos.
+-- Chave única (seguradora_id, numero_apolice, parcela_n, titulo, vencimento_original); parcela_n=0 e titulo='' quando a seguradora não informa.
+-- erp_cruzar_inadimplencia(): liga ao documento/parcela (mesma regra de número de apólice do cruzamento de extratos) e marca 'regularizada'
+--   a parcela que aparece depois em extrato de comissão. Só o service_role executa.
+-- erp_inadimplencia_confirmada(p_de, p_ate) e erp_inadimplencia_confirmada_linhas(corretora, seg, p_de, p_ate): alimentam /erp/baixas.
+-- (definições completas: pg_get_functiondef no banco)
