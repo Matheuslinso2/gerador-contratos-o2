@@ -544,7 +544,7 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
                           <>
                             <p className="text-gray-700">
                               {c.inad.sem === 0
-                                ? <>Das <b>{c.inad.esperadas}</b> parcelas que deveriam ter pago comissão (vencidas, além do prazo habitual da seguradora e ainda sem comissão esgotada), <b>todas</b> aparecem em extrato ou estão baixadas.</>
+                                ? <>Das <b>{c.inad.esperadas}</b> parcelas que deveriam ter pago comissão (vencidas e além do prazo habitual da seguradora, inclusive as de comissão já esgotada), <b>todas</b> aparecem em extrato ou estão baixadas.</>
                                 : <><b>{c.inad.sem}</b> de {c.inad.esperadas} parcelas esperadas (<b>{brl(c.inad.valorSem)}</b> de {brl(c.inad.valorEsperado)}) não aparecem em nenhum extrato nem estão baixadas: o cliente provavelmente não pagou, e a seguradora também não recebeu.</>}
                             </p>
                             {c.inad.sem > 0 && (

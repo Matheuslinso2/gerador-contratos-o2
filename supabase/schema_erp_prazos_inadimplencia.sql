@@ -5,12 +5,12 @@
 -- REGRA DO MATHEUS
 --  * Se a linha do cliente está no extrato da seguradora, ele pagou. Se a comissão esperada (parcela vencida e além do prazo habitual da
 --    seguradora/ramo) não está em nenhum extrato nem baixada no Corp, a seguradora provavelmente não recebeu o prêmio.
---  * NENHUM produto paga antes do vencimento. A seguradora só gera comissão depois que o cliente paga a 1ª parcela. No ESGOTAMENTO ela
---    concentra a comissão nas primeiras parcelas e deixa um resquício nas seguintes (ex.: 70% de comissão em 4 vezes: 100%, 100%, 20%, 0).
---    O Corp fecha as parcelas seguintes como "recebida" com valor 0 na data do esgotamento (isso é que dava prazo "negativo").
---  * Por isso: (1) os prazos são medidos só com comissões de verdade (valor > 0); (2) a parcela 1 sempre vale; (3) da parcela 2 em diante não
---    se conclui se uma parcela ANTERIOR do mesmo documento foi fechada com valor 0 ou paga com menos de 90% do melhor percentual recebido
---    do documento (sinal RELATIVO: em seguradoras que pagam parte da comissão direto à imobiliária quase nenhuma parcela chega a 99%).
+--  * NENHUM produto paga antes do vencimento. A seguradora só gera comissão depois que o cliente paga a 1ª parcela.
+--  * ESGOTAMENTO NÃO ISENTA DE CONTROLE (Matheus, 29/10): mesmo com a comissão toda recebida nas primeiras parcelas, o cliente segue pagando o
+--    boleto no vencimento e a linha dele continua no extrato (comissão zerada). Por isso TODA parcela vencida é esperada. Evidência de pagamento =
+--    linha do extrato ligada à parcela (qualquer valor, inclusive zero) OU comissão recebida > 0 no Corp. "Recebida com valor 0" no Corp NÃO prova pagamento.
+--  * Parcela do cliente não paga = sem repasse àquela linha até ele pagar (o repasse é parcelado como a apólice).
+--  * Os prazos são medidos só com comissões de verdade (valor > 0), teto de 120 dias.
 --  * A tela só conclui onde o extrato está ligado às parcelas (>= 90% das linhas) e confere com o banco (Nibo).
 
 create index if not exists erp_corp_comissoes_venc_idx on erp_corp_comissoes (venc_parcela);
