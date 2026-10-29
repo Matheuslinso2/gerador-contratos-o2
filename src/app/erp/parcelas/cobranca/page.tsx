@@ -153,7 +153,8 @@ export default async function ParcelasCobrancaPage({ searchParams }: { searchPar
       </div>
       <p className="text-[11px] text-gray-500">
         Mostra as 300 mais urgentes do filtro. "Prazo normal" e "limite" vêm do estudo dos últimos 16 meses de comissões recebidas (mediana e percentil 90 por seguradora e ramo).
-        A regra de quantos dias em aberto leva ao cancelamento da apólice ainda não está cadastrada: ela só aparece aqui depois de informada por seguradora.
+        O prazo normal e o limite já incluem uma tolerância de 2 dias (1 por questões operacionais do banco e 1 para não cobrar o cliente no dia seguinte e ele já ter pago).
+        "Risco de cancelamento" aparece onde a regra da seguradora está cadastrada: 1ª parcela não paga em Alfa e Yelum (Incêndio), Suhai (Auto) e Tokio (Fiança); mais de 30 dias na Too (Fiança) e de 20 dias na Allianz (Residência).
       </p>
     </main>
   );

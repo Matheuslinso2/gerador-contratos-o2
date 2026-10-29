@@ -9,3 +9,5 @@
 -- automático): Alfa Incêndio, Yelum Incêndio, Suhai Auto, Tokio Fiança (migration erp_regras_cancelamento_primeira_parcela). 'risco_cancelamento' só quando
 -- dias de atraso > max(dias da regra, prazo normal da seguradora). Condições com prazo contado da NOTIFICAÇÃO (Tokio Incêndio/Empresarial: 15+30 dias; Bradesco:
 -- 30 dias após a suspensão) NÃO entram: não são dias desde o vencimento. Too (30) e Allianz (20) são certeza média: aguardam aprovação do Matheus.
+-- 29/10 (noite): Too Fiança (30 dias) e Allianz Residência (20 dias) cadastradas com aprovação do Matheus; tolerância de 2 dias somada ao prazo normal e ao limite
+-- (1 por questões operacionais do banco + 1 para não cobrar o cliente no dia seguinte e ele já ter pago) — migration erp_regras_cancelamento_too_allianz_tolerancia.
