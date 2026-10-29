@@ -1,0 +1,7 @@
+-- ERP O2 (29/10/2026): status de COBRANÇA das parcelas, padronizados por seguradora e produto (aplicado via MCP: erp_parcelas_cobranca_v2,
+-- erp_cobranca_resumo). Parcela vencida e paga → a seguradora paga a comissão em até 'prazo_normal' dias (erp_prazos_comissao: mediana por
+-- seguradora/ramo); sem a comissão (nem linha de extrato) depois do prazo = em aberto, e a urgência sobe: aguardando_comissao (1) → atencao
+-- (após o prazo normal, 2) → urgente (após o limite habitual P90, 3) → risco_cancelamento (4, SÓ onde erp_regras_cancelamento tiver a regra
+-- da seguradora; nenhuma regra foi inventada: a tabela nasce vazia). Janela: vencimentos de -180 a +30 dias. Tela: /erp/parcelas/cobranca.
+-- Definições completas: pg_get_viewdef('erp_parcelas_cobranca') e pg_get_functiondef('erp_cobranca_resumo').
+-- erp_regras_cancelamento(seg_abrev, ramo nulo = seguradora inteira, dias_em_aberto, fonte, atualizado_em), RLS is_colaborador_o2().

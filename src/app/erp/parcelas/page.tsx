@@ -53,7 +53,11 @@ export default async function ErpParcelasPage({ searchParams }: { searchParams: 
   return (
     <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-4 p-8">
       <div>
-        <h1 className="text-xl font-semibold text-o2-navy">Parcelas · conferência dos vencimentos</h1>
+        <div className="flex gap-3 text-sm">
+          <span className="border-b-2 border-o2-navy font-semibold text-o2-navy">Conferência dos vencimentos</span>
+          <Link href="/erp/parcelas/cobranca" className="text-gray-500 hover:text-o2-navy hover:underline">Cobrança e inadimplência</Link>
+        </div>
+        <h1 className="mt-2 text-xl font-semibold text-o2-navy">Parcelas · conferência dos vencimentos</h1>
         <p className="text-sm text-gray-600">
           Parcelas cujo vencimento no Corp está em outro mês do que a seguradora cobrou na fatura. Enquanto não for corrigido no Corp, a previsão de receita e a
           baixa de comissão caem no mês errado. Fonte: faturas Tokio, Porto, Pottencial, Too e Yelum. A inadimplência entra nesta etapa depois.
