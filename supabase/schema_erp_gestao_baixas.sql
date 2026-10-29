@@ -1,0 +1,5 @@
+-- ERP O2 (29/10/2026): Gestão das baixas (aba lateral de /erp/baixas). Aplicado via MCP (migration erp_gestao_baixas_tabelas).
+--   erp_gestao_baixas_notas        anotações por seguradora × empresa (extrato_id nulo) e por extrato
+--   erp_saldo_cobrar_seguradora    diferença que a seguradora ainda deve (aberto / recebido / perdoado), mesmo dentro da tolerância de R$ 6
+--   erp_baixa_automatica_config    uma linha por seguradora × empresa; ativa = false e modo = 'teste' (a baixa automática só é AVALIADA, não executada)
+-- RLS: is_colaborador_o2() em tudo. Regra do "padrão correto": src/lib/erp/baixaAutomatica.ts.
