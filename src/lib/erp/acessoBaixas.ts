@@ -11,6 +11,9 @@ const PODEM_VER_BAIXAS = [
   "kamila@o2seguros.com.br",
   "patricia@o2seguros.com.br",
   "henrique@o2seguros.com.br",
+  // Nichoos (desenvolvimento do ERP; liberado pelo Matheus em 29/10)
+  "misatorafael@nichoos.com",
+  "lucas@nichoos.com",
 ];
 
 export function podeVerBaixas(email: string | null | undefined): boolean {
