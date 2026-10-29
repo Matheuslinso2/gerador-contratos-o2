@@ -35,6 +35,17 @@ const texto = (v: unknown): string | null => {
   return s ? s : null;
 };
 const data = (v: unknown): string | null => (texto(v) ? String(v).slice(0, 10) : null);
+/** Forma de pagamento do card (campo novo nos funis, 29/10) → modo de cobrança do ERP. FATURA AGRUPADA = fatura; FATURA INDIVIDUAL = individual. */
+function modoDaForma(rotuloForma: string | null | undefined): Extraido["modoCobranca"] | null {
+  const t = (rotuloForma ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
+  if (!t) return null;
+  if (t.startsWith("FATURA INDIVIDUAL")) return "individual";
+  if (t.startsWith("FATURA")) return "fatura";
+  if (t.startsWith("CART")) return "cartao";
+  if (t.startsWith("BOLET")) return "boleto";
+  if (t.startsWith("DEBIT")) return "debito";
+  return null;
+}
 const addDays = (d: string, n: number): string => { const x = new Date(d + "T00:00:00Z"); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
 const digitos = (v: unknown): string => String(v ?? "").replace(/\D/g, "");
 /** CPF/CNPJ que veio como número perde zeros à esquerda: completa para 11 ou 14. */
@@ -88,7 +99,7 @@ export type Extraido = {
   imobTexto: string | null; // nome/código da imobiliária quando o card não usa Empresa
   tipoContratacao: "indicacao_imobiliaria" | "venda_direta" | "frota" | "canal" | null;
   canalVenda: string | null;
-  modoCobranca: "nao_informado" | "fatura" | "boleto" | "cartao" | "debito";
+  modoCobranca: "nao_informado" | "fatura" | "boleto" | "cartao" | "debito" | "individual";
   formaPagamento: string | null;
   observacoes: string | null;
   item: { administrado?: boolean | null; tipo_imovel?: string | null; cep?: string | null; logradouro?: string | null; numero?: string | null; complemento?: string | null; bairro?: string | null; cidade?: string | null; uf?: string | null; valor_aluguel?: number | null; plano?: string | null; observacoes?: string | null; placa?: string | null; veiculo?: string | null } | null;
@@ -138,7 +149,7 @@ export const CONFIGS: ConfigSpa[] = [
         cliente: { documento: cpf1, nome: texto(r.ufCrm10_1776354897), email: texto(r.ufCrm10_1783366659), telefone: texto(r.ufCrm10_1783366668) },
         imobTexto: texto(r.ufCrm10_1783371296),
         tipoContratacao: it.companyId ? "indicacao_imobiliaria" : voceE.includes("Pretendente") || voceE.includes("Proprietário") ? "venda_direta" : null,
-        canalVenda: null, modoCobranca: "nao_informado", formaPagamento: null,
+        canalVenda: null, modoCobranca: modoDaForma(rotulo(defs, "ufCrm10_1793209055151", r.ufCrm10_1793209055151)) ?? "nao_informado", formaPagamento: rotulo(defs, "ufCrm10_1793209055151", r.ufCrm10_1793209055151),
         observacoes: [texto(r.ufCrm10_1776352503), tipoEnd ? `Endosso: ${tipoEnd}` : null, endosso && texto(r.ufCrm10_1793216356) ? `Pendências: ${texto(r.ufCrm10_1793216356)}` : null].filter(Boolean).join("\n") || null,
         item: {
           administrado: (() => { const a = rotulo(defs, "ufCrm10_1781116076", r.ufCrm10_1781116076); if (a === "Sim") return true; if (a === "Não") return false; if (r.ufCrm10_1788957284213 === "Y" || r.ufCrm10_1788957828053 === "Y") return true; if (r.ufCrm10_1788957284213 === "N") return false; return null; })(),
@@ -191,7 +202,7 @@ export const CONFIGS: ConfigSpa[] = [
         imobTexto: null,
         tipoContratacao: origem.includes("Segimob") ? "canal" : it.companyId ? "indicacao_imobiliaria" : null,
         canalVenda: origem.includes("Segimob") ? "segimob" : null,
-        modoCobranca: ramoAbrev === "IMOB" ? "fatura" : "nao_informado", formaPagamento: null,
+        modoCobranca: modoDaForma(rotulo(defs, "ufCrm12_1793285359407", r.ufCrm12_1793285359407)) ?? (ramoAbrev === "IMOB" ? "fatura" : "nao_informado"), formaPagamento: rotulo(defs, "ufCrm12_1793285359407", r.ufCrm12_1793285359407),
         observacoes: [texto(r.ufCrm12Observacoes), movimentacao ? `Movimentação: ${movimentacao}` : null, rotulo(defs, "ufCrm12_1789156499539", r.ufCrm12_1789156499539) ? `Endosso: ${rotulo(defs, "ufCrm12_1789156499539", r.ufCrm12_1789156499539)}` : null, texto(r.ufCrm12ReferenciaPlanilha) ? `Planilha: ${texto(r.ufCrm12ReferenciaPlanilha)}` : null].filter(Boolean).join("\n") || null,
         item: {
           cep: texto(r.ufCrm12_1790085456047), logradouro: texto(r.ufCrm12_1790085424526), numero: texto(r.ufCrm12_1790085444491), complemento: texto(r.ufCrm12_1790085448344),
@@ -454,7 +465,7 @@ export async function sincronizarSpa(sb: SupabaseClient, cfg: ConfigSpa, o: Opco
           corretora_id: corr, tipo: x.tipo_corp === "END" ? x.tipoEndosso ?? "C" : x.tipo, tipo_corp: x.tipo_corp, seguradora_id: seg, ramo_id: ramo,
           locatario_id: locatarioId, imobiliaria_principal_id: imobId, canal_venda: x.canalVenda,
           tipo_contratacao: x.tipoContratacao, modo_cobranca: x.modoCobranca === "fatura" && !imobId ? "nao_informado" : x.modoCobranca,
-          numero_apolice: x.numeroApolice, numero_proposta: x.numeroProposta, forma_pagamento: null,
+          numero_apolice: x.numeroApolice, numero_proposta: x.numeroProposta, forma_pagamento: x.formaPagamento,
           dt_proposta: String(item.createdTime).slice(0, 10), vigencia_inicio: x.vigIni, vigencia_fim: x.vigFim,
           qtd_parcelas: x.parcelas, premio_liquido: sep.liquido, iof: sep.iof, premio_total: sep.total,
           comissao_pct: comissaoPct, comissao_valor: Math.round(premio * comissaoPct) / 100,
@@ -472,6 +483,8 @@ export async function sincronizarSpa(sb: SupabaseClient, cfg: ConfigSpa, o: Opco
           Object.assign(patch, { tipo_corp: x.tipo_corp, ...(x.tipo_corp === "END" ? { tipo: x.tipoEndosso ?? "C" } : {}), situacao: sit.situacao, motivo_cancelamento: sit.motivo ?? null, vigencia_inicio: x.vigIni, vigencia_fim: x.vigFim, seguradora_id: seg ?? atual.seguradora_id, qtd_parcelas: x.parcelas, numero_apolice: x.numeroApolice ?? atual.numero_apolice, numero_proposta: x.numeroProposta ?? atual.numero_proposta });
           if (premio) { patch.premio_liquido = sep.liquido; patch.iof = sep.iof; patch.premio_total = sep.total; patch.comissao_valor = Math.round(premio * comissaoPct) / 100; }
           if (comissaoPct) patch.comissao_pct = comissaoPct;
+          // forma de pagamento escolhida no card (Matheus 29/10): vira o modo de cobrança (fatura só vale com imobiliária)
+          if (x.formaPagamento) { patch.modo_cobranca = x.modoCobranca === "fatura" && !(atual?.imobiliaria_principal_id || imobId) ? "nao_informado" : x.modoCobranca; patch.forma_pagamento = x.formaPagamento; }
         }
         if (!atual?.locatario_id && locatarioId) patch.locatario_id = locatarioId;
         if (!atual?.imobiliaria_principal_id && imobId) patch.imobiliaria_principal_id = imobId;

@@ -81,7 +81,8 @@ export const SEGURADORA_FATURA: Record<string, string> = { TOKI: "TOKIO", POTT: 
 
 export const CORRETORAS = ["O2 Corretora", "O2 Capitalização"];
 export const FORMAS_PAGAMENTO: Record<string, string> = {
-  fatura: "Fatura da imobiliária",
+  fatura: "Fatura agrupada da imobiliária",
+  individual: "Fatura individual",
   boleto: "Boleto",
   cartao: "Cartão",
   debito: "Débito",
