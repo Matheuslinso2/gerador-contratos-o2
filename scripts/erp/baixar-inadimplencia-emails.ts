@@ -41,7 +41,7 @@ async function main() {
     for (const m of msgs) {
       const dia = new Date(m.data).toISOString().slice(0, 10);
       const base = `${dia}_${limpa(m.assunto)}_${m.id.slice(-6)}`;
-      fs.writeFileSync(path.join(pasta, `${base}.txt`), `${m.assunto}\n${m.de ?? ""}\n${m.data}\n\n${m.corpoTexto}`);
+      fs.writeFileSync(path.join(pasta, `${base}.txt`), `${m.assunto}\n${m.remetente}\n${m.data}\n\n${m.corpoTexto}`);
       for (const a of m.anexos) {
         try {
           const buf = await baixarAnexo(m.id, a.attachmentId);
