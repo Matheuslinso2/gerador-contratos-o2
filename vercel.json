@@ -144,6 +144,10 @@
       "schedule": "25 * * * *"
     },
     {
+      "path": "/api/cron/erp-inadimplencia",
+      "schedule": "45 * * * *"
+    },
+    {
       "path": "/api/cron/erp-faturas",
       "schedule": "50 * * * *"
     }
