@@ -396,6 +396,7 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
             <TabelaControle titulo="O2 Corretora de Seguros : 20001784000180" linhas={quadroTopo["O2 Corretora"] ?? []} />
             <TabelaControle titulo="o2 Capitalização e Seguros" linhas={quadroTopo["O2 Capitalização"] ?? []} />
           </div>
+          <TabelaControle titulo="Consolidado · O2 Corretora + O2 Capitalização (uma linha por seguradora)" linhas={consolidarQuadros(quadroTopo["O2 Corretora"] ?? [], quadroTopo["O2 Capitalização"] ?? [])} />
           <p className="text-[11px] leading-relaxed text-gray-500">
             Valores líquidos do imposto retido, como entram na conta. <b>Comissão prevista</b>: o que as parcelas do mês deveriam render conforme a experiência de cada seguradora (vencimento + prazo que ela costuma levar).
             <b> Extratos de comissão</b>: o que a seguradora pagou segundo os extratos lidos. <b>Baixadas</b>: o que já foi baixado no Corp no mês (data da quitação). <b>Nibo</b>: o que entrou na conta (receita de seguros).
@@ -922,6 +923,17 @@ function ExtratoCard({ e, linhas, aberto, base }: { e: Extrato; linhas: LinhaExt
       </div>
     </div>
   );
+}
+
+// Soma as duas empresas por seguradora (foco na seguradora, não no produto): mesmas colunas e mesma regra dos quadros por CNPJ.
+function consolidarQuadros(a: LinhaTopo[], b: LinhaTopo[]): LinhaTopo[] {
+  const m = new Map<string, LinhaTopo>();
+  for (const l of [...a, ...b]) {
+    const x = m.get(l.seg);
+    if (!x) { m.set(l.seg, { ...l }); continue; }
+    x.prevista += l.prevista; x.extratos += l.extratos; x.baixadas += l.baixadas; x.nibo += l.nibo;
+  }
+  return [...m.values()].map((l) => ({ ...l, prevista: Math.round(l.prevista * 100) / 100, extratos: Math.round(l.extratos * 100) / 100, baixadas: Math.round(l.baixadas * 100) / 100, nibo: Math.round(l.nibo * 100) / 100 })).sort((x, y) => x.nome.localeCompare(y.nome));
 }
 
 function TabelaControle({ titulo, linhas }: { titulo: string; linhas: LinhaTopo[] }) {
