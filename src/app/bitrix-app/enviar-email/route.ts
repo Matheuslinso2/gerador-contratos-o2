@@ -5,7 +5,7 @@ import { registrarAtividadeEmail } from "@/lib/bitrix/atividades";
 import { tokenBitrixValido, BUCKET_ANEXOS } from "@/lib/bitrix/emailNoCard";
 import { createServiceClient } from "@/lib/supabase/service";
 import { nomeExibidoRemetente } from "@/lib/campanhas/remetente";
-import { bccDoCard, continuarConversa } from "@/lib/bitrix/conversasEmail";
+import { bccDoCard, continuarConversa, gravarDestinatarios } from "@/lib/bitrix/conversasEmail";
 import { vincularPorTratativa } from "@/lib/bitrix/conversasGmail";
 import { buscarAssinatura, htmlAssinatura } from "@/lib/bitrix/assinaturasEmail";
 
@@ -177,6 +177,9 @@ export async function POST(request: NextRequest) {
     console.error("Falha ao enviar e-mail pelo card:", erro);
     return NextResponse.json({ ok: false, erro: "Falha ao enviar o e-mail. Tente de novo em instantes." }, { status: 502 });
   }
+
+  // Próximo e-mail deste card já abre com estes Para/Cc (reunião Kamila 29/10/2026).
+  await gravarDestinatarios(entityTypeId, itemId, { para: destinatarios, cc: copias }, "envio");
 
   // Arquivo temporário só existia pra sustentar este envio -- limpeza
   // best-effort (aguarda terminar antes da função serverless encerrar, mas

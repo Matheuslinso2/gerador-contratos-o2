@@ -67,3 +67,35 @@ export async function continuarConversa(
 // Cópia oculta pro endereço do card: é assim que o Worker recebe o nosso
 // próprio e-mail e descobre o Message-ID que o provedor de envio atribuiu.
 export const bccDoCard = (entityTypeId: number, itemId: number) => gerarEnderecoRespostaCard(entityTypeId, itemId);
+
+// --- Destinatários da conversa (29/10/2026, reunião Kamila) ---
+// O "E-mail no card" abre com Para/Cc já preenchidos quando o card tem
+// conversa: guarda quem recebeu o último envio pelo card, ou os participantes
+// da conversa do Gmail quando ela é vinculada.
+export type DestinatariosCard = { para: string[]; cc: string[] };
+
+export async function gravarDestinatarios(
+  entityTypeId: number,
+  itemId: number,
+  d: DestinatariosCard,
+  origem: "envio" | "gmail"
+): Promise<void> {
+  if (!d.para.length) return;
+  const { error } = await createServiceClient()
+    .from("bitrix_email_destinatarios")
+    .upsert(
+      { entity_type_id: entityTypeId, item_id: itemId, para: d.para, cc: d.cc, origem, atualizado_em: new Date().toISOString() },
+      { onConflict: "entity_type_id,item_id" }
+    );
+  if (error) console.warn("Falha ao guardar destinatários do card:", error.message);
+}
+
+export async function lerDestinatarios(entityTypeId: number, itemId: number): Promise<DestinatariosCard | null> {
+  const { data } = await createServiceClient()
+    .from("bitrix_email_destinatarios")
+    .select("para, cc")
+    .eq("entity_type_id", entityTypeId)
+    .eq("item_id", itemId)
+    .maybeSingle();
+  return data ? { para: data.para ?? [], cc: data.cc ?? [] } : null;
+}

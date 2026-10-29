@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { tokenBitrixValido } from "@/lib/bitrix/emailNoCard";
-import { listarConversas } from "@/lib/bitrix/conversasEmail";
+import { listarConversas, lerDestinatarios } from "@/lib/bitrix/conversasEmail";
 
 export const dynamic = "force-dynamic";
 
@@ -19,5 +19,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, erro: "Sessão do Bitrix inválida." }, { status: 401 });
   }
   if (!entityTypeId || !itemId) return NextResponse.json({ ok: false, erro: "Dados incompletos." }, { status: 400 });
-  return NextResponse.json({ ok: true, conversas: await listarConversas(entityTypeId, itemId) });
+  const [conversas, destinatarios] = await Promise.all([listarConversas(entityTypeId, itemId), lerDestinatarios(entityTypeId, itemId)]);
+  return NextResponse.json({ ok: true, conversas, destinatarios: conversas.length ? destinatarios : null });
 }

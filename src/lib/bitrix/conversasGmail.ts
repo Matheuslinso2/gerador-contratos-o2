@@ -2,7 +2,7 @@ import "server-only";
 import { obterClienteGmail, REMETENTES_EXCLUIDOS } from "@/lib/gestaoEmails/gmail";
 import { createServiceClient } from "@/lib/supabase/service";
 import { buscarItem, chamarBitrix } from "./client";
-import { assuntoBase } from "./conversasEmail";
+import { assuntoBase, gravarDestinatarios, type DestinatariosCard } from "./conversasEmail";
 
 // Achar, no Gmail, a conversa que a equipe já está tendo com o cliente por
 // fora do card (ex: o cliente escreveu direto pra fianca@ e a equipe
@@ -67,6 +67,31 @@ function desescaparHtml(texto: string): string {
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&amp;/g, "&");
+}
+
+// Quem participa da conversa do Gmail: Para = gente de fora da O2 (cliente,
+// imobiliária) que aparece em De/Para/Cc; Cc = endereços internos que aparecem
+// em Cc (ex.: fianca@). O endereço de resposta do card e os remetentes
+// automáticos ficam de fora. A pessoa edita tudo antes de enviar.
+export function destinatariosDaConversa(msgs: { payload?: { headers?: { name?: string | null; value?: string | null }[] | null } | null }[]): DestinatariosCard {
+  const achar = (t: string) => t.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g) ?? [];
+  const interno = (e: string) => /@o2seguros\.com\.br$/i.test(e);
+  const ignorar = (e: string) => /^card-\d+-\d+@/i.test(e) || /@notificacoes\.o2seguros\.com\.br$/i.test(e) || /no-?reply/i.test(e);
+  const para: string[] = [];
+  const cc: string[] = [];
+  const somar = (lista: string[], e: string) => { if (!lista.some((x) => x.toLowerCase() === e.toLowerCase())) lista.push(e); };
+  // Da mensagem mais recente para a mais antiga: quem escreveu por último vem primeiro.
+  for (const m of [...msgs].reverse()) {
+    const h = m.payload?.headers ?? [];
+    for (const nome of ["From", "To", "Cc"]) {
+      for (const e of achar(cabecalho(h, nome))) {
+        if (ignorar(e)) continue;
+        if (!interno(e)) somar(para, e);
+        else if (nome === "Cc") somar(cc, e);
+      }
+    }
+  }
+  return { para: para.slice(0, 5), cc: cc.slice(0, 5) };
 }
 
 function cabecalho(headers: { name?: string | null; value?: string | null }[] | undefined, nome: string): string {
@@ -185,7 +210,7 @@ export async function vincularConversaGmail(entityTypeId: number, itemId: number
     userId: "me",
     id: threadId,
     format: "metadata",
-    metadataHeaders: ["Subject", "Message-ID", "References"],
+    metadataHeaders: ["Subject", "Message-ID", "References", "From", "To", "Cc"],
   });
   const msgs = thread.data.messages ?? [];
   const ultima = msgs[msgs.length - 1];
@@ -210,5 +235,6 @@ export async function vincularConversaGmail(entityTypeId: number, itemId: number
     { onConflict: "entity_type_id,item_id,message_id" }
   );
   if (error) throw new Error(`Falha ao vincular a conversa: ${error.message}`);
+  await gravarDestinatarios(entityTypeId, itemId, destinatariosDaConversa(msgs), "gmail");
   return { assuntoBase: base };
 }

@@ -113,9 +113,9 @@ export async function buscarApolicesMae(
   const temFiltro = !!(f.busca.trim() || f.imovel.trim());
   if (!temFiltro && !(f.soDaImobiliaria && card.imobiliariaNome)) return [];
   // Card com mais de uma apólice no campo ("2166636/9791158"): busca cada número.
-  const partes = f.busca.split(/s+es+|[/,;]/i).map((p) => p.trim()).filter(Boolean);
-  if (partes.length > 1 && partes.every((p) => /^[d.-s]+$/.test(p))) {
-    const listas = await Promise.all(partes.map((p) => buscarApolicesMae(sb, funil, card, { ...f, busca: p.replace(/D/g, "") })));
+  const partes = f.busca.split(/\s+e\s+|[/,;]/i).map((p) => p.trim()).filter(Boolean);
+  if (partes.length > 1 && partes.every((p) => /^[\d.\-\s]+$/.test(p))) {
+    const listas = await Promise.all(partes.map((p) => buscarApolicesMae(sb, funil, card, { ...f, busca: p.replace(/\D/g, "") })));
     const vistos = new Set<string>();
     return listas.flat().filter((d) => (vistos.has(d.id) ? false : (vistos.add(d.id), true)));
   }

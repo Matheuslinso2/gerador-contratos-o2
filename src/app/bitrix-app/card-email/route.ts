@@ -369,6 +369,18 @@ export async function POST(request: NextRequest) {
           document.getElementById("bloco-vincular").style.display = "block";
           if (!resultado.ok || !resultado.conversas || !resultado.conversas.length) return;
           conversaDoCard = resultado.conversas[0].assuntoBase;
+          // Card com conversa: Para/Cc já vêm da última troca (editáveis), sem redigitar.
+          var dest = resultado.destinatarios;
+          if (dest && dest.para && dest.para.length) {
+            var paraEl = document.getElementById("para");
+            if (!paraEl.value.trim()) paraEl.value = dest.para.join("; ");
+            var ccDest = document.getElementById("cc");
+            var ccAtuais = listaEnderecos(ccDest.value);
+            (dest.cc || []).forEach(function (e) {
+              if (!ccAtuais.some(function (a) { return a.toLowerCase() === e.toLowerCase(); })) ccAtuais.push(e);
+            });
+            ccDest.value = ccAtuais.join("; ");
+          }
           document.getElementById("aviso-sem-conversa").textContent =
             "Esta não é a conversa certa? O e-mail vai em \\u201C" + conversaDoCard + "\\u201D. Se o cliente conversa com a equipe em outra conversa do Gmail, procure e vincule a correta.";
           aplicarConversa();
@@ -459,6 +471,8 @@ export async function POST(request: NextRequest) {
               conversaDoCard = v.assuntoBase;
               aplicarConversa();
               document.getElementById("bloco-vincular").style.display = "none";
+              // Preenche Para/Cc com os participantes da conversa recém-vinculada.
+              carregarConversas(BX24.getAuth() && BX24.getAuth().access_token);
             }).catch(function () {
               erroEl.textContent = "Falha de conexão. Tente de novo.";
               vincular.disabled = false;
