@@ -1,17 +1,24 @@
 -- ERP O2 (29/10/2026): prazos de pagamento de comissão por seguradora e PROVÁVEL INADIMPLÊNCIA pelo extrato.
--- Aplicado via MCP (migrations erp_prazos_comissao, erp_inadimplencia_provavel, erp_corp_comissoes_venc_idx). Só leitura nas telas.
+-- Aplicado via MCP (migrations erp_prazos_comissao, erp_inadimplencia_provavel, erp_corp_comissoes_venc_idx, erp_inadimplencia_esgotamento,
+-- erp_prazos_comissao_teto, erp_inadimplencia_esgotamento_relativo). Só leitura nas telas.
 --
--- Regra do Matheus: se a linha do cliente está no extrato da seguradora, ele pagou; se a comissão esperada (parcela que venceu e passou do
--- prazo habitual da seguradora/ramo) não está em nenhum extrato nem baixada no Corp, a seguradora provavelmente não recebeu o prêmio.
--- A tela só conclui onde o extrato está ligado às parcelas (>= 90% das linhas) e confere com o banco (Nibo).
---
--- erp_prazos_comissao: prazo normal (mediana) e limite (percentil 90, mínimo 10 dias) medidos nos últimos 16 meses de comissões
--- recebidas; fonte 'manual' (editada à mão) nunca é sobrescrita. Remedida de hora em hora pelo cron /api/cron/erp-nibo.
--- Ramos que pagam ANTES do vencimento (prazo normal < -5 dias: antecipada/esgotamento) ficam fora da conta de inadimplência.
+-- REGRA DO MATHEUS
+--  * Se a linha do cliente está no extrato da seguradora, ele pagou. Se a comissão esperada (parcela vencida e além do prazo habitual da
+--    seguradora/ramo) não está em nenhum extrato nem baixada no Corp, a seguradora provavelmente não recebeu o prêmio.
+--  * NENHUM produto paga antes do vencimento. A seguradora só gera comissão depois que o cliente paga a 1ª parcela. No ESGOTAMENTO ela
+--    concentra a comissão nas primeiras parcelas e deixa um resquício nas seguintes (ex.: 70% de comissão em 4 vezes: 100%, 100%, 20%, 0).
+--    O Corp fecha as parcelas seguintes como "recebida" com valor 0 na data do esgotamento (isso é que dava prazo "negativo").
+--  * Por isso: (1) os prazos são medidos só com comissões de verdade (valor > 0); (2) a parcela 1 sempre vale; (3) da parcela 2 em diante não
+--    se conclui se uma parcela ANTERIOR do mesmo documento foi fechada com valor 0 ou paga com menos de 90% do melhor percentual recebido
+--    do documento (sinal RELATIVO: em seguradoras que pagam parte da comissão direto à imobiliária quase nenhuma parcela chega a 99%).
+--  * A tela só conclui onde o extrato está ligado às parcelas (>= 90% das linhas) e confere com o banco (Nibo).
 
 create index if not exists erp_corp_comissoes_venc_idx on erp_corp_comissoes (venc_parcela);
+create index if not exists erp_corp_comissoes_documento_idx on erp_corp_comissoes (documento_id);
 create index if not exists erp_extrato_linhas_parcela_idx on erp_extrato_linhas (parcela_id) where parcela_id is not null;
 
+-- erp_prazos_comissao: prazo normal (mediana) e limite de atraso (percentil 90, mínimo 10 e teto 120 dias) dos últimos 16 meses de comissões
+-- recebidas com valor > 0; fonte 'manual' (editada à mão) nunca é sobrescrita. Remedida de hora em hora pelo cron /api/cron/erp-nibo.
 create table if not exists erp_prazos_comissao (
   id bigserial primary key,
   seg_abrev text not null,
@@ -28,13 +35,13 @@ alter table erp_prazos_comissao enable row level security;
 drop policy if exists colab_all on erp_prazos_comissao;
 create policy colab_all on erp_prazos_comissao for all using ((select is_colaborador_o2())) with check ((select is_colaborador_o2()));
 
--- erp_atualizar_prazos_comissao(): remede os prazos (security definer; só o service_role executa, chamada pelo cron).
--- erp_previsao_caixa_mensal(p_de, p_ate): comissão que deveria cair por mês (vencimento + prazo normal; fim de semana -> segunda).
--- erp_inadimplencia_provavel(p_de, p_ate): parcelas esperadas x com evidência (extrato ou baixa) x sem evidência, por empresa e seguradora.
--- erp_inadimplencia_provavel_linhas(p_corretora, p_seg, p_de, p_ate): as parcelas sem evidência (até 300), para conferir com a seguradora.
--- erp_extratos_ligacao(p_de, p_ate): quantas linhas de extrato estão ligadas a parcelas (trava da conclusão).
--- erp_baixadas_corp_mensal / erp_previsto_diario: ver schema_erp_baixadas_corp_mensal.sql e schema_erp_previsto_diario.sql.
--- As definições completas estão nas migrations aplicadas (consulte pg_get_functiondef no banco).
+-- Funções (definições completas nas migrations aplicadas; use pg_get_functiondef no banco):
+--   erp_atualizar_prazos_comissao()                      remede os prazos (security definer; só o service_role executa, via cron)
+--   erp_previsao_caixa_mensal(p_de, p_ate)               comissão que deveria cair por mês (vencimento + prazo normal; fim de semana -> segunda)
+--   erp_inadimplencia_provavel(p_de, p_ate)              parcelas esperadas x com evidência (extrato ou baixa) x sem evidência, por empresa e seguradora
+--   erp_inadimplencia_provavel_linhas(corretora, seg, de, ate)   as parcelas sem evidência (até 300), para conferir com a seguradora
+--   erp_extratos_ligacao(p_de, p_ate)                    quantas linhas de extrato estão ligadas a parcelas (trava da conclusão)
+--   erp_baixadas_corp_mensal / erp_previsto_diario       ver schema_erp_baixadas_corp_mensal.sql e schema_erp_previsto_diario.sql
 
 create or replace function erp_extratos_ligacao(p_de date, p_ate date)
 returns table (corretora text, seg_abrev text, linhas bigint, ligadas bigint)
