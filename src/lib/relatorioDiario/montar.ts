@@ -436,24 +436,24 @@ export const MODELO_WHATSAPP_V3 = {
     "📋 *RELATÓRIO DE COTAÇÕES*",
     "",
     "🛡️ *SEGURO FIANÇA*",
-    "{{2}}",
-    "{{3}}",
-    "{{4}}",
+    "▪️ Dia anterior: {{2}}",
+    "▪️ Novos no mês: {{3}}",
+    "▪️ Renovações no mês: {{4}}",
     "",
     "💰 *CAPITALIZAÇÃO*",
-    "{{5}}",
-    "{{6}}",
-    "{{7}}",
+    "▪️ Dia anterior: {{5}}",
+    "▪️ Novos no mês: {{6}}",
+    "▪️ Renovações no mês: {{7}}",
     "",
     "🚗 *SEGURO AUTO*",
-    "{{8}}",
-    "{{9}}",
-    "{{10}}",
+    "▪️ Dia anterior: {{8}}",
+    "▪️ Novos no mês: {{9}}",
+    "▪️ Renovações no mês: {{10}}",
     "",
     "🏠 *RAMOS ELEMENTARES*",
-    "{{11}}",
-    "{{12}}",
-    "{{13}}",
+    "▪️ Dia anterior: {{11}}",
+    "▪️ Novos no mês: {{12}}",
+    "▪️ Renovações no mês: {{13}}",
     "",
     "💵 *FATURAMENTO DO MÊS — {{14}}*",
     "🛡️ Fiança: {{15}}",
@@ -471,9 +471,9 @@ export const MODELO_WHATSAPP_V3 = {
 
 const mesCurto = (c: string) => `${["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"][Number(c.slice(5, 7)) - 1]}/${c.slice(2, 4)}`;
 
-function linhaBloco(rotulo: string, b: BlocoMes | null | undefined, ramos = false): string {
-  if (b === undefined) return `${rotulo}: —`;
-  if (b === null) return `${rotulo}: ainda sem dados separados`;
+function linhaBloco(b: BlocoMes | null | undefined, ramos = false): string {
+  if (b === undefined) return "—";
+  if (b === null) return "ainda sem dados separados";
   const cards = ramos ? "cards" : "cotações";
   const itens = b.itens;
   const cot = ramos && itens ? `${b.cotacoes} cards (${itens.cotados} itens) cotados` : `${plural(b.cotacoes, "cotação", "cotações")}`;
@@ -482,11 +482,10 @@ function linhaBloco(rotulo: string, b: BlocoMes | null | undefined, ramos = fals
       ? `${b.efetivados} efetivados${itens.contratados !== null ? ` (${itens.contratados} itens contratados)` : ""}`
       : `${b.efetivados} efetivados`;
   void cards;
-  return `${rotulo}: ${cot} · ${efet} · ${fmtConversao(b.conversao)} · prêmio ${b.premio === null ? "—" : fmtReais.format(b.premio)} · comissão ${fmtReais.format(b.comissao)}`;
+  return `${cot} · ${efet} · ${fmtConversao(b.conversao)} · prêmio ${b.premio === null ? "—" : fmtReais.format(b.premio)} · comissão ${fmtReais.format(b.comissao)}`;
 }
 
 export function parametrosModeloV3(r: RelatorioDiario): string[] {
-  const rotuloOntem = r.periodo.dias.length === 1 ? "Ontem" : "Sex a dom";
   const avisos: string[] = [];
 
   function produto(nome: string, s: Secao<ResumoProduto>, ramos = false): [string, string, string] {
@@ -499,9 +498,9 @@ export function parametrosModeloV3(r: RelatorioDiario): string[] {
     const p = d.solicitacoes;
     const ontem =
       d.ontemEfetivados === null && !p
-        ? `${rotuloOntem}: —`
-        : `${rotuloOntem}: ${p ? `${p.ontem === null ? "—" : ramos ? plural(p.ontem, "card", "cards") : plural(p.ontem, "cotação", "cotações")} · ` : ""}${d.ontemEfetivados === null ? "—" : `${d.ontemEfetivados} efetivados`}`;
-    return [ontem, linhaBloco("No mês, novos", d.novos, ramos), linhaBloco("No mês, renovações", d.renovacoes, ramos)];
+        ? "—"
+        : `${p ? `${p.ontem === null ? "—" : ramos ? plural(p.ontem, "card", "cards") : plural(p.ontem, "cotação", "cotações")} · ` : ""}${d.ontemEfetivados === null ? "—" : `${d.ontemEfetivados} efetivados`}`;
+    return [ontem, linhaBloco(d.novos, ramos), linhaBloco(d.renovacoes, ramos)];
   }
 
   const fi = produto("Fiança", r.fianca);
