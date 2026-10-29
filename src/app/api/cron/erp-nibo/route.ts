@@ -14,9 +14,13 @@ export async function GET(request: NextRequest) {
   const desdeParam = request.nextUrl.searchParams.get("desde");
   const desde = desdeParam && /^\d{4}-\d{2}-\d{2}$/.test(desdeParam) ? desdeParam : new Date(Date.now() - 120 * 86400000).toISOString().slice(0, 10);
   try {
-    const resumo = await sincronizarNibo(createServiceClient(), { desde });
+    const sb = createServiceClient();
+    const resumo = await sincronizarNibo(sb, { desde });
     console.log("erp-nibo", JSON.stringify(resumo)); // aparece nos logs da Vercel (sem token, só contagens e mensagens de erro)
-    return NextResponse.json(resumo, { status: resumo.ok ? 200 : 503 });
+    // Aproveita a rodada horária para remedir os prazos de pagamento das seguradoras (erp_prazos_comissao; os editados à mão não mudam).
+    const { data: prazos, error: erroPrazos } = await sb.rpc("erp_atualizar_prazos_comissao");
+    console.log("erp-prazos-comissao", erroPrazos ? `erro: ${erroPrazos.message}` : `${prazos} linha(s) atualizada(s)`);
+    return NextResponse.json({ ...resumo, prazos_comissao: erroPrazos ? { erro: erroPrazos.message } : { atualizadas: prazos } }, { status: resumo.ok ? 200 : 503 });
   } catch (e) {
     return NextResponse.json({ ok: false, erro: (e as Error).message }, { status: 500 });
   }

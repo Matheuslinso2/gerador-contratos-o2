@@ -52,12 +52,14 @@ const PARA_TRATAR = ["estorno", "divergente", "nao_encontrada"];
 // Conferência de caixa (28/10): uma linha por corretora × seguradora × mês, com o banco (Nibo) ao lado do extrato.
 type LinhaCaixa = {
   chave: string; mes: string; corretora: string; seg: string; segNome: string; m: Mensal | null;
-  banco: number | null; esperado: number | null; previsto: number | null; porVencimento: number | null; sit: SituacaoCaixa; dias: DiaCaixa[]; motivos: string[];
+  banco: number | null; esperado: number | null; previsto: number | null; porVencimento: number | null; sit: SituacaoCaixa; dias: DiaCaixa[]; motivos: string[]; inad?: InadInfo | null;
 };
 const NOME_CURTO: Record<string, string> = {
   ALFA: "Alfa", ALLI: "Allianz", AZUL: "Azul", BRAD: "Bradesco", BRAS: "Brasilcap", HDI: "HDI", ICAT: "Icatu", KLIN: "Klini",
   MAPF: "Mapfre", PORT: "Porto Seguro", POTT: "Pottencial", SUHA: "Suhai", SULA: "Sulamérica", TOKI: "Tokio Marine", TOO: "Too", YELU: "Yelum", ZURI: "Zurich",
 };
+type InadInfo = { esperadas: number; comEvidencia: number; sem: number; valorEsperado: number; valorSem: number; conclusivo: boolean; porque: string };
+type LinhaInad = { documento_id: string | null; nosso_numero_corp: number | null; apolice: string | null; cliente: string | null; parcela_texto: string | null; venc_parcela: string; dias_atraso: number; valor: number | string };
 type PontoDia = { dia: number; previsto: number; recebido: number };
 type LinhaTopo = { seg: string; nome: string; prevista: number; extratos: number; baixadas: number; nibo: number };
 const COLUNAS_CAIXA = "grid grid-cols-[minmax(150px,1.5fr)_64px_repeat(5,minmax(100px,1fr))_minmax(150px,1.2fr)] items-center gap-x-2";
@@ -155,6 +157,8 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
   let linhasCaixa: LinhaCaixa[] = [];
   const quadroTopo: Record<string, LinhaTopo[]> = {};
   const graficoTopo: Record<string, PontoDia[]> = {};
+  let inadLinhas: LinhaInad[] = [];
+  let erroListaInad: string | null = null;
   if (mesesOrd.length) {
     const [anoF, mesF] = mesesOrd[mesesOrd.length - 1].split("-").map(Number);
     const desdeCaixa = `${mesesOrd[0]}-01`;
@@ -163,13 +167,18 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
     const qDias = supabase.from("erp_baixa_assistida_resumo")
       .select("seg_abrev, corretora, data_recebimento, total_extrato, soma_linhas, liquido_sem_desconto, linhas")
       .neq("tipo", "resumo_mensal").gte("data_recebimento", desdeCaixa).lte("data_recebimento", ateCaixa).limit(5000);
-    const [{ data: diasBrutos }, entradas, { data: segsBrutas }, { data: previsaoBruta }, { data: nfsBrutas }, { data: baixadasBrutas }, { data: previstoDiaBruto }] = await Promise.all([
+    const [{ data: diasBrutos }, entradas, { data: segsBrutas }, { data: previsaoBruta }, { data: nfsBrutas }, { data: baixadasBrutas }, { data: previstoDiaBruto }, { data: inadBruta }, { data: ligacaoBruta }, { data: inadLinhasBruta, error: erroInadLinhas }] = await Promise.all([
       qDias, entradasNibo(supabase, desdeCaixa, ateCaixa), supabase.from("erp_seguradoras").select("abreviacao, nome"),
       supabase.rpc("erp_previsao_caixa_mensal", { p_de: desdeCaixa, p_ate: fimCaixa }),
       supabase.from("erp_extratos_seguradora").select("nf_numero, nf_emitida_em, seguradora:erp_seguradoras!inner(abreviacao)").in("seguradora.abreviacao", ["POTT", "TOO"]).gte("competencia", desdeCaixa).lte("competencia", fimCaixa),
       supabase.rpc("erp_baixadas_corp_mensal", { p_de: desdeCaixa, p_ate: fimCaixa }),
       supabase.rpc("erp_previsto_diario", { p_de: desdeCaixa, p_ate: fimCaixa }),
+      supabase.rpc("erp_inadimplencia_provavel", { p_de: desdeCaixa, p_ate: fimCaixa }),
+      supabase.rpc("erp_extratos_ligacao", { p_de: desdeCaixa, p_ate: new Date(Date.UTC(anoF, mesF, 30)).toISOString().slice(0, 10) }),
+      sp.inad ? supabase.rpc("erp_inadimplencia_provavel_linhas", { p_corretora: corretoraSel, p_seg: sp.inad, p_de: desdeCaixa, p_ate: fimCaixa }) : Promise.resolve({ data: [], error: null }),
     ]);
+    inadLinhas = (inadLinhasBruta ?? []) as LinhaInad[];
+    erroListaInad = erroInadLinhas?.message ?? null;
     // nota fiscal registrada (Pottencial e Too só pagam depois dela) e data do último extrato lido de cada seguradora
     const nfPorSeg = new Set<string>();
     for (const x of (nfsBrutas ?? []) as unknown as { nf_numero: string | null; nf_emitida_em: string | null; seguradora: { abreviacao: string } | { abreviacao: string }[] | null }[]) {
@@ -276,6 +285,27 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
       linhasCaixa.push({ chave: k, mes: `${mes}-01`, corretora, seg, segNome: nomeSeg.get(seg) ?? seg, m: null, banco: null, esperado: null, previsto: r2(p.esperado), porVencimento: r2(p.porVencimento), sit: situacaoCaixa(null, null, p.esperado), dias: [], motivos: motivosDe(seg, null, null, r2(p.esperado), null, []) });
     }
     linhasCaixa = linhasCaixa.sort((a, b) => b.mes.localeCompare(a.mes) || a.segNome.localeCompare(b.segNome));
+    // Provável inadimplência (Matheus 29/10): a linha do cliente no extrato prova que ele pagou; comissão esperada que não aparece em nenhum
+    // extrato nem está baixada = a seguradora provavelmente não recebeu. Só se conclui com o extrato ligado às parcelas e conferido com o banco.
+    const inadPorSeg = new Map<string, { esperadas: number; com_evidencia: number; sem_evidencia: number; valor_esperado: number; valor_sem_evidencia: number }>();
+    for (const x of (inadBruta ?? []) as { corretora: string; seg_abrev: string; esperadas: number; com_evidencia: number; sem_evidencia: number; valor_esperado: number | string; valor_sem_evidencia: number | string }[]) {
+      if (x.corretora === corretoraSel) inadPorSeg.set(x.seg_abrev, { esperadas: Number(x.esperadas), com_evidencia: Number(x.com_evidencia), sem_evidencia: Number(x.sem_evidencia), valor_esperado: Number(x.valor_esperado), valor_sem_evidencia: Number(x.valor_sem_evidencia) });
+    }
+    const ligPorSeg = new Map<string, { linhas: number; ligadas: number }>();
+    for (const x of (ligacaoBruta ?? []) as { corretora: string | null; seg_abrev: string; linhas: number; ligadas: number }[]) {
+      if (x.corretora === corretoraSel) ligPorSeg.set(x.seg_abrev, { linhas: Number(x.linhas), ligadas: Number(x.ligadas) });
+    }
+    for (const c of linhasCaixa) {
+      const i = inadPorSeg.get(c.seg);
+      if (!i || i.esperadas === 0) { c.inad = null; continue; }
+      const lig = ligPorSeg.get(c.seg);
+      const pctLig = lig && lig.linhas ? lig.ligadas / lig.linhas : 0;
+      let porque = "";
+      if (!c.m && !(c.esperado ?? 0)) porque = "o ERP não tem extrato desta seguradora neste mês";
+      else if (!lig || lig.linhas < 20 || pctLig < 0.9) porque = `o extrato desta seguradora ainda não está ligado às parcelas (${Math.round(pctLig * 100)}% das linhas)`;
+      else if (c.sit.codigo !== "bate") porque = "o extrato não confere com o banco neste mês (confira a diferença acima)";
+      c.inad = { esperadas: i.esperadas, comEvidencia: i.com_evidencia, sem: i.sem_evidencia, valorEsperado: i.valor_esperado, valorSem: i.valor_sem_evidencia, conclusivo: porque === "", porque };
+    }
   }
   const pendentes = extratos.filter((e) => !e.baixa_aprovada_em && e.tipo !== "resumo_mensal");
   const aprovados = extratos.filter((e) => e.baixa_aprovada_em);
@@ -484,7 +514,7 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
                 const ruins = c.dias.filter((d) => Math.abs(d.dif) > TOLERANCIA_CAIXA);
                 const soTotal = c.m != null && c.m.so_total === c.m.extratos;
                 return (
-                  <details key={c.chave} className="group rounded-lg border border-gray-200 bg-white open:border-o2-navy">
+                  <details key={c.chave} open={sp.inad === c.seg} className="group rounded-lg border border-gray-200 bg-white open:border-o2-navy">
                     <summary className={`${COLUNAS_CAIXA} cursor-pointer list-none px-2 py-1.5 text-xs hover:bg-gray-50`}>
                       <span className="min-w-0">
                         <span className="block font-medium">{c.segNome}</span>
@@ -505,6 +535,48 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
                       <div className="border-t border-gray-100 bg-amber-50/50 px-3 py-2 text-xs">
                         <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Motivo provável (hipótese para investigar)</h3>
                         <ul className="mt-1 list-disc space-y-0.5 pl-4 text-gray-700">{c.motivos.map((t, i) => <li key={i}>{t}</li>)}</ul>
+                      </div>
+                    )}
+                    {c.inad && (
+                      <div className="space-y-1 border-t border-gray-100 px-3 py-2 text-xs">
+                        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Provável inadimplência (pelo extrato)</h3>
+                        {c.inad.conclusivo ? (
+                          <>
+                            <p className="text-gray-700">
+                              {c.inad.sem === 0
+                                ? <>Das <b>{c.inad.esperadas}</b> parcelas que deveriam ter pago comissão (vencidas e além do prazo habitual da seguradora), <b>todas</b> aparecem em extrato ou estão baixadas.</>
+                                : <><b>{c.inad.sem}</b> de {c.inad.esperadas} parcelas esperadas (<b>{brl(c.inad.valorSem)}</b> de {brl(c.inad.valorEsperado)}) não aparecem em nenhum extrato nem estão baixadas: o cliente provavelmente não pagou, e a seguradora também não recebeu.</>}
+                            </p>
+                            {c.inad.sem > 0 && (
+                              <Link href={`${hrefTela({ inad: c.seg, detalhe: "1" })}#inad-${c.seg}`} className="text-o2-navy underline">ver as {c.inad.sem} parcelas</Link>
+                            )}
+                          </>
+                        ) : (
+                          <p className="text-gray-600">Sem conclusão: {c.inad.porque}. Sem o extrato conferido com o banco não dá para saber quem não pagou.</p>
+                        )}
+                        {sp.inad === c.seg && erroListaInad && <p className="text-red-700">Não consegui carregar a lista: {erroListaInad}</p>}
+                        {c.inad.conclusivo && sp.inad === c.seg && inadLinhas.length > 0 && (
+                          <div id={`inad-${c.seg}`} className="max-h-[320px] overflow-auto rounded border border-gray-200">
+                            <table className="w-full text-[11px]">
+                              <thead className="sticky top-0 bg-gray-50 text-left uppercase tracking-wide text-gray-500">
+                                <tr><th className="px-2 py-1">Nosso nº do Corp</th><th className="px-2 py-1">Nº da apólice</th><th className="px-2 py-1">Cliente</th><th className="px-2 py-1">Parcela</th><th className="px-2 py-1">Vencimento</th><th className="px-2 py-1 text-right">Dias</th><th className="px-2 py-1 text-right">Comissão</th></tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-100">
+                                {inadLinhas.map((l, i) => (
+                                  <tr key={i}>
+                                    <td className="px-2 py-1">{l.documento_id ? <Link href={`/erp/documentos/${l.documento_id}`} className="text-o2-navy hover:underline">{l.nosso_numero_corp ?? "ver"}</Link> : "—"}</td>
+                                    <td className="px-2 py-1">{l.apolice}</td>
+                                    <td className="max-w-[220px] truncate px-2 py-1" title={l.cliente ?? ""}>{l.cliente}</td>
+                                    <td className="px-2 py-1">{l.parcela_texto ?? "—"}</td>
+                                    <td className="px-2 py-1">{formatarData(l.venc_parcela)}</td>
+                                    <td className="px-2 py-1 text-right">{l.dias_atraso}</td>
+                                    <td className="px-2 py-1 text-right">{brl(Number(l.valor))}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
                       </div>
                     )}
                     <div className="grid gap-4 border-t border-gray-100 p-3 text-xs md:grid-cols-[minmax(220px,1fr)_2fr]">
