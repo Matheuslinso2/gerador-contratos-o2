@@ -450,11 +450,16 @@ export async function lerFonteRamosElementaresBitrix(
 
     if (ehFunilRenovacoes || tipoProcesso === "RENOVACAO") {
       const linha = linhaRenovacao({ item, status, origem, produto, seguradora, imobiliaria, responsavel, eventos, desfechoNoMes });
-      if (competenciaItem === competencia) abas.renovacoesAtual.push(linha);
-      // Renovação de outra competência efetivada/perdida neste mês (antecipada
-      // ou atrasada): conta aqui, no mês em que aconteceu.
+      // Entrada = mês de CRIAÇÃO do card (Matheus, 29/10/2026): a renovação é
+      // negociada antes do vencimento, então um card criado em outubro para
+      // vigência de dezembro é entrada de outubro. A vigência não decide o
+      // mês: o painel controla o fluxo do mês. O que não foi definido vira
+      // herança para o mês seguinte; a efetivação/perda conta no mês em que
+      // aconteceu.
+      const mesEntrada = dataCriacao ? competenciaData(dataCriacao) : competenciaItem;
+      if (mesEntrada === competencia) abas.renovacoesAtual.push(linha);
       else if (desfechoDesteMes) abas.renovacoesAtual.push(linha);
-      else if (competenciaItem === futura) abas.renovacoesFutura.push(linha);
+      else if (mesEntrada < competencia && abertoNoMes) abas.renovacoesAtual.push(linha);
       continue;
     }
 
@@ -618,7 +623,8 @@ export async function listarRenovacoesRamosElementares(): Promise<CardRenovacaoR
     cards.push({
       id: Number(item.id),
       categoria,
-      competencia: competenciaData(dataCompetencia),
+      // Entrada da renovação = mês de criação do card (29/10/2026), não o mês do vencimento.
+      competencia: competenciaData(criadoEm ?? dataCompetencia),
       status,
       desfecho: terminal && dataDesfecho ? (status as "EFETIVADO" | "NÃO EFETIVADO") : null,
       dataDesfecho: dataDesfecho ? diaBrasilia(dataDesfecho) : null,
