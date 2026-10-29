@@ -510,7 +510,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
 
         {erroLinhasAbertas && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">Não consegui carregar as linhas do extrato: {erroLinhasAbertas.message}</p>}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
-          <Cartao rotulo="Para identificar" valor={`${resumoIdent.qtd} · ${brl(resumoIdent.valor)}`} cor={resumoIdent.qtd ? "text-red-700" : "text-gray-700"} sub="recebido, ainda sem parcela (bloqueia aprovar)" />
+          <Cartao rotulo="Para identificar" valor={`${resumoIdent.qtd} · ${brl(resumoIdent.valor)}`} cor={resumoIdent.qtd ? "text-red-700" : "text-gray-700"} sub="recebido, ainda sem parcela (pendente de identificação)" />
           <Cartao rotulo="A baixar à mão" valor={resumoGestao.manual} cor={resumoGestao.manual ? "text-red-700" : "text-gray-700"} sub="extratos que dependem de ação humana" />
           <Cartao rotulo="Seriam automáticos" valor={resumoGestao.auto} cor="text-green-700" sub="no padrão (baixa automática desligada, em teste)" />
           <Cartao rotulo="Com linhas a tratar" valor={resumoGestao.aTratar} cor={resumoGestao.aTratar ? "text-orange-700" : "text-gray-700"} sub="estorno, divergente ou não encontrada" />
@@ -522,9 +522,9 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
           <section className="space-y-2 rounded-xl border border-red-200 bg-white p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-red-700">Para identificar: recebido, ainda sem parcela</h2>
-              <Link href="/erp/baixas/fila" className="text-xs text-o2-navy underline">abrir a fila de identificação →</Link>
+              <span />
             </div>
-            <p className="text-xs text-gray-600">Toda linha de extrato é parcela até se provar o contrário. Enquanto não for identificada (ou confirmada como não-parcela), o valor conta como recebido e bloqueia a aprovação do extrato.</p>
+            <p className="text-xs text-gray-600">Toda linha de extrato é parcela até se provar o contrário. Enquanto não for identificada (ou confirmada como não-parcela), o valor conta como recebido, ainda sem parcela.</p>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500"><tr><th className="px-2 py-1">Empresa</th><th className="px-2 py-1">Seguradora</th><th className="px-2 py-1 text-right">Linhas</th><th className="px-2 py-1 text-right">Valor</th><th className="px-2 py-1 text-right">Mais antiga (dias)</th></tr></thead>
@@ -990,7 +990,7 @@ function quandoBaixar(e: Extrato): string | null {
 }
 
 function ExtratoCard({ e, linhas, aberto, base, tot, estados }: { e: Extrato; linhas: LinhaExtrato[]; aberto: boolean; base: string; tot?: TotaisExtrato; estados?: Map<string, EstadoLinha> }) {
-  const bloqueado = Boolean(tot?.bloqueado_para_aprovar);
+  const temPendente = Number(tot?.qtd_pendente ?? 0) > 0; // informativo: o bloqueio de aprovar está desligado por enquanto
   return (
     <div id={`extrato-${e.id}`} className={`scroll-mt-4 rounded-lg border ${aberto ? "border-o2-navy" : "border-gray-200"}`}>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 text-xs">
@@ -1018,8 +1018,8 @@ function ExtratoCard({ e, linhas, aberto, base, tot, estados }: { e: Extrato; li
           {quandoBaixar(e) && <p className="rounded bg-yellow-50 px-2 py-1 text-[11px] text-yellow-800">{quandoBaixar(e)}</p>}
           <form action={aprovarBaixa} className="flex items-center gap-3">
             <input type="hidden" name="extrato_id" value={e.id} />
-            <button disabled={bloqueado} title={bloqueado ? "Bloqueada: há linhas pendentes de identificação neste extrato" : undefined} className={`rounded-lg px-3 py-1.5 text-xs font-semibold text-white ${bloqueado ? "cursor-not-allowed bg-gray-400" : "bg-o2-coral"}`}>Aprovar baixa</button>
-            {bloqueado && <span className="text-[11px] font-medium text-red-700">Bloqueada: {tot?.qtd_pendente} linha(s) pendente(s) de identificação ({brl(Number(tot?.soma_pendente_sem_parcela ?? 0))}). Identifique pela <a href="/erp/baixas/fila" className="underline">fila</a> antes de aprovar.</span>}
+            <button className="rounded-lg bg-o2-coral px-3 py-1.5 text-xs font-semibold text-white">Aprovar baixa</button>
+            {temPendente && <span className="text-[11px] font-medium text-red-700">{tot?.qtd_pendente} linha(s) pendente(s) de identificação ({brl(Number(tot?.soma_pendente_sem_parcela ?? 0))}).</span>}
             <span className="text-[11px] text-gray-500">
               Grava {e.n_cheia + e.n_pro_labore} recebimento(s) ({brl(e.valor_a_baixar)}) no ERP e quita as parcelas; {e.n_estorno + e.n_divergente + e.n_nao_encontrada} linha(s) vão para “Para tratar”.
             </span>

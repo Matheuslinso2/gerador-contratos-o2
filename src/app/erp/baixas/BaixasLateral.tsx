@@ -6,8 +6,7 @@ import { usePathname } from "next/navigation";
 // Menu lateral de Baixas: a conferência do mês (tela atual) e a gestão das baixas por extrato/seguradora.
 const ITENS = [
   { href: "/erp/baixas", rotulo: "Conferência do mês", sub: "quadros, gráfico e detalhe", exato: true },
-  { href: "/erp/baixas/gestao", rotulo: "Gestão das baixas", sub: "extratos por seguradora e empresa", exato: false },
-  { href: "/erp/baixas/fila", rotulo: "Fila de identificação", sub: "linhas recebidas sem parcela", exato: false },
+  { href: "/erp/baixas/gestao", rotulo: "Gestão das baixas", sub: "extratos por seguradora e empresa", exato: false },
 ];
 
 export default function BaixasLateral() {
