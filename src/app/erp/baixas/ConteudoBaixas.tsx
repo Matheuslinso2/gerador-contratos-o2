@@ -71,6 +71,10 @@ type TotaisExtrato = {
   extrato_id: string; soma_identificada: number | string; soma_nao_parcela: number | string; soma_pendente_sem_parcela: number | string; qtd_identificada: number; qtd_nao_parcela: number;
   qtd_pendente: number; idade_max_pendente_dias: number | null; bloqueado_para_aprovar: boolean; diferenca: number | string; erp_identifica_corp_nao: number | string;
 };
+type BaixaErpExtrato = {
+  extrato_id: string; linhas: number; erp_qtd: number; erp_valor: number | string; corp_qtd: number; corp_valor: number | string; so_erp_qtd: number; so_erp_valor: number | string;
+  so_corp_qtd: number; so_corp_valor: number | string; nenhum_qtd: number; nenhum_valor: number | string; sem_parcela_qtd: number; fora_tolerancia_qtd: number; estorno_qtd: number;
+};
 type EstadoLinha = { linha_id: string; estado: string; idade_dias: number | null; fora_tipo: string | null; candidato_imobiliaria: string | null; candidato_cliente: string | null; ja_no_corp: boolean | null };
 type LinhaPendente = {
   linha_id: string; extrato_id: string; n: number; seguradora_abrev: string; corretora: string; pago_em: string | null; valor_comissao: number | string; apolice: string | null;
@@ -344,12 +348,16 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
   // Gestão: estado das linhas e totais por extrato (views só de leitura da baixa assistida; sempre filtradas por lista de extratos, por desempenho)
   const totaisPor = new Map<string, TotaisExtrato>();
   const estadosAberto = new Map<string, EstadoLinha>();
+  const baixaErpPor = new Map<string, BaixaErpExtrato>();
   let pendentesLinhas: LinhaPendente[] = [];
   const outrasEntradas = new Map<string, number>();
   if (modo === "gestao" && extratos.length) {
     const lotes = <T,>(xs: T[], n: number) => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
     const rt = await Promise.all(lotes(extratos.map((e) => e.id), 60).map((l) => supabase.from("erp_baixa_extrato_totais").select("*").in("extrato_id", l)));
     for (const r of rt) for (const t of (r.data ?? []) as TotaisExtrato[]) totaisPor.set(t.extrato_id, t);
+    // baixa PRÓPRIA do ERP (trilha de teste, paralela ao Corp; não entra nos totais oficiais): por extrato, ERP × Corp
+    const rb = await Promise.all(lotes(extratos.map((e) => e.id), 60).map((l) => supabase.from("erp_baixa_erp_extrato_resumo").select("*").in("extrato_id", l)));
+    for (const r of rb) for (const b of (r.data ?? []) as BaixaErpExtrato[]) baixaErpPor.set(b.extrato_id, b);
     const comPend = [...totaisPor.values()].filter((t) => Number(t.qtd_pendente) > 0).map((t) => t.extrato_id);
     const lp = await Promise.all(lotes(comPend, 40).map((l) =>
       supabase.from("erp_baixa_linha_estado").select("linha_id, extrato_id, n, seguradora_abrev, corretora, pago_em, valor_comissao, apolice, idade_dias, candidato_imobiliaria, candidato_cliente, tentativas_identificacao").in("extrato_id", l).eq("estado", "pendente_identificacao").limit(600)));
@@ -848,6 +856,17 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
                                 {" · "}banco (Nibo) <b>{brl(c.banco)}</b>{" · "}
                                 {difB == null ? <span className="text-red-700">sem entrada no banco</span> : fecha ? <span className="font-semibold text-green-700">fecha com o banco (tolerância {brl(tol)})</span> : <span className="font-semibold text-red-700">não fecha: {difB > 0 ? "banco a mais" : "banco a menos"} {brl(Math.abs(difB))} (tolerância {brl(tol)})</span>}
                               </p>
+                              {(() => {
+                                const be = extratos.filter((e) => e.corretora === c.corretora && e.seg_abrev === c.seg).map((e) => ({ e, b: baixaErpPor.get(e.id) })).filter((x): x is { e: Extrato; b: BaixaErpExtrato } => Boolean(x.b));
+                                if (be.length === 0) return null;
+                                const sm = (f2: (b: BaixaErpExtrato) => number | string) => Math.round(be.reduce((t, x) => t + Number(f2(x.b)) * (1 - Number(x.e.imposto_pct) / 100), 0) * 100) / 100;
+                                const n = (f2: (b: BaixaErpExtrato) => number) => be.reduce((t, x) => t + f2(x.b), 0);
+                                return (
+                                  <p className="text-gray-700">
+                                    <b>Baixa própria do ERP (teste, não entra nos totais oficiais)</b>: ERP baixou <b>{brl(sm((b) => b.erp_valor))}</b> ({n((b) => b.erp_qtd)} linhas) · Corp baixou <b>{brl(sm((b) => b.corp_valor))}</b> ({n((b) => b.corp_qtd)}) · só o ERP {n((b) => b.so_erp_qtd)} ({brl(sm((b) => b.so_erp_valor))}) · só o Corp {n((b) => b.so_corp_qtd)} ({brl(sm((b) => b.so_corp_valor))}) · sem baixa em nenhum {n((b) => b.nenhum_qtd)} ({brl(sm((b) => b.nenhum_valor))}) · banco {brl(c.banco)}. Valores líquidos do imposto; o Corp registra a comissão cheia, inclusive o pró-labore pago direto.
+                                  </p>
+                                );
+                              })()}
                               {erpNaoCorp > 0 && <p className="text-blue-800">O ERP identifica {brl(erpNaoCorp)} que o Corp não reconhece (ainda não aparece como recebido no Corp).</p>}
                             </div>
                           );
@@ -862,7 +881,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
                             const auto = avaliarBaixaAutomatica(e, banco, Number(totaisPor.get(e.id)?.qtd_pendente ?? 0));
                             return (
                               <div key={e.id}>
-                                <ControleExtrato extratoId={e.id} seguradora_id={e.seguradora_id} corretora_id={e.corretora_id ?? ""} mes={mesSel} ancora={`extrato-${e.id}`} banco={banco} bancoDia={bancoDia} aprovada={Boolean(e.baixa_aprovada_em)} seria={auto.seria} faltas={auto.faltas} tot={totaisPor.get(e.id) ? { qtdPendente: Number(totaisPor.get(e.id)!.qtd_pendente), somaPendente: Number(totaisPor.get(e.id)!.soma_pendente_sem_parcela), idadeMax: totaisPor.get(e.id)!.idade_max_pendente_dias, erpNaoCorp: Number(totaisPor.get(e.id)!.erp_identifica_corp_nao) } : undefined} />
+                                <ControleExtrato extratoId={e.id} seguradora_id={e.seguradora_id} corretora_id={e.corretora_id ?? ""} mes={mesSel} ancora={`extrato-${e.id}`} banco={banco} bancoDia={bancoDia} aprovada={Boolean(e.baixa_aprovada_em)} seria={auto.seria} faltas={auto.faltas} tot={totaisPor.get(e.id) ? { qtdPendente: Number(totaisPor.get(e.id)!.qtd_pendente), somaPendente: Number(totaisPor.get(e.id)!.soma_pendente_sem_parcela), idadeMax: totaisPor.get(e.id)!.idade_max_pendente_dias, erpNaoCorp: Number(totaisPor.get(e.id)!.erp_identifica_corp_nao) } : undefined} baixaErp={baixaErpPor.get(e.id)} totalExtrato={Number(e.total_extrato ?? 0)} />
                                 {card(e)}
                               </div>
                             );

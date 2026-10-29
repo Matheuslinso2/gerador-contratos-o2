@@ -3,3 +3,7 @@
 --   erp_saldo_cobrar_seguradora    diferença que a seguradora ainda deve (aberto / recebido / perdoado), mesmo dentro da tolerância de R$ 6
 --   erp_baixa_automatica_config    uma linha por seguradora × empresa; ativa = false e modo = 'teste' (a baixa automática só é AVALIADA, não executada)
 -- RLS: is_colaborador_o2() em tudo. Regra do "padrão correto": src/lib/erp/baixaAutomatica.ts.
+--
+-- 29/10 (migration erp_baixa_erp_extrato_resumo_view): view erp_baixa_erp_extrato_resumo (security_invoker) = resumo POR EXTRATO da baixa própria do ERP
+-- (tabela erp_baixa_erp, trilha de teste paralela ao Corp, da sessão da baixa assistida): ERP baixou × Corp baixou × só ERP × só Corp × sem baixa.
+-- Índice erp_baixa_erp_extrato_idx. Sempre consultar com .in("extrato_id", lista) para não estourar o timeout. Não entra nos totais oficiais.

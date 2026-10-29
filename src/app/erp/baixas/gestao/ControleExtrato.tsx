@@ -16,6 +16,8 @@ export default function ControleExtrato(p: {
   extratoId: string; seguradora_id: string; corretora_id: string; mes: string; ancora: string;
   banco: SituacaoBanco; bancoDia: DiaCaixa | null; aprovada: boolean; seria: boolean; faltas: string[];
   tot?: { qtdPendente: number; somaPendente: number; idadeMax: number | null; erpNaoCorp: number };
+  baixaErp?: { linhas: number; erp_qtd: number; erp_valor: number | string; corp_qtd: number; corp_valor: number | string; so_erp_qtd: number; so_corp_qtd: number; nenhum_qtd: number; sem_parcela_qtd: number; fora_tolerancia_qtd: number; estorno_qtd: number };
+  totalExtrato?: number;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-t-lg border border-b-0 border-gray-200 bg-gray-50 px-3 py-1.5 text-[11px]">
@@ -27,6 +29,13 @@ export default function ControleExtrato(p: {
         </span>
       )}
       {p.tot && p.tot.erpNaoCorp > 0 && <span className="rounded-full bg-blue-100 px-2 py-0.5 text-blue-800">o ERP identifica {brlCurto(p.tot.erpNaoCorp)} que o Corp não</span>}
+      {p.baixaErp && (
+        <span className="rounded bg-white px-1.5 py-0.5 text-gray-700 ring-1 ring-gray-200" title="Trilha de teste da baixa própria do ERP; não entra nos totais oficiais. O Corp registra a comissão cheia (com o pró-labore pago direto), por isso pode ser maior que o extrato.">
+          extrato {brlCurto(p.totalExtrato ?? 0)} · ERP baixou {brlCurto(Number(p.baixaErp.erp_valor))} ({p.baixaErp.erp_qtd}/{p.baixaErp.linhas}) · Corp {brlCurto(Number(p.baixaErp.corp_valor))} ({p.baixaErp.corp_qtd})
+          {p.baixaErp.so_erp_qtd > 0 ? ` · só ERP ${p.baixaErp.so_erp_qtd}` : ""}{p.baixaErp.so_corp_qtd > 0 ? ` · só Corp ${p.baixaErp.so_corp_qtd}` : ""}
+          {p.baixaErp.nenhum_qtd > 0 ? ` · não baixadas ${p.baixaErp.nenhum_qtd} (${[p.baixaErp.sem_parcela_qtd && `${p.baixaErp.sem_parcela_qtd} sem parcela`, p.baixaErp.fora_tolerancia_qtd && `${p.baixaErp.fora_tolerancia_qtd} fora da tolerância`, p.baixaErp.estorno_qtd && `${p.baixaErp.estorno_qtd} estorno`].filter(Boolean).join(", ")})` : ""}
+        </span>
+      )}
       {!p.aprovada && p.seria && <span className="rounded bg-green-50 px-1.5 py-0.5 font-medium text-green-800">seria baixado automaticamente <span className="font-normal text-gray-500">(teste, desligado)</span></span>}
       {!p.aprovada && !p.seria && p.faltas.length > 0 && <span className="text-red-700">baixa à mão: {p.faltas.join("; ")}</span>}
       <details className="ml-auto">
