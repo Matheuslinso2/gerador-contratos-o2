@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isMatheus } from "@/lib/admin";
-import { montarRelatorioDiario, parametrosModelo, MODELO_WHATSAPP } from "@/lib/relatorioDiario/montar";
+import { montarRelatorioDiario, parametrosModeloV3, MODELO_WHATSAPP_V3 } from "@/lib/relatorioDiario/montar";
 import { enviarModeloWhatsApp } from "@/lib/whatsapp";
 import { destinatariosDoRelatorio } from "@/lib/whatsappContatos";
 
@@ -21,7 +21,7 @@ export async function enviarTesteWhatsApp() {
   if (!numero) {
     destino = `/admin/relatorio-diario?envio=erro&msg=${encodeURIComponent("nenhum contato da equipe marcado pra receber o relatório (Configurações → WhatsApp)")}`;
   } else {
-    const resultado = await enviarModeloWhatsApp(numero, MODELO_WHATSAPP, parametrosModelo(await montarRelatorioDiario()));
+    const resultado = await enviarModeloWhatsApp(numero, MODELO_WHATSAPP_V3, parametrosModeloV3(await montarRelatorioDiario()));
     if (!resultado.ok) destino = `/admin/relatorio-diario?envio=erro&msg=${encodeURIComponent(resultado.erro)}`;
   }
   redirect(destino);
@@ -40,10 +40,10 @@ export async function enviarParaTodosWhatsApp() {
   if (destinatarios.length === 0) {
     redirect(`/admin/relatorio-diario?envio=erro&msg=${encodeURIComponent("nenhum contato da equipe marcado pra receber o relatório (Configurações → WhatsApp)")}`);
   }
-  const parametros = parametrosModelo(await montarRelatorioDiario());
+  const parametros = parametrosModeloV3(await montarRelatorioDiario());
   const falhas: string[] = [];
   for (const numero of destinatarios) {
-    const r = await enviarModeloWhatsApp(numero, MODELO_WHATSAPP, parametros);
+    const r = await enviarModeloWhatsApp(numero, MODELO_WHATSAPP_V3, parametros);
     if (!r.ok) falhas.push(`…${numero.slice(-4)}: ${r.erro}`);
   }
   const enviados = destinatarios.length - falhas.length;

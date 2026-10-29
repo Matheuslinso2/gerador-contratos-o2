@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { montarRelatorioDiario, parametrosModelo, MODELO_WHATSAPP } from "@/lib/relatorioDiario/montar";
+import { montarRelatorioDiario, parametrosModeloV3, MODELO_WHATSAPP_V3 } from "@/lib/relatorioDiario/montar";
 import { ehDiaUtil } from "@/lib/relatorioDiario/periodo";
 import { enviarModeloWhatsApp } from "@/lib/whatsapp";
 import { destinatariosDoRelatorio } from "@/lib/whatsappContatos";
@@ -29,10 +29,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: false, erro: "nenhum contato marcado pra receber o relatório" }, { status: 500 });
   }
 
-  const parametros = parametrosModelo(await montarRelatorioDiario());
+  const parametros = parametrosModeloV3(await montarRelatorioDiario());
   const resultados = [];
   for (const numero of destinatarios) {
-    const r = await enviarModeloWhatsApp(numero, MODELO_WHATSAPP, parametros);
+    const r = await enviarModeloWhatsApp(numero, MODELO_WHATSAPP_V3, parametros);
     resultados.push({ numero: `…${numero.slice(-4)}`, ...r });
   }
 
