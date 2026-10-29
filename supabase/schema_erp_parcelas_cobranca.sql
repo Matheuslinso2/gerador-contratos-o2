@@ -16,3 +16,5 @@
 -- PRÓXIMO PASSO (aguarda confirmação do Matheus): demais parcelas seguem a Tabela de Prazo Curto — cobertura = início da vigência + dias conforme % do prêmio pago
 -- (13%=15, 20%=30, 27%=45, 30%=60, 37%=75, 40%=90, 46%=105, 50%=120, 56%=135, 60%=150, 66%=165, 70%=180, 73%=195, 75%=210, 78%=225, 80%=240, 83%=255, 85%=270,
 -- 88%=285, 90%=300, 93%=315, 95%=330, 98%=345, 100%=365); confirmar como tratar % fora da tabela (o levantamento diz "faixa de cima") antes de programar.
+-- 29/10 (noite): parcela dentro de FATURA UNIFICADA usa o vencimento do BOLETO da fatura (erp_fatura_meses.vencimento quando valor_boleto = soma dos itens), não o do Corp;
+-- nelas a regra de cancelamento por parcela individual não se aplica (máximo "urgente"). Colunas novas: venc_corp, via_fatura. Janela: -180 a +60 dias.

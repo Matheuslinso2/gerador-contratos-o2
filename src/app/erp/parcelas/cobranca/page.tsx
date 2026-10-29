@@ -26,7 +26,7 @@ const SITUACOES = Object.fromEntries(Object.entries(STATUS).map(([k, v]) => [k, 
 type Linha = {
   parcela_id: string; documento_id: string; nosso_numero_corp: number | null; apolice: string | null; cliente: string | null; parcela_texto: string | null;
   venc_parcela: string; valor: number; corretora: string | null; seg: string; ramo: string | null; produto: string | null; dias: number;
-  prazo_normal: number; limite: number; dias_cancelamento: number | null; status: string; urgencia: number;
+  prazo_normal: number; limite: number; dias_cancelamento: number | null; status: string; urgencia: number; via_fatura: boolean; venc_corp: string;
 };
 type Resumo = { seg: string; produto: string; status: string; urgencia: number; parcelas: number; valor: number };
 
@@ -141,7 +141,10 @@ export default async function ParcelasCobrancaPage({ searchParams }: { searchPar
                 <td className="px-3 py-1.5">{l.cliente ?? "—"}</td>
                 <td className="px-3 py-1.5">{l.apolice ?? "—"}</td>
                 <td className="px-3 py-1.5">{l.parcela_texto ?? "—"}</td>
-                <td className="whitespace-nowrap px-3 py-1.5">{formatarData(l.venc_parcela)}</td>
+                <td className="whitespace-nowrap px-3 py-1.5">
+                  {formatarData(l.venc_parcela)}
+                  {l.via_fatura && <span className="block text-[10px] text-sky-700" title={`Fatura unificada: a parcela só fica em aberto depois do vencimento do boleto da fatura (no Corp consta ${formatarData(l.venc_corp)})`}>boleto da fatura · Corp {formatarData(l.venc_corp)}</span>}
+                </td>
                 <td className="px-3 py-1.5 text-right">{l.dias > 0 ? l.dias : `em ${-l.dias}`}</td>
                 <td className="px-3 py-1.5 text-right text-gray-500">{l.prazo_normal} / {l.limite} dias{l.dias_cancelamento ? ` · cancela em ${l.dias_cancelamento}` : ""}</td>
                 <td className="px-3 py-1.5 text-right">{formatarReais(Number(l.valor))}</td>
@@ -153,6 +156,7 @@ export default async function ParcelasCobrancaPage({ searchParams }: { searchPar
       </div>
       <p className="text-[11px] text-gray-500">
         Mostra as 300 mais urgentes do filtro. "Prazo normal" e "limite" vêm do estudo dos últimos 16 meses de comissões recebidas (mediana e percentil 90 por seguradora e ramo).
+        Apólices aglomeradas numa fatura unificada só ficam em aberto depois do vencimento do BOLETO da fatura (marcado "boleto da fatura"), não pelo vencimento cadastrado no Corp; nelas o status não passa de "urgente" até a regra de cancelamento por fatura em atraso ser levantada.
         O prazo normal e o limite já incluem uma tolerância de 2 dias (1 por questões operacionais do banco e 1 para não cobrar o cliente no dia seguinte e ele já ter pago).
         "Risco de cancelamento" aparece onde a regra da seguradora está cadastrada: 1ª parcela não paga em Alfa e Yelum (Incêndio), Suhai (Auto) e Tokio (Fiança); mais de 30 dias na Too (Fiança) e de 20 dias na Allianz (Residência).
       </p>
