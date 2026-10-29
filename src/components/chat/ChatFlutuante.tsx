@@ -7,6 +7,9 @@ type Colega = { email: string; nome: string | null };
 type Mensagem = { id: string; conversa_id: string; autor_email: string; texto: string; criado_em: string };
 type Part = { conversa_id: string; email: string; lido_ate: string };
 
+// O Robô O2 aparece como mais um contato; a conversa com ele fica só na tela (não grava no banco).
+const ROBO: Colega = { email: "robo@o2.interno", nome: "Robô O2" };
+
 function nomeDe(c: { email: string; nome?: string | null }) {
   if (c.nome) return c.nome;
   const l = c.email.split("@")[0].replace(/[._]/g, " ");
@@ -24,6 +27,8 @@ export default function ChatFlutuante({ meuEmail }: { meuEmail: string }) {
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
   const [texto, setTexto] = useState("");
   const [erro, setErro] = useState<string | null>(null);
+  const [roboMsgs, setRoboMsgs] = useState<Mensagem[]>([]);
+  const [roboPensando, setRoboPensando] = useState(false);
   const colegaPorConversa = useRef<Record<string, string>>({});
   const conversaAbertaRef = useRef<string | null>(null);
   const fimRef = useRef<HTMLDivElement>(null);
@@ -110,11 +115,44 @@ export default function ChatFlutuante({ meuEmail }: { meuEmail: string }) {
 
   useEffect(() => {
     fimRef.current?.scrollIntoView({ block: "end" });
-  }, [mensagens, ativo]);
+  }, [mensagens, roboMsgs, roboPensando, ativo]);
+
+  const ehRobo = ativo?.email === ROBO.email;
+
+  async function perguntarAoRobo(t: string) {
+    const nova: Mensagem = { id: crypto.randomUUID(), conversa_id: "robo", autor_email: meuEmail, texto: t, criado_em: new Date().toISOString() };
+    const historico = [...roboMsgs, nova];
+    setRoboMsgs(historico);
+    setRoboPensando(true);
+    setErro(null);
+    try {
+      const r = await fetch("/api/chat/robo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mensagens: historico.map((m) => ({ role: m.autor_email === ROBO.email ? "assistant" : "user", content: m.texto })),
+        }),
+      });
+      const j = (await r.json().catch(() => ({}))) as { resposta?: string };
+      if (!r.ok || !j.resposta) throw new Error("falha");
+      setRoboMsgs((atual) => [
+        ...atual,
+        { id: crypto.randomUUID(), conversa_id: "robo", autor_email: ROBO.email, texto: j.resposta!, criado_em: new Date().toISOString() },
+      ]);
+    } catch {
+      setErro("O robô não conseguiu responder agora. Tente de novo.");
+    } finally {
+      setRoboPensando(false);
+    }
+  }
 
   async function abrirConversa(c: Colega) {
     setErro(null);
     setAtivo(c);
+    if (c.email === ROBO.email) {
+      setConversaId(null);
+      return;
+    }
     setMensagens([]);
     setConversaId(null);
     const { data: cid, error } = await supabase.rpc("chat_abrir_conversa", { p_outro: c.email });
@@ -144,7 +182,14 @@ export default function ChatFlutuante({ meuEmail }: { meuEmail: string }) {
   async function enviar(e: React.FormEvent) {
     e.preventDefault();
     const t = texto.trim();
-    if (!t || !conversaId) return;
+    if (!t) return;
+    if (ehRobo) {
+      if (roboPensando) return;
+      setTexto("");
+      void perguntarAoRobo(t);
+      return;
+    }
+    if (!conversaId) return;
     setTexto("");
     const { error } = await supabase
       .from("chat_mensagens")
@@ -178,7 +223,7 @@ export default function ChatFlutuante({ meuEmail }: { meuEmail: string }) {
               >
                 ← {nomeDe(ativo)}
                 <span
-                  className={`ml-2 inline-block h-2 w-2 rounded-full ${online.has(ativo.email.toLowerCase()) ? "bg-green-400" : "bg-white/30"}`}
+                  className={`ml-2 inline-block h-2 w-2 rounded-full ${ehRobo || online.has(ativo.email.toLowerCase()) ? "bg-green-400" : "bg-white/30"}`}
                 />
               </button>
             ) : (
@@ -196,6 +241,19 @@ export default function ChatFlutuante({ meuEmail }: { meuEmail: string }) {
 
           {!ativo ? (
             <ul className="flex-1 overflow-y-auto">
+              <li>
+                <button
+                  type="button"
+                  onClick={() => void abrirConversa(ROBO)}
+                  className="flex w-full items-center gap-3 border-b border-black/5 bg-o2-coral/5 px-4 py-2.5 text-left hover:bg-o2-coral/10"
+                >
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-o2-coral text-xs text-white">✦</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-o2-navy">Robô O2</span>
+                    <span className="block text-xs text-o2-cinza-medio">pergunte sobre apólices, imobiliárias, faturas…</span>
+                  </span>
+                </button>
+              </li>
               {ordenados.length === 0 && <li className="p-4 text-sm text-o2-cinza-medio">Nenhum colega encontrado.</li>}
               {ordenados.map((c) => {
                 const on = online.has(c.email.toLowerCase());
@@ -223,7 +281,12 @@ export default function ChatFlutuante({ meuEmail }: { meuEmail: string }) {
           ) : (
             <>
               <div className="flex-1 space-y-2 overflow-y-auto bg-o2-gray/40 p-3">
-                {mensagens.map((m) => {
+                {ehRobo && roboMsgs.length === 0 && (
+                  <p className="rounded-xl bg-white p-3 text-xs text-o2-cinza-escuro">
+                    Pergunte em português, por exemplo: “quantas apólices vigentes a Ramiro Sá tem?”. Eu só consulto o que está no Workspace e no ERP e não altero nada.
+                  </p>
+                )}
+                {(ehRobo ? roboMsgs : mensagens).map((m) => {
                   const minha = m.autor_email.toLowerCase() === meuEmail;
                   return (
                     <div key={m.id} className={`flex ${minha ? "justify-end" : "justify-start"}`}>
@@ -238,6 +301,7 @@ export default function ChatFlutuante({ meuEmail }: { meuEmail: string }) {
                     </div>
                   );
                 })}
+                {ehRobo && roboPensando && <p className="text-xs text-o2-cinza-medio">Robô O2 está consultando…</p>}
                 <div ref={fimRef} />
               </div>
               {erro && <p className="px-3 py-1 text-xs text-red-600">{erro}</p>}
@@ -251,7 +315,7 @@ export default function ChatFlutuante({ meuEmail }: { meuEmail: string }) {
                 />
                 <button
                   type="submit"
-                  disabled={!conversaId || !texto.trim()}
+                  disabled={(ehRobo ? roboPensando : !conversaId) || !texto.trim()}
                   className="rounded-full bg-o2-coral px-4 text-sm font-medium text-white disabled:opacity-40"
                 >
                   Enviar
