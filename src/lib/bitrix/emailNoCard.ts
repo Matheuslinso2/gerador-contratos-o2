@@ -34,6 +34,25 @@ export async function tokenBitrixValido(authId: string): Promise<boolean> {
   }
 }
 
+// Quem está usando a aba (nome/e-mail do usuário do Bitrix dono do token). Só
+// para registrar autoria de modelos; null se o token não vale.
+export async function usuarioDoTokenBitrix(authId: string): Promise<string | null> {
+  try {
+    const resp = await fetch(`https://${DOMINIO_PORTAL}/rest/profile.json`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ auth: authId }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    const dados = await resp.json();
+    if (!resp.ok || dados.error || !dados.result) return null;
+    const r = dados.result as { NAME?: string; LAST_NAME?: string; EMAIL?: string };
+    return (r.EMAIL || [r.NAME, r.LAST_NAME].filter(Boolean).join(" ") || "usuário do Bitrix").trim().toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
 export type InfoCardEmail = {
   badge: string;
   tituloCard: string;

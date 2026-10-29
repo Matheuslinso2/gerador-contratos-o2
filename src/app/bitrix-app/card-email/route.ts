@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { salvarInstalacao } from "@/lib/bitrix/appAuth";
 import { entityTypeIdPorPlacement } from "@/lib/bitrix/entidadesCard";
 import { MODELOS_EMAIL } from "@/lib/bitrix/modelosEmail";
+import { ENTIDADES_COMERCIAL, listarModelosBanco } from "@/lib/bitrix/modelosEmailBanco";
 import { listarAssinaturas, urlImagemAssinatura } from "@/lib/bitrix/assinaturasEmail";
 
 export const dynamic = "force-dynamic";
@@ -119,9 +120,14 @@ export async function POST(request: NextRequest) {
   // Só mostra os modelos que valem pro tipo de card aberto (ex: modelos de
   // Fiança só nos cards de Seguro Fiança). Sem tipo identificado, mostra só
   // os que servem pra qualquer card.
-  const modelosDoCard = MODELOS_EMAIL.filter(
+  const modelosDoCodigo = MODELOS_EMAIL.filter(
     (m) => !m.entidades || (entityTypeIdDoPost !== null && m.entidades.includes(entityTypeIdDoPost))
   );
+  // Modelos criados pela própria equipe (hoje só Leads e Negócios, da área
+  // comercial): vêm do banco e entram na lista junto com os do código.
+  const modelosDoBanco = entityTypeIdDoPost !== null ? await listarModelosBanco(entityTypeIdDoPost) : [];
+  const modelosDoCard = [...modelosDoCodigo, ...modelosDoBanco];
+  const podeCriarModelo = entityTypeIdDoPost !== null && ENTIDADES_COMERCIAL.includes(entityTypeIdDoPost);
 
   // Remetentes (equipe) com a imagem de assinatura de cada um.
   const assinaturas = (await listarAssinaturas()).map((a) => ({ ...a, imagem: urlImagemAssinatura(a.arquivo) }));
@@ -204,6 +210,13 @@ export async function POST(request: NextRequest) {
       <option value="">Em branco (escrever do zero)</option>
     </select>
     <div id="dica-modelo">Escolha um modelo para preencher assunto e mensagem. Depois é só editar o que precisar.</div>
+    <div id="acoes-modelo" style="display:none;gap:8px;flex-wrap:wrap;margin-top:8px;align-items:center;">
+      <button type="button" id="btn-salvar-modelo" style="border:1px solid #01192e;color:#01192e;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit;background:#fff;">Salvar como modelo</button>
+      <button type="button" id="btn-atualizar-modelo" style="display:none;border:1px solid #01192e;color:#01192e;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit;background:#fff;">Atualizar este modelo</button>
+      <button type="button" id="btn-excluir-modelo" style="display:none;border:1px solid #c62828;color:#c62828;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit;background:#fff;">Excluir este modelo</button>
+    </div>
+    <div id="msg-modelo" style="font-size:12px;margin-top:4px;"></div>
+    <div id="dica-salvar-modelo" style="display:none;font-size:11px;color:#8d8683;margin-top:4px;">Para o modelo se preencher sozinho em cada card, escreva {{empresa}}, {{responsavel}} ou {{card}} no texto. Ao salvar, o nome do cliente deste card vira esse trecho automaticamente. O modelo fica visível para toda a equipe comercial.</div>
 
     <div id="bloco-vincular" style="display:none;">
       <div id="aviso-sem-conversa">Este card ainda não tem conversa por e-mail registrada. Se o cliente já conversa com a equipe pelo Gmail, vincule essa conversa para este e-mail entrar nela (em vez de abrir outra).</div>
@@ -267,6 +280,7 @@ export async function POST(request: NextRequest) {
     var MODELOS_EMAIL = ${JSON.stringify(modelosDoCard).replace(/</g, "\\u003c")};
     var ASSINATURAS = ${JSON.stringify(assinaturas).replace(/</g, "\\u003c")};
     var infoCard = null;
+    var PODE_CRIAR_MODELO = ${JSON.stringify(podeCriarModelo)};
     var ultimoAssuntoModelo = "";
     var ultimoCorpoModelo = "";
 
@@ -289,7 +303,11 @@ export async function POST(request: NextRequest) {
 
     function popularModelos() {
       var select = document.getElementById("modelo");
-      if (!MODELOS_EMAIL.length) {
+      if (PODE_CRIAR_MODELO) {
+        document.getElementById("acoes-modelo").style.display = "flex";
+        document.getElementById("dica-salvar-modelo").style.display = "block";
+      }
+      if (!MODELOS_EMAIL.length && !PODE_CRIAR_MODELO) {
         // Nenhum modelo pra esse tipo de card: esconde o campo inteiro.
         document.getElementById("rotulo-modelo").style.display = "none";
         select.style.display = "none";
@@ -343,6 +361,104 @@ export async function POST(request: NextRequest) {
       return String(texto || "").split(/[,;\\s]+/).map(function (e) { return e.trim(); }).filter(Boolean);
     }
     popularModelos();
+
+    // ---- Modelos criados pela equipe (Leads e Negócios) ----
+    function modeloSelecionado() {
+      var id = document.getElementById("modelo").value;
+      return MODELOS_EMAIL.filter(function (m) { return m.id === id; })[0] || null;
+    }
+    function atualizarBotoesModelo() {
+      var m = modeloSelecionado();
+      var editavel = !!(m && m.editavel);
+      document.getElementById("btn-atualizar-modelo").style.display = editavel ? "inline-block" : "none";
+      document.getElementById("btn-excluir-modelo").style.display = editavel ? "inline-block" : "none";
+    }
+    document.getElementById("modelo").addEventListener("change", atualizarBotoesModelo);
+
+    // O texto da tela já tem os dados deste card; ao salvar, devolve os
+    // trechos {{empresa}}/{{responsavel}}/{{card}} para o modelo servir em outros cards.
+    function voltarPlaceholders(texto, comoHtml) {
+      if (!infoCard) return texto;
+      [["empresa", infoCard.empresa], ["responsavel", infoCard.responsavel], ["card", infoCard.tituloCard]].forEach(function (par) {
+        var valor = par[1];
+        if (!valor || String(valor).length < 4) return;
+        var v = comoHtml ? escaparHtml(valor) : String(valor);
+        texto = texto.split(v).join("{{" + par[0] + "}}");
+      });
+      return texto;
+    }
+    function avisoModelo(texto, erro) {
+      var el = document.getElementById("msg-modelo");
+      el.textContent = texto;
+      el.style.color = erro ? "#c62828" : "#1b7a3a";
+    }
+    function pedirModelo(carga, aoConcluir) {
+      var auth = BX24.getAuth();
+      carga.authId = auth && auth.access_token;
+      carga.entityTypeId = entityTypeId;
+      avisoModelo("Salvando...", false);
+      fetch("/bitrix-app/modelos-email", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(carga) })
+        .then(function (resp) { return resp.json(); })
+        .then(function (dados) {
+          if (dados && dados.ok) { aoConcluir(dados); } else { avisoModelo((dados && dados.erro) || "Falha ao salvar o modelo.", true); }
+        })
+        .catch(function () { avisoModelo("Falha de conexão. Tente de novo.", true); });
+    }
+    function textoPronto() {
+      var corpoEl = document.getElementById("corpo");
+      if (!corpoEl.textContent.trim()) { avisoModelo("Escreva a mensagem antes de salvar como modelo.", true); return null; }
+      if (corpoEl.querySelector('img[src^="data:"], img[src^="blob:"], img[src^="file:"]')) { avisoModelo("Espere as imagens terminarem de carregar antes de salvar.", true); return null; }
+      return {
+        assunto: voltarPlaceholders(document.getElementById("assunto").value, false),
+        corpoHtml: voltarPlaceholders(corpoEl.innerHTML, true),
+      };
+    }
+    document.getElementById("btn-salvar-modelo").addEventListener("click", function () {
+      var pronto = textoPronto();
+      if (!pronto) return;
+      var nome = window.prompt("Nome do modelo (ex: Black Friday - Seguro Incêndio):");
+      if (!nome || !nome.trim()) return;
+      pedirModelo({ acao: "salvar", nome: nome.trim(), assunto: pronto.assunto, corpoHtml: pronto.corpoHtml }, function (dados) {
+        var m = dados.modelo;
+        MODELOS_EMAIL.push(m);
+        var opcao = document.createElement("option");
+        opcao.value = m.id;
+        opcao.textContent = m.nome;
+        document.getElementById("modelo").appendChild(opcao);
+        document.getElementById("modelo").value = m.id;
+        ultimoAssuntoModelo = document.getElementById("assunto").value;
+        ultimoCorpoModelo = document.getElementById("corpo").innerHTML;
+        atualizarBotoesModelo();
+        avisoModelo("Modelo salvo. Já aparece para toda a equipe comercial.", false);
+      });
+    });
+    document.getElementById("btn-atualizar-modelo").addEventListener("click", function () {
+      var m = modeloSelecionado();
+      if (!m || !m.editavel) return;
+      var pronto = textoPronto();
+      if (!pronto) return;
+      if (!window.confirm("Trocar o assunto e a mensagem do modelo “" + m.nome + "” pelo texto que está na tela?")) return;
+      pedirModelo({ acao: "atualizar", id: m.id, assunto: pronto.assunto, corpoHtml: pronto.corpoHtml }, function (dados) {
+        m.assunto = dados.modelo.assunto;
+        m.corpoHtml = dados.modelo.corpoHtml;
+        ultimoAssuntoModelo = document.getElementById("assunto").value;
+        ultimoCorpoModelo = document.getElementById("corpo").innerHTML;
+        avisoModelo("Modelo atualizado.", false);
+      });
+    });
+    document.getElementById("btn-excluir-modelo").addEventListener("click", function () {
+      var m = modeloSelecionado();
+      if (!m || !m.editavel) return;
+      if (!window.confirm("Excluir o modelo “" + m.nome + "” para toda a equipe?")) return;
+      pedirModelo({ acao: "excluir", id: m.id }, function () {
+        MODELOS_EMAIL = MODELOS_EMAIL.filter(function (x) { return x.id !== m.id; });
+        var select = document.getElementById("modelo");
+        for (var i = select.options.length - 1; i >= 0; i--) { if (select.options[i].value === m.id) select.remove(i); }
+        select.value = "";
+        atualizarBotoesModelo();
+        avisoModelo("Modelo excluído.", false);
+      });
+    });
 
     // Todo e-mail sobre este card entra na conversa mais recente dele (o
     // servidor garante: assunto "Re: ..." + cabeçalhos de resposta). Aqui só
