@@ -108,14 +108,20 @@ async function montarFilaTodos() {
     }
     if (!data || data.length < 1000) break;
   }
+  // prioridade (Matheus 29/10): primeiro as apólices a RENOVAR em outubro, novembro, dezembro e janeiro (fim de vigência de 01/10/2026
+  // a 31/01/2027; as que vencem antes entram primeiro), depois os demais vigentes, por fim o resto
+  const renovar = (nn: string) => fim.get(nn)! >= "2026-10-01" && fim.get(nn)! <= "2027-01-31";
+  const faixa = (nn: string) => (renovar(nn) ? 0 : fim.get(nn)! >= hoje ? 1 : 2);
   const nns = [...fim.keys()].sort((a, b) => {
-    const va = fim.get(a)! >= hoje ? 0 : 1, vb = fim.get(b)! >= hoje ? 0 : 1;
-    return va - vb || Number(b) - Number(a);
+    const fa = faixa(a), fb = faixa(b);
+    if (fa !== fb) return fa - fb;
+    if (fa === 0 && fim.get(a) !== fim.get(b)) return fim.get(a)!.localeCompare(fim.get(b)!);
+    return Number(b) - Number(a);
   });
   const fila: Item[] = nns.map((nn) => ({ nn, produto: ramo.get(nn) ?? "?", fim_vig: fim.get(nn)! }));
   fs.writeFileSync(FILA, JSON.stringify(fila));
   const vig = fila.filter((i) => i.fim_vig >= hoje).length;
-  log(`fila: ${fila.length} documentos do Corp (${vig} vigentes primeiro) → ${FILA}`);
+  log(`fila: ${fila.length} documentos do Corp (${fila.filter((i) => i.fim_vig >= "2026-10-01" && i.fim_vig <= "2027-01-31").length} a renovar de out/26 a jan/27 primeiro, depois ${vig} vigentes) → ${FILA}`);
 }
 
 // Prioridade (Matheus 25/10): as apólices que o ERP acusa "fora das últimas faturas" (ex.: 149 Incêndio Tokio da

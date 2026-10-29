@@ -25,7 +25,7 @@ const pausa = (ms: number) => new Promise((r) => setTimeout(r, ms));
 async function comRetry<T>(fn: () => Promise<T>): Promise<T> { for (let t = 0; ; t++) { try { return await fn(); } catch (e) { if (t >= 4) throw e; await pausa(2000 * (t + 1)); } } }
 
 type Ap = { id: string; fonte: string; arquivo_id: string; arquivo_nome: string | null; nosso_numero: string };
-type Doc = { id: string; nosso_numero: number; nosso_numero_corp: number | null; vigencia_fim: string | null; seguradora_id: string | null; ramo_id: string | null };
+type Doc = { id: string; nosso_numero: number; nosso_numero_corp: number | null; vigencia_fim: string | null; seguradora_id: string | null; ramo_id: string | null; situacao?: string };
 
 (async () => {
   const aps: Ap[] = [];
@@ -35,7 +35,7 @@ type Doc = { id: string; nosso_numero: number; nosso_numero_corp: number | null;
   }
   const docs = new Map<string, Doc>();
   for (const g of em([...new Set(aps.map((a) => a.nosso_numero))])) {
-    const { data } = await sb.from("erp_documentos").select("id,nosso_numero,nosso_numero_corp,vigencia_fim,seguradora_id,ramo_id,situacao").eq("situacao", "vigente").in("nosso_numero_corp", g);
+    const { data } = await sb.from("erp_documentos").select("id,nosso_numero,nosso_numero_corp,vigencia_fim,seguradora_id,ramo_id,situacao").in("nosso_numero_corp", g); // qualquer situação (Matheus 29/10): baixou apólice que casa com um Nosso Nº = vincula; vigentes primeiro só por prioridade
     for (const d of (data ?? []) as Doc[]) docs.set(String(d.nosso_numero_corp), d);
   }
   const comAnexo = new Set<string>();
@@ -49,7 +49,9 @@ type Doc = { id: string; nosso_numero: number; nosso_numero_corp: number | null;
   for (const a of aps) { const d = docs.get(a.nosso_numero); if (!d || comAnexo.has(d.id) || corpAnexo.has(a.nosso_numero) || escolhido.has(d.id)) continue; escolhido.set(d.id, a); }
   const lista = [...escolhido.entries()].map(([id, a]) => ({ a, d: [...docs.values()].find((x) => x.id === id)! }));
   const jan = (d: Doc) => !!d.vigencia_fim && d.vigencia_fim >= "2027-01-01" && d.vigencia_fim <= "2027-01-31";
-  const alvo = (PRIORIDADE === "jan2027" ? lista.filter((x) => jan(x.d)) : lista).slice(0, LIMITE);
+  // prioridade: jan2027 = só os que vencem em janeiro; vigentes/todos = tudo, com os vigentes na frente (depois os de fim de vigência mais recente)
+  const ordenada = [...lista].sort((x, y) => Number(y.d.situacao === "vigente") - Number(x.d.situacao === "vigente") || (y.d.vigencia_fim ?? "").localeCompare(x.d.vigencia_fim ?? ""));
+  const alvo = (PRIORIDADE === "jan2027" ? ordenada.filter((x) => jan(x.d)) : ordenada).slice(0, LIMITE);
   const { data: segs } = await sb.from("erp_seguradoras").select("id,nome"); const { data: ramos } = await sb.from("erp_ramos").select("id,nome");
   const nSeg = new Map((segs ?? []).map((s) => [s.id, s.nome])); const nRamo = new Map((ramos ?? []).map((s) => [s.id, s.nome]));
   const porProduto: Record<string, number> = {};
