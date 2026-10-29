@@ -598,7 +598,23 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
               marcos.sort((a, b) => String(a.quando).localeCompare(String(b.quando)));
               const bolinha = { card: "bg-gray-400", etapa: "bg-o2-navy", comentario: "bg-amber-500", evento: "bg-green-600" } as const;
               const exportar = marcos.map((m) => `${formatarData(m.quando)} · ${m.texto.replace(/\s+/g, " ")}`).join("\n");
+              // datas-chave do card (reunião 29/10): criação, solicitação, negociação e efetivação
+              const etapasOrd = [...o.historico_etapas].sort((a, b) => String(a.quando).localeCompare(String(b.quando)));
+              const solicitacaoCampo = Object.entries(o.dados_legiveis).find(([k]) => /recebimento|solicita/i.test(k))?.[1];
+              const negociacao = etapasOrd.find((h) => /negocia/i.test(h.etapa))?.quando ?? null;
+              const efetivacao = etapasOrd.find((h) => h.semantica === "S")?.quando ?? d.dt_proposta ?? null;
+              const solicitacao = etapasOrd[0]?.quando ?? (typeof solicitacaoCampo === "string" ? solicitacaoCampo : null);
+              const datasChave: [string, string | null][] = [["Criação do card", o.card_criado_em], ["Solicitação", solicitacao], ["Negociação", negociacao], ["Efetivação", efetivacao]];
               return (
+                <>
+                <div className="grid grid-cols-2 gap-3 rounded-lg bg-gray-50 p-3 text-xs md:grid-cols-4">
+                  {datasChave.map(([r, v]) => (
+                    <div key={r}>
+                      <div className="text-[11px] uppercase tracking-wide text-gray-500">{r}</div>
+                      <div className="font-medium text-gray-800">{v ? formatarData(v) : "—"}</div>
+                    </div>
+                  ))}
+                </div>
                 <details className="rounded-lg border border-gray-200 text-xs" open={false}>
                   <summary className="cursor-pointer px-3 py-2 font-medium text-o2-navy">
                     Histórico do card — linha do tempo ({marcos.length} marcos: {o.historico_etapas.length} etapas, {o.comentarios.length} comentários, {d.eventos.length} eventos)
@@ -617,6 +633,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
                     <a href={"data:text/plain;charset=utf-8," + encodeURIComponent("Histórico do card " + o.item_id + " · " + (o.titulo ?? "") + "\n\n" + exportar)} download={`historico-card-${o.item_id}.txt`} className="inline-block rounded border border-gray-300 px-2 py-1 text-[11px] hover:bg-gray-50">Baixar tudo (.txt)</a>
                   </div>
                 </details>
+                </>
               );
             })()}
             <details className="text-xs">
