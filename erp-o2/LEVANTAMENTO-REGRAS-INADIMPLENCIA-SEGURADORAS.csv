@@ -1,0 +1,19 @@
+seguradora;produto;dias_ate_cancelar;aviso_previo;certeza;fonte
+Tokio;Incêndio / Empresarial;1ª parcela: 0 (automático). Demais: 15 dias para pagar após a notificação + 30 dias após a suspensão (cerca de 45 dias da notificação);Sim - notificação por escrito;Alta;Condições Gerais Tokio Marine Empresarial itens 16.9 a 16.11 (PDF da apólice)
+Bradesco;Incêndio residencial;1ª parcela: 0. Demais: no mínimo 30 dias após a suspensão da garantia;Sim - notificação prévia;Alta;Condições Gerais Bradesco Residencial Sob Medida (PDF da apólice)
+Alfa;Incêndio (Empresarial / Residencial / Imobiliárias);0 (cancelamento automático no vencimento; seguradora pode propor nova data);Não formal (envia aviso "pendente há 2/4 dias");Alta (texto) - prática mais branda;Certificado de seguro Alfa
+Yelum;Incêndio;1ª parcela: 0 (cancela desde o início da vigência). Demais: não encontrado;Sim - notificado para regularização;Alta (1ª parcela);Apólice Yelum cláusulas I e II
+Suhai;Automóvel;1ª parcela: 0. Demais: não encontrado;Sim - aviso aos 3 e 20 dias (sem prazo);Alta (1ª parcela);Apólice Suhai e e-mails
+Tokio;Fiança;1ª parcela: 0 (resolve de pleno direito). Demais: não encontrado;Sim - 1º/2º/3º comunicado;Alta (1ª parcela);Apólice Tokio Aluguel (rodapé do carnê) e e-mails
+Too;Fiança;Mais de 30 dias de atraso = passível de cancelamento; aviso formal dá 7 dias até a data limite (prazo reaberto semanalmente);Sim - aviso com data limite;Média;E-mails Too (Comunicado de Parcelas em Atraso; Aviso de cancelamento por inadimplência); Condições Gerais não localizadas
+Allianz;Residência Digital (incêndio);Pagar até 20 dias após o vencimento; sem isso suspende desde o vencimento e cancela na data informada;Sim - inadimplência / pré-cancelamento / cancelamento;Média;E-mails Allianz Brasil; Condições Gerais não localizadas
+Yelum;Incêndio;Cerca de 14 dias entre a carta de cobrança e o cancelamento (13 a 15 nas cartas lidas; 1ª parcela);Sim - carta de cobrança;Média;E-mails Carta de Cobrança - Yelum Seguros
+Pottencial;Fiança (Garantia);Cancelamento: não encontrado. Boleto vale 30 dias; mais de 45 dias de atraso = Serasa;Sim - Prêmios Pendentes / URGENTE;Média (só prazos de cobrança);E-mails Pottencial
+Tokio;Condomínio / RC / Automóvel / Residencial / Vida;não encontrado (texto: poderá cancelar / suspensão automática);Sim - 1º/2º/3º comunicado;Baixa (sem dias);Apólices e e-mails Tokio
+Porto;Fiança;não encontrado (apólice: poderá ser suspenso ou cancelado se o boleto não for pago);Não encontrado aviso de cancelamento;Baixa;Apólice Porto Fiança
+Porto;Incêndio / Condomínio;não encontrado (cláusula de fracionamento não veio nos PDFs); boleto aceito até 55 dias após o vencimento (prazo do banco, não de cancelamento);Não encontrado;Baixa;Apólice e boletos Porto
+Porto;Portáteis;não encontrado;Não encontrado;n/a;PDF da apólice sem cláusula
+Allianz;Incêndio / Condomínio (demais ramos);não encontrado (o prazo de 20 dias vem de e-mail da Residência Digital);Sim - relatório diário;n/a;PDF sem cláusula
+Zurich;Incêndio;não encontrado (cancelada por falta de pagamento dentro do prazo);Não encontrado;n/a;E-mail Zurich
+HDI / Mapfre / Liberty / Azul / Mitsui / Sulamérica;Diversos;não encontrado;Não encontrado;n/a;PDFs sem cláusula e e-mails sem prazo
+Brasilcap / Icatu / Mapfre Cap;Capitalização;não levantado;não levantado;n/a;

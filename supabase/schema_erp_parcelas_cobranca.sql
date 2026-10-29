@@ -5,3 +5,7 @@
 -- da seguradora; nenhuma regra foi inventada: a tabela nasce vazia). Janela: vencimentos de -180 a +30 dias. Tela: /erp/parcelas/cobranca.
 -- Definições completas: pg_get_viewdef('erp_parcelas_cobranca') e pg_get_functiondef('erp_cobranca_resumo').
 -- erp_regras_cancelamento(seg_abrev, ramo nulo = seguradora inteira, dias_em_aberto, fonte, atualizado_em), RLS is_colaborador_o2().
+-- 29/10 (tarde): regras de cancelamento com evidência ALTA entram em erp_regras_cancelamento com aplica_parcela='primeira' (1ª parcela não paga cancela
+-- automático): Alfa Incêndio, Yelum Incêndio, Suhai Auto, Tokio Fiança (migration erp_regras_cancelamento_primeira_parcela). 'risco_cancelamento' só quando
+-- dias de atraso > max(dias da regra, prazo normal da seguradora). Condições com prazo contado da NOTIFICAÇÃO (Tokio Incêndio/Empresarial: 15+30 dias; Bradesco:
+-- 30 dias após a suspensão) NÃO entram: não são dias desde o vencimento. Too (30) e Allianz (20) são certeza média: aguardam aprovação do Matheus.
