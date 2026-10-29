@@ -58,6 +58,7 @@ const NOME_CURTO: Record<string, string> = {
   ALFA: "Alfa", ALLI: "Allianz", AZUL: "Azul", BRAD: "Bradesco", BRAS: "Brasilcap", HDI: "HDI", ICAT: "Icatu", KLIN: "Klini",
   MAPF: "Mapfre", PORT: "Porto Seguro", POTT: "Pottencial", SUHA: "Suhai", SULA: "Sulamérica", TOKI: "Tokio Marine", TOO: "Too", YELU: "Yelum", ZURI: "Zurich",
 };
+type PontoDia = { dia: number; previsto: number; recebido: number };
 type LinhaTopo = { seg: string; nome: string; prevista: number; extratos: number; baixadas: number; nibo: number };
 const COLUNAS_CAIXA = "grid grid-cols-[minmax(150px,1.5fr)_64px_repeat(5,minmax(100px,1fr))_minmax(150px,1.2fr)] items-center gap-x-2";
 
@@ -153,6 +154,7 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
   const mesesOrd = usaPeriodo ? [...meses].map((m) => m.slice(0, 7)).sort() : [mesSel];
   let linhasCaixa: LinhaCaixa[] = [];
   const quadroTopo: Record<string, LinhaTopo[]> = {};
+  const graficoTopo: Record<string, PontoDia[]> = {};
   if (mesesOrd.length) {
     const [anoF, mesF] = mesesOrd[mesesOrd.length - 1].split("-").map(Number);
     const desdeCaixa = `${mesesOrd[0]}-01`;
@@ -161,11 +163,12 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
     const qDias = supabase.from("erp_baixa_assistida_resumo")
       .select("seg_abrev, corretora, data_recebimento, total_extrato, soma_linhas, liquido_sem_desconto, linhas")
       .neq("tipo", "resumo_mensal").gte("data_recebimento", desdeCaixa).lte("data_recebimento", ateCaixa).limit(5000);
-    const [{ data: diasBrutos }, entradas, { data: segsBrutas }, { data: previsaoBruta }, { data: nfsBrutas }, { data: baixadasBrutas }] = await Promise.all([
+    const [{ data: diasBrutos }, entradas, { data: segsBrutas }, { data: previsaoBruta }, { data: nfsBrutas }, { data: baixadasBrutas }, { data: previstoDiaBruto }] = await Promise.all([
       qDias, entradasNibo(supabase, desdeCaixa, ateCaixa), supabase.from("erp_seguradoras").select("abreviacao, nome"),
       supabase.rpc("erp_previsao_caixa_mensal", { p_de: desdeCaixa, p_ate: fimCaixa }),
       supabase.from("erp_extratos_seguradora").select("nf_numero, nf_emitida_em, seguradora:erp_seguradoras!inner(abreviacao)").in("seguradora.abreviacao", ["POTT", "TOO"]).gte("competencia", desdeCaixa).lte("competencia", fimCaixa),
       supabase.rpc("erp_baixadas_corp_mensal", { p_de: desdeCaixa, p_ate: fimCaixa }),
+      supabase.rpc("erp_previsto_diario", { p_de: desdeCaixa, p_ate: fimCaixa }),
     ]);
     // nota fiscal registrada (Pottencial e Too só pagam depois dela) e data do último extrato lido de cada seguradora
     const nfPorSeg = new Set<string>();
@@ -216,6 +219,19 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
         if ([l.prevista, l.extratos, l.baixadas, l.nibo].some((v) => Math.abs(v) >= 0.005)) linhas.push(l);
       }
       quadroTopo[corr] = linhas.sort((a, b) => a.nome.localeCompare(b.nome));
+    }
+    // ---- Gráfico diário por empresa: previsto do dia (parcelas que vencem no dia) × recebido no dia (Nibo), todas as seguradoras somadas ----
+    const [aTopo, mTopo] = mesTopo.split("-").map(Number);
+    const diasDoMes = new Date(Date.UTC(aTopo, mTopo, 0)).getUTCDate();
+    for (const corr of CORRETORAS) {
+      const pontos: PontoDia[] = Array.from({ length: diasDoMes }, (_, i) => ({ dia: i + 1, previsto: 0, recebido: 0 }));
+      for (const p of (previstoDiaBruto ?? []) as { corretora: string; dia: string; previsto_liquido: number | string }[]) {
+        if (p.corretora === corr && p.dia.startsWith(mesTopo)) pontos[Number(p.dia.slice(8, 10)) - 1].previsto += Number(p.previsto_liquido);
+      }
+      for (const n of entradas) {
+        if (n.corretora === corr && n.dia.startsWith(mesTopo)) pontos[Number(n.dia.slice(8, 10)) - 1].recebido += n.valor;
+      }
+      graficoTopo[corr] = pontos.map((p) => ({ dia: p.dia, previsto: Math.round(p.previsto * 100) / 100, recebido: Math.round(p.recebido * 100) / 100 }));
     }
     const bancoMes = new Map<string, number>();
     for (const n of entradas) {
@@ -340,7 +356,17 @@ export default async function ErpBaixasPage({ searchParams }: { searchParams: Pr
           <p className="text-[11px] leading-relaxed text-gray-500">
             Valores líquidos do imposto retido, como entram na conta. <b>Comissão prevista</b>: o que as parcelas do mês deveriam render conforme a experiência de cada seguradora (vencimento + prazo que ela costuma levar).
             <b> Extratos de comissão</b>: o que a seguradora pagou segundo os extratos lidos. <b>Baixadas</b>: o que já foi baixado no Corp no mês (data da quitação). <b>Nibo</b>: o que entrou na conta (receita de seguros).
-            <b> Diferença</b> = Nibo − Baixadas: o que entrou no banco e ainda não foi baixado (negativo: baixado a mais do que entrou). Até R$ {TOLERANCIA_CAIXA} é considerado igual.
+            <b> Diferença extratos × baixadas</b> = Extratos − Baixadas: o que a seguradora pagou e ainda não foi baixado (negativo: baixado a mais). <b>Diferença extratos × Nibo</b> = Extratos − Nibo: o que a seguradora diz que pagou e não entrou na conta (negativo: entrou mais do que os extratos explicam). Até R$ {TOLERANCIA_CAIXA} é considerado igual.
+          </p>
+        </section>
+
+        <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-4">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-o2-navy">Comportamento diário de comissões - previsão de receitas versus recebido por vencimento de parcelas</h2>
+          <GraficoDiario titulo="O2 Corretora de Seguros : 20001784000180" pontos={graficoTopo["O2 Corretora"] ?? []} />
+          <GraficoDiario titulo="o2 Capitalização e Seguros" pontos={graficoTopo["O2 Capitalização"] ?? []} />
+          <p className="text-[11px] leading-relaxed text-gray-500">
+            <b>Previsto do dia</b>: comissão das parcelas que vencem naquele dia (todas as seguradoras e produtos, líquida do imposto retido). <b>Recebido no dia</b>: o que entrou na conta naquele dia (Nibo, receita de seguros).
+            O previsto marca o vencimento; as seguradoras costumam pagar alguns dias depois, por isso os picos não coincidem. A escala é por faixas de valor.
           </p>
         </section>
 
@@ -780,17 +806,21 @@ function ExtratoCard({ e, linhas, aberto, base }: { e: Extrato; linhas: LinhaExt
 
 function TabelaControle({ titulo, linhas }: { titulo: string; linhas: LinhaTopo[] }) {
   const soma = (f: (l: LinhaTopo) => number) => Math.round(linhas.reduce((t, l) => t + f(l), 0) * 100) / 100;
-  const dif = (l: { nibo: number; baixadas: number }) => Math.round((l.nibo - l.baixadas) * 100) / 100;
   const tot = { prevista: soma((l) => l.prevista), extratos: soma((l) => l.extratos), baixadas: soma((l) => l.baixadas), nibo: soma((l) => l.nibo) };
-  const th = "whitespace-nowrap px-2 py-1.5 text-right font-semibold";
-  const cel = (v: number) => (Math.abs(v) < 0.005 ? <span className="text-gray-300">—</span> : brl(v));
+  const dExtBaixadas = (l: { extratos: number; baixadas: number }) => Math.round((l.extratos - l.baixadas) * 100) / 100;
+  const dExtNibo = (l: { extratos: number; nibo: number }) => Math.round((l.extratos - l.nibo) * 100) / 100;
+  const th = "whitespace-nowrap px-1 py-1.5 text-right font-semibold";
+  const td = "whitespace-nowrap px-1 py-1 text-right tabular-nums";
+  // números como numa planilha (sem o "R$" repetido; os valores são em reais)
+  const n2 = (v: number) => v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const cel = (v: number) => (Math.abs(v) < 0.005 ? <span className="text-gray-300">—</span> : n2(v));
   const difCel = (v: number) => (
-    <span className={Math.abs(v) > TOLERANCIA_CAIXA ? "font-semibold text-red-700" : "text-gray-500"}>{Math.abs(v) < 0.005 ? "—" : brl(v)}</span>
+    <span className={Math.abs(v) > TOLERANCIA_CAIXA ? "font-semibold text-red-700" : "text-gray-500"}>{Math.abs(v) < 0.005 ? "—" : n2(v)}</span>
   );
   return (
     <div className="overflow-x-auto rounded-lg border border-gray-300">
-      <table className="w-full text-xs">
-        <caption className="bg-o2-navy px-3 py-2 text-left text-sm font-bold text-white">{titulo}</caption>
+      <table className="w-full text-[11px]">
+        <caption className="bg-o2-navy px-3 py-2 text-left text-sm font-bold text-white">{titulo} <span className="text-[10px] font-normal opacity-80">(valores em R$)</span></caption>
         <thead className="bg-gray-100 text-[11px] uppercase tracking-wide text-gray-600">
           <tr>
             <th className="px-2 py-1.5 text-left font-semibold">Seguradora</th>
@@ -798,33 +828,128 @@ function TabelaControle({ titulo, linhas }: { titulo: string; linhas: LinhaTopo[
             <th className={th} title="O que a seguradora pagou, segundo os extratos lidos pelo ERP">Extratos de<br />comissão</th>
             <th className={th} title="Já baixado no Corp no mês (data da quitação)">Baixadas</th>
             <th className={th} title="O que entrou na conta (Nibo, receita de seguros)">Nibo</th>
-            <th className={th} title="Nibo − Baixadas">Diferença</th>
+            <th className={th} title="Extratos de comissão − Baixadas: o que a seguradora pagou e ainda não foi baixado (negativo: baixado a mais)">Dif.<br />extratos × baixadas</th>
+            <th className={th} title="Extratos de comissão − Nibo: o que a seguradora diz que pagou e não entrou na conta (negativo: entrou mais do que os extratos explicam)">Dif.<br />extratos × Nibo</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
-          {linhas.length === 0 && <tr><td colSpan={6} className="px-2 py-3 text-center text-gray-500">Nada neste mês.</td></tr>}
+          {linhas.length === 0 && <tr><td colSpan={7} className="px-2 py-3 text-center text-gray-500">Nada neste mês.</td></tr>}
           {linhas.map((l) => (
             <tr key={l.seg}>
               <td className="whitespace-nowrap px-2 py-1 font-medium text-gray-800">{l.nome}</td>
-              <td className="whitespace-nowrap px-2 py-1 text-right">{cel(l.prevista)}</td>
-              <td className="whitespace-nowrap px-2 py-1 text-right">{cel(l.extratos)}</td>
-              <td className="whitespace-nowrap px-2 py-1 text-right">{cel(l.baixadas)}</td>
-              <td className="whitespace-nowrap px-2 py-1 text-right">{cel(l.nibo)}</td>
-              <td className="whitespace-nowrap px-2 py-1 text-right">{difCel(dif(l))}</td>
+              <td className={td}>{cel(l.prevista)}</td>
+              <td className={td}>{cel(l.extratos)}</td>
+              <td className={td}>{cel(l.baixadas)}</td>
+              <td className={td}>{cel(l.nibo)}</td>
+              <td className={td}>{difCel(dExtBaixadas(l))}</td>
+              <td className={td}>{difCel(dExtNibo(l))}</td>
             </tr>
           ))}
         </tbody>
         <tfoot className="bg-gray-100 font-bold text-o2-navy">
           <tr>
             <td className="px-2 py-1.5">TOTAIS</td>
-            <td className="px-2 py-1.5 text-right">{brl(tot.prevista)}</td>
-            <td className="px-2 py-1.5 text-right">{brl(tot.extratos)}</td>
-            <td className="px-2 py-1.5 text-right">{brl(tot.baixadas)}</td>
-            <td className="px-2 py-1.5 text-right">{brl(tot.nibo)}</td>
-            <td className="px-2 py-1.5 text-right">{difCel(dif(tot))}</td>
+            <td className={td}>{n2(tot.prevista)}</td>
+            <td className={td}>{n2(tot.extratos)}</td>
+            <td className={td}>{n2(tot.baixadas)}</td>
+            <td className={td}>{n2(tot.nibo)}</td>
+            <td className={td}>{difCel(dExtBaixadas(tot))}</td>
+            <td className={td}>{difCel(dExtNibo(tot))}</td>
           </tr>
         </tfoot>
       </table>
+    </div>
+  );
+}
+
+// Faixas de valor do eixo vertical (modelo do Matheus): 1 mil, 2 mil, 3 mil, 3–5, 5–10, ... 55–60 mil; acima disso a escala se estende
+// só até o maior valor do mês (ex.: picos de vencimento perto de R$ 190 mil).
+const FAIXAS_BASE = [0, 1000, 2000, 3000, 5000, 10000, 15000, 20000, 25000, 30000, 35000, 40000, 45000, 50000, 55000, 60000];
+const FAIXAS_EXTRA = [80000, 100000, 150000, 200000, 250000, 300000, 400000, 500000];
+const rotuloFaixa = (lo: number, hi: number) => (lo === 0 ? "até 1 mil" : `${lo / 1000}–${hi / 1000} mil`);
+
+function GraficoDiario({ titulo, pontos }: { titulo: string; pontos: PontoDia[] }) {
+  const maior = Math.max(0, ...pontos.map((p) => Math.max(p.previsto, p.recebido)));
+  const limites = [...FAIXAS_BASE];
+  for (const e of FAIXAS_EXTRA) if (limites[limites.length - 1] < maior) limites.push(e);
+  const nFaixas = limites.length - 1;
+  const posicao = (v: number) => {
+    if (v <= 0) return 0;
+    for (let i = 0; i < nFaixas; i++) if (v < limites[i + 1]) return i + (v - limites[i]) / (limites[i + 1] - limites[i]);
+    return nFaixas;
+  };
+  const W = 1100, esq = 86, dir = 8, topo = 8, base = 26, alturaFaixa = 22;
+  const H = topo + nFaixas * alturaFaixa + base;
+  const largura = W - esq - dir;
+  const slot = largura / Math.max(pontos.length, 1);
+  const barra = slot * 0.4;
+  const yDe = (v: number) => topo + (nFaixas - posicao(v)) * alturaFaixa;
+  const mil = (v: number) => (Math.abs(v) < 0.5 ? "–" : Math.round(v).toLocaleString("pt-BR"));
+  const totalPrev = pontos.reduce((t, p) => t + p.previsto, 0);
+  const totalRec = pontos.reduce((t, p) => t + p.recebido, 0);
+  return (
+    <div className="space-y-2 rounded-lg border border-gray-300 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-bold text-o2-navy">{titulo}</h3>
+        <div className="flex items-center gap-4 text-xs text-gray-600">
+          <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-o2-navy" /> Previsto do dia</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-o2-coral" /> Recebido no dia</span>
+        </div>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label={`Previsto do dia contra recebido no dia — ${titulo}`}>
+        {limites.slice(0, -1).map((lo, i) => {
+          const y = topo + (nFaixas - i - 1) * alturaFaixa;
+          return (
+            <g key={lo}>
+              <rect x={esq} y={y} width={largura} height={alturaFaixa} className={i % 2 ? "fill-gray-50" : "fill-white"} />
+              <line x1={esq} x2={W - dir} y1={y + alturaFaixa} y2={y + alturaFaixa} className="stroke-gray-200" strokeWidth={1} />
+              <text x={esq - 6} y={y + alturaFaixa / 2 + 3} textAnchor="end" fontSize={10} className="fill-gray-500">{rotuloFaixa(lo, limites[i + 1])}</text>
+            </g>
+          );
+        })}
+        {pontos.map((p, i) => {
+          const x0 = esq + i * slot;
+          const base0 = topo + nFaixas * alturaFaixa;
+          return (
+            <g key={p.dia}>
+              {p.previsto > 0 && (
+                <rect x={x0 + slot * 0.08} y={yDe(p.previsto)} width={barra} height={Math.max(base0 - yDe(p.previsto), 1)} className="fill-o2-navy">
+                  <title>{`Dia ${p.dia} · previsto ${brl(p.previsto)}`}</title>
+                </rect>
+              )}
+              {p.recebido > 0 && (
+                <rect x={x0 + slot * 0.52} y={yDe(p.recebido)} width={barra} height={Math.max(base0 - yDe(p.recebido), 1)} className="fill-o2-coral">
+                  <title>{`Dia ${p.dia} · recebido ${brl(p.recebido)}`}</title>
+                </rect>
+              )}
+              <text x={x0 + slot / 2} y={H - 9} textAnchor="middle" fontSize={10} className="fill-gray-600">{p.dia}</text>
+            </g>
+          );
+        })}
+      </svg>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[1000px] text-[10px]">
+          <thead className="text-gray-500">
+            <tr>
+              <th className="px-1 py-0.5 text-left font-semibold">Dia</th>
+              {pontos.map((p) => <th key={p.dia} className="px-0.5 py-0.5 text-right font-semibold">{p.dia}</th>)}
+              <th className="px-1 py-0.5 text-right font-bold text-o2-navy">Total</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            <tr>
+              <td className="whitespace-nowrap px-1 py-0.5 font-semibold text-o2-navy">Previsto do dia</td>
+              {pontos.map((p) => <td key={p.dia} className="px-0.5 py-0.5 text-right" title={brl(p.previsto)}>{mil(p.previsto)}</td>)}
+              <td className="whitespace-nowrap px-1 py-0.5 text-right font-bold">{mil(totalPrev)}</td>
+            </tr>
+            <tr>
+              <td className="whitespace-nowrap px-1 py-0.5 font-semibold text-o2-coral">Recebido no dia</td>
+              {pontos.map((p) => <td key={p.dia} className="px-0.5 py-0.5 text-right" title={brl(p.recebido)}>{mil(p.recebido)}</td>)}
+              <td className="whitespace-nowrap px-1 py-0.5 text-right font-bold">{mil(totalRec)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
