@@ -94,13 +94,15 @@ function vigenciaGenerica(t: string): { ini: string | null; fim: string | null }
     confere.premio = !pr.length || !alvos.length ? "?" : pr.some((v) => alvos.some((a) => Math.abs(v - a) <= 1)) ? "✓" : "✗";
 
     const todos = Object.values(confere);
-    const ok = !!numero && !!vig.ini && !!vig.fim && todos.every((x) => x !== "✗") && todos.filter((x) => x === "✓").length >= 3;
+    // regra do Matheus (29/10): nada por adivinhação — só é "conferida" a proposta em que os SEIS itens deram ✓ e o PDF trouxe Nº da apólice e vigência.
+    // Qualquer ✗ ou ? (ex.: o pré-cadastro não tem itens) = abrir a proposta/apólice e conferir com os olhos antes de promover.
+    const ok = !!numero && !!vig.ini && !!vig.fim && todos.every((x) => x === "✓");
     if (ok) tudoOk++;
-    console.log(`${String(d.nosso_numero).padEnd(7)} ${String(d.tipo_corp ?? "").padEnd(4)} ${(d.seguradora?.abreviacao ?? "").padEnd(5)} ${prod.padEnd(10)} apólice ${numero ?? "—"} · vig ${vig.ini ?? "—"} a ${vig.fim ?? "—"} · ${Object.entries(confere).map(([k, v]) => `${k} ${v}`).join(" · ")}${ok ? "  ⇒ PODE PROMOVER" : ""}`);
+    console.log(`${String(d.nosso_numero).padEnd(7)} ${String(d.tipo_corp ?? "").padEnd(4)} ${(d.seguradora?.abreviacao ?? "").padEnd(5)} ${prod.padEnd(10)} apólice ${numero ?? "—"} · vig ${vig.ini ?? "—"} a ${vig.fim ?? "—"} · ${Object.entries(confere).map(([k, v]) => `${k} ${v}`).join(" · ")}${ok ? "  ⇒ CONFERIDA (aguarda OK para promover)" : "  ⇒ ABRIR E CONFERIR"}`);
     if (PROMOVER && ok) {
       const { error } = await sb.from("erp_documentos").update({ numero_apolice: numero, vigencia_inicio: vig.ini, vigencia_fim: vig.fim, situacao: "vigente" }).eq("id", d.id).eq("situacao", "proposta");
       if (error) console.log(`   erro: ${error.message}`); else promovidos++;
     }
   }
-  console.log(`\n${comPdf} propostas com PDF de apólice lido · ${tudoOk} com tudo conferido (podem virar apólice)${PROMOVER ? ` · ${promovidos} promovidas` : " · (ensaio, nada gravado)"}`);
+  console.log(`\n${comPdf} propostas com PDF de apólice lido · ${tudoOk} com os 6 itens conferidos (as demais precisam ser abertas e conferidas)${PROMOVER ? ` · ${promovidos} promovidas` : " · (ensaio, nada gravado)"}`);
 })();
