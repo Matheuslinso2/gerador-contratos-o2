@@ -4,6 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { isAdmin } from "@/lib/admin";
 import { FERRAMENTAS, executarFerramenta } from "@/lib/whatsappFerramentas";
 import { FERRAMENTAS_ERP, executarFerramentaErp } from "./roboFerramentas";
+import { FERRAMENTAS_GERAIS, executarFerramentaGeral } from "./roboGeral";
 
 // Robô O2 do chat da equipe (Fase 2, 29/10/2026). Mesmo "cérebro" da IA do WhatsApp (painéis + tabelas do
 // Workspace) mais as ferramentas do ERP. Somente leitura. Comissão/repasse só para admin (mesma cautela do
@@ -30,6 +31,8 @@ CONCEITOS DA O2 — NUNCA MISTURAR (cotação é cotação, proposta é proposta
 FONTE DOS DADOS — REGRA MAIS IMPORTANTE
 - Responda SOMENTE com o que as ferramentas devolverem. Nunca invente, estime ou arredonde um número que não veio delas. Se não achar, diga "não encontrei" e diga o que você procurou.
 - Você NÃO consulta internet, nem o Bitrix ao vivo. Só o banco do Workspace/ERP. Se perguntarem algo fora disso, diga que não tem essa informação por aqui.
+- Você tem acesso ao Workspace e ao ERP inteiros: painéis (consultar_painel e consultar_painel_extra: Fiança, Renovação, Capitalização, Auto, Ramos Elementares, Painel Comercial, Sinistros, Endossos), campanhas comerciais (campanhas, campanhas_envios, campanhas_metas, campanhas_producao), faturas, repasses, sinistros, produção do Corp e todas as telas do ERP (documentos, parcelas, comissões, baixas, extratos, renovações, emissão). Para qualquer assunto, use descrever_tabelas se não souber a tabela e consultar_dados para ler. Não diga "não tenho acesso" sem antes procurar.
+- Dados sensíveis (CPF, senhas, conversas, e-mails) não estão disponíveis; se pedirem, explique que são protegidos.
 - Para qualquer pergunta sobre uma imobiliária, comece por buscar_imobiliaria. Imobiliárias do mesmo grupo (ex.: Ramiro Sá) são somadas e você diz quais fichas entraram.
 - Pergunta de VALOR de uma imobiliária num mês (comissão efetivada, prêmio, efetivados, cotações) sem citar produto: NÃO responda com um painel só. Consulte TODOS os painéis com consultar_painel na competência — seguro_fianca (parte topImobiliarias), ramos_elementares (partes novos e renovacoes, porImobiliaria), capitalizacao (parte titulos), seguro_auto — procurando a imobiliária por TODOS os nomes das fichas do grupo (use buscar_imobiliaria antes; no painel o nome pode vir diferente, ex.: "Ramiro Sá Imóveis"; procure por um pedaço do nome). Responda com o *total somado* e a quebra por produto, e diga os produtos em que ela não tem registro naquele mês ("sem registro"). Se citarem um produto, responda só dele.
 - Perguntas sobre o que está vigente: use contar_documentos_erp com situacao ["vigente"] e agrupar_por "tipo", e responda separado, no formato "*582 apólices* e *8 endossos* vigentes". Apólices = tipo A (mesma regra da tela ERP > Apólices > Vigentes); endossos = tipos C, D, I, M, R, X somados; faturas = tipo F (só cite se houver). O total da ficha da imobiliária no ERP soma tudo isso junto, por isso é maior que o número de apólices.
@@ -50,7 +53,9 @@ export async function responderComoRobo(email: string, historico: TurnoChat[]): 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY não configurada");
   const verComissao = isAdmin(email);
-  const ferramentas: Anthropic.Tool[] = verComissao ? [...FERRAMENTAS_ERP, ...FERRAMENTAS] : FERRAMENTAS_ERP;
+  const ferramentas: Anthropic.Tool[] = verComissao
+    ? [...FERRAMENTAS_ERP, ...FERRAMENTAS_GERAIS, ...FERRAMENTAS]
+    : [...FERRAMENTAS_ERP, ...FERRAMENTAS_GERAIS.filter((f) => f.name !== "consultar_painel_extra")];
 
   const anthropic = new Anthropic({ apiKey });
   const mensagens: Anthropic.MessageParam[] = historico.map((t) => ({ role: t.role, content: t.content }));
@@ -75,7 +80,10 @@ export async function responderComoRobo(email: string, historico: TurnoChat[]): 
       chamadas.map(async (c) => ({
         type: "tool_result" as const,
         tool_use_id: c.id,
-        content: (await executarFerramentaErp(c.name, c.input, verComissao)) ?? (verComissao ? await executarFerramenta(c.name, c.input) : "Ferramenta indisponível para o seu perfil."),
+        content:
+          (await executarFerramentaErp(c.name, c.input, verComissao)) ??
+          (await executarFerramentaGeral(c.name, c.input, verComissao)) ??
+          (verComissao ? await executarFerramenta(c.name, c.input) : "Ferramenta indisponível para o seu perfil."),
       }))
     );
     mensagens.push({ role: "user", content: resultados });

@@ -14,7 +14,7 @@ const LIMITE_LINHAS = 50;
 const LIMITE_AGREGACAO = 30000; // linhas lidas pra somar/agrupar
 const LIMITE_CARACTERES = 18000; // por resultado de ferramenta
 
-type ConfigTabela = { descricao: string; colunas: string[] };
+export type ConfigTabela = { descricao: string; colunas: string[] };
 
 const TABELAS: Record<string, ConfigTabela> = {
   imobiliarias: {
@@ -152,7 +152,7 @@ export const FERRAMENTAS: Anthropic.Tool[] = [
 ];
 
 type Filtro = { coluna: string; operador: string; valor?: unknown };
-type EntradaTabela = {
+export type EntradaTabela = {
   tabela: string;
   colunas?: string[];
   filtros?: Filtro[];
@@ -164,7 +164,7 @@ type EntradaTabela = {
   somar?: string[];
 };
 
-function compacto(valor: unknown): string {
+export function compacto(valor: unknown): string {
   // Listas longas viram as primeiras 40 + aviso, pra caber no contexto.
   const podado = JSON.parse(
     JSON.stringify(valor, (_k, v) =>
@@ -210,9 +210,10 @@ async function comNomeImobiliaria(linhas: Record<string, unknown>[]) {
   }));
 }
 
-async function consultarTabela(e: EntradaTabela): Promise<string> {
-  const config = TABELAS[e.tabela];
-  if (!config) return `Tabela não permitida. Use: ${Object.keys(TABELAS).join(", ")}`;
+// `tabelas` permite reusar a consulta com outra lista fechada (o Robô O2 do chat usa a das tabelas do ERP e do Workspace).
+export async function consultarTabela(e: EntradaTabela, tabelas: Record<string, ConfigTabela> = TABELAS): Promise<string> {
+  const config = tabelas[e.tabela];
+  if (!config) return `Tabela não permitida. Use: ${Object.keys(tabelas).join(", ")}`;
   const permitida = (c: string) => config.colunas.includes(c);
   const usadas = [...(e.colunas ?? []), ...(e.filtros ?? []).map((f) => f.coluna), e.ordenar_por, e.agrupar_por, ...(e.somar ?? [])].filter(
     (c): c is string => !!c
