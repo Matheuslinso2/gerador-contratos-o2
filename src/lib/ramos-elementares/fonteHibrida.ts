@@ -2,6 +2,7 @@ import "server-only";
 
 import { lerFonteRamosElementares, PlanilhaDaCompetenciaNaoEncontradaError, type FonteRamosBruta } from "./fonteGoogle";
 import { lerFonteRamosElementaresBitrix } from "./fonteBitrix";
+import type { CelulaGoogle } from "./fonteGoogle";
 
 // A partir de COMPETENCIA_INICIO_HIBRIDO (ver page.tsx), Novos Negócios e
 // Pendências passaram a ser lançados direto no Bitrix (SPA 1046).
@@ -44,6 +45,19 @@ const COMPETENCIA_RENOVACAO_AINDA_NA_PLANILHA = "2026-11";
 const AVISO_TRANSICAO =
   "Transição planilha → Bitrix: até set/2026 as renovações são contadas por item (linhas das planilhas); a partir de out/2026, por card (1 card = 1 negociação por imobiliária, com os itens em planilha anexa). Set e out não são comparáveis; de novembro em diante, só Bitrix.";
 
+function mesAnterior(competencia: string): string {
+  const [ano, mes] = competencia.split("-").map(Number);
+  const data = new Date(Date.UTC(ano, mes - 2, 1));
+  return `${data.getUTCFullYear()}-${String(data.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+// Mesmo cálculo de mesDoSerial em analise.ts (data serial do Google, horário de Brasília).
+function mesDoSerialPlanilha(serial: number): string {
+  const ms = (serial - 25569) * 86_400_000;
+  const data = new Date(Number.isInteger(serial) ? ms : ms - 3 * 3_600_000);
+  return `${data.getUTCFullYear()}-${String(data.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
 function mesSeguinte(competencia: string): string {
   const [ano, mes] = competencia.split("-").map(Number);
   const data = new Date(Date.UTC(ano, mes, 1));
@@ -59,9 +73,30 @@ export async function lerFonteRamosElementaresHibrida(competencia: string): Prom
     lerFonteRamosElementaresBitrix(competencia),
   ]);
 
+  // Renovações da planilha do mês ANTERIOR efetivadas neste mês (ex.: renovações
+  // de set efetivadas em 1-6/10) contam aqui, no mês da efetivação -- a planilha
+  // de outubro não existe, então busca a de setembro só por elas (29/10/2026).
+  let efetivadasDaPlanilhaAnterior: CelulaGoogle[][] = [];
+  const anterior = mesAnterior(competencia);
+  if (competencia > ULTIMA_COMPETENCIA_RENOVACAO_NA_PLANILHA && anterior <= ULTIMA_COMPETENCIA_RENOVACAO_NA_PLANILHA) {
+    const googleAnterior = await lerFonteRamosElementares(anterior).catch((erro) => {
+      if (erro instanceof PlanilhaDaCompetenciaNaoEncontradaError) return null;
+      throw erro;
+    });
+    if (googleAnterior) {
+      // só a competência do mês anterior: a aba da PRÓXIMA competência é o mês atual, que o Bitrix já tem
+      efetivadasDaPlanilhaAnterior = googleAnterior.abas.renovacoesAtual.filter((linha) => {
+        const status = String(linha[0] ?? "").trim().toUpperCase();
+        const data = typeof linha[25] === "number" ? (linha[25] as number) : null;
+        return status === "EFETIVADO" && data !== null && mesDoSerialPlanilha(data) === competencia;
+      });
+    }
+  }
+
   if (!google) {
     return {
       ...bitrix,
+      abas: { ...bitrix.abas, renovacoesAtual: [...bitrix.abas.renovacoesAtual, ...efetivadasDaPlanilhaAnterior] },
       avisos: [
         `Planilha mensal de ${competencia} não encontrada na pasta — painel montado só com o Bitrix24 (novos, renovações e endossos).`,
         ...bitrix.avisos,
@@ -86,7 +121,7 @@ export async function lerFonteRamosElementaresHibrida(competencia: string): Prom
       renovacoesAtual:
         competencia <= ULTIMA_COMPETENCIA_RENOVACAO_NA_PLANILHA
           ? [...bitrix.abas.renovacoesAtual, ...google.abas.renovacoesAtual]
-          : bitrix.abas.renovacoesAtual,
+          : [...bitrix.abas.renovacoesAtual, ...efetivadasDaPlanilhaAnterior],
       renovacoesFutura:
         mesSeguinte(competencia) <= ULTIMA_COMPETENCIA_RENOVACAO_NA_PLANILHA ||
         mesSeguinte(competencia) === COMPETENCIA_RENOVACAO_AINDA_NA_PLANILHA

@@ -738,8 +738,18 @@ export function montarAnaliseRamosElementares(fonte: FonteRamosBruta, agora = ne
   // efetivação é outra -- a efetivação/perda conta no mês em que ocorreu.
   // Renovação já efetivada/perdida em mês anterior sai da competência;
   // renovação da próxima competência efetivada/perdida neste mês entra aqui.
-  const rnAtualBruto = mapearRenovacoes(fonte.abas.renovacoesAtual, abaRnAtual);
-  const rnFuturaBruto = mapearRenovacoes(fonte.abas.renovacoesFutura, abaRnFutura);
+  // Linha de planilha já efetivada/perdida num mês DEPOIS deste: nesse mês ela
+  // ainda estava aberta (mesma regra que o lado Bitrix aplica com statusNoMes).
+  // Sem isso, as renovações de set efetivadas em 1-6/10 contavam em setembro
+  // no painel e em outubro no /producao (29/10/2026).
+  const reabrirSeDesfechoDepois = (registro: RegistroRenovacao): RegistroRenovacao =>
+    (registro.status === "EFETIVADO" || registro.status === "NÃO EFETIVADO") &&
+    registro.dataEfetivacao !== null &&
+    mesDoSerial(registro.dataEfetivacao) > fonte.competencia
+      ? { ...registro, status: "PENDENTE", efetivado: false, itensContratados: null }
+      : registro;
+  const rnAtualBruto = mapearRenovacoes(fonte.abas.renovacoesAtual, abaRnAtual).map(reabrirSeDesfechoDepois);
+  const rnFuturaBruto = mapearRenovacoes(fonte.abas.renovacoesFutura, abaRnFutura).map(reabrirSeDesfechoDepois);
   const desfechoComData = (registro: RegistroRenovacao) =>
     (registro.status === "EFETIVADO" || registro.status === "NÃO EFETIVADO") && registro.dataEfetivacao !== null;
   const mesDesfecho = (registro: RegistroRenovacao) => (registro.dataEfetivacao === null ? null : mesDoSerial(registro.dataEfetivacao));
