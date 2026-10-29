@@ -4,7 +4,7 @@ import { isEquipe, isMatheus } from "@/lib/admin";
 import { signOut } from "../../actions";
 import AppHeader from "@/components/AppHeader";
 import BackLink from "@/components/BackLink";
-import { montarRelatorioDiario, textoRelatorio, MODELO_WHATSAPP } from "@/lib/relatorioDiario/montar";
+import { montarRelatorioDiario, textoRelatorioV3, MODELO_WHATSAPP_V3 } from "@/lib/relatorioDiario/montar";
 import { enviarTesteWhatsApp, enviarParaTodosWhatsApp } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -41,16 +41,16 @@ export default async function RelatorioDiarioPage({ searchParams }: { searchPara
         <div className="space-y-2">
           <BackLink />
           <div>
-            <h1 className="text-xl font-semibold text-o2-navy">Relatório diário (WhatsApp) — prévia</h1>
+            <h1 className="text-xl font-semibold text-o2-navy">Relatório diário (WhatsApp) — prévia do modelo novo</h1>
             <p className="text-sm text-gray-500">
-              Cópia do que os painéis do Workspace salvaram (não consulta o Bitrix). Período: {relatorio.periodo.rotulo} · mês{" "}
+              Prévia do modelo 3 (ainda aguardando aprovação da Meta; os envios continuam saindo no modelo atual). Cópia do que os painéis salvaram (não consulta o Bitrix). Período: {relatorio.periodo.rotulo} · mês{" "}
               {relatorio.periodo.competenciaMes}.
             </p>
           </div>
         </div>
 
         <div className="max-w-md rounded-xl bg-[#d9fdd3] p-4 shadow-sm">
-          <pre className="whitespace-pre-wrap font-sans text-sm text-gray-900">{textoRelatorio(relatorio)}</pre>
+          <pre className="whitespace-pre-wrap font-sans text-sm text-gray-900">{textoRelatorioV3(relatorio)}</pre>
         </div>
 
         {isMatheus(user?.email) && (
@@ -80,9 +80,9 @@ export default async function RelatorioDiarioPage({ searchParams }: { searchPara
             </details>
             <details>
               <summary className="cursor-pointer text-gray-600">
-                Texto do modelo pra cadastrar na Meta (nome: <code>{MODELO_WHATSAPP.nome}</code>, idioma Português (BR))
+                Texto do modelo pra cadastrar na Meta (nome: <code>{MODELO_WHATSAPP_V3.nome}</code>, idioma Português (BR))
               </summary>
-              <pre className="mt-2 whitespace-pre-wrap rounded bg-white p-3 font-mono text-xs text-gray-800">{MODELO_WHATSAPP.corpo}</pre>
+              <pre className="mt-2 whitespace-pre-wrap rounded bg-white p-3 font-mono text-xs text-gray-800">{MODELO_WHATSAPP_V3.corpo}</pre>
             </details>
           </div>
         )}

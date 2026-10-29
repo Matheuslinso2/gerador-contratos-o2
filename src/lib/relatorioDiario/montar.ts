@@ -37,9 +37,33 @@ export type ResumoProduto = {
   // Fiança (09/10/2026): mesmo bloco, rotulado como "análises", e com o
   // total em andamento agora (novos + herdados de meses anteriores).
   solicitacoes?: { ontem: number | null; mes: number; rotulo?: [string, string]; rotuloMes?: [string, string]; emAndamento?: number };
+  // Modelo 3: novos × renovações. renovacoes null = painel ainda não separa.
+  novos?: BlocoMes;
+  renovacoes?: BlocoMes | null;
+};
+
+// Bloco do mês (novos ou renovações) do "Relatório de Cotações" -- modelo 3.
+export type BlocoMes = {
+  cotacoes: number;
+  efetivados: number;
+  conversao: number | null;
+  premio: number | null;
+  comissao: number;
+  itens?: { cotados: number; contratados: number | null }; // só Ramos (cards × itens)
+};
+
+// "Faturamento do mês" = aba Flash Report do Power BI (corp_painel_pronto,
+// chave flash:AAAA-MM, gerada a cada importação do Corp).
+export type FlashMes = {
+  competencia: string;
+  atualizadoEm: string | null;
+  docs: number;
+  comissao: number;
+  ramos: { ramo: string; docs: number; pl: number; comissao: number }[];
 };
 
 export type RelatorioDiario = {
+  flash?: Secao<FlashMes>;
   periodo: PeriodoRelatorio;
   fianca: Secao<ResumoProduto>;
   capitalizacao: Secao<ResumoProduto>;
@@ -154,12 +178,23 @@ async function montarParaPeriodo(periodo: PeriodoRelatorio): Promise<RelatorioDi
   const [fianca, capitalizacao, auto, ramos] = await Promise.all([
     secao<AnaliseGerencial, ResumoProduto>("seguro_fianca_snapshots", periodo, (doMes, todos) => {
       const { convertidos, recusados, perdidos } = doMes.kpis;
+      const conv = Object.values(doMes.convertidoPorSeguradora ?? {});
+      const comissaoMes = conv.reduce((s, c) => s + c.comissao, 0);
+      const conversaoMes = taxa(convertidos.total, convertidos.total + recusados.total + perdidos.total);
       return {
+        novos: {
+          cotacoes: doMes.kpis.total,
+          efetivados: convertidos.total,
+          conversao: conversaoMes,
+          premio: conv.reduce((s, c) => s + c.premio, 0),
+          comissao: comissaoMes,
+        },
+        renovacoes: null, // funil Renovação Fiança (cat. 32) ainda não entra no retrato
         ontemEfetivados: [...todos.values()].reduce((s, a) => s + somarQuadro(a.efetivacoesPorDia, periodo.dias), 0),
         efetivados: convertidos.total,
-        conversao: taxa(convertidos.total, convertidos.total + recusados.total + perdidos.total),
+        conversao: conversaoMes,
         // Mesma soma do quadro "Convertido" do painel (mês do evento).
-        comissao: Object.values(doMes.convertidoPorSeguradora ?? {}).reduce((s, c) => s + c.comissao, 0),
+        comissao: comissaoMes,
         // Pedido do Matheus (09/10/2026): análises de ontem, recebidas no mês
         // e em andamento agora -- mesmos números dos quadros do painel.
         solicitacoes: {
@@ -174,27 +209,50 @@ async function montarParaPeriodo(periodo: PeriodoRelatorio): Promise<RelatorioDi
     // "No mês" = mesmos números do painel, que desde 15/10/2026 contam pelo
     // mês do pagamento (não pelo dia em que o Controle moveu pra Emitido).
     secao<PainelCapitalizacao, ResumoProduto>("capitalizacao_snapshots", periodo, (doMes, todos) => ({
+      novos: {
+        cotacoes: doMes.kpis.total,
+        efetivados: doMes.kpis.emitidos,
+        conversao: doMes.kpis.taxaConversao,
+        premio: doMes.kpis.valorTotalEmitido,
+        comissao: doMes.kpis.comissaoEfetivada,
+      },
+      renovacoes: null, // funil Renovação Capitalização ainda não entra no retrato
       ontemEfetivados: efetivadosNoPeriodo([...todos.values()], periodo.dias),
       efetivados: doMes.kpis.emitidos,
       conversao: doMes.kpis.taxaConversao,
       comissao: doMes.kpis.comissaoEfetivada,
       solicitacoes: { ontem: novosNoPeriodo([...todos.values()], periodo.dias), mes: doMes.kpis.total },
     })),
-    secao<PainelSeguroAuto, ResumoProduto>("seguro_auto_snapshots", periodo, (doMes, todos) => ({
-      ontemEfetivados: efetivadosNoPeriodo([...todos.values()], periodo.dias),
-      ...(mesPorEvento(doMes) ?? {
+    secao<PainelSeguroAuto, ResumoProduto>("seguro_auto_snapshots", periodo, (doMes, todos) => {
+      const mes = mesPorEvento(doMes) ?? {
         efetivados: doMes.kpis.convertidos,
         conversao: doMes.kpis.taxaConversao,
         comissao: doMes.kpis.comissaoGerada,
-      }),
-    })),
+      };
+      return {
+        ontemEfetivados: efetivadosNoPeriodo([...todos.values()], periodo.dias),
+        ...mes,
+        novos: { cotacoes: doMes.kpis.total, ...mes, premio: doMes.kpis.premioEfetivado ?? null },
+        renovacoes: null, // Auto: renovação ainda não separada no painel
+      };
+    }),
     secao<AnaliseRamosElementares, Extract<RelatorioDiario["ramos"], { ok: true }>["dados"]>(
       "ramos_elementares_snapshots",
       periodo,
       (doMes) => {
         const { novosEfetivados, renovacoesEfetivadas, comissaoEfetivada } = doMes.visaoGeral;
         const efetivados = novosEfetivados + renovacoesEfetivadas;
+        const bloco = (r: ResumoPopulacao): BlocoMes => ({
+          cotacoes: r.total,
+          efetivados: r.efetivados,
+          conversao: taxa(r.efetivados, concluidosRamos(r)),
+          premio: r.premioEfetivado ?? null,
+          comissao: r.comissaoEfetivada ?? 0,
+          itens: { cotados: r.itensCotados ?? 0, contratados: r.itensContratados ?? null },
+        });
         return {
+          novos: bloco(doMes.novos.consolidado),
+          renovacoes: bloco(doMes.renovacoes.atual),
           ontemEfetivados: null,
           novosEfetivados,
           renovacoesEfetivadas,
@@ -205,7 +263,36 @@ async function montarParaPeriodo(periodo: PeriodoRelatorio): Promise<RelatorioDi
       }
     ),
   ]);
-  return { periodo, fianca, capitalizacao, auto, ramos };
+  return { periodo, fianca, capitalizacao, auto, ramos, flash: await lerFlash(periodo.competenciaMes) };
+}
+
+async function lerFlash(competencia: string): Promise<Secao<FlashMes>> {
+  try {
+    const sb = createServiceClient();
+    const [{ data: tela, error }, { data: imp }] = await Promise.all([
+      sb.from("corp_painel_pronto").select("dados").eq("chave", `flash:${competencia}`).maybeSingle(),
+      sb.from("corp_sp_arquivos").select("importado_em").order("importado_em", { ascending: false }).limit(1).maybeSingle(),
+    ]);
+    if (error) throw new Error(error.message);
+    const f = tela?.dados as
+      | { cartoes: { com_mes: number | null; docs_mes: number | null }; por_ramo: { ramo_flash: string; mes_com: number | null; docs: number | null; pl: number | null }[] }
+      | undefined;
+    if (!f) return { ok: false, erro: `Flash Report de ${competencia} ainda não gerado` };
+    return {
+      ok: true,
+      atualizadoEm: (imp?.importado_em as string | undefined) ?? new Date().toISOString(),
+      parcial: false,
+      dados: {
+        competencia,
+        atualizadoEm: (imp?.importado_em as string | undefined) ?? null,
+        docs: Number(f.cartoes.docs_mes ?? 0),
+        comissao: Number(f.cartoes.com_mes ?? 0),
+        ramos: f.por_ramo.map((l) => ({ ramo: l.ramo_flash, docs: Number(l.docs ?? 0), pl: Number(l.pl ?? 0), comissao: Number(l.mes_com ?? 0) })),
+      },
+    };
+  } catch (erro) {
+    return { ok: false, erro: erro instanceof Error ? erro.message : String(erro) };
+  }
 }
 
 // --- Texto: modelo cadastrado na Meta + os parâmetros que preenchem ele ---
@@ -328,4 +415,119 @@ export function parametrosModelo(r: RelatorioDiario): string[] {
 export function textoRelatorio(r: RelatorioDiario): string {
   const params = parametrosModelo(r);
   return MODELO_WHATSAPP.corpo.replace(/\{\{(\d+)\}\}/g, (_, n) => params[Number(n) - 1] ?? "");
+}
+
+// --- Modelo 3 (29/10/2026): "Relatório de Cotações" + "Faturamento do mês" ---
+//
+// Pedido do Matheus: cotações de ontem/mês, novos × renovações, prêmio e
+// comissão efetivados, cards × itens em Ramos, e o faturamento do Power BI
+// (aba Flash Report) por ramo macro, O2 Cap + O2 Seguros somados. Precisa ser
+// cadastrado na Meta (nome novo) e aprovado antes de entrar no cron -- até lá
+// o cron segue com MODELO_WHATSAPP. Ao aprovar: trocar o uso do cron para
+// MODELO_WHATSAPP_V3 / parametrosModeloV3.
+
+export const MODELO_WHATSAPP_V3 = {
+  nome: "workspace_o2_modelo3",
+  idioma: "pt_BR",
+  corpo: [
+    "📊 *Relatório O2 — {{1}}*",
+    "",
+    "📋 *RELATÓRIO DE COTAÇÕES*",
+    "",
+    "🛡️ *SEGURO FIANÇA*",
+    "{{2}}",
+    "{{3}}",
+    "{{4}}",
+    "",
+    "💰 *CAPITALIZAÇÃO*",
+    "{{5}}",
+    "{{6}}",
+    "{{7}}",
+    "",
+    "🚗 *SEGURO AUTO*",
+    "{{8}}",
+    "{{9}}",
+    "{{10}}",
+    "",
+    "🏠 *RAMOS ELEMENTARES*",
+    "{{11}}",
+    "{{12}}",
+    "{{13}}",
+    "",
+    "💵 *FATURAMENTO DO MÊS — {{14}}*",
+    "🛡️ Fiança: {{15}}",
+    "💰 Capitalização: {{16}}",
+    "🔥 Incêndio: {{17}}",
+    "🚗 Auto: {{18}}",
+    "🏢 Condomínio: {{19}}",
+    "🎁 Premiação: {{20}}",
+    "*TOTAL: {{21}}*",
+    "",
+    "{{22}}",
+    "_Enviado automaticamente pelo Workspace O2._",
+  ].join("\n"),
+};
+
+const mesCurto = (c: string) => `${["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"][Number(c.slice(5, 7)) - 1]}/${c.slice(2, 4)}`;
+
+function linhaBloco(rotulo: string, b: BlocoMes | null | undefined, ramos = false): string {
+  if (b === undefined) return `${rotulo}: —`;
+  if (b === null) return `${rotulo}: ainda sem dados separados`;
+  const cards = ramos ? "cards" : "cotações";
+  const itens = b.itens;
+  const cot = ramos && itens ? `${b.cotacoes} cards (${itens.cotados} itens) cotados` : `${plural(b.cotacoes, "cotação", "cotações")}`;
+  const efet =
+    ramos && itens
+      ? `${b.efetivados} efetivados${itens.contratados !== null ? ` (${itens.contratados} itens contratados)` : ""}`
+      : `${b.efetivados} efetivados`;
+  void cards;
+  return `${rotulo}: ${cot} · ${efet} · ${fmtConversao(b.conversao)} · prêmio ${b.premio === null ? "—" : fmtReais.format(b.premio)} · comissão ${fmtReais.format(b.comissao)}`;
+}
+
+export function parametrosModeloV3(r: RelatorioDiario): string[] {
+  const rotuloOntem = r.periodo.dias.length === 1 ? "Ontem" : "Sex a dom";
+  const avisos: string[] = [];
+
+  function produto(nome: string, s: Secao<ResumoProduto>, ramos = false): [string, string, string] {
+    if (!s.ok) {
+      avisos.push(`${nome} indisponível`);
+      return [INDISPONIVEL, "—", "—"];
+    }
+    if (s.parcial) avisos.push(`${nome} (foto de ${fmtHora.format(new Date(s.atualizadoEm))})`);
+    const d = s.dados;
+    const p = d.solicitacoes;
+    const ontem =
+      d.ontemEfetivados === null && !p
+        ? `${rotuloOntem}: —`
+        : `${rotuloOntem}: ${p ? `${p.ontem === null ? "—" : plural(p.ontem, "cotação", "cotações")} · ` : ""}${d.ontemEfetivados === null ? "—" : `${d.ontemEfetivados} efetivados`}`;
+    return [ontem, linhaBloco("No mês, novos", d.novos, ramos), linhaBloco("No mês, renovações", d.renovacoes, ramos)];
+  }
+
+  const fi = produto("Fiança", r.fianca);
+  const ca = produto("Capitalização", r.capitalizacao);
+  const au = produto("Auto", r.auto);
+  const ra = produto("Ramos", r.ramos, true);
+
+  const nomes = ["FIANÇA", "CAPITALIZAÇÃO", "INCÊNDIO", "AUTO", "CONDOMÍNIO", "PREMIAÇÃO"];
+  let faturamentoTitulo = "indisponível";
+  let total = INDISPONIVEL;
+  const porRamo: string[] = nomes.map(() => "—");
+  if (r.flash?.ok) {
+    const f = r.flash.dados;
+    faturamentoTitulo = `${mesCurto(f.competencia)} · Corp de ${f.atualizadoEm ? fmtHora.format(new Date(f.atualizadoEm)).replace(", ", " ") : "—"}`;
+    nomes.forEach((n, i) => {
+      const l = f.ramos.find((x) => x.ramo === n);
+      if (l) porRamo[i] = `${l.docs} docs · PL ${fmtReais.format(l.pl)} · comissão ${fmtReais.format(l.comissao)}`;
+    });
+    const pl = f.ramos.reduce((s, l) => s + l.pl, 0);
+    total = `${f.docs} docs · PL ${fmtReais.format(pl)} · comissão ${fmtReais.format(f.comissao)}`;
+  } else avisos.push("Faturamento (Flash Report) indisponível");
+
+  const rodape = avisos.length ? `⚠️ Pode faltar algo: ${avisos.join(", ")}.` : "✅ Todos os painéis atualizados de madrugada.";
+  return [r.periodo.rotulo, ...fi, ...ca, ...au, ...ra, faturamentoTitulo, ...porRamo, total, rodape];
+}
+
+export function textoRelatorioV3(r: RelatorioDiario): string {
+  const params = parametrosModeloV3(r);
+  return MODELO_WHATSAPP_V3.corpo.replace(/\{\{(\d+)\}\}/g, (_, n) => params[Number(n) - 1] ?? "");
 }
