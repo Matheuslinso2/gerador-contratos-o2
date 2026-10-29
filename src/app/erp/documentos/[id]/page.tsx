@@ -543,33 +543,38 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
               )}
               <span className="text-gray-400"> · capturado {formatarData(o.capturado_em)} (uso interno; nada é escrito no card)</span>
             </p>
-            {o.historico_etapas.length > 0 && (
-              <div className="text-xs">
-                <div className="text-[11px] uppercase tracking-wide text-gray-500">Trilha de etapas</div>
-                <ul className="mt-1 space-y-0.5">
-                  {o.historico_etapas.map((h, i) => (
-                    <li key={i}>
-                      {formatarData(h.quando)} · {h.etapa}
-                      {h.semantica === "S" ? " ✓" : h.semantica === "F" ? " ✗" : ""}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {o.comentarios.length > 0 ? (
-              <div className="text-xs">
-                <div className="text-[11px] uppercase tracking-wide text-gray-500">Comentários do card ({o.comentarios.length})</div>
-                <ul className="mt-1 max-h-72 space-y-1 overflow-y-auto">
-                  {o.comentarios.map((c, i) => (
-                    <li key={i} className="rounded bg-gray-50 p-2">
-                      <span className="text-gray-500">{formatarData(c.quando)}</span> · <span className="whitespace-pre-wrap">{c.texto}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : (
-              <p className="text-[11px] text-gray-500">Comentários do card ainda não capturados (entram nas próximas rodadas).</p>
-            )}
+            {(() => {
+              // linha do tempo única do card (Matheus 29/10): etapas, comentários e eventos do documento, do mais antigo ao mais novo
+              type Marco = { quando: string; tipo: "card" | "etapa" | "comentario" | "evento"; texto: string; destaque?: "ok" | "falha" };
+              const marcos: Marco[] = [];
+              if (o.card_criado_em) marcos.push({ quando: o.card_criado_em, tipo: "card", texto: "Card criado no Bitrix" });
+              for (const h of o.historico_etapas) marcos.push({ quando: h.quando, tipo: "etapa", texto: h.etapa, destaque: h.semantica === "S" ? "ok" : h.semantica === "F" ? "falha" : undefined });
+              for (const c of o.comentarios) marcos.push({ quando: c.quando, tipo: "comentario", texto: c.texto });
+              for (const e of d.eventos) marcos.push({ quando: e.data, tipo: "evento", texto: `${e.tipo.replace(/_/g, " ")}${e.canal ? ` · ${e.canal}` : ""}${e.usuario_email ? ` · ${e.usuario_email}` : ""}` });
+              marcos.sort((a, b) => String(a.quando).localeCompare(String(b.quando)));
+              const bolinha = { card: "bg-gray-400", etapa: "bg-o2-navy", comentario: "bg-amber-500", evento: "bg-green-600" } as const;
+              const exportar = marcos.map((m) => `${formatarData(m.quando)} · ${m.texto.replace(/\s+/g, " ")}`).join("\n");
+              return (
+                <details className="rounded-lg border border-gray-200 text-xs" open={false}>
+                  <summary className="cursor-pointer px-3 py-2 font-medium text-o2-navy">
+                    Histórico do card — linha do tempo ({marcos.length} marcos: {o.historico_etapas.length} etapas, {o.comentarios.length} comentários, {d.eventos.length} eventos)
+                  </summary>
+                  <div className="space-y-2 border-t border-gray-100 p-3">
+                    {o.comentarios_capturados_em === null && <p className="text-[11px] text-gray-500">Comentários do card ainda não capturados (entram nas próximas rodadas).</p>}
+                    <ol className="relative max-h-96 space-y-2 overflow-y-auto border-l border-gray-200 pl-4">
+                      {marcos.map((m, i) => (
+                        <li key={i} className="relative">
+                          <span className={`absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full ${bolinha[m.tipo]}`} />
+                          <span className="text-gray-500">{formatarData(m.quando)}</span>{" "}
+                          {m.tipo === "comentario" ? <span className="whitespace-pre-wrap rounded bg-amber-50 px-1.5 py-0.5">{m.texto}</span> : <span className={m.destaque === "ok" ? "font-semibold text-green-700" : m.destaque === "falha" ? "font-semibold text-red-700" : m.tipo === "etapa" ? "font-medium" : ""}>{m.texto}{m.destaque === "ok" ? " ✓" : m.destaque === "falha" ? " ✗" : ""}</span>}
+                        </li>
+                      ))}
+                    </ol>
+                    <a href={"data:text/plain;charset=utf-8," + encodeURIComponent("Histórico do card " + o.item_id + " · " + (o.titulo ?? "") + "\n\n" + exportar)} download={`historico-card-${o.item_id}.txt`} className="inline-block rounded border border-gray-300 px-2 py-1 text-[11px] hover:bg-gray-50">Baixar tudo (.txt)</a>
+                  </div>
+                </details>
+              );
+            })()}
             <details className="text-xs">
               <summary className="cursor-pointer text-gray-600">Todos os campos preenchidos do card ({Object.keys(o.dados_legiveis).length})</summary>
               <table className="mt-2 w-full">
