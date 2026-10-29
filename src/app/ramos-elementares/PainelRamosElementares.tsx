@@ -24,11 +24,13 @@ import type { ImobiliariaUnificada } from "@/lib/ramos-elementares/imobiliariasU
 function ItensKpi({
   cotados,
   contratados,
+  cotadosEfetivados,
   semContratados,
   modo,
 }: {
   cotados?: number;
   contratados?: number;
+  cotadosEfetivados?: number;
   semContratados?: number;
   modo: "cotados" | "contratados";
 }) {
@@ -40,6 +42,7 @@ function ItensKpi({
   return (
     <>
       {contratados.toLocaleString("pt-BR")} itens contratados
+      {cotadosEfetivados !== undefined && <> de {cotadosEfetivados.toLocaleString("pt-BR")} cotados</>}
       {!!semContratados && <small> · {semContratados} sem preencher</small>}
     </>
   );
@@ -131,6 +134,7 @@ function Kpi({
   tone,
   legenda,
   itens,
+  unidade,
 }: {
   label: string;
   value: string;
@@ -138,6 +142,7 @@ function Kpi({
   tone?: "ok" | "warning" | "danger";
   legenda?: string;
   itens?: React.ReactNode;
+  unidade?: string;
 }) {
   return (
     <div className={styles.kpi}>
@@ -147,6 +152,7 @@ function Kpi({
       </div>
       <div className={`${styles.kpiValue} ${tone ? styles[tone] : ""}`}>
         {value}
+        {unidade && <small style={{ fontSize: "0.5em", fontWeight: 600, marginLeft: 4, opacity: 0.7 }}>{unidade}</small>}
       </div>
       {itens && <div className={styles.kpiItens}>{itens}</div>}
       <div className={styles.kpiNote}>{note}</div>
@@ -304,6 +310,7 @@ function PainelVisao({
           label="Total de entradas"
           legenda="Novas entradas mais renovações da competência, somadas. Mostra o tamanho total do trabalho do mês antes de separar por origem."
           value={String(analise.visaoGeral.novasEntradas + analise.visaoGeral.renovacoesCompetencia)}
+          unidade="cards"
           note="Novas entradas + renovações da competência"
           itens={<ItensKpi modo="cotados" cotados={somarOpcional(analise.novos.mes.itensCotados, analise.renovacoes.atual.itensCotados)} />}
         />
@@ -311,12 +318,14 @@ function PainelVisao({
           label="Total efetivados"
           legenda="Novos efetivados (do mês e herdados) mais as renovações efetivadas, sempre pelo mês em que a efetivação aconteceu."
           value={String(analise.visaoGeral.novosEfetivados + analise.visaoGeral.renovacoesEfetivadas)}
+          unidade="cards"
           note="Novos efetivados + renovações efetivadas"
           tone="ok"
           itens={
             <ItensKpi
               modo="contratados"
               contratados={somarOpcional(analise.novos.consolidado.itensContratados, analise.renovacoes.atual.itensContratados)}
+              cotadosEfetivados={somarOpcional(analise.novos.consolidado.itensCotadosEfetivados, analise.renovacoes.atual.itensCotadosEfetivados)}
               semContratados={somarOpcional(analise.novos.consolidado.efetivadosSemItensContratados, analise.renovacoes.atual.efetivadosSemItensContratados)}
             />
           }
@@ -332,6 +341,7 @@ function PainelVisao({
           label="Novas entradas"
           legenda="Negócios novos que entraram neste mês."
           value={String(analise.visaoGeral.novasEntradas)}
+          unidade="cards"
           note="NOVOS MÊS"
           itens={<ItensKpi modo="cotados" cotados={analise.novos.mes.itensCotados} />}
         />
@@ -339,6 +349,7 @@ function PainelVisao({
           label="Pendências anteriores"
           legenda="Negócios novos que entraram em meses anteriores e ainda estavam abertos neste mês ou foram concluídos (efetivados ou perdidos) neste mês. A efetivação conta no mês em que aconteceu, e a origem continua sendo o mês de entrada."
           value={String(analise.visaoGeral.pendenciasAnteriores)}
+          unidade="cards"
           note="Carteira de entrada"
           itens={<ItensKpi modo="cotados" cotados={analise.novos.pendentes.itensCotados} />}
         />
@@ -346,6 +357,7 @@ function PainelVisao({
           label="Renovações da competência"
           legenda="Apólices em renovação na competência selecionada, mais as de outras competências efetivadas ou perdidas neste mês (antecipadas ou atrasadas). Renovação concluída em mês anterior não entra."
           value={String(analise.visaoGeral.renovacoesCompetencia)}
+          unidade="cards"
           note="Competência selecionada"
           itens={<ItensKpi modo="cotados" cotados={analise.renovacoes.atual.itensCotados} />}
         />
@@ -353,12 +365,14 @@ function PainelVisao({
           label="Novos efetivados"
           legenda="Novos negócios efetivados neste mês, somando os que entraram no mês e os herdados de meses anteriores. Conta pelo mês em que a efetivação aconteceu."
           value={String(analise.visaoGeral.novosEfetivados)}
+          unidade="cards"
           note="Mês + pendências"
           tone="ok"
           itens={
             <ItensKpi
               modo="contratados"
               contratados={analise.novos.consolidado.itensContratados}
+              cotadosEfetivados={analise.novos.consolidado.itensCotadosEfetivados}
               semContratados={analise.novos.consolidado.efetivadosSemItensContratados}
             />
           }
@@ -367,12 +381,14 @@ function PainelVisao({
           label="Renovações efetivadas"
           legenda="Renovações da competência que chegaram a EFETIVADO. O percentual embaixo é a conversão: efetivadas ÷ renovações da competência."
           value={String(analise.visaoGeral.renovacoesEfetivadas)}
+          unidade="cards"
           note={pct(analise.renovacoes.atual.conversao)}
           tone="ok"
           itens={
             <ItensKpi
               modo="contratados"
               contratados={analise.renovacoes.atual.itensContratados}
+              cotadosEfetivados={analise.renovacoes.atual.itensCotadosEfetivados}
               semContratados={analise.renovacoes.atual.efetivadosSemItensContratados}
             />
           }
@@ -401,7 +417,7 @@ function PainelVisao({
             />
           </div>
           <p>
-            {analise.novos.consolidado.total} registros entre novos do mês e
+            {analise.novos.consolidado.total} cards{analise.novos.consolidado.itensCotados !== undefined && ` (${analise.novos.consolidado.itensCotados.toLocaleString("pt-BR")} itens cotados)`} entre novos do mês e
             pendências anteriores
           </p>
           <ResumoStatus resumo={analise.novos.consolidado} />
@@ -619,7 +635,7 @@ function PainelNovos({
               nomeAbaExcel="Status"
             />
           </div>
-          <p>Distribuição atual dos registros</p>
+          <p>Distribuição atual dos cards (1 card = 1 negociação; um lote pode ter vários itens)</p>
           <ResumoStatus resumo={resumo} />
         </section>
         <section id="quadro-ramos-novos-cotador" className={styles.panel}>

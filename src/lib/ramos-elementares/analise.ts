@@ -15,6 +15,9 @@ export type ItemAgrupado = {
   premioEfetivado?: number;
   itensCotados?: number;
   itensContratados?: number;
+  // Itens COTADOS dos cards efetivados (cotou 10, efetivou 5 do lote): serve para
+  // mostrar "itens contratados de N cotados" ao lado do número de cards efetivados.
+  itensCotadosEfetivados?: number;
   efetivadosSemItensContratados?: number;
 };
 
@@ -39,6 +42,7 @@ export type ResumoPopulacao = {
   // Ver ItemAgrupado: itens (endereços) cotados e contratados.
   itensCotados?: number;
   itensContratados?: number;
+  itensCotadosEfetivados?: number;
   efetivadosSemItensContratados?: number;
 };
 
@@ -644,6 +648,7 @@ function somarItens(registros: RegistroBase[]) {
   return {
     itensCotados: registros.reduce((soma, registro) => soma + registro.itensCotados, 0),
     itensContratados: registros.reduce((soma, registro) => soma + (registro.itensContratados ?? 0), 0),
+    itensCotadosEfetivados: registros.filter((registro) => registro.efetivado).reduce((soma, registro) => soma + registro.itensCotados, 0),
     efetivadosSemItensContratados: registros.filter((registro) => registro.efetivado && registro.itensContratados === null).length,
   };
 }
