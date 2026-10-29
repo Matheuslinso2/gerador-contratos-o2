@@ -11,3 +11,8 @@
 -- 30 dias após a suspensão) NÃO entram: não são dias desde o vencimento. Too (30) e Allianz (20) são certeza média: aguardam aprovação do Matheus.
 -- 29/10 (noite): Too Fiança (30 dias) e Allianz Residência (20 dias) cadastradas com aprovação do Matheus; tolerância de 2 dias somada ao prazo normal e ao limite
 -- (1 por questões operacionais do banco + 1 para não cobrar o cliente no dia seguinte e ele já ter pago) — migration erp_regras_cancelamento_too_allianz_tolerancia.
+-- 29/10 (noite): condições gerais lidas no Drive (erp-o2/LEVANTAMENTO-CONDICOES-GERAIS-DRIVE-INADIMPLENCIA.md): 1ª parcela/prêmio único não pago cancela a apólice
+-- automaticamente em Porto, Tokio, Pottencial, Too, Allianz, Yelum, HDI e Azul (24 regras 'primeira' por seguradora×ramo, certeza alta, cláusula na coluna fonte).
+-- PRÓXIMO PASSO (aguarda confirmação do Matheus): demais parcelas seguem a Tabela de Prazo Curto — cobertura = início da vigência + dias conforme % do prêmio pago
+-- (13%=15, 20%=30, 27%=45, 30%=60, 37%=75, 40%=90, 46%=105, 50%=120, 56%=135, 60%=150, 66%=165, 70%=180, 73%=195, 75%=210, 78%=225, 80%=240, 83%=255, 85%=270,
+-- 88%=285, 90%=300, 93%=315, 95%=330, 98%=345, 100%=365); confirmar como tratar % fora da tabela (o levantamento diz "faixa de cima") antes de programar.
