@@ -7,3 +7,8 @@
 -- 29/10 (migration erp_baixa_erp_extrato_resumo_view): view erp_baixa_erp_extrato_resumo (security_invoker) = resumo POR EXTRATO da baixa própria do ERP
 -- (tabela erp_baixa_erp, trilha de teste paralela ao Corp, da sessão da baixa assistida): ERP baixou × Corp baixou × só ERP × só Corp × sem baixa.
 -- Índice erp_baixa_erp_extrato_idx. Sempre consultar com .in("extrato_id", lista) para não estourar o timeout. Não entra nos totais oficiais.
+--
+-- 30/10 (migration erp_previsao_por_regra_e_inadimplencia_pela_regra): PREVISÃO POR REGRA (Matheus): erp_previsao_caixa_regra_mensal(p_de, p_ate) usa
+-- erp_comissoes.previsao_recebimento (regra da seguradora, tabela erp_regra_previsao da sessão da baixa assistida); seguradora sem regra cai no prazo medido.
+-- A previsão por EXPERIÊNCIA (erp_previsao_caixa_mensal) continua, lado a lado na tela. erp_inadimplencia_provavel e _linhas: parcela esperada = a data da regra
+-- já passou (sem tolerância extra: quem paga em dia recebe a comissão na data da regra; parcela não paga não cai depois); sem regra, prazo medido.
