@@ -4,7 +4,7 @@ import fs from "node:fs"; import os from "node:os"; import path from "node:path"
 import { textoDoPdf } from "@/lib/erp/anexosEmail";
 const ALVOS = ["4107594","4110311","4115266","4291951","4292712","4315346","10894893","10985231","10982887","11010495","10817997"];
 (async () => {
-  const d = path.join(os.tmpdir(), "porto", "cap"); const linhas: string[] = [];
+  const d = path.join(os.tmpdir(), "porto", process.argv[2] ?? "cap"); const linhas: string[] = [];
   for (const f of fs.readdirSync(d).filter((x) => x.endsWith(".pdf"))) {
     const { t } = await textoDoPdf(fs.readFileSync(path.join(d, f)), []); if (!t) { linhas.push(`${f} SEM TEXTO`); continue; }
     const s = t.replace(/\s+/g, " ");
