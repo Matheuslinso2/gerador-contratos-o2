@@ -321,8 +321,14 @@ function CampoUploadPlanilha({ responseId, path, setPath, nome, setNome }: { res
       setArquivo({ nome: selecionado.name, estado: "erro", mensagem: `Maior que ${maxMb}MB` });
       return;
     }
-    setArquivo({ nome: selecionado.name, estado: "enviando" });
     const extensao = selecionado.name.split(".").pop()?.toLowerCase() || "bin";
+    // .xls (Excel antigo) pode carregar macro -- recusado também no bucket
+    // (revisão de segurança 30/10/2026). .xlsx não roda macro.
+    if (!["xlsx", "csv", "ods", "pdf"].includes(extensao)) {
+      setArquivo({ nome: selecionado.name, estado: "erro", mensagem: "Formato não aceito — salve a planilha como .xlsx ou .csv (ou envie em PDF)" });
+      return;
+    }
+    setArquivo({ nome: selecionado.name, estado: "enviando" });
     const novoPath = `${responseId}/planilha/${crypto.randomUUID()}.${extensao}`;
     const supabase = createClient();
     // O tipo vem da extensão, não do navegador: em muitos computadores (Windows
@@ -331,7 +337,6 @@ function CampoUploadPlanilha({ responseId, path, setPath, nome, setNome }: { res
     // ("mime type application/octet-stream is not supported", 22/10/2026).
     const tipoPorExtensao: Record<string, string> = {
       xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      xls: "application/vnd.ms-excel",
       csv: "text/csv",
       ods: "application/vnd.oasis.opendocument.spreadsheet",
       pdf: "application/pdf",
@@ -359,7 +364,7 @@ function CampoUploadPlanilha({ responseId, path, setPath, nome, setNome }: { res
   return (
     <div>
       <label className={labelClass}>Planilha com os itens (endereços, aluguel, m²) *</label>
-      <p className="mt-0.5 text-xs text-gray-500">1 arquivo, Excel/CSV/PDF, até 20MB.</p>
+      <p className="mt-0.5 text-xs text-gray-500">1 arquivo, Excel (.xlsx)/CSV/PDF, até 20MB.</p>
       <input type="hidden" name="anexo_planilha" value={path} />
       <input type="hidden" name="anexo_planilha_nome" value={nome} />
       <label
@@ -368,7 +373,7 @@ function CampoUploadPlanilha({ responseId, path, setPath, nome, setNome }: { res
       >
         <IconeUpload />
         {nome ? "Trocar planilha" : "Selecionar planilha"}
-        <input type="file" accept=".xlsx,.xls,.csv,.ods,.pdf" onChange={aoSelecionar} className="sr-only" />
+        <input type="file" accept=".xlsx,.csv,.ods,.pdf" onChange={aoSelecionar} className="sr-only" />
       </label>
       {arquivo && (
         <p className={`mt-1.5 text-xs ${arquivo.estado === "erro" ? "text-red-600" : arquivo.estado === "ok" ? "text-green-700" : "text-gray-500"}`}>

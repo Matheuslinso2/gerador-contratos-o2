@@ -105,12 +105,24 @@ async function extrairDocumento(
     );
   }
 
-  const { data, error } = await supabase.storage.from(BUCKET_TEMP).download(path);
+  // Upload do Auditor público ("publico/<uuid>.<ext>"): o visitante só pode
+  // ENVIAR pra essa pasta (revisão de segurança 30/10/2026 -- antes qualquer
+  // visitante listava/baixava/apagava os contratos dos outros). Quem baixa e
+  // apaga é o servidor, com service_role, e só no formato exato que o
+  // formulário gera.
+  let storage = supabase.storage;
+  if (path.startsWith("publico/")) {
+    if (!/^publico\/[0-9a-f-]{36}\.[a-z0-9]{1,5}$/i.test(path)) {
+      throw new Error("Não foi possível recuperar o arquivo enviado. Tente novamente.");
+    }
+    storage = createServiceClient().storage;
+  }
+  const { data, error } = await storage.from(BUCKET_TEMP).download(path);
   if (error || !data) {
     throw new Error("Não foi possível recuperar o arquivo enviado. Tente novamente.");
   }
   const buffer = Buffer.from(await data.arrayBuffer());
-  void supabase.storage.from(BUCKET_TEMP).remove([path]);
+  void storage.from(BUCKET_TEMP).remove([path]);
 
   // Imagem/print de tela: não tem texto pra extrair, manda os bytes direto
   // pra IA "ver" o conteúdo, igual já fazíamos com PDF escaneado.

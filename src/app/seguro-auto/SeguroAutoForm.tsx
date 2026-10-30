@@ -119,6 +119,12 @@ function CampoUpload({
       setArquivo({ nome: selecionado.name, estado: "erro", mensagem: `Maior que ${maxMb}MB` });
       return;
     }
+    // .doc (Word antigo) pode carregar macro -- recusado também no bucket
+    // (revisão de segurança 30/10/2026). .docx não roda macro.
+    if (selecionado.name.toLowerCase().endsWith(".doc")) {
+      setArquivo({ nome: selecionado.name, estado: "erro", mensagem: "Formato .doc não aceito — salve como .docx ou PDF" });
+      return;
+    }
     setArquivo({ nome: selecionado.name, estado: "enviando" });
     const extensao = selecionado.name.split(".").pop()?.toLowerCase() || "bin";
     const novoPath = `${responseId}/${pasta}/${crypto.randomUUID()}.${extensao}`;
@@ -139,7 +145,7 @@ function CampoUpload({
       <label className={labelClass}>{label}</label>
       <p className="mt-0.5 text-xs text-gray-500">{detalhe}</p>
       <input type="hidden" name={hiddenName} value={path} />
-      <input type="file" accept=".pdf,.doc,.docx,image/*" onChange={aoSelecionar} className="mt-1.5 w-full text-sm" />
+      <input type="file" accept=".pdf,.docx,image/*" onChange={aoSelecionar} className="mt-1.5 w-full text-sm" />
       {arquivo && (
         <p className={`mt-1.5 text-xs ${arquivo.estado === "erro" ? "text-red-600" : arquivo.estado === "ok" ? "text-green-700" : "text-gray-500"}`}>
           {arquivo.nome} — {arquivo.estado === "enviando" ? "enviando..." : arquivo.estado === "ok" ? "enviado ✅" : arquivo.mensagem}
