@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { salvarInstalacaoSeValida } from "@/lib/bitrix/appAuth";
+import { salvarInstalacaoSeValida, DOMINIO_PORTAL_O2 } from "@/lib/bitrix/appAuth";
 import { entityTypeIdPorPlacement } from "@/lib/bitrix/entidadesCard";
 import { MODELOS_EMAIL } from "@/lib/bitrix/modelosEmail";
 import { ENTIDADES_COMERCIAL, listarModelosBanco } from "@/lib/bitrix/modelosEmailBanco";
@@ -74,7 +74,13 @@ export async function POST(request: NextRequest) {
 
   console.log("Placement Bitrix recebeu POST com as chaves:", Object.keys(campos));
 
-  const { accessToken, refreshToken, memberId, expiresIn, dominio } = extrairDadosAuth(campos);
+  const dadosAuth = extrairDadosAuth(campos);
+  const { accessToken, refreshToken, memberId, expiresIn } = dadosAuth;
+  // O Bitrix costuma mandar só SERVER_ENDPOINT=oauth.bitrix.info (descartado
+  // acima), sem o domínio do portal -- e aí o token nunca era salvo. Como só o
+  // portal da O2 é aceito e o token é conferido nele (salvarInstalacaoSeValida),
+  // usa o domínio fixo quando não vier nenhum.
+  const dominio = dadosAuth.dominio ?? DOMINIO_PORTAL_O2;
 
   if (accessToken && refreshToken && dominio && memberId) {
     try {
