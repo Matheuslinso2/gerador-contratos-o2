@@ -39,8 +39,11 @@ import { cancelarAgendamentoCampanha } from "./actions";
 import ProducaoCampanha from "./metas/ProducaoCampanha";
 import EmailsDaCampanha, { type EmailFilho } from "./metas/EmailsDaCampanha";
 import ExportarEste from "@/components/ExportarEste";
+import { createServiceClient } from "@/lib/supabase/service";
+import CardsBitrixSecao from "./CardsBitrixSecao";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 const ROTULO_TEMPLATE: Record<string, string> = {
   comunicado: "Comunicado geral",
@@ -529,6 +532,8 @@ export default async function CampanhaDetalhePage({
                 : "Prévia do e-mail"
           }
         />
+
+        {!campanhaPai && <CardsBitrixSecao campanha={campanha} db={createServiceClient()} />}
 
         {/* Produção gerada -- sempre presente (mesmo motivo do Resumo do
             envio acima). Desde 22/10/2026 é automática (funil + Corp), com

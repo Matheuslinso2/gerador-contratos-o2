@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { processarLote } from "@/lib/campanhas/processarLote";
 import { dispararCampanha } from "@/lib/campanhas/dispararCampanha";
+import { criarCardsDaCampanha } from "@/lib/campanhas/cardsBitrix";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -62,9 +63,33 @@ export async function GET(request: NextRequest) {
     })
   );
 
+  // Cards no funil Campanhas do Bitrix (30/10/2026): só para campanha com o
+  // interruptor ligado, e só depois de os e-mails iniciais terem saído
+  // (enviando/concluída). Em lotes pequenos; a próxima passada continua. Uma
+  // falha aqui nunca derruba o envio.
+  const cardsCriados: unknown[] = [];
+  try {
+    const { data: comCards } = await supabase
+      .from("campanhas")
+      .select("id, nome, valido_de, valido_ate, imobiliarias_selecionadas, criado_por_email, disparada_em")
+      .eq("criar_cards_bitrix", true)
+      .is("campanha_pai_id", null)
+      .in("status", ["enviando", "concluida"])
+      .gte("disparada_em", new Date(Date.now() - 3 * 24 * 3600 * 1000).toISOString());
+    for (const c of comCards ?? []) {
+      try {
+        cardsCriados.push({ campanhaId: c.id, ...(await criarCardsDaCampanha(supabase, c, "cron:campanha", 15)) });
+      } catch (e) {
+        cardsCriados.push({ campanhaId: c.id, erro: e instanceof Error ? e.message : String(e) });
+      }
+    }
+  } catch (e) {
+    cardsCriados.push({ erro: e instanceof Error ? e.message : String(e) });
+  }
+
   const ok = resultados.every((r) => r.ok) && resultadosAgendamento.every((r) => r.ok);
   return NextResponse.json(
-    { ok, agendamentosDisparados: resultadosAgendamento, processadas: resultados.length, resultados },
+    { ok, agendamentosDisparados: resultadosAgendamento, processadas: resultados.length, resultados, cardsCriados },
     { status: ok ? 200 : 500 }
   );
 }
