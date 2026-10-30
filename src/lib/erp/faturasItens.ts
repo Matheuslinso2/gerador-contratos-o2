@@ -21,7 +21,10 @@ type Arquivo = {
   arquivo_nome: string | null;
   texto_bruto_extraido: string | null;
 };
-export type Item = { ramo: string | null; apolice: string; endosso: string | null; parcela_n: number | null; parcelas_total: number | null; valor: number };
+export type Item = { ramo: string | null; apolice: string; endosso: string | null; parcela_n: number | null; parcelas_total: number | null; valor: number; vencimento_linha?: string | null };
+
+/** "15/04/2025" → "2025-04-15" (vencimento da parcela que a própria linha da fatura mostra) */
+const dataLinha = (s: string | undefined) => { const m = (s ?? "").match(/(\d{2})\/(\d{2})\/(\d{4})/); return m ? `${m[3]}-${m[2]}-${m[1]}` : null; };
 
 const reais = (s: string) => {
   const neg = s.includes("-");
@@ -45,6 +48,7 @@ export function lerRelatorioTokio(texto: string): Item[] {
       parcela_n: Number(c[6]) || null,
       parcelas_total: Number(c[7]) || null,
       valor: reais(c[8]),
+      vencimento_linha: dataLinha(c[4]),
     });
   }
   return itens;
@@ -57,10 +61,10 @@ export function apoliceFaturaTokio(texto: string): { ramo: string; nr: string } 
 
 export function lerBoletoPorto(texto: string): Item[] {
   const itens: Item[] = [];
-  const re = /\d{3}\.(\d{4})\.(\d{9})\.\d+\s+(\d{1,3})\s+\S+\s+(-?[\d.]+(?:,\d{2})?)\s+\d{2}\/\d{2}\/\d{4}/g;
+  const re = /\d{3}\.(\d{4})\.(\d{9})\.\d+\s+(\d{1,3})\s+\S+\s+(-?[\d.]+(?:,\d{2})?)\s+(\d{2}\/\d{2}\/\d{4})/g;
   for (const m of texto.matchAll(re)) {
     const v = m[4].includes(",") ? reais(m[4]) : Number(m[4]);
-    itens.push({ ramo: m[1], apolice: semZero(m[2]), endosso: null, parcela_n: Number(m[3]) || null, parcelas_total: null, valor: v });
+    itens.push({ ramo: m[1], apolice: semZero(m[2]), endosso: null, parcela_n: Number(m[3]) || null, parcelas_total: null, valor: v, vencimento_linha: null /* Porto: a data da linha NÃO é o vencimento da parcela (é anterior ao boleto em meses) */ });
   }
   return itens;
 }
@@ -88,7 +92,7 @@ export function lerRelatorioPottencial(texto: string): { pagador: string | null;
     // o código do corretor pode variar dentro da mesma fatura (ex.: 15167929 e 1244); a fatura fica com o mais frequente
     if (c[0].trim().length >= 5) corretor ??= c[0].trim();
     const [n, t] = c[7].split("/");
-    itens.push({ ramo: c[4].trim().slice(9, 13) || null, apolice: semZero(c[4].trim().slice(-9)), endosso: null, parcela_n: Number(n) || null, parcelas_total: Number(t) || null, valor: Number(c[8].replace(/,/g, "")) || 0 });
+    itens.push({ ramo: c[4].trim().slice(9, 13) || null, apolice: semZero(c[4].trim().slice(-9)), endosso: null, parcela_n: Number(n) || null, parcelas_total: Number(t) || null, valor: Number(c[8].replace(/,/g, "")) || 0, vencimento_linha: dataLinha(c[6]) });
   }
   return { pagador, corretor, itens };
 }
@@ -106,8 +110,8 @@ export function lerRelatorioYelum(texto: string): Item[] {
   const pos = [...texto.matchAll(/(\d{15})\s+\d+\/\d+\s/g)];
   pos.forEach((m, i) => {
     const trecho = texto.slice(m.index!, pos[i + 1]?.index ?? texto.length);
-    const f = trecho.match(/\s(\d{1,3})\/(\d{1,3})\s+\d{2}\/\d{2}\/\d{4}\s+(-?[\d.]*\d,\d{2})/);
-    if (f) itens.push({ ramo: m[1].slice(0, 4), apolice: semZero(m[1]), endosso: null, parcela_n: Number(f[1]) || null, parcelas_total: Number(f[2]) || null, valor: reais(f[3]) });
+    const f = trecho.match(/\s(\d{1,3})\/(\d{1,3})\s+(\d{2}\/\d{2}\/\d{4})\s+(-?[\d.]*\d,\d{2})/);
+    if (f) itens.push({ ramo: m[1].slice(0, 4), apolice: semZero(m[1]), endosso: null, parcela_n: Number(f[1]) || null, parcelas_total: Number(f[2]) || null, valor: reais(f[4]), vencimento_linha: dataLinha(f[3]) });
   });
   return itens;
 }
