@@ -204,7 +204,7 @@ export default async function ProducaoPage({
       </>
     );
   }
-  const [{ data: kpisData, error: erroKpis }, opcoes, { data: imports }, { data: espelho }] = await Promise.all([
+  const [{ data: kpisData, error: erroKpis }, opcoes, { data: imports }, { data: espelho }, { data: reVigData }] = await Promise.all([
     supabase.rpc("kpis_producao", {
       p_de: de,
       p_ate: ate,
@@ -216,7 +216,11 @@ export default async function ProducaoPage({
     opcoesImobiliarias(supabase),
     supabase.from("base_unica_importacoes").select("layout, importado_em").in("layout", ["bitrix_spa"]),
     supabase.from("corp_sp_arquivos").select("importado_em").eq("tipo", "grade").order("importado_em", { ascending: false }).limit(1).maybeSingle(),
+    // Renovações de RE separadas pela VIGÊNCIA (competência = vigência; 30/10/2026, reunião Kamila).
+    supabase.rpc("renovacoes_re_vigencia", { p_de: de, p_ate: ate }),
   ]);
+  // Só vale para a O2 inteira: o recorte por vigência não considera filtro de produto, seguradora ou imobiliária.
+  const reVig = filtroImob || filtros.produtos.length || filtros.seguradoras.length ? null : (reVigData as ReVigencia | null);
   const kpis = kpisData as Kpis | null;
   const nomesSelecionados = opcoes.filter((o) => (o.tipo === "grupo" ? filtros.grupos : filtros.imobs).includes(o.id)).map((o) => o.nome);
   const ultima = (layout: string) =>
@@ -269,7 +273,7 @@ export default async function ProducaoPage({
         )}
         {kpis && (
           <>
-            <BlocoCotacoes kpis={kpis} filtros={filtros} filtroImob={filtroImob} fontes={fontes} todas={sp.todasc === "1"} todasRenov={sp.todasr === "1"} sp={sp} />
+            <BlocoCotacoes reVig={reVig} kpis={kpis} filtros={filtros} filtroImob={filtroImob} fontes={fontes} todas={sp.todasc === "1"} todasRenov={sp.todasr === "1"} sp={sp} />
             <BlocoApolices kpis={kpis} filtroImob={filtroImob} mesAtual={mesAtual} fontes={fontes} todas={sp.todas === "1"} sp={sp} />
           </>
         )}
@@ -292,6 +296,8 @@ function Bloco({ titulo, fonte, cor, children }: { titulo: string; fonte: ReactN
     </section>
   );
 }
+
+type ReVigencia = { entradas: number; entradas_vig: number; conversoes: number; conversoes_vig: number; perdas: number; perdas_vig: number };
 
 function Cartao({ rotulo, valor, linhas, legenda, variacaoAno }: { rotulo: string; valor: string; linhas: string[]; legenda: ReactNode; variacaoAno?: Variacao }) {
   return (
@@ -411,6 +417,7 @@ const FONTE_RENOVACOES: Record<string, string> = {
 // ---------------------------------------------------------------- Cotações
 
 function BlocoCotacoes({
+  reVig,
   kpis,
   filtros,
   filtroImob,
@@ -419,6 +426,7 @@ function BlocoCotacoes({
   todasRenov,
   sp,
 }: {
+  reVig: ReVigencia | null;
   kpis: Kpis;
   filtros: Filtros;
   filtroImob: boolean;
@@ -648,7 +656,7 @@ function BlocoCotacoes({
           </div>
         </>
       )}
-      <Renovacoes kpis={kpis} filtroImob={filtroImob} todas={todasRenov} sp={sp} meses={meses} />
+      <Renovacoes reVig={reVig} kpis={kpis} filtroImob={filtroImob} todas={todasRenov} sp={sp} meses={meses} />
     </Bloco>
   );
 }
@@ -658,7 +666,7 @@ function BlocoCotacoes({
 // mês em que entrou (Fiança: 1ª planilha em que aparece / criação do card;
 // RE: mês do vencimento = aba RN / competência do card) e como renovada ou
 // não renovada no mês do desfecho. Não entra nos números de cotações acima.
-function Renovacoes({ kpis, filtroImob, todas, sp, meses }: { kpis: Kpis; filtroImob: boolean; todas: boolean; sp: Record<string, string | undefined>; meses: string[] }) {
+function Renovacoes({ reVig, kpis, filtroImob, todas, sp, meses }: { reVig: ReVigencia | null; kpis: Kpis; filtroImob: boolean; todas: boolean; sp: Record<string, string | undefined>; meses: string[] }) {
   const r = kpis.renovacoes;
   const ra = kpis.renovacoes_ano_anterior;
   const produtos = ORDEM_PRODUTOS.map((p) => kpis.renovacoes_por_produto.find((x) => x.produto === p)).filter((x): x is RenovacaoProduto => !!x);
@@ -689,21 +697,21 @@ function Renovacoes({ kpis, filtroImob, todas, sp, meses }: { kpis: Kpis; filtro
         <Cartao
           rotulo="Renovações recebidas"
           valor={num(r.entradas)}
-          linhas={[produtos.map((p) => `${ROTULO_CURTO[p.produto] ?? p.produto} ${num(p.entradas)}`).join(" · ")]}
+          linhas={[produtos.map((p) => `${ROTULO_CURTO[p.produto] ?? p.produto} ${num(p.entradas)}`).join(" · "), ...(reVig ? [`RE: ${num(reVig.entradas_vig)} com vigência no período · ${num(reVig.entradas - reVig.entradas_vig)} de outros meses`] : [])]}
           variacaoAno={compara ? variacao(r.entradas, ra.entradas) : null}
           legenda="Renovações que entraram no período, cada uma contada uma vez, no mês em que entrou (Fiança: 1ª planilha em que aparece ou criação do card; RE: mês do vencimento)."
         />
         <Cartao
           rotulo="Renovadas"
           valor={num(r.conversoes)}
-          linhas={[`${compacto(r.premio_convertido)} de prêmio nas renovadas`]}
+          linhas={[`${compacto(r.premio_convertido)} de prêmio nas renovadas`, ...(reVig ? [`RE: ${num(reVig.conversoes_vig)} com vigência no período · ${num(reVig.conversoes - reVig.conversoes_vig)} de outros meses`] : [])]}
           variacaoAno={compara ? variacao(r.conversoes, ra.conversoes) : null}
           legenda="Renovações efetivadas no período, pelo mês em que foram efetivadas (Sucesso no funil ou RENOVADO/EFETIVADO na planilha)."
         />
         <Cartao
           rotulo="Não renovadas"
           valor={num(r.perdas)}
-          linhas={[produtos.map((p) => `${ROTULO_CURTO[p.produto] ?? p.produto} ${num(p.perdas)}`).join(" · ")]}
+          linhas={[produtos.map((p) => `${ROTULO_CURTO[p.produto] ?? p.produto} ${num(p.perdas)}`).join(" · "), ...(reVig ? [`RE: ${num(reVig.perdas_vig)} com vigência no período · ${num(reVig.perdas - reVig.perdas_vig)} de outros meses`] : [])]}
           variacaoAno={compara ? variacao(r.perdas, ra.perdas) : null}
           legenda="Renovações perdidas no período, pelo mês em que isso aconteceu (Perdido no funil; NÃO RENOVADO, NÃO EFETIVADO, SEM PARCERIA ou CANCELADO na planilha)."
         />
