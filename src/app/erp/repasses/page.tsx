@@ -53,6 +53,7 @@ export default async function ErpRepassesPage({ searchParams }: { searchParams: 
             pago ou enviado. Vale o percentual de repasse que está no documento, seja seguro novo, renovação ou endosso. Venda direta da O2, sem imobiliária, não entra.
           </InfoLegenda>
         </h1>
+        <Link href={`/erp/repasses/comparacao?mes=${mes}`} className="text-xs text-o2-navy underline">Comparação ERP × Corp (repasses gerados pelas baixas do ERP) →</Link>
         <p className="text-sm text-gray-600">
           Comissão recebida em {rotuloMes(mesAnterior(mes))} → repasse com previsão para 15/{rotuloMes(mes)}. Linha = base da parcela × % de repasse × % de participação; soma por
           imobiliária e desconto de {DESCONTO_PCT}% no total. <b>Só leitura:</b> nada é gravado nem enviado. Vale o % de repasse que está no documento, seja seguro novo,

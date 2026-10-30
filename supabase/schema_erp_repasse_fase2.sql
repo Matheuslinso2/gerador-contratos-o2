@@ -35,3 +35,6 @@ end $$;
 
 drop trigger if exists erp_repasse_da_baixa on erp_comissao_recebimentos;
 create trigger erp_repasse_da_baixa after insert on erp_comissao_recebimentos for each row execute function erp_gerar_repasse_da_baixa();
+
+-- Comparação ERP × Corp (só leitura; migration erp_repasse_comparacao_erp_corp): erp_repasse_comparacao(mes) devolve, por repasse gerado
+-- pelo ERP, o valor do ERP e o que o Corp calcularia para a MESMA parcela (null enquanto o Corp não baixou). Usada em /erp/repasses/comparacao.
