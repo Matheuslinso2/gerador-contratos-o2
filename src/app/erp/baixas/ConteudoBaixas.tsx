@@ -91,7 +91,7 @@ const ESTADO_LINHA: Record<string, { t: string; cor: string }> = {
   pendente_identificacao: { t: "pendente de identificação", cor: "bg-red-100 text-red-700" },
 };
 type PontoDia = { dia: number; regra: number; exper: number; recebido: number };
-type LinhaTopo = { seg: string; nome: string; prevista: number; regra: number; extratos: number; baixadas: number; baixadasErp: number; proLabore: number; nibo: number };
+type LinhaTopo = { seg: string; nome: string; prevista: number; regra: number; extratos: number; baixadas: number; baixadasErp: number; proLabore: number; foraSeguro: number; nibo: number };
 const COLUNAS_CAIXA = "grid grid-cols-[minmax(150px,1.5fr)_64px_repeat(5,minmax(100px,1fr))_minmax(150px,1.2fr)] items-center gap-x-2";
 
 const brl = (v: number | null | undefined) => (v == null ? "—" : Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
@@ -201,7 +201,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
     const qDias = supabase.from("erp_baixa_assistida_resumo")
       .select("seg_abrev, corretora, data_recebimento, total_extrato, soma_linhas, liquido_sem_desconto, linhas")
       .neq("tipo", "resumo_mensal").gte("data_recebimento", desdeCaixa).lte("data_recebimento", ateCaixa).limit(5000);
-    const [{ data: diasBrutos }, entradas, { data: segsBrutas }, { data: previsaoBruta }, { data: nfsBrutas }, { data: baixadasBrutas }, { data: previstoDiaBruto }, { data: regraBruta }, { data: inadBruta }, { data: ligacaoBruta }, { data: inadLinhasBruta, error: erroInadLinhas }, { data: confBruta }, { data: confLinhasBruta }, { data: baixadasErpBrutas }, { data: proLaboreBrutas }] = await Promise.all([
+    const [{ data: diasBrutos }, entradas, { data: segsBrutas }, { data: previsaoBruta }, { data: nfsBrutas }, { data: baixadasBrutas }, { data: previstoDiaBruto }, { data: regraBruta }, { data: inadBruta }, { data: ligacaoBruta }, { data: inadLinhasBruta, error: erroInadLinhas }, { data: confBruta }, { data: confLinhasBruta }, { data: baixadasErpBrutas }, { data: proLaboreBrutas }, { data: foraSeguroBrutas }] = await Promise.all([
       qDias, entradasNibo(supabase, desdeCaixa, ateCaixa), supabase.from("erp_seguradoras").select("abreviacao, nome"),
       supabase.rpc("erp_retrato", { p_funcao: "erp_previsao_caixa_mensal", p_de: desdeCaixa, p_ate: fimCaixa }),
       supabase.from("erp_extratos_seguradora").select("nf_numero, nf_emitida_em, seguradora:erp_seguradoras!inner(abreviacao)").in("seguradora.abreviacao", ["POTT", "TOO"]).gte("competencia", desdeCaixa).lte("competencia", fimCaixa),
@@ -215,6 +215,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
       sp.inad ? supabase.rpc("erp_inadimplencia_confirmada_linhas", { p_corretora: sp.inadEmp ?? empresaFiltro ?? CORRETORAS[0], p_seg: sp.inad, p_de: desdeCaixa, p_ate: fimCaixa }) : Promise.resolve({ data: [] }),
       supabase.rpc("erp_baixadas_erp_mensal", { p_de: desdeCaixa, p_ate: fimCaixa }),
       supabase.rpc("erp_pro_labore_mensal_quadro", { p_de: desdeCaixa, p_ate: fimCaixa }),
+      supabase.rpc("erp_fora_seguro_mensal_quadro", { p_de: desdeCaixa, p_ate: fimCaixa }),
     ]);
     confLinhas = (confLinhasBruta ?? []) as LinhaConf[];
     inadLinhas = (inadLinhasBruta ?? []) as LinhaInad[];
@@ -251,6 +252,8 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
     for (const b of (baixadasErpBrutas ?? []) as { corretora: string; seg_abrev: string; mes: string; liquido: number | string }[]) baixadasErpMap.set(`${b.corretora}|${b.seg_abrev}|${b.mes}`, Number(b.liquido));
     const proLaboreMap = new Map<string, number>();
     for (const b of (proLaboreBrutas ?? []) as { corretora: string; seg_abrev: string; mes: string; pago_direto: number | string }[]) proLaboreMap.set(`${b.corretora}|${b.seg_abrev}|${b.mes}`, Number(b.pago_direto));
+    const foraSeguroMap = new Map<string, number>();
+    for (const b of (foraSeguroBrutas ?? []) as { corretora: string; seg_abrev: string; mes: string; liquido: number | string }[]) foraSeguroMap.set(`${b.corretora}|${b.seg_abrev}|${b.mes}`, Number(b.liquido));
     const regraTodas = new Map<string, number>();
     for (const p of (regraBruta ?? []) as { corretora: string; seg_abrev: string; mes: string; previsto_liquido: number | string }[]) regraTodas.set(`${p.corretora}|${p.seg_abrev}|${p.mes}`, Number(p.previsto_liquido));
     const prevTodas = new Map<string, number>();
@@ -258,7 +261,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
     const rd = (v: number) => Math.round(v * 100) / 100;
     for (const corr of CORRETORAS) {
       const segsEmp = new Set<string>();
-      for (const k of [...porDia.keys(), ...prevTodas.keys(), ...regraTodas.keys(), ...baixadasMap.keys(), ...baixadasErpMap.keys(), ...proLaboreMap.keys()]) {
+      for (const k of [...porDia.keys(), ...prevTodas.keys(), ...regraTodas.keys(), ...baixadasMap.keys(), ...baixadasErpMap.keys(), ...proLaboreMap.keys(), ...foraSeguroMap.keys()]) {
         const [c, sg, mm] = k.split("|");
         if (c === corr && mm === mesTopo) segsEmp.add(sg);
       }
@@ -269,9 +272,9 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
         const l: LinhaTopo = {
           seg: sg, nome: NOME_CURTO[sg] ?? nomeSeg.get(sg) ?? (sg === "OUTRAS" ? "Outras" : sg),
           prevista: rd(prevTodas.get(k) ?? 0), regra: rd(regraTodas.get(k) ?? 0), extratos: rd(dias.reduce((t, d) => t + d.extrato, 0)),
-          baixadas: rd(baixadasMap.get(k) ?? 0), baixadasErp: rd(baixadasErpMap.get(k) ?? 0), proLabore: rd(proLaboreMap.get(k) ?? 0), nibo: rd(dias.reduce((t, d) => t + d.banco, 0)),
+          baixadas: rd(baixadasMap.get(k) ?? 0), baixadasErp: rd(baixadasErpMap.get(k) ?? 0), proLabore: rd(proLaboreMap.get(k) ?? 0), foraSeguro: rd(foraSeguroMap.get(k) ?? 0), nibo: rd(dias.reduce((t, d) => t + d.banco, 0)),
         };
-        if ([l.prevista, l.regra, l.extratos, l.baixadas, l.baixadasErp, l.proLabore, l.nibo].some((v) => Math.abs(v) >= 0.005)) linhas.push(l);
+        if ([l.prevista, l.regra, l.extratos, l.baixadas, l.baixadasErp, l.proLabore, l.foraSeguro, l.nibo].some((v) => Math.abs(v) >= 0.005)) linhas.push(l);
       }
       quadroTopo[corr] = linhas.sort((a, b) => a.nome.localeCompare(b.nome));
     }
@@ -1162,9 +1165,9 @@ function consolidarQuadros(a: LinhaTopo[], b: LinhaTopo[]): LinhaTopo[] {
   for (const l of [...a, ...b]) {
     const x = m.get(l.seg);
     if (!x) { m.set(l.seg, { ...l }); continue; }
-    x.prevista += l.prevista; x.regra += l.regra; x.extratos += l.extratos; x.baixadas += l.baixadas; x.baixadasErp += l.baixadasErp; x.proLabore += l.proLabore; x.nibo += l.nibo;
+    x.prevista += l.prevista; x.regra += l.regra; x.extratos += l.extratos; x.baixadas += l.baixadas; x.baixadasErp += l.baixadasErp; x.proLabore += l.proLabore; x.foraSeguro += l.foraSeguro; x.nibo += l.nibo;
   }
-  return [...m.values()].map((l) => ({ ...l, prevista: Math.round(l.prevista * 100) / 100, regra: Math.round(l.regra * 100) / 100, extratos: Math.round(l.extratos * 100) / 100, baixadas: Math.round(l.baixadas * 100) / 100, baixadasErp: Math.round(l.baixadasErp * 100) / 100, proLabore: Math.round(l.proLabore * 100) / 100, nibo: Math.round(l.nibo * 100) / 100 })).sort((x, y) => x.nome.localeCompare(y.nome));
+  return [...m.values()].map((l) => ({ ...l, prevista: Math.round(l.prevista * 100) / 100, regra: Math.round(l.regra * 100) / 100, extratos: Math.round(l.extratos * 100) / 100, baixadas: Math.round(l.baixadas * 100) / 100, baixadasErp: Math.round(l.baixadasErp * 100) / 100, proLabore: Math.round(l.proLabore * 100) / 100, foraSeguro: Math.round(l.foraSeguro * 100) / 100, nibo: Math.round(l.nibo * 100) / 100 })).sort((x, y) => x.nome.localeCompare(y.nome));
 }
 
 // Cor de fundo por ORIGEM do número (Matheus 30/10): ERP azul, Corp âmbar, previsões verde (regra mais forte, experiência mais clara),
@@ -1188,7 +1191,7 @@ function LegendaOrigem() {
 
 function TabelaControle({ titulo, linhas, info }: { titulo: string; linhas: LinhaTopo[]; info?: ReactNode }) {
   const soma = (f: (l: LinhaTopo) => number) => Math.round(linhas.reduce((t, l) => t + f(l), 0) * 100) / 100;
-  const tot = { prevista: soma((l) => l.prevista), regra: soma((l) => l.regra), extratos: soma((l) => l.extratos), baixadas: soma((l) => l.baixadas), baixadasErp: soma((l) => l.baixadasErp), proLabore: soma((l) => l.proLabore), nibo: soma((l) => l.nibo) };
+  const tot = { prevista: soma((l) => l.prevista), regra: soma((l) => l.regra), extratos: soma((l) => l.extratos), baixadas: soma((l) => l.baixadas), baixadasErp: soma((l) => l.baixadasErp), proLabore: soma((l) => l.proLabore), foraSeguro: soma((l) => l.foraSeguro), nibo: soma((l) => l.nibo) };
   const dExtBaixadas = (l: { extratos: number; baixadas: number }) => Math.round((l.extratos - l.baixadas) * 100) / 100;
   const dExtNibo = (l: { extratos: number; nibo: number }) => Math.round((l.extratos - l.nibo) * 100) / 100;
   const th = "whitespace-nowrap px-1 py-1.5 text-right font-semibold";
@@ -1212,13 +1215,14 @@ function TabelaControle({ titulo, linhas, info }: { titulo: string; linhas: Linh
             <th className={`${th} ${COR_ORIGEM.corp.th}`} title="Já baixado no Corp no mês (data da quitação)">Baixadas<br />(Corp)</th>
             <th className={`${th} ${COR_ORIGEM.erp.th}`} title="Baixado pelo próprio ERP a partir dos extratos, pela regra do ERP (data do pagamento do extrato). De setembro/2026 em diante é a baixa oficial; o Corp fica só como comparação.">Baixadas<br />(ERP)</th>
             <th className={`${th} ${COR_ORIGEM.erp.th}`} title="Parte da comissão que a seguradora pagou direto à imobiliária (pró-labore), em vez de pagar à O2: comissão esperada menos o que veio no extrato. Quando há pró-labore, a Prevista (regra) fica maior que o que entra na conta por este mesmo valor.">Pago direto à<br />imobiliária (pró-labore)</th>
+            <th className={`${th} ${COR_ORIGEM.erp.th}`} title="Receitas que a seguradora paga sem apólice vinculada (campanhas, premiação/Programa Super, verba de marketing, venda avulsa de cartão, agenciamento, ganho extra), líquidas do imposto retido. Não entram em Baixadas: são receita fora do seguro.">Receitas fora<br />do seguro</th>
             <th className={`${th} ${COR_ORIGEM.neutro.th}`} title="O que entrou na conta (Nibo, receita de seguros)">Nibo</th>
             <th className={th} title="Extratos de comissão − Baixadas: o que a seguradora pagou e ainda não foi baixado (negativo: baixado a mais)">Dif.<br />extratos × baixadas</th>
             <th className={th} title="Extratos de comissão − Nibo: o que a seguradora diz que pagou e não entrou na conta (negativo: entrou mais do que os extratos explicam)">Dif.<br />extratos × Nibo</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
-          {linhas.length === 0 && <tr><td colSpan={10} className="px-2 py-3 text-center text-gray-500">Nada neste mês.</td></tr>}
+          {linhas.length === 0 && <tr><td colSpan={11} className="px-2 py-3 text-center text-gray-500">Nada neste mês.</td></tr>}
           {linhas.map((l) => (
             <tr key={l.seg}>
               <td className="whitespace-nowrap px-2 py-1 font-medium text-gray-800">{l.nome}</td>
@@ -1228,6 +1232,7 @@ function TabelaControle({ titulo, linhas, info }: { titulo: string; linhas: Linh
               <td className={`${td} ${COR_ORIGEM.corp.td}`}>{cel(l.baixadas)}</td>
               <td className={`${td} ${COR_ORIGEM.erp.td}`}>{cel(l.baixadasErp)}</td>
               <td className={`${td} ${COR_ORIGEM.erp.td}`}>{cel(l.proLabore)}</td>
+              <td className={`${td} ${COR_ORIGEM.erp.td}`}>{cel(l.foraSeguro)}</td>
               <td className={td}>{cel(l.nibo)}</td>
               <td className={td}>{difCel(dExtBaixadas(l))}</td>
               <td className={td}>{difCel(dExtNibo(l))}</td>
@@ -1243,6 +1248,7 @@ function TabelaControle({ titulo, linhas, info }: { titulo: string; linhas: Linh
             <td className={`${td} ${COR_ORIGEM.corp.tot}`}>{n2(tot.baixadas)}</td>
             <td className={`${td} ${COR_ORIGEM.erp.tot}`}>{n2(tot.baixadasErp)}</td>
             <td className={`${td} ${COR_ORIGEM.erp.tot}`}>{n2(tot.proLabore)}</td>
+            <td className={`${td} ${COR_ORIGEM.erp.tot}`}>{n2(tot.foraSeguro)}</td>
             <td className={td}>{n2(tot.nibo)}</td>
             <td className={td}>{difCel(dExtBaixadas(tot))}</td>
             <td className={td}>{difCel(dExtNibo(tot))}</td>
