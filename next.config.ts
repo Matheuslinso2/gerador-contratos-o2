@@ -21,6 +21,29 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/api/social/imagem/*": ["public/marca-o2/**/*", "src/lib/social/fonts/**/*"],
   },
+  // Cabeçalhos de segurança (revisão 30/10/2026, item 6). Só frame-ancestors
+  // na CSP por enquanto: uma CSP completa precisa mapear Sentry, Google Maps
+  // e os scripts inline do Next antes, senão quebra telas. Sem
+  // X-Frame-Options porque ele não consegue liberar o Bitrix no /bitrix-app
+  // (frame-ancestors já cobre todos os navegadores atuais).
+  async headers() {
+    const comuns = [
+      { key: "X-Content-Type-Options", value: "nosniff" },
+      { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+      { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()" },
+    ];
+    return [
+      // Nenhuma página pode ser aberta dentro de iframe de outro site
+      // (o Painel Comercial usa iframe do próprio domínio, liberado por 'self').
+      { source: "/:path*", headers: [...comuns, { key: "Content-Security-Policy", value: "frame-ancestors 'self'" }] },
+      // O app do Bitrix abre dentro do portal da O2 no Bitrix24 -- a regra
+      // de baixo substitui a de cima só nessas rotas.
+      {
+        source: "/bitrix-app/:path*",
+        headers: [{ key: "Content-Security-Policy", value: "frame-ancestors 'self' https://o2seguros.bitrix24.com.br" }],
+      },
+    ];
+  },
 };
 
 export default withSentryConfig(nextConfig, {

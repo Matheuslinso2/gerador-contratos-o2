@@ -110,9 +110,16 @@ export async function alertarAdmin({
   detalhe: string;
   quem?: string;
 }) {
+  // Tudo aqui é texto puro, às vezes vindo de fora (/api/erro-cliente é
+  // público) -- escapa no HTML pra ninguém conseguir montar link/HTML no alerta.
+  const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const assunto = `🚨 Erro no sistema${quem ? ` — ${quem.slice(0, 120)}` : ""}`;
+  contexto = esc(contexto);
+  detalhe = esc(detalhe);
+  quem = quem && esc(quem);
   await enviarEmail({
     para: EMAIL_ALERTA_ADMIN,
-    assunto: `🚨 Erro no sistema${quem ? ` — ${quem}` : ""}`,
+    assunto,
     html: `
       <div style="max-width: 560px; margin: 0 auto; font-family: Arial, sans-serif;">
         <div style="background: #01192e; padding: 16px 20px; border-radius: 10px 10px 0 0;">
