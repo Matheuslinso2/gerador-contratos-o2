@@ -17,6 +17,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { obterAutenticacaoGoogle } from "@/lib/googleAuth";
 import { abrirTextoPdfComSenha, candidatosSenhaO2 } from "@/lib/pdfComSenha";
 import { parseTokioPdf, parsePortoPdf } from "@/lib/erp/extratosPdf";
+import { parseYelumPdf } from "@/lib/erp/extratoYelum";
 import { parsePottencial, parseToo, num, txt, dataBr, type LinhaExtrato } from "@/lib/erp/extratos";
 
 export const PASTA_EXTRATOS = process.env.ERP_EXTRATOS_DRIVE_PASTA || "11BDjbKy1Nj-A4mslt2onv3IzmhX8mYga";
@@ -278,10 +279,10 @@ export async function carregarExtratosDrive(sb: SupabaseClient, opts: { gravar: 
         const texto = tipo === "pdf" ? (await abrirTextoPdfComSenha(buf, candidatosSenhaO2()))?.texto ?? null : buf.toString("utf8");
         if (!texto) throw new Error("PDF não abriu (senha desconhecida?)");
         // Tokio e Porto: leitor fixo (exato, sem custo); a IA só para formato desconhecido.
-        const fixo = a.seguradora === "TOKI" ? parseTokioPdf(texto) : a.seguradora === "PORT" ? parsePortoPdf(texto) : null;
+        const fixo = a.seguradora === "TOKI" ? parseTokioPdf(texto) : a.seguradora === "PORT" ? parsePortoPdf(texto) : a.seguradora === "YELU" ? parseYelumPdf(texto) : null;
         if (fixo) {
-          parsed = fixo; como = a.seguradora === "TOKI" ? "leitor Tokio (PDF)" : "leitor Porto (PDF)";
-          if (!a.pagoEm && fixo.pago_em) a.pagoEm = fixo.pago_em;
+          parsed = fixo; como = a.seguradora === "TOKI" ? "leitor Tokio (PDF)" : a.seguradora === "YELU" ? "leitor Yelum (PDF)" : "leitor Porto (PDF)";
+          if (!a.pagoEm && "pago_em" in fixo && typeof fixo.pago_em === "string") a.pagoEm = fixo.pago_em;
         } else {
           const ia = await lerTextoPelaIA(texto, seg.get(a.seguradora)?.nome ?? a.seguradora);
           parsed = ia; competencia = ia.competencia; como = "leitura por IA";
