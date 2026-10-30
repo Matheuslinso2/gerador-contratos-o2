@@ -1,4 +1,5 @@
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
+import InfoLegenda from "@/components/InfoLegenda";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -453,7 +454,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
           <>
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-sm font-bold uppercase tracking-wide text-o2-navy">Controle mensal de baixa de comissão - Corp - ERP O2</h2>
+            <h2 className="text-sm font-bold uppercase tracking-wide text-o2-navy">Controle mensal de baixa de comissão - Corp - ERP O2 <InfoLegenda titulo="Controle mensal de baixa de comissão">Mostra, mês a mês e por seguradora, de onde vem o dinheiro: o que deveria cair (pela regra de cada seguradora e pela experiência), o que os extratos dizem que ela pagou, o que já foi baixado no Corp e o que entrou na conta pelo Nibo. Os valores são líquidos do imposto retido, como entram na conta. As duas últimas colunas são diferenças; passam em vermelho quando a diferença é maior que R$ 6. Abre no mês atual e dá para navegar pelos meses.</InfoLegenda></h2>
             {!usaPeriodo ? (
               <div className="flex items-center gap-2 text-sm" aria-label="Mês">
                 <Link href={hrefTela({ mes: somaMes(mesSel, -1) })} className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-gray-700 hover:bg-gray-50" title="mês anterior">◀</Link>
@@ -466,10 +467,10 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
             )}
           </div>
           <div className="grid gap-4 2xl:grid-cols-2">
-            <TabelaControle titulo="O2 Corretora de Seguros : 20001784000180" linhas={quadroTopo["O2 Corretora"] ?? []} />
-            <TabelaControle titulo="o2 Capitalização e Seguros" linhas={quadroTopo["O2 Capitalização"] ?? []} />
+            <TabelaControle titulo="O2 Corretora de Seguros : 20001784000180" info={<InfoLegenda titulo="Quadro da O2 Corretora">Um quadro só desta empresa, uma linha por seguradora (não por produto). Mostra o previsto pela regra e pela experiência, o que os extratos dizem que foi pago, o que o Corp já baixou no mês e o que entrou no Nibo. Líquido do imposto retido.</InfoLegenda>} linhas={quadroTopo["O2 Corretora"] ?? []} />
+            <TabelaControle titulo="o2 Capitalização e Seguros" info={<InfoLegenda titulo="Quadro da O2 Capitalização">Um quadro só desta empresa, uma linha por seguradora (não por produto), com as mesmas colunas do quadro da O2 Corretora. Líquido do imposto retido.</InfoLegenda>} linhas={quadroTopo["O2 Capitalização"] ?? []} />
           </div>
-          <TabelaControle titulo="Consolidado · O2 Corretora + O2 Capitalização (uma linha por seguradora)" linhas={consolidarQuadros(quadroTopo["O2 Corretora"] ?? [], quadroTopo["O2 Capitalização"] ?? [])} />
+          <TabelaControle titulo="Consolidado · O2 Corretora + O2 Capitalização (uma linha por seguradora)" info={<InfoLegenda titulo="Quadro consolidado">Junta as duas empresas numa visão só: para cada seguradora, soma o que foi previsto, o que os extratos dizem que foi pago, o que o Corp baixou e o que entrou no Nibo nas duas empresas. As diferenças são calculadas sobre essas somas. Líquido do imposto retido.</InfoLegenda>} linhas={consolidarQuadros(quadroTopo["O2 Corretora"] ?? [], quadroTopo["O2 Capitalização"] ?? [])} />
           <p className="text-[11px] leading-relaxed text-gray-500">
             Valores líquidos do imposto retido, como entram na conta. <b>Prevista (regra)</b>: o que deveria cair no mês pela regra de cada seguradora (boleto, fatura ou nota fiscal + o prazo próprio dela), sem atraso nem inadimplência. <b>Prevista (experiência)</b>: vencimento da parcela + o prazo que a seguradora costuma levar, pelo histórico.
             <b> Extratos de comissão</b>: o que a seguradora pagou segundo os extratos lidos. <b>Baixadas</b>: o que já foi baixado no Corp no mês (data da quitação). <b>Nibo</b>: o que entrou na conta (receita de seguros).
@@ -478,7 +479,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
         </section>
 
         <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-o2-navy">Comportamento diário de comissões - previsão de receitas versus recebido por vencimento de parcelas</h2>
+          <h2 className="text-sm font-bold uppercase tracking-wide text-o2-navy">Comportamento diário de comissões - previsão de receitas versus recebido por vencimento de parcelas <InfoLegenda titulo="Comportamento diário de comissões">Para cada dia do mês, três barras: a comissão que deveria cair pela regra da seguradora (boleto, fatura ou nota fiscal mais o prazo próprio dela, sem atraso nem inadimplência), a que deveria cair pela experiência (vencimento da parcela mais o prazo que a seguradora costuma levar, pelo histórico) e o que realmente entrou na conta pelo Nibo. Fim de semana conta na segunda-feira. A escala é por faixas de valor. O quadro consolidado soma as duas empresas.</InfoLegenda></h2>
           <GraficoDiario titulo="Consolidado · O2 Corretora + O2 Capitalização" pontos={consolidarDias(graficoTopo["O2 Corretora"] ?? [], graficoTopo["O2 Capitalização"] ?? [])} />
           <details className="rounded-lg border border-gray-200">
             <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-o2-navy">Ver o comportamento diário de cada empresa separadamente</summary>
@@ -521,18 +522,18 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
 
         {erroLinhasAbertas && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">Não consegui carregar as linhas do extrato: {erroLinhasAbertas.message}</p>}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
-          <Cartao rotulo="Para identificar" valor={`${resumoIdent.qtd} · ${brl(resumoIdent.valor)}`} cor={resumoIdent.qtd ? "text-red-700" : "text-gray-700"} sub="recebido, ainda sem parcela (pendente de identificação)" />
-          <Cartao rotulo="A baixar à mão" valor={resumoGestao.manual} cor={resumoGestao.manual ? "text-red-700" : "text-gray-700"} sub="extratos que dependem de ação humana" />
-          <Cartao rotulo="Seriam automáticos" valor={resumoGestao.auto} cor="text-green-700" sub="no padrão (baixa automática desligada, em teste)" />
-          <Cartao rotulo="Com linhas a tratar" valor={resumoGestao.aTratar} cor={resumoGestao.aTratar ? "text-orange-700" : "text-gray-700"} sub="estorno, divergente ou não encontrada" />
-          <Cartao rotulo="Banco sem extrato" valor={resumoGestao.bancoSemExtrato} cor={resumoGestao.bancoSemExtrato ? "text-red-700" : "text-gray-700"} sub="dias com entrada no Nibo e sem extrato lido" />
-          <Cartao rotulo="Saldo a cobrar" valor={brl(saldoAbertoTotal)} cor={saldoAbertoTotal ? "text-o2-navy" : "text-gray-700"} sub="que as seguradoras ainda devem" />
+          <Cartao rotulo="Para identificar" valor={`${resumoIdent.qtd} · ${brl(resumoIdent.valor)}`} cor={resumoIdent.qtd ? "text-red-700" : "text-gray-700"} sub="recebido, ainda sem parcela (pendente de identificação)" info={<>Linhas de extrato que a seguradora pagou e o ERP ainda não sabe de qual parcela são. Mostra quantas linhas e quanto dinheiro, somando os extratos do mês filtrado.</>} />
+          <Cartao rotulo="A baixar à mão" valor={resumoGestao.manual} cor={resumoGestao.manual ? "text-red-700" : "text-gray-700"} sub="extratos que dependem de ação humana" info={<>Extratos do mês que ainda não tiveram a baixa aprovada e que não estão no padrão para baixa automática: o valor não aparece no banco, há linha sem parcela, linha diferente do previsto, estorno ou linha em tratativa. Alguém precisa conferir e aprovar.</>} />
+          <Cartao rotulo="Seriam automáticos" valor={resumoGestao.auto} cor="text-green-700" sub="no padrão (baixa automática desligada, em teste)" info={<>Extratos que estariam no padrão para baixar sozinhos: o valor bate com o banco, todas as linhas estão ligadas a parcelas, nenhuma linha difere do previsto, não há estorno nem tratativa e a soma das linhas fecha com o total. A baixa automática está desligada; isto é só uma prévia para conferir.</>} />
+          <Cartao rotulo="Com linhas a tratar" valor={resumoGestao.aTratar} cor={resumoGestao.aTratar ? "text-orange-700" : "text-gray-700"} sub="estorno, divergente ou não encontrada" info={<>Extratos sem baixa aprovada que têm linha de estorno, linha diferente do que o documento previa ou linha que o ERP não encontrou, e que ainda não foi resolvida.</>} />
+          <Cartao rotulo="Banco sem extrato" valor={resumoGestao.bancoSemExtrato} cor={resumoGestao.bancoSemExtrato ? "text-red-700" : "text-gray-700"} sub="dias com entrada no Nibo e sem extrato lido" info={<>Conta os dias do mês em que entrou dinheiro de uma seguradora no Nibo (receita de seguros) sem nenhum extrato dela lido pelo ERP naquele dia. Pode ser extrato que ainda não chegou ou não foi salvo.</>} />
+          <Cartao rotulo="Saldo a cobrar" valor={brl(saldoAbertoTotal)} cor={saldoAbertoTotal ? "text-o2-navy" : "text-gray-700"} sub="que as seguradoras ainda devem" info={<>Soma das diferenças que você registrou à mão como devidas pelas seguradoras e que ainda estão em aberto (nem recebidas, nem perdoadas).</>} />
         </div>
 
         {modo === "gestao" && pendentesLinhas.length > 0 && (
           <section className="space-y-2 rounded-xl border border-red-200 bg-white p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-red-700">Para identificar: recebido, ainda sem parcela</h2>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-red-700">Para identificar: recebido, ainda sem parcela <InfoLegenda titulo="Para identificar">Linhas de extrato que a seguradora pagou e o ERP ainda não ligou a uma parcela. Toda linha de extrato é tratada como parcela até se provar o contrário. O quadro agrupa por empresa e seguradora: quantidade de linhas, valor e há quantos dias está a mais antiga. Abaixo, as linhas mais antigas com o candidato mais provável, quando o ERP encontrou algum.</InfoLegenda></h2>
               <span />
             </div>
             <p className="text-xs text-gray-600">Toda linha de extrato é parcela até se provar o contrário. Enquanto não for identificada (ou confirmada como não-parcela), o valor conta como recebido, ainda sem parcela.</p>
@@ -577,7 +578,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
 
         {modo === "gestao" && outrasEntradas.size > 0 && (
           <p className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-600">
-            <b>Entradas do Nibo neste mês que não são receita de seguros</b> (não entram em nenhum total desta tela): {[...outrasEntradas.entries()].map(([cat, v]) => `${cat} ${brl(Math.round(v * 100) / 100)}`).join(" · ")}.
+            <b>Entradas do Nibo neste mês que não são receita de seguros</b> <InfoLegenda titulo="Entradas que ficam de fora">O Nibo recebe também dinheiro que não é receita de seguros, como empréstimo ou estorno. Esses valores não entram em nenhum total desta tela. Transferência entre as duas empresas também não é receita.</InfoLegenda> (não entram em nenhum total desta tela): {[...outrasEntradas.entries()].map(([cat, v]) => `${cat} ${brl(Math.round(v * 100) / 100)}`).join(" · ")}.
             Transferência entre as duas empresas também fica de fora.
           </p>
         )}
@@ -644,7 +645,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
           return (
         <section key={emp} className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
           <h2 className="rounded-lg bg-o2-navy px-3 py-2 text-sm font-bold text-white">{emp === "O2 Corretora" ? "O2 Corretora de Seguros : 20001784000180" : "O2 Capitalização e Seguros : 54493758000138"}</h2>
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Resumo do mês por seguradora · {emp}</h3>
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Resumo do mês por seguradora · {emp} <InfoLegenda titulo="Resumo do mês por seguradora">Uma linha por seguradora desta empresa. Pagou é o que o extrato mostra (bruto menos imposto retido, antes do desconto que a seguradora faz). Deveria cair é a previsão pela experiência da seguradora. Recebemos é o que entrou no Nibo, que é a referência. Diferença é recebemos menos pagou. A baixar é o que já foi reconhecido como parcela e ainda não baixado. Clique numa linha para abrir os detalhes, os extratos e as linhas.</InfoLegenda></h3>
           <p className="text-xs text-gray-500">
             <b>Pagou</b> = extrato da seguradora (bruto − imposto retido, antes do desconto dela, como o Nibo lança o empréstimo da Porto). <b>Deveria cair</b> = comissão das parcelas que, pela experiência de cada seguradora
             (vencimento + o prazo que ela costuma levar), deveria entrar no mês. <b>Recebemos</b> = o que entrou na conta (Nibo, receita de seguros; o banco é a referência). Fim de semana conta na segunda-feira.
@@ -688,13 +689,13 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
                     </summary>
                     {c.motivos.length > 0 && (
                       <div className="border-t border-gray-100 bg-amber-50/50 px-3 py-2 text-xs">
-                        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Motivo provável (hipótese para investigar)</h3>
+                        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Motivo provável (hipótese para investigar) <InfoLegenda titulo="Motivo provável">Hipóteses para a diferença deste mês, montadas a partir dos dados: desconto da seguradora, pró-labore pago direto à imobiliária, estornos, nota fiscal ainda não registrada, extrato sem banco, valores diferentes. São pistas para investigar, não conclusões.</InfoLegenda></h3>
                         <ul className="mt-1 list-disc space-y-0.5 pl-4 text-gray-700">{c.motivos.map((t, i) => <li key={i}>{t}</li>)}</ul>
                       </div>
                     )}
                     {c.conf && (
                       <div className="space-y-1 border-t border-gray-100 px-3 py-2 text-xs">
-                        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Inadimplência avisada pela seguradora</h3>
+                        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Inadimplência avisada pela seguradora <InfoLegenda titulo="Inadimplência avisada pela seguradora">Parcelas que a própria seguradora avisou, por e-mail ou relatório, que o cliente não pagou. Parcela em aberto não gera comissão nem repasse até o cliente pagar. Passa a regularizada quando aparece depois em um extrato ou é baixada no Corp.</InfoLegenda></h3>
                         <p className="text-gray-700">
                           <b>{c.conf.abertas}</b> parcela(s) em aberto (<b>{brl(c.conf.valor)}</b> de prêmio) nos relatórios/e-mails de cobrança desta seguradora
                           {c.conf.regularizadas > 0 && <>; {c.conf.regularizadas} já regularizada(s) (apareceram depois em extrato)</>}.
@@ -729,7 +730,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
                     )}
                     {c.inad && (
                       <div className="space-y-1 border-t border-gray-100 px-3 py-2 text-xs">
-                        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Provável inadimplência (pelo extrato)</h3>
+                        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Provável inadimplência (pelo extrato) <InfoLegenda titulo="Provável inadimplência">Parcelas cuja data prevista pela regra da seguradora já passou e que não aparecem em nenhum extrato nem foram baixadas. O cliente que paga em dia gera a comissão na data da regra; parcela não paga não cai depois. Mesmo com a comissão do esgotamento já recebida, a parcela continua esperada. Só conclui quando o extrato da seguradora está ligado às parcelas e confere com o banco.</InfoLegenda></h3>
                         {c.inad.conclusivo ? (
                           <>
                             <p className="text-gray-700">
@@ -771,7 +772,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
                     )}
                     <div className="grid gap-4 border-t border-gray-100 p-3 text-xs md:grid-cols-[minmax(220px,1fr)_2fr]">
                       <div className="space-y-1">
-                        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Do extrato</h3>
+                        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Do extrato <InfoLegenda titulo="Do extrato">Resumo dos extratos lidos desta seguradora no mês: valor bruto, imposto retido, desconto que a seguradora faz do que paga (como o empréstimo da Porto), líquido, quantos extratos já foram aprovados e se a soma das linhas fecha com o total. Em seguida, quanto deveria cair pela experiência e as parcelas que vencem no mês.</InfoLegenda></h3>
                         {c.m ? (
                           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
                             <dt className="text-gray-500">Bruto</dt><dd className="text-right">{brl(c.m.bruto)}</dd>
@@ -794,11 +795,11 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
                           <p className="rounded bg-yellow-50 px-2 py-1 text-[11px] text-yellow-800">Nesta seguradora o previsto costuma ficar acima do caixa: parte da comissão vai direto à imobiliária (pró-labore) e ainda não está descontada do previsto.</p>
                         )}
                         {c.m && <div className="pt-1"><Chips e={c.m} /></div>}
-                        {c.m && <p className="pt-1 text-[11px] text-gray-500"><a href={`#extratos-pendentes`} className="underline">ver os extratos e as linhas</a> (mais abaixo, em “Extratos pendentes” e “Baixas aprovadas”).</p>}
+                        {c.m && <p className="pt-1 text-[11px] text-gray-500">Os extratos e as linhas estão logo abaixo, em “Extratos desta seguradora no mês” ().</p>}
                       </div>
                       <div className="space-y-1">
                         <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                          Banco × extrato, dia a dia{c.dias.length ? ` · ${c.dias.length - ruins.length} de ${c.dias.length} dia(s) batem` : ""}
+                          Banco × extrato, dia a dia <InfoLegenda titulo="Banco × extrato, dia a dia">Compara, dia a dia, o que entrou no Nibo com o que os extratos desta seguradora pagaram. Fim de semana e feriado contam no próximo dia útil. Diferença de até R$ 6 é considerada igual. Os dias que batem ficam recolhidos.</InfoLegenda>{c.dias.length ? ` · ${c.dias.length - ruins.length} de ${c.dias.length} dia(s) batem` : ""}
                         </h3>
                         {ruins.length === 0 ? (
                           <p className="text-green-700">{c.dias.length ? "Todos os dias batem." : "Sem pagamentos no período."}</p>
@@ -878,7 +879,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
                           <PainelControleBloco seg={c.seg} corretora={c.corretora} mes={mesSel} ancora={`bloco-${c.chave.replace(/\W/g, "")}`} />
                         </Suspense>
                         <div className="space-y-2 border-t border-gray-100 p-3">
-                          <h4 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Extratos desta seguradora no mês — conferir linhas e aprovar a baixa</h4>
+                          <h4 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Extratos desta seguradora no mês — conferir linhas e aprovar a baixa <InfoLegenda titulo="Extratos desta seguradora">Cada extrato lido da seguradora neste mês. Acima de cada um, uma faixa com a conferência do banco, as linhas sem parcela e a comparação entre o que o ERP baixou e o que o Corp baixou (trilha de teste). Abra as linhas para conferir parcela a parcela e aprove a baixa quando estiver certo.</InfoLegenda></h4>
                           {extratos.filter((e) => e.corretora === c.corretora && e.seg_abrev === c.seg).sort((a, b) => Number(Boolean(a.baixa_aprovada_em)) - Number(Boolean(b.baixa_aprovada_em))).map((e) => {
                             const { situacao: banco, dia: bancoDia } = bancoDoExtrato(c.dias, e.data_recebimento);
                             const auto = avaliarBaixaAutomatica(e, banco, Number(totaisPor.get(e.id)?.qtd_pendente ?? 0));
@@ -1117,7 +1118,7 @@ function consolidarQuadros(a: LinhaTopo[], b: LinhaTopo[]): LinhaTopo[] {
   return [...m.values()].map((l) => ({ ...l, prevista: Math.round(l.prevista * 100) / 100, regra: Math.round(l.regra * 100) / 100, extratos: Math.round(l.extratos * 100) / 100, baixadas: Math.round(l.baixadas * 100) / 100, nibo: Math.round(l.nibo * 100) / 100 })).sort((x, y) => x.nome.localeCompare(y.nome));
 }
 
-function TabelaControle({ titulo, linhas }: { titulo: string; linhas: LinhaTopo[] }) {
+function TabelaControle({ titulo, linhas, info }: { titulo: string; linhas: LinhaTopo[]; info?: ReactNode }) {
   const soma = (f: (l: LinhaTopo) => number) => Math.round(linhas.reduce((t, l) => t + f(l), 0) * 100) / 100;
   const tot = { prevista: soma((l) => l.prevista), regra: soma((l) => l.regra), extratos: soma((l) => l.extratos), baixadas: soma((l) => l.baixadas), nibo: soma((l) => l.nibo) };
   const dExtBaixadas = (l: { extratos: number; baixadas: number }) => Math.round((l.extratos - l.baixadas) * 100) / 100;
@@ -1133,7 +1134,7 @@ function TabelaControle({ titulo, linhas }: { titulo: string; linhas: LinhaTopo[
   return (
     <div className="overflow-x-auto rounded-lg border border-gray-300">
       <table className="w-full text-[11px]">
-        <caption className="bg-o2-navy px-3 py-2 text-left text-sm font-bold text-white">{titulo} <span className="text-[10px] font-normal opacity-80">(valores em R$)</span></caption>
+        <caption className="bg-o2-navy px-3 py-2 text-left text-sm font-bold text-white">{titulo} <span className="text-[10px] font-normal opacity-80">(valores em R$)</span> {info}</caption>
         <thead className="bg-gray-100 text-[11px] uppercase tracking-wide text-gray-600">
           <tr>
             <th className="px-2 py-1.5 text-left font-semibold">Seguradora</th>
@@ -1207,7 +1208,7 @@ function GraficoDiario({ titulo, pontos }: { titulo: string; pontos: PontoDia[] 
   return (
     <div className="space-y-2 rounded-lg border border-gray-300 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-bold text-o2-navy">{titulo}</h3>
+        <h3 className="text-sm font-bold text-o2-navy">{titulo} <InfoLegenda titulo="Gráfico diário">Três barras por dia: o que deveria cair pela regra da seguradora (sem atraso nem inadimplência), o que deveria cair pela experiência (vencimento mais o prazo que a seguradora costuma levar) e o que entrou na conta pelo Nibo. Valores líquidos do imposto retido; a escala é por faixas de valor e a tabela embaixo traz os números de cada dia.</InfoLegenda></h3>
         <div className="flex items-center gap-4 text-xs text-gray-600">
           <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-o2-navy" /> Prevista (regra)</span>
           <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-sky-500" /> Prevista (experiência)</span>
@@ -1282,10 +1283,10 @@ function GraficoDiario({ titulo, pontos }: { titulo: string; pontos: PontoDia[] 
   );
 }
 
-function Cartao({ rotulo, valor, sub, cor }: { rotulo: string; valor: number | string; sub: string; cor: string }) {
+function Cartao({ rotulo, valor, sub, cor, info }: { rotulo: string; valor: number | string; sub: string; cor: string; info?: ReactNode }) {
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-3">
-      <div className="text-[10px] font-medium uppercase tracking-wide text-gray-500">{rotulo}</div>
+      <div className="text-[10px] font-medium uppercase tracking-wide text-gray-500">{rotulo}{info ? <InfoLegenda titulo={rotulo}>{info}</InfoLegenda> : null}</div>
       <div className={`text-xl font-bold ${cor}`}>{valor}</div>
       <div className="text-[11px] text-gray-500">{sub}</div>
     </div>

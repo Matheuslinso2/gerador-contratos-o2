@@ -1,4 +1,5 @@
 import RascunhoAutomatico from "@/components/RascunhoAutomatico";
+import InfoLegenda from "@/components/InfoLegenda";
 import { brlCurto } from "./formato";
 import { salvarNotaBaixa } from "./actions";
 import type { SituacaoBanco } from "@/lib/erp/baixaAutomatica";
@@ -21,6 +22,7 @@ export default function ControleExtrato(p: {
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-t-lg border border-b-0 border-gray-200 bg-gray-50 px-3 py-1.5 text-[11px]">
+      <InfoLegenda titulo="Faixa do extrato">Resume a conferência deste extrato. O selo do banco diz se o valor pago aparece no Nibo no dia (diferença de até R$ 6 é igual). Linhas recebidas sem parcela são as que o ERP ainda não ligou a uma parcela. A linha de comparação mostra o total do extrato, quanto o ERP baixou, quanto o Corp baixou, quantas linhas só um dos dois baixou e quantas ficaram sem baixa, com o motivo; é uma trilha de teste e não entra nos totais oficiais. O Corp registra a comissão cheia, com o pró-labore pago direto à imobiliária, por isso pode ser maior que o extrato. O aviso de baixa automática é só uma prévia: ela está desligada.</InfoLegenda>
       <span className={`rounded-full px-2 py-0.5 ${BANCO_TXT[p.banco].cor}`}>{BANCO_TXT[p.banco].t}</span>
       {p.bancoDia && p.banco !== "bate" && <span className="text-gray-500">banco {brlCurto(p.bancoDia.banco)} × extratos do dia {brlCurto(p.bancoDia.extrato)}</span>}
       {p.tot && p.tot.qtdPendente > 0 && (

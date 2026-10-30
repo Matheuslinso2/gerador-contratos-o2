@@ -1,4 +1,5 @@
 import RascunhoAutomatico from "@/components/RascunhoAutomatico";
+import InfoLegenda from "@/components/InfoLegenda";
 import { createClient } from "@/lib/supabase/server";
 import { formatarData } from "@/lib/sinistros/regras";
 import { salvarNotaBaixa, criarSaldoCobrar, fecharSaldoCobrar } from "./actions";
@@ -55,7 +56,7 @@ export default async function PainelControleBloco({ seg, corretora, mes, ancora,
   return (
     <div className="grid gap-3 border-t border-gray-100 p-3 text-xs lg:grid-cols-2">
       <div className="rounded-lg bg-gray-50 p-3">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Histórico desta seguradora (6 meses, calculado)</h3>
+        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Histórico desta seguradora (6 meses, calculado) <InfoLegenda titulo="Histórico desta seguradora">Olha os extratos dos últimos 6 meses desta seguradora nesta empresa: quantos foram lidos, quantos vieram sem nenhuma linha a tratar (estorno, diferente do previsto ou não encontrada), em quantos meses houve problema e quantos estornos e linhas de pró-labore pago direto apareceram. Embaixo ficam suas anotações sobre o padrão da seguradora.</InfoLegenda></h3>
         {hist.length > 0 ? (
           <p className="mt-1 text-gray-700">
             {hist.length} extrato(s) lidos; <b>{limpos}</b> sem nenhuma linha a tratar ({Math.round((limpos / hist.length) * 100)}%).
@@ -84,7 +85,7 @@ export default async function PainelControleBloco({ seg, corretora, mes, ancora,
       </div>
 
       <div className="rounded-lg bg-gray-50 p-3">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Saldo a cobrar da seguradora{saldoTotal !== 0 ? ` · ${brl(saldoTotal)}` : ""}</h3>
+        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Saldo a cobrar da seguradora<InfoLegenda titulo="Saldo a cobrar">A tolerância de até R$ 6 por parcela deixa a baixa passar, mas a diferença que a seguradora ainda deve não pode se perder. Aqui você registra o valor e o motivo; ele fica em aberto até ser marcado como recebido ou perdoado. O total aparece no cartão no topo da tela.</InfoLegenda>{saldoTotal !== 0 ? ` · ${brl(saldoTotal)}` : ""}</h3>
         {saldos.length === 0 ? (
           <p className="mt-1 text-gray-500">Nada em aberto.</p>
         ) : (
