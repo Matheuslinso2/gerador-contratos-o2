@@ -50,6 +50,8 @@ export type BlocoMes = {
   premio: number | null;
   comissao: number;
   itens?: { cotados: number; contratados: number | null }; // só Ramos (cards × itens)
+  // Só Ramos renovações: quantos desses têm VIGÊNCIA no mês (competência = vigência).
+  daVigencia?: { cotacoes: number; efetivados: number };
 };
 
 // "Faturamento do mês" = aba Flash Report do Power BI (corp_painel_pronto,
@@ -252,7 +254,12 @@ async function montarParaPeriodo(periodo: PeriodoRelatorio): Promise<RelatorioDi
         });
         return {
           novos: bloco(doMes.novos.consolidado),
-          renovacoes: bloco(doMes.renovacoes.atual),
+          renovacoes: {
+            ...bloco(doMes.renovacoes.atual),
+            daVigencia: doMes.renovacoes.porVigencia && doMes.competencia > "2026-09"
+              ? { cotacoes: doMes.renovacoes.porVigencia.doMes.total, efetivados: doMes.renovacoes.porVigencia.doMes.efetivados }
+              : undefined,
+          },
           ontemEfetivados: efetivadosNoPeriodo([...todos.values()], periodo.dias),
           solicitacoes: { ontem: novosNoPeriodo([...todos.values()], periodo.dias), mes: doMes.novos.consolidado.total + doMes.renovacoes.atual.total, rotulo: ["card", "cards"] },
           novosEfetivados,
@@ -516,7 +523,8 @@ function linhaBloco(b: BlocoMes | null | undefined, ramos = false): string {
       ? `${b.efetivados} efetivados${itens.contratados !== null ? ` (${itens.contratados} itens contratados)` : ""}`
       : `${b.efetivados} efetivados`;
   void cards;
-  return `${cot} · ${efet} · ${fmtConversao(b.conversao)} · prêmio ${b.premio === null ? "—" : fmtReais.format(b.premio)} · comissão ${fmtReais.format(b.comissao)}`;
+  const vig = b.daVigencia;
+  return `${vig ? `${cot} (${vig.cotacoes} com vigência no mês)` : cot} · ${vig ? `${efet} (${vig.efetivados} com vigência no mês)` : efet} · ${fmtConversao(b.conversao)} · prêmio ${b.premio === null ? "—" : fmtReais.format(b.premio)} · comissão ${fmtReais.format(b.comissao)}`;
 }
 
 export function parametrosModeloV3(r: RelatorioDiario): string[] {
