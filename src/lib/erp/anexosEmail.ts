@@ -84,7 +84,7 @@ export function avaliar(t: string, c: DocAlvo, soConfirmada = false): Avaliacao 
 
 export async function guardarAnexo(
   sb: SupabaseClient,
-  o: { doc: Pick<DocAlvo, "id">; pdf: Buffer; nome: string; messageId: string; tipo: string; av: Avaliacao; extra?: Record<string, unknown>; origem?: "email" | "bitrix" | "drive"; texto?: string }
+  o: { doc: Pick<DocAlvo, "id">; pdf: Buffer; nome: string; messageId: string; tipo: string; av: Avaliacao; extra?: Record<string, unknown>; origem?: "email" | "bitrix" | "drive" | "api"; texto?: string }
 ): Promise<void> {
   // Regra: anexo da Alfa nunca é ligado a documento de Fiança (a Alfa não tem Fiança). Quem lê o texto do PDF passa `texto`.
   if (o.texto && ehAlfa(o.texto)) {
