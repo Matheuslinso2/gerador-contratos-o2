@@ -10,9 +10,9 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { textoDoPdf, guardarAnexo } from "@/lib/erp/anexosEmail";
 import { garantirCliente, tipoDoDocumento } from "@/lib/erp/clientes";
 
-const LOTE = "TOKIO-PORTAL-20261030";
 const T = path.join(os.tmpdir(), "tokio");
 const arg = (n: string) => { const i = process.argv.indexOf(`--${n}`); return i >= 0 ? process.argv[i + 1] : undefined; };
+const LOTE = arg("lote") ?? "TOKIO-PORTAL-20261030"; const PASTAS = (arg("pastas") ?? "pdfs70145,pdfs55002,pdfs195354").split(","); const OBS_EXTRA = arg("obs") ?? null;
 const GRAVAR = process.argv.includes("--gravar"); const LIMITE = Number(arg("limite") ?? 100000); const OFFSET = Number(arg("offset") ?? 0);
 const HOJE = "2026-10-30";
 const sb = createServiceClient();
@@ -22,7 +22,7 @@ const dmy = (s: string | undefined) => (s ? s.split("/").reverse().join("-") : n
 const em = <T,>(xs: T[], n = 100) => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
 
 type Parcela = { n: number; valor: number; venc: string };
-type Lido = { ap: string; apOficial: string; negocio: string | null; proposta: string | null; tipoSeguro: string; vigIni: string | null; vigFim: string | null; emissao: string | null; liq: number; juros: number; iof: number; total: number; cobranca: string; modo: "fatura" | "debito" | "cartao" | "boleto" | "nao_informado"; parcelas: Parcela[]; parcelasOk: boolean; segNome: string | null; segDoc: string | null; imobNome: string | null; imobCnpj: string | null; imobCodigo: string | null; risco: { logradouro: string; numero: string; complemento: string; bairro: string; cidade: string; uf: string; cep: string } | null; produto: string; corretoraCod: string | null; pasta: string };
+type Lido = { ap: string; apOficial: string; negocio: string | null; proposta: string | null; tipoSeguro: string; vigIni: string | null; vigFim: string | null; emissao: string | null; liq: number; juros: number; iof: number; total: number; cobranca: string; modo: "fatura" | "debito" | "cartao" | "boleto" | "nao_informado"; parcelas: Parcela[]; parcelasOk: boolean; segNome: string | null; segDoc: string | null; imobNome: string | null; imobCnpj: string | null; imobCodigo: string | null; risco: { logradouro: string; numero: string; complemento: string; bairro: string; cidade: string; uf: string; cep: string } | null; produto: string; corretoraCod: string | null; pasta: string; renovada: string | null };
 
 function ler(t: string, ap: string, pasta: string): Lido {
   const s = t.replace(/\s+/g, " ");
@@ -47,13 +47,13 @@ function ler(t: string, ap: string, pasta: string): Lido {
     imobNome: imob?.[1]?.trim() ?? null, imobCnpj: dig(imob?.[2]) || null, imobCodigo: imob?.[3] ?? null,
     risco: rk ? { logradouro: rk[1].trim(), numero: rk[2], complemento: rk[3].trim(), bairro: rk[4].trim(), cidade: rk[5].trim(), uf: rk[6], cep: rk[7] } : null,
     produto: g(/Encaminhamos a sua Ap[óo]lice n[ºo°] \d+ - ([^,]+),/)?.[1]?.trim() ?? g(/Esta [ée] a sua Ap[óo]lice n[ºo°] \d+ - ([^.]+)\./)?.[1]?.trim() ?? "?",
-    corretoraCod: corr, pasta,
+    corretoraCod: corr, pasta, renovada: g(/Ap[óo]lice Renovada:s*(?:d+.)?(d+)/)?.[1] ?? null,
   };
 }
 
 (async () => {
   // universo: PDFs das 3 pastas (141); a pasta pdfsilana (Residencial Premiado) fica de fora por enquanto
-  const pastas = ["pdfs70145", "pdfs55002", "pdfs195354"]; const arqs: { ap: string; f: string; pasta: string }[] = [];
+  const pastas = PASTAS; const arqs: { ap: string; f: string; pasta: string }[] = [];
   for (const p of pastas) for (const f of fs.readdirSync(path.join(T, p)).filter((x) => x.endsWith(".pdf")).sort()) arqs.push({ ap: f.replace(".pdf", ""), f: path.join(T, p, f), pasta: p });
   const lote = arqs.slice(OFFSET, OFFSET + LIMITE);
   const [{ data: seg }, { data: corrs }, { data: ramos }] = await Promise.all([sb.from("erp_seguradoras").select("id,nome").ilike("nome", "%TOKIO%"), sb.from("erp_corretoras").select("id,apelido"), sb.from("erp_ramos").select("id,abreviacao,corretora_id")]);
@@ -90,12 +90,12 @@ function ler(t: string, ap: string, pasta: string): Lido {
     try {
       const cli = await garantirCliente(sb, { documento: x.segDoc, nome: x.segNome, fonte: `lote:${LOTE}` }); if (!cli) throw new Error("cliente não criado/ligado");
       cli.criado ? r.clientesNovos++ : r.clientesExistentes++;
-      const obs = [`Cadastrado do PDF oficial da apólice (portal Tokio) no lote ${LOTE}.`, `Nº oficial no PDF: ${x.apOficial}.`, x.negocio ? `Negócio: ${x.negocio}.` : null, x.cobranca ? `Cobrança no PDF: ${x.cobranca}.` : null, cap && !imobiliario ? "Atenção: corretor do PDF é O2 Capitalização (070145) em produto Residencial; conferir." : null, imob ? null : x.imobNome ? `Imobiliária do PDF sem casamento no banco único: ${x.imobNome} (${x.imobCnpj}).` : null].filter(Boolean).join(" ");
+      const obs = [`Cadastrado do PDF oficial da apólice (portal Tokio) no lote ${LOTE}.`, `Nº oficial no PDF: ${x.apOficial}.`, x.negocio ? `Negócio: ${x.negocio}.` : null, x.cobranca ? `Cobrança no PDF: ${x.cobranca}.` : null, x.renovada ? `Apólice renovada (consta no PDF): ${x.renovada}.` : null, OBS_EXTRA, cap && !imobiliario ? "Atenção: corretor do PDF é O2 Capitalização (070145) em produto Residencial; conferir." : null, imob ? null : x.imobNome ? `Imobiliária do PDF sem casamento no banco único: ${x.imobNome} (${x.imobCnpj}).` : null].filter(Boolean).join(" ");
       const { data: doc, error } = await sb.from("erp_documentos").insert({
         corretora_id: corrId(x.corretoraCod), tipo: "A", tipo_corp: /Renov/i.test(x.tipoSeguro) ? "RENV" : "NOVO", seguradora_id: segId, ramo_id: ramoId(ramo), locatario_id: cli.id, imobiliaria_principal_id: imob?.id ?? null,
         tipo_contratacao: imob ? "indicacao_imobiliaria" : null, modo_cobranca: modo, numero_proposta: x.proposta ?? x.negocio, numero_apolice: String(Number(dig(x.apOficial))), dt_emissao: x.emissao, vigencia_inicio: x.vigIni, vigencia_fim: x.vigFim,
         forma_pagamento: formaCod, qtd_parcelas: x.parcelasOk ? x.parcelas.length : null, premio_liquido: x.liq, premio_adicional: x.juros, iof: x.iof, premio_total: x.total,
-        situacao, competencia: x.vigIni!.slice(0, 7) + "-01", origem: "api", origem_ref: `lote:${LOTE}:${a.ap}`, observacoes: obs, criado_por_email: `sistema:${LOTE}`, revisao_pendente: cap && !imobiliario,
+        situacao, documento_renovado_id: x.renovada ? existentes.get(String(x.renovada).slice(-8))?.id ?? null : null, competencia: x.vigIni!.slice(0, 7) + "-01", origem: "api", origem_ref: `lote:${LOTE}:${a.ap}`, observacoes: obs, criado_por_email: `sistema:${LOTE}`, revisao_pendente: cap && !imobiliario,
       }).select("id,nosso_numero").single();
       if (error) throw new Error("documento: " + error.message);
       if (x.risco) { const { error: ei } = await sb.from("erp_documento_itens").insert({ documento_id: doc.id, item_n: 1, tipo_imovel: /EMPRESARIAL/i.test(x.produto) ? "comercial" : "residencial", cep: x.risco.cep, logradouro: x.risco.logradouro, numero: x.risco.numero, complemento: x.risco.complemento || null, bairro: x.risco.bairro, cidade: x.risco.cidade, uf: x.risco.uf, contrato_inicio: null, contrato_fim: null }); if (ei) throw new Error("item: " + ei.message); }
