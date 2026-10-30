@@ -38,3 +38,7 @@ create trigger erp_repasse_da_baixa after insert on erp_comissao_recebimentos fo
 
 -- Comparação ERP × Corp (só leitura; migration erp_repasse_comparacao_erp_corp): erp_repasse_comparacao(mes) devolve, por repasse gerado
 -- pelo ERP, o valor do ERP e o que o Corp calcularia para a MESMA parcela (null enquanto o Corp não baixou). Usada em /erp/repasses/comparacao.
+
+-- Preparo do repasse (só leitura; migrations erp_comissoes_prevista_previsao_idx): índice parcial das comissões previstas por data e
+-- erp_repasse_preparo(mes) = por imobiliária: parcelas/bruto da simulação, sem repasse, pró-labore, baixa divergente, comissões do mês anterior
+-- ainda sem baixa, parcelas em atraso (avisos das seguradoras) e falta de cadastro. Usada em /erp/repasses/preparo.

@@ -54,6 +54,7 @@ export default async function ErpRepassesPage({ searchParams }: { searchParams: 
           </InfoLegenda>
         </h1>
         <Link href={`/erp/repasses/comparacao?mes=${mes}`} className="text-xs text-o2-navy underline">Comparação ERP × Corp (repasses gerados pelas baixas do ERP) →</Link>
+        <Link href={`/erp/repasses/preparo?mes=${mes}`} className="ml-4 text-xs text-o2-navy underline">Preparo do mês (pendências antes de programar) →</Link>
         <p className="text-sm text-gray-600">
           Comissão recebida em {rotuloMes(mesAnterior(mes))} → repasse com previsão para 15/{rotuloMes(mes)}. Linha = base da parcela × % de repasse × % de participação; soma por
           imobiliária e desconto de {DESCONTO_PCT}% no total. <b>Só leitura:</b> nada é gravado nem enviado. Vale o % de repasse que está no documento, seja seguro novo,
