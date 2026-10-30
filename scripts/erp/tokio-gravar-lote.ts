@@ -82,7 +82,7 @@ function ler(t: string, ap: string, pasta: string): Lido {
     const imob = x.imobCnpj ? imobPorCnpj.get(x.imobCnpj) : undefined; if (x.imobNome && !imob) { r.imobSemCasamento++; imobsFalta.set(x.imobCnpj ?? x.imobNome, x.imobNome); }
     const imobiliario = /IMOBILIARIO/i.test(x.produto); const cap = x.corretoraCod === "070145";
     const ramo = imobiliario ? (cap ? "2IMO" : "IMOB") : "RESI";
-    const formaCod = x.modo === "fatura" ? null /* no ERP fatura é fatura (modo_cobranca); "cheque" do Corp não se usa */ : x.modo === "debito" ? "debito" : x.modo === "cartao" ? "cartao" : x.modo === "boleto" ? "boleto" : null; // erp_formas_pagamento: o Corp registra fatura como "cheque"
+    const formaCod = x.modo === "fatura" ? "fatura" /* no ERP fatura é fatura; "Ficha Faturada"/"Cheque" do Corp = 'fatura' */ : x.modo === "debito" ? "debito" : x.modo === "cartao" ? "cartao" : x.modo === "boleto" ? "boleto" : null; // erp_formas_pagamento: o Corp registra fatura como "cheque"
     const situacao = x.vigFim! >= HOJE ? "vigente" : "vencido"; const modo = x.modo === "fatura" && !imob ? "nao_informado" : x.modo;
     if (!x.parcelasOk && x.parcelas.length) r.parcelasForaDaSoma++;
     r.criar++;
