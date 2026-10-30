@@ -154,6 +154,10 @@
     {
       "path": "/api/cron/erp-baixa-automatica",
       "schedule": "55 * * * *"
+    },
+    {
+      "path": "/api/cron/erp-repasse-resumo",
+      "schedule": "58 * * * *"
     }
   ]
 }

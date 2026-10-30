@@ -20,9 +20,14 @@ export default async function ErpRepasseImobiliariaPage({ params, searchParams }
   const { data: imob } = await sb.from("imobiliarias").select("id, nome, codigo_produtor_corp, email_repasses").eq("id", id).maybeSingle();
   if (!imob) notFound();
   const meses = [0, 1, 2, 3].map((n) => mesAnterior(mes, n));
-  const porMes = await Promise.all(meses.map((m) => linhasDoMes(sb, m, id)));
-  const linhas = porMes[0].filter((l) => l.repasse !== 0);
-  const semRepasse = porMes[0].length - linhas.length;
+  // só o mês aberto é calculado na hora; a evolução vem do retrato pronto (erp_repasse_resumo_pronto)
+  const [linhasMes, { data: evo }] = await Promise.all([
+    linhasDoMes(sb, mes, id),
+    sb.from("erp_repasse_resumo_pronto").select("mes, corp_parcelas, corp_bruto").eq("imobiliaria_id", id).in("mes", meses.map((m) => `${m}-01`)),
+  ]);
+  const evoPorMes = new Map(((evo ?? []) as { mes: string; corp_parcelas: number; corp_bruto: number }[]).map((e) => [e.mes.slice(0, 7), e]));
+  const linhas = linhasMes.filter((l) => l.repasse !== 0);
+  const semRepasse = linhasMes.length - linhas.length;
   const t = totais(linhas);
   const emails = Array.isArray(imob.email_repasses) ? (imob.email_repasses as string[]).join(", ") : "";
 
@@ -124,9 +129,9 @@ export default async function ErpRepasseImobiliariaPage({ params, searchParams }
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {meses.map((m, i) => {
-                const l = porMes[i].filter((x) => x.repasse !== 0);
-                const tt = totais(l);
+              {meses.map((m) => {
+                const e = evoPorMes.get(m);
+                const tt = totais([{ repasse: Number(e?.corp_bruto ?? 0) }]);
                 return (
                   <tr key={m}>
                     <td className="px-3 py-1">
@@ -134,7 +139,7 @@ export default async function ErpRepasseImobiliariaPage({ params, searchParams }
                         {rotuloMes(m)}
                       </Link>
                     </td>
-                    <td className="px-3 py-1 text-right">{l.length}</td>
+                    <td className="px-3 py-1 text-right">{e?.corp_parcelas ?? 0}</td>
                     <td className="px-3 py-1 text-right">{formatarReais(tt.bruto)}</td>
                     <td className="px-3 py-1 text-right">{formatarReais(tt.liquido)}</td>
                   </tr>

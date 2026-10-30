@@ -50,3 +50,10 @@ create trigger erp_repasse_da_baixa after insert on erp_comissao_recebimentos fo
 --   erp_cancelar_autorizacao_repasse(lote): desfaz enquanto não pago.
 --   erp_conferir_pagamentos_repasse(): lançamento de pagamento do Nibo, categoria '1.1 REPASSE - COMISSÕES', valor = líquido autorizado (±1 centavo),
 --     data >= autorização e favorecido com uma palavra do nome da imobiliária -> lote e repasses 'pago'. Chamar após cada sync do Nibo.
+
+-- DESEMPENHO (migration erp_repasse_resumo_pronto, já aplicada): retrato pronto da tela de Repasses.
+--   erp_repasse_resumo_pronto (mes, imobiliaria_id, ...) = por mês de repasse × imobiliária: simulação do Corp, pendências (sem baixa, divergente, atraso,
+--     pró-labore, cadastro) e agregados do ERP (pendente, do mês, autorizadas) + gerado_em. RLS: colaborador O2. Índice erp_repasses(competencia, status, imobiliaria_id).
+--   erp_atualizar_repasse_resumo(mes) refaz um mês; erp_atualizar_repasse_resumo_abertos() refaz anterior/atual/seguinte e só cria os mais antigos se faltarem.
+--   Cron /api/cron/erp-repasse-resumo às :58 (depois da baixa automática :55) + refeito a cada autorização/cancelamento + botão “Atualizar agora”.
+--   Medido como usuário autenticado (RLS): tela principal 2.365 ms -> 0,7 ms; ficha da imobiliária (mês aberto) 47 ms; aviso “Comissão recebida” 40 ms.

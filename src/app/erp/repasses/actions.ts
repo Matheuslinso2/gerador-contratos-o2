@@ -26,6 +26,7 @@ export async function autorizarRepasse(formData: FormData) {
   const { data, error } = await supabase.rpc("erp_autorizar_repasse", { p_imobiliaria: imobiliaria, p_mes: `${mes}-01` });
   if (error) redirect(`/erp/repasses?mes=${mes}&erro=${encodeURIComponent(error.message)}`);
   const r = data as { parcelas: number; liquido: number };
+  await supabase.rpc("erp_atualizar_repasse_resumo", { p_mes: `${mes}-01` });
   revalidatePath("/erp/repasses");
   revalidatePath("/erp/repasses/autorizados");
   redirect(`/erp/repasses?mes=${mes}&ok=${encodeURIComponent(`Repasse autorizado: ${r.parcelas} parcela(s), líquido R$ ${Number(r.liquido).toFixed(2).replace(".", ",")}`)}`);
@@ -39,7 +40,19 @@ export async function cancelarAutorizacao(formData: FormData) {
   if (!lote) redirect(`${volta}erro=${encodeURIComponent("lote não informado")}`);
   const { error } = await supabase.rpc("erp_cancelar_autorizacao_repasse", { p_lote: lote });
   if (error) redirect(`${volta}erro=${encodeURIComponent(error.message)}`);
+  await supabase.rpc("erp_atualizar_repasse_resumo_abertos");
   revalidatePath("/erp/repasses");
   revalidatePath("/erp/repasses/autorizados");
   redirect(`${volta}ok=${encodeURIComponent("Autorização cancelada: as parcelas voltaram para pendentes")}`);
+}
+
+// Refaz o retrato (tabela pronta) de um mês de repasse — também roda por cron.
+export async function atualizarResumoRepasse(formData: FormData) {
+  const supabase = await exigirColaborador();
+  const mes = String(formData.get("mes") ?? "");
+  if (!mesOk(mes)) redirect("/erp/repasses");
+  const { error } = await supabase.rpc("erp_atualizar_repasse_resumo", { p_mes: `${mes}-01` });
+  if (error) redirect(`/erp/repasses?mes=${mes}&erro=${encodeURIComponent(error.message)}`);
+  revalidatePath("/erp/repasses");
+  redirect(`/erp/repasses?mes=${mes}`);
 }
