@@ -66,3 +66,26 @@ end;
 $$;
 
 grant execute on function registrar_acesso_diario(text) to authenticated;
+
+-- 29/10/2026 (reunião Kamila): a métrica "requisições" contava chamadas de API
+-- da interface, não uso real. Passa a contar TELAS (trocas de página) e CLIQUES,
+-- enviados pelo navegador (components/UsoTracker.tsx -> /api/uso).
+alter table workspace_acessos_diarios
+  add column if not exists qtd_telas integer not null default 0,
+  add column if not exists qtd_cliques integer not null default 0;
+
+create or replace function registrar_uso_cliente(p_email text, p_telas integer, p_cliques integer)
+returns void
+language plpgsql
+security invoker
+as $$
+begin
+  insert into workspace_acessos_diarios (email, dia, primeiro_acesso, ultimo_acesso, qtd_requisicoes, qtd_telas, qtd_cliques)
+  values (p_email, (now() at time zone 'America/Sao_Paulo')::date, now(), now(), 0, greatest(p_telas,0), greatest(p_cliques,0))
+  on conflict (email, dia) do update
+    set ultimo_acesso = now(),
+        qtd_telas = workspace_acessos_diarios.qtd_telas + greatest(p_telas,0),
+        qtd_cliques = workspace_acessos_diarios.qtd_cliques + greatest(p_cliques,0);
+end;
+$$;
+grant execute on function registrar_uso_cliente(text, integer, integer) to authenticated;

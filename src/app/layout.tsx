@@ -1,3 +1,4 @@
+import UsoTracker from "@/components/UsoTracker";
 import type { Metadata } from "next";
 import { Poppins } from "next/font/google";
 import Footer from "@/components/Footer";
@@ -36,6 +37,7 @@ export default function RootLayout({
           <ChatGate />
         </Suspense>
         <AvisoNovaVersao />
+        <UsoTracker />
       </body>
     </html>
   );

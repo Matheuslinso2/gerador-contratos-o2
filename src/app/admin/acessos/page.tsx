@@ -13,6 +13,8 @@ type LinhaAcesso = {
   primeiro_acesso: string;
   ultimo_acesso: string;
   qtd_requisicoes: number;
+  qtd_telas: number;
+  qtd_cliques: number;
 };
 
 function fmtHora(v: string): string {
@@ -36,7 +38,7 @@ export default async function AdminAcessosPage() {
   const LIMITE_DIAS = 30;
   const { data: acessos } = await supabase
     .from("workspace_acessos_diarios")
-    .select("email, dia, primeiro_acesso, ultimo_acesso, qtd_requisicoes")
+    .select("email, dia, primeiro_acesso, ultimo_acesso, qtd_requisicoes, qtd_telas, qtd_cliques")
     .order("dia", { ascending: false })
     .order("email", { ascending: true })
     .limit(LIMITE_DIAS * 40);
@@ -59,7 +61,7 @@ export default async function AdminAcessosPage() {
             <h1 className="text-xl font-semibold text-o2-navy">Uso diário do Workspace</h1>
             <p className="text-sm text-gray-500">
               Quem de fato usou o sistema em cada dia — não é histórico de login (a sessão fica salva por muito
-              tempo, então &quot;último login&quot; não reflete uso real). Últimos {LIMITE_DIAS} dias com registro.
+              tempo, então &quot;último login&quot; não reflete uso real). Telas = trocas de página; cliques = cliques na interface (contados pelo navegador, desde 30/10/2026; dias anteriores aparecem com zero). Últimos {LIMITE_DIAS} dias com registro.
             </p>
           </div>
         </div>
@@ -77,7 +79,7 @@ export default async function AdminAcessosPage() {
                     <div key={l.email} className="flex items-center justify-between text-sm text-gray-600">
                       <span>{l.email}</span>
                       <span className="text-gray-400">
-                        {fmtHora(l.primeiro_acesso)}–{fmtHora(l.ultimo_acesso)} · {l.qtd_requisicoes} requisiç{l.qtd_requisicoes === 1 ? "ão" : "ões"}
+                        {fmtHora(l.primeiro_acesso)}–{fmtHora(l.ultimo_acesso)} · {l.qtd_telas} tela{l.qtd_telas === 1 ? "" : "s"} · {l.qtd_cliques} clique{l.qtd_cliques === 1 ? "" : "s"}
                       </span>
                     </div>
                   ))}
