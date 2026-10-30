@@ -28,3 +28,9 @@ create table if not exists public.campanhas_cards_bitrix (
 );
 create index if not exists campanhas_cards_bitrix_campanha on public.campanhas_cards_bitrix (campanha_id);
 alter table public.campanhas_cards_bitrix enable row level security;
+
+-- Etapa 3 (30/10/2026): acompanhamento da equipe na aba "Panorama da campanha" do card.
+alter table public.campanhas_cards_bitrix add column if not exists proxima_acao text;
+alter table public.campanhas_cards_bitrix add column if not exists observacao text;
+alter table public.campanhas_cards_bitrix add column if not exists atualizado_por text;
+alter table public.campanhas_cards_bitrix add column if not exists atualizado_em timestamptz;

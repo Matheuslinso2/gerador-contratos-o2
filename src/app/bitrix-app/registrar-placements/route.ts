@@ -16,10 +16,14 @@ export const dynamic = "force-dynamic";
 // que realmente apareceram na lista.
 // ?aba=apolice-mae (28/10/2026): registra a aba "Apólice-mãe" nas SPAs que
 // têm funil de endosso (Fiança, Ramos, Capitalização) em vez do E-mail.
-const ABAS = {
-  email: { handler: "https://contratos.o2seguros.com.br/bitrix-app/card-email", titulo: "E-mail", entidades: null as number[] | null },
+// ?aba=campanha (30/10/2026): aba "Panorama da campanha" só nos Negócios (o handler
+// avisa quando o card não está ligado a uma campanha do Workspace).
+type AbaConfig = { handler: string; titulo: string; entidades: number[] | null; placements?: string[] };
+const ABAS: Record<string, AbaConfig> = {
+  email: { handler: "https://contratos.o2seguros.com.br/bitrix-app/card-email", titulo: "E-mail", entidades: null },
   "apolice-mae": { handler: "https://contratos.o2seguros.com.br/bitrix-app/card-apolice-mae", titulo: "Apólice-mãe", entidades: [1042, 1046, 1048] },
-} as const;
+  campanha: { handler: "https://contratos.o2seguros.com.br/bitrix-app/card-campanha", titulo: "Panorama da campanha", entidades: null, placements: ["CRM_DEAL_DETAIL_TAB"] },
+};
 
 const ALVOS = [
   { rotulo: "Lead", padrao: "CRM_LEAD_DETAIL_TAB" },
@@ -35,10 +39,14 @@ type PlacementBindResposta = { result: boolean };
 
 export async function GET(request: NextRequest) {
   const executar = request.nextUrl.searchParams.get("executar") === "1";
-  const aba = ABAS[(request.nextUrl.searchParams.get("aba") ?? "email") as keyof typeof ABAS] ?? ABAS.email;
+  const aba = ABAS[request.nextUrl.searchParams.get("aba") ?? "email"] ?? ABAS.email;
   const HANDLER = aba.handler;
   const TITLE = aba.titulo;
-  const alvos = aba.entidades ? ALVOS.filter((a) => aba.entidades!.some((e) => a.padrao.includes(`_${e}_`))) : ALVOS;
+  const alvos = aba.placements
+    ? ALVOS.filter((a) => aba.placements!.includes(a.padrao))
+    : aba.entidades
+      ? ALVOS.filter((a) => aba.entidades!.some((e) => a.padrao.includes(`_${e}_`)))
+      : ALVOS;
 
   const listaBruta = await chamarBitrixComoApp<PlacementListResposta>("placement.list");
   const disponiveis = listaBruta.result ?? [];
