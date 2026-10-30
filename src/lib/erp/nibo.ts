@@ -102,5 +102,7 @@ export async function sincronizarNibo(sb: SupabaseClient, o: { desde: string }) 
     }
     resumo[empresa] = r;
   }
-  return { ok: true, desde: o.desde, resumo };
+  // confirma pelo Nibo os pagamentos de repasse dos lotes autorizados (aba Repasse); não deve derrubar a sincronização
+  const { error: erroRepasse } = await sb.rpc("erp_conferir_pagamentos_repasse");
+  return { ok: true, desde: o.desde, resumo, ...(erroRepasse ? { aviso_repasse: erroRepasse.message } : {}) };
 }
