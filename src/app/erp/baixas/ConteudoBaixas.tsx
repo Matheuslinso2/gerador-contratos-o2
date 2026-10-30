@@ -1167,6 +1167,25 @@ function consolidarQuadros(a: LinhaTopo[], b: LinhaTopo[]): LinhaTopo[] {
   return [...m.values()].map((l) => ({ ...l, prevista: Math.round(l.prevista * 100) / 100, regra: Math.round(l.regra * 100) / 100, extratos: Math.round(l.extratos * 100) / 100, baixadas: Math.round(l.baixadas * 100) / 100, baixadasErp: Math.round(l.baixadasErp * 100) / 100, proLabore: Math.round(l.proLabore * 100) / 100, nibo: Math.round(l.nibo * 100) / 100 })).sort((x, y) => x.nome.localeCompare(y.nome));
 }
 
+// Cor de fundo por ORIGEM do número (Matheus 30/10): ERP azul, Corp âmbar, previsões verde (regra mais forte, experiência mais clara),
+// extrato e banco neutros. Usada nos quadros de controle mensal e no gráfico diário.
+const COR_ORIGEM = {
+  erp: { th: "bg-sky-100 text-sky-900", td: "bg-sky-50", tot: "bg-sky-100" },
+  corp: { th: "bg-amber-100 text-amber-900", td: "bg-amber-50", tot: "bg-amber-100" },
+  regra: { th: "bg-emerald-200 text-emerald-900", td: "bg-emerald-100/60", tot: "bg-emerald-200" },
+  exper: { th: "bg-emerald-100 text-emerald-900", td: "bg-emerald-50", tot: "bg-emerald-100" },
+  neutro: { th: "bg-gray-100 text-gray-700", td: "", tot: "" },
+} as const;
+
+function LegendaOrigem() {
+  const chip = (cls: string, txt: string) => <span className="flex items-center gap-1"><span className={`inline-block h-3 w-3 rounded-sm ring-1 ring-gray-300 ${cls}`} />{txt}</span>;
+  return (
+    <div className="flex flex-wrap items-center gap-3 px-3 py-1.5 text-[10px] text-gray-600">
+      {chip("bg-sky-100", "ERP")}{chip("bg-amber-100", "Corp")}{chip("bg-emerald-200", "Previsão")}{chip("bg-gray-100", "Extrato / banco")}
+    </div>
+  );
+}
+
 function TabelaControle({ titulo, linhas, info }: { titulo: string; linhas: LinhaTopo[]; info?: ReactNode }) {
   const soma = (f: (l: LinhaTopo) => number) => Math.round(linhas.reduce((t, l) => t + f(l), 0) * 100) / 100;
   const tot = { prevista: soma((l) => l.prevista), regra: soma((l) => l.regra), extratos: soma((l) => l.extratos), baixadas: soma((l) => l.baixadas), baixadasErp: soma((l) => l.baixadasErp), proLabore: soma((l) => l.proLabore), nibo: soma((l) => l.nibo) };
@@ -1183,17 +1202,17 @@ function TabelaControle({ titulo, linhas, info }: { titulo: string; linhas: Linh
   return (
     <div className="overflow-x-auto rounded-lg border border-gray-300">
       <table className="w-full text-[11px]">
-        <caption className="bg-o2-navy px-3 py-2 text-left text-sm font-bold text-white">{titulo} <span className="text-[10px] font-normal opacity-80">(valores em R$)</span> {info}</caption>
+        <caption className="text-left"><div className="bg-o2-navy px-3 py-2 text-sm font-bold text-white">{titulo} <span className="text-[10px] font-normal opacity-80">(valores em R$)</span> {info}</div><LegendaOrigem /></caption>
         <thead className="bg-gray-100 text-[11px] uppercase tracking-wide text-gray-600">
           <tr>
             <th className="px-2 py-1.5 text-left font-semibold">Seguradora</th>
-            <th className={th} title="Comissão que deveria cair no mês pela REGRA da seguradora (boleto/fatura/nota fiscal + o prazo próprio dela), sem atraso nem inadimplência. Seguradora sem regra usa a experiência.">Prevista<br />(regra)</th>
-            <th className={th} title="Comissão que deveria cair no mês pela EXPERIÊNCIA: vencimento da parcela + o prazo que a seguradora costuma levar (histórico, que inclui atrasos)">Prevista<br />(experiência)</th>
-            <th className={th} title="O que a seguradora pagou, segundo os extratos lidos pelo ERP">Extratos de<br />comissão</th>
-            <th className={th} title="Já baixado no Corp no mês (data da quitação)">Baixadas<br />(Corp)</th>
-            <th className={th} title="Baixado pelo próprio ERP a partir dos extratos, pela regra do ERP (data do pagamento do extrato). De setembro/2026 em diante é a baixa oficial; o Corp fica só como comparação.">Baixadas<br />(ERP)</th>
-            <th className={th} title="Parte da comissão que a seguradora pagou direto à imobiliária (pró-labore), em vez de pagar à O2: comissão esperada menos o que veio no extrato. Quando há pró-labore, a Prevista (regra) fica maior que o que entra na conta por este mesmo valor.">Pago direto à<br />imobiliária (pró-labore)</th>
-            <th className={th} title="O que entrou na conta (Nibo, receita de seguros)">Nibo</th>
+            <th className={`${th} ${COR_ORIGEM.regra.th}`} title="Comissão que deveria cair no mês pela REGRA da seguradora (boleto/fatura/nota fiscal + o prazo próprio dela), sem atraso nem inadimplência. Seguradora sem regra usa a experiência.">Prevista<br />(regra)</th>
+            <th className={`${th} ${COR_ORIGEM.exper.th}`} title="Comissão que deveria cair no mês pela EXPERIÊNCIA: vencimento da parcela + o prazo que a seguradora costuma levar (histórico, que inclui atrasos)">Prevista<br />(experiência)</th>
+            <th className={`${th} ${COR_ORIGEM.neutro.th}`} title="O que a seguradora pagou, segundo os extratos lidos pelo ERP">Extratos de<br />comissão</th>
+            <th className={`${th} ${COR_ORIGEM.corp.th}`} title="Já baixado no Corp no mês (data da quitação)">Baixadas<br />(Corp)</th>
+            <th className={`${th} ${COR_ORIGEM.erp.th}`} title="Baixado pelo próprio ERP a partir dos extratos, pela regra do ERP (data do pagamento do extrato). De setembro/2026 em diante é a baixa oficial; o Corp fica só como comparação.">Baixadas<br />(ERP)</th>
+            <th className={`${th} ${COR_ORIGEM.erp.th}`} title="Parte da comissão que a seguradora pagou direto à imobiliária (pró-labore), em vez de pagar à O2: comissão esperada menos o que veio no extrato. Quando há pró-labore, a Prevista (regra) fica maior que o que entra na conta por este mesmo valor.">Pago direto à<br />imobiliária (pró-labore)</th>
+            <th className={`${th} ${COR_ORIGEM.neutro.th}`} title="O que entrou na conta (Nibo, receita de seguros)">Nibo</th>
             <th className={th} title="Extratos de comissão − Baixadas: o que a seguradora pagou e ainda não foi baixado (negativo: baixado a mais)">Dif.<br />extratos × baixadas</th>
             <th className={th} title="Extratos de comissão − Nibo: o que a seguradora diz que pagou e não entrou na conta (negativo: entrou mais do que os extratos explicam)">Dif.<br />extratos × Nibo</th>
           </tr>
@@ -1203,12 +1222,12 @@ function TabelaControle({ titulo, linhas, info }: { titulo: string; linhas: Linh
           {linhas.map((l) => (
             <tr key={l.seg}>
               <td className="whitespace-nowrap px-2 py-1 font-medium text-gray-800">{l.nome}</td>
-              <td className={td}>{cel(l.regra)}</td>
-              <td className={td}>{cel(l.prevista)}</td>
+              <td className={`${td} ${COR_ORIGEM.regra.td}`}>{cel(l.regra)}</td>
+              <td className={`${td} ${COR_ORIGEM.exper.td}`}>{cel(l.prevista)}</td>
               <td className={td}>{cel(l.extratos)}</td>
-              <td className={td}>{cel(l.baixadas)}</td>
-              <td className={td}>{cel(l.baixadasErp)}</td>
-              <td className={td}>{cel(l.proLabore)}</td>
+              <td className={`${td} ${COR_ORIGEM.corp.td}`}>{cel(l.baixadas)}</td>
+              <td className={`${td} ${COR_ORIGEM.erp.td}`}>{cel(l.baixadasErp)}</td>
+              <td className={`${td} ${COR_ORIGEM.erp.td}`}>{cel(l.proLabore)}</td>
               <td className={td}>{cel(l.nibo)}</td>
               <td className={td}>{difCel(dExtBaixadas(l))}</td>
               <td className={td}>{difCel(dExtNibo(l))}</td>
@@ -1218,12 +1237,12 @@ function TabelaControle({ titulo, linhas, info }: { titulo: string; linhas: Linh
         <tfoot className="bg-gray-100 font-bold text-o2-navy">
           <tr>
             <td className="px-2 py-1.5">TOTAIS</td>
-            <td className={td}>{n2(tot.regra)}</td>
-            <td className={td}>{n2(tot.prevista)}</td>
+            <td className={`${td} ${COR_ORIGEM.regra.tot}`}>{n2(tot.regra)}</td>
+            <td className={`${td} ${COR_ORIGEM.exper.tot}`}>{n2(tot.prevista)}</td>
             <td className={td}>{n2(tot.extratos)}</td>
-            <td className={td}>{n2(tot.baixadas)}</td>
-            <td className={td}>{n2(tot.baixadasErp)}</td>
-            <td className={td}>{n2(tot.proLabore)}</td>
+            <td className={`${td} ${COR_ORIGEM.corp.tot}`}>{n2(tot.baixadas)}</td>
+            <td className={`${td} ${COR_ORIGEM.erp.tot}`}>{n2(tot.baixadasErp)}</td>
+            <td className={`${td} ${COR_ORIGEM.erp.tot}`}>{n2(tot.proLabore)}</td>
             <td className={td}>{n2(tot.nibo)}</td>
             <td className={td}>{difCel(dExtBaixadas(tot))}</td>
             <td className={td}>{difCel(dExtNibo(tot))}</td>
@@ -1265,9 +1284,9 @@ function GraficoDiario({ titulo, pontos }: { titulo: string; pontos: PontoDia[] 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-bold text-o2-navy">{titulo} <InfoLegenda titulo="Gráfico diário">Três barras por dia: o que deveria cair pela regra da seguradora (sem atraso nem inadimplência), o que deveria cair pela experiência (vencimento mais o prazo que a seguradora costuma levar) e o que entrou na conta pelo Nibo. Valores líquidos do imposto retido; a escala é por faixas de valor e a tabela embaixo traz os números de cada dia.</InfoLegenda></h3>
         <div className="flex items-center gap-4 text-xs text-gray-600">
-          <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-o2-navy" /> Prevista (regra)</span>
-          <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-sky-500" /> Prevista (experiência)</span>
-          <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-o2-coral" /> Recebido no dia</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-emerald-700" /> Prevista (regra)</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-emerald-300" /> Prevista (experiência)</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-sky-500" /> Recebido no dia</span>
         </div>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label={`Prevista pela regra, prevista pela experiência e recebida no dia — ${titulo}`}>
@@ -1287,17 +1306,17 @@ function GraficoDiario({ titulo, pontos }: { titulo: string; pontos: PontoDia[] 
           return (
             <g key={p.dia}>
               {p.regra > 0 && (
-                <rect x={x0 + slot * 0.06} y={yDe(p.regra)} width={barra} height={Math.max(base0 - yDe(p.regra), 1)} className="fill-o2-navy">
+                <rect x={x0 + slot * 0.06} y={yDe(p.regra)} width={barra} height={Math.max(base0 - yDe(p.regra), 1)} className="fill-emerald-700">
                   <title>{`Dia ${p.dia} · prevista pela regra ${brl(p.regra)}`}</title>
                 </rect>
               )}
               {p.exper > 0 && (
-                <rect x={x0 + slot * 0.35} y={yDe(p.exper)} width={barra} height={Math.max(base0 - yDe(p.exper), 1)} className="fill-sky-500">
+                <rect x={x0 + slot * 0.35} y={yDe(p.exper)} width={barra} height={Math.max(base0 - yDe(p.exper), 1)} className="fill-emerald-300">
                   <title>{`Dia ${p.dia} · prevista pela experiência ${brl(p.exper)}`}</title>
                 </rect>
               )}
               {p.recebido > 0 && (
-                <rect x={x0 + slot * 0.64} y={yDe(p.recebido)} width={barra} height={Math.max(base0 - yDe(p.recebido), 1)} className="fill-o2-coral">
+                <rect x={x0 + slot * 0.64} y={yDe(p.recebido)} width={barra} height={Math.max(base0 - yDe(p.recebido), 1)} className="fill-sky-500">
                   <title>{`Dia ${p.dia} · recebido ${brl(p.recebido)}`}</title>
                 </rect>
               )}
