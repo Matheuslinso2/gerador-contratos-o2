@@ -203,12 +203,12 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
       .neq("tipo", "resumo_mensal").gte("data_recebimento", desdeCaixa).lte("data_recebimento", ateCaixa).limit(5000);
     const [{ data: diasBrutos }, entradas, { data: segsBrutas }, { data: previsaoBruta }, { data: nfsBrutas }, { data: baixadasBrutas }, { data: previstoDiaBruto }, { data: regraBruta }, { data: inadBruta }, { data: ligacaoBruta }, { data: inadLinhasBruta, error: erroInadLinhas }, { data: confBruta }, { data: confLinhasBruta }, { data: baixadasErpBrutas }] = await Promise.all([
       qDias, entradasNibo(supabase, desdeCaixa, ateCaixa), supabase.from("erp_seguradoras").select("abreviacao, nome"),
-      supabase.rpc("erp_previsao_caixa_mensal", { p_de: desdeCaixa, p_ate: fimCaixa }),
+      supabase.rpc("erp_retrato", { p_funcao: "erp_previsao_caixa_mensal", p_de: desdeCaixa, p_ate: fimCaixa }),
       supabase.from("erp_extratos_seguradora").select("nf_numero, nf_emitida_em, seguradora:erp_seguradoras!inner(abreviacao)").in("seguradora.abreviacao", ["POTT", "TOO"]).gte("competencia", desdeCaixa).lte("competencia", fimCaixa),
       supabase.rpc("erp_baixadas_corp_mensal", { p_de: desdeCaixa, p_ate: fimCaixa }),
-      supabase.rpc("erp_previsao_diaria", { p_de: desdeCaixa, p_ate: ateCaixa }),
-      supabase.rpc("erp_previsao_caixa_regra_mensal", { p_de: desdeCaixa, p_ate: fimCaixa }),
-      supabase.rpc("erp_inadimplencia_provavel", { p_de: desdeCaixa, p_ate: fimCaixa }),
+      supabase.rpc("erp_retrato", { p_funcao: "erp_previsao_diaria", p_de: desdeCaixa, p_ate: ateCaixa }),
+      supabase.rpc("erp_retrato", { p_funcao: "erp_previsao_caixa_regra_mensal", p_de: desdeCaixa, p_ate: fimCaixa }),
+      supabase.rpc("erp_retrato", { p_funcao: "erp_inadimplencia_provavel", p_de: desdeCaixa, p_ate: fimCaixa }),
       supabase.rpc("erp_extratos_ligacao", { p_de: desdeCaixa, p_ate: new Date(Date.UTC(anoF, mesF, 30)).toISOString().slice(0, 10) }),
       sp.inad ? supabase.rpc("erp_inadimplencia_provavel_linhas", { p_corretora: sp.inadEmp ?? empresaFiltro ?? CORRETORAS[0], p_seg: sp.inad, p_de: desdeCaixa, p_ate: fimCaixa }) : Promise.resolve({ data: [], error: null }),
       supabase.rpc("erp_inadimplencia_confirmada", { p_de: desdeCaixa, p_ate: fimCaixa }),
@@ -365,28 +365,31 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
   const outrasEntradas = new Map<string, number>();
   if (modo === "gestao" && extratos.length) {
     const lotes = <T,>(xs: T[], n: number) => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
-    const rt = await Promise.all(lotes(extratos.map((e) => e.id), 60).map((l) => supabase.from("erp_baixa_extrato_totais").select("*").in("extrato_id", l)));
+    const ids = extratos.map((e) => e.id);
+    const [aE, mE] = mesSel.split("-").map(Number);
+    const [aN, mN] = mesSel.split("-").map(Number);
+    // tudo o que não depende de outra consulta vai junto (antes eram ~6 idas ao banco em fila)
+    const [rt, rb, esAberto, epR, neR] = await Promise.all([
+      Promise.all(lotes(ids, 60).map((l) => supabase.from("erp_baixa_extrato_totais").select("*").in("extrato_id", l))),
+      // baixa PRÓPRIA do ERP por extrato, ERP × Corp
+      Promise.all(lotes(ids, 60).map((l) => supabase.from("erp_baixa_erp_extrato_resumo").select("*").in("extrato_id", l))),
+      extratoAberto && extratoPorId[extratoAberto]
+        ? supabase.from("erp_baixa_linha_estado").select("linha_id, estado, idade_dias, fora_tipo, candidato_imobiliaria, candidato_cliente, ja_no_corp").eq("extrato_id", extratoAberto)
+        : Promise.resolve({ data: null }),
+      // endossos que aparecem no extrato e não estão cadastrados na apólice no ERP (retrato de 15 min: a consulta leva ~2,7 s)
+      supabase.rpc("erp_retrato", { p_funcao: "erp_endossos_pendentes_cadastro", p_de: `${mesSel}-01`, p_ate: new Date(Date.UTC(aE, mE, 0)).toISOString().slice(0, 10) }),
+      // entradas do Nibo no mês que NÃO são receita de seguros (empréstimo, estorno, transferência…): ficam fora de todos os totais
+      supabase.from("erp_nibo_lancamentos").select("categoria, valor").eq("tipo", "recebimento").gte("data", `${mesSel}-01`).lte("data", new Date(Date.UTC(aN, mN, 0)).toISOString().slice(0, 10)).neq("categoria", "1.1 - RECEITA DE SEGUROS").limit(2000),
+    ]);
     for (const r of rt) for (const t of (r.data ?? []) as TotaisExtrato[]) totaisPor.set(t.extrato_id, t);
-    // baixa PRÓPRIA do ERP (trilha de teste, paralela ao Corp; não entra nos totais oficiais): por extrato, ERP × Corp
-    const rb = await Promise.all(lotes(extratos.map((e) => e.id), 60).map((l) => supabase.from("erp_baixa_erp_extrato_resumo").select("*").in("extrato_id", l)));
     for (const r of rb) for (const b of (r.data ?? []) as BaixaErpExtrato[]) baixaErpPor.set(b.extrato_id, b);
+    for (const l of (esAberto.data ?? []) as EstadoLinha[]) estadosAberto.set(l.linha_id, l);
+    endossosPendentes = ((epR.data ?? []) as EndossoPendente[]).filter((x) => !empresaFiltro || x.corretora === empresaFiltro).filter((x) => !filtros.seguradora || x.seg_abrev === filtros.seguradora);
+    const ne = neR.data;
     const comPend = [...totaisPor.values()].filter((t) => Number(t.qtd_pendente) > 0).map((t) => t.extrato_id);
     const lp = await Promise.all(lotes(comPend, 40).map((l) =>
       supabase.from("erp_baixa_linha_estado").select("linha_id, extrato_id, n, seguradora_abrev, corretora, pago_em, valor_comissao, apolice, idade_dias, candidato_imobiliaria, candidato_cliente, tentativas_identificacao").in("extrato_id", l).eq("estado", "pendente_identificacao").limit(600)));
     pendentesLinhas = lp.flatMap((r) => (r.data ?? []) as LinhaPendente[]).sort((a, b) => (b.idade_dias ?? 0) - (a.idade_dias ?? 0));
-    if (extratoAberto && extratoPorId[extratoAberto]) {
-      const { data: es } = await supabase.from("erp_baixa_linha_estado").select("linha_id, estado, idade_dias, fora_tipo, candidato_imobiliaria, candidato_cliente, ja_no_corp").eq("extrato_id", extratoAberto);
-      for (const l of (es ?? []) as EstadoLinha[]) estadosAberto.set(l.linha_id, l);
-    }
-    // endossos que aparecem no extrato (estorno, restituição ou linha de endosso, mesmo sem valor) e não estão cadastrados na apólice no ERP
-    {
-      const [aE, mE] = mesSel.split("-").map(Number);
-      const { data: ep } = await supabase.rpc("erp_endossos_pendentes_cadastro", { p_de: `${mesSel}-01`, p_ate: new Date(Date.UTC(aE, mE, 0)).toISOString().slice(0, 10) });
-      endossosPendentes = ((ep ?? []) as EndossoPendente[]).filter((x) => !empresaFiltro || x.corretora === empresaFiltro).filter((x) => !filtros.seguradora || x.seg_abrev === filtros.seguradora);
-    }
-    // entradas do Nibo no mês que NÃO são receita de seguros (empréstimo, estorno, transferência…): ficam fora de todos os totais
-    const [aN, mN] = mesSel.split("-").map(Number);
-    const { data: ne } = await supabase.from("erp_nibo_lancamentos").select("categoria, valor").eq("tipo", "recebimento").gte("data", `${mesSel}-01`).lte("data", new Date(Date.UTC(aN, mN, 0)).toISOString().slice(0, 10)).neq("categoria", "1.1 - RECEITA DE SEGUROS").limit(2000);
     for (const n of (ne ?? []) as { categoria: string | null; valor: number | string }[]) outrasEntradas.set(n.categoria ?? "sem categoria", (outrasEntradas.get(n.categoria ?? "sem categoria") ?? 0) + Number(n.valor));
   }
   const pendentes = extratos.filter((e) => !e.baixa_aprovada_em && e.tipo !== "resumo_mensal");

@@ -14,9 +14,11 @@ export async function GET(request: NextRequest) {
     const { data, error } = await createServiceClient().rpc("erp_baixa_automatica_rodar", { p_limite: 60 });
     if (error) throw new Error(error.message);
     const linhas = (data ?? []) as { r_seguradora: string; r_resultado: string }[];
+    // renova os retratos das consultas pesadas da tela de Baixas (previsões, inadimplência, endossos) usados nos últimos 2 dias
+    const { data: retratos } = await createServiceClient().rpc("erp_retrato_renovar");
     const naoAplicadas = linhas.filter((l) => l.r_resultado.startsWith("não aplicada"));
-    console.log("erp-baixa-automatica", JSON.stringify({ extratos: linhas.length, naoAplicadas: naoAplicadas.length }));
-    return NextResponse.json({ ok: true, extratos: linhas.length, naoAplicadas: naoAplicadas.length });
+    console.log("erp-baixa-automatica", JSON.stringify({ extratos: linhas.length, naoAplicadas: naoAplicadas.length, retratos }));
+    return NextResponse.json({ ok: true, extratos: linhas.length, naoAplicadas: naoAplicadas.length, retratos });
   } catch (e) {
     return NextResponse.json({ ok: false, erro: (e as Error).message }, { status: 500 });
   }
