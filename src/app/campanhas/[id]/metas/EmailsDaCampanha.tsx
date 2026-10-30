@@ -2,7 +2,7 @@ import Link from "next/link";
 import InfoLegenda from "@/components/InfoLegenda";
 import SubmitButton from "@/components/SubmitButton";
 import { ROTULO_STATUS_CAMPANHA, COR_STATUS_CAMPANHA } from "@/lib/campanhas/rotulos";
-import { gerarParciaisCampanha } from "./actions";
+import { prepararParciais } from "../parciaisActions";
 
 export type EmailFilho = {
   id: string;
@@ -104,21 +104,13 @@ export default function EmailsDaCampanha({
         <div className="border-t pt-3">
           <p className="mb-2 text-xs font-semibold text-gray-600">
             Parcial por e-mail
-            <InfoLegenda titulo="Parcial automática">
-              Cria um e-mail de parcial para cada imobiliária (ou grupo) COM meta, com os números de hoje: meta, realizado, quanto falta, barra de progresso, dias até o fim, cotações em andamento e a premiação. Cada uma recebe só os próprios números. Os números ficam fixos no momento da geração: para a próxima parcial, gere de novo. Sem data, os e-mails ficam como rascunho para revisar e disparar; com data, saem sozinhos na hora marcada.
+            <InfoLegenda titulo="Enviar parciais">
+              Gera o panorama de cada imobiliária (ou grupo) COM meta, com os números de hoje, e mostra uma prévia para você revisar o texto e as imagens. Só depois de confirmar os e-mails saem: cada imobiliária recebe o próprio panorama como imagem, a versão fica guardada (histórico das parciais) e os cards do Bitrix recebem um comentário. Os números ficam fixos na versão.
             </InfoLegenda>
           </p>
-          <form action={gerarParciaisCampanha.bind(null, campanhaId)} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-            <div>
-              <label className="mb-1 block text-xs font-medium text-gray-600">Remetente (nome, opcional)</label>
-              <input name="remetente_nome" maxLength={40} placeholder="Ex: Lívia" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-o2-coral focus:outline-none" />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-gray-600">Agendar o envio (opcional)</label>
-              <input name="agendado_para" type="datetime-local" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-o2-coral focus:outline-none" />
-            </div>
-            <SubmitButton className="rounded-full bg-o2-coral px-5 py-2 text-sm font-medium text-white" textoCarregando="Gerando...">
-              Gerar parciais
+          <form action={prepararParciais.bind(null, campanhaId)}>
+            <SubmitButton className="rounded-full bg-o2-coral px-5 py-2 text-sm font-medium text-white" textoCarregando="Gerando a prévia...">
+              Enviar parciais
             </SubmitButton>
           </form>
         </div>
