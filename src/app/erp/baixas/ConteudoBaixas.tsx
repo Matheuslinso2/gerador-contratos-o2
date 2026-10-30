@@ -78,7 +78,7 @@ type BaixaErpExtrato = {
 };
 type EndossoPendente = {
   seguradora: string; seg_abrev: string; corretora: string | null; apolice: string; endosso: string; cliente: string | null; documento_id: string | null; nosso_numero_corp: number | null;
-  linhas: number; extratos: number; premio: number | string | null; comissao: number | string | null; primeira_data: string; ultima_data: string; tipo_linha: string; no_corp: boolean; motivo: string; situacao: string; qtd_endossos_erp: number;
+  linhas: number; extratos: number; premio: number | string | null; comissao: number | string | null; primeira_data: string; ultima_data: string; tipo_linha: string; no_corp: boolean; motivo: string; situacao: string; qtd_endossos_erp: number; em_emissao: boolean;
 };
 type EstadoLinha = { linha_id: string; estado: string; idade_dias: number | null; fora_tipo: string | null; candidato_imobiliaria: string | null; candidato_cliente: string | null; ja_no_corp: boolean | null };
 type LinhaPendente = {
@@ -606,7 +606,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
                       <td className="px-2 py-1">{x.tipo_linha}</td>
                       <td className="px-2 py-1 text-right">{x.comissao == null ? "—" : brl(Number(x.comissao))}</td>
                       <td className="whitespace-nowrap px-2 py-1">{formatarData(x.ultima_data)}</td>
-                      <td className="px-2 py-1">{x.situacao === "conferir" ? <span className="mr-1 rounded bg-amber-100 px-1 text-[10px] text-amber-800" title="O valor bate com um endosso cadastrado, mas o número do endosso é diferente: confira se é o mesmo">conferir: valor igual, número diferente</span> : null}{x.motivo}{x.qtd_endossos_erp > 0 ? <span className="ml-1 text-[10px] text-gray-500">({x.qtd_endossos_erp} endosso(s) cadastrado(s) na apólice)</span> : null}{x.no_corp ? <span className="ml-1 rounded bg-blue-100 px-1 text-[10px] text-blue-800">já está no Corp</span> : null}</td>
+                      <td className="px-2 py-1">{x.em_emissao ? <span className="mr-1 rounded bg-sky-100 px-1 text-[10px] text-sky-800" title="A apólice já tem um endosso pedido pela O2 aguardando emissão; falta ligar ao que apareceu no extrato">pedido da O2 em Emissão</span> : null}{x.situacao === "conferir" ? <span className="mr-1 rounded bg-amber-100 px-1 text-[10px] text-amber-800" title="O valor bate com um endosso cadastrado, mas o número do endosso é diferente: confira se é o mesmo">conferir: valor igual, número diferente</span> : null}{x.motivo}{x.qtd_endossos_erp > 0 ? <span className="ml-1 text-[10px] text-gray-500">({x.qtd_endossos_erp} endosso(s) cadastrado(s) na apólice)</span> : null}{x.no_corp ? <span className="ml-1 rounded bg-blue-100 px-1 text-[10px] text-blue-800">já está no Corp</span> : null}</td>
                     </tr>
                   ))}
                 </tbody>

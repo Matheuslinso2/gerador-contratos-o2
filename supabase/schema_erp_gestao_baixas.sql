@@ -34,3 +34,4 @@
 -- (documento_pai_id OU mesmo Nº da apólice) e confere pelo número do endosso (inclui o formato longo da Pottencial, que termina no número curto) e pelo valor do prêmio.
 -- Cadastrado = número igual, ou valor igual quando o endosso cadastrado não tem número. Valor igual com número diferente => situacao 'conferir'. Novas colunas: situacao, qtd_endossos_erp.
 -- Out/2026: 76 pendentes + 1 conferir (antes 81). Definição completa na função no banco (pg_get_functiondef).
+-- 30/10 (migration erp_endossos_pendentes_em_emissao): coluna em_emissao = a apólice já tem endosso pré-cadastrado (situação proposta/cotação, sem número) pedido pela O2 pelo botão Endossar; falta ligar ao extrato. Out/2026: 73 pendentes + 3 em emissão + 1 conferir.
