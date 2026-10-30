@@ -57,7 +57,29 @@ function ComPct({ valor: v, total }: { valor: number; total: number }) {
   );
 }
 
-export default function StatusCardsTabela({ linhas: todasAsLinhas, rotuloPrimeiraColuna, comBusca }: { linhas: LinhaStatus[]; rotuloPrimeiraColuna: string; comBusca: boolean }) {
+export type RotulosStatus = { solicitacoes: string; naoPagas: string; fechadas: string; premioSolicitado: string; premioFechado: string; comissao: string; legendaNaoPagas: string; legendaFechadas: string };
+const ROTULOS_NOVOS: RotulosStatus = {
+  solicitacoes: "Solicitações",
+  naoPagas: "Não pagas",
+  fechadas: "Fechadas",
+  premioSolicitado: "Prêmio solicitado",
+  premioFechado: "Prêmio fechado",
+  comissao: "Comissão gerada",
+  legendaNaoPagas: "Propostas que não foram pagas no mês (Pagamento não realizado ou Desistência) — quantidade · % sobre as solicitações",
+  legendaFechadas: "Fechadas = títulos com pagamento confirmado no mês — quantidade · % sobre as solicitações",
+};
+
+export default function StatusCardsTabela({
+  linhas: todasAsLinhas,
+  rotuloPrimeiraColuna,
+  comBusca,
+  rotulos = ROTULOS_NOVOS,
+}: {
+  linhas: LinhaStatus[];
+  rotuloPrimeiraColuna: string;
+  comBusca: boolean;
+  rotulos?: RotulosStatus;
+}) {
   // Linha que só existia no mês anterior (0 solicitações agora) não aparece na lista, mas
   // entra no total do mês anterior da tendência.
   const linhas = useMemo(() => todasAsLinhas.filter((l) => l.solicitacoes > 0), [todasAsLinhas]);
@@ -130,14 +152,14 @@ export default function StatusCardsTabela({ linhas: todasAsLinhas, rotuloPrimeir
           <thead>
             <tr>
               <Th coluna="nome">{rotuloPrimeiraColuna}</Th>
-              <Th coluna="solicitacoes" titulo="Cards do recorte do mês (novos + herança)">Solicitações</Th>
+              <Th coluna="solicitacoes" titulo="Cards do recorte do mês (novos + herança)">{rotulos.solicitacoes}</Th>
               <Th coluna="tendencia" titulo="Tendência — solicitações comparadas ao mês anterior (mesmo recorte)">Tend.</Th>
               <Th coluna="emAndamento" titulo="Cards ainda abertos">Em andamento</Th>
-              <Th coluna="naoPagas" titulo="Propostas que não foram pagas no mês (Pagamento não realizado ou Desistência) — quantidade · % sobre as solicitações">Não pagas</Th>
-              <Th coluna="fechadas" titulo="Fechadas = títulos com pagamento confirmado no mês — quantidade · % sobre as solicitações">Fechadas</Th>
-              <Th coluna="premioSolicitado" titulo="Prêmio (valor do título) de todas as solicitações do recorte">Prêmio solicitado</Th>
-              <Th coluna="premioFechado" titulo="Prêmio (valor do título) das fechadas — o card da Capitalização não tem prêmio líquido separado">Prêmio fechado</Th>
-              <Th coluna="comissaoFechada" titulo="Comissão gerada pelas fechadas">Comissão gerada</Th>
+              <Th coluna="naoPagas" titulo={rotulos.legendaNaoPagas}>{rotulos.naoPagas}</Th>
+              <Th coluna="fechadas" titulo={rotulos.legendaFechadas}>{rotulos.fechadas}</Th>
+              <Th coluna="premioSolicitado" titulo="Valor do título de todos os cards do recorte">{rotulos.premioSolicitado}</Th>
+              <Th coluna="premioFechado" titulo="Valor do título dos fechados — o card da Capitalização não tem prêmio líquido separado">{rotulos.premioFechado}</Th>
+              <Th coluna="comissaoFechada" titulo="Comissão dos fechados">{rotulos.comissao}</Th>
             </tr>
           </thead>
           <tbody>

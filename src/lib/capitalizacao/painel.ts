@@ -8,6 +8,7 @@ import {
 } from "@/lib/bitrix/client";
 import { diasUteisEquivalentesEntre } from "@/lib/bitrix/horarioComercial";
 import { contarPorDia, type ContagemDia } from "@/lib/contagemPorDia";
+import { montarReaplicacao, type PainelReaplicacao } from "./reaplicacao";
 
 // Modelagem do painel Capitalização — fonte: SPA "Título de Capitalização" no
 // Bitrix24, entityTypeId 1048, um único funil (categoria 28). Etapas
@@ -27,6 +28,9 @@ export const ETAPAS: Etapa[] = [
   { statusId: "DT1048_28:PREPARATION", nome: "Proposta", semantica: "P" },
   { statusId: "DT1048_28:CLIENT", nome: "Pagamento concluído (cartão)", semantica: "P" },
   { statusId: "DT1048_28:BOLETO_PAGO", nome: "Boleto pago", semantica: "P" },
+  { statusId: "DT1048_28:UC_2XCB43", nome: "Liberado para cadastro", semantica: "P" },
+  { statusId: "DT1048_28:UC_PFZLGU", nome: "Cadastrado", semantica: "P" },
+  { statusId: "DT1048_28:UC_ILV881", nome: "Conferência", semantica: "P" },
   { statusId: "DT1048_28:SUCCESS", nome: "Emitido", semantica: "S" },
   { statusId: "DT1048_28:FAIL", nome: "Pagamento não realizado", semantica: "F" },
   { statusId: "DT1048_28:DESISTENCIA", nome: "Desistência", semantica: "F" },
@@ -84,6 +88,9 @@ function competenciaData(data: Date): string {
 // Etapas de pagamento (cartão ou boleto) -- a data em que o card entrou numa
 // delas é a que decide o mês de um título Emitido.
 const ETAPAS_PAGAMENTO = new Set(["DT1048_28:CLIENT", "DT1048_28:BOLETO_PAGO"]);
+// Etapas DEPOIS do pagamento (30/10/2026): o Controle cadastra no Corp, confere e só então move
+// para Emitido. O título já está pago, então continua contando como efetivado.
+const ETAPAS_POS_PAGAMENTO = new Set(["DT1048_28:UC_2XCB43", "DT1048_28:UC_PFZLGU", "DT1048_28:UC_ILV881"]);
 
 // Decisão do Matheus (18/10/2026): o título conta como efetivado (valor e
 // comissão) assim que o pagamento entra -- card em Pagamento concluído
@@ -91,7 +98,7 @@ const ETAPAS_PAGAMENTO = new Set(["DT1048_28:CLIENT", "DT1048_28:BOLETO_PAGO"]);
 // Corp e mover pra Emitido. Antes só contava em Emitido e outubro aparecia
 // zerado com 11 boletos pagos.
 function efetivado(c: { etapaId: string }): boolean {
-  return c.etapaId === "DT1048_28:SUCCESS" || ETAPAS_PAGAMENTO.has(c.etapaId);
+  return c.etapaId === "DT1048_28:SUCCESS" || ETAPAS_PAGAMENTO.has(c.etapaId) || ETAPAS_POS_PAGAMENTO.has(c.etapaId);
 }
 
 export type CardCapitalizacao = {
@@ -186,6 +193,8 @@ export type LinhaStatusCap = {
 
 export type PainelCapitalizacao = {
   competencia: string;
+  // Aba "Reaplicação" (funil Reaplicações, categoria 38). Opcional: retratos antigos não têm.
+  reaplicacao?: PainelReaplicacao;
   // Opcional: retratos salvos antes de 30/10/2026 não têm.
   statusImobiliarias?: LinhaStatusCap[];
   statusSeguradoras?: LinhaStatusCap[];
@@ -251,7 +260,7 @@ export function mapearCard(item: BitrixItemRaw, agora: Date, pagoEm: Map<number,
   // é a hora em que chegou na etapa final -- vale pra Perdidos e pra um
   // Emitido que pulou a etapa de pagamento.
   const finalizadoEm = movidoEm ?? criadoEm;
-  const concluidoEm = ETAPAS_PAGAMENTO.has(texto(item.stageId))
+  const concluidoEm = ETAPAS_PAGAMENTO.has(texto(item.stageId)) || ETAPAS_POS_PAGAMENTO.has(texto(item.stageId))
     ? (pagoEm.get(Number(item.id)) ?? finalizadoEm)
     : semantica === "P"
       ? null
@@ -406,7 +415,12 @@ function semAcentos(t: string): string {
   return t.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/s+/g, " ").trim();
 }
 
-function statusPor(cards: CardCapitalizacao[], competencia: string, chaveDe: (c: CardCapitalizacao) => { chave: string; nome: string }): LinhaStatusCap[] {
+function statusPor(
+  cards: CardCapitalizacao[],
+  competencia: string,
+  chaveDe: (c: CardCapitalizacao) => { chave: string; nome: string },
+  fechada: (c: CardCapitalizacao) => boolean = efetivado
+): LinhaStatusCap[] {
   const noMes = (c: CardCapitalizacao) => !!c.concluidoEm && competenciaData(c.concluidoEm) === competencia;
   const atual = recorteGeral(cards, competencia);
   const anterior = recorteGeral(cards, competenciaAnterior(competencia));
@@ -423,7 +437,7 @@ function statusPor(cards: CardCapitalizacao[], competencia: string, chaveDe: (c:
     l.premioSolicitado += c.valorTitulo;
     if (!c.concluidoEm || competenciaData(c.concluidoEm) > competencia) l.emAndamento++;
     if (noMes(c) && c.semantica === "F") l.naoPagas++;
-    if (noMes(c) && efetivado(c)) {
+    if (noMes(c) && fechada(c)) {
       l.fechadas++;
       l.premioFechado += c.valorTitulo;
       l.comissaoFechada += c.comissao;
@@ -435,15 +449,15 @@ function statusPor(cards: CardCapitalizacao[], competencia: string, chaveDe: (c:
     .sort((a, b) => b.solicitacoes - a.solicitacoes || a.nome.localeCompare(b.nome, "pt-BR"));
 }
 
-function statusImobiliarias(cards: CardCapitalizacao[], competencia: string): LinhaStatusCap[] {
+function statusImobiliarias(cards: CardCapitalizacao[], competencia: string, fechada: (c: CardCapitalizacao) => boolean = efetivado): LinhaStatusCap[] {
   return statusPor(cards, competencia, (c) => {
     const nome = c.imobiliaria === "—" ? "NÃO INFORMADA" : c.imobiliaria.trim().toUpperCase();
     return { chave: c.companyId ? `bitrix_empresa:${c.companyId}` : `cap_nome:${semAcentos(nome)}`, nome };
-  });
+  }, fechada);
 }
 
-function statusSeguradoras(cards: CardCapitalizacao[], competencia: string): LinhaStatusCap[] {
-  return statusPor(cards, competencia, (c) => ({ chave: `seg:${c.seguradora}`, nome: c.seguradora }));
+function statusSeguradoras(cards: CardCapitalizacao[], competencia: string, fechada: (c: CardCapitalizacao) => boolean = efetivado): LinhaStatusCap[] {
+  return statusPor(cards, competencia, (c) => ({ chave: `seg:${c.seguradora}`, nome: c.seguradora }), fechada);
 }
 
 function contagemPorOrigem(itens: CardCapitalizacao[], competencia: string): ContagemPorOrigem {
@@ -569,8 +583,11 @@ export async function montarPainelCapitalizacao(
     // id do Bitrix cresce com a criação -- mais novo primeiro.
     .sort((a, b) => b.id - a.id);
 
+  const reaplicacao = retratoCongelado?.reaplicacao ?? montarReaplicacao(itensSpa, competencia, agora);
+
   return {
     competencia,
+    reaplicacao,
     kpisAnterior,
     statusImobiliarias: statusImobiliarias(cards, competencia),
     statusSeguradoras: statusSeguradoras(cards, competencia),

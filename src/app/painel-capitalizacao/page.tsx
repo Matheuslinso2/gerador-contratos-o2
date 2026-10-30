@@ -10,6 +10,8 @@ import AtualizarAgora from "@/components/AtualizarAgora";
 import { competenciaAtual, competenciaValida, montarPainelCapitalizacao, type PainelCapitalizacao as PainelCapitalizacaoData } from "@/lib/capitalizacao/painel";
 import PainelCapitalizacao from "./PainelCapitalizacao";
 import { unificarStatusImobiliariasCap } from "@/lib/capitalizacao/statusUnificado";
+import AbasCapitalizacao from "./AbasCapitalizacao";
+import PainelReaplicacaoView from "./PainelReaplicacaoView";
 import SeletorCompetencia from "./SeletorCompetencia";
 import styles from "./painel-capitalizacao.module.css";
 import { BotaoExportarPainelPdf } from "@/components/ExportarQuadro";
@@ -109,6 +111,15 @@ export default async function PainelCapitalizacaoPage({
     }
   }
 
+  let reaplicacaoImobiliarias: Awaited<ReturnType<typeof unificarStatusImobiliariasCap>> | undefined;
+  if (dados?.reaplicacao?.statusImobiliarias?.length) {
+    try {
+      reaplicacaoImobiliarias = await unificarStatusImobiliariasCap(supabase, dados.reaplicacao.statusImobiliarias);
+    } catch (e) {
+      console.error("Capitalização (reaplicação): falha ao ler a base unificada de imobiliárias:", e);
+    }
+  }
+
   return (
     <>
       <AppHeader userEmail={user?.email} logoutAction={signOut} />
@@ -154,7 +165,20 @@ export default async function PainelCapitalizacaoPage({
             </div>
           )}
 
-          {dados && <PainelCapitalizacao dados={dados} statusImobiliarias={statusImobiliarias} />}
+          {dados && (
+            <AbasCapitalizacao
+              novos={<PainelCapitalizacao dados={dados} statusImobiliarias={statusImobiliarias} />}
+              reaplicacao={
+                dados.reaplicacao ? (
+                  <PainelReaplicacaoView painel={dados.reaplicacao} imobiliarias={reaplicacaoImobiliarias} />
+                ) : (
+                  <div className={styles.panelSub}>Esta competência ainda não tem retrato de reaplicações — abra o painel de novo para atualizar.</div>
+                )
+              }
+              totalNovos={dados.kpis.total}
+              totalReaplicacao={dados.reaplicacao?.kpis.entradas ?? 0}
+            />
+          )}
         </div>
       </div>
     </>
