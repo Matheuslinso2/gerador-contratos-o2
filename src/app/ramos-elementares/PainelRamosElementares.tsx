@@ -833,7 +833,10 @@ function PainelRenovacoes({
   competencia: string;
 }) {
   const [recorte, setRecorte] = useState<RecorteRenovacao>("atual");
-  const resumo = analise.renovacoes[recorte];
+  // Competência = mês da VIGÊNCIA. Desde out/2026 (renovação lançada direto no Bitrix, entrada
+  // pelo mês de criação do card) as duas abas fatiam o fluxo do mês pela vigência.
+  const porVigencia = competencia > "2026-09" ? analise.renovacoes.porVigencia : undefined;
+  const resumo = porVigencia ? (recorte === "atual" ? porVigencia.doMes : porVigencia.outros) : analise.renovacoes[recorte];
   const arquivo = (sufixo: string) =>
     `ramos-elementares-renovacoes-${sufixo}-${recorte}-${competencia}`;
   return (
@@ -844,23 +847,23 @@ function PainelRenovacoes({
           className={recorte === "atual" ? styles.filtroAtivo : styles.filtro}
           onClick={() => setRecorte("atual")}
         >
-          Competência atual
+          {porVigencia ? "Vigência neste mês" : "Competência atual"}
         </button>
         <button
           type="button"
           className={recorte === "futura" ? styles.filtroAtivo : styles.filtro}
           onClick={() => setRecorte("futura")}
         >
-          Próxima competência
+          {porVigencia ? "Vigência em outros meses" : "Próxima competência"}
         </button>
       </div>
       <div className={styles.kpis}>
         <Kpi
           label="Carteira"
-          legenda="Total de renovações da competência escolhida (atual ou próxima). A próxima competência é só previsão operacional e não se mistura com o mês atual."
+          legenda={porVigencia ? "Renovações em andamento ou concluídas neste mês (cards criados no mês + herança), separadas pela vigência: vigência neste mês, ou vigência em outros meses (negociação antecipada ou atrasada). Competência = mês da vigência." : "Total de renovações da competência escolhida (atual ou próxima). A próxima competência é só previsão operacional e não se mistura com o mês atual."}
           value={String(resumo.total)}
           note={
-            recorte === "atual" ? "Resultado atual" : "Previsão operacional"
+            porVigencia ? (recorte === "atual" ? "Vigência neste mês" : "Vigência em outros meses") : recorte === "atual" ? "Resultado atual" : "Previsão operacional"
           }
           itens={<ItensKpi modo="cotados" cotados={resumo.itensCotados} />}
         />
@@ -869,7 +872,7 @@ function PainelRenovacoes({
           legenda="Renovações com status EFETIVADO. Na competência atual, o percentual embaixo é a conversão: efetivados ÷ carteira."
           value={String(resumo.efetivados)}
           note={
-            recorte === "atual"
+            porVigencia || recorte === "atual"
               ? pct(resumo.conversao)
               : "Não misturar com o mês atual"
           }
@@ -925,9 +928,13 @@ function PainelRenovacoes({
             />
           </div>
           <p>
-            {recorte === "atual"
-              ? "Conversão calculada na competência"
-              : "Preparação do próximo período"}
+            {porVigencia
+              ? recorte === "atual"
+                ? "Renovações com vigência neste mês"
+                : "Renovações com vigência em outros meses (negociadas antes ou depois do vencimento)"
+              : recorte === "atual"
+                ? "Conversão calculada na competência"
+                : "Preparação do próximo período"}
           </p>
           <ResumoStatus resumo={resumo} />
         </section>

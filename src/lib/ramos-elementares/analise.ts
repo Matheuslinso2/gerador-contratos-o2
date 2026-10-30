@@ -105,6 +105,11 @@ export type AnaliseRamosElementares = {
     pendentes: ResumoPopulacao;
   };
   renovacoes: {
+    // Competência = mês da VIGÊNCIA (fim da vigência da apólice). A lista "atual" é o
+    // fluxo do mês (cards criados no mês + herança); aqui ele é fatiado pela vigência:
+    // doMes = vigência no mês; outros = vigência em outros meses (negociação antecipada
+    // ou atrasada). Desde 30/10/2026 (reunião Kamila).
+    porVigencia?: { doMes: ResumoPopulacao; outros: ResumoPopulacao };
     atual: ResumoPopulacao;
     futura: ResumoPopulacao;
   };
@@ -1068,7 +1073,17 @@ export function montarAnaliseRamosElementares(fonte: FonteRamosBruta, agora = ne
       comissaoEfetivada,
     },
     novos: { consolidado: resumoNovos, mes: resumoMes, pendentes: resumoPendentes },
-    renovacoes: { atual: resumoRnAtual, futura: resumoRnFutura },
+    renovacoes: {
+      atual: resumoRnAtual,
+      futura: resumoRnFutura,
+      porVigencia: (() => {
+        const mesVigencia = (r: RegistroRenovacao) => (r.fimVigencia !== null ? mesDoSerial(r.fimVigencia) : fonte.competencia);
+        return {
+          doMes: resumir(rnAtual.filter((r) => mesVigencia(r) === fonte.competencia)),
+          outros: resumir(rnAtual.filter((r) => mesVigencia(r) !== fonte.competencia)),
+        };
+      })(),
+    },
     controleRenovacao,
     financeiro: {
       comissaoPotencial,

@@ -41,7 +41,6 @@ import type { CelulaGoogle } from "./fonteGoogle";
 //    out/2026 já vem só do Bitrix.
 // (Novos seguem Bitrix desde 2026-09, decisão de 01/09/2026.)
 const ULTIMA_COMPETENCIA_RENOVACAO_NA_PLANILHA = "2026-09";
-const COMPETENCIA_RENOVACAO_AINDA_NA_PLANILHA = "2026-11";
 const AVISO_TRANSICAO =
   "Transição planilha → Bitrix: até set/2026 as renovações são contadas por item (linhas das planilhas); a partir de out/2026, por card (1 card = 1 negociação por imobiliária, com os itens em planilha anexa). Set e out não são comparáveis; de novembro em diante, só Bitrix.";
 
@@ -122,9 +121,10 @@ export async function lerFonteRamosElementaresHibrida(competencia: string): Prom
         competencia <= ULTIMA_COMPETENCIA_RENOVACAO_NA_PLANILHA
           ? [...bitrix.abas.renovacoesAtual, ...google.abas.renovacoesAtual]
           : [...bitrix.abas.renovacoesAtual, ...efetivadasDaPlanilhaAnterior],
+      // Em out/2026 a aba "futura" da planilha (lote de novembro) NÃO entra mais: os
+      // mesmos imóveis já têm card no Bitrix e contavam duas vezes (30/10/2026).
       renovacoesFutura:
-        mesSeguinte(competencia) <= ULTIMA_COMPETENCIA_RENOVACAO_NA_PLANILHA ||
-        mesSeguinte(competencia) === COMPETENCIA_RENOVACAO_AINDA_NA_PLANILHA
+        mesSeguinte(competencia) <= ULTIMA_COMPETENCIA_RENOVACAO_NA_PLANILHA
           ? [...bitrix.abas.renovacoesFutura, ...google.abas.renovacoesFutura]
           : bitrix.abas.renovacoesFutura,
       endossos: google.nomesAbas.endossos ? google.abas.endossos : bitrix.abas.endossos,
