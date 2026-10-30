@@ -76,6 +76,7 @@ const TABELAS_DESCRICAO: Record<string, string> = {
   relatorios_prospeccao: "Fichas de prospecção de novas imobiliárias.",
   leads_site_o2seguros: "Leads dos formulários do site (sem telefone).",
   // --- Produção / Corp
+  producao_resolvida: "COTAÇÕES (e histórico de produção) por imobiliária, já ligadas ao banco único (view de producao_unificada com imobiliaria_id, grupo_id e imobiliaria_exibicao). É onde estão os CARDS DO BITRIX copiados (fonte='bitrix', atualizados de hora em hora) e as planilhas antigas (fonte='planilha') e o Corp (fonte='corp', apólices efetivadas). produto: fianca, re (ramos elementares: incêndio/imobiliário, residencial etc.), capitalizacao, automovel. status_padrao: 'Em análise' = cotação EM ABERTO; 'Aprovado' (Fiança) = cotação aprovada ainda não efetivada (também aberta); 'Convertido' = cotação efetivada; 'Perdido' e 'Recusado' = encerradas sem negócio; 'Efetivado' (corp) = apólice. Para cotações em aberto de uma imobiliária: filtre imobiliaria_id (in, com todos os ids do grupo de buscar_imobiliaria) e status_padrao, agrupando por produto e fonte.",
   producao_unificada: "Linha única de produção por origem (cotações de planilhas e Bitrix, apólices do Corp) com produto, status padrão, prêmio e comissão. imobiliaria_texto = nome da imobiliária na fonte.",
   producao_erp: "Produção do Corp (apólices/endossos emitidos) com prêmio e comissão.",
   producao_resumo_mensal: "Produção do Corp somada por ramo e mês.",
@@ -122,7 +123,7 @@ const COLUNA_PERMITIDA_APESAR = new Set(["imobiliaria_texto"]);
 const TIPOS_BLOQUEADOS = new Set(["jsonb", "json", "bytea"]);
 // Quem não é admin não vê comissão, repasse, saldo, imposto, desconto, premiação.
 const COLUNA_FINANCEIRA = /comiss|repasse|premiacao|pro_?labore|saldo|imposto|desconto/i;
-const TABELA_FINANCEIRA = /^(erp_(repasse|baixa|comissao|comissoes|corp_comissoes|nibo|extrato|saldo|previsao|imposto|desconto|descontos|estorno|gestao)|repasses|producao_|corp_|campanhas_producao|campanhas_metas|faturas|erp_fatura)/i;
+const TABELA_FINANCEIRA = /^(erp_(repasse|baixa|comissao|comissoes|corp_comissoes|nibo|extrato|saldo|previsao|imposto|desconto|descontos|estorno|gestao)|repasses|producao_(?!unificada|resolvida)|corp_|campanhas_producao|campanhas_metas|faturas|erp_fatura)/i;
 
 let cacheColunas: { em: number; mapa: Map<string, { coluna: string; tipo: string }[]> } | null = null;
 

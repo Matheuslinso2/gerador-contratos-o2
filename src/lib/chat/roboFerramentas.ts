@@ -22,17 +22,29 @@ function normalizar(s: string | null | undefined) {
     .trim();
 }
 
-function casaTodos(texto: string, consulta: string) {
+// Distância de edição <= 1 (uma letra trocada, a mais ou a menos): "canele" casa com "canale".
+function quaseIgual(a: string, b: string) {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  if (a.length === b.length) return a.slice(i + 1) === b.slice(i + 1) || a.slice(i) === b.slice(i);
+  const [curta, longa] = a.length < b.length ? [a, b] : [b, a];
+  return curta.slice(i) === longa.slice(i + 1);
+}
+
+function casaTodos(texto: string, consulta: string, aproximado = false) {
   const palavras = texto.split(" ");
   return consulta
     .split(" ")
     .filter(Boolean)
-    .every((t) => palavras.some((p) => (t.length <= 2 ? p === t : p.startsWith(t))));
+    .every((t) =>
+      palavras.some((p) => (t.length <= 2 ? p === t : p.startsWith(t) || (aproximado && t.length >= 4 && quaseIgual(p.slice(0, t.length), t))))
+    );
 }
 
 type Ficha = { id: string; nome: string; apelido: string | null; grupo_id: string | null; codigo_produtor_corp: string | null };
 
-async function resolverImobiliarias(nome: string): Promise<{ fichas: Ficha[]; grupo: string | null; ambiguo: boolean }> {
+async function resolverImobiliarias(nome: string): Promise<{ fichas: Ficha[]; grupo: string | null; ambiguo: boolean; aproximado: boolean }> {
   const sb = createServiceClient();
   const [{ data: imobs }, { data: grupos }] = await Promise.all([
     sb.from("imobiliarias").select("id, nome, apelido, grupo_id, codigo_produtor_corp").limit(5000),
@@ -40,18 +52,23 @@ async function resolverImobiliarias(nome: string): Promise<{ fichas: Ficha[]; gr
   ]);
   const nomeGrupo = new Map((grupos ?? []).map((g) => [g.id as string, g.nome as string]));
   const q = normalizar(nome);
-  if (!q) return { fichas: [], grupo: null, ambiguo: false };
+  if (!q) return { fichas: [], grupo: null, ambiguo: false, aproximado: false };
   const todas = (imobs ?? []) as Ficha[];
-  const achadas = todas.filter((i) =>
-    casaTodos(normalizar(`${i.nome} ${i.apelido ?? ""} ${i.grupo_id ? (nomeGrupo.get(i.grupo_id) ?? "") : ""}`), q)
-  );
+  const textoDe = (i: Ficha) => normalizar(`${i.nome} ${i.apelido ?? ""} ${i.grupo_id ? (nomeGrupo.get(i.grupo_id) ?? "") : ""}`);
+  let aproximado = false;
+  let achadas = todas.filter((i) => casaTodos(textoDe(i), q));
+  // Sem resultado exato: tolera uma letra errada na digitação (ex.: "Canele" por "Canale").
+  if (!achadas.length) {
+    achadas = todas.filter((i) => casaTodos(textoDe(i), q, true));
+    aproximado = achadas.length > 0;
+  }
   // Se a busca bate no nome de um grupo, entram todas as fichas do grupo.
-  const gruposAchados = new Set(achadas.map((i) => i.grupo_id).filter((g): g is string => !!g && casaTodos(normalizar(nomeGrupo.get(g)), q)));
+  const gruposAchados = new Set(achadas.map((i) => i.grupo_id).filter((g): g is string => !!g && casaTodos(normalizar(nomeGrupo.get(g)), q, aproximado)));
   const fichas = new Map(achadas.map((i) => [i.id, i]));
   for (const i of todas) if (i.grupo_id && gruposAchados.has(i.grupo_id)) fichas.set(i.id, i);
   const lista = [...fichas.values()];
   const grupo = gruposAchados.size === 1 ? (nomeGrupo.get([...gruposAchados][0]) ?? null) : null;
-  return { fichas: lista, grupo, ambiguo: lista.length > MAX_FICHAS };
+  return { fichas: lista, grupo, ambiguo: lista.length > MAX_FICHAS, aproximado };
 }
 
 export const FERRAMENTAS_ERP: Anthropic.Tool[] = [
@@ -97,7 +114,7 @@ type EntradaContar = {
 };
 
 async function buscarImobiliaria(e: { nome: string }, verComissao: boolean): Promise<string> {
-  const { fichas, grupo, ambiguo } = await resolverImobiliarias(e.nome);
+  const { fichas, grupo, ambiguo, aproximado } = await resolverImobiliarias(e.nome);
   if (!fichas.length) return JSON.stringify({ encontrou: false, observacao: "Nenhuma imobiliária com esse nome no banco único. Peça para o usuário conferir a grafia." });
   if (ambiguo)
     return JSON.stringify({ encontrou: true, ambiguo: true, observacao: `Mais de ${MAX_FICHAS} fichas batem. Peça um nome mais específico.`, exemplos: fichas.slice(0, MAX_FICHAS).map((f) => f.nome) });
@@ -130,6 +147,7 @@ async function buscarImobiliaria(e: { nome: string }, verComissao: boolean): Pro
     encontrou: true,
     grupo,
     fichas: linhas,
+    ...(aproximado ? { aproximado: true, avisoBusca: "Nenhum nome igual; estas fichas têm nome parecido com o digitado. Diga ao usuário como entendeu (ex.: \"entendi Canale\") para ele confirmar." } : {}),
     totalDoGrupo: { docsTotal: soma("docsTotal"), docsVigentesNaFichaDoErp: soma("docsVigentesNaFichaDoErp"), premioVigente: Math.round(soma("premioVigente") * 100) / 100 },
     nota: "docsVigentesNaFichaDoErp conta TODO documento vigente (apólices, endossos, faturas). Para separar apólices (tipo A) de endossos (C, D, I, M, R, X) vigentes, use contar_documentos_erp com situacao ['vigente'] e agrupar_por 'tipo'.",
   });
