@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import PageHeader from "@/components/PageHeader";
+import InfoLegenda from "@/components/InfoLegenda";
 import { IconReport } from "@/components/icons";
 import { formatarData, formatarReais } from "@/lib/sinistros/regras";
 import { podeVerBaixas } from "@/lib/erp/acessoBaixas";
@@ -222,7 +223,7 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
         )}
         {secao === "faturas" && (<>
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Alertas de fatura (Tokio e Pottencial)</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Alertas de fatura (Tokio e Pottencial)<InfoLegenda titulo="Alertas de fatura">Lista as apólices novas de imobiliárias que pagam por fatura e que deveriam estar na fatura da imobiliária. Cruza as propostas efetivadas no ERP (que vêm do Corp) com as faturas já carregadas das seguradoras Tokio e Pottencial. Pela regra de corte (ainda uma hipótese até dez/2026), cada seguro novo tem uma fatura prevista. O alerta aparece quando a fatura carregada não contém o seguro, quando a seguradora não deu destino em mais de 10 dias, ou quando a fatura prevista já venceu e ainda não foi carregada. Os contadores coloridos mostram o total de cada tipo de alerta. A tabela mostra no máximo as 300 mais recentes e é refeita de hora em hora. O filtro de mês vale pela data da fatura prevista.</InfoLegenda></h2>
           <p className="text-xs text-gray-500">
             Seguro novo de imobiliária com fatura: pela regra de corte (hipótese até dez/2026) ele tem uma fatura prevista. Alerta quando a fatura carregada não o contém, quando a seguradora não deu destino em 10 dias, ou quando a fatura prevista venceu e ainda não foi carregada no /faturas.
             {alertas[0]?.gerado_em ? ` Lista gerada ${formatarData(alertas[0].gerado_em)} (atualiza de hora em hora).` : ""}
@@ -285,7 +286,7 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
         </section>
 
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Contratadas fora da fatura ({fora.length}) — informativo, não é pendência</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Contratadas fora da fatura ({fora.length}) — informativo, não é pendência<InfoLegenda titulo="Contratadas fora da fatura">Compara as últimas faturas carregadas de cada imobiliária e seguradora (Tokio, Pottencial, Too e Yelum). Quem apareceu em alguma delas fica com forma de pagamento fatura. Aqui estão as apólices que tinham parcela vencendo na janela dessas faturas e não apareceram em nenhuma (só imobiliárias com 2 ou mais faturas carregadas). São candidatas a boleto ou cartão. A coluna No extrato indica se a comissão dela já apareceu no extrato da seguradora, o que confirma que foi paga fora da fatura. É só informação, não é pendência.</InfoLegenda></h2>
           <p className="text-xs text-gray-500">
             Cruzamento das últimas faturas carregadas de cada imobiliária × seguradora (Tokio, Pottencial, Too, Yelum): quem apareceu em alguma fatura ficou com forma de pagamento “fatura”.
             Aqui estão as apólices com parcela vencendo na janela dessas faturas que não apareceram em nenhuma delas (imobiliárias com 2+ faturas carregadas) — candidatas a boleto/cartão, a confirmar no extrato de comissão.
@@ -335,7 +336,7 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
         </>)}
         {secao === "baixa" && (<>
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Baixa de comissão (Corp) — formato da planilha CONTROLE BAIXA</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Baixa de comissão (Corp) — formato da planilha CONTROLE BAIXA<InfoLegenda titulo="Baixa de comissão (Corp)">Mostra, mês a mês e por corretora e seguradora, a comissão que já foi dada como recebida no Corp (data de quitação), no formato da planilha de controle da baixa. Bruto vem do Corp; o líquido esperado é o bruto menos o imposto retido e menos o desconto da seguradora (hoje, o empréstimo da Porto). Pró-labore conferido é a parte que a seguradora paga direto à imobiliária, que não é divergência. Divergência é o que sobrou de diferença entre o percentual do documento e o recebido, apólice por apólice, e o número entre parênteses é a quantidade de linhas. Sem filtro de mês, aparecem o mês atual e os 3 anteriores. O Corp é exportado pelo robô às 12h e às 20h.</InfoLegenda></h2>
           <p className="text-xs text-gray-500">
             Corp → Comissões → Recebidas, por data de quitação, exportado pelo robô do Corp (12h e 20h). O2 Capitalização = ramos 2FIA/2IMO/2POR, CAP2 e premiação (PREM).
             Líquido esperado = bruto − imposto retido − desconto da seguradora (empréstimo da Porto). Cada baixa é conferida apólice por apólice: % do documento − % recebido. Se a diferença bate com o pró-labore daquela imobiliária naquela seguradora, é “pró-labore conferido” (pago direto à imob, não é pendência); se não bate, é divergência.
@@ -343,7 +344,7 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
           </p>
           {atrasos.length > 0 && (
             <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">
-              <p className="font-semibold">Baixa de comissão atrasada</p>
+              <p className="font-semibold">Baixa de comissão atrasada<InfoLegenda titulo="Baixa de comissão atrasada">Avisa quando um mês já fechado teve baixa no Corp abaixo de 30% da média dos 3 meses anteriores (ou nenhuma baixa), para aquela seguradora e corretora. Sem a baixa, o mês não é conferido contra os extratos e o repasse, a conferência e o fechamento ficam parados.</InfoLegenda></p>
               <p className="mt-1 text-red-700">Mês já fechado com baixa no Corp abaixo de 30% da média dos 3 meses anteriores. Sem a baixa, o mês não foi conferido contra os extratos e o fluxo (repasse, conferência, fechamento) fica parado.</p>
               <ul className="mt-2 space-y-1">
                 {mesesAtraso.map((m) => {
@@ -407,7 +408,7 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
         </section>
 
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Estornos de endosso</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Estornos de endosso<InfoLegenda titulo="Estornos de endosso">Uma linha negativa no extrato da seguradora é um estorno de comissão de um endosso com devolução de prêmio (cancelamento a pedido, cancelamento de item, restituição). Cada linha é casada com o endosso da apólice pelo número do endosso, pelo prêmio ou pela comissão. Há três listas: estorno no extrato sem endosso no ERP (a seguradora descontou, mas o endosso não está cadastrado ou ligado); endosso sem estorno no extrato (endosso com comissão negativa há mais de 30 dias, de seguradora com extratos carregados, e o desconto ainda não apareceu); e endossos sem apólice ligada (a ligação automática por seguradora e número da apólice não achou uma apólice única, e precisa ser feita à mão na ficha do endosso, a partir de 2021). As listas de estorno são refeitas de hora em hora, até 300 linhas.</InfoLegenda></h2>
           <p className="text-xs text-gray-500">
             Linha negativa no extrato = estorno de comissão de um endosso com restituição (cancelamento a pedido, cancelamento de item, restituição). Cada linha é casada com o endosso da apólice pelo nº do endosso, prêmio ou comissão.
             {estornos[0] ? ` Atualizado em ${new Date(estornos[0].gerado_em).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}.` : ""}
@@ -471,7 +472,7 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
         </section>
 
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Extratos de comissão das seguradoras</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Extratos de comissão das seguradoras<InfoLegenda titulo="Extratos de comissão das seguradoras">Lista os 40 extratos mais recentes que o ERP leu, vindos do e-mail (Pottencial mensal, Too semanal, Tokio só o total do mês) e da pasta oficial do Drive onde a equipe salva os extratos baixados dos sites das seguradoras. Linhas é quanto veio no extrato; Casadas, quantas foram ligadas a um documento do ERP; Com parcela, quantas foram ligadas também a uma parcela, que é conferida contra o previsto. Tipo mostra se é o demonstrativo por apólice ou só o total do mês, e não lido indica extrato que o robô não conseguiu ler. A baixa em si é aprovada na tela de baixa assistida.</InfoLegenda></h2>
           <p className="text-xs text-gray-500">
             Lidos de hora em hora de duas fontes: o e-mail (Pottencial mensal, Too semanal, Tokio só o total do mês) e a pasta oficial do Drive “- RELATÓRIO COMISSÃO SEGURADORAS”, onde a equipe salva os extratos baixados dos sites das seguradoras (seguradora → ano → mês, arquivo com a data de recebimento).
             Cada linha é casada com o documento e a parcela do ERP e conferida contra o previsto; a baixa é aprovada em <Link href="/erp/baixas" className="underline">Baixa de comissão assistida</Link>.
@@ -483,6 +484,7 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
             <span className="rounded-full bg-purple-100 px-2 py-0.5 text-purple-800">Estorno: <b>{somaPend("n_estorno")}</b></span>
             <span className="rounded-full bg-orange-100 px-2 py-0.5 text-orange-800">Divergente: <b>{somaPend("n_divergente")}</b></span>
             <span className="rounded-full bg-red-100 px-2 py-0.5 text-red-700">Não encontrada: <b>{somaPend("n_nao_encontrada")}</b></span>
+            <InfoLegenda titulo="Situação das linhas pendentes de baixa" alinhar="direita">Conta as linhas dos extratos que ainda aguardam aprovação da baixa, somando todos os extratos pendentes (não muda com os filtros). Cheia: a comissão recebida bate com a prevista. Pró-labore conferido: a diferença bate com o pró-labore que a seguradora paga direto à imobiliária. Estorno: linha negativa. Divergente: o valor difere do previsto. Não encontrada: não achou a apólice ou a parcela no ERP.</InfoLegenda>
           </div>
           {extratos.length === 0 ? (
             <p className="text-xs text-gray-500">Nenhum extrato carregado ainda.</p>
@@ -524,7 +526,7 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
           )}
         </section>
 
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Conferência com o retrato do Power BI</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Conferência com o retrato do Power BI<InfoLegenda titulo="Conferência com o retrato do Power BI">Compara, por mês, ramo e seguradora, a quantidade de documentos e a comissão do retrato de produção do Corp (o mesmo do Power BI) com o que o ERP tem importado do Corp, sem os documentos fora da regra do Power BI. Só aparecem as linhas em que há diferença; se tudo bate, a tela diz que não há diferença. As diferenças costumam ser alterações que o próprio Corp fez depois do fechamento do mês, como cancelamentos e ajustes.</InfoLegenda></h2>
         {diferencas.length === 0 ? (
           <p className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-700">Nenhuma diferença.</p>
         ) : (

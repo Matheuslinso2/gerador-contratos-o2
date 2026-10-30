@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef } from "react";
+import InfoLegenda from "@/components/InfoLegenda";
 
 export type EmailDaConversa = { id: string; data: string | null; de: string; para: string; assunto: string; trecho: string; tem_anexo: boolean; prova: boolean };
 export type AnexoDoEmail = { id: string; nome: string; tipo: string; situacao: string; url: string | null };
@@ -17,6 +18,9 @@ export default function JanelaEmails({ codigoO2, emails, anexos }: { codigoO2: s
       <button type="button" onClick={() => ref.current?.showModal()} className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-800 hover:bg-gray-50">
         E-mails ({emails.length})
       </button>
+      <InfoLegenda titulo="E-mails do documento">
+        Mostra as mensagens de e-mail das caixas da O2 que estão ligadas a este documento e as outras mensagens da mesma conversa, só com cabeçalho e trecho; o texto completo continua na caixa de e-mail. O número entre parênteses é a quantidade de mensagens. A marca “indica emissão” aparece no e-mail que serve de prova de que a apólice foi emitida. Em PDFs guardados ficam os anexos de e-mail que o ERP guardou; “vínculo provável, conferir” significa que a ligação do PDF com o documento ainda não foi confirmada. O botão só aparece quando há e-mail ou PDF ligado ao documento.
+      </InfoLegenda>
       <dialog ref={ref} className="m-auto w-[min(920px,94vw)] rounded-lg border border-gray-300 p-0 shadow-xl backdrop:bg-black/40">
         <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
           <div>

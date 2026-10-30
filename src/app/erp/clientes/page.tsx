@@ -7,6 +7,7 @@ import { IconReport } from "@/components/icons";
 import { buscarClientes, codigoCliente, formatarDocumento } from "@/lib/erp/clientes";
 import { lerFiltros } from "@/lib/erp/filtros";
 import FiltrosErp from "../FiltrosErp";
+import InfoLegenda from "@/components/InfoLegenda";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Clientes" };
@@ -66,6 +67,9 @@ export default async function ErpClientesPage({ searchParams }: { searchParams: 
         {chip("todos", `Todos (${(totalBase ?? 0).toLocaleString("pt-BR")})`)}
         {chip("incompletos", `Cadastro incompleto (${(nIncompletos ?? 0).toLocaleString("pt-BR")})`)}
         {chip("a_cadastrar", `A cadastrar: partes de proposta sem cliente (${(nACadastrar ?? 0).toLocaleString("pt-BR")})`)}
+        <InfoLegenda titulo="Lista de clientes">
+          Base única de pessoas do ERP: titular, segurado, proprietário, inquilino e garantido, de todos os produtos. Cada pessoa tem um Código do cliente único (CLI-000001). Todos: todos os cadastros; o número vem de um resumo atualizado de hora em hora. Cadastro incompleto: falta CPF/CNPJ válido (11 ou 14 dígitos) ou faltam e-mail e telefone; na lista aparece “falta” em vermelho no CPF/CNPJ e a etiqueta “incompleto” na coluna Cadastro. A cadastrar: partes de propostas e apólices (inquilino, proprietário, condutor e outras) que ainda não estão ligadas a um cliente do cadastro; sem CPF/CNPJ válido a pessoa não é criada sozinha, então é preciso completar o documento no card ou cadastrar o cliente. A busca procura por nome, CPF/CNPJ ou Código do cliente.
+        </InfoLegenda>
         <Link href="/erp/clientes/novo" className="ml-auto rounded-full bg-o2-navy px-4 py-1.5 text-xs font-semibold text-white hover:opacity-90">+ Novo cliente</Link>
       </div>
 

@@ -8,6 +8,7 @@ import CabecalhoDocumento from "../CabecalhoDocumento";
 import { dataDoRepasse, repasseEhFixo, repassePorParcela } from "@/lib/erp/repasseParcelas";
 import { formatarData, formatarReais } from "@/lib/sinistros/regras";
 import RascunhoAutomatico from "@/components/RascunhoAutomatico";
+import InfoLegenda from "@/components/InfoLegenda";
 import { ligarEndossoApolice } from "./actions";
 import { buscarFichaDocumento, nomeTipoDocumento, SITUACOES, TIPOS_DOCUMENTO, TIPO_CORP, TIPO_CONTRATACAO, MODO_COBRANCA } from "@/lib/erp/documentos";
 
@@ -17,10 +18,13 @@ export const dynamic = "force-dynamic";
 // "Controle de Documentos" do Corp: Documento · Produtores/Repasses · Parcelas
 // e comissões · Anexos · Acompanhamento. Edição chega nas fases seguintes.
 
-function Campo({ rotulo, valor }: { rotulo: string; valor: React.ReactNode }) {
+function Campo({ rotulo, valor, info }: { rotulo: string; valor: React.ReactNode; info?: React.ReactNode }) {
   return (
     <div>
-      <div className="text-[11px] uppercase tracking-wide text-gray-500">{rotulo}</div>
+      <div className="text-[11px] uppercase tracking-wide text-gray-500">
+        {rotulo}
+        {info ? <InfoLegenda titulo={rotulo}>{info}</InfoLegenda> : null}
+      </div>
       <div className="text-sm text-gray-900">{valor ?? "—"}</div>
     </div>
   );
@@ -169,6 +173,9 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
           <span className="text-gray-400"> → </span>
           <span className={d.cadeia.cliente ? "font-medium" : "text-gray-400"}>{d.cadeia.cliente ?? "cliente não ligado"}</span>
           <span className="text-gray-500"> ({d.partes_apolice.length ? "cliente no Corp" : "segurado"})</span>
+          <InfoLegenda titulo="Cadeia da produção">
+            Caminho da produção deste documento, da esquerda para a direita: canal de gestão, imobiliária indicadora (com o grupo, quando ela pertence a um) e cliente. Os nomes vêm do canal, da imobiliária principal (base única de imobiliárias) e do cliente gravados no documento. Sem imobiliária indicadora, normalmente é venda direta da O2.
+          </InfoLegenda>
         </div>
 
         {/* botão "E-mails (n)": só equipe O2 (a página já confere acima); some quando não há e-mail nem PDF ligado ao documento */}
@@ -176,6 +183,9 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
 
         <nav className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
           <span className="text-[11px] uppercase tracking-wide text-gray-500">Anexos e vínculos:</span>
+          <InfoLegenda titulo="Anexos e vínculos">
+            Atalhos que levam às seções mais abaixo desta página. Aba Anexos do Corp: arquivos que estão na aba Anexos do documento no Corp. Acervo de apólices: PDFs de apólice do acervo ligados a este documento. Card do Bitrix: cards que deram origem ao documento. O número entre parênteses é a quantidade de itens em cada um.
+          </InfoLegenda>
           <a href="#anexos-corp" className="rounded-full border border-gray-300 px-3 py-1 hover:bg-gray-50">Aba Anexos do Corp ({anexosCorp.length})</a>
           <a href="#anexos-acervo" className="rounded-full border border-gray-300 px-3 py-1 hover:bg-gray-50">Acervo de apólices ({d.anexos.length})</a>
           <a href="#origem-bitrix" className="rounded-full border border-gray-300 px-3 py-1 hover:bg-gray-50">Card do Bitrix ({d.origens.length})</a>
@@ -183,7 +193,12 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
 
         {d.partes_apolice.length > 0 && (
           <div className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm">
-            <div className="text-[11px] uppercase tracking-wide text-gray-500">Partes da apólice (lidas no PDF)</div>
+            <div className="text-[11px] uppercase tracking-wide text-gray-500">
+              Partes da apólice (lidas no PDF)
+              <InfoLegenda titulo="Partes da apólice">
+                Pessoas lidas do PDF da apólice no acervo. Na Fiança: Segurado = locador = proprietário do imóvel; Garantido = locatário (inquilino). O CPF/CNPJ aparece quando foi lido no PDF. Em caso de diferença com outros cadastros, o documento oficial da seguradora prevalece.
+              </InfoLegenda>
+            </div>
             <div className="mt-1 grid gap-x-6 gap-y-1 md:grid-cols-2">
               {d.partes_apolice.map((p, i) => (
                 <div key={`${p.papel}-${i}`}>
@@ -197,7 +212,12 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
         )}
 
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Documento</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">
+            Documento
+            <InfoLegenda titulo="Documento">
+              Dados do documento como no Corp, somente leitura. Imobiliária da produção: a imobiliária principal do documento (abre a ficha da base única). Dt. proposta e Dt. emissão: datas gravadas no documento. Nº da apólice: o número dado pela seguradora (“0 (não emitida)” enquanto não existe). Cobrança: como o cliente paga (fatura da imobiliária, boleto, cartão, débito). Origem: de onde o documento entrou no ERP e, quando houver, a data em que foi digitado. Alguns campos têm o próprio ⓘ explicando como o valor é entendido.
+            </InfoLegenda>
+          </h2>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <div className="col-span-2 md:col-span-4">
               <div className="text-[11px] uppercase tracking-wide text-gray-500">Imobiliária da produção</div>
@@ -215,25 +235,30 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
             <Campo rotulo="Dt. proposta" valor={formatarData(d.dt_proposta)} />
             <Campo rotulo="Dt. emissão" valor={formatarData(d.dt_emissao)} />
             <Campo rotulo="Nº da apólice" valor={d.numero_apolice ?? "0 (não emitida)"} />
-            <Campo rotulo="Nº endosso / proposta" valor={`${d.numero_endosso ?? "0"} / ${d.numero_proposta ?? "—"}`} />
+            <Campo rotulo="Nº endosso / proposta" info="Primeiro o número do endosso (0 quando o documento não é endosso), depois o número da proposta, quando houver." valor={`${d.numero_endosso ?? "0"} / ${d.numero_proposta ?? "—"}`} />
             <Campo rotulo="Vigência" valor={`${formatarData(d.vigencia_inicio)} a ${formatarData(d.vigencia_fim)}`} />
-            <Campo rotulo="Competência" valor={formatarData(d.competencia)} />
+            <Campo rotulo="Competência" info="Data de competência gravada no documento (vem do Corp). Define a que mês o documento pertence nas contas por mês." valor={formatarData(d.competencia)} />
             <Campo rotulo="Forma de pagamento" valor={d.forma_pagamento ?? "—"} />
             <Campo rotulo="Qtde de parcelas" valor={d.qtd_parcelas ?? "—"} />
             <Campo rotulo="Prêmio líquido" valor={formatarReais(d.premio_liquido)} />
             <Campo rotulo="Adicional / IOF" valor={`${formatarReais(d.premio_adicional)} / ${formatarReais(d.iof)}`} />
-            <Campo rotulo="Prêmio total" valor={formatarReais(d.premio_total)} />
-            <Campo rotulo="Comissão" valor={`${d.comissao_pct.toLocaleString("pt-BR")}% sobre ${d.comissao_base.replace("_", " ")} = ${formatarReais(d.comissao_valor)}`} />
-            <Campo rotulo="Premiação" valor={formatarReais(d.premiacao_valor)} />
+            <Campo rotulo="Prêmio total" info="Pela regra da O2, o prêmio total é o líquido mais o IOF (mais o adicional de fracionamento, se o pagamento é parcelado com juros). O valor mostrado é o que está gravado no documento; em documentos que vieram de cards do Bitrix o total pode ter vindo igual ao líquido." valor={formatarReais(d.premio_total)} />
+            <Campo rotulo="Comissão" info="Percentual de comissão sobre a base indicada (prêmio líquido ou total, conforme o documento) e o valor da comissão resultante, como gravado no documento." valor={`${d.comissao_pct.toLocaleString("pt-BR")}% sobre ${d.comissao_base.replace("_", " ")} = ${formatarReais(d.comissao_valor)}`} />
+            <Campo rotulo="Premiação" info="Valor de premiação gravado no documento (vem do Corp). É separado da comissão." valor={formatarReais(d.premiacao_valor)} />
             <Campo rotulo="Canal de venda" valor={d.canal_venda ?? "—"} />
             <Campo rotulo="Tipo de contratação" valor={d.tipo_contratacao ? TIPO_CONTRATACAO[d.tipo_contratacao] ?? d.tipo_contratacao : "—"} />
-            <Campo rotulo="Cobrança" valor={MODO_COBRANCA[d.modo_cobranca] ?? d.modo_cobranca} />
+            <Campo rotulo="Cobrança" info="Como o cliente paga: Fatura da imobiliária (a parcela vem dentro da fatura), Boleto, Cartão ou Débito (o cliente paga direto), Individual (legado, sem detalhe) ou Não informada." valor={MODO_COBRANCA[d.modo_cobranca] ?? d.modo_cobranca} />
             <Campo rotulo="Cancelado em" valor={formatarData(d.cancelado_em)} />
             <Campo rotulo="Origem" valor={`${d.origem}${d.digitado_em ? ` · digitado ${formatarData(d.digitado_em)}` : ""}`} />
           </div>
           {d.familia.length > 1 && (
             <div className="rounded-lg border border-gray-100 bg-gray-50 p-3 text-xs">
-              <div className="mb-1 text-[11px] uppercase tracking-wide text-gray-500">Família (corrente de renovações, como no Corp)</div>
+              <div className="mb-1 text-[11px] uppercase tracking-wide text-gray-500">
+                Família (corrente de renovações, como no Corp)
+                <InfoLegenda titulo="Família de renovações">
+                  A corrente de renovações do documento: as versões anteriores e as seguintes, como na coluna da esquerda do Controle de Documentos do Corp. O símbolo ▶ marca o documento que você está vendo; clique em outro para abri-lo. Cada linha mostra o Código O2 do documento, o Nosso nº do Corp, se é novo ou renovação, a situação, a vigência e o Nº da apólice.
+                </InfoLegenda>
+              </div>
               <ol className="space-y-0.5">
                 {d.familia.map((f) => (
                   <li key={f.id} className={f.id === d.id ? "font-semibold text-o2-navy" : ""}>
@@ -270,6 +295,9 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
               </Link>
               {d.apolice_mae.numero_apolice ? ` · nº ${d.apolice_mae.numero_apolice}` : ""} · vigência {formatarData(d.apolice_mae.vigencia_inicio)} a {formatarData(d.apolice_mae.vigencia_fim)}
               {d.imobiliaria ? ` · imobiliária ${d.imobiliaria}` : ""}
+              <InfoLegenda titulo="Apólice do endosso">
+                Mostra a apólice que este endosso altera (apólice-mãe), com o Código O2 do documento, o Nº da apólice, a vigência e a imobiliária. Clique no Código O2 para abrir a apólice.
+              </InfoLegenda>
             </p>
           )}
           {d.tipo !== "A" && d.tipo !== "F" && (
@@ -277,6 +305,9 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
               <RascunhoAutomatico sufixo={d.id} />
               <input type="hidden" name="id" value={d.id} />
               <span className="font-medium text-gray-700">{d.apolice_mae ? "Corrigir a apólice deste endosso:" : "Endosso sem apólice ligada. Código O2 do documento da apólice:"}</span>
+              <InfoLegenda titulo="Ligar endosso à apólice">
+                Digite o Código O2 do documento da apólice (ou da fatura) a que este endosso pertence e clique em Ligar. O ERP confere se o documento existe, se é de apólice ou fatura e se é da mesma seguradora; estando tudo certo, grava o vínculo. Use também para corrigir uma ligação errada.
+              </InfoLegenda>
               <input name="codigo_o2" inputMode="numeric" placeholder="ex.: 200629" className="w-28 rounded border border-gray-300 px-2 py-1" />
               <button className="rounded bg-o2-navy px-3 py-1 text-white hover:bg-o2-indigo">Ligar</button>
               {vinculo && AVISO_VINCULO[vinculo] && <span className={vinculo === "ok" ? "text-green-700" : "text-red-700"}>{AVISO_VINCULO[vinculo]}</span>}
@@ -287,6 +318,9 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
               <div className="mb-1 text-[11px] uppercase tracking-wide text-gray-500">
                 Endossos desta apólice ({d.endossos.length}) · prêmio {formatarReais(d.endossos.reduce((s, e) => s + e.premio_liquido, 0))} · comissão{" "}
                 {formatarReais(d.endossos.reduce((s, e) => s + e.comissao_valor, 0))}
+                <InfoLegenda titulo="Endossos desta apólice">
+                  Endossos ligados a esta apólice, do mais antigo ao mais novo. O título soma o prêmio líquido e a comissão de todos eles. Valores negativos (em vermelho) são devoluções ou estornos; na comissão, é o estorno descontado no extrato da seguradora. A data mostrada é o início de vigência do endosso (ou a emissão, se não houver).
+                </InfoLegenda>
               </div>
               <table className="w-full">
                 <tbody className="divide-y divide-gray-200">
@@ -317,7 +351,12 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
 
         {d.itens.length > 0 && (
           <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Imóvel, partes e coberturas</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">
+              Imóvel, partes e coberturas
+              <InfoLegenda titulo="Imóvel, partes e coberturas">
+                Um bloco por item do documento (em lotes de imobiliária, um por imóvel): endereço, tipo/plano, se o imóvel é administrado pela imobiliária ou só intermediado, valor do aluguel, as pessoas ligadas ao item (papel, nome e CPF/CNPJ) e as coberturas com a verba mensal. São os dados gravados no documento.
+              </InfoLegenda>
+            </h2>
             {d.itens.map((it) => (
               <div key={it.id} className="space-y-2">
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -347,7 +386,12 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
         )}
 
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Produtores e repasse</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">
+            Produtores e repasse
+            <InfoLegenda titulo="Produtores e repasse">
+              Quem produziu o documento e quanto se repassa a cada um. Produtor no Corp: nome e código do produtor como cadastrado no Corp. Ficha (base única): a imobiliária correspondente na base única. Tipo: imobiliária, parceiro, pessoa, canal, marcador ou O2 (venda direta). Partic.: percentual de participação do produtor no documento. Repasse negociado: o percentual que o Corp registrou neste documento. Esperado (ficha): a regra padrão da ficha da imobiliária, inferida do histórico. Quando diferem, o negociado aparece em laranja. Valor previsto: prêmio líquido x percentual de repasse x percentual de participação. Repasse fixo (percentual zero com valor) é um valor único por documento.
+            </InfoLegenda>
+          </h2>
           <table className="w-full text-xs">
             <thead className="text-left text-[11px] uppercase tracking-wide text-gray-500">
               <tr>
@@ -396,7 +440,11 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
 
         {d.coberturas_contratadas.length > 0 && (
           <section className="space-y-2 rounded-xl border border-gray-200 bg-white p-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Coberturas contratadas ({d.coberturas_contratadas.length})</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Coberturas contratadas ({d.coberturas_contratadas.length})
+            <InfoLegenda titulo="Coberturas contratadas">
+              Coberturas lidas do PDF da apólice no acervo. Limite máximo (LMI) é o valor máximo que a seguradora paga na cobertura; Verba / prêmio é o valor da verba (ou do prêmio) daquela cobertura. Em caso de diferença, o documento oficial da seguradora prevalece.
+            </InfoLegenda>
+          </h2>
             <table className="w-full text-xs">
               <thead className="text-left text-[11px] uppercase tracking-wide text-gray-500">
                 <tr><th className="py-1 pr-3">Cobertura</th><th className="py-1 pr-3 text-right">Limite máximo (LMI)</th><th className="py-1 pr-3 text-right">Verba / prêmio</th></tr>
@@ -416,18 +464,28 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
         )}
 
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Parcelas e comissões</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">
+            Parcelas e comissões
+            <InfoLegenda titulo="Parcelas e comissões">
+              Demonstrativo parcela a parcela. Valor da parcela: o que o cliente paga. Quitação: data e valor pagos, ou em aberto. Comissão prevista: a parte da comissão do documento que cabe à parcela. Repasse previsto: o repasse do documento dividido em parcelas iguais; o repasse fixo entra uma única vez, na 1ª parcela. Previsão receb.: data prevista para a O2 receber a comissão da parcela. Repasse (previsto / confirmado): previsto é o dia 15 do mês seguinte à previsão de recebimento; só passa a confirmado quando a comissão da parcela é de fato recebida, e então vale o dia 15 do mês seguinte ao recebimento real. Comissão no Corp: situação da parcela na grade de comissões do Corp (recebida ou a receber). A última linha soma as colunas de valores.
+            </InfoLegenda>
+          </h2>
           {d.parcelas.length > 0 && (
             <div className="grid grid-cols-2 gap-3 rounded-lg bg-gray-50 p-3 md:grid-cols-4">
-              <Campo rotulo="Comissão já recebida (Corp)" valor={formatarReais(recebidoCorp)} />
-              <Campo rotulo="Comissão a receber (Corp)" valor={d.comissoes_corp.length ? formatarReais(aReceberCorp) : "sem baixa do Corp"} />
-              <Campo rotulo="Repasse previsto" valor={`${formatarReais(totalRepasse)}${temFixo ? " (inclui fixo)" : ""}`} />
-              <Campo rotulo="Repasse já pago" valor="em breve (Nibo)" />
+              <Campo rotulo="Comissão já recebida (Corp)" info="Soma das comissões que a grade de comissões do Corp já mostra como recebidas (baixadas) neste documento." valor={formatarReais(recebidoCorp)} />
+              <Campo rotulo="Comissão a receber (Corp)" info="Soma das comissões que a grade do Corp ainda mostra como não recebidas. Aparece “sem baixa do Corp” quando o documento não tem grade de comissões no Corp." valor={d.comissoes_corp.length ? formatarReais(aReceberCorp) : "sem baixa do Corp"} />
+              <Campo rotulo="Repasse previsto" info="Total do repasse previsto no documento (soma das parcelas da tabela). Vem do prêmio líquido x percentual de repasse x percentual de participação de cada produtor; “inclui fixo” quando algum produtor tem repasse fixo." valor={`${formatarReais(totalRepasse)}${temFixo ? " (inclui fixo)" : ""}`} />
+              <Campo rotulo="Repasse já pago" info="Ainda não está ligado: o valor realmente pago virá do Nibo, por isso aparece “em breve (Nibo)”." valor="em breve (Nibo)" />
             </div>
           )}
           {avisadas.length > 0 && (
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-900">
-              <p className="font-semibold">A {d.seguradora_nome ?? "seguradora"} avisou que estas parcelas não foram pagas pelo cliente</p>
+              <p className="font-semibold">
+                A {d.seguradora_nome ?? "seguradora"} avisou que estas parcelas não foram pagas pelo cliente
+                <InfoLegenda titulo="Parcelas em aberto na seguradora">
+                  Parcelas que a própria seguradora avisou, em e-mails e relatórios de inadimplência, como não pagas pelo cliente. Mostra o número da parcela, o vencimento, o valor, a data do aviso e o cancelamento previsto, quando a seguradora informou. Sem pagamento do cliente não há comissão, e o repasse só acontece depois que a comissão for recebida.
+                </InfoLegenda>
+              </p>
               <ul className="mt-1 list-disc space-y-0.5 pl-4">
                 {avisadas.map((a, i) => (
                   <li key={i}>
@@ -504,6 +562,9 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs">
               <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-amber-800">
                 Parcelas dos endossos desta apólice — cobradas em paralelo às da apólice
+                <InfoLegenda titulo="Parcelas dos endossos">
+                  Parcelas dos endossos de cobrança ligados a esta apólice. São cobradas ao mesmo tempo que as parcelas da apólice, sem substituí-las. Valor negativo (em vermelho) é devolução ou restituição. Quitação mostra a data e o valor pagos, ou em aberto.
+                </InfoLegenda>
               </div>
               <table className="w-full">
                 <thead className="text-left text-[11px] uppercase tracking-wide text-gray-500">
@@ -540,7 +601,11 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
         </section>
 
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
-          <h2 id="anexos-corp" className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Anexos (como no Corp)</h2>
+          <h2 id="anexos-corp" className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Anexos (como no Corp)
+            <InfoLegenda titulo="Anexos (como no Corp)">
+              Cópia da aba Anexos deste documento no Corp, trazida por um robô, na mesma ordem e com os mesmos nomes. Tipo é como aparece no Corp; Tamanho é o do arquivo. O botão Abrir gera um link temporário (vale por 10 minutos). Documento que nasceu no ERP não tem aba Anexos no Corp; se o robô ainda não passou por este documento, a lista fica vazia.
+            </InfoLegenda>
+          </h2>
           {!d.nosso_numero_corp ? (
             <p className="text-xs text-gray-500">Documento nascido no ERP: não tem aba Anexos no Corp.</p>
           ) : anexosCorp.length === 0 ? (
@@ -581,7 +646,11 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
         </section>
 
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
-          <h2 id="anexos-acervo" className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Anexos (acervo de apólices)</h2>
+          <h2 id="anexos-acervo" className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Anexos (acervo de apólices)
+            <InfoLegenda titulo="Anexos (acervo de apólices)">
+              PDFs do acervo de apólices que foram ligados a este documento (a ligação usa o Nosso nº do Corp). Cada linha mostra o nome do arquivo, a origem do PDF e o Nº da apólice lido nele. As partes e as coberturas da apólice mostradas nesta página são lidas desses PDFs.
+            </InfoLegenda>
+          </h2>
           {d.anexos.length === 0 ? (
             <p className="text-xs text-gray-500">Nenhum PDF ligado a este documento no acervo ainda.</p>
           ) : (
@@ -597,7 +666,11 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
 
         {d.origens.map((o) => (
           <section key={o.id} className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
-            <h2 id="origem-bitrix" className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Origem no Bitrix</h2>
+            <h2 id="origem-bitrix" className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Origem no Bitrix
+              <InfoLegenda titulo="Origem no Bitrix">
+                Dados do card do Bitrix que deu origem a este documento, somente para consulta (o ERP não escreve no card). Datas-chave: Criação do card; Solicitação (primeira etapa do histórico ou o campo de recebimento/solicitação do card); Negociação (quando o card entrou numa etapa de negociação); Efetivação (quando o card chegou a uma etapa de sucesso, ou a data da proposta). Histórico do card: linha do tempo única com as etapas, os comentários e os eventos do documento, do mais antigo ao mais novo. Todos os campos preenchidos: tudo o que está preenchido no card, com nomes legíveis.
+              </InfoLegenda>
+            </h2>
             <p className="text-xs text-gray-700">
               Card {o.item_id} · {o.titulo ?? "—"} · etapa {o.etapa_id ?? "—"} · criado {formatarData(o.card_criado_em)} · atualizado {formatarData(o.card_atualizado_em)}
               {o.url && (
@@ -674,7 +747,12 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
         ))}
 
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Acompanhamento</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">
+            Acompanhamento
+            <InfoLegenda titulo="Acompanhamento">
+              Eventos registrados para o documento, como emissão, envio ao cliente e entrega, com a data, o canal, o destinatário e quem registrou, do mais recente para o mais antigo. Mostra até 50 eventos. Enquanto as próximas etapas do ERP não registram eventos, esta lista pode estar vazia.
+            </InfoLegenda>
+          </h2>
           {d.eventos.length === 0 ? (
             <p className="text-xs text-gray-500">Sem eventos registrados (emissão, envio ao cliente, entrega — chegam na Fase 4).</p>
           ) : (

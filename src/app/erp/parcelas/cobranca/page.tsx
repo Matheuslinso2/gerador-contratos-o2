@@ -4,6 +4,7 @@ import { formatarData, formatarReais } from "@/lib/sinistros/regras";
 import { lerFiltros } from "@/lib/erp/filtros";
 import FiltrosErp from "../../FiltrosErp";
 import BotaoVerDocumento from "../../BotaoVerDocumento";
+import InfoLegenda from "@/components/InfoLegenda";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Parcelas · cobrança" };
@@ -70,7 +71,7 @@ export default async function ParcelasCobrancaPage({ searchParams }: { searchPar
           <Link href="/erp/parcelas" className="text-gray-500 hover:text-o2-navy hover:underline">Conferência dos vencimentos</Link>
           <span className="border-b-2 border-o2-navy font-semibold text-o2-navy">Cobrança e inadimplência</span>
         </div>
-        <h1 className="mt-2 text-xl font-semibold text-o2-navy">Parcelas · cobrança e inadimplência</h1>
+        <h1 className="mt-2 text-xl font-semibold text-o2-navy">Parcelas · cobrança e inadimplência<InfoLegenda titulo="Cobrança e inadimplência">Cada parcela recebe um status pelo prazo que a seguradora costuma levar para pagar a comissão depois do vencimento. Se a comissão não chegou (nem aparece como linha no extrato) depois desse prazo, a parcela está em aberto, e a urgência de cobrança sobe com os dias de atraso. A janela considera vencimentos dos últimos 180 dias e dos próximos 30. Por padrão a lista esconde as parcelas pagas e as a vencer; o filtro de situação mostra qualquer status. Apólices em fatura unificada só ficam em aberto depois do vencimento do boleto da fatura.</InfoLegenda></h1>
         <p className="text-sm text-gray-600">
           Cada parcela recebe um status pelo prazo que a seguradora costuma levar para pagar a comissão depois do vencimento. Se a comissão não chegou (nem linha no
           extrato) depois desse prazo, a parcela está em aberto e a urgência de cobrança sobe com os dias de atraso. Janela: vencimentos dos últimos 180 dias e dos
@@ -89,10 +90,11 @@ export default async function ParcelasCobrancaPage({ searchParams }: { searchPar
       {provisorias.length > 0 && (
         <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-900">
           Status provisório em: <b>{provisorias.join(", ")}</b>. O extrato dessas seguradoras ainda está pouco ligado às parcelas (menos de 90%), então parte do "em aberto" pode
-          ser só falta de leitura do extrato. Confira com a seguradora antes de cobrar o cliente.
+          ser só falta de leitura do extrato. Confira com a seguradora antes de cobrar o cliente.<InfoLegenda titulo="Status provisório">Compara, nos últimos 180 dias, quantas linhas do extrato de cada seguradora foram ligadas a uma parcela. Quando menos de 90% estão ligadas (ou não há extrato), o ERP ainda pode estar sem enxergar parte dos pagamentos, e por isso o em aberto dessa seguradora pode ser só falta de leitura do extrato.</InfoLegenda>
         </p>
       )}
 
+      <p className="text-xs font-semibold uppercase tracking-wide text-o2-navy">Seguradora × status<InfoLegenda titulo="Seguradora × status">Matriz com a quantidade de parcelas e a comissão em cada status, por seguradora. Não mostra as pagas nem as a vencer. Os status, do mais grave ao mais leve: Risco de cancelamento (só onde a regra de cancelamento da seguradora está cadastrada); Em aberto, urgente; Em aberto, atenção; Vencida, dentro do prazo da seguradora (a comissão ainda pode chegar); Vence em até 5 dias. O prazo normal é a mediana e o limite é o percentil 90 do tempo que a seguradora levou para pagar a comissão, nos últimos 16 meses, por seguradora e ramo, com 2 dias de tolerância. Clicar em um número filtra a lista abaixo. O filtro de produto vale para a matriz também.</InfoLegenda></p>
       <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
         <table className="w-full text-xs">
           <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
@@ -116,6 +118,7 @@ export default async function ParcelasCobrancaPage({ searchParams }: { searchPar
         </table>
       </div>
 
+      <p className="text-xs font-semibold uppercase tracking-wide text-o2-navy">Parcelas mais urgentes<InfoLegenda titulo="Parcelas mais urgentes">Lista as 300 parcelas mais urgentes do filtro, da mais grave para a mais leve e, dentro do mesmo status, das mais atrasadas. Dias é o atraso desde o vencimento (ou em quantos dias vence). Prazo normal / limite são os dias que a seguradora costuma levar para pagar a comissão (mediana e percentil 90 dos últimos 16 meses, por seguradora e ramo, já com 2 dias de tolerância); quando existe regra de cancelamento, aparece em quantos dias a apólice cancela. A marca boleto da fatura indica fatura unificada: a parcela só fica em aberto depois do vencimento do boleto da fatura, não da data do Corp, e nelas o status não passa de urgente. Onde a Condição Geral manda usar a Tabela de Prazo Curto, aparece pago X% e cobertura até: é a cobertura em dias contados do início da vigência conforme a porcentagem do prêmio já paga, e o risco de cancelamento só é marcado quando a data da faixa de cima da tabela já passou (mais 2 dias) e nenhuma parcela posterior tem prova de pagamento. As regras de cancelamento seguem a Condição Geral de cada seguradora, e o padrão por produto vale para as que não têm documento cadastrado.</InfoLegenda></p>
       <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
         <table className="w-full text-xs">
           <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">

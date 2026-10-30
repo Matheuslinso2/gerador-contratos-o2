@@ -7,6 +7,8 @@ import { IconReport } from "@/components/icons";
 import { formatarData, formatarReais } from "@/lib/sinistros/regras";
 import { dadosDeCabecalhoPorId, tipoDoCabecalho, TIPOS_DOCUMENTO } from "@/lib/erp/documentos";
 import { lerFiltros } from "@/lib/erp/filtros";
+import InfoLegenda from "@/components/InfoLegenda";
+import type { ReactNode } from "react";
 import FiltrosErp from "../FiltrosErp";
 import BotaoVerDocumento from "../BotaoVerDocumento";
 
@@ -136,20 +138,37 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
         valores={{ ...f, mes }}
         placeholderBusca="Código O2 do documento · nosso nº do Corp · nome do titular"
         tipos={TIPOS_DOCUMENTO}
-        resumo={<>{atraso ? `atraso de meses anteriores a ${rotuloMes}` : `efetivadas em ${rotuloMes}`} · {total.toLocaleString("pt-BR")} pendente(s)</>}
+        resumo={
+          <>
+            {atraso ? `atraso de meses anteriores a ${rotuloMes}` : `efetivadas em ${rotuloMes}`} · {total.toLocaleString("pt-BR")} pendente(s)
+            <InfoLegenda titulo="Lista de propostas pendentes">
+              A lista abaixo mostra as propostas efetivadas ainda sem Nº da apólice (ou do endosso), da mais antiga para a mais nova. O mês do filtro é o mês da efetivação; com o atraso ligado, mostra as efetivadas em meses anteriores ao escolhido. Os demais filtros (produto, imobiliária, tipo, seguradora e busca) recortam a lista. Dias = hoje menos a data de efetivação. A data de efetivação vem do cartão concluído no Bitrix; sem cartão, da proposta do Corp (a fonte da data aparece embaixo dela). Atualizada a cada hora.
+            </InfoLegenda>
+          </>
+        }
       />
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Cartao titulo={`Efetivadas em ${rotuloMes}`} valor={kpi?.efetivados} nota={kpi ? `${kpi.bitrix} do Bitrix · ${kpi.corp} do Corp` : "calculando"} />
-        <Cartao titulo="Emitidas (já têm nº)" valor={kpi?.emitidos} nota={kpi && kpi.efetivados ? `${Math.round((kpi.emitidos / kpi.efetivados) * 100)}% das efetivadas do mês` : undefined} cor="text-green-700" />
-        <Cartao titulo="Pendentes do mês" valor={kpi?.pendentes} nota="efetivadas no mês, sem nº" cor="text-orange-700" />
-        <Link href={href({ atraso: "1", faixa: undefined })} className="block">
-          <Cartao titulo="Atraso de meses anteriores" valor={atrasoTotal ?? 0} nota="ver todas · sem nº de apólice" cor="text-red-700" realce={atraso} />
-        </Link>
+        <Cartao titulo={`Efetivadas em ${rotuloMes}`} valor={kpi?.efetivados} nota={kpi ? `${kpi.bitrix} do Bitrix · ${kpi.corp} do Corp` : "calculando"} info="Propostas efetivadas no mês escolhido: cotação concluída com sucesso no funil do Bitrix (vale a data do cartão) ou, quando não há cartão, proposta do Corp. A nota separa quantas vieram de cada fonte. Cotações ainda em negociação não entram: ficam no Workspace." />
+        <Cartao titulo="Emitidas (já têm nº)" valor={kpi?.emitidos} nota={kpi && kpi.efetivados ? `${Math.round((kpi.emitidos / kpi.efetivados) * 100)}% das efetivadas do mês` : undefined} cor="text-green-700" info="Das efetivadas do mês, quantas já têm Nº da apólice (ou Nº do endosso). Por enquanto esse número é a prova de que a seguradora emitiu. A porcentagem é emitidas dividido por efetivadas." />
+        <Cartao titulo="Pendentes do mês" valor={kpi?.pendentes} nota="efetivadas no mês, sem nº" cor="text-orange-700" info="Propostas efetivadas no mês escolhido que ainda não têm Nº da apólice (nem do endosso): seguem em Emissão até virarem apólice." />
+        <div className="relative">
+          <Link href={href({ atraso: "1", faixa: undefined })} className="block">
+            <Cartao titulo="Atraso de meses anteriores" valor={atrasoTotal ?? 0} nota="ver todas · sem nº de apólice" cor="text-red-700" realce={atraso} />
+          </Link>
+          <span className="absolute bottom-2 right-2">
+            <InfoLegenda titulo="Atraso de meses anteriores" alinhar="direita">
+              Propostas efetivadas antes do mês escolhido que continuam sem Nº da apólice (ou do endosso), de qualquer época anterior. Não muda com os filtros de produto, imobiliária ou seguradora. Clique no cartão para ver a lista.
+            </InfoLegenda>
+          </span>
+        </div>
       </section>
 
       <section className="flex flex-wrap items-center gap-2 text-xs">
         <span className="text-[11px] uppercase tracking-wide text-gray-500">Dias desde a efetivação:</span>
+        <InfoLegenda titulo="Dias desde a efetivação">
+          Divide as propostas pendentes do recorte atual (mês ou atraso) pelo tempo desde a efetivação: até 5 dias, 6 a 10, 11 a 15 e mais de 15. O número em cada botão respeita os filtros de produto, tipo, imobiliária, seguradora e origem. Clique para filtrar a lista; clique de novo para limpar.
+        </InfoLegenda>
         {FAIXAS.map((x, i) => (
           <Link key={x.chave} href={href({ faixa: faixa === x.chave ? undefined : x.chave })} className={`rounded-full border px-3 py-1 font-medium ${x.cor} ${faixa === x.chave ? "ring-2 ring-o2-navy" : ""}`}>
             {x.rotulo} · {(contagens[i] as number).toLocaleString("pt-BR")}
@@ -157,6 +176,9 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
         ))}
         <span className="mx-2 text-gray-300">|</span>
         <span className="text-[11px] uppercase tracking-wide text-gray-500">Origem:</span>
+        <InfoLegenda titulo="Origem">
+          Bitrix = proposta que veio de um cartão concluído no Bitrix. Corp = proposta que veio do cadastro do Corp. Todas = as duas na mesma lista.
+        </InfoLegenda>
         {[{ k: undefined, r: "todas" }, { k: "bitrix", r: "Bitrix" }, { k: "corp", r: "Corp" }].map((o) => (
           <Link key={o.r} href={href({ origem: o.k })} className={`rounded-full border px-3 py-1 font-medium ${origem === o.k ? "border-o2-navy bg-o2-navy text-white" : "border-gray-300 text-gray-700"}`}>
             {o.r}
@@ -240,10 +262,10 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
   );
 }
 
-function Cartao({ titulo, valor, nota, cor = "text-o2-navy", realce = false }: { titulo: string; valor: number | undefined; nota?: string; cor?: string; realce?: boolean }) {
+function Cartao({ titulo, valor, nota, cor = "text-o2-navy", realce = false, info }: { titulo: string; valor: number | undefined; nota?: string; cor?: string; realce?: boolean; info?: ReactNode }) {
   return (
     <div className={`rounded-xl border bg-white p-4 ${realce ? "border-o2-navy ring-1 ring-o2-navy" : "border-gray-200"}`}>
-      <div className="text-[11px] uppercase tracking-wide text-gray-500">{titulo}</div>
+      <div className="text-[11px] uppercase tracking-wide text-gray-500">{titulo}{info ? <InfoLegenda titulo={titulo}>{info}</InfoLegenda> : null}</div>
       <div className={`mt-1 text-2xl font-semibold ${cor}`}>{valor === undefined ? "—" : valor.toLocaleString("pt-BR")}</div>
       {nota && <div className="mt-0.5 text-[11px] text-gray-500">{nota}</div>}
     </div>

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { lerFiltros, SEGURADORA_FATURA } from "@/lib/erp/filtros";
 import { formatarReais } from "@/lib/sinistros/regras";
 import FiltrosErp from "../FiltrosErp";
+import InfoLegenda from "@/components/InfoLegenda";
 
 export const metadata = { title: "Imobiliárias" };
 export const dynamic = "force-dynamic";
@@ -83,7 +84,7 @@ export default async function ErpImobiliarias({ searchParams }: { searchParams: 
   return (
     <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-4 p-8">
       <div>
-        <h1 className="text-xl font-semibold text-o2-navy">Imobiliárias</h1>
+        <h1 className="text-xl font-semibold text-o2-navy">Imobiliárias<InfoLegenda titulo="Imobiliárias no ERP">É o cadastro único de imobiliárias da O2, o mesmo do Workspace e do Power BI. O cadastro (dados, contatos, grupo) é editado no Workspace; aqui aparece o que importa para a gestão: apólices vigentes, propostas pendentes de emissão, faturas e pró-labore. Os totais por imobiliária são recalculados a cada hora.</InfoLegenda></h1>
         <p className="text-sm text-gray-600">
           A mesma base única de imobiliárias do Workspace e do Power BI. O cadastro (dados, contatos, grupo) é editado no Workspace; aqui aparece o que importa para a gestão: produção vigente, propostas pendentes de emissão, faturas e repasse.
         </p>
@@ -94,6 +95,7 @@ export default async function ErpImobiliarias({ searchParams }: { searchParams: 
             {v.rotulo}
           </Link>
         ))}
+        <InfoLegenda titulo="Visões da lista">Com apólices vigentes: só imobiliárias que têm ao menos uma apólice vigente (esta visão não se aplica quando há busca por nome ou código). Com propostas pendentes: têm proposta ainda não emitida como apólice. Com fatura: têm ao menos uma fatura cadastrada no ERP. Todas: o cadastro inteiro.</InfoLegenda>
       </div>
       <FiltrosErp
         caminho="/erp/imobiliarias"
@@ -104,6 +106,7 @@ export default async function ErpImobiliarias({ searchParams }: { searchParams: 
         resumo="Seguradora: imobiliárias com fatura nessa seguradora ou com pró-labore pago direto por ela."
       />
       <p className="text-xs text-gray-500">{(count ?? lista.length).toLocaleString("pt-BR")} imobiliária(s){lista.length < (count ?? 0) ? ` · mostrando ${lista.length}` : ""} · ordenadas pelo prêmio das apólices vigentes</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-o2-navy">Lista de imobiliárias<InfoLegenda titulo="Colunas da lista">Grupo: o grupo do cadastro único e o papel da ficha nele; se não tem grupo, aparece o grupo usado no Power BI. Cód. O2 / no Corp: o código da imobiliária na O2 e o código dela como produtor no Corp. Vigentes e Prêmio vigente: quantidade e soma do prêmio das apólices vigentes dela no ERP. Pend. emissão: propostas ainda não emitidas como apólice. Produtos: produtos dos documentos dela. Fatura em: seguradoras em que ela tem fatura. Pró-labore direto: seguradoras que pagam uma fatia direto à imobiliária, com os pontos ao lado da sigla. A lista vem ordenada pelo prêmio vigente e mostra 100 por vez.</InfoLegenda></p>
       <div className="overflow-auto rounded-xl border border-gray-200 bg-white">
         <table className="w-full text-xs">
           <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">

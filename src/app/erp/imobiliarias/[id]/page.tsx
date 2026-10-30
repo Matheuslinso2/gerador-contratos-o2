@@ -6,6 +6,7 @@ import { nomesProdutoDasFaturas } from "@/lib/erp/faturaTela";
 import { formatarDocumento } from "@/lib/erp/clientes";
 import { formatarReais } from "@/lib/sinistros/regras";
 import RegrasRepasseErp from "../RegrasRepasseErp";
+import InfoLegenda from "@/components/InfoLegenda";
 
 export const metadata = { title: "Imobiliária" };
 export const dynamic = "force-dynamic";
@@ -18,10 +19,10 @@ type Membro = { id: string; nome: string; papel_no_grupo: string | null; codigo_
 
 const lista = (v: string[] | null | undefined) => (v && v.length ? v.join(", ") : null);
 
-function Campo({ rotulo, valor }: { rotulo: string; valor: React.ReactNode }) {
+function Campo({ rotulo, valor, info }: { rotulo: string; valor: React.ReactNode; info?: React.ReactNode }) {
   return (
     <div>
-      <div className="text-[11px] uppercase tracking-wide text-gray-500">{rotulo}</div>
+      <div className="text-[11px] uppercase tracking-wide text-gray-500">{rotulo}{info}</div>
       <div className="text-sm text-gray-900">{valor ?? <span className="text-gray-300">—</span>}</div>
     </div>
   );
@@ -70,14 +71,14 @@ export default async function ErpImobiliaria({ params }: { params: Promise<{ id:
       </div>
 
       <section className="grid grid-cols-2 gap-3 rounded-xl border border-gray-200 bg-white p-4 md:grid-cols-4">
-        <Campo rotulo="Apólices vigentes" valor={(resumo?.docs_vigentes ?? 0).toLocaleString("pt-BR")} />
-        <Campo rotulo="Prêmio vigente" valor={resumo?.docs_vigentes ? formatarReais(Number(resumo.premio_vigente)) : null} />
-        <Campo rotulo="Comissão vigente" valor={resumo?.docs_vigentes ? formatarReais(Number(resumo.comissao_vigente)) : null} />
-        <Campo rotulo="Propostas pendentes de emissão" valor={resumo?.propostas_pendentes ? <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-800">{resumo.propostas_pendentes}</span> : "0"} />
+        <Campo rotulo="Apólices vigentes" valor={(resumo?.docs_vigentes ?? 0).toLocaleString("pt-BR")} info={<InfoLegenda titulo="Apólices vigentes">Quantidade de apólices vigentes desta imobiliária no ERP. O resumo é recalculado a cada hora.</InfoLegenda>} />
+        <Campo rotulo="Prêmio vigente" valor={resumo?.docs_vigentes ? formatarReais(Number(resumo.premio_vigente)) : null} info={<InfoLegenda titulo="Prêmio vigente">Soma do prêmio das apólices vigentes desta imobiliária no ERP. Fica em branco quando não há apólice vigente.</InfoLegenda>} />
+        <Campo rotulo="Comissão vigente" valor={resumo?.docs_vigentes ? formatarReais(Number(resumo.comissao_vigente)) : null} info={<InfoLegenda titulo="Comissão vigente">Soma da comissão das apólices vigentes desta imobiliária no ERP. Fica em branco quando não há apólice vigente.</InfoLegenda>} />
+        <Campo rotulo="Propostas pendentes de emissão" valor={resumo?.propostas_pendentes ? <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-800">{resumo.propostas_pendentes}</span> : "0"} info={<InfoLegenda titulo="Propostas pendentes de emissão" alinhar="direita">Quantidade de propostas desta imobiliária que ainda não viraram apólice, ou seja, aguardam emissão. O link propostas em emissão, no alto da página, abre a lista.</InfoLegenda>} />
       </section>
 
       <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Cadastro (base única, só leitura aqui)</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Cadastro (base única, só leitura aqui)<InfoLegenda titulo="Cadastro">Dados do cadastro único de imobiliárias, o mesmo do Workspace e do Power BI. Aqui só se lê; para corrigir, use o link editar o cadastro no Workspace. Cód. O2 da imobiliária é o código dela na O2; Cód. da imobiliária no Corp é o código dela como produtor no Corp; Grupo no Power BI é o nome usado para juntar fichas no Power BI. Os e-mails de fatura e de repasse são os usados nesses envios, e a situação na Receita é a da última consulta registrada.</InfoLegenda></h2>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <Campo rotulo="CNPJ / CPF" valor={imob.cnpj ? `${formatarDocumento(imob.cnpj)}${imob.tipo_pessoa ? ` · ${imob.tipo_pessoa.toLowerCase()}` : ""}` : null} />
           <Campo rotulo="Cód. O2 da imobiliária (produtor)" valor={imob.codigo_o2 ?? null} />
@@ -98,7 +99,7 @@ export default async function ErpImobiliaria({ params }: { params: Promise<{ id:
 
       {grupo && (
         <section className="space-y-2 rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Grupo {grupo.nome} ({grupo.tipo === "rede_filiais" ? "rede de filiais" : "mesma empresa"})</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Grupo {grupo.nome} ({grupo.tipo === "rede_filiais" ? "rede de filiais" : "mesma empresa"})<InfoLegenda titulo="Grupo">Lista as outras fichas do cadastro único que pertencem ao mesmo grupo (até 60), com o papel de cada uma e o código O2 da imobiliária. O grupo pode ser uma rede de filiais ou fichas diferentes da mesma empresa.</InfoLegenda></h2>
           {membros.length === 0 ? (
             <p className="text-xs text-gray-500">Esta é a única ficha do grupo.</p>
           ) : (
@@ -115,7 +116,7 @@ export default async function ErpImobiliaria({ params }: { params: Promise<{ id:
       )}
 
       <section className="space-y-2 rounded-xl border border-gray-200 bg-white p-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Produção vigente por produto e seguradora</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Produção vigente por produto e seguradora<InfoLegenda titulo="Produção vigente">Apólices vigentes desta imobiliária no ERP, agrupadas por produto e seguradora, com a quantidade, a soma do prêmio e a soma da comissão de cada grupo.</InfoLegenda></h2>
         {producao.length === 0 ? (
           <p className="text-xs text-gray-500">Nenhuma apólice vigente.</p>
         ) : (
@@ -139,7 +140,7 @@ export default async function ErpImobiliaria({ params }: { params: Promise<{ id:
       </section>
 
       <section className="space-y-2 rounded-xl border border-gray-200 bg-white p-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Faturas</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Faturas<InfoLegenda titulo="Faturas">Fatura é a aglutinação de várias apólices em uma cobrança só. Lista as faturas desta imobiliária cadastradas no ERP, por seguradora, com a corretora e o código do corretor; clicar abre a fatura. Sem fatura, as apólices são cobradas direto, por boleto, cartão ou débito.</InfoLegenda></h2>
         {!faturaAtiva ? (
           <p className="text-xs text-gray-500">Sem fatura carregada: as apólices desta imobiliária são cobradas direto (boleto, cartão ou débito).</p>
         ) : (
@@ -163,7 +164,7 @@ export default async function ErpImobiliaria({ params }: { params: Promise<{ id:
       />
 
       <section className="space-y-2 rounded-lg border border-gray-200 bg-white p-3 text-sm">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Pró-labore pago direto pela seguradora</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Pró-labore pago direto pela seguradora<InfoLegenda titulo="Pró-labore pago direto">A seguradora paga esta fatia direto à imobiliária, com nota fiscal da imobiliária. Por isso não entra na conta da O2, não é pendência de comissão e não pode gerar repasse da O2. A tabela mostra a seguradora, os pontos, se o valor está confirmado ou ainda a confirmar e como foi apurado.</InfoLegenda></h2>
         <p className="text-xs text-gray-500">
           A seguradora paga esta fatia direto à imobiliária (NF da imob): não entra na conta da O2, não é pendência de comissão e não pode gerar repasse da O2.
         </p>

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import RascunhoAutomatico from "@/components/RascunhoAutomatico";
+import InfoLegenda from "@/components/InfoLegenda";
 import { criarCliente } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +20,12 @@ export default async function NovoClientePage({ searchParams }: { searchParams: 
   return (
     <main className="mx-auto w-full max-w-[640px] flex-1 space-y-4 p-8">
       <Link href="/erp/clientes" className="text-sm text-gray-500 hover:text-o2-navy hover:underline">← Clientes</Link>
-      <h1 className="text-xl font-semibold text-o2-navy">Novo cliente</h1>
+      <h1 className="text-xl font-semibold text-o2-navy">
+        Novo cliente
+        <InfoLegenda titulo="Novo cliente">
+          Cadastro de uma pessoa na base única de clientes, feito antes de criar o documento, como no Corp. Obrigatórios: nome ou razão social, CPF ou CNPJ válido e pelo menos um entre e-mail e telefone. Se o CPF/CNPJ já existir, o sistema abre o cadastro que já existe, sem criar outro. O rascunho é guardado automaticamente enquanto você digita. Cada cliente novo recebe seu Código do cliente (CLI-000001 e seguintes).
+        </InfoLegenda>
+      </h1>
       <p className="text-sm text-gray-600">
         Cadastre antes de criar o documento, como no Corp. CPF ou CNPJ é obrigatório, e também e-mail ou telefone. Se o CPF/CNPJ já existir, o sistema abre o cadastro que já existe, sem criar outro.
       </p>

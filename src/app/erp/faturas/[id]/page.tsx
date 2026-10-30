@@ -6,6 +6,7 @@ import { fichaFatura, TOLERANCIA_FATURA, type LinhaFatura } from "@/lib/erp/fatu
 import RascunhoAutomatico from "@/components/RascunhoAutomatico";
 import { registrarMovimentacao } from "./actions";
 import BotaoVerDocumento from "../../BotaoVerDocumento";
+import InfoLegenda from "@/components/InfoLegenda";
 
 const MOTIVOS = ["Entrega de chaves", "Fim de contrato", "Cancelamento a pedido", "Sinistro", "Litígio", "Troca de administradora", "Renovação em outra fatura", "Erro da seguradora", "Outro"];
 
@@ -84,6 +85,9 @@ export default async function ErpFaturaPage({ params, searchParams }: { params: 
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <h1 className="text-xl font-semibold text-o2-navy">
             Fatura · {imob} · {fatura.seguradora} <span className="text-base font-normal text-gray-500">{fatura.chave}</span>
+            <InfoLegenda titulo="Tela da fatura">
+              Uma única fatura: o conjunto de apólices que a seguradora cobra da imobiliária num boleto (a fatura não tem apólice própria). Os botões com os meses navegam pelos meses carregados dos arquivos da seguradora. O resumo compara o mês com o mês anterior; abaixo ficam as entradas, as saídas e todas as linhas do mês.
+            </InfoLegenda>
           </h1>
           {mes && (
             <div className="flex items-center gap-2 text-sm">
@@ -111,16 +115,19 @@ export default async function ErpFaturaPage({ params, searchParams }: { params: 
       {mes && (
         <section className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-7">
           {[
-            ["Mês anterior", anterior ? String(anterior.qtd_itens) : "—"],
-            ["+ Entradas", String(entradas.length)],
-            ["− Saídas", String(saidas.length)],
-            ["= Este mês", String(mes.qtd_itens)],
-            ["Boleto da seguradora", mes.valor_boleto === null ? "—" : formatarReais(mes.valor_boleto)],
-            ["Soma das linhas", formatarReais(mes.valor_itens)],
-            ["Comissão no extrato", comissaoTotal ? formatarReais(comissaoTotal) : "—"],
-          ].map(([r, v]) => (
+            ["Mês anterior", anterior ? String(anterior.qtd_itens) : "—", "Quantidade de apólices na fatura do mês anterior carregado, conforme o arquivo da seguradora. Mostra “—” quando não há mês anterior."],
+            ["+ Entradas", String(entradas.length), "Quantas linhas deste mês têm um Nº da apólice que não estava na fatura do mês anterior. Sem mês anterior carregado, todas contam como entrada."],
+            ["− Saídas", String(saidas.length), "Quantas apólices estavam na fatura do mês anterior e não aparecem neste mês. A lista de saídas abaixo diz o motivo de cada uma."],
+            ["= Este mês", String(mes.qtd_itens), "Quantidade de apólices na fatura deste mês, conforme o arquivo da seguradora. É a contagem do arquivo, não uma conta feita a partir das caixas ao lado."],
+            ["Boleto da seguradora", mes.valor_boleto === null ? "—" : formatarReais(mes.valor_boleto), "Valor do boleto da fatura deste mês, lido do arquivo da seguradora. Mostra “—” quando o arquivo não trouxe o valor."],
+            ["Soma das linhas", formatarReais(mes.valor_itens), "Soma do valor cobrado de cada apólice na fatura deste mês. Deve bater com o boleto; a tolerância é de R$ 1,00."],
+            ["Comissão no extrato", comissaoTotal ? formatarReais(comissaoTotal) : "—", "Soma da comissão que o extrato da seguradora trouxe para as apólices e parcelas das linhas deste mês. Só entram as linhas ligadas a um documento do ERP; mostra “—” quando não há comissão no extrato."],
+          ].map(([r, v, info]) => (
             <div key={r} className="rounded-xl border border-gray-200 bg-white p-3">
-              <div className="text-[11px] uppercase tracking-wide text-gray-500">{r}</div>
+              <div className="text-[11px] uppercase tracking-wide text-gray-500">
+                {r}
+                <InfoLegenda titulo={r}>{info}</InfoLegenda>
+              </div>
               <div className="text-lg font-semibold text-o2-navy">{v}</div>
             </div>
           ))}
@@ -137,17 +144,28 @@ export default async function ErpFaturaPage({ params, searchParams }: { params: 
           )}
           {semDoc > 0 && <span className="rounded-full bg-red-100 px-2 py-0.5 text-red-800">{semDoc} linha(s) com apólice que não está no ERP</span>}
           {semExplicacao > 0 && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800">{semExplicacao} saída(s) sem explicação</span>}
+          <InfoLegenda titulo="Conferência do mês">
+            Resumo das conferências do mês. Boleto: “bate” quando o boleto e a soma das linhas diferem em até R$ 1,00; fora disso mostra a diferença; “sem boleto” quando o arquivo não trouxe o valor. Linhas com apólice que não está no ERP: o Nº da apólice da fatura não foi encontrado entre os documentos. Saídas sem explicação: apólices que saíram da fatura sem motivo conhecido nem registrado.
+          </InfoLegenda>
         </div>
       )}
 
       <details open={entradas.length > 0 && entradas.length <= 30} className="rounded-xl border border-gray-200 bg-white">
-        <summary className="cursor-pointer px-4 py-2 text-sm font-semibold text-o2-navy">Entradas ({entradas.length})</summary>
+        <summary className="cursor-pointer px-4 py-2 text-sm font-semibold text-o2-navy">
+          Entradas ({entradas.length})
+          <InfoLegenda titulo="Entradas">
+            Linhas deste mês cujo Nº da apólice não estava na fatura do mês anterior. Nº da apólice: o da seguradora, com o endosso quando houver. Código O2 do documento: o documento correspondente no ERP (“não está no ERP” quando não foi encontrado). Parcela: número da parcela e total. Cobrado na fatura: valor da linha. Comissão no extrato: comissão que o extrato da seguradora trouxe para o mesmo documento e parcela (“—” quando não há). Situação: situação do documento no ERP.
+          </InfoLegenda>
+        </summary>
         {entradas.length > 0 && <Tabela linhas={entradas} />}
       </details>
 
       <details open={saidas.length > 0} className="rounded-xl border border-gray-200 bg-white">
         <summary className="cursor-pointer px-4 py-2 text-sm font-semibold text-o2-navy">
           Saídas ({saidas.length}){semExplicacao ? <span className="ml-2 text-xs font-normal text-amber-700">{semExplicacao} sem explicação: a tratativa por e-mail da imobiliária, o card de renovação ou o endosso precisam dizer o motivo</span> : null}
+          <InfoLegenda titulo="Saídas">
+            Apólices que estavam na fatura do mês anterior e não estão neste mês. O ERP explica sozinho quando sabe o motivo: última parcela cobrada, endosso de cancelamento, apólice cancelada, vigência encerrada ou mudança para outra forma de pagamento. Quando não sabe, a saída fica “sem explicação” e a equipe registra o motivo (por exemplo, entrega de chaves ou fim de contrato) e a referência (assunto do e-mail ou número do card). Valor no mês anterior: o que a apólice pagava na fatura anterior.
+          </InfoLegenda>
         </summary>
         {saidas.length > 0 && (
           <table className="w-full text-xs">
@@ -209,7 +227,12 @@ export default async function ErpFaturaPage({ params, searchParams }: { params: 
       </details>
 
       <details className="rounded-xl border border-gray-200 bg-white">
-        <summary className="cursor-pointer px-4 py-2 text-sm font-semibold text-o2-navy">Todas as linhas do mês ({linhas.length})</summary>
+        <summary className="cursor-pointer px-4 py-2 text-sm font-semibold text-o2-navy">
+          Todas as linhas do mês ({linhas.length})
+          <InfoLegenda titulo="Todas as linhas do mês">
+            Todas as linhas da fatura neste mês, conforme o arquivo da seguradora, com as mesmas colunas de Entradas: Nº da apólice, Código O2 do documento, cliente, parcela, valor cobrado, comissão no extrato e situação do documento. A soma da coluna Cobrado na fatura é a Soma das linhas do resumo.
+          </InfoLegenda>
+        </summary>
         <Tabela linhas={linhas} />
       </details>
     </main>

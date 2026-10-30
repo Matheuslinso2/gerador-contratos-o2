@@ -4,6 +4,7 @@ import { formatarData, formatarReais } from "@/lib/sinistros/regras";
 import { lerFiltros, limitesMes } from "@/lib/erp/filtros";
 import FiltrosErp from "../FiltrosErp";
 import BotaoVerDocumento from "../BotaoVerDocumento";
+import InfoLegenda from "@/components/InfoLegenda";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Parcelas" };
@@ -57,7 +58,7 @@ export default async function ErpParcelasPage({ searchParams }: { searchParams: 
           <span className="border-b-2 border-o2-navy font-semibold text-o2-navy">Conferência dos vencimentos</span>
           <Link href="/erp/parcelas/cobranca" className="text-gray-500 hover:text-o2-navy hover:underline">Cobrança e inadimplência</Link>
         </div>
-        <h1 className="mt-2 text-xl font-semibold text-o2-navy">Parcelas · conferência dos vencimentos</h1>
+        <h1 className="mt-2 text-xl font-semibold text-o2-navy">Parcelas · conferência dos vencimentos<InfoLegenda titulo="Conferência dos vencimentos">Mostra parcelas cujo vencimento no Corp está em outro mês do que a seguradora cobrou na fatura. A comparação usa as faturas de Tokio, Porto, Pottencial, Too e Yelum. Enquanto o Corp não for corrigido, a previsão de receita e a baixa de comissão caem no mês errado. A lista é refeita a cada leitura das faturas. O filtro de mês vale pelo vencimento cobrado pela seguradora, e a tela mostra 500 parcelas (o CSV traz todas, até 3.000).</InfoLegenda></h1>
         <p className="text-sm text-gray-600">
           Parcelas cujo vencimento no Corp está em outro mês do que a seguradora cobrou na fatura. Enquanto não for corrigido no Corp, a previsão de receita e a
           baixa de comissão caem no mês errado. Fonte: faturas Tokio, Porto, Pottencial, Too e Yelum. A inadimplência entra nesta etapa depois.
@@ -78,12 +79,13 @@ export default async function ErpParcelasPage({ searchParams }: { searchParams: 
         }
       />
       <div className="flex flex-wrap gap-2 text-xs">
-        {[...porMes.entries()].sort().reverse().map(([m, x]) => (
+        <span className="self-center"><InfoLegenda titulo="Cobrado em (por mês)">Agrupa as parcelas divergentes pelo mês em que a seguradora cobrou. Cada cartão mostra quantas parcelas são e a soma da comissão prevista delas, que hoje está sendo prevista no mês errado do Corp.</InfoLegenda></span>{[...porMes.entries()].sort().reverse().map(([m, x]) => (
           <span key={m} className="rounded-lg border border-gray-200 bg-white px-3 py-1.5">
             cobrado em {m.slice(5)}/{m.slice(0, 4)}: <b>{x.n}</b> parcelas · {formatarReais(x.v)}
           </span>
         ))}
       </div>
+      <p className="text-xs font-semibold uppercase tracking-wide text-o2-navy">Parcelas com vencimento divergente<InfoLegenda titulo="Parcelas com vencimento divergente">Cada linha é uma parcela. Vencimento no Corp é a data cadastrada no Corp; Cobrado pela seguradora é o vencimento dessa mesma parcela na fatura da seguradora; Diferença diz quantos meses o Corp está adiantado ou atrasado. Comissão prevista é a comissão esperada daquela parcela. Parcela mostra o número da parcela e o total quando se sabe. Abrir leva ao documento no ERP.</InfoLegenda></p>
       <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
         <table className="w-full text-xs">
           <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">

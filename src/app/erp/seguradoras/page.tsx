@@ -7,6 +7,7 @@ import PageHeader from "@/components/PageHeader";
 import { IconReport } from "@/components/icons";
 import { formatarData } from "@/lib/sinistros/regras";
 import { salvarRegraSeguradora, salvarRegraProduto } from "./actions";
+import InfoLegenda from "@/components/InfoLegenda";
 
 export const dynamic = "force-dynamic";
 
@@ -106,7 +107,12 @@ export default async function ErpSeguradorasPage({ searchParams }: { searchParam
         {sucesso && <p className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-700">Regra salva. A previsão das parcelas é refeita na próxima recalculação.</p>}
 
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Regras por seguradora × produto</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">
+            Regras por seguradora × produto
+            <InfoLegenda titulo="Regras por seguradora × produto">
+              Exceções à regra geral: como uma seguradora paga a comissão da O2 em um produto específico. Proporcional = a mesma fração da comissão em cada parcela; esgotamento = a comissão inteira nas primeiras parcelas, até zerar (o campo Esgot. até limita em quantas parcelas; vazio vale sempre). Vale a regra mais específica: quem não está nesta lista usa a regra geral da seguradora. Fonte e observação dizem de onde veio a regra; marque Confirmada depois de conferir no Corp (aba Comissões) ou no demonstrativo. A previsão de comissão das parcelas é refeita na próxima recalculação. O repasse à imobiliária é sempre proporcional. O formulário embaixo adiciona uma regra nova.
+            </InfoLegenda>
+          </h2>
           <p className="text-xs text-gray-500">
             Vale a regra mais específica. Conferido nos relatórios de agosto/2026: Incêndio e Fiança são proporcionais em todas; o esgotamento (“comissão antecipada”) apareceu no Auto da Tokio.
             Quem não está aqui usa a regra geral da seguradora (tabela abaixo).
@@ -217,7 +223,12 @@ export default async function ErpSeguradorasPage({ searchParams }: { searchParam
           </form>
         </section>
 
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Regra geral por seguradora</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">
+          Regra geral por seguradora
+          <InfoLegenda titulo="Regra geral por seguradora">
+            Uma linha por seguradora ativa, da que tem mais documentos em 2026 para a que tem menos (Docs 2026). Regra = proporcional ou esgotamento (veja o quadro acima); Paga em (dias) = prazo de pagamento da comissão, de 0 a 60 dias; Dia fixo = dia do mês (1 a 28) a ser usado na previsão da parcela, quando houver; Onde está o extrato e Lido pelo ERP indicam onde fica o extrato da seguradora e se o ERP já lê esse extrato (portal, Drive ou e-mail). Confirmada = a regra foi conferida no Corp ou no demonstrativo. Salvar grava a linha; a previsão das parcelas é refeita na próxima recalculação.
+          </InfoLegenda>
+        </h2>
 
         <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
           <table className="w-full text-xs">

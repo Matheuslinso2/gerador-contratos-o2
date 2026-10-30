@@ -10,6 +10,7 @@ import { lerFiltros, VISOES } from "@/lib/erp/filtros";
 import { codigoCliente } from "@/lib/erp/clientes";
 import FiltrosErp from "../FiltrosErp";
 import BotaoVerDocumento from "../BotaoVerDocumento";
+import InfoLegenda from "@/components/InfoLegenda";
 
 
 // ERP O2 — Fase 0: tela mínima de consulta de documentos (só leitura), para o
@@ -118,7 +119,12 @@ export default async function ListaDocumentos({
 
         {semVigente.length > 0 && (
           <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-3">
-            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-yellow-800">Cliente sem documento vigente</div>
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-yellow-800">
+              Cliente sem documento vigente
+              <InfoLegenda titulo="Cliente sem documento vigente">
+                Aparece quando a busca por nome, CPF/CNPJ ou Código do cliente acha uma pessoa cadastrada que não tem nenhum documento vigente. Serve para o cliente não sumir da busca: mostra o Código do cliente (clique para abrir o cadastro) e quantos documentos ele tem no histórico.
+              </InfoLegenda>
+            </div>
             <ul className="divide-y divide-yellow-100 text-xs">
               {semVigente.map((c) => (
                 <li key={c.id} className="flex flex-wrap items-center gap-3 py-1.5">
@@ -131,6 +137,13 @@ export default async function ListaDocumentos({
             </ul>
           </div>
         )}
+
+        <p className="flex items-center text-xs font-semibold uppercase tracking-wide text-o2-navy">
+          Lista de documentos
+          <InfoLegenda titulo="Lista de documentos">
+            Cada linha é um documento: apólice, endosso ou fatura, vindos do Corp e dos cards do Bitrix. Cotações e propostas não aparecem nestas visões (a proposta fica na tela Emissão até virar apólice). O filtro de visão decide o recorte: Apólices vigentes (vigentes hoje, ou em algum dia do período, se houver datas), Apólices com início de vigência no período, Faturas do período ou Endossos do período. Quando você busca por nome, CPF/CNPJ, código ou número, a busca olha o histórico todo. Titular do seguro: na Fiança é o proprietário (segurado e locador), com o inquilino em baixo; nos demais produtos é o segurado. Pr. líquido e Comissão são os valores gravados no documento. A lista mostra 50 por vez; use Mostrar mais.
+          </InfoLegenda>
+        </p>
 
         {linhas.length === 0 ? (
           <p className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">{semVigente.length > 0 ? "Nenhum documento vigente encontrado para essa busca." : "Nenhum documento encontrado."}</p>

@@ -10,6 +10,7 @@ import FiltrosErp from "../FiltrosErp";
 import { urlCard } from "@/lib/erp/renovacaoCards";
 import { dadosDeCabecalhoPorId, tipoDoCabecalho } from "@/lib/erp/documentos";
 import BotaoVerDocumento from "../BotaoVerDocumento";
+import InfoLegenda from "@/components/InfoLegenda";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Renovação" };
@@ -36,6 +37,14 @@ const BLOCOS: { id: BlocoId; titulo: string; funil: string; regra: string }[] = 
   { id: "re_lotes", titulo: "Ramos Elementares — incêndio imobiliário em lotes", funil: "SPA 1046 · Renovações (cat. 34)", regra: "1 card por imobiliária + seguradora (lote); itens renovados pela Segimob ficam em lote separado (SEG/seguradora)" },
   { id: "re_demais", titulo: "Ramos Elementares — demais produtos", funil: "SPA 1046 · Renovações (cat. 34)", regra: "1 card por apólice (residencial, empresarial, condomínio, vida, portáteis, RC…)" },
 ];
+// Complemento da explicação (ⓘ) de cada bloco: como as apólices viram cards.
+const INFO_BLOCO: Record<BlocoId, string> = {
+  fianca: "Apólices de Seguro Fiança vigentes que vencem no período. Cada apólice vira um card de renovação.",
+  cap: "Títulos de Capitalização vigentes que vencem no período. Cada título (apólice) vira um card de reaplicação.",
+  auto: "Apólices de Automóvel vigentes que vencem no período. Cada apólice vira um card de renovação.",
+  re_lotes: "Apólices de Seguro Incêndio de imobiliárias vigentes que vencem no período, reunidas em lote: um card por imobiliária e seguradora. Os itens renovados pela Segimob ficam em um lote separado, como faz o robô de renovações de Ramos Elementares. (Seguro Incêndio não é garantia locatícia.)",
+  re_demais: "Apólices de Ramos Elementares que não entram em lote (residencial, empresarial, condomínio, vida, portáteis, RC e outros) vigentes que vencem no período. Cada apólice vira um card.",
+};
 const STATUS: Record<string, string> = { a_renovar: "A renovar", em_cotacao: "Em cotação", renovado: "Renovado", nao_renovado: "Não renovado", cancelado: "Cancelado" };
 const NOME_SEG: Record<string, string> = { TOKI: "TOKIO", YELU: "YELLUM", PORT: "PORTO", ALLI: "ALLIANZ", ZURI: "ZURICH", ALF: "ALFA", BRAD: "BRADESCO" };
 const mmaaaa = (iso: string) => `${iso.slice(5, 7)}.${iso.slice(0, 4)}`;
@@ -187,12 +196,18 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
           <>
             {docs.length.toLocaleString("pt-BR")} apólice(s) vigente(s) · {cards.length.toLocaleString("pt-BR")} card(s) a criar
             {truncado ? " · lista limitada a 4.000 documentos: afunile o período" : ""}
+            <InfoLegenda titulo="Período e filtros da renovação">
+              O período filtra pelo fim de vigência da apólice. Ao abrir, a tela mostra o mês que vence daqui a dois meses (o ciclo do robô de renovações). Entram só apólices vigentes; propostas que ainda não viraram apólice não aparecem. Os filtros de busca, seguradora, produto e imobiliária recortam as apólices. Apólices com endosso de cancelamento ficam de fora. A tela só mostra a prévia: nada é criado no Bitrix a partir dela.
+            </InfoLegenda>
           </>
         }
       />
 
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <span className="text-gray-500">Vencimento em:</span>
+        <InfoLegenda titulo="Vencimento em">
+          Atalhos para trocar o período pelo mês inteiro, do próximo mês até quatro meses à frente. O mês é o do fim de vigência das apólices. Os filtros de busca, seguradora, produto e imobiliária são mantidos.
+        </InfoLegenda>
         {atalhos.map((a) => {
           const q = new URLSearchParams(base);
           q.set("de", a.de); q.set("ate", a.ate);
@@ -207,7 +222,12 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
 
       {abertasPorCard.size > 0 && (
         <section className="space-y-2 rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
-          <h2 className="text-base font-semibold text-gray-900">Em acompanhamento até o desfecho</h2>
+          <h2 className="text-base font-semibold text-gray-900">
+            Em acompanhamento até o desfecho
+            <InfoLegenda titulo="Em acompanhamento até o desfecho">
+              Cards de renovação já criados no Bitrix que ainda estão em A renovar ou Em cotação, mas cuja apólice já não está vigente (a vigência acabou). Continuam listados até o card chegar a Renovado ou Não renovado. Apólices com endosso de cancelamento ficam de fora. Esta lista não muda com o período nem com os filtros da tela.
+            </InfoLegenda>
+          </h2>
           <p className="text-xs text-gray-600">
             {abertasPorCard.size} card(s) de renovação ainda sem desfecho (nem Renovado nem Não renovado), cuja apólice já não está vigente. Continuam aqui até o card chegar ao fim do funil.
           </p>
@@ -258,7 +278,12 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
           <section key={b.id} className="space-y-2 rounded-2xl border border-gray-200 bg-gray-50/60 p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-[280px] flex-1">
-                <h2 className="text-base font-semibold text-gray-900">{b.titulo}</h2>
+                <h2 className="text-base font-semibold text-gray-900">
+                  {b.titulo}
+                  <InfoLegenda titulo={b.titulo}>
+                    {INFO_BLOCO[b.id]} Funil de destino no Bitrix: {b.funil}. Mostra quantos cards, quantas apólices e o prêmio líquido (conforme o Corp). As etiquetas coloridas apontam pendências a resolver antes de criar os cards (sem imobiliária, sem prêmio, sem Nº da apólice, cliente com cadastro incompleto) e quantas apólices já têm card no Bitrix ou já estão em andamento/renovadas. O botão está desligado: nada é criado ainda. Clique num card para ver as apólices dele.
+                  </InfoLegenda>
+                </h2>
                 <p className="text-xs text-gray-500">Destino: {b.funil} · {b.regra}</p>
                 <p className="mt-1 text-sm text-gray-800">
                   <strong>{lista.length}</strong> card(s) · <strong>{nDocs}</strong> apólice(s) · prêmio líquido {formatarReais(premio)}

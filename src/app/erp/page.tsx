@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { CADASTROS, ETAPAS } from "@/lib/erp/processo";
 import { podeVerBaixas } from "@/lib/erp/acessoBaixas";
+import InfoLegenda from "@/components/InfoLegenda";
 
 export const metadata = { title: { absolute: "ERP O2" } };
 export const dynamic = "force-dynamic";
@@ -20,6 +21,19 @@ type Kpis = {
   renovacoes_cadastradas: number;
 };
 type KpisEmissao = { efetivados: number; emitidos: number; pendentes: number; bitrix: number; corp: number };
+
+// Explicação de cada etapa (ⓘ do cartão). Só descreve o que a tela mostra e de onde vem.
+const INFO_ETAPA: Record<string, string> = {
+  emissao: "Propostas (cotações que o cliente autorizou) efetivadas no mês escolhido. Pendentes = ainda sem Nº da apólice (ou do endosso); emitidas = já têm o número; efetivadas = o total do mês. A linha de baixo conta as propostas pendentes há mais de 5, 10 e 15 dias desde a efetivação, somando todas as épocas (não só o mês). Vem do cartão do Bitrix e do Corp.",
+  faturas: "Faturas das imobiliárias carregadas no mês (fatura é a reunião de várias apólices; ela não tem apólice própria). Mostra quantas faturas, quantas apólices elas reúnem e a soma dos boletos. Entram / saem / ficam compara cada fatura com a do mês anterior: apólices que entraram, que saíram e que continuam. Fatura nova é a que não existia no mês anterior. O aviso de boleto aparece quando o valor do boleto não bate com a soma das linhas.",
+  envio: "Etapa ainda não construída (em breve): apólices emitidas a enviar ao cliente ou à imobiliária.",
+  apolices: "Quantidade de apólices vigentes e de apólices canceladas no mês escolhido, conforme a base do ERP (Corp e cartões do Bitrix). Clique no cartão para abrir a lista de documentos, com ficha e linha do tempo.",
+  parcelas: "Parcelas que vencem no mês e quantas já foram quitadas; parcelas vencidas ainda em aberto, com o valor somado. A data de baixa do Corp mostra até quando a baixa está em dia: se estiver atrasada, esses números ficam desatualizados. Vencimentos divergentes = parcelas cujo vencimento no Corp é diferente do cobrado pela seguradora (contagem geral, não só do mês).",
+  baixa: "Comissão do mês: valor já baixado (recebido, conforme o Corp) e valor ainda pendente, cada um com a quantidade de linhas. Mostra também até que dia vai a baixa do Corp e quantos estornos de endosso aguardam análise (contagem geral).",
+  repasses: "Relatório do que será pago a cada imobiliária no dia 15 (simulação, só leitura). Este cartão não traz números na tela inicial.",
+  sinistro: "Sinistros em andamento e sinistros abertos na seguradora no mês escolhido (pela data de abertura informada pela seguradora). O cartão abre o módulo de Sinistros do Workspace.",
+  renovacao: "Renovações a vencer no mês escolhido, conforme as renovações já cadastradas no ERP. O cartão abre a tela de Renovação, com as apólices vigentes agrupadas como serão os cards.",
+};
 
 const n = (v: number | null | undefined) => (v ?? 0).toLocaleString("pt-BR");
 const brl = (v: number | null | undefined) => (v ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -116,7 +130,12 @@ export default async function ErpInicio({ searchParams }: { searchParams: Promis
       </div>
       {avisos.length > 0 && (
         <section className="space-y-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Pedindo atenção</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">
+            Pedindo atenção
+            <InfoLegenda titulo="Pedindo atenção">
+              Avisos que aparecem só quando há algo a resolver: baixa de comissão atrasada (combinações de corretora e seguradora sem baixa em dia, com os meses), apólices efetivadas fora da fatura carregada ou sem destino da seguradora há mais de 10 dias, e documentos vindos do Bitrix aguardando revisão do pré-cadastro. Clique no aviso para ir à tela correspondente.
+            </InfoLegenda>
+          </h2>
           {avisos.map((a) => (
             <Link key={a.texto} href={a.href} className={`block rounded-lg border p-3 text-sm hover:underline ${a.cor}`}>
               {a.texto}
@@ -126,7 +145,12 @@ export default async function ErpInicio({ searchParams }: { searchParams: Promis
       )}
       <section className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">O processo em {rotuloMes}, da efetivação à renovação</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">
+            O processo em {rotuloMes}, da efetivação à renovação
+            <InfoLegenda titulo="O processo do mês">
+              Um cartão por etapa do processo, da esquerda para a direita, com os números do mês escolhido nos botões ao lado (mês atual e os dois anteriores). Os números vêm de tabelas prontas, atualizadas a cada hora. Cotações ficam no Workspace: o ERP começa na efetivação da proposta. Etapa sem dado ou sem tela aparece como em breve.
+            </InfoLegenda>
+          </h2>
           <div className="flex gap-1 text-xs">
             {meses.map((m) => (
               <Link key={m} href={m === meses[0] ? "/erp" : `/erp?mes=${m}`} className={`rounded-full border px-3 py-1 font-medium ${m === mes ? "border-o2-navy bg-o2-navy text-white" : "border-gray-300 text-gray-700"}`}>
@@ -154,13 +178,24 @@ export default async function ErpInicio({ searchParams }: { searchParams: Promis
                 )}
               </>
             );
+            const info = (
+              <span className="absolute right-2 top-2">
+                <InfoLegenda titulo={et.label} alinhar="direita">{INFO_ETAPA[et.chave] ?? et.descricao}</InfoLegenda>
+              </span>
+            );
             return et.href ? (
-              <Link key={et.chave} href={et.href} target={et.externo ? "_blank" : undefined} className="rounded-xl border border-gray-200 bg-white p-3 transition hover:border-o2-coral hover:shadow-sm" title={et.descricao}>
-                {corpo}
-              </Link>
+              <div key={et.chave} className="relative">
+                <Link href={et.href} target={et.externo ? "_blank" : undefined} className="block h-full rounded-xl border border-gray-200 bg-white p-3 transition hover:border-o2-coral hover:shadow-sm" title={et.descricao}>
+                  {corpo}
+                </Link>
+                {info}
+              </div>
             ) : (
-              <div key={et.chave} className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-3 opacity-70" title={et.descricao}>
-                {corpo}
+              <div key={et.chave} className="relative">
+                <div className="h-full rounded-xl border border-dashed border-gray-200 bg-gray-50 p-3 opacity-70" title={et.descricao}>
+                  {corpo}
+                </div>
+                {info}
               </div>
             );
           })}

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import RascunhoAutomatico from "@/components/RascunhoAutomatico";
+import InfoLegenda from "@/components/InfoLegenda";
 import { formatarData, formatarReais } from "@/lib/sinistros/regras";
 import { dadosDeCabecalhoPorId, SITUACOES, tipoDoCabecalho } from "@/lib/erp/documentos";
 import { codigoCliente, formatarDocumento, tipoDoDocumento } from "@/lib/erp/clientes";
@@ -63,15 +64,20 @@ export default async function ErpClienteFichaPage({ params, searchParams }: { pa
 
       {kpi && kpi.documentos > 0 && (
         <section className="grid grid-cols-2 gap-3 rounded-xl border border-gray-200 bg-white p-4 md:grid-cols-4">
-          <Info rotulo="Documentos (todo o histórico)" valor={`${kpi.documentos} (${kpi.vigentes} vigentes)`} />
-          <Info rotulo="Produtos" valor={kpi.produtos.length ? kpi.produtos.join(", ") : "—"} />
-          <Info rotulo="Prêmio total gerado" valor={formatarReais(kpi.premio_total)} />
-          <Info rotulo="Comissão gerada" valor={`${formatarReais(kpi.comissao)}${kpi.desde ? ` · desde ${formatarData(kpi.desde)}` : ""}`} />
+          <Info info="Quantidade de documentos deste cliente em todo o histórico da O2 e, entre parênteses, quantos estão vigentes. Conta os documentos em que ele é o titular ou o segurado lido da apólice. Cotações, recusados, perdidos e duplicados não entram; propostas entram." rotulo="Documentos (todo o histórico)" valor={`${kpi.documentos} (${kpi.vigentes} vigentes)`} />
+          <Info info="Os produtos diferentes (Seguro Fiança, Incêndio, Automóvel e outros) dos documentos contados ao lado." rotulo="Produtos" valor={kpi.produtos.length ? kpi.produtos.join(", ") : "—"} />
+          <Info info="Soma do prêmio total dos mesmos documentos contados em Documentos. É o valor gravado em cada documento, que em alguns casos pode estar igual ao prêmio líquido." rotulo="Prêmio total gerado" valor={formatarReais(kpi.premio_total)} />
+          <Info info="Soma da comissão gravada nos mesmos documentos. Depois do valor, aparece desde quando: o início de vigência mais antigo entre eles." rotulo="Comissão gerada" valor={`${formatarReais(kpi.comissao)}${kpi.desde ? ` · desde ${formatarData(kpi.desde)}` : ""}`} />
         </section>
       )}
 
       <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Cadastro</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">
+          Cadastro
+          <InfoLegenda titulo="Cadastro do cliente">
+            Dados da pessoa na base única de clientes. Regra do cadastro: CPF ou CNPJ válido sempre, e também e-mail ou telefone. O CPF/CNPJ é a chave do cadastro e não muda depois de informado; só aparece para digitar quando falta ou está inválido. E-mail e telefone podem ser corrigidos, e os antigos ficam guardados em Contatos anteriores. A etiqueta “cadastro incompleto” aparece quando falta CPF/CNPJ válido ou faltam e-mail e telefone. A linha de origem mostra de onde veio o cadastro, quando foi criado e o código do cliente no Corp, se houver.
+          </InfoLegenda>
+        </h2>
         <form action={atualizarCliente} className="space-y-3">
           <RascunhoAutomatico sufixo={c.id} />
           <input type="hidden" name="id" value={c.id} />
@@ -107,7 +113,12 @@ export default async function ErpClienteFichaPage({ params, searchParams }: { pa
       </section>
 
       <section className="space-y-2 rounded-xl border border-gray-200 bg-white p-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Documentos deste cliente</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">
+          Documentos deste cliente
+          <InfoLegenda titulo="Documentos deste cliente">
+            Documentos em que o cliente é o titular ou aparece como parte (segurado ou garantido) lida da apólice, do início de vigência mais recente para o mais antigo, no máximo 200; os duplicados ficam de fora. Por isso a lista pode incluir cotações e propostas, que não entram nos números do quadro de cima. Titular do seguro: na Fiança é o proprietário (com o inquilino em baixo); nos demais produtos é o segurado. Prêmio total é o valor gravado no documento. Clique em Ver documento ou no Código O2 do documento para abrir a ficha.
+          </InfoLegenda>
+        </h2>
         {docs.length === 0 ? (
           <p className="text-xs text-gray-500">Nenhum documento ligado a este cliente.</p>
         ) : (
@@ -148,10 +159,13 @@ export default async function ErpClienteFichaPage({ params, searchParams }: { pa
   );
 }
 
-function Info({ rotulo, valor }: { rotulo: string; valor: string }) {
+function Info({ rotulo, valor, info }: { rotulo: string; valor: string; info?: React.ReactNode }) {
   return (
     <div>
-      <div className="text-[11px] uppercase tracking-wide text-gray-500">{rotulo}</div>
+      <div className="text-[11px] uppercase tracking-wide text-gray-500">
+        {rotulo}
+        {info ? <InfoLegenda titulo={rotulo}>{info}</InfoLegenda> : null}
+      </div>
       <div className="text-sm text-gray-900">{valor}</div>
     </div>
   );

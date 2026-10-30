@@ -1,4 +1,5 @@
 import type { RegraRepasse } from "@/lib/erp/documentos";
+import InfoLegenda from "@/components/InfoLegenda";
 
 // ERP O2 — regra ESPERADA de repasse da imobiliária (o que foi combinado na
 // parceria). A negociação real é por documento (erp_documento_produtores);
@@ -28,7 +29,7 @@ export default function RegrasRepasseErp({
 }) {
   return (
     <section className="space-y-2 rounded-lg border border-gray-200 bg-white p-3 text-sm">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">ERP — Produtor e regras de repasse</h2>
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">ERP — Produtor e regras de repasse<InfoLegenda titulo="Produtor e regras de repasse">Mostra a regra esperada de repasse desta imobiliária, ou seja, o que foi combinado na parceria. A negociação de verdade é feita por documento; aqui aparece o padrão. Cada linha traz a seguradora e o ramo (padrão vale para os demais), a base de cálculo, o percentual para seguro novo e para renovado, a forma de repasse e a origem: inferida do Corp (a partir dos documentos novos desde 2025; com menos de 3 documentos não há regra) ou manual. Modo fatura diz se a imobiliária está habilitada a ter apólices em fatura. A retenção de imposto padrão é 18%, e repasses fixos e premiação de campanha não sofrem retenção. A edição das regras ainda não está nesta tela.</InfoLegenda></h2>
       <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs">
         <span>
           <span className="text-gray-500">Cód. O2 da imobiliária (produtor):</span> <b>{codigoO2 ?? "—"}</b>

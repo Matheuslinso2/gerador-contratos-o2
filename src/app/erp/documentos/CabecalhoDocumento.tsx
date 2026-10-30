@@ -1,5 +1,6 @@
 import { formatarData } from "@/lib/sinistros/regras";
 import { SITUACOES, tipoDoCabecalho } from "@/lib/erp/documentos";
+import InfoLegenda from "@/components/InfoLegenda";
 
 // ERP O2 — cabeçalho padrão do documento (Matheus 28/10/2026): compacto, com o que identifica o seguro de relance:
 // Tipo de documento · Titular do seguro · Produto · Seguradora · Vigência. O mesmo padrão vale nas listas e nas demais telas.
@@ -23,10 +24,13 @@ export type DadosCabecalho = {
   extras: { texto: string; cor: string }[];
 };
 
-function Celula({ rotulo, valor, sub, className = "" }: { rotulo: string; valor: React.ReactNode; sub?: React.ReactNode; className?: string }) {
+function Celula({ rotulo, valor, sub, className = "", info }: { rotulo: string; valor: React.ReactNode; sub?: React.ReactNode; className?: string; info?: React.ReactNode }) {
   return (
     <div className={`min-w-0 ${className}`}>
-      <div className="text-[10px] font-medium uppercase tracking-wide text-gray-500">{rotulo}</div>
+      <div className="text-[10px] font-medium uppercase tracking-wide text-gray-500">
+        {rotulo}
+        {info ? <InfoLegenda titulo={rotulo}>{info}</InfoLegenda> : null}
+      </div>
       <div className="truncate text-sm font-semibold text-gray-900">{valor ?? <span className="font-normal text-gray-400">—</span>}</div>
       {sub ? <div className="truncate text-[11px] text-gray-500">{sub}</div> : null}
     </div>
@@ -46,8 +50,8 @@ export default function CabecalhoDocumento({ c }: { c: DadosCabecalho }) {
   const tipo = tipoDoCabecalho(c);
   const vig = c.vigencia_inicio || c.vigencia_fim ? `${formatarData(c.vigencia_inicio)} a ${formatarData(c.vigencia_fim)}` : null;
   return (
-    <header className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-gray-100 bg-gray-50/70 px-4 py-2">
+    <header className="rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-t-xl border-b border-gray-100 bg-gray-50/70 px-4 py-2">
         <span className={`rounded-md px-2.5 py-0.5 text-sm font-bold uppercase tracking-wide ${tipo.cor}`}>{tipo.nome}</span>
         {tipo.detalhe ? <span className="text-xs text-gray-500">{tipo.detalhe}</span> : null}
         <span className="text-sm text-gray-600">
@@ -64,13 +68,16 @@ export default function CabecalhoDocumento({ c }: { c: DadosCabecalho }) {
               {e.texto}
             </span>
           ))}
+          <InfoLegenda titulo="Cabeçalho do documento" alinhar="direita">
+            Resumo que identifica o documento. Tipo: Cotação, Proposta (fica em Emissão até virar apólice), Apólice (nova ou renovação), Apólice na Fatura (cobrada dentro da fatura da imobiliária), Fatura ou Endosso (cobrança, devolução, sem prêmio, restituição, cancelamento). Código O2 do documento é o número do ERP; Nº da apólice é o da seguradora (aparece “não emitida” enquanto não houver); Nosso nº do Corp é o número no Corp (“nasceu no ERP” quando não veio de lá). A etiqueta escura é a situação do documento. As etiquetas coloridas ao lado avisam: parcelas em aberto na seguradora (ela avisou que o cliente não pagou), pré-cadastro com revisão pendente, fora da conta do Power BI (documento que não entra na regra de produção copiada do Power BI) e mês fechado (documento de um mês já encerrado).
+          </InfoLegenda>
         </span>
       </div>
       <div className="grid grid-cols-2 gap-x-6 gap-y-3 px-4 py-3 md:grid-cols-6">
-        <Celula className="col-span-2" rotulo="Titular do seguro" valor={c.titular ?? <span className="font-normal text-gray-400">titular não ligado</span>} sub={c.titularPapel} />
+        <Celula className="col-span-2" rotulo="Titular do seguro" info="Na Fiança, é o proprietário do imóvel (segurado e locador), lido do PDF da apólice quando existe, ou do card. Nos demais produtos, é o segurado/cliente do documento. Na Fiança, o inquilino (garantido) aparece na linha de baixo do cabeçalho. Sem titular ligado, aparece “titular não ligado”." valor={c.titular ?? <span className="font-normal text-gray-400">titular não ligado</span>} sub={c.titularPapel} />
         <Celula rotulo="Produto" valor={c.produto_nome} />
         <Celula rotulo="Seguradora" valor={c.seguradora_nome} />
-        <Celula className="col-span-2" rotulo="Vigência" valor={vig} sub={situacaoDaVigencia(c.vigencia_inicio, c.vigencia_fim, c.situacao)} />
+        <Celula className="col-span-2" rotulo="Vigência" info="Período de cobertura do documento. Para documentos vigentes ou vencidos, a linha de baixo mostra quantos dias faltam para vencer ou há quantos dias venceu." valor={vig} sub={situacaoDaVigencia(c.vigencia_inicio, c.vigencia_fim, c.situacao)} />
       </div>
       {c.inquilino || c.imovel ? (
         <div className="flex flex-wrap gap-x-6 gap-y-0.5 border-t border-gray-100 px-4 py-1.5 text-xs text-gray-600">
