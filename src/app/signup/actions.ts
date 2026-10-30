@@ -73,8 +73,8 @@ export async function signUp(formData: FormData) {
   if (!aceiteTermos) {
     redirect(`/signup?erro=${encodeURIComponent("É necessário aceitar os Termos de Uso e a Política de Privacidade.")}`);
   }
-  if (password.length < 6) {
-    redirect(`/signup?erro=${encodeURIComponent("A senha precisa ter pelo menos 6 caracteres.")}`);
+  if (password.length < 8) {
+    redirect(`/signup?erro=${encodeURIComponent("A senha precisa ter pelo menos 8 caracteres.")}`);
   }
 
   // Cada conta representa uma imobiliária/administradora (ver page.tsx) --

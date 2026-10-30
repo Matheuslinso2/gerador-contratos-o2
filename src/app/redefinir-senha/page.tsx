@@ -42,8 +42,8 @@ export default function RedefinirSenhaPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErro("");
-    if (senha.length < 6) {
-      setErro("A senha precisa ter pelo menos 6 caracteres.");
+    if (senha.length < 8) {
+      setErro("A senha precisa ter pelo menos 8 caracteres.");
       return;
     }
     setEstado("enviando");
@@ -95,9 +95,9 @@ export default function RedefinirSenhaPage() {
           <CampoSenha
             id="nova-senha"
             name="nova-senha"
-            placeholder="Nova senha (mín. 6 caracteres)"
+            placeholder="Nova senha (mín. 8 caracteres)"
             required
-            minLength={6}
+            minLength={8}
             autoComplete="new-password"
             value={senha}
             onChange={(e) => setSenha(e.target.value)}

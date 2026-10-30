@@ -39,9 +39,9 @@ export default async function SignupPage({
         <CampoSenha
           id="password"
           name="password"
-          placeholder="Senha (mín. 6 caracteres)"
+          placeholder="Senha (mín. 8 caracteres)"
           required
-          minLength={6}
+          minLength={8}
           autoComplete="new-password"
         />
 

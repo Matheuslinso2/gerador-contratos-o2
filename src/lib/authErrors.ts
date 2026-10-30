@@ -4,7 +4,7 @@ const MENSAGENS: Record<string, string> = {
   "Invalid login credentials": "E-mail ou senha incorretos.",
   "Email not confirmed": "Confirme seu e-mail antes de entrar (verifique sua caixa de entrada).",
   "User already registered": "Já existe uma conta com esse e-mail.",
-  "Password should be at least 6 characters": "A senha precisa ter pelo menos 6 caracteres.",
+  "Password should be at least 8 characters": "A senha precisa ter pelo menos 8 caracteres.",
   "Unable to validate email address: invalid format": "Esse e-mail não parece válido — confira se digitou certo.",
   "Signup is disabled": "Criação de contas está temporariamente desativada. Fale com a O2.",
   "New password should be different from the old password.": "A nova senha precisa ser diferente da senha atual.",
@@ -14,7 +14,9 @@ const MENSAGENS: Record<string, string> = {
 // Correspondência por trecho, pra pegar variações (ex: número de segundos
 // muda a cada erro de limite de tentativas).
 const TRECHOS: [string, string][] = [
-  ["Password should be at least", "A senha precisa ter pelo menos 6 caracteres."],
+  ["Password should be at least", "A senha precisa ter pelo menos 8 caracteres."],
+  // Senha que já apareceu em vazamentos (proteção ligada no Supabase em 30/10/2026).
+  ["known to be weak", "Essa senha já apareceu em vazamentos na internet e não é segura. Escolha outra."],
   ["you can only request this after", "Muitas tentativas seguidas — espere um minuto e tente de novo."],
   ["rate limit", "Muitas tentativas seguidas — espere um pouco e tente de novo."],
   ["Token has expired", "Esse link expirou. Peça um novo."],
