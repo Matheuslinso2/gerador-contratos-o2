@@ -497,6 +497,8 @@ export async function marcarAbertoNaSeguradora(fd: FormData) {
   const s = await carregar(supabase, id);
   if (!s) voltar(id, null, "Sinistro não encontrado.");
   const primeiraVez = !s.autorizado_em;
+  // O prazo de 10 dias úteis de análise e os 4 dias do pagamento valem só para a Capitalização (Matheus, 30/10/2026).
+  const prazoCap = s.produto === "capitalizacao";
   await supabase
     .from("sinistros")
     .update({
@@ -514,7 +516,7 @@ export async function marcarAbertoNaSeguradora(fd: FormData) {
     await registrar(supabase, id, {
       autor_tipo: "o2",
       referente: "imobiliaria",
-      texto: `Acionamento autorizado pela O2 (${user.email}).${numero ? ` Nº do aviso: ${numero}.` : ""} A partir de agora a conversa sobre este sinistro fica neste chat.\n\n${TEXTO_PRAZO_ANALISE.join("\n")}`,
+      texto: `Acionamento autorizado pela O2 (${user.email}).${numero ? ` Nº do aviso: ${numero}.` : ""} A partir de agora a conversa sobre este sinistro fica neste chat.${prazoCap ? `\n\n${TEXTO_PRAZO_ANALISE.join("\n")}` : ""}`,
     });
   await registrar(supabase, id, {
     autor_tipo: "o2",
@@ -531,7 +533,7 @@ export async function marcarAbertoNaSeguradora(fd: FormData) {
     { ...s, etapa: "na_seguradora", numero_sinistro_seguradora: numero } as SinistroEmail,
     destinos,
     `Acionamento autorizado${numero ? ` — aviso ${numero}` : ""}`,
-    `A O2 autorizou o acionamento.${numero ? ` Sinistro aberto na ${s.seguradora} com o aviso nº ${numero}.` : ""} ${TEXTO_PRAZO_ANALISE.join(" ")}${regras.length ? " A partir de agora, atenção às regras:" : ""}`,
+    `A O2 autorizou o acionamento.${numero ? ` Sinistro aberto na ${s.seguradora} com o aviso nº ${numero}.` : ""}${prazoCap ? ` ${TEXTO_PRAZO_ANALISE.join(" ")}` : ""}${regras.length ? " A partir de agora, atenção às regras:" : ""}`,
     regras
   );
   voltar(id, null, destinos.length ? undefined : SEM_EMAIL);
