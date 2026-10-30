@@ -154,13 +154,13 @@ export async function fichaFatura(sb: SupabaseClient, faturaId: string, competen
 export async function listarFaturas(sb: SupabaseClient, f: { seguradora?: string; imobiliaria?: string; mes?: string }) {
   let q = sb
     .from("erp_fatura_meses")
-    .select("id, competencia, vencimento, valor_boleto, valor_itens, qtd_itens, arquivos, fatura:erp_faturas!inner(id, seguradora, chave, corretora, imobiliaria:imobiliarias!inner(nome))")
+    .select("id, competencia, vencimento, valor_boleto, valor_itens, qtd_itens, arquivos, fatura:erp_faturas!inner(id, seguradora, chave, corretora, imobiliaria_id, imobiliaria:imobiliarias!inner(nome))")
     .order("competencia", { ascending: false });
   if (f.seguradora) q = q.eq("fatura.seguradora", ({ TOKI: "TOKIO", PORT: "PORTO", POTT: "POTTENCIAL", TOO: "TOO", YELU: "YELUM" } as Record<string, string>)[f.seguradora] ?? "—");
   if (f.imobiliaria) q = q.ilike("fatura.imobiliaria.nome", `%${f.imobiliaria.replace(/[%_,()]/g, "")}%`);
   if (f.mes) q = q.eq("competencia", f.mes);
   const { data } = await q.limit(2000);
-  type Linha = { arquivos: string[] | null; id: string; competencia: string; vencimento: string | null; valor_boleto: number | null; valor_itens: number; qtd_itens: number; fatura: { id: string; seguradora: string; chave: string; corretora: string | null; imobiliaria: { nome: string } } };
+  type Linha = { arquivos: string[] | null; id: string; competencia: string; vencimento: string | null; valor_boleto: number | null; valor_itens: number; qtd_itens: number; fatura: { id: string; seguradora: string; chave: string; corretora: string | null; imobiliaria_id: string; imobiliaria: { nome: string } } };
   const ultimo = new Map<string, Linha & { anterior_itens: number | null }>();
   const porFatura = new Map<string, Linha[]>();
   for (const l of (data ?? []) as unknown as Linha[]) porFatura.set(l.fatura.id, [...(porFatura.get(l.fatura.id) ?? []), l]);

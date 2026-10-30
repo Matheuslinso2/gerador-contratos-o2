@@ -21,6 +21,13 @@ export default async function ErpFaturasPage({ searchParams }: { searchParams: P
     listarFaturas(supabase, { seguradora: f.seguradora, imobiliaria: f.imobiliaria, mes: f.mes }),
     supabase.from("erp_fora_faturas_pronto").select("documento_id", { count: "exact", head: true }),
   ]);
+  // Envio (Fase 1 do envio nativo, 30/10): status do envio do Workspace por imobiliária × seguradora × competência.
+  const competencias = [...new Set(faturas.map((l) => l.competencia))];
+  const { data: envios } = competencias.length
+    ? await supabase.from("erp_fatura_envio_status").select("imobiliaria_id, seguradora, competencia, situacao_envio, docs_total, docs_enviados, ultimo_envio_em, ultimo_envio_por").in("competencia", competencias)
+    : { data: [] };
+  type Envio = { imobiliaria_id: string; seguradora: string; competencia: string; situacao_envio: string; docs_total: number; docs_enviados: number; ultimo_envio_em: string | null; ultimo_envio_por: string | null };
+  const envioDe = new Map(((envios ?? []) as Envio[]).map((e) => [`${e.imobiliaria_id}|${e.seguradora}|${e.competencia}`, e]));
   const divergentes = faturas.filter((l) => l.valor_boleto !== null && Math.abs(Number(l.valor_boleto) - Number(l.valor_itens)) > TOLERANCIA_FATURA).length;
 
   return (
@@ -56,7 +63,7 @@ export default async function ErpFaturasPage({ searchParams }: { searchParams: P
       <p className="flex items-center text-xs font-semibold uppercase tracking-wide text-o2-navy">
         Lista de faturas
         <InfoLegenda titulo="Lista de faturas">
-          Imobiliária: dona da fatura (abre a tela da fatura). Seguradora · fatura: a seguradora e a identificação da fatura. Nº da fatura: número do documento do boleto, lido do arquivo da seguradora. Corretora: a corretora da O2 ligada à fatura (por exemplo, O2 Corretora ou O2 Cap). Último mês: o mês mais recente carregado (ou o mês do filtro). Apólices: quantidade de apólices na fatura nesse mês; quando há mês anterior, aparece “mês anterior → este mês”. Boleto: valor do boleto da seguradora. Soma das linhas: soma do que a fatura cobra de cada apólice. Conferência: “bate” quando boleto e soma diferem em até R$ 1,00; fora disso mostra a diferença; “sem boleto” quando o arquivo não trouxe o valor do boleto.
+          Imobiliária: dona da fatura (abre a tela da fatura). Seguradora · fatura: a seguradora e a identificação da fatura. Nº da fatura: número do documento do boleto, lido do arquivo da seguradora. Corretora: a corretora da O2 ligada à fatura (por exemplo, O2 Corretora ou O2 Cap). Último mês: o mês mais recente carregado (ou o mês do filtro). Apólices: quantidade de apólices na fatura nesse mês; quando há mês anterior, aparece “mês anterior → este mês”. Boleto: valor do boleto da seguradora. Soma das linhas: soma do que a fatura cobra de cada apólice. Conferência: “bate” quando boleto e soma diferem em até R$ 1,00; fora disso mostra a diferença; “sem boleto” quando o arquivo não trouxe o valor do boleto. Envio à imobiliária: situação do envio da fatura daquele mês, lida do envio de faturas que hoje roda no Workspace — “enviada” (com a data do último envio e, ao passar o mouse, quem enviou), “parcial” (só parte dos arquivos foi enviada), “a enviar” (arquivos prontos, ainda não enviados) ou “aguardando arquivo”. Na Porto, as faturas de Fiança e de Ramos Elementares aparecem juntas porque o controle do ERP não as separa.
         </InfoLegenda>
       </p>
       <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
@@ -72,6 +79,7 @@ export default async function ErpFaturasPage({ searchParams }: { searchParams: P
               <th className="px-3 py-2 text-right">Boleto</th>
               <th className="px-3 py-2 text-right">Soma das linhas</th>
               <th className="px-3 py-2">Conferência</th>
+              <th className="px-3 py-2">Envio à imobiliária</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -104,6 +112,17 @@ export default async function ErpFaturasPage({ searchParams }: { searchParams: P
                     ) : (
                       <span className="font-medium text-red-700">diferença {formatarReais(dif)}</span>
                     )}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-1.5 text-xs">
+                    {(() => {
+                      const e = envioDe.get(`${l.fatura.imobiliaria_id}|${l.fatura.seguradora}|${l.competencia}`);
+                      if (!e) return <span className="text-gray-400">sem arquivo no envio</span>;
+                      const quando = e.ultimo_envio_em ? new Date(e.ultimo_envio_em).toLocaleDateString("pt-BR") : null;
+                      if (e.situacao_envio === "enviada") return <span className="text-green-700" title={e.ultimo_envio_por ? `Enviado por ${e.ultimo_envio_por}` : undefined}>enviada{quando ? ` em ${quando}` : ""}</span>;
+                      if (e.situacao_envio === "parcial") return <span className="font-medium text-amber-700">parcial · {e.docs_enviados} de {e.docs_total} arquivos</span>;
+                      if (e.situacao_envio === "a_enviar") return <span className="font-medium text-sky-700">a enviar</span>;
+                      return <span className="text-gray-500">aguardando arquivo</span>;
+                    })()}
                   </td>
                 </tr>
               );

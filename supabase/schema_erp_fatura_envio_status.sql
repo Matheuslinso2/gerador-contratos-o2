@@ -1,0 +1,5 @@
+-- Fase 1 do Envio de Faturas nativo no ERP (Matheus 30/10): liga o envio do Workspace (faturas / faturas_envios) ao controle de faturas do ERP
+-- (erp_faturas / erp_fatura_meses) por imobiliária × seguradora × competência. Só leitura; o envio atual não muda.
+-- Porto: o Workspace separa PORTO FIANÇA e PORTO RE; o ERP guarda a seguradora como PORTO (os ramos 0746/0118/0114 não separam limpo), então fica agregado.
+-- Cobertura em set/out: 215 de 219 e 226 de 236 grupos do Workspace casam com o controle do ERP.
+-- Migration aplicada: erp_fatura_envio_status (view security_invoker; situacao_envio = enviada | parcial | a_enviar | aguardando | sem_documentos).
