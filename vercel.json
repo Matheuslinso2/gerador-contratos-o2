@@ -150,6 +150,10 @@
     {
       "path": "/api/cron/erp-faturas",
       "schedule": "50 * * * *"
+    },
+    {
+      "path": "/api/cron/erp-baixa-automatica",
+      "schedule": "55 * * * *"
     }
   ]
 }
