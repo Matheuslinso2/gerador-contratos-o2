@@ -11,6 +11,12 @@ import { createServiceClient } from "@/lib/supabase/service";
 
 const ID_LINHA = "default";
 
+// Único portal aceito (revisão de segurança 30/10/2026): antes o domínio vinha
+// do POST de /bitrix-app/card-email, que é público -- qualquer um podia trocar
+// a instalação e desviar as chamadas do app (com o conteúdo dos e-mails
+// registrados nos cards) para um servidor próprio.
+export const DOMINIO_PORTAL_O2 = "o2seguros.bitrix24.com.br";
+
 type LinhaAuth = {
   dominio: string;
   member_id: string;
@@ -26,6 +32,7 @@ export async function salvarInstalacao(params: {
   refreshToken: string;
   expiresInSegundos: number;
 }) {
+  if (params.dominio !== DOMINIO_PORTAL_O2) throw new Error(`Portal Bitrix não autorizado: ${params.dominio}`);
   const supabase = createServiceClient();
   const expiraEm = new Date(Date.now() + params.expiresInSegundos * 1000).toISOString();
   const { error } = await supabase.from("bitrix_app_auth").upsert({
@@ -101,7 +108,7 @@ async function obterAuthValida(): Promise<LinhaAuth> {
 // embutir a chave na própria URL do webhook.
 export async function chamarBitrixComoApp<T>(metodo: string, params: Record<string, unknown> = {}): Promise<T> {
   const auth = await obterAuthValida();
-  const resposta = await fetch(`https://${auth.dominio}/rest/${metodo}.json`, {
+  const resposta = await fetch(`https://${DOMINIO_PORTAL_O2}/rest/${metodo}.json`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ ...params, auth: auth.access_token }),
@@ -113,4 +120,32 @@ export async function chamarBitrixComoApp<T>(metodo: string, params: Record<stri
     throw new Error(`Bitrix (app) ${metodo}: ${dados.error_description || dados.error || `HTTP ${resposta.status}`}`);
   }
   return dados as T;
+}
+
+// Chamado pelo POST público do placement: só grava se o portal for o da O2,
+// o token valer de verdade nesse portal (profile.json) e o member_id bater com
+// o da instalação já salva. Devolve o motivo quando recusa (só para log).
+export async function salvarInstalacaoSeValida(params: Parameters<typeof salvarInstalacao>[0]): Promise<string | null> {
+  if (params.dominio !== DOMINIO_PORTAL_O2) return `domínio recusado (${params.dominio})`;
+
+  const supabase = createServiceClient();
+  const { data: atual } = await supabase.from("bitrix_app_auth").select("member_id").eq("id", ID_LINHA).maybeSingle();
+  if (atual?.member_id && atual.member_id !== params.memberId) return "member_id diferente da instalação";
+
+  try {
+    const resp = await fetch(`https://${DOMINIO_PORTAL_O2}/rest/profile.json`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ auth: params.accessToken }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
+    });
+    const dados = await resp.json();
+    if (!resp.ok || dados.error || !dados.result) return "token não vale no portal da O2";
+  } catch {
+    return "não foi possível validar o token no portal da O2";
+  }
+
+  await salvarInstalacao(params);
+  return null;
 }

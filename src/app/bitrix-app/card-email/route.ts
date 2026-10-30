@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { salvarInstalacao } from "@/lib/bitrix/appAuth";
+import { salvarInstalacaoSeValida } from "@/lib/bitrix/appAuth";
 import { entityTypeIdPorPlacement } from "@/lib/bitrix/entidadesCard";
 import { MODELOS_EMAIL } from "@/lib/bitrix/modelosEmail";
 import { ENTIDADES_COMERCIAL, listarModelosBanco } from "@/lib/bitrix/modelosEmailBanco";
@@ -78,13 +78,14 @@ export async function POST(request: NextRequest) {
 
   if (accessToken && refreshToken && dominio && memberId) {
     try {
-      await salvarInstalacao({
+      const recusa = await salvarInstalacaoSeValida({
         dominio,
         memberId,
         accessToken,
         refreshToken,
         expiresInSegundos: Number(expiresIn ?? 3600),
       });
+      if (recusa) console.warn(`Instalação do app Bitrix NÃO atualizada: ${recusa}`);
     } catch (erro) {
       console.error("Falha ao salvar token do app Bitrix:", erro);
     }
