@@ -6,9 +6,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const DESCONTO_PCT = 18;
 
-// Decisão do Matheus (30/10): o ERP NÃO paga repasse até o Corp ser desligado; os repasses do ERP servem só para conferir com o relatório do Corp.
-// Para liberar a autorização, mude para true (e publique).
-export const REPASSE_PAGO_PELO_ERP = false;
+// Decisão do Matheus (30/10): o ERP NÃO paga repasse até o Corp ser desligado, mas todas as funções (autorizar, conferir pelo Nibo, enviar) ficam liberadas
+// para teste e não têm efeito real nos pagamentos, que seguem pelo Corp. Quando o Corp for desligado, mude para false (some o aviso).
+export const REPASSE_ERP_EM_TESTE = true;
 
 export type LinhaRepasse = {
   imobiliaria_id: string;
