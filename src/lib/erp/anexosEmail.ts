@@ -70,7 +70,7 @@ export async function carregarDocs(sb: SupabaseClient, ids: string[]): Promise<M
 export const documentosNoTexto = (t: string): Set<string> =>
   new Set([...t.matchAll(/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b|\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/g)].map((m) => dig(m[0])));
 
-export type Avaliacao = { situacao: "confirmada" | "provavel"; cpf: boolean; num: boolean; vig: boolean };
+export type Avaliacao = { situacao: "confirmada" | "provavel" | "conferir"; cpf: boolean; num: boolean; vig: boolean };
 
 export function avaliar(t: string, c: DocAlvo, soConfirmada = false): Avaliacao | null {
   const td = dig(t);
