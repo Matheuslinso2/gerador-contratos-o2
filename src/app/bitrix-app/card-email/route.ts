@@ -448,6 +448,10 @@ export async function POST(request: NextRequest) {
         }
         aplicarConversa();
         corpoEl.focus();
+        // O cursor no começo veio do próprio sistema, não da pessoa: não vale como posição
+        // para "Inserir campo" (senão o campo cairia no topo do texto).
+        cursorDaPessoa = false;
+        ultimaSelecaoCorpo = null;
       });
     }
     // "a@x.com; b@x.com, c@x.com" -> ["a@x.com", "b@x.com", "c@x.com"]
@@ -548,10 +552,16 @@ export async function POST(request: NextRequest) {
       if (!chave) return;
       var corpoEl = document.getElementById("corpo");
       corpoEl.focus();
+      var sel = window.getSelection();
+      sel.removeAllRanges();
       if (ultimaSelecaoCorpo) {
-        var sel = window.getSelection();
-        sel.removeAllRanges();
         sel.addRange(ultimaSelecaoCorpo);
+      } else {
+        // Sem cursor no texto ainda: o campo entra no FIM da mensagem (não no começo).
+        var fim = document.createRange();
+        fim.selectNodeContents(corpoEl);
+        fim.collapse(false);
+        sel.addRange(fim);
       }
       document.execCommand("insertHTML", false, preencherPlaceholders("{{" + chave + "}}", true));
     });
@@ -846,6 +856,7 @@ export async function POST(request: NextRequest) {
     var TAMANHO_MAXIMO_IMAGEM = 5 * 1024 * 1024;
     var TIPOS_IMAGEM = ["image/png", "image/jpeg", "image/gif", "image/webp"];
     var ultimaSelecaoCorpo = null;
+    var cursorDaPessoa = true;
     var imagensEnviando = 0;
 
     function imagensDe(arquivos) {
@@ -855,7 +866,11 @@ export async function POST(request: NextRequest) {
     document.addEventListener("selectionchange", function () {
       var corpoEl = document.getElementById("corpo");
       var sel = window.getSelection();
-      if (sel && sel.rangeCount && corpoEl.contains(sel.anchorNode)) ultimaSelecaoCorpo = sel.getRangeAt(0).cloneRange();
+      if (cursorDaPessoa && sel && sel.rangeCount && corpoEl.contains(sel.anchorNode)) ultimaSelecaoCorpo = sel.getRangeAt(0).cloneRange();
+    });
+    // Clique ou tecla dentro do texto: a posição passa a ser da pessoa.
+    ["mousedown", "keydown", "touchstart"].forEach(function (evento) {
+      document.getElementById("corpo").addEventListener(evento, function () { cursorDaPessoa = true; });
     });
 
     function inserirImagem(arquivo) {
