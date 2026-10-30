@@ -45,3 +45,4 @@
 --   * erp_corp_gravar_baixas / erp_corp_quitar_parcelas / erp_aplicar_comissoes_corp(): baixa do Corp com data >= 01/09/2026 não entra mais como recebimento nem quita parcela (fica só no espelho erp_corp_comissoes, para comparação).
 --   * inadimplência (provável, linhas e cruzar): de set/2026 em diante a prova de pagamento é a linha no extrato ou a baixa do ERP; baixa do Corp só conta antes de set/2026.
 -- 30/10 (migration erp_baixa_automatica_regra_trilha): a baixa automática só baixa linha com erp_baixa_erp.baixada (mesma regra do ERP); a rodada reprocessa a trilha (erp_baixa_erp_processar) antes. 17 baixas automáticas fora da regra (diferença > R$ 6) desfeitas, cópia em erp_baixa_revertida_log.
+-- 30/10 (migration erp_baixadas_erp_mensal): erp_baixadas_erp_mensal(p_de,p_ate) = baixas do ERP (recebimentos origem 'extrato') por empresa × seguradora × mês, líquido do imposto retido; coluna 'Baixadas (ERP)' do Controle mensal.
