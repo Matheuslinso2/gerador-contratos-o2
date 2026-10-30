@@ -10,6 +10,7 @@ import {
   PRAZO_PENDENCIA_DIAS,
   TEXTO_CIENCIA,
   TEXTO_PRAZO_ANALISE,
+  regrasDoSinistro,
   calcularPrazoAviso,
   formatarData,
   hojeSP,
@@ -525,12 +526,13 @@ export async function marcarAbertoNaSeguradora(fd: FormData) {
     etapa_para: "na_seguradora",
   });
   const destinos = destinosImobiliaria(s);
+  const regras = regrasDoSinistro({ ...s, etapa: "na_seguradora" });
   await emailAtualizacaoParaImobiliaria(
     { ...s, etapa: "na_seguradora", numero_sinistro_seguradora: numero } as SinistroEmail,
     destinos,
     `Acionamento autorizado${numero ? ` — aviso ${numero}` : ""}`,
-    `A O2 autorizou o acionamento.${numero ? ` Sinistro aberto na ${s.seguradora} com o aviso nº ${numero}.` : ""} ${TEXTO_PRAZO_ANALISE.join(" ")} A partir de agora, atenção às regras:`,
-    TEXTO_CIENCIA.slice(0, 3)
+    `A O2 autorizou o acionamento.${numero ? ` Sinistro aberto na ${s.seguradora} com o aviso nº ${numero}.` : ""} ${TEXTO_PRAZO_ANALISE.join(" ")}${regras.length ? " A partir de agora, atenção às regras:" : ""}`,
+    regras
   );
   voltar(id, null, destinos.length ? undefined : SEM_EMAIL);
 }

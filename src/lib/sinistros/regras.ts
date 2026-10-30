@@ -339,6 +339,26 @@ export const TEXTO_CIENCIA = [
   "A análise da seguradora leva até 30 dias a contar do último documento entregue; o prazo fica suspenso enquanto houver pendência.",
 ];
 
+// Regras que a imobiliária recebe depois do acionamento (e-mail e ficha). As 3
+// primeiras de TEXTO_CIENCIA valem só para o Seguro Fiança (boletos, parcelas do
+// seguro fiança) -- Capitalização e demais produtos não recebem (reclamação da
+// equipe, 30/10/2026: o e-mail do SIN-266, Capitalização, trouxe as regras da
+// Fiança). Com assistência jurídica (acordo/judicial ou despejo), a regra de não
+// receber valor passa a ser a do escritório.
+export const TEXTO_ASSISTENCIA_JURIDICA =
+  "Lembrando que após iniciada a assessoria jurídica, todos os valores serão negociados pelo escritório responsável, então a imobiliária/proprietário NÃO deve receber qualquer valor do locatário sem prévia autorização do escritório.";
+export function regrasDoSinistro(s: {
+  produto?: string | null;
+  etapa?: string | null;
+  despejo?: boolean | null;
+  acordo_em_andamento?: boolean | null;
+}): string[] {
+  const juridico = s.etapa === "acordo_judicial" || s.despejo === true || s.acordo_em_andamento === true;
+  if ((s.produto ?? "fianca") !== "fianca") return juridico ? [TEXTO_ASSISTENCIA_JURIDICA] : [];
+  const base = TEXTO_CIENCIA.slice(0, 3);
+  return juridico ? [TEXTO_ASSISTENCIA_JURIDICA, ...base.slice(1)] : base;
+}
+
 // ---------- R6 / validação do envio ----------
 
 export type Debito = {

@@ -13,6 +13,7 @@ import {
   PRAZO_SEGURADORA_DIAS,
   SLA_PRE_ANALISE_DIAS_UTEIS,
   TEXTO_CIENCIA,
+  regrasDoSinistro,
   tituloTipo,
   calcularPrazoAviso,
   diasEntre,
@@ -575,10 +576,10 @@ function VisaoImobiliaria({ s, debitos, docs, checklist, historico, indenizacoes
       <Aviso tipo="info">
         <b>{ETAPAS[etapa].tituloImobiliaria}.</b> {explicacao[etapa]}
       </Aviso>
-      {(etapa === "na_seguradora" || etapa === "em_indenizacao") && (
+      {(etapa === "na_seguradora" || etapa === "em_indenizacao" || etapa === "acordo_judicial") && regrasDoSinistro(s).length > 0 && (
         <Aviso tipo="alerta">
           <ul className="ml-5 list-disc">
-            {TEXTO_CIENCIA.slice(0, 3).map((t) => (
+            {regrasDoSinistro(s).map((t) => (
               <li key={t}>{t}</li>
             ))}
           </ul>

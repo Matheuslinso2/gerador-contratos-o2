@@ -9,7 +9,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2, DOMINIO_O2 } from "@/lib/admin";
-import { COBERTURAS_LMI, ETAPAS, calcularPrazoAviso, formatarReais, hojeSP, saldoLmi, situacaoDoFormulario, type EtapaSinistro, type TipoSinistro } from "@/lib/sinistros/regras";
+import { COBERTURAS_LMI, ETAPAS, calcularPrazoAviso, formatarReais, hojeSP, regrasDoSinistro, saldoLmi, situacaoDoFormulario, type EtapaSinistro, type TipoSinistro } from "@/lib/sinistros/regras";
 import { emailAtualizacaoParaImobiliaria, type SinistroEmail } from "@/lib/sinistros/emails";
 
 type Supa = Awaited<ReturnType<typeof createClient>>;
@@ -138,7 +138,9 @@ export async function mudarEtapa(fd: FormData) {
       { ...s, etapa: para } as SinistroEmail,
       destinos,
       para === "encerrado" ? "Sinistro encerrado" : `Sinistro: ${ETAPAS[para].tituloImobiliaria}`,
-      mensagem ?? resumo
+      mensagem ?? resumo,
+      // Foi para acordo/judicial: lembra que os valores passam pelo escritório.
+      para === "acordo_judicial" ? regrasDoSinistro({ ...s, etapa: para }) : []
     );
   }
   revalidatePath("/sinistros/gestao");
