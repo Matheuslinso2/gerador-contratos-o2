@@ -8,9 +8,9 @@ import SubmitButton from "@/components/SubmitButton";
 export default async function LoginCodigoPage({
   searchParams,
 }: {
-  searchParams: Promise<{ erro?: string; enviado?: string }>;
+  searchParams: Promise<{ erro?: string; enviado?: string; next?: string }>;
 }) {
-  const { erro, enviado } = await searchParams;
+  const { erro, enviado, next } = await searchParams;
 
   return (
     <main className="mx-auto flex max-w-sm flex-1 flex-col justify-center gap-5 p-8">
@@ -56,6 +56,7 @@ export default async function LoginCodigoPage({
         </>
       ) : (
         <form action={enviarCodigo} className="space-y-3">
+          {next && <input type="hidden" name="next" value={next} />}
           <label htmlFor="email" className="sr-only">E-mail</label>
           <input
             id="email"

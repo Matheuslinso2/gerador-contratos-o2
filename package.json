@@ -13,6 +13,7 @@
     "@googleapis/drive": "^20.2.0",
     "@googleapis/gmail": "^18.0.0",
     "@googleapis/sheets": "^13.0.2",
+    "@modelcontextprotocol/server": "^2.4.0",
     "@sentry/nextjs": "^10.71.0",
     "@supabase/ssr": "^0.12.3",
     "@supabase/supabase-js": "^2.110.8",
@@ -21,6 +22,7 @@
     "html2canvas-pro": "^2.4.1",
     "jspdf": "^4.2.1",
     "jszip": "^3.10.1",
+    "mcp-handler": "^2.3.0",
     "next": "16.2.11",
     "pdf-lib": "^1.17.1",
     "react": "19.2.4",
@@ -29,7 +31,8 @@
     "rss-parser": "^3.13.0",
     "unpdf": "^1.8.0",
     "word-extractor": "^1.0.4",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

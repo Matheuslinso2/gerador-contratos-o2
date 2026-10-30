@@ -6,6 +6,13 @@ import { createClient } from "@/lib/supabase/server";
 import { traduzirErroAuth } from "@/lib/authErrors";
 import { origem } from "@/lib/origem";
 
+// Para onde voltar depois do login: só a tela de autorização do conector de
+// leitura (OAuth) é aceita, para ninguém usar o login como redirecionador.
+export async function destinoSeguro(next: unknown): Promise<string> {
+  const n = typeof next === "string" ? next : "";
+  return n.startsWith("/oauth/consent?") ? n : "/";
+}
+
 export async function signIn(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
@@ -15,7 +22,7 @@ export async function signIn(formData: FormData) {
   if (error) {
     redirect(`/login?erro=${encodeURIComponent(traduzirErroAuth(error.message))}`);
   }
-  redirect("/");
+  redirect(await destinoSeguro(formData.get("next")));
 }
 
 // Login sem senha (decisão de 30/10/2026): equipe O2 entra com a conta Google
@@ -23,11 +30,12 @@ export async function signIn(formData: FormData) {
 // por e-mail. Senha continua valendo. Nenhum dos dois cria conta nova -- quem
 // não tem cadastro continua passando por /signup (ver login/callback).
 
-export async function entrarComGoogle() {
+export async function entrarComGoogle(formData: FormData) {
+  const next = await destinoSeguro(formData.get("next"));
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
-    options: { redirectTo: `${await origem()}/login/callback`, queryParams: { prompt: "select_account" } },
+    options: { redirectTo: `${await origem()}/login/callback${next !== "/" ? `?next=${encodeURIComponent(next)}` : ""}`, queryParams: { prompt: "select_account" } },
   });
   if (error || !data.url) {
     redirect(`/login?erro=${encodeURIComponent("Não foi possível abrir o login do Google. Tente de novo.")}`);
@@ -36,6 +44,7 @@ export async function entrarComGoogle() {
 }
 
 const COOKIE_EMAIL_CODIGO = "o2_login_codigo_email";
+const COOKIE_NEXT_CODIGO = "o2_login_codigo_next";
 
 export async function enviarCodigo(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -47,7 +56,9 @@ export async function enviarCodigo(formData: FormData) {
   await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
 
   // E-mail fica num cookie curto (não na URL) até a pessoa digitar o código.
-  (await cookies()).set(COOKIE_EMAIL_CODIGO, email, { httpOnly: true, secure: true, sameSite: "lax", maxAge: 15 * 60, path: "/login" });
+  const loja = await cookies();
+  loja.set(COOKIE_EMAIL_CODIGO, email, { httpOnly: true, secure: true, sameSite: "lax", maxAge: 15 * 60, path: "/login" });
+  loja.set(COOKIE_NEXT_CODIGO, await destinoSeguro(formData.get("next")), { httpOnly: true, secure: true, sameSite: "lax", maxAge: 15 * 60, path: "/login" });
   redirect("/login/codigo?enviado=1");
 }
 
@@ -62,8 +73,10 @@ export async function confirmarCodigo(formData: FormData) {
   if (error) {
     redirect(`/login/codigo?enviado=1&erro=${encodeURIComponent("Código inválido ou vencido. Confira o e-mail ou peça um novo código.")}`);
   }
+  const next = await destinoSeguro(loja.get(COOKIE_NEXT_CODIGO)?.value);
   loja.delete({ name: COOKIE_EMAIL_CODIGO, path: "/login" });
-  redirect("/");
+  loja.delete({ name: COOKIE_NEXT_CODIGO, path: "/login" });
+  redirect(next);
 }
 
 export async function esqueciSenha(formData: FormData) {

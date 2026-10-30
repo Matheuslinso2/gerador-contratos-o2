@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { isEquipe } from "@/lib/admin";
 import { buscarImobiliariaDoUsuario } from "@/lib/imobiliariaDoUsuario";
+import { destinoSeguro } from "../actions";
 
 // Volta do "Entrar com Google" (login/actions.ts). Fica dentro de /login pra
 // ser rota pública no proxy.ts sem precisar de exceção nova.
@@ -22,10 +23,11 @@ export async function GET(request: NextRequest) {
   const user = data?.user;
   if (error || !user) return voltar(`erro=${encodeURIComponent("Não foi possível concluir o login com Google. Tente de novo.")}`);
 
-  if (isEquipe(user.email)) return NextResponse.redirect(new URL("/", request.url));
+  const destino = await destinoSeguro(request.nextUrl.searchParams.get("next"));
+  if (isEquipe(user.email)) return NextResponse.redirect(new URL(destino, request.url));
 
   const imobiliaria = await buscarImobiliariaDoUsuario(supabase, user);
-  if (imobiliaria) return NextResponse.redirect(new URL("/", request.url));
+  if (imobiliaria) return NextResponse.redirect(new URL(destino, request.url));
 
   await supabase.auth.signOut();
   const criadaAgora = Date.now() - new Date(user.created_at).getTime() < 5 * 60_000;

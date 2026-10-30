@@ -3,6 +3,12 @@ import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server
 import { NOME_COOKIE_ACESSO_PUBLICO, ROTAS_PUBLICAS_COM_COOKIE } from "@/lib/acessoPublico";
 
 const ROTAS_PUBLICAS = [
+  // Conector de leitura (MCP) da diretoria: a rota exige o token OAuth e
+  // responde 401 com o endereço de descoberta (sem cookie de sessão); a tela
+  // de autorização manda para o /login quem não estiver logado.
+  "/api/mcp",
+  "/.well-known/oauth-protected-resource",
+  "/oauth/consent",
   "/login",
   "/signup",
   "/termos",

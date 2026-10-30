@@ -7,9 +7,10 @@ import SubmitButton from "@/components/SubmitButton";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ erro?: string; aviso?: string }>;
+  searchParams: Promise<{ erro?: string; aviso?: string; next?: string }>;
 }) {
-  const { erro, aviso } = await searchParams;
+  const { erro, aviso, next } = await searchParams;
+  const campoNext = next ? <input type="hidden" name="next" value={next} /> : null;
 
   return (
     <main className="mx-auto flex max-w-sm flex-1 flex-col justify-center gap-5 p-8">
@@ -26,6 +27,7 @@ export default async function LoginPage({
       )}
 
       <form action={signIn} className="space-y-3">
+        {campoNext}
         <label htmlFor="email" className="sr-only">E-mail</label>
         <input
           id="email"
@@ -58,6 +60,7 @@ export default async function LoginPage({
       </div>
 
       <form action={entrarComGoogle}>
+        {campoNext}
         <SubmitButton
           textoCarregando="Abrindo o Google…"
           className="flex w-full items-center justify-center gap-2 rounded-full border border-gray-300 bg-white px-4 py-2.5 font-medium text-gray-700 transition hover:bg-gray-50"
@@ -73,7 +76,7 @@ export default async function LoginPage({
       </form>
 
       <Link
-        href="/login/codigo"
+        href={next ? `/login/codigo?next=${encodeURIComponent(next)}` : "/login/codigo"}
         className="block w-full rounded-full border border-gray-300 bg-white px-4 py-2.5 text-center font-medium text-gray-700 transition hover:bg-gray-50"
       >
         ✉️ Receber código por e-mail
