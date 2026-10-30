@@ -160,6 +160,8 @@ export async function POST(request: NextRequest) {
     #corpo:focus { outline: 2px solid #F8540D22; }
     #corpo ul, #corpo ol { margin: 0 0 0 20px; padding: 0; }
     #corpo a { color: #F8540D; }
+    #corpo .campo { background: #fff3d6; border-bottom: 1px dashed #ff9900; }
+    #corpo .campo.falta { background: #ffe2e2; border-bottom-color: #c62828; }
     button.enviar { margin-top: 16px; background: #F8540D; color: #fff; border: none; padding: 10px 24px; border-radius: 999px; font-weight: 700; font-size: 14px; cursor: pointer; }
     button.enviar:disabled { opacity: 0.6; cursor: default; }
     #mensagem { margin-top: 12px; font-size: 13px; }
@@ -222,8 +224,26 @@ export async function POST(request: NextRequest) {
       <button type="button" id="btn-atualizar-modelo" style="display:none;border:1px solid #01192e;color:#01192e;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit;background:#fff;">Atualizar este modelo</button>
       <button type="button" id="btn-excluir-modelo" style="display:none;border:1px solid #c62828;color:#c62828;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit;background:#fff;">Excluir este modelo</button>
     </div>
+    <div id="bloco-inserir-campo" style="display:none;margin-top:10px;">
+      <label for="inserir-campo" style="margin-top:0;">Inserir campo do cliente no texto</label>
+      <select id="inserir-campo">
+        <option value="">Escolha um campo para colocar no texto…</option>
+        <option value="empresa">Nome da imobiliária</option>
+        <option value="responsavel">Nome do responsável</option>
+        <option value="card">Título do card</option>
+        <option value="campanha">Nome da campanha</option>
+        <option value="meta">Meta da imobiliária</option>
+        <option value="realizado">Realizado até agora</option>
+        <option value="faltam">Quanto falta para a meta</option>
+        <option value="percentual">% da meta atingido</option>
+        <option value="dias_restantes">Dias até o fim da campanha</option>
+        <option value="prazo">Data final da campanha</option>
+        <option value="cotacoes_abertas">Cotações em andamento</option>
+        <option value="desempenho">Quadro de desempenho (barra e números)</option>
+      </select>
+    </div>
     <div id="msg-modelo" style="font-size:12px;margin-top:4px;"></div>
-    <div id="dica-salvar-modelo" style="display:none;font-size:11px;color:#8d8683;margin-top:4px;">Para o modelo se preencher sozinho em cada card, escreva {{empresa}}, {{responsavel}} ou {{card}} no texto. Ao salvar, o nome do cliente deste card vira esse trecho automaticamente. O modelo fica visível para toda a equipe comercial.</div>
+    <div id="dica-salvar-modelo" style="display:none;font-size:11px;color:#8d8683;margin-top:4px;">Use "Inserir campo" para colocar dados do cliente no texto (nome, meta, quanto falta, prazo, quadro de desempenho). Em cada card esses trechos se preenchem sozinhos com os dados daquela imobiliária e continuam editáveis; se faltar o dado, aparece um [trecho em vermelho] para completar. O modelo fica visível para toda a equipe comercial.</div>
 
     <div id="bloco-vincular" style="display:none;">
       <div id="aviso-sem-conversa">Este card ainda não tem conversa por e-mail registrada. Se o cliente já conversa com a equipe pelo Gmail, vincule essa conversa para este e-mail entrar nela (em vez de abrir outra).</div>
@@ -295,17 +315,83 @@ export async function POST(request: NextRequest) {
       return String(texto).split("&").join("&amp;").split("<").join("&lt;").split(">").join("&gt;");
     }
 
-    function preencherPlaceholders(texto, comoHtml) {
-      var valores = {
-        responsavel: (infoCard && infoCard.responsavel) || "[nome do cliente]",
-        empresa: (infoCard && infoCard.empresa) || "[empresa/imóvel]",
-        card: (infoCard && infoCard.tituloCard) || "[título do card]",
+    // Campos do cliente que os modelos podem usar. Cada um aparece no texto como
+    // um trecho destacado (data-campo) que se preenche sozinho com os dados do
+    // card e CONTINUA EDITÁVEL; sem o dado, vira um [trecho entre colchetes]
+    // para a pessoa completar. Ao salvar como modelo, voltam a ser {{campo}}.
+    var ROTULO_FALTANTE = {
+      empresa: "[empresa/imóvel]",
+      responsavel: "[nome do cliente]",
+      card: "[título do card]",
+      campanha: "[campanha]",
+      meta: "[meta]",
+      realizado: "[realizado]",
+      faltam: "[quanto falta]",
+      percentual: "[% da meta]",
+      dias_restantes: "[dias até o fim]",
+      prazo: "[data final]",
+      cotacoes_abertas: "[cotações em andamento]",
+      desempenho: "[quadro de desempenho: este card não tem os dados da campanha, preencha à mão]"
+    };
+    var CAMPOS_MODELO = Object.keys(ROTULO_FALTANTE);
+
+    function valorCampo(chave) {
+      var c = infoCard && infoCard.campanha;
+      var mapa = {
+        empresa: infoCard && infoCard.empresa,
+        responsavel: infoCard && infoCard.responsavel,
+        card: infoCard && infoCard.tituloCard,
+        campanha: c && c.campanha,
+        meta: c && c.meta,
+        realizado: c && c.realizado,
+        faltam: c && c.faltam,
+        percentual: c && c.percentual,
+        dias_restantes: c && c.diasRestantes,
+        prazo: c && c.prazo,
+        cotacoes_abertas: c && c.cotacoesAbertas
       };
-      Object.keys(valores).forEach(function (chave) {
-        var valor = comoHtml ? escaparHtml(valores[chave]) : valores[chave];
-        texto = texto.split("{{" + chave + "}}").join(valor);
+      return mapa[chave] || null;
+    }
+
+    function preencherPlaceholders(texto, comoHtml) {
+      CAMPOS_MODELO.forEach(function (chave) {
+        var token = "{{" + chave + "}}";
+        if (texto.indexOf(token) === -1) return;
+        var valor = chave === "desempenho" ? (infoCard && infoCard.campanha ? infoCard.campanha.quadroHtml : null) : valorCampo(chave);
+        var faltou = !valor;
+        var exibido = faltou ? ROTULO_FALTANTE[chave] : valor;
+        var resultado;
+        if (!comoHtml) {
+          resultado = chave === "desempenho" ? "" : exibido;
+        } else if (chave === "desempenho" && !faltou) {
+          resultado = '<div data-campo="desempenho" class="campo">' + valor + '</div>';
+        } else {
+          resultado = '<span data-campo="' + chave + '" class="campo' + (faltou ? ' falta' : '') + '">' + escaparHtml(exibido) + '</span>';
+        }
+        texto = texto.split(token).join(resultado);
       });
       return texto;
+    }
+
+    // Trechos de campo -> {{campo}} (para salvar como modelo).
+    function paraTokens(html) {
+      var div = document.createElement("div");
+      div.innerHTML = html;
+      div.querySelectorAll("[data-campo]").forEach(function (el) {
+        el.replaceWith(document.createTextNode("{{" + el.getAttribute("data-campo") + "}}"));
+      });
+      return div.innerHTML;
+    }
+    // Tira a marcação dos campos antes de enviar (o e-mail sai limpo).
+    function semMarcas(html) {
+      var div = document.createElement("div");
+      div.innerHTML = html;
+      div.querySelectorAll("[data-campo]").forEach(function (el) {
+        var frag = document.createDocumentFragment();
+        while (el.firstChild) frag.appendChild(el.firstChild);
+        el.replaceWith(frag);
+      });
+      return div.innerHTML;
     }
 
     function popularModelos() {
@@ -313,6 +399,7 @@ export async function POST(request: NextRequest) {
       if (PODE_CRIAR_MODELO) {
         document.getElementById("acoes-modelo").style.display = "flex";
         document.getElementById("dica-salvar-modelo").style.display = "block";
+        document.getElementById("bloco-inserir-campo").style.display = "block";
       }
       if (!MODELOS_EMAIL.length && !PODE_CRIAR_MODELO) {
         // Nenhum modelo pra esse tipo de card: esconde o campo inteiro.
@@ -417,7 +504,7 @@ export async function POST(request: NextRequest) {
       if (corpoEl.querySelector('img[src^="data:"], img[src^="blob:"], img[src^="file:"]')) { avisoModelo("Espere as imagens terminarem de carregar antes de salvar.", true); return null; }
       return {
         assunto: voltarPlaceholders(document.getElementById("assunto").value, false),
-        corpoHtml: voltarPlaceholders(corpoEl.innerHTML, true),
+        corpoHtml: voltarPlaceholders(paraTokens(corpoEl.innerHTML), true),
       };
     }
     document.getElementById("btn-salvar-modelo").addEventListener("click", function () {
@@ -453,6 +540,22 @@ export async function POST(request: NextRequest) {
         avisoModelo("Modelo atualizado.", false);
       });
     });
+
+    // ---- Inserir campo do cliente no texto ----
+    document.getElementById("inserir-campo").addEventListener("change", function () {
+      var chave = this.value;
+      this.value = "";
+      if (!chave) return;
+      var corpoEl = document.getElementById("corpo");
+      corpoEl.focus();
+      if (ultimaSelecaoCorpo) {
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(ultimaSelecaoCorpo);
+      }
+      document.execCommand("insertHTML", false, preencherPlaceholders("{{" + chave + "}}", true));
+    });
+
     document.getElementById("btn-excluir-modelo").addEventListener("click", function () {
       var m = modeloSelecionado();
       if (!m || !m.editavel) return;
@@ -988,6 +1091,9 @@ export async function POST(request: NextRequest) {
             return;
           }
 
+          var camposPendentes = Array.prototype.some.call(corpoEl.querySelectorAll(".campo.falta"), function (el) { return el.textContent.trim().charAt(0) === "["; });
+          if (camposPendentes && !window.confirm("Ainda há campos em vermelho sem preencher (entre colchetes). Enviar mesmo assim?")) return;
+
           var botao = document.getElementById("botao-enviar");
           botao.disabled = true;
 
@@ -1003,7 +1109,7 @@ export async function POST(request: NextRequest) {
               para: document.getElementById("para").value,
               cc: document.getElementById("cc").value,
               assunto: document.getElementById("assunto").value,
-              corpo: corpoEl.innerHTML,
+              corpo: semMarcas(corpoEl.innerHTML),
               anexos: anexosConcluidos,
             }),
           })

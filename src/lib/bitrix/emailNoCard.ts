@@ -1,6 +1,7 @@
 import "server-only";
 import { buscarItem, buscarEmpresas, buscarUsuarios } from "./client";
 import { nomeProdutoPorEntidade, gerarLinkCard } from "./entidadesCard";
+import { buscarDesempenhoDoCard, type DadosCampanhaCard } from "./desempenhoNoCard";
 
 // Compartilhado entre enviar-email/route.ts (monta o e-mail de verdade) e
 // info-card/route.ts (prévia na tela de composição, pedida pelo Matheus
@@ -59,6 +60,8 @@ export type InfoCardEmail = {
   empresa?: string;
   responsavel?: string;
   link: string;
+  /** Meta, realizado, prazo etc. da imobiliária do card, se estiver numa campanha com meta. */
+  campanha?: DadosCampanhaCard | null;
 };
 
 // Best-effort: qualquer falha (permissão, campo ausente, timeout) devolve
@@ -71,7 +74,9 @@ export async function buscarInfoCardParaEmail(entityTypeId: number, itemId: numb
       item.companyId ? buscarEmpresas([item.companyId]) : Promise.resolve({} as Record<number, string>),
       item.assignedById ? buscarUsuarios([item.assignedById]) : Promise.resolve({} as Record<number, string>),
     ]);
+    const campanha = await buscarDesempenhoDoCard(entityTypeId, itemId);
     return {
+      campanha,
       badge: nomeProdutoPorEntidade(entityTypeId),
       tituloCard: item.title,
       empresa: item.companyId ? empresas[item.companyId] : undefined,
