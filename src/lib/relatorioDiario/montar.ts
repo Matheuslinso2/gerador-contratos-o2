@@ -189,7 +189,7 @@ async function montarParaPeriodo(periodo: PeriodoRelatorio): Promise<RelatorioDi
           premio: conv.reduce((s, c) => s + c.premio, 0),
           comissao: comissaoMes,
         },
-        renovacoes: null, // funil Renovação Fiança (cat. 32) ainda não entra no retrato
+        renovacoes: null, // preenchido depois por lerRenovacaoFianca (funil Renovação, cat. 32)
         ontemEfetivados: [...todos.values()].reduce((s, a) => s + somarQuadro(a.efetivacoesPorDia, periodo.dias), 0),
         efetivados: convertidos.total,
         conversao: conversaoMes,
@@ -264,7 +264,41 @@ async function montarParaPeriodo(periodo: PeriodoRelatorio): Promise<RelatorioDi
       }
     ),
   ]);
+  if (fianca.ok) fianca.dados.renovacoes = await lerRenovacaoFianca(periodo.competenciaMes);
   return { periodo, fianca, capitalizacao, auto, ramos, flash: await lerFlash(periodo.competenciaMes) };
+}
+
+// Renovações de Fiança do mês (funil Renovação, categoria 32) pela série
+// separada que alimenta o Power BI - O2 Seguros (producao_painel_mensal,
+// tipo renovacao): entradas = cards recebidos no mês; renovadas / perdidas
+// pelo mês do desfecho. Dados da reunião Kamila 29/10/2026.
+async function lerRenovacaoFianca(competencia: string): Promise<BlocoMes | null> {
+  try {
+    const { data, error } = await createServiceClient()
+      .from("producao_painel_mensal")
+      .select("evento, n, premio, comissao")
+      .eq("origem", "funil")
+      .eq("produto", "fianca")
+      .eq("tipo", "renovacao")
+      .eq("competencia", competencia);
+    if (error) throw new Error(error.message);
+    const por = (ev: string) =>
+      (data ?? []).filter((l) => l.evento === ev).reduce((a, l) => ({ n: a.n + Number(l.n ?? 0), premio: a.premio + Number(l.premio ?? 0), comissao: a.comissao + Number(l.comissao ?? 0) }), { n: 0, premio: 0, comissao: 0 });
+    const entrada = por("entrada");
+    const conv = por("conversao");
+    const perda = por("perda");
+    if (!entrada.n && !conv.n && !perda.n) return null;
+    return {
+      cotacoes: entrada.n,
+      efetivados: conv.n,
+      conversao: taxa(conv.n, conv.n + perda.n),
+      premio: conv.premio,
+      comissao: conv.comissao,
+    };
+  } catch (erro) {
+    console.error("Relatório diário: falha lendo renovações de Fiança:", erro);
+    return null;
+  }
 }
 
 async function lerFlash(competencia: string): Promise<Secao<FlashMes>> {
