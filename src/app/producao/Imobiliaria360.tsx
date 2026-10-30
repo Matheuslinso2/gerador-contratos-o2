@@ -349,7 +349,7 @@ function Visao360({
           linhas={[`${num(cotConv)} convertidas`]}
           legenda="Tomadas de preço de todos os produtos no período (planilhas e Bitrix), na mesma régua do painel de cada produto."
         />
-        <Cartao rotulo="Apólices (Corp)" valor={num(kpis.resumo.propostas)} linhas={[`${compacto(kpis.resumo.premio)} de prêmio líquido`]} legenda="Documentos efetivados no Corp no período, pela data da proposta (espelho do SharePoint, mesma conta do Power BI)." />
+        <Cartao rotulo="Apólices (Corp)" valor={num(kpis.resumo.propostas)} linhas={[`${compacto(kpis.resumo.premio)} de prêmio líquido`]} legenda="Documentos efetivados no Corp no período, pelo mês de início de vigência (espelho do SharePoint, mesma conta do Power BI)." />
         <Cartao rotulo="Comissão" valor={compacto(kpis.resumo.comissao)} linhas={[`ano anterior: ${compacto(kpis.resumo_ano_anterior.comissao)}`]} />
         <Cartao
           rotulo="Sinistros avisados"

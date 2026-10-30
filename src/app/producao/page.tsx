@@ -32,7 +32,7 @@ export const dynamic = "force-dynamic";
 //    (nov/2025–set/2026) + funil Renovação do Bitrix (out/2026 →); RE = abas RN
 //    das planilhas (nov/2025–set/2026) + funil Renovações do Bitrix (set/2026 →).
 //  - APÓLICES (Corp): o que foi efetivado — propostas, prêmio líquido,
-//    comissão —, pelo mês da data da proposta.
+//    comissão —, pelo mês de início de vigência (corp_calcular_retrato_producao usa ini_vig).
 // Aba "Imobiliária 360" (21/10/2026, Matheus): sem imobiliária escolhida, a O2
 // inteira com o ranking (os dois blocos abaixo); com UMA imobiliária ou grupo
 // (filtro ou clique no ranking), a visão 360 dela (Imobiliaria360.tsx); com
@@ -889,7 +889,7 @@ function BlocoApolices({
       cor="#01192e"
       fonte={
         <>
-          O que foi efetivado de fato: documentos, prêmio líquido e comissão da corretora, pelo mês da data da proposta — a mesma conta do Power BI (documento
+          O que foi efetivado de fato: documentos, prêmio líquido e comissão da corretora, pelo mês de início de vigência — a mesma conta do Power BI (documento
           conta uma vez; novos, renovações, endossos, faturas e cancelamentos). Fonte: espelho do SharePoint do Corp, de 2020 em diante
           {fontes.corp ? ` (atualizado em ${dataHora(fontes.corp)})` : ""}; de 2015 a 2019, os relatórios PDF do Corp. A imobiliária é ligada pelo código do
           produtor. O filtro de seguradora vale só para este bloco.
