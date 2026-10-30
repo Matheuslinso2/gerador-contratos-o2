@@ -63,6 +63,10 @@ const F = {
   gestor: "UF_CRM_O2_GESTOR_CONTA",
 };
 const E = { apolices: "UF_CRM_1788467865683", comissao: "UF_CRM_1788467885830", dataResultado: "UF_CRM_1789589770952" };
+// Oportunidades geradas (30/10/2026): funil Sucesso, etapa Oportunidade (UC_ZX9NXX),
+// mês definido SÓ pelo campo "Data de entrada — Oportunidade comercial".
+const CAMPO_DT_OPORTUNIDADE = "UF_CRM_O2_DT_OPORTUNIDADE";
+const ETAPA_OPORTUNIDADE = "UC_ZX9NXX";
 
 const MOTIVO: Record<string, { grupo: string; nome: string }> = {
   "2148": { grupo: "A", nome: "A. QUEDA DE PRODUÇÃO" },
@@ -358,6 +362,41 @@ export function construirDatasets(entrada: EntradaConstrucao): Datasets {
     });
   }
   const eventosCall = eventos.filter((e) => e.agendada);
+
+  // ----- oportunidades geradas: card do funil Sucesso com "Data de entrada — Oportunidade comercial" -----
+  // O mês vem somente desse campo (nunca da data da call, de criação ou de edição).
+  // Conta uma vez por card, mesmo que ele já tenha saído da etapa Oportunidade.
+  // Sem data (ou data inválida) o card NÃO entra na conta: vai para a lista de pendências.
+  type Oportunidade = { card: string; cliente: string; vendedora: string; data: string; mes: string; etapa: string; alerta: string | null; call: Evento | null };
+  const dataReal = (s: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+    const [a, m, dia] = s.split("-").map(Number);
+    const t = new Date(Date.UTC(a, m - 1, dia));
+    return t.getUTCFullYear() === a && t.getUTCMonth() === m - 1 && t.getUTCDate() === dia;
+  };
+  const oportunidadesSucesso = new Map<string, Oportunidade>();
+  const oportunidadesPendentes: Linha[] = [];
+  for (const c of cards) {
+    if (c.funil !== "Sucesso") continue;
+    const bruto = c.deal[CAMPO_DT_OPORTUNIDADE];
+    const dt = dataSimples(bruto);
+    if (!dt) {
+      if (c.stageId === ETAPA_OPORTUNIDADE) oportunidadesPendentes.push({ card: Number(c.id), cliente: c.cliente, vendedora: c.vendedora, etapa: c.etapa, motivo: "Está na etapa Oportunidade, mas o campo \"Data de entrada — Oportunidade comercial\" está vazio." });
+      continue;
+    }
+    if (!dataReal(dt)) {
+      oportunidadesPendentes.push({ card: Number(c.id), cliente: c.cliente, vendedora: c.vendedora, etapa: c.etapa, motivo: `Data de entrada inválida: "${str(bruto)}".` });
+      continue;
+    }
+    if (oportunidadesSucesso.has(c.id)) continue;
+    const call = eventosCall.find((e) => e.card === c.id) ?? null;
+    // Vínculo com a call de origem = a call registrada no próprio card. Divergência só sinaliza.
+    const alerta = !call ? "sem call registrada no card" : call.resultadoId !== "3274" ? `call do card com resultado "${call.resultado}"` : null;
+    oportunidadesSucesso.set(c.id, { card: c.id, cliente: c.cliente, vendedora: c.vendedora, data: dt, mes: dt.slice(0, 7), etapa: c.etapa, alerta, call });
+  }
+  const oppsDo = (v: string, mes: string) => [...oportunidadesSucesso.values()].filter((o) => (v === "Todas" || o.vendedora === v) && o.mes === mes);
+  d.oportunidades_pendencias = oportunidadesPendentes;
+
   d.suc_eventos = eventosCall
     .map(({ id, data, card, cliente, vendedora, evento, resultado, pontua, funil }) => ({ id, data, card: Number(card), cliente, vendedora, evento, resultado, pontua, funil }))
     .sort((a, b) => String(a.data).localeCompare(String(b.data)));
@@ -443,7 +482,10 @@ export function construirDatasets(entrada: EntradaConstrucao): Datasets {
     for (const e of eventosCall.filter((x) => x.vendedora === v && mesesLive.includes(mesDe(x.data) ?? "")).sort((a, b) => a.data.localeCompare(b.data))) {
       n++;
       const pontuou = e.pontua === "Sim";
-      const opp = pontuou && e.resultadoId === "3274";
+      // Funil Sucesso: a oportunidade é paga pela "Data de entrada — Oportunidade comercial"
+      // (linha própria abaixo), não mais pela data da call. Campanhas e Ativação seguem
+      // como antes (resultado "Oportunidade de cotação gerada" no mês da call).
+      const opp = pontuou && e.resultadoId === "3274" && e.funil !== "Sucesso";
       const pendente = e.pontua === "Pendente";
       const base = pontuou ? VALOR_BASE_CALL : 0;
       const comp = opp ? VALOR_COMPLEMENTO_OPORTUNIDADE : 0;
@@ -459,6 +501,23 @@ export function construirDatasets(entrada: EntradaConstrucao): Datasets {
         total: base + comp,
         situacao: pontuou ? "Paga" : e.treino ? "Não pontua" : pendente ? "Pendente: preencher resultado" : "Não pontua",
         card: Number(e.card),
+      });
+    }
+    // Oportunidades do funil Sucesso: R$ 50 no mês da data de entrada na Oportunidade comercial
+    for (const o of [...oportunidadesSucesso.values()].filter((x) => x.vendedora === v && mesesLive.includes(x.mes)).sort((a, b) => a.data.localeCompare(b.data) || Number(a.card) - Number(b.card))) {
+      n++;
+      comissao.push({
+        id: `${prefixo[v]}${n}`,
+        vendedora: v,
+        data: o.data,
+        cliente: o.cliente,
+        formato: o.call?.evento ?? null,
+        resultado: "Oportunidade gerada",
+        base: 0,
+        complemento: VALOR_COMPLEMENTO_OPORTUNIDADE,
+        total: VALOR_COMPLEMENTO_OPORTUNIDADE,
+        situacao: o.alerta ? `Paga (conferir: ${o.alerta})` : "Paga",
+        card: Number(o.card),
       });
     }
     // 0,5% da Comissão O2 do cliente que fechou, no mês da data do resultado
@@ -495,7 +554,8 @@ export function construirDatasets(entrada: EntradaConstrucao): Datasets {
   const mesCorrente = mesAtual;
   for (const v of ["Dayane", "Livia", "Henrique", "Todas"]) {
     const ac = acoesDo(v, mesCorrente);
-    const opp = ac.filter((e) => e.resultadoId === "3274").length;
+    // Sucesso: oportunidades que entraram no mês (data de entrada); demais funis: call com resultado 3274 no mês.
+    const opp = ac.filter((e) => e.resultadoId === "3274" && e.funil !== "Sucesso").length + oppsDo(v, mesCorrente).length;
     const taxa = ac.length ? opp / ac.length : null;
     metaAcoes.push({
       vendedora: v === "Todas" ? "Equipe" : v,
@@ -523,7 +583,7 @@ export function construirDatasets(entrada: EntradaConstrucao): Datasets {
       add(mes, v, "agendaram", ev.length);
       add(mes, v, "realizaram", realizadas.length);
       add(mes, v, "treino", ev.filter((e) => e.treino && e.realizada).length);
-      add(mes, v, "oportunidade", realizadas.filter((e) => e.resultadoId === "3274").length);
+      add(mes, v, "oportunidade", realizadas.filter((e) => e.resultadoId === "3274" && e.funil !== "Sucesso").length + oppsDo(v, mes).length);
       add(mes, v, "resultado", unicos(ms.filter((x) => x.tipo === "resultado")));
       add(mes, v, "perdas", unicos(ms.filter((x) => x.tipo === "perda")));
       add(mes, v, "encerramento", unicos(ms.filter((x) => x.tipo === "encerramento")));
@@ -759,13 +819,13 @@ function origens(hoje: string): Linha[] {
     ["agendaram", "Calls/visitas agendadas", "Cards com data de reunião no mês (campos de reunião do negócio)."],
     ["realizaram", "Calls/visitas realizadas", "Reunião com status Realizada no mês e campo Resultado da visita/call preenchido que pontua (sem treinamento/cadastro)."],
     ["treino", "Treinamento/cadastro", "Resultado \"Avanço de relacionamento / cadastro\" ou motivo F2. Conta como contato, não pontua."],
-    ["oportunidade", "Oportunidades", "Resultado da visita/call = Oportunidade de cotação gerada, no mês da reunião."],
+    ["oportunidade", "Oportunidades", "Funil Sucesso: cards com o campo \"Data de entrada — Oportunidade comercial\" preenchida, no mês dessa data (independe da data da call; cada card conta uma vez). Campanhas e Ativação: resultado da visita/call = Oportunidade de cotação gerada, no mês da reunião."],
     ["resultado", "Resultados", "Card entrou em Resultados gerados (Sucesso), Apuração do resultado (Campanhas) ou foi ganho no mês, pelo histórico de etapas."],
     ["perdas", "Perdas", "Cards perdidos no mês. Fechamento em lote em Analisar falha é encerramento de ciclo, não perda."],
     ["apolices", "Apólices", "Empresa vinculada › Resultado Financeiro (Nº de apólices), pela DATA - RESULTADO COMERCIAL GERADO no mês."],
     ["comissao_o2", "Comissão O2", "Empresa vinculada › Resultado Financeiro (Comissão O2), pela DATA - RESULTADO COMERCIAL GERADO no mês."],
-    ["comissao_vend", "Comissão do(a) vendedor(a)", "Out/26 em diante: R$ 50 por call/visita realizada + R$ 50 se gerar oportunidade + 0,5% da Comissão O2 de quem fechou. Set/26 fechado pela regra de 14/10."],
-    ["meta_taxa", "Meta 60%", "Calls/visitas realizadas no mês (Sucesso, Campanhas e Ativação, sem treinamento) que geraram oportunidade. 60% = 100% da meta."],
+    ["comissao_vend", "Comissão do(a) vendedor(a)", "Out/26 em diante: R$ 50 por call/visita realizada + R$ 50 por oportunidade gerada (Sucesso: no mês da \"Data de entrada — Oportunidade comercial\"; Campanhas/Ativação: no mês da call) + 0,5% da Comissão O2 de quem fechou. Set/26 fechado pela regra de 14/10."],
+    ["meta_taxa", "Meta 60%", "Calls/visitas realizadas no mês (Sucesso, Campanhas e Ativação, sem treinamento) que geraram oportunidade; as oportunidades do funil Sucesso entram pelo mês da data de entrada (podem vir de calls de meses anteriores). 60% = 100% da meta."],
     ["cotacoes_mes", "Cotações do mês", "Calls/visitas de clientes da campanha com resultado \"Oportunidade de cotação gerada\" no mês."],
     ["apolices_mes", "Apólices do mês", "Resultado Financeiro da Empresa com data no mês, só clientes da campanha."],
     ["apolices_sem_data", "Apólices sem data", "Clientes da campanha com apólices no Resultado Financeiro, mas sem DATA - RESULTADO COMERCIAL GERADO. Não entram em nenhum mês até a data ser preenchida."],
