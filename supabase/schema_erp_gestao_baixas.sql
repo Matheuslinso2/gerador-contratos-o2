@@ -15,3 +15,13 @@
 --
 -- 30/10 (migration erp_previsao_diaria_regra_e_experiencia): erp_previsao_diaria(p_de, p_ate) = por empresa e dia, a comissão prevista pela REGRA e pela EXPERIÊNCIA
 -- (dia em que deveria cair; fim de semana vai para a segunda). Alimenta o gráfico diário de /erp/baixas com as 3 medidas (regra, experiência, recebido no Nibo).
+--
+-- 30/10 (migration erp_baixa_automatica_aplicar_e_desfazer): BAIXA AUTOMÁTICA e DESFAZER (executáveis só pelo service_role; nada liga sozinho).
+--   erp_baixa_automatica_aplicar(extrato, confianca, por, teste_unico): exige a seguradora×empresa ligada em erp_baixa_automatica_config OU teste único explícito;
+--     só linhas 'cheia' e 'pró-labore direto' com comissão ainda 'prevista' e SEM outro recebimento (do Corp ou de outro extrato duplicado); recusa extrato
+--     duplicado já baixado; grava recebimento (origem 'extrato', que dispara o repasse), quita a parcela, marca a comissão recebida e registra cada linha em
+--     erp_baixa_automatica_log (regra e confiança). Divergentes, não encontradas e estornos ficam de fora.
+--   erp_desfazer_baixa_extrato(extrato, motivo, por): DELETE dos recebimentos de origem 'extrato' do extrato, com instantâneo em erp_baixa_desfeitas
+--     (recebimento, repasses e parcela antes), motivo obrigatório; recusa se há repasse em lote ou pago; comissão volta a 'prevista' só sem outro recebimento;
+--     quitação da parcela só é limpa se o Corp não tem baixa; zera a aprovação do extrato.
+-- Primeiro teste (Pottencial, O2 Capitalização, crédito 24/09, extrato que bate com o Nibo): gravou, desfez (voltou ao estado anterior) e regravou.
