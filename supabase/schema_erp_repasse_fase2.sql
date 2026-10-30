@@ -42,3 +42,11 @@ create trigger erp_repasse_da_baixa after insert on erp_comissao_recebimentos fo
 -- Preparo do repasse (só leitura; migrations erp_comissoes_prevista_previsao_idx): índice parcial das comissões previstas por data e
 -- erp_repasse_preparo(mes) = por imobiliária: parcelas/bruto da simulação, sem repasse, pró-labore, baixa divergente, comissões do mês anterior
 -- ainda sem baixa, parcelas em atraso (avisos das seguradoras) e falta de cadastro. Usada em /erp/repasses/preparo.
+
+-- FASE 3 (migration erp_repasse_fase3_autorizar_e_pagamento_nibo, já aplicada): lote autorizado e pagamento confirmado SÓ pelo Nibo.
+--   erp_repasse_lotes ganha status 'autorizado' e colunas autorizado_em/por, nibo_entry_id (único), nibo_valor, relatorio_enviado_em.
+--   erp_autorizar_repasse(imobiliaria, mês): reúne os repasses pendentes até o mês (acumula), trava bruto/18% (só comissão; premiação sem desconto)/líquido
+--     num lote 'autorizado' e põe as linhas em 'em_lote'. Pendências NÃO bloqueiam (falha de baixa é erro de processo).
+--   erp_cancelar_autorizacao_repasse(lote): desfaz enquanto não pago.
+--   erp_conferir_pagamentos_repasse(): lançamento de pagamento do Nibo, categoria '1.1 REPASSE - COMISSÕES', valor = líquido autorizado (±1 centavo),
+--     data >= autorização e favorecido com uma palavra do nome da imobiliária -> lote e repasses 'pago'. Chamar após cada sync do Nibo.
