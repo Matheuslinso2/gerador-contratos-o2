@@ -30,3 +30,7 @@
 -- (estorno, restituição, linha de endosso mesmo sem valor) e NÃO estão cadastrados como endosso da apólice no ERP (compara o número do endosso; sem número, o valor).
 -- Agrupa por seguradora × empresa × apólice × endosso; marca se o Corp já tem o endosso e se a apólice nem existe no ERP. O motivo do cancelamento fica em segundo plano.
 -- Índices: erp_documentos_pai_idx e erp_corp_comissoes_apolice_dig_idx. Alimenta o quadro "Endossos pendentes de cadastro" da Gestão das baixas.
+-- 30/10 (migration erp_endossos_pendentes_dupla_verificacao_v2): dupla verificação pedida pelo Matheus. O endosso é filho da apólice: procura os endossos cadastrados
+-- (documento_pai_id OU mesmo Nº da apólice) e confere pelo número do endosso (inclui o formato longo da Pottencial, que termina no número curto) e pelo valor do prêmio.
+-- Cadastrado = número igual, ou valor igual quando o endosso cadastrado não tem número. Valor igual com número diferente => situacao 'conferir'. Novas colunas: situacao, qtd_endossos_erp.
+-- Out/2026: 76 pendentes + 1 conferir (antes 81). Definição completa na função no banco (pg_get_functiondef).
