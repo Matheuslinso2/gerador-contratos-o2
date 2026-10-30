@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatarData, formatarReais } from "@/lib/sinistros/regras";
 import { lerFiltros } from "@/lib/erp/filtros";
 import { DESCONTO_PCT, linhasDoMes, mesAnterior, mesRepasse, rotuloMes, totais } from "@/lib/erp/repasse";
+import InfoLegenda from "@/components/InfoLegenda";
 import BotaoVerDocumento from "../../BotaoVerDocumento";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +32,12 @@ export default async function ErpRepasseImobiliariaPage({ params, searchParams }
         <Link href={`/erp/repasses?mes=${mes}`} className="text-xs text-gray-500 hover:underline">
           ← Repasses de {rotuloMes(mes)}
         </Link>
-        <h1 className="text-xl font-semibold text-o2-navy">{imob.nome}</h1>
+        <h1 className="flex items-center gap-2 text-xl font-semibold text-o2-navy">
+          {imob.nome}
+          <InfoLegenda titulo="Relatório da imobiliária">
+            Uma linha por parcela com comissão recebida no mês anterior, no mesmo formato do relatório de repasse do Corp. No fim, o total, o desconto de 18% e o líquido. É uma simulação: nada é gravado nem enviado.
+          </InfoLegenda>
+        </h1>
         <p className="text-sm text-gray-600">
           Cód. do produtor no Corp: {imob.codigo_produtor_corp ?? "—"} · e-mail do repasse: {emails || "—"} · previsão 15/{rotuloMes(mes)} (comissão recebida em{" "}
           {rotuloMes(mesAnterior(mes))}) · simulação, nada gravado.
@@ -42,17 +48,17 @@ export default async function ErpRepasseImobiliariaPage({ params, searchParams }
           <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
             <tr>
               <th className="px-3 py-2">Abrir</th>
-              <th className="px-3 py-2">Segurado</th>
-              <th className="px-3 py-2">Seg.</th>
-              <th className="px-3 py-2">Ramo</th>
-              <th className="px-3 py-2">Nº da apólice</th>
-              <th className="px-3 py-2">Tipo</th>
-              <th className="px-3 py-2">Parc.</th>
-              <th className="px-3 py-2">Recebida em</th>
-              <th className="px-3 py-2 text-right">% Part.</th>
-              <th className="px-3 py-2 text-right">Vl. Base</th>
-              <th className="px-3 py-2 text-right">% Rep.</th>
-              <th className="px-3 py-2 text-right">Vl. Repasse</th>
+              <th className="px-3 py-2">Segurado <InfoLegenda titulo="Segurado">Cliente titular do seguro.</InfoLegenda></th>
+              <th className="px-3 py-2">Seg. <InfoLegenda titulo="Seguradora">Seguradora do documento.</InfoLegenda></th>
+              <th className="px-3 py-2">Ramo <InfoLegenda titulo="Ramo">Ramo do seguro.</InfoLegenda></th>
+              <th className="px-3 py-2">Nº da apólice <InfoLegenda titulo="Nº da apólice">Número da apólice na seguradora; clique para abrir o documento.</InfoLegenda></th>
+              <th className="px-3 py-2">Tipo <InfoLegenda titulo="Tipo">Se o documento é novo, renovação ou endosso, como está cadastrado. Todos entram na conta se tiverem percentual de repasse.</InfoLegenda></th>
+              <th className="px-3 py-2">Parc. <InfoLegenda titulo="Parcela">Número da parcela sobre o total de parcelas do documento.</InfoLegenda></th>
+              <th className="px-3 py-2">Recebida em <InfoLegenda titulo="Recebida em">Data em que a comissão desta parcela foi recebida e baixada. O mês dela define em qual repasse a parcela entra.</InfoLegenda></th>
+              <th className="px-3 py-2 text-right">% Part. <InfoLegenda titulo="Percentual de participação">Parte da parcela que pertence a esta imobiliária. É 100% quando ela é a única e menos quando o seguro é dividido.</InfoLegenda></th>
+              <th className="px-3 py-2 text-right">Vl. Base <InfoLegenda titulo="Valor base">Valor da parcela sobre o qual o repasse é calculado: o prêmio da parcela, não a comissão.</InfoLegenda></th>
+              <th className="px-3 py-2 text-right">% Rep. <InfoLegenda titulo="Percentual de repasse">Percentual combinado com a imobiliária para este documento, vindo do cadastro do Corp.</InfoLegenda></th>
+              <th className="px-3 py-2 text-right">Vl. Repasse <InfoLegenda titulo="Valor do repasse">Valor base × percentual de repasse × percentual de participação, arredondado em centavos.</InfoLegenda></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -81,15 +87,15 @@ export default async function ErpRepasseImobiliariaPage({ params, searchParams }
           </tbody>
           <tfoot className="bg-gray-50 text-sm">
             <tr>
-              <td colSpan={11} className="px-3 py-1 text-right">Total em reais ({linhas.length} parcelas)</td>
+              <td colSpan={11} className="px-3 py-1 text-right">Total em reais ({linhas.length} parcelas) <InfoLegenda titulo="Total em reais" alinhar="direita">Soma do valor do repasse de todas as parcelas listadas.</InfoLegenda></td>
               <td className="px-3 py-1 text-right">{formatarReais(t.bruto)}</td>
             </tr>
             <tr>
-              <td colSpan={11} className="px-3 py-1 text-right">Desconto ({DESCONTO_PCT},00 %)</td>
+              <td colSpan={11} className="px-3 py-1 text-right">Desconto ({DESCONTO_PCT},00 %) <InfoLegenda titulo="Desconto de 18%" alinhar="direita">5% de ISS e 13% de impostos federais, aplicados sobre o total. Valor fixo e premiação não têm esse desconto.</InfoLegenda></td>
               <td className="px-3 py-1 text-right">−{formatarReais(t.desconto)}</td>
             </tr>
             <tr>
-              <td colSpan={11} className="px-3 py-1 text-right font-semibold">Total líquido</td>
+              <td colSpan={11} className="px-3 py-1 text-right font-semibold">Total líquido <InfoLegenda titulo="Total líquido" alinhar="direita">Total em reais menos o desconto de 18%: o que seria pago à imobiliária.</InfoLegenda></td>
               <td className="px-3 py-1 text-right font-semibold">{formatarReais(t.liquido)}</td>
             </tr>
           </tfoot>
@@ -103,7 +109,10 @@ export default async function ErpRepasseImobiliariaPage({ params, searchParams }
         </p>
       )}
       <div>
-        <h2 className="mb-1 text-sm font-semibold text-o2-navy">Evolução mês a mês</h2>
+        <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-o2-navy">
+          Evolução mês a mês
+          <InfoLegenda titulo="Evolução mês a mês">Os últimos quatro meses de repasse desta imobiliária, calculados do mesmo jeito: quantidade de parcelas, total bruto e líquido. Clique no mês para ver a conta dele.</InfoLegenda>
+        </h2>
         <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
           <table className="w-full text-xs">
             <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
