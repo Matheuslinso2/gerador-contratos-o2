@@ -85,7 +85,7 @@ const ESTADO_LINHA: Record<string, { t: string; cor: string }> = {
   nao_parcela_confirmada: { t: "não é parcela (confirmado)", cor: "bg-blue-100 text-blue-800" },
   pendente_identificacao: { t: "pendente de identificação", cor: "bg-red-100 text-red-700" },
 };
-type PontoDia = { dia: number; previsto: number; recebido: number };
+type PontoDia = { dia: number; regra: number; exper: number; recebido: number };
 type LinhaTopo = { seg: string; nome: string; prevista: number; regra: number; extratos: number; baixadas: number; nibo: number };
 const COLUNAS_CAIXA = "grid grid-cols-[minmax(150px,1.5fr)_64px_repeat(5,minmax(100px,1fr))_minmax(150px,1.2fr)] items-center gap-x-2";
 
@@ -201,7 +201,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
       supabase.rpc("erp_previsao_caixa_mensal", { p_de: desdeCaixa, p_ate: fimCaixa }),
       supabase.from("erp_extratos_seguradora").select("nf_numero, nf_emitida_em, seguradora:erp_seguradoras!inner(abreviacao)").in("seguradora.abreviacao", ["POTT", "TOO"]).gte("competencia", desdeCaixa).lte("competencia", fimCaixa),
       supabase.rpc("erp_baixadas_corp_mensal", { p_de: desdeCaixa, p_ate: fimCaixa }),
-      supabase.rpc("erp_previsto_diario", { p_de: desdeCaixa, p_ate: fimCaixa }),
+      supabase.rpc("erp_previsao_diaria", { p_de: desdeCaixa, p_ate: ateCaixa }),
       supabase.rpc("erp_previsao_caixa_regra_mensal", { p_de: desdeCaixa, p_ate: fimCaixa }),
       supabase.rpc("erp_inadimplencia_provavel", { p_de: desdeCaixa, p_ate: fimCaixa }),
       supabase.rpc("erp_extratos_ligacao", { p_de: desdeCaixa, p_ate: new Date(Date.UTC(anoF, mesF, 30)).toISOString().slice(0, 10) }),
@@ -268,14 +268,14 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
     const [aTopo, mTopo] = mesTopo.split("-").map(Number);
     const diasDoMes = new Date(Date.UTC(aTopo, mTopo, 0)).getUTCDate();
     for (const corr of CORRETORAS) {
-      const pontos: PontoDia[] = Array.from({ length: diasDoMes }, (_, i) => ({ dia: i + 1, previsto: 0, recebido: 0 }));
-      for (const p of (previstoDiaBruto ?? []) as { corretora: string; dia: string; previsto_liquido: number | string }[]) {
-        if (p.corretora === corr && p.dia.startsWith(mesTopo)) pontos[Number(p.dia.slice(8, 10)) - 1].previsto += Number(p.previsto_liquido);
+      const pontos: PontoDia[] = Array.from({ length: diasDoMes }, (_, i) => ({ dia: i + 1, regra: 0, exper: 0, recebido: 0 }));
+      for (const p of (previstoDiaBruto ?? []) as { corretora: string; dia: string; regra_liquido: number | string; experiencia_liquido: number | string }[]) {
+        if (p.corretora === corr && p.dia.startsWith(mesTopo)) { const i = Number(p.dia.slice(8, 10)) - 1; pontos[i].regra += Number(p.regra_liquido); pontos[i].exper += Number(p.experiencia_liquido); }
       }
       for (const n of entradas) {
         if (n.corretora === corr && n.dia.startsWith(mesTopo)) pontos[Number(n.dia.slice(8, 10)) - 1].recebido += n.valor;
       }
-      graficoTopo[corr] = pontos.map((p) => ({ dia: p.dia, previsto: Math.round(p.previsto * 100) / 100, recebido: Math.round(p.recebido * 100) / 100 }));
+      graficoTopo[corr] = pontos.map((p) => ({ dia: p.dia, regra: Math.round(p.regra * 100) / 100, exper: Math.round(p.exper * 100) / 100, recebido: Math.round(p.recebido * 100) / 100 }));
     }
     const bancoMes = new Map<string, number>();
     for (const n of entradas) {
@@ -488,7 +488,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
             </div>
           </details>
           <p className="text-[11px] leading-relaxed text-gray-500">
-            <b>Previsto do dia</b>: comissão das parcelas que vencem naquele dia (todas as seguradoras e produtos, líquida do imposto retido). <b>Recebido no dia</b>: o que entrou na conta naquele dia (Nibo, receita de seguros).
+            <b>Prevista (regra)</b>: comissão que deveria cair naquele dia pela regra da seguradora (boleto, fatura ou nota fiscal + o prazo próprio dela), sem atraso nem inadimplência. <b>Prevista (experiência)</b>: vencimento da parcela + o prazo que a seguradora costuma levar. Todas as seguradoras e produtos, líquido do imposto retido. <b>Recebido no dia</b>: o que entrou na conta naquele dia (Nibo, receita de seguros).
             O previsto marca o vencimento; as seguradoras costumam pagar alguns dias depois, por isso os picos não coincidem. A escala é por faixas de valor.
           </p>
         </section>
@@ -1102,9 +1102,9 @@ function consolidarDias(a: PontoDia[], b: PontoDia[]): PontoDia[] {
   const m = new Map<number, PontoDia>();
   for (const p of [...a, ...b]) {
     const x = m.get(p.dia);
-    if (x) { x.previsto += p.previsto; x.recebido += p.recebido; } else m.set(p.dia, { ...p });
+    if (x) { x.regra += p.regra; x.exper += p.exper; x.recebido += p.recebido; } else m.set(p.dia, { ...p });
   }
-  return [...m.values()].sort((x, y) => x.dia - y.dia).map((p) => ({ dia: p.dia, previsto: Math.round(p.previsto * 100) / 100, recebido: Math.round(p.recebido * 100) / 100 }));
+  return [...m.values()].sort((x, y) => x.dia - y.dia).map((p) => ({ dia: p.dia, regra: Math.round(p.regra * 100) / 100, exper: Math.round(p.exper * 100) / 100, recebido: Math.round(p.recebido * 100) / 100 }));
 }
 
 function consolidarQuadros(a: LinhaTopo[], b: LinhaTopo[]): LinhaTopo[] {
@@ -1185,7 +1185,7 @@ const FAIXAS_EXTRA = [80000, 100000, 150000, 200000, 250000, 300000, 400000, 500
 const rotuloFaixa = (lo: number, hi: number) => (lo === 0 ? "até 1 mil" : `${lo / 1000}–${hi / 1000} mil`);
 
 function GraficoDiario({ titulo, pontos }: { titulo: string; pontos: PontoDia[] }) {
-  const maior = Math.max(0, ...pontos.map((p) => Math.max(p.previsto, p.recebido)));
+  const maior = Math.max(0, ...pontos.map((p) => Math.max(p.regra, p.exper, p.recebido)));
   const limites = [...FAIXAS_BASE];
   for (const e of FAIXAS_EXTRA) if (limites[limites.length - 1] < maior) limites.push(e);
   const nFaixas = limites.length - 1;
@@ -1198,21 +1198,23 @@ function GraficoDiario({ titulo, pontos }: { titulo: string; pontos: PontoDia[] 
   const H = topo + nFaixas * alturaFaixa + base;
   const largura = W - esq - dir;
   const slot = largura / Math.max(pontos.length, 1);
-  const barra = slot * 0.4;
+  const barra = slot * 0.27;
   const yDe = (v: number) => topo + (nFaixas - posicao(v)) * alturaFaixa;
   const mil = (v: number) => (Math.abs(v) < 0.5 ? "–" : Math.round(v).toLocaleString("pt-BR"));
-  const totalPrev = pontos.reduce((t, p) => t + p.previsto, 0);
+  const totalRegra = pontos.reduce((t, p) => t + p.regra, 0);
+  const totalExper = pontos.reduce((t, p) => t + p.exper, 0);
   const totalRec = pontos.reduce((t, p) => t + p.recebido, 0);
   return (
     <div className="space-y-2 rounded-lg border border-gray-300 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-bold text-o2-navy">{titulo}</h3>
         <div className="flex items-center gap-4 text-xs text-gray-600">
-          <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-o2-navy" /> Previsto do dia</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-o2-navy" /> Prevista (regra)</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-sky-500" /> Prevista (experiência)</span>
           <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-o2-coral" /> Recebido no dia</span>
         </div>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label={`Previsto do dia contra recebido no dia — ${titulo}`}>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label={`Prevista pela regra, prevista pela experiência e recebida no dia — ${titulo}`}>
         {limites.slice(0, -1).map((lo, i) => {
           const y = topo + (nFaixas - i - 1) * alturaFaixa;
           return (
@@ -1228,13 +1230,18 @@ function GraficoDiario({ titulo, pontos }: { titulo: string; pontos: PontoDia[] 
           const base0 = topo + nFaixas * alturaFaixa;
           return (
             <g key={p.dia}>
-              {p.previsto > 0 && (
-                <rect x={x0 + slot * 0.08} y={yDe(p.previsto)} width={barra} height={Math.max(base0 - yDe(p.previsto), 1)} className="fill-o2-navy">
-                  <title>{`Dia ${p.dia} · previsto ${brl(p.previsto)}`}</title>
+              {p.regra > 0 && (
+                <rect x={x0 + slot * 0.06} y={yDe(p.regra)} width={barra} height={Math.max(base0 - yDe(p.regra), 1)} className="fill-o2-navy">
+                  <title>{`Dia ${p.dia} · prevista pela regra ${brl(p.regra)}`}</title>
+                </rect>
+              )}
+              {p.exper > 0 && (
+                <rect x={x0 + slot * 0.35} y={yDe(p.exper)} width={barra} height={Math.max(base0 - yDe(p.exper), 1)} className="fill-sky-500">
+                  <title>{`Dia ${p.dia} · prevista pela experiência ${brl(p.exper)}`}</title>
                 </rect>
               )}
               {p.recebido > 0 && (
-                <rect x={x0 + slot * 0.52} y={yDe(p.recebido)} width={barra} height={Math.max(base0 - yDe(p.recebido), 1)} className="fill-o2-coral">
+                <rect x={x0 + slot * 0.64} y={yDe(p.recebido)} width={barra} height={Math.max(base0 - yDe(p.recebido), 1)} className="fill-o2-coral">
                   <title>{`Dia ${p.dia} · recebido ${brl(p.recebido)}`}</title>
                 </rect>
               )}
@@ -1254,9 +1261,14 @@ function GraficoDiario({ titulo, pontos }: { titulo: string; pontos: PontoDia[] 
           </thead>
           <tbody className="divide-y divide-gray-100">
             <tr>
-              <td className="whitespace-nowrap px-1 py-0.5 font-semibold text-o2-navy">Previsto do dia</td>
-              {pontos.map((p) => <td key={p.dia} className="px-0.5 py-0.5 text-right" title={brl(p.previsto)}>{mil(p.previsto)}</td>)}
-              <td className="whitespace-nowrap px-1 py-0.5 text-right font-bold">{mil(totalPrev)}</td>
+              <td className="whitespace-nowrap px-1 py-0.5 font-semibold text-o2-navy">Prevista (regra)</td>
+              {pontos.map((p) => <td key={p.dia} className="px-0.5 py-0.5 text-right" title={brl(p.regra)}>{mil(p.regra)}</td>)}
+              <td className="whitespace-nowrap px-1 py-0.5 text-right font-bold">{mil(totalRegra)}</td>
+            </tr>
+            <tr>
+              <td className="whitespace-nowrap px-1 py-0.5 font-semibold text-sky-600">Prevista (experiência)</td>
+              {pontos.map((p) => <td key={p.dia} className="px-0.5 py-0.5 text-right" title={brl(p.exper)}>{mil(p.exper)}</td>)}
+              <td className="whitespace-nowrap px-1 py-0.5 text-right font-bold">{mil(totalExper)}</td>
             </tr>
             <tr>
               <td className="whitespace-nowrap px-1 py-0.5 font-semibold text-o2-coral">Recebido no dia</td>

@@ -12,3 +12,6 @@
 -- erp_comissoes.previsao_recebimento (regra da seguradora, tabela erp_regra_previsao da sessão da baixa assistida); seguradora sem regra cai no prazo medido.
 -- A previsão por EXPERIÊNCIA (erp_previsao_caixa_mensal) continua, lado a lado na tela. erp_inadimplencia_provavel e _linhas: parcela esperada = a data da regra
 -- já passou (sem tolerância extra: quem paga em dia recebe a comissão na data da regra; parcela não paga não cai depois); sem regra, prazo medido.
+--
+-- 30/10 (migration erp_previsao_diaria_regra_e_experiencia): erp_previsao_diaria(p_de, p_ate) = por empresa e dia, a comissão prevista pela REGRA e pela EXPERIÊNCIA
+-- (dia em que deveria cair; fim de semana vai para a segunda). Alimenta o gráfico diário de /erp/baixas com as 3 medidas (regra, experiência, recebido no Nibo).
