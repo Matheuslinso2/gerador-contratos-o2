@@ -1,6 +1,7 @@
 import styles from "./painel-capitalizacao.module.css";
 import { competenciaAtual, type KpisGrupo, type PainelCapitalizacao as PainelCapitalizacaoData } from "@/lib/capitalizacao/painel";
 import TitulosTabela from "./TitulosTabela";
+import StatusCardsTabela, { type LinhaStatus } from "./StatusCardsTabela";
 import ExportarQuadro from "@/components/ExportarQuadro";
 import InfoLegenda from "@/components/InfoLegenda";
 
@@ -170,7 +171,16 @@ const CLASSE_FILL: Record<string, string> = {
   F: styles.fillNegative,
 };
 
-export default function PainelCapitalizacao({ dados }: { dados: PainelCapitalizacaoData }) {
+export default function PainelCapitalizacao({
+  dados,
+  statusImobiliarias,
+}: {
+  dados: PainelCapitalizacaoData;
+  // Já unificadas pela base única de imobiliárias (page.tsx); sem isso usa as do retrato.
+  statusImobiliarias?: LinhaStatus[];
+}) {
+  const linhasImob: LinhaStatus[] = statusImobiliarias ?? dados.statusImobiliarias ?? [];
+  const linhasSeg: LinhaStatus[] = dados.statusSeguradoras ?? [];
   const { kpis, funil, cardsAlerta, titulos } = dados;
   const maiorQuantidade = Math.max(1, ...funil.map((e) => e.quantidadeAtual));
 
@@ -303,6 +313,64 @@ export default function PainelCapitalizacao({ dados }: { dados: PainelCapitaliza
           tone={kpis.cardsComAlerta > 0 ? "warning" : "positive"}
         />
       </div>
+
+      {linhasImob.length > 0 && (
+        <section id="quadro-cap-status-imobiliarias" className={styles.section}>
+          <div className={styles.sectionHead}>
+            <h2>Status de todos os cards — por imobiliária<InfoLegenda titulo="Status de todos os cards por imobiliária">Uma linha por imobiliária (pela base única de imobiliárias; corretor individual e proprietário aparecem pelo nome informado no card). Recorte = Geral do mês: cards criados no mês + herança em andamento. Solicitações = cards do recorte; a tendência compara com o mês anterior (mesmo recorte). Em andamento = ainda abertos. Não pagas = propostas que terminaram em Pagamento não realizado ou Desistência no mês. Fechadas = títulos com pagamento confirmado no mês. Prêmio = valor do título do card (a Capitalização não tem prêmio líquido separado); Prêmio fechado e Comissão gerada = só das fechadas. O ⓥ marca nome ainda sem vínculo confirmado na base de imobiliárias.</InfoLegenda></h2>
+            <div className={styles.note}>novos + herança do mês · prêmio = valor do título</div>
+            <ExportarQuadro
+              quadroId="quadro-cap-status-imobiliarias"
+              corFundo="#f7f8fa"
+              nomeArquivo={arquivo("status-imobiliarias")}
+              dadosExcel={linhasImob.map((l) => ({
+                imobiliaria: l.nome,
+                solicitacoes: l.solicitacoes,
+                solicitacoes_mes_anterior: l.solicitacoesMesAnterior,
+                em_andamento: l.emAndamento,
+                nao_pagas: l.naoPagas,
+                fechadas: l.fechadas,
+                premio_solicitado: l.premioSolicitado,
+                premio_fechado: l.premioFechado,
+                comissao_gerada: l.comissaoFechada,
+              }))}
+              nomeAbaExcel="Imobiliárias"
+            />
+          </div>
+          <div className={styles.panel}>
+            <StatusCardsTabela linhas={linhasImob} rotuloPrimeiraColuna="Imobiliária" comBusca />
+          </div>
+        </section>
+      )}
+
+      {linhasSeg.length > 0 && (
+        <section id="quadro-cap-status-seguradoras" className={styles.section}>
+          <div className={styles.sectionHead}>
+            <h2>Status de todos os cards — por seguradora<InfoLegenda titulo="Status de todos os cards por seguradora">Mesmos números do quadro por imobiliária, agrupados pela seguradora informada no card (Brasilcap, Porto Cap, Icatu, Mapfre Cap). Quantidade de solicitações, não pagas, fechadas, prêmio fechado e comissão gerada.</InfoLegenda></h2>
+            <div className={styles.note}>novos + herança do mês · prêmio = valor do título</div>
+            <ExportarQuadro
+              quadroId="quadro-cap-status-seguradoras"
+              corFundo="#f7f8fa"
+              nomeArquivo={arquivo("status-seguradoras")}
+              dadosExcel={linhasSeg.map((l) => ({
+                seguradora: l.nome,
+                solicitacoes: l.solicitacoes,
+                solicitacoes_mes_anterior: l.solicitacoesMesAnterior,
+                em_andamento: l.emAndamento,
+                nao_pagas: l.naoPagas,
+                fechadas: l.fechadas,
+                premio_solicitado: l.premioSolicitado,
+                premio_fechado: l.premioFechado,
+                comissao_gerada: l.comissaoFechada,
+              }))}
+              nomeAbaExcel="Seguradoras"
+            />
+          </div>
+          <div className={styles.panel}>
+            <StatusCardsTabela linhas={linhasSeg} rotuloPrimeiraColuna="Seguradora" comBusca={false} />
+          </div>
+        </section>
+      )}
 
       <section id="quadro-cap-funil" className={styles.section}>
         <div className={styles.sectionHead}>

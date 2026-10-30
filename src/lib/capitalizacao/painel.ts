@@ -40,6 +40,7 @@ const CAMPOS = {
   locatPjRazao: "ufCrm14CapLocatPjRazao",
   imobiliaria: "ufCrm14CapImobAdmin",
   corretor: "ufCrm14CapCorretor",
+  seguradora: "ufCrm14CapSeguradora",
 } as const;
 
 const LIMITE_ALERTA_DIAS = 3;
@@ -110,6 +111,8 @@ export type CardCapitalizacao = {
   diasParadoEtapaAtual: number | null;
   titular: string;
   imobiliaria: string;
+  seguradora: string;
+  companyId: number | null;
 };
 
 // mesAtual = origem (criadoEm) nesta competência; herdado = origem em
@@ -163,8 +166,29 @@ export type KpisGrupo = {
 };
 export type KpisPorOrigem = { novos: KpisGrupo; heranca: KpisGrupo; geral: KpisGrupo };
 
+// Quadro "Status de todos os cards" (reunião Kamila 29/10/2026 / pedido do Matheus 30/10): por
+// imobiliária e por seguradora, no recorte Geral do mês (novos + herança). Solicitações =
+// cards do recorte; fechadas = emitidos (pagamento confirmado) no mês; não pagas =
+// Pagamento não realizado/Desistência no mês; em andamento = ainda abertos. Prêmio = valor
+// do título (o card da Cap não tem prêmio líquido separado).
+export type LinhaStatusCap = {
+  chave: string; // bitrix_empresa:<id> ou cap_nome:<nome normalizado> (resolvida na base unificada)
+  nome: string;
+  solicitacoes: number;
+  emAndamento: number;
+  naoPagas: number;
+  fechadas: number;
+  premioSolicitado: number;
+  premioFechado: number;
+  comissaoFechada: number;
+  solicitacoesMesAnterior: number;
+};
+
 export type PainelCapitalizacao = {
   competencia: string;
+  // Opcional: retratos salvos antes de 30/10/2026 não têm.
+  statusImobiliarias?: LinhaStatusCap[];
+  statusSeguradoras?: LinhaStatusCap[];
   // Mês anterior completo, calculado dos mesmos cards (sem chamada extra ao
   // Bitrix). Opcional: retratos salvos antes de 05/10/2026 não têm.
   kpisAnterior?: KpisNovidades & { competencia: string };
@@ -248,7 +272,18 @@ export function mapearCard(item: BitrixItemRaw, agora: Date, pagoEm: Map<number,
     diasParadoEtapaAtual,
     titular: texto(item[CAMPOS.locatPfNome]) || texto(item[CAMPOS.locatPjRazao]) || texto(item.title) || "—",
     imobiliaria: texto(item[CAMPOS.imobiliaria]) || texto(item[CAMPOS.corretor]) || "—",
+    seguradora: seguradoraCanonica(texto(item[CAMPOS.seguradora])),
+    companyId: Number(item.companyId) > 0 ? Number(item.companyId) : null,
   };
+}
+
+// "PORTO" e "PORTOCAP" são a mesma seguradora; vazio vira "NÃO INFORMADA".
+function seguradoraCanonica(valor: string): string {
+  const v = valor.trim().toUpperCase().replace(/s+/g, " ");
+  if (!v) return "NÃO INFORMADA";
+  if (v === "PORTO" || v === "PORTOCAP" || v === "PORTO CAP") return "PORTO CAP";
+  if (v === "MAPFRE" || v === "MAPFRECAP" || v === "MAPFRE CAP") return "MAPFRE CAP";
+  return v;
 }
 
 // Tempo médio (dias) que os cards que JÁ passaram por cada etapa ficaram
@@ -359,6 +394,56 @@ function kpisPorOrigem(cards: CardCapitalizacao[], competencia: string): KpisPor
     (c) => competenciaData(c.criadoEm) < competencia && (!c.concluidoEm || competenciaData(c.concluidoEm) >= competencia)
   );
   return { novos: kpisDoGrupo(novos, competencia), heranca: kpisDoGrupo(heranca, competencia), geral: kpisDoGrupo([...novos, ...heranca], competencia) };
+}
+
+function recorteGeral(cards: CardCapitalizacao[], competencia: string): CardCapitalizacao[] {
+  return cards.filter(
+    (c) => competenciaData(c.criadoEm) === competencia || (competenciaData(c.criadoEm) < competencia && (!c.concluidoEm || competenciaData(c.concluidoEm) >= competencia))
+  );
+}
+
+function semAcentos(t: string): string {
+  return t.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/s+/g, " ").trim();
+}
+
+function statusPor(cards: CardCapitalizacao[], competencia: string, chaveDe: (c: CardCapitalizacao) => { chave: string; nome: string }): LinhaStatusCap[] {
+  const noMes = (c: CardCapitalizacao) => !!c.concluidoEm && competenciaData(c.concluidoEm) === competencia;
+  const atual = recorteGeral(cards, competencia);
+  const anterior = recorteGeral(cards, competenciaAnterior(competencia));
+  const linhas = new Map<string, LinhaStatusCap>();
+  const linha = (c: CardCapitalizacao) => {
+    const { chave, nome } = chaveDe(c);
+    let l = linhas.get(chave);
+    if (!l) linhas.set(chave, (l = { chave, nome, solicitacoes: 0, emAndamento: 0, naoPagas: 0, fechadas: 0, premioSolicitado: 0, premioFechado: 0, comissaoFechada: 0, solicitacoesMesAnterior: 0 }));
+    return l;
+  };
+  for (const c of atual) {
+    const l = linha(c);
+    l.solicitacoes++;
+    l.premioSolicitado += c.valorTitulo;
+    if (!c.concluidoEm || competenciaData(c.concluidoEm) > competencia) l.emAndamento++;
+    if (noMes(c) && c.semantica === "F") l.naoPagas++;
+    if (noMes(c) && efetivado(c)) {
+      l.fechadas++;
+      l.premioFechado += c.valorTitulo;
+      l.comissaoFechada += c.comissao;
+    }
+  }
+  for (const c of anterior) linha(c).solicitacoesMesAnterior++;
+  return [...linhas.values()]
+    .filter((l) => l.solicitacoes > 0 || l.solicitacoesMesAnterior > 0)
+    .sort((a, b) => b.solicitacoes - a.solicitacoes || a.nome.localeCompare(b.nome, "pt-BR"));
+}
+
+function statusImobiliarias(cards: CardCapitalizacao[], competencia: string): LinhaStatusCap[] {
+  return statusPor(cards, competencia, (c) => {
+    const nome = c.imobiliaria === "—" ? "NÃO INFORMADA" : c.imobiliaria.trim().toUpperCase();
+    return { chave: c.companyId ? `bitrix_empresa:${c.companyId}` : `cap_nome:${semAcentos(nome)}`, nome };
+  });
+}
+
+function statusSeguradoras(cards: CardCapitalizacao[], competencia: string): LinhaStatusCap[] {
+  return statusPor(cards, competencia, (c) => ({ chave: `seg:${c.seguradora}`, nome: c.seguradora }));
 }
 
 function contagemPorOrigem(itens: CardCapitalizacao[], competencia: string): ContagemPorOrigem {
@@ -487,6 +572,8 @@ export async function montarPainelCapitalizacao(
   return {
     competencia,
     kpisAnterior,
+    statusImobiliarias: statusImobiliarias(cards, competencia),
+    statusSeguradoras: statusSeguradoras(cards, competencia),
     porOrigem: kpisPorOrigem(cards, competencia),
     porOrigemAnterior: kpisPorOrigem(cards, competenciaAnt),
     kpis: {

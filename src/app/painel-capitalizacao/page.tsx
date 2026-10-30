@@ -9,6 +9,7 @@ import { pediuAtualizacao, retratoRecente } from "@/lib/retratoPaineis";
 import AtualizarAgora from "@/components/AtualizarAgora";
 import { competenciaAtual, competenciaValida, montarPainelCapitalizacao, type PainelCapitalizacao as PainelCapitalizacaoData } from "@/lib/capitalizacao/painel";
 import PainelCapitalizacao from "./PainelCapitalizacao";
+import { unificarStatusImobiliariasCap } from "@/lib/capitalizacao/statusUnificado";
 import SeletorCompetencia from "./SeletorCompetencia";
 import styles from "./painel-capitalizacao.module.css";
 import { BotaoExportarPainelPdf } from "@/components/ExportarQuadro";
@@ -97,6 +98,17 @@ export default async function PainelCapitalizacaoPage({
     if (data) dados = data.payload as PainelCapitalizacaoData;
   }
 
+  // Quadro de imobiliárias pela base única (regra do Matheus, 22/10/2026). Se a base falhar, o painel
+  // mostra as linhas do retrato (nome do card) em vez de esconder o quadro.
+  let statusImobiliarias: Awaited<ReturnType<typeof unificarStatusImobiliariasCap>> | undefined;
+  if (dados?.statusImobiliarias?.length) {
+    try {
+      statusImobiliarias = await unificarStatusImobiliariasCap(supabase, dados.statusImobiliarias);
+    } catch (e) {
+      console.error("Capitalização: falha ao ler a base unificada de imobiliárias:", e);
+    }
+  }
+
   return (
     <>
       <AppHeader userEmail={user?.email} logoutAction={signOut} />
@@ -142,7 +154,7 @@ export default async function PainelCapitalizacaoPage({
             </div>
           )}
 
-          {dados && <PainelCapitalizacao dados={dados} />}
+          {dados && <PainelCapitalizacao dados={dados} statusImobiliarias={statusImobiliarias} />}
         </div>
       </div>
     </>
