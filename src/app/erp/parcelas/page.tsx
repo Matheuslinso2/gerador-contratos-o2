@@ -49,7 +49,6 @@ export default async function ErpParcelasPage({ searchParams }: { searchParams: 
     const a = porMes.get(k) ?? { n: 0, v: 0 };
     porMes.set(k, { n: a.n + 1, v: a.v + Number(l.comissao_prevista ?? 0) });
   }
-  const csv = new URLSearchParams(Object.entries(f).filter(([, v]) => v) as [string, string][]).toString();
 
   return (
     <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-4 p-8">
@@ -58,10 +57,10 @@ export default async function ErpParcelasPage({ searchParams }: { searchParams: 
           <span className="border-b-2 border-o2-navy font-semibold text-o2-navy">Conferência dos vencimentos</span>
           <Link href="/erp/parcelas/cobranca" className="text-gray-500 hover:text-o2-navy hover:underline">Cobrança e inadimplência</Link>
         </div>
-        <h1 className="mt-2 text-xl font-semibold text-o2-navy">Parcelas · conferência dos vencimentos<InfoLegenda titulo="Conferência dos vencimentos">Mostra parcelas cujo vencimento no Corp está em outro mês do que a seguradora cobrou na fatura. A comparação usa as faturas de Tokio, Porto, Pottencial, Too e Yelum. Enquanto o Corp não for corrigido, a previsão de receita e a baixa de comissão caem no mês errado. A lista é refeita a cada leitura das faturas. O filtro de mês vale pelo vencimento cobrado pela seguradora, e a tela mostra 500 parcelas (o CSV traz todas, até 3.000).</InfoLegenda></h1>
+        <h1 className="mt-2 text-xl font-semibold text-o2-navy">Parcelas · conferência dos vencimentos<InfoLegenda titulo="Conferência dos vencimentos">O vencimento de cada parcela no ERP é conferido contra a apólice (PDF), a fatura da seguradora e a regra do calendário, nessa ordem de prioridade. Esta lista mostra as parcelas em que o vencimento do ERP está em outro mês do que a seguradora cobrou na fatura (Tokio, Porto, Pottencial, Too e Yelum) e que ainda pedem conferência. A lista é refeita a cada leitura das faturas. O filtro de mês vale pelo vencimento cobrado pela seguradora, e a tela mostra 500 parcelas.</InfoLegenda></h1>
         <p className="text-sm text-gray-600">
-          Parcelas cujo vencimento no Corp está em outro mês do que a seguradora cobrou na fatura. Enquanto não for corrigido no Corp, a previsão de receita e a
-          baixa de comissão caem no mês errado. Fonte: faturas Tokio, Porto, Pottencial, Too e Yelum. A inadimplência entra nesta etapa depois.
+          O ERP confere o vencimento de cada parcela com a apólice, a fatura da seguradora e a regra do calendário. Aqui ficam as parcelas em que o vencimento do ERP
+          está em outro mês do que a seguradora cobrou na fatura. Fonte: faturas Tokio, Porto, Pottencial, Too e Yelum.
         </p>
       </div>
       <FiltrosErp
@@ -70,22 +69,19 @@ export default async function ErpParcelasPage({ searchParams }: { searchParams: 
         valores={f}
         resumo={
           <>
-            {linhas.length.toLocaleString("pt-BR")} parcelas divergentes · comissão prevista no mês errado {formatarReais(total)} ·{" "}
-            <a href={`/erp/parcelas/csv?${csv}`} className="underline">
-              baixar lista para corrigir no Corp (CSV)
-            </a>
+            {linhas.length.toLocaleString("pt-BR")} parcelas em conferência · comissão prevista nelas {formatarReais(total)}
             {linhas[0] ? ` · atualizado em ${new Date(linhas[0].gerado_em).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}` : ""}
           </>
         }
       />
       <div className="flex flex-wrap gap-2 text-xs">
-        <span className="self-center"><InfoLegenda titulo="Cobrado em (por mês)">Agrupa as parcelas divergentes pelo mês em que a seguradora cobrou. Cada cartão mostra quantas parcelas são e a soma da comissão prevista delas, que hoje está sendo prevista no mês errado do Corp.</InfoLegenda></span>{[...porMes.entries()].sort().reverse().map(([m, x]) => (
+        <span className="self-center"><InfoLegenda titulo="Cobrado em (por mês)">Agrupa as parcelas em conferência pelo mês em que a seguradora cobrou. Cada cartão mostra quantas parcelas são e a soma da comissão prevista delas.</InfoLegenda></span>{[...porMes.entries()].sort().reverse().map(([m, x]) => (
           <span key={m} className="rounded-lg border border-gray-200 bg-white px-3 py-1.5">
             cobrado em {m.slice(5)}/{m.slice(0, 4)}: <b>{x.n}</b> parcelas · {formatarReais(x.v)}
           </span>
         ))}
       </div>
-      <p className="text-xs font-semibold uppercase tracking-wide text-o2-navy">Parcelas com vencimento divergente<InfoLegenda titulo="Parcelas com vencimento divergente">Cada linha é uma parcela. Vencimento no Corp é a data cadastrada no Corp; Cobrado pela seguradora é o vencimento dessa mesma parcela na fatura da seguradora; Diferença diz quantos meses o Corp está adiantado ou atrasado. Comissão prevista é a comissão esperada daquela parcela. Parcela mostra o número da parcela e o total quando se sabe. Abrir leva ao documento no ERP.</InfoLegenda></p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-o2-navy">Parcelas em conferência<InfoLegenda titulo="Parcelas em conferência">Cada linha é uma parcela. Vencimento no ERP é a data que o ERP tem para a parcela; Cobrado pela seguradora é o vencimento dessa mesma parcela na fatura da seguradora; Diferença diz quantos meses o vencimento do ERP está adiantado ou atrasado em relação à fatura. Comissão prevista é a comissão esperada daquela parcela. Parcela mostra o número da parcela e o total quando se sabe. Abrir leva ao documento no ERP.</InfoLegenda></p>
       <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
         <table className="w-full text-xs">
           <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
@@ -97,7 +93,7 @@ export default async function ErpParcelasPage({ searchParams }: { searchParams: 
               <th className="px-3 py-2">Nº da apólice</th>
               <th className="px-3 py-2">Imobiliária</th>
               <th className="px-3 py-2">Parcela</th>
-              <th className="px-3 py-2">Vencimento no Corp</th>
+              <th className="px-3 py-2">Vencimento no ERP</th>
               <th className="px-3 py-2">Cobrado pela seguradora</th>
               <th className="px-3 py-2">Diferença</th>
               <th className="px-3 py-2 text-right">Comissão prevista</th>
@@ -120,9 +116,9 @@ export default async function ErpParcelasPage({ searchParams }: { searchParams: 
                   {l.parcela_n}
                   {l.parcelas_total ? `/${l.parcelas_total}` : ""}
                 </td>
-                <td className="px-3 py-1 text-red-700">{formatarData(l.venc_corp)}</td>
+                <td className="px-3 py-1">{formatarData(l.venc_corp)}</td>
                 <td className="px-3 py-1 font-medium">{formatarData(l.venc_seguradora)}</td>
-                <td className="px-3 py-1">{l.dif_meses > 0 ? `Corp ${l.dif_meses} mês(es) depois` : `Corp ${-l.dif_meses} mês(es) antes`}</td>
+                <td className="px-3 py-1">{l.dif_meses > 0 ? `${l.dif_meses} mês(es) depois da fatura` : `${-l.dif_meses} mês(es) antes da fatura`}</td>
                 <td className="px-3 py-1 text-right">{l.comissao_prevista === null ? "—" : formatarReais(Number(l.comissao_prevista))}</td>
               </tr>
             ))}

@@ -37,3 +37,9 @@
 -- cobertura_ate_min (faixa de baixo) e cobertura_ate_max (faixa de cima), contadas do INÍCIO da vigência. Risco de cancelamento só se hoje > cobertura_ate_max + 2 dias,
 -- sem prova na parcela e SEM parcela posterior com prova (senão é lacuna de baixa), só vigência de até 12 parcelas (a tabela é anual) e nunca dentro de fatura unificada.
 -- Migrations: erp_prazo_curto_tabela_e_cobranca, erp_prazo_curto_so_sem_parcela_posterior_paga, erp_prazo_curto_so_vigencia_ate_12_parcelas.
+
+-- 30/10 (Matheus: "deixar na nossa base corrigidos os vencimentos; não quero o registro explícito do erro do Corp; o ERP faz só a sua conferência com
+-- base nas apólices e regras; o Corp é consertado a cada baixa"): a view erp_parcelas_cobranca passou a usar o vencimento do ERP (erp_parcelas.vencimento,
+-- já corrigido pelo lote 'vencimentos-documentais-30out' da sessão da baixa) em vez do vencimento do Corp (erp_corp_comissoes.venc_parcela, que segue só
+-- como espelho na coluna venc_corp). Efeito: 11.497 parcelas mudaram de vencimento e ~1.400 de status (3%). Tela 'Conferência dos vencimentos' sem Corp
+-- (vencimento do ERP × cobrado pela seguradora) e rota de CSV 'para corrigir no Corp' removida. Migration: erp_cobranca_usa_vencimento_do_erp.

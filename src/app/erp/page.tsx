@@ -28,7 +28,7 @@ const INFO_ETAPA: Record<string, string> = {
   faturas: "Faturas das imobiliárias carregadas no mês (fatura é a reunião de várias apólices; ela não tem apólice própria). Mostra quantas faturas, quantas apólices elas reúnem e a soma dos boletos. Entram / saem / ficam compara cada fatura com a do mês anterior: apólices que entraram, que saíram e que continuam. Fatura nova é a que não existia no mês anterior. O aviso de boleto aparece quando o valor do boleto não bate com a soma das linhas.",
   envio: "Etapa ainda não construída (em breve): apólices emitidas a enviar ao cliente ou à imobiliária.",
   apolices: "Quantidade de apólices vigentes e de apólices canceladas no mês escolhido, conforme a base do ERP (Corp e cartões do Bitrix). Clique no cartão para abrir a lista de documentos, com ficha e linha do tempo.",
-  parcelas: "Parcelas que vencem no mês e quantas já foram quitadas; parcelas vencidas ainda em aberto, com o valor somado. A data de baixa do Corp mostra até quando a baixa está em dia: se estiver atrasada, esses números ficam desatualizados. Vencimentos divergentes = parcelas cujo vencimento no Corp é diferente do cobrado pela seguradora (contagem geral, não só do mês).",
+  parcelas: "Parcelas que vencem no mês e quantas já foram quitadas; parcelas vencidas ainda em aberto, com o valor somado. A data de baixa do Corp mostra até quando a baixa está em dia: se estiver atrasada, esses números ficam desatualizados. Vencimentos em conferência = parcelas cujo vencimento no ERP está em outro mês do que a seguradora cobrou na fatura (contagem geral, não só do mês).",
   baixa: "Comissão do mês: valor já baixado (recebido, conforme o Corp) e valor ainda pendente, cada um com a quantidade de linhas. Mostra também até que dia vai a baixa do Corp e quantos estornos de endosso aguardam análise (contagem geral).",
   repasses: "Relatório do que será pago a cada imobiliária no dia 15 (simulação, só leitura). Este cartão não traz números na tela inicial.",
   sinistro: "Sinistros em andamento e sinistros abertos na seguradora no mês escolhido (pela data de abertura informada pela seguradora). O cartão abre o módulo de Sinistros do Workspace.",
@@ -112,7 +112,7 @@ export default async function ErpInicio({ searchParams }: { searchParams: Promis
     linhas.parcelas = [
       { texto: `${n(k.parcelas.vencem)} vencem no mês · ${n(k.parcelas.quitadas)} quitadas`, forte: true },
       { texto: `${n(k.parcelas.vencidas_abertas)} vencidas em aberto (${brl(k.parcelas.valor_vencidas_abertas)}) · ${baixaAtrasada}` },
-      { texto: `${n(vencDiv)} vencimentos divergentes do Corp` },
+      { texto: `${n(vencDiv)} vencimentos em conferência (ERP × fatura da seguradora)` },
     ];
     linhas.baixa = [
       { texto: `${brl(k.baixa.recebida_valor)} baixados (${n(k.baixa.recebida_n)}) · ${brl(k.baixa.pendente_valor)} pendentes (${n(k.baixa.pendente_n)})`, forte: true },
