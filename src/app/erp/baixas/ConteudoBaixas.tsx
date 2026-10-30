@@ -76,6 +76,10 @@ type BaixaErpExtrato = {
   extrato_id: string; linhas: number; erp_qtd: number; erp_valor: number | string; corp_qtd: number; corp_valor: number | string; so_erp_qtd: number; so_erp_valor: number | string;
   so_corp_qtd: number; so_corp_valor: number | string; nenhum_qtd: number; nenhum_valor: number | string; sem_parcela_qtd: number; fora_tolerancia_qtd: number; estorno_qtd: number;
 };
+type EndossoPendente = {
+  seguradora: string; seg_abrev: string; corretora: string | null; apolice: string; endosso: string; cliente: string | null; documento_id: string | null; nosso_numero_corp: number | null;
+  linhas: number; extratos: number; premio: number | string | null; comissao: number | string | null; primeira_data: string; ultima_data: string; tipo_linha: string; no_corp: boolean; motivo: string;
+};
 type EstadoLinha = { linha_id: string; estado: string; idade_dias: number | null; fora_tipo: string | null; candidato_imobiliaria: string | null; candidato_cliente: string | null; ja_no_corp: boolean | null };
 type LinhaPendente = {
   linha_id: string; extrato_id: string; n: number; seguradora_abrev: string; corretora: string; pago_em: string | null; valor_comissao: number | string; apolice: string | null;
@@ -353,6 +357,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
   const totaisPor = new Map<string, TotaisExtrato>();
   const estadosAberto = new Map<string, EstadoLinha>();
   const baixaErpPor = new Map<string, BaixaErpExtrato>();
+  let endossosPendentes: EndossoPendente[] = [];
   let pendentesLinhas: LinhaPendente[] = [];
   const outrasEntradas = new Map<string, number>();
   if (modo === "gestao" && extratos.length) {
@@ -369,6 +374,12 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
     if (extratoAberto && extratoPorId[extratoAberto]) {
       const { data: es } = await supabase.from("erp_baixa_linha_estado").select("linha_id, estado, idade_dias, fora_tipo, candidato_imobiliaria, candidato_cliente, ja_no_corp").eq("extrato_id", extratoAberto);
       for (const l of (es ?? []) as EstadoLinha[]) estadosAberto.set(l.linha_id, l);
+    }
+    // endossos que aparecem no extrato (estorno, restituição ou linha de endosso, mesmo sem valor) e não estão cadastrados na apólice no ERP
+    {
+      const [aE, mE] = mesSel.split("-").map(Number);
+      const { data: ep } = await supabase.rpc("erp_endossos_pendentes_cadastro", { p_de: `${mesSel}-01`, p_ate: new Date(Date.UTC(aE, mE, 0)).toISOString().slice(0, 10) });
+      endossosPendentes = ((ep ?? []) as EndossoPendente[]).filter((x) => !empresaFiltro || x.corretora === empresaFiltro).filter((x) => !filtros.seguradora || x.seg_abrev === filtros.seguradora);
     }
     // entradas do Nibo no mês que NÃO são receita de seguros (empréstimo, estorno, transferência…): ficam fora de todos os totais
     const [aN, mN] = mesSel.split("-").map(Number);
@@ -521,7 +532,8 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
         />
 
         {erroLinhasAbertas && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">Não consegui carregar as linhas do extrato: {erroLinhasAbertas.message}</p>}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-7">
+          <Cartao rotulo="Endossos sem cadastro" valor={endossosPendentes.length} cor={endossosPendentes.length ? "text-red-700" : "text-gray-700"} sub="aparecem no extrato e não estão na apólice" info={<>Conta as apólices com endosso que a seguradora mostrou no extrato do mês (estorno, restituição ou linha de endosso, mesmo sem valor a pagar ou estornar) e que não está cadastrado como endosso daquela apólice no ERP. O motivo do cancelamento fica em segundo plano: o importante é cadastrar o endosso.</>} />
           <Cartao rotulo="Para identificar" valor={`${resumoIdent.qtd} · ${brl(resumoIdent.valor)}`} cor={resumoIdent.qtd ? "text-red-700" : "text-gray-700"} sub="recebido, ainda sem parcela (pendente de identificação)" info={<>Linhas de extrato que a seguradora pagou e o ERP ainda não sabe de qual parcela são. Mostra quantas linhas e quanto dinheiro, somando os extratos do mês filtrado.</>} />
           <Cartao rotulo="A baixar à mão" valor={resumoGestao.manual} cor={resumoGestao.manual ? "text-red-700" : "text-gray-700"} sub="extratos que dependem de ação humana" info={<>Extratos do mês que ainda não tiveram a baixa aprovada e que não estão no padrão para baixa automática: o valor não aparece no banco, há linha sem parcela, linha diferente do previsto, estorno ou linha em tratativa. Alguém precisa conferir e aprovar.</>} />
           <Cartao rotulo="Seriam automáticos" valor={resumoGestao.auto} cor="text-green-700" sub="no padrão (baixa automática desligada, em teste)" info={<>Extratos que estariam no padrão para baixar sozinhos: o valor bate com o banco, todas as linhas estão ligadas a parcelas, nenhuma linha difere do previsto, não há estorno nem tratativa e a soma das linhas fecha com o total. A baixa automática está desligada; isto é só uma prévia para conferir.</>} />
@@ -573,6 +585,34 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
                 </table>
               </div>
             </details>
+          </section>
+        )}
+
+        {modo === "gestao" && endossosPendentes.length > 0 && (
+          <section className="space-y-2 rounded-xl border border-red-200 bg-white p-4">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-red-700">Endossos pendentes de cadastro <InfoLegenda titulo="Endossos pendentes de cadastro">Apólices em que a seguradora mostrou um endosso no extrato do mês, seja estorno ou restituição, seja uma linha de endosso sem valor a pagar ou estornar, e que não existe cadastrado como endosso daquela apólice no ERP. A busca compara o número do endosso (ou, quando ele não vem no extrato, o valor) com os endossos já cadastrados na apólice. Quando a apólice nem aparece no ERP, o motivo diz isso. Quando o Corp já tem o endosso, aparece marcado. O motivo do cancelamento fica em segundo plano.</InfoLegenda></h2>
+            <p className="text-xs text-gray-600">Endosso que existe no extrato da seguradora e não está cadastrado na apólice: o estorno ou o endosso precisa ser lançado no ERP (e no Corp, enquanto ele existir) para não perder a baixa nem o repasse.</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500"><tr><th className="px-2 py-1">Seguradora</th><th className="px-2 py-1">Empresa</th><th className="px-2 py-1">Nº da apólice</th><th className="px-2 py-1">Nº do endosso</th><th className="px-2 py-1">Cliente</th><th className="px-2 py-1">O que apareceu</th><th className="px-2 py-1 text-right">Comissão</th><th className="px-2 py-1">Extrato</th><th className="px-2 py-1">Situação</th></tr></thead>
+                <tbody className="divide-y divide-gray-100">
+                  {endossosPendentes.slice(0, 80).map((x, i) => (
+                    <tr key={i}>
+                      <td className="px-2 py-1 font-medium">{NOME_CURTO[x.seg_abrev] ?? x.seg_abrev}</td>
+                      <td className="px-2 py-1">{x.corretora ?? "—"}</td>
+                      <td className="px-2 py-1">{x.documento_id ? <Link href={`/erp/documentos/${x.documento_id}`} className="text-o2-navy hover:underline" title={x.nosso_numero_corp ? `Nosso nº do Corp ${x.nosso_numero_corp}` : undefined}>{x.apolice}</Link> : x.apolice}</td>
+                      <td className="px-2 py-1">{x.endosso}</td>
+                      <td className="max-w-[200px] truncate px-2 py-1" title={x.cliente ?? ""}>{x.cliente ?? "—"}</td>
+                      <td className="px-2 py-1">{x.tipo_linha}</td>
+                      <td className="px-2 py-1 text-right">{x.comissao == null ? "—" : brl(Number(x.comissao))}</td>
+                      <td className="whitespace-nowrap px-2 py-1">{formatarData(x.ultima_data)}</td>
+                      <td className="px-2 py-1">{x.motivo}{x.no_corp ? <span className="ml-1 rounded bg-blue-100 px-1 text-[10px] text-blue-800">já está no Corp</span> : null}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {endossosPendentes.length > 80 && <p className="text-[11px] text-gray-500">Mostrando 80 de {endossosPendentes.length}.</p>}
           </section>
         )}
 

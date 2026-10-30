@@ -25,3 +25,8 @@
 --     (recebimento, repasses e parcela antes), motivo obrigatório; recusa se há repasse em lote ou pago; comissão volta a 'prevista' só sem outro recebimento;
 --     quitação da parcela só é limpa se o Corp não tem baixa; zera a aprovação do extrato.
 -- Primeiro teste (Pottencial, O2 Capitalização, crédito 24/09, extrato que bate com o Nibo): gravou, desfez (voltou ao estado anterior) e regravou.
+--
+-- 30/10 (migrations erp_endossos_pendentes_cadastro e _otimizada): erp_endossos_pendentes_cadastro(p_de, p_ate) = endossos que aparecem no extrato da seguradora
+-- (estorno, restituição, linha de endosso mesmo sem valor) e NÃO estão cadastrados como endosso da apólice no ERP (compara o número do endosso; sem número, o valor).
+-- Agrupa por seguradora × empresa × apólice × endosso; marca se o Corp já tem o endosso e se a apólice nem existe no ERP. O motivo do cancelamento fica em segundo plano.
+-- Índices: erp_documentos_pai_idx e erp_corp_comissoes_apolice_dig_idx. Alimenta o quadro "Endossos pendentes de cadastro" da Gestão das baixas.
