@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
+import { REPASSE_PAGO_PELO_ERP } from "@/lib/erp/repasse";
 
 // ERP O2 — repasse. Autorizar grava o lote da imobiliária (valores travados) e cancelar desfaz enquanto o Nibo não confirmou o pagamento.
 // O pagamento NÃO é marcado aqui: só o Nibo confirma (erp_conferir_pagamentos_repasse).
@@ -20,6 +21,7 @@ const mesOk = (m: string) => /^\d{4}-\d{2}$/.test(m);
 
 export async function autorizarRepasse(formData: FormData) {
   const supabase = await exigirColaborador();
+  if (!REPASSE_PAGO_PELO_ERP) redirect(`/erp/repasses?erro=${encodeURIComponent("O ERP ainda não paga repasse: ele serve só para conferir com o Corp até o Corp ser desligado.")}`);
   const imobiliaria = String(formData.get("imobiliaria_id") ?? "");
   const mes = String(formData.get("mes") ?? "");
   if (!imobiliaria || !mesOk(mes)) redirect(`/erp/repasses?erro=${encodeURIComponent("dados incompletos")}`);

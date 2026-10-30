@@ -2,7 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { formatarReais } from "@/lib/sinistros/regras";
 import { lerFiltros } from "@/lib/erp/filtros";
-import { DESCONTO_PCT, arredonda, mesAnterior, mesRepasse, repasseRetidoPossivel, rotuloMes } from "@/lib/erp/repasse";
+import { DESCONTO_PCT, REPASSE_PAGO_PELO_ERP, arredonda, mesAnterior, mesRepasse, repasseRetidoPossivel, rotuloMes } from "@/lib/erp/repasse";
 import InfoLegenda from "@/components/InfoLegenda";
 import FiltrosErp from "../FiltrosErp";
 import { autorizarRepasse } from "./actions";
@@ -93,6 +93,11 @@ export default async function ErpRepassesPage({ searchParams }: { searchParams: 
           Repasses autorizados e pagamento →
         </Link>
       </div>
+      {!REPASSE_PAGO_PELO_ERP && (
+        <p className="rounded-lg border border-blue-300 bg-blue-50 p-2 text-sm text-blue-900">
+          Os repasses do ERP servem, por enquanto, só para conferir com o relatório do Corp. O pagamento continua pelo Corp até ele ser desligado; por isso a autorização está bloqueada.
+        </p>
+      )}
       {ok && <p className="rounded-lg border border-green-300 bg-green-50 p-2 text-sm text-green-800">{ok}</p>}
       {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-2 text-sm text-red-800">{erro}</p>}
       <FiltrosErp
@@ -190,7 +195,9 @@ export default async function ErpRepassesPage({ searchParams }: { searchParams: 
                   )}
                 </td>
                 <td className="px-3 py-1.5">
-                  {l.pend > 0 ? (
+                  {l.pend > 0 && !REPASSE_PAGO_PELO_ERP ? (
+                    <span className="text-gray-400">só conferência</span>
+                  ) : l.pend > 0 ? (
                     <form action={autorizarRepasse}>
                       <input type="hidden" name="imobiliaria_id" value={l.id} />
                       <input type="hidden" name="mes" value={mes} />
