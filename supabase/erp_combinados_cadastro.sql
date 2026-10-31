@@ -22,6 +22,10 @@ create table if not exists erp_combinados_cadastro (
   pro_labore_status text check (pro_labore_status in ('com','sem')),
   pro_labore_pct numeric,
   pro_labore_valor numeric,
+  valor_premio numeric,       -- VALOR: da mensagem (Capitalização)
+  numero_endosso text,
+  data_endosso date,
+  n_itens int,
   n_arquivos int not null default 0,
   fonte text not null default 'tarefa Bitrix',
   nivel int not null default 3,
