@@ -25,7 +25,7 @@ import { createHash } from "node:crypto";
 import sharp from "sharp";
 import { chromium, type BrowserContext, type Page } from "playwright";
 import { createServiceClient } from "@/lib/supabase/service";
-import { estaPulado, registrarErro, selecionarPendentes } from "./anexos-fila";
+import { TIPO_POR_ROTULO, deveBaixar, estaPulado, registrarErro, selecionarPendentes } from "./anexos-fila";
 import { agora, acharTodos, acharNaTela, definirPastaFotos, entrar, espera, esperarModelo, foto, lerConfig, log, RAIZ, VIEWPORT } from "./_corp";
 
 const args = process.argv.slice(2);
@@ -51,12 +51,16 @@ type Item = { nn: string; produto: string; fim_vig: string };
 export type LinhaAnexo = { ordem: number; nome: string; rotulo: string; arquivo: string; apolice: boolean; bytes: number };
 type Estado = Record<string, {
   quando: string; versao?: number;
-  resultado: "baixado" | "sem_anexo" | "sem_anexo_apolice" | "nao_achou" | "erro";
+  resultado: "baixado" | "sem_anexo" | "sem_anexo_alvo" | "sem_anexo_apolice" | "nao_achou" | "erro";
   arquivos?: string[]; outros?: string[]; erro?: string; tentativas?: number; pulado?: boolean;
   /** por linha da lista, na ordem do Corp: imagem do rótulo de tipo (rotulos/<id>.png) */
   rotulos?: string[];
   /** a aba Anexos como o Corp mostra: ordem, nome do arquivo, recorte do tipo e onde o arquivo ficou (relativo à pasta) */
   lista?: LinhaAnexo[];
+  /** linhas da aba Anexos que não foram baixadas (tipo fora de Apólice/Proposta/Endosso): ordem + recorte do rótulo */
+  ignorados?: { ordem: number; rotulo: string }[];
+  /** total de linhas que a aba Anexos tinha na visita */
+  total?: number;
 }>;
 const PULADOS = path.join(PASTA, "pulados-revisar.json");
 /** documentos que deram erro neste processo: não voltam nem depois de um reinício da sessão */
@@ -249,7 +253,7 @@ async function linhasDeAnexo(page: Page): Promise<number> {
 const nomeSeguro = (s: string) => s.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").slice(0, 120);
 
 /** Na aba Anexos: baixa todos os anexos. Os do tipo Apólice (rótulo na linha) vão para pdfs/. */
-async function baixarAnexos(page: Page, nn: string): Promise<{ apolices: string[]; outros: string[]; rotulos: string[]; lista: LinhaAnexo[] }> {
+async function baixarAnexos(page: Page, nn: string): Promise<{ apolices: string[]; outros: string[]; rotulos: string[]; lista: LinhaAnexo[]; ignorados: { ordem: number; rotulo: string }[]; total: number }> {
   const aba = await esperarModelo(page, "doc-aba-anexos", 10_000);
   await page.mouse.click(aba.x, aba.y);
   await espera(2500);
@@ -260,13 +264,15 @@ async function baixarAnexos(page: Page, nn: string): Promise<{ apolices: string[
   if (total >= MAX_LINHAS) log(`${nn}: ${total}+ anexos — a lista pode ter mais abaixo (só os visíveis foram baixados)`);
   const apolices: string[] = [], outros: string[] = [], rotulosLinha: string[] = [];
   const lista: LinhaAnexo[] = [];
+  const ignorados: { ordem: number; rotulo: string }[] = [];
   for (let k = 0; k < total; k++) {
     const yLinha = LINHA0 + k * ALTURA_LINHA + 16;
-    const ehApolice = rotulos.some((r) => Math.abs(r.y - yLinha) < 18);
     const recorte = await page.screenshot({ clip: { x: 960, y: yLinha - 8, width: 140, height: 18 } });
     const idRotulo = createHash("sha1").update(recorte).digest("hex").slice(0, 12);
     if (!fs.existsSync(path.join(ROTULOS, `${idRotulo}.png`))) fs.writeFileSync(path.join(ROTULOS, `${idRotulo}.png`), recorte);
     rotulosLinha.push(idRotulo);
+    const ehApolice = TIPO_POR_ROTULO[idRotulo] === "Apólice" || rotulos.some((r) => Math.abs(r.y - yLinha) < 18);
+    if (!deveBaixar(idRotulo)) { ignorados.push({ ordem: k + 1, rotulo: idRotulo }); continue; } // boleto, certificado, outro...: só Apólice, Proposta e Endosso
     await page.mouse.click(700, yLinha - 10); // nome do arquivo, na linha
     await espera(700);
     const olho = await esperarModelo(page, "anexo-visualizar", 5000);
@@ -310,7 +316,7 @@ async function baixarAnexos(page: Page, nn: string): Promise<{ apolices: string[
     }
     await espera(800);
   }
-  return { apolices, outros, rotulos: rotulosLinha, lista };
+  return { apolices, outros, rotulos: rotulosLinha, lista, ignorados, total };
 }
 
 // ------------------------------------------------------------ rodada
@@ -415,8 +421,8 @@ async function rodada(
         if (!achou) { await abrirConsultaDocumentos(page); achou = await abrirDocumento(page, item.nn); }
         if (!achou) estado[item.nn] = { quando: new Date().toISOString(), versao: VERSAO_VISITA, resultado: "nao_achou" };
         else {
-          const { apolices, outros, rotulos, lista } = await baixarAnexos(page, item.nn);
-          estado[item.nn] = { quando: new Date().toISOString(), versao: VERSAO_VISITA, resultado: apolices.length || outros.length ? "baixado" : "sem_anexo", arquivos: apolices, outros, rotulos, lista };
+          const { apolices, outros, rotulos, lista, ignorados, total } = await baixarAnexos(page, item.nn);
+          estado[item.nn] = { quando: new Date().toISOString(), versao: VERSAO_VISITA, resultado: apolices.length || outros.length ? "baixado" : total ? "sem_anexo_alvo" : "sem_anexo", arquivos: apolices, outros, rotulos, lista, ignorados, total };
           await fecharDocumento(page);
         }
         erros = 0; progressoDaSessao++;

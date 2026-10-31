@@ -28,3 +28,18 @@ export function registrarErro(estado: Record<string, EntradaEstado>, nn: string,
   estado[nn] = { quando, resultado: "erro", erro: mensagem, tentativas, pulado: tentativas >= MAX_TENTATIVAS } as EntradaEstado & { quando: string };
   return tentativas;
 }
+
+// ---- tipos de anexo (rótulo da aba Anexos do Corp, lido por imagem: recorte → sha1 → tipo) ----
+// Conferidos a olho em 31/10 (mosaico dos 17 recortes). O recorte muda com a linha selecionada (fundo azul)
+// e com o ícone (robô / pino), por isso há mais de um id por tipo.
+export const TIPO_POR_ROTULO: Record<string, string> = {
+  e13686035870: "Apólice", "93b35210f85f": "Apólice", "28cc48e3c54d": "Apólice", "26bc5e073ac1": "Apólice",
+  "6b096b0dfa75": "Proposta", e397bec4478f: "Proposta", e1f9eb6a2f31: "Proposta", "829ffddf5474": "Proposta",
+  "74a4fb265c89": "Endosso", "311786138bd0": "Endosso",
+  "6cea5ecdda1d": "Certificado", "5cbb8ee06e5b": "Certificado",
+  "21941a1734c2": "Boleto", "6800e182f329": "Boleto", aed7f0415fde: "Boleto",
+  e1947b4cc768: "Outro", d072b2b994bc: "Outro",
+};
+/** Decisão do Matheus 31/10: só estes três tipos são baixados. Rótulo desconhecido (recorte novo) é baixado por segurança e fica "sem tipo" até alguém classificar. */
+export const TIPOS_BAIXAR = new Set(["Apólice", "Proposta", "Endosso"]);
+export const deveBaixar = (rotulo: string) => { const t = TIPO_POR_ROTULO[rotulo]; return !t || TIPOS_BAIXAR.has(t); };

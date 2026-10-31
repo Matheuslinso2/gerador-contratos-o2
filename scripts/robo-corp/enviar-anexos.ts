@@ -13,6 +13,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { LinhaAnexo } from "./anexos";
+import { TIPO_POR_ROTULO } from "./anexos-fila";
 
 const PASTA = process.env.APOLICES_CORP || path.join(os.tmpdir(), "o2-apolices-corp");
 const ESTADO = path.join(PASTA, "estado.json");
@@ -25,12 +26,8 @@ const lerJson = <T>(f: string, padrao: T): T => (fs.existsSync(f) ? JSON.parse(f
 
 // Nome dos tipos já conferidos a olho (recorte da tela do Corp → texto). Tipo novo entra sem
 // nome e o ERP mostra o próprio recorte até alguém dar o nome em corp_anexos_tipos.
-const TIPOS_CONHECIDOS: Record<string, string> = {
-  e13686035870: "Apólice",
-  "6b096b0dfa75": "Proposta",
-  e1947b4cc768: "Outro",
-  "21941a1734c2": "Boleto",
-};
+// (31/10: tabela única em anexos-fila.ts, TIPO_POR_ROTULO — 17 recortes conferidos a olho)
+const TIPOS_CONHECIDOS = TIPO_POR_ROTULO;
 
 const MIME: Record<string, string> = {
   ".pdf": "application/pdf", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".gif": "image/gif",
@@ -39,7 +36,7 @@ const MIME: Record<string, string> = {
   ".txt": "text/plain", ".zip": "application/zip", ".msg": "application/vnd.ms-outlook", ".eml": "message/rfc822",
 };
 
-type Visita = { quando: string; versao?: number; resultado: string; lista?: LinhaAnexo[] };
+type Visita = { quando: string; versao?: number; resultado: string; lista?: LinhaAnexo[]; total?: number };
 
 async function main() {
   const sb = createServiceClient();
@@ -85,7 +82,7 @@ async function main() {
       if (error) throw new Error(`${nn}: ${error.message}`);
     }
     // a lista do Corp encolheu desde a última visita: tira as linhas que não existem mais
-    const { error: eDel } = await sb.from("corp_anexos").delete().eq("nosso_numero", nn).gt("ordem", linhas.length);
+    const { error: eDel } = await sb.from("corp_anexos").delete().eq("nosso_numero", nn).gt("ordem", v.total ?? linhas.length); // ordens têm buracos (linhas ignoradas): só some o que passou do fim da lista do Corp
     if (eDel) throw new Error(`${nn}: ${eDel.message}`);
     for (const l of v.lista!) if (!l.apolice) fs.rmSync(path.join(PASTA, l.arquivo), { force: true });
     fs.rmSync(path.join(PASTA, "outros", nn), { recursive: true, force: true });
