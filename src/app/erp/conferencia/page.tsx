@@ -9,6 +9,7 @@ import InfoLegenda from "@/components/InfoLegenda";
 import { IconReport } from "@/components/icons";
 import { formatarData, formatarReais } from "@/lib/sinistros/regras";
 import { podeVerBaixas } from "@/lib/erp/acessoBaixas";
+import PainelResumoAba from "@/app/erp/PainelResumoAba";
 
 export const dynamic = "force-dynamic";
 
@@ -200,6 +201,7 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
   return (
     <>
       <main className="mx-auto w-full max-w-[1100px] flex-1 space-y-6 p-8">
+        <PainelResumoAba funcao="erp_resumo_conferencia" titulo="Conferência Corp × ERP" legendas={{"Documentos no Corp e no ERP por mês":"Quantos documentos cada sistema tem em cada mês (os últimos cinco meses até o mês atual). Quanto mais próximas as barras, melhor a conferência.","Diferença de documentos por seguradora (mês atual)":"Seguradoras em que o ERP tem mais ou menos documentos que o Corp no mês atual (as 8 maiores diferenças). Negativo = o ERP tem menos.","Diferença de comissão por seguradora (mês atual, R$)":"Diferença de comissão prevista entre o ERP e o Corp, por seguradora, no mês atual (as 8 maiores). Negativo = o ERP tem menos."}} />
         <PageHeader
           icon={<IconReport />}
           titulo={secao === "faturas" ? "ERP O2 — Faturas" : "ERP O2 — Conferência da baixa de comissão"}

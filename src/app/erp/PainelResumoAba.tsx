@@ -68,7 +68,7 @@ async function Conteudo({ funcao, titulo = "Resumo da aba", legendas = {} }: Pro
             const ls = linhas.filter((l) => l.bloco === t);
             const cats = [...new Map(ls.sort((a, b) => a.ordem - b.ordem).map((l) => [l.rotulo, l.ordem])).keys()];
             const series = [...new Set(ls.map((l) => l.serie))];
-            const max = Math.max(...ls.map((l) => l.valor as number), 1);
+            const max = Math.max(...ls.map((l) => Math.abs(l.valor as number)), 1);
             const nome = t.slice(5);
             return (
               <div key={t} className="rounded-lg border border-gray-200 p-3">
@@ -95,7 +95,7 @@ async function Conteudo({ funcao, titulo = "Resumo da aba", legendas = {} }: Pro
                         if (!v) return null;
                         return (
                           <div key={s} className="flex items-center gap-2">
-                            <div className="h-2.5 rounded-sm" style={{ width: `${Math.max(2, ((v.valor as number) / max) * 100)}%`, background: corDe(s), maxWidth: "calc(100% - 3rem)" }} />
+                            <div className="h-2.5 rounded-sm" style={{ width: `${Math.max(2, (Math.abs(v.valor as number) / max) * 100)}%`, background: (v.valor as number) < 0 ? "#c0392b" : corDe(s), maxWidth: "calc(100% - 3rem)" }} />
                             <span className="text-gray-700">{fmt(v.valor as number)}</span>
                           </div>
                         );
