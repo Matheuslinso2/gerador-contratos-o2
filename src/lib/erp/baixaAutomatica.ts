@@ -44,8 +44,9 @@ export function avaliarBaixaAutomatica(e: ExtratoParaAvaliar, banco: SituacaoBan
   if (e.tipo === "resumo_mensal" || e.linhas === 0) faltas.push("sem linhas para baixar (só o total do mês)");
   if (banco === "sem_banco") faltas.push("o valor não aparece no banco no dia");
   else if (banco === "diferente") faltas.push("o banco difere do extrato");
-  // regra do Matheus (30/10): automática só com 100% das linhas identificadas — portão erp_baixa_automatica_portao no banco
-  if (qtdPendenteIdentificacao > 0) faltas.unshift(`travado por ${qtdPendenteIdentificacao} linha(s) pendente(s) de identificação`);
+  // regra do Matheus (31/10): a automática baixa cada LINHA 100% certa; as linhas que faltam vão para o guia de fontes e o extrato
+  // só fecha quando não sobra pendente (erp_baixa_automatica_aplicar no banco)
+  if (qtdPendenteIdentificacao > 0) faltas.unshift(`${qtdPendenteIdentificacao} linha(s) pendente(s) de identificação: tratar pelo guia de fontes (as linhas certas já são baixadas)`);
   else if (e.n_nao_encontrada > 0) faltas.push(`${e.n_nao_encontrada} linha(s) sem apólice/parcela no ERP`);
   if (e.n_divergente > 0) faltas.push(`${e.n_divergente} linha(s) diferem do previsto`);
   if (e.n_estorno > 0) faltas.push(`${e.n_estorno} estorno(s)`);
