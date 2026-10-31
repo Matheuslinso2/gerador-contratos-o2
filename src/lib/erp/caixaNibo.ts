@@ -10,7 +10,8 @@ export const TOLERANCIA_CAIXA = 6; // R$ por parcela (regra do Matheus, 28/10); 
 
 export type EntradaNibo = { corretora: string; seg: string; dia: string; valor: number };
 export type ExtratoDia = { seg: string; corretora: string | null; dia: string; liquido: number; bruto: number; linhas: number };
-export type DiaCaixa = { dia: string; banco: number; extrato: number; dif: number };
+// extratoDias: dias de crédito dos extratos juntados neste dia (o banco pagou junto ou em outro dia)
+export type DiaCaixa = { dia: string; banco: number; extrato: number; dif: number; extratoDias?: string[] };
 
 const EMPRESA: Record<string, string> = { corretora: "O2 Corretora", capitalizacao: "O2 Capitalização" };
 
@@ -74,43 +75,99 @@ export function semDuplicados(extratos: ExtratoDia[]): ExtratoDia[] {
 
 const r2 = (v: number) => Math.round(v * 100) / 100;
 
+// Subconjunto de valores (em centavos) cuja soma chega ao alvo dentro da tolerância — programação dinâmica, até 30 itens.
+function subconjunto(valores: number[], alvo: number): number[] | null {
+  const itens = valores.slice(0, 30).map((v, i) => ({ c: Math.round(v * 100), i })).filter((x) => x.c > 0);
+  const A = Math.round(alvo * 100), T = TOLERANCIA_CAIXA * 100;
+  if (A <= T) return null;
+  const pai = new Map<number, [number, number]>([[0, [-1, -1]]]);
+  for (const x of itens) for (const [soma] of [...pai]) { const n = soma + x.c; if (n <= A + T && !pai.has(n)) pai.set(n, [soma, x.i]); }
+  let melhor: number | null = null;
+  for (const k of pai.keys()) if (k > 0 && Math.abs(k - A) <= T && (melhor === null || Math.abs(k - A) < Math.abs(melhor - A))) melhor = k;
+  if (melhor === null) return null;
+  const esc: number[] = [];
+  for (let k = melhor; k > 0; ) { const [p, i] = pai.get(k)!; esc.push(i); k = p; }
+  return esc;
+}
+
 // chave: corretora|seg|AAAA-MM do dia de crédito
-// Um extrato datado de um dia pode entrar no banco um ou dois dias depois (ou junto com o do dia seguinte): quando um dia só tem
-// extrato e um dia próximo (até 3 dias depois) tem no banco exatamente essa sobra, os dois são juntados no dia do banco.
+// Cruzamento extrato × banco (técnicas medidas em 31/10 sobre set–out/2026):
+//  1. mesmo dia de crédito (fim de semana/feriado → próximo dia útil);
+//  2. vários extratos pagos num depósito só: um dia em que o banco recebeu mais do que o extrato do dia procura, entre 7 dias
+//     antes e 5 depois, dias que só têm extrato e cuja soma completa a diferença (soma de subconjunto, tolerância R$ 6);
+//  3. um extrato pago em vários depósitos: um dia com extrato acima do banco procura, entre 5 dias antes e 7 depois, dias que só
+//     têm banco e cuja soma completa a diferença. Os dias juntados ficam listados em extratoDias.
+//  4. mesmo valor exato (até R$ 0,05) e único em até 90 dias: a data do extrato é a de chegada do arquivo, não a do pagamento
+//     (ex.: Pottencial Cap, extrato de 28/10 = depósito de 26/08); o extrato vai para o dia do banco.
+//  5. soma do mês = soma do mês: o que sobrou sem par de extrato e de banco no mesmo mês fecha dentro da tolerância
+//     (ex.: Too Cap set/26, 4 extratos = 3 depósitos). Junta tudo no último dia de banco do mês.
 export function compararDias(extratos: ExtratoDia[], entradas: EntradaNibo[]): Map<string, DiaCaixa[]> {
-  const porSeg = new Map<string, Map<string, { banco: number; extrato: number }>>();
+  type Acc = { banco: number; extrato: number; extratoDias: Set<string> };
+  const porSeg = new Map<string, Map<string, Acc>>();
   const pega = (corretora: string, seg: string, dia: string) => {
     const k = `${corretora}|${seg}`;
     if (!porSeg.has(k)) porSeg.set(k, new Map());
     const dias = porSeg.get(k)!;
-    if (!dias.has(dia)) dias.set(dia, { banco: 0, extrato: 0 });
+    if (!dias.has(dia)) dias.set(dia, { banco: 0, extrato: 0, extratoDias: new Set() });
     return dias.get(dia)!;
   };
   for (const e of semDuplicados(extratos)) {
     if (!e.corretora) continue;
-    pega(e.corretora, e.seg, diaDeCredito(e.dia)).extrato += e.liquido;
+    const d = diaDeCredito(e.dia);
+    const a = pega(e.corretora, e.seg, d);
+    a.extrato += e.liquido;
+    a.extratoDias.add(d);
   }
   for (const n of entradas) pega(n.corretora, n.seg, n.dia).banco += n.valor;
 
+  const gap = (a: string, b: string) => (new Date(b).getTime() - new Date(a).getTime()) / 86400000;
   const saida = new Map<string, DiaCaixa[]>();
   for (const [kSeg, dias] of porSeg) {
-    const ordem = [...dias.keys()].sort();
-    for (const dE of ordem) {
-      const e = dias.get(dE)!;
-      if (e.banco > TOLERANCIA_CAIXA || e.extrato <= TOLERANCIA_CAIXA) continue; // só dias com extrato e nada no banco
-      const alvo = ordem.find((dB) => {
-        if (dB <= dE) return false;
-        const gap = (new Date(dB).getTime() - new Date(dE).getTime()) / 86400000;
-        const b = dias.get(dB)!;
-        return gap <= 3 && Math.abs(b.banco - b.extrato - e.extrato) <= TOLERANCIA_CAIXA;
-      });
-      if (alvo) { dias.get(alvo)!.extrato += e.extrato; dias.delete(dE); }
+    const ordem = () => [...dias.keys()].sort();
+    // 2. banco acima do extrato no dia → junta dias só de extrato
+    for (const d of ordem()) {
+      const a = dias.get(d);
+      if (!a || a.banco - a.extrato <= TOLERANCIA_CAIXA) continue;
+      const cand = ordem().filter((x) => x !== d && gap(x, d) <= 7 && gap(x, d) >= -5 && dias.get(x)!.banco <= 0.005 && dias.get(x)!.extrato > TOLERANCIA_CAIXA);
+      const esc = subconjunto(cand.map((x) => dias.get(x)!.extrato), a.banco - a.extrato);
+      if (!esc) continue;
+      for (const i of esc) { const x = dias.get(cand[i])!; a.extrato += x.extrato; x.extratoDias.forEach((z) => a.extratoDias.add(z)); dias.delete(cand[i]); }
     }
-    const [corretora, seg] = kSeg.split('|');
+    // 3. extrato acima do banco no dia → junta dias só de banco
+    for (const d of ordem()) {
+      const a = dias.get(d);
+      if (!a || a.extrato - a.banco <= TOLERANCIA_CAIXA) continue;
+      const cand = ordem().filter((x) => x !== d && gap(d, x) <= 7 && gap(d, x) >= -5 && dias.get(x)!.extrato <= 0.005 && dias.get(x)!.banco > 0.005);
+      const esc = subconjunto(cand.map((x) => dias.get(x)!.banco), a.extrato - a.banco);
+      if (!esc) continue;
+      for (const i of esc) { a.banco += dias.get(cand[i])!.banco; dias.delete(cand[i]); }
+    }
+    // 4. mesmo valor exato, data distante (até 90 dias), um único candidato
+    for (const d of ordem()) {
+      const a = dias.get(d);
+      if (!a || a.banco > 0.005 || a.extrato <= TOLERANCIA_CAIXA) continue;
+      const cand = ordem().filter((x) => x !== d && Math.abs(gap(d, x)) <= 90 && dias.get(x)!.extrato <= 0.005 && Math.abs(dias.get(x)!.banco - a.extrato) <= 0.05);
+      if (cand.length !== 1) continue;
+      const b = dias.get(cand[0])!;
+      b.extrato += a.extrato; a.extratoDias.forEach((z) => b.extratoDias.add(z)); dias.delete(d);
+    }
+    // 5. soma do mês = soma do mês (só o que sobrou sem par)
+    const meses = new Set(ordem().map((d) => d.slice(0, 7)));
+    for (const m of meses) {
+      const soE = ordem().filter((d) => d.startsWith(m) && dias.get(d)!.banco <= 0.005 && dias.get(d)!.extrato > TOLERANCIA_CAIXA);
+      const soB = ordem().filter((d) => d.startsWith(m) && dias.get(d)!.extrato <= 0.005 && dias.get(d)!.banco > 0.005);
+      if (!soE.length || !soB.length) continue;
+      const se = soE.reduce((t, d) => t + dias.get(d)!.extrato, 0), sb = soB.reduce((t, d) => t + dias.get(d)!.banco, 0);
+      if (Math.abs(se - sb) > TOLERANCIA_CAIXA) continue;
+      const alvo = dias.get(soB[soB.length - 1])!;
+      for (const d of soE) { alvo.extrato += dias.get(d)!.extrato; dias.get(d)!.extratoDias.forEach((z) => alvo.extratoDias.add(z)); dias.delete(d); }
+      for (const d of soB.slice(0, -1)) { alvo.banco += dias.get(d)!.banco; dias.delete(d); }
+    }
+    const [corretora, seg] = kSeg.split("|");
     for (const [dia, v] of dias) {
       const chave = `${corretora}|${seg}|${dia.slice(0, 7)}`;
       if (!saida.has(chave)) saida.set(chave, []);
-      saida.get(chave)!.push({ dia, banco: r2(v.banco), extrato: r2(v.extrato), dif: r2(v.banco - v.extrato) });
+      saida.get(chave)!.push({ dia, banco: r2(v.banco), extrato: r2(v.extrato), dif: r2(v.banco - v.extrato), extratoDias: [...v.extratoDias] });
     }
   }
   for (const lista of saida.values()) lista.sort((a, b) => a.dia.localeCompare(b.dia));

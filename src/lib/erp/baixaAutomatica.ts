@@ -7,7 +7,7 @@
 //   3. nenhuma linha divergente do previsto (diferença acima da tolerância por parcela), nenhum estorno,
 //      nenhuma linha em tratativa aberta, e a soma das linhas fecha com o total do extrato.
 // Fora do padrão, a baixa é MANUAL (a equipe resolve o que depende de ação humana).
-import { TOLERANCIA_CAIXA, type DiaCaixa } from "./caixaNibo";
+import { TOLERANCIA_CAIXA, diaDeCredito, type DiaCaixa } from "./caixaNibo";
 
 export type ExtratoParaAvaliar = {
   tipo: string;
@@ -26,6 +26,10 @@ export type SituacaoBanco = "bate" | "diferente" | "sem_banco";
 // o dia do extrato no confronto com o banco (compararDias junta dias vizinhos quando o banco pagou em outro dia)
 export function bancoDoExtrato(dias: DiaCaixa[] | undefined, dataRecebimento: string | null): { situacao: SituacaoBanco; dia: DiaCaixa | null } {
   if (!dias || !dataRecebimento) return { situacao: "sem_banco", dia: null };
+  // primeiro: o dia em que este extrato foi juntado pelo cruzamento (pagamento junto ou em outro dia)
+  const credito = diaDeCredito(dataRecebimento);
+  const juntado = dias.find((d) => d.extratoDias?.includes(credito));
+  if (juntado) return { situacao: juntado.banco <= 0 ? "sem_banco" : Math.abs(juntado.dif) <= TOLERANCIA_CAIXA ? "bate" : "diferente", dia: juntado };
   const t = new Date(`${dataRecebimento}T00:00:00Z`).getTime();
   const perto = dias
     .filter((d) => d.extrato > 0 && Math.abs(new Date(`${d.dia}T00:00:00Z`).getTime() - t) <= 3 * 86400000)
