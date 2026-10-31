@@ -40,6 +40,6 @@ export const TIPO_POR_ROTULO: Record<string, string> = {
   "21941a1734c2": "Boleto", "6800e182f329": "Boleto", aed7f0415fde: "Boleto",
   e1947b4cc768: "Outro", d072b2b994bc: "Outro",
 };
-/** Decisão do Matheus 31/10: só estes três tipos são baixados. Rótulo desconhecido (recorte novo) é baixado por segurança e fica "sem tipo" até alguém classificar. */
-export const TIPOS_BAIXAR = new Set(["Apólice", "Proposta", "Endosso"]);
+/** Decisão do Matheus 31/10: Apólice, Proposta, Endosso e Certificado (documento oficial da Capitalização) são baixados; Boleto e Outro não. Rótulo desconhecido (recorte novo) é baixado por segurança e fica "sem tipo" até alguém classificar. */
+export const TIPOS_BAIXAR = new Set(["Apólice", "Proposta", "Endosso", "Certificado"]);
 export const deveBaixar = (rotulo: string) => { const t = TIPO_POR_ROTULO[rotulo]; return !t || TIPOS_BAIXAR.has(t); };

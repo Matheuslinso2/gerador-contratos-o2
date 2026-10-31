@@ -32,5 +32,9 @@ ver([...ruins].every((nn) => estaPulado(estado[nn]) && estado[nn].tentativas ===
 ver(selecionarPendentes(fila, estado, V, new Set()).length === 0, "pulados não voltam mais");
 // erro antigo (sem contador) vale 1 tentativa
 ver(selecionarPendentes([{ nn: "1" }], { "1": { resultado: "erro" } }, V, new Set()).length === 1 && !estaPulado({ resultado: "erro" }), "erro antigo = 1 tentativa, 1 sobrando");
+// tipos baixados: Apólice, Proposta, Endosso, Certificado; Boleto e Outro não; recorte desconhecido baixa
+import { TIPO_POR_ROTULO, deveBaixar } from "./anexos-fila";
+for (const [id, t] of Object.entries(TIPO_POR_ROTULO)) ver(deveBaixar(id) === ["Apólice", "Proposta", "Endosso", "Certificado"].includes(t), `deveBaixar(${id}=${t})`);
+ver(deveBaixar("recorte-novo"), "rótulo desconhecido é baixado por segurança");
 console.log(falhas ? `${falhas} FALHA(S)` : `OK: ${ok} documentos bons feitos, ${tentativasTotais} tentativas nos 5 ruins, ${reinicios} reinício(s), 5 pulados`);
 process.exit(falhas ? 1 : 0);
