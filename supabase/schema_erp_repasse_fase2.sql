@@ -62,3 +62,10 @@ create trigger erp_repasse_da_baixa after insert on erp_comissao_recebimentos fo
 -- (idempotente pelo índice único) e é o que o gatilho passa a chamar. Serve quando um produtor/imobiliária é vinculado depois da baixa.
 -- Caso aplicado: 8 apólices Tokio (7784535 a 7784575, baixadas em 28/10) sem produtor; imobiliária principal do documento = PINTAS, confirmada pelo PDF da apólice
 -- (nome e CNPJ, nível 1); regra da ficha Pintas × Tokio = 0% -> vínculo gravado com a fonte em motivo_diferenca, sem repasse a pagar.
+
+-- PRÓ-LABORE OFICIAL (31/10, migration erp_repasse_abate_pro_labore_oficial): o extrato do Segimob (erp_pro_labore_linhas, por documento e parcela, nível 1 do guia)
+-- mostra o que a seguradora já pagou DIRETO à imobiliária; isso quita/abate o repasse da O2 (nunca pagar em dobro).
+--   erp_aplicar_pro_labore_oficial(recebimento|null): recalcula do zero (base × % repasse × % participação − pró-labore da mesma parcela); resíduo < R$ 0,10 = quitado
+--   (status 'cancelado' + motivo); parcial = 'pendente' com valor abatido. Só repasses sem lote. Coluna erp_repasses.pro_labore_abatido guarda o abatimento.
+--   Roda no gatilho da baixa e a cada atualização horária do retrato (os extratos do Segimob chegam depois da baixa). 31/10: 49 quitados (R$ 664) e 2 abatidos.
+--   Parcelas sem linha de pró-labore ficam como estão (a regra se corrige sozinha quando o extrato do Segimob chegar, enquanto o repasse não estiver em lote).
