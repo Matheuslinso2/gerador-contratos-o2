@@ -407,7 +407,7 @@ export type DocumentoFicha = DocumentoLista & {
   /** endossos desta apólice (filhos por documento_pai_id), do mais antigo ao mais novo */
   endossos: EndossoDoc[];
   /** coberturas contratadas lidas do PDF da apólice (acervo): Fiança já lida; demais produtos entram conforme o leitor de cada um */
-  coberturas_contratadas: { cobertura: string; lmi: number | null; verba: number | null }[];
+  coberturas_contratadas: { cobertura: string; lmi: number | null; verba: number | null; fonte?: string }[];
   /** parcelas dos endossos desta apólice, cobradas em paralelo às da apólice (Matheus 28/10) */
   parcelas_endossos: { documento_id: string; n: number; vencimento: string; valor: number; quitada_em: string | null; valor_quitado: number | null }[];
   /** quando o documento é um endosso: a apólice que ele altera */
@@ -678,17 +678,17 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
     cadeia: { canal: d.canal?.nome ?? null, imobiliaria: d.imobiliaria?.nome ?? null, grupo: d.imob_grupo?.grupo?.nome ?? null, cliente: d.cliente?.nome ?? null },
     coberturas_contratadas: await (async () => {
       // 1º as coberturas lidas por produto (erp_documento_coberturas: Incêndio...), depois as da Fiança (acervo)
-      const { data: lidas } = await sb.from("erp_documento_coberturas").select("nome, tipo, lmi, premio").eq("documento_id", id).order("ordem");
+      const { data: lidas } = await sb.from("erp_documento_coberturas").select("nome, tipo, lmi, premio, verba, nivel, lote").eq("documento_id", id).order("ordem");
       if ((lidas ?? []).length) {
         const peso: Record<string, number> = { basica: 0, adicional: 1, servico: 2 };
-        return (lidas as { nome: string; tipo: string; lmi: number | string | null; premio: number | string | null }[])
+        return (lidas as { nome: string; tipo: string; lmi: number | string | null; premio: number | string | null; verba: number | string | null; nivel: number | null }[])
           .sort((a, b) => (peso[a.tipo] ?? 1) - (peso[b.tipo] ?? 1))
-          .map((c) => ({ cobertura: c.nome + (c.tipo === "basica" ? " (básica)" : c.tipo === "servico" ? " (serviço)" : ""), lmi: c.lmi == null ? null : Number(c.lmi), verba: c.premio == null ? null : Number(c.premio) }));
+          .map((c) => ({ cobertura: c.nome + (c.tipo === "basica" ? " (básica)" : c.tipo === "servico" ? " (serviço)" : ""), lmi: c.lmi == null ? null : Number(c.lmi), verba: c.verba != null ? Number(c.verba) : c.premio == null ? null : Number(c.premio), fonte: `PDF da seguradora${c.nivel ? ` · nível ${c.nivel}` : ""}` }));
       }
       if (!d.nosso_numero_corp) return [];
       const { data: ac } = await sb.from("apolice_documentos").select("coberturas").eq("nosso_numero", String(d.nosso_numero_corp)).eq("situacao", "certa").not("coberturas", "is", null).limit(1);
       const lista = ((ac ?? [])[0]?.coberturas ?? []) as { cobertura?: string; lmi?: number | string | null; verba?: number | string | null }[];
-      return Array.isArray(lista) ? lista.filter((c) => c.cobertura).map((c) => ({ cobertura: String(c.cobertura), lmi: c.lmi == null ? null : Number(c.lmi), verba: c.verba == null ? null : Number(c.verba) })) : [];
+      return Array.isArray(lista) ? lista.filter((c) => c.cobertura).map((c) => ({ cobertura: String(c.cobertura), lmi: c.lmi == null ? null : Number(c.lmi), verba: c.verba == null ? null : Number(c.verba), fonte: "PDF do acervo · nível 1" })) : [];
     })(),
     parcelas_endossos: await (async () => {
       const idsEnd = ((endossos ?? []) as { id: string }[]).map((e) => e.id);
