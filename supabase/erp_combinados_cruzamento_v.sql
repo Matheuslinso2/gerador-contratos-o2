@@ -1,0 +1,4 @@
+-- 31/10/2026 — cruzamento combinado (tarefas CADASTRO do Bitrix, nível 3) x cadastro do ERP, por documento ligado. Só leitura (view).
+-- Situação por campo: bate | diverge | sem_erp (ERP sem o dado) | sem_combinado (a mensagem não trouxe). Tolerância de % : 0,01.
+-- pró-labore: 'sem' no combinado diverge se o ERP tem pró-labore; 'bate_presenca' = combinado diz que tem (sem %) e o ERP tem.
+-- (a definição aplicada está no banco como erp_combinados_cruzamento_v; ver também imobiliaria_campos_log e imobiliaria_email_evidencia_v)
