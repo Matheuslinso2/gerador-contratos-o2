@@ -62,14 +62,20 @@ async function todas<T>(tabela: string, cols: string): Promise<T[]> {
   console.log(`IMOBILIÁRIAS (${porNome.size} nomes): ligados ${res.ligado} (${res.ligadoCombinados} combinados) | ambíguos ${res.ambiguo} (${res.combAmbiguo}) | sugeridos ${res.sugerido} (${res.combSug}) | sem candidato ${res.semCandidato} (${res.combSem}) | não é imobiliária ${res.naoEImob}`);
 
   // ---------------------------------------------------------------- 2) documentos
-  const { data: cs, error: e2 } = await sb.from("erp_combinados_cadastro").select("id,setor,segurado_nome,seg_numero,vigencia_ini,vigencia_fim,numero_endosso").is("documento_id", null);
-  if (e2) throw new Error(e2.message);
+  // todas as páginas (o limite padrão de 1.000 linhas fazia cada rodada olhar sempre os mesmos); só quem tem dado para buscar (SEG ou nome+vigência)
+  const cs: { id: string; setor: string | null; segurado_nome: string | null; seg_numero: string | null; vigencia_ini: string | null; vigencia_fim: string | null; numero_endosso: string | null }[] = [];
+  for (let de = 0; ; de += 1000) {
+    const { data, error: e2 } = await sb.from("erp_combinados_cadastro").select("id,setor,segurado_nome,seg_numero,vigencia_ini,vigencia_fim,numero_endosso").is("documento_id", null).or("seg_numero.not.is.null,vigencia_ini.not.is.null").order("id").range(de, de + 999);
+    if (e2) throw new Error(e2.message);
+    cs.push(...(data ?? []));
+    if (!data || data.length < 1000) break;
+  }
   const dig = (s: string) => s.replace(/\D/g, "").replace(/^0+/, "");
   const doc = { porProposta: 0, porApolice: 0, porNomeVig: 0, ambiguo: 0, nenhum: 0, semDados: 0 };
   const docLig: { id: string; documento_id: string; ligacao: string }[] = [];
   let feitos = 0;
   for (const c of cs ?? []) {
-    if (++feitos % 300 === 0) console.log(`  documentos ${feitos}/${cs!.length}`);
+    if (++feitos % 300 === 0) console.log(`  documentos ${feitos}/${cs.length}`);
     // 2a) pelo SEG: (proposta ou apólice, só dígitos), 1 candidato
     if (c.seg_numero && dig(c.seg_numero).length >= 5) {
       const d = dig(c.seg_numero);
@@ -89,7 +95,7 @@ async function todas<T>(tabela: string, cols: string): Promise<T[]> {
       else if (perto.length > 1) doc.ambiguo++; else doc.nenhum++;
     } else doc.semDados++;
   }
-  console.log(`DOCUMENTOS (${cs?.length} combinados sem vínculo): por proposta ${doc.porProposta} | por apólice ${doc.porApolice} | nome+vigência ${doc.porNomeVig} | ambíguo ${doc.ambiguo} | nenhum ${doc.nenhum} | sem nome/vigência para buscar ${doc.semDados}`);
+  console.log(`DOCUMENTOS (${cs.length} combinados sem vínculo): por proposta ${doc.porProposta} | por apólice ${doc.porApolice} | nome+vigência ${doc.porNomeVig} | ambíguo ${doc.ambiguo} | nenhum ${doc.nenhum} | sem nome/vigência para buscar ${doc.semDados}`);
 
   if (!GRAVAR) { console.log("ENSAIO: nada gravado"); return; }
   // ---------------------------------------------------------------- gravação
