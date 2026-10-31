@@ -1,0 +1,5 @@
+-- 31/10/2026 — auditoria do "imóvel administrado" (erp_documento_itens.administrado). A taxa de administração NUNCA é registrada nem calculada pelo ERP.
+-- Tabela erp_item_administrado_log (item, valor, fonte, nível do guia, evidência) e fontes aceitas em administrado_fonte:
+--   card (campo ADMINISTRADO? do card de Fiança: Y/N explícito) | inferido_fatura (estimativa pela forma de pagamento) | manual |
+--   mesmo_imovel_card (mesma imobiliária + mesmo CEP+nº+complemento já confirmado por card, sem conflito) | documento_pai (endosso herda da apólice-mãe)
+-- Regras: só preenche nulo; nunca sobrescreve valor confirmado; 'inferido_fatura' nunca vira 'card'; conflito card x ERP vai para lista, não é corrigido.
