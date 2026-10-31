@@ -5,6 +5,7 @@ import { lerFiltros } from "@/lib/erp/filtros";
 import FiltrosErp from "../../FiltrosErp";
 import BotaoVerDocumento from "../../BotaoVerDocumento";
 import InfoLegenda from "@/components/InfoLegenda";
+import PainelResumoAba from "@/app/erp/PainelResumoAba";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Parcelas · cobrança" };
@@ -66,6 +67,7 @@ export default async function ParcelasCobrancaPage({ searchParams }: { searchPar
 
   return (
     <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-4 p-8">
+      <PainelResumoAba funcao="erp_resumo_parcelas" titulo="Parcelas" legendas={{"Parcelas por mês de vencimento, por situação":"Parcelas que vencem em cada mês (dois meses atrás até três meses à frente), separadas por situação: paga, a vencer, atenção ou urgente, risco de cancelamento e aguardando comissão.","Em risco de cancelamento por seguradora":"Seguradoras com mais parcelas em risco de cancelamento hoje (as 8 maiores).","Prova de pagamento das parcelas":"Parcelas com e sem prova de pagamento (linha de extrato, fatura ou baixa). Sem prova não se cobra a imobiliária."}} />
       <div>
         <div className="flex gap-3 text-sm">
           <Link href="/erp/parcelas" className="text-gray-500 hover:text-o2-navy hover:underline">Conferência dos vencimentos</Link>

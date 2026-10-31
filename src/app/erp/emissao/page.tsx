@@ -11,6 +11,7 @@ import InfoLegenda from "@/components/InfoLegenda";
 import type { ReactNode } from "react";
 import FiltrosErp from "../FiltrosErp";
 import BotaoVerDocumento from "../BotaoVerDocumento";
+import PainelResumoAba from "@/app/erp/PainelResumoAba";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Emissão" };
@@ -125,6 +126,7 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
 
   return (
     <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-6 p-8">
+      <PainelResumoAba funcao="erp_resumo_emissao" titulo="Emissão" legendas={{"Efetivadas, emitidas e pendentes por mês":"Para cada mês: quantas propostas foram efetivadas, quantas já viraram apólice (emitidas) e quantas ainda estão pendentes de emissão. Fonte: o mesmo quadro mensal da aba.","Pendentes por seguradora":"As seguradoras com mais propostas aguardando emissão agora (as 10 maiores).","Pendência por faixa de dias desde a efetivação":"Há quantos dias cada proposta pendente foi efetivada. As faixas mais longas são as que mais pedem atenção."}} />
       <PageHeader
         icon={<IconReport />}
         titulo="ERP O2 — Emissão"
