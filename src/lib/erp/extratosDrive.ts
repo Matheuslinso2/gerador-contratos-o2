@@ -25,7 +25,7 @@ const DESDE = (process.env.ERP_EXTRATOS_DESDE || "2026-08").replace("-", ""); //
 
 // nome da pasta (como está no Drive / na planilha CONTROLE BAIXA) → abreviação em erp_seguradoras
 const SEGURADORA_DA_PASTA: Record<string, string> = {
-  ALFA: "ALFA", ALLIANZ: "ALLI", AXA: "AXA", AZUL: "AZUL", BRADESCO: "BRAD", BRASILCAP: "BRAS", HDI: "HDI", ICATU: "ICAT",
+  ALFA: "ALF", ALLIANZ: "ALLI", AXA: "AXA", AZUL: "AZUL", BRADESCO: "BRAD", BRASILCAP: "BRAS", HDI: "HDI", ICATU: "ICAT",
   MAPFRE: "MAPF", PORTO: "PORT", POTTENCIAL: "POTT", SUHAI: "SUHA", SULAMERICA: "SULA", TOKIO: "TOKI", TOO: "TOO", YELUM: "YELU", ZURICH: "ZURI",
 };
 const NOME_LINHA: Record<string, string> = { POTT: "POTTENCIAL", TOO: "TOO", TOKI: "TOKIO" };

@@ -143,8 +143,9 @@ export async function carregarInadimplenciaSeguradoras(
   opts: { desde: string; gravar: boolean; apenas?: string[] },
 ): Promise<ResumoInadimplencia[]> {
   const api = obterClienteGmail();
-  const { data: segs } = await sb.from("erp_seguradoras").select("id, abreviacao").in("abreviacao", ["ALLI", "POTT", "ALFA", "TOO"]);
+  const { data: segs } = await sb.from("erp_seguradoras").select("id, abreviacao").in("abreviacao", ["ALLI", "POTT", "ALF", "TOO"]);
   const segId = new Map((segs ?? []).map((s: { id: string; abreviacao: string }) => [s.abreviacao, s.id]));
+  if (segId.has("ALF")) segId.set("ALFA", segId.get("ALF")!); // Alfa unificada (31/10): a sigla ALFA do e-mail financeiro resolve para o cadastro ALF
   const desde = opts.desde.replace(/-/g, "/");
   const saida: ResumoInadimplencia[] = [];
   for (const f of FONTES) {

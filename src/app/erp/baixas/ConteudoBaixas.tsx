@@ -62,7 +62,7 @@ type LinhaCaixa = {
   banco: number | null; esperado: number | null; previsto: number | null; porVencimento: number | null; sit: SituacaoCaixa; dias: DiaCaixa[]; motivos: string[]; inad?: InadInfo | null; conf?: ConfInfo | null;
 };
 const NOME_CURTO: Record<string, string> = {
-  ALFA: "Alfa", ALLI: "Allianz", AZUL: "Azul", BRAD: "Bradesco", BRAS: "Brasilcap", HDI: "HDI", ICAT: "Icatu", KLIN: "Klini",
+  ALFA: "Alfa", ALF: "Alfa", ALLI: "Allianz", AZUL: "Azul", BRAD: "Bradesco", BRAS: "Brasilcap", HDI: "HDI", ICAT: "Icatu", KLIN: "Klini",
   MAPF: "Mapfre", PORT: "Porto Seguro", POTT: "Pottencial", SUHA: "Suhai", SULA: "Sulamérica", TOKI: "Tokio Marine", TOO: "Too", YELU: "Yelum", ZURI: "Zurich",
 };
 type InadInfo = { esperadas: number; comEvidencia: number; sem: number; valorEsperado: number; valorSem: number; conclusivo: boolean; porque: string };

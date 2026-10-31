@@ -18,7 +18,7 @@ const EMPRESA: Record<string, string> = { corretora: "O2 Corretora", capitalizac
 // nome do fornecedor no Nibo → abreviação em erp_seguradoras (Liberty virou Yelum; no Nibo ainda aparece como Liberty)
 const FORNECEDOR: [RegExp, string][] = [
   [/toki/i, "TOKI"], [/porto/i, "PORT"], [/pottencial/i, "POTT"], [/allianz/i, "ALLI"], [/brasil ?cap/i, "BRAS"], [/^too\b/i, "TOO"],
-  [/liberty|yelum/i, "YELU"], [/icatu/i, "ICAT"], [/alfa/i, "ALFA"], [/azul/i, "AZUL"], [/bradesco/i, "BRAD"], [/mapfre/i, "MAPF"],
+  [/liberty|yelum/i, "YELU"], [/icatu/i, "ICAT"], [/alfa/i, "ALF"], [/azul/i, "AZUL"], [/bradesco/i, "BRAD"], [/mapfre/i, "MAPF"],
   [/hdi/i, "HDI"], [/suhai/i, "SUHA"], [/sul ?am[eé]rica/i, "SULA"], [/zurich/i, "ZURI"],
 ];
 export function segDoFornecedor(nome: string | null): string {
