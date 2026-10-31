@@ -498,7 +498,7 @@ export type ParcelaDoc = {
   comissao_status: string | null;
   comissao_previsao: string | null;
 };
-export type AnexoDoc = { id: string; tipo: string; arquivo_nome: string | null; fonte: string | null; numero_apolice: string | null };
+export type AnexoDoc = { id: string; tipo: string; arquivo_nome: string | null; fonte: string | null; numero_apolice: string | null; arquivo_id?: string | null };
 export type EventoDoc = { id: string; tipo: string; data: string; canal: string | null; destinatario: string | null; usuario_email: string | null };
 
 export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Promise<DocumentoFicha | null> {
@@ -556,7 +556,7 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
       .order("n"),
     // acervo de PDFs (apolice_documentos) ligado pelo Nosso Nº do Corp — o ERP ainda não grava erp_documento_anexos na carga
     d.nosso_numero_corp
-      ? sb.from("apolice_documentos").select("id, arquivo_nome, fonte, numero_apolice, produto, local_risco").eq("nosso_numero", String(d.nosso_numero_corp)).limit(10)
+      ? sb.from("apolice_documentos").select("id, arquivo_id, arquivo_nome, fonte, numero_apolice, produto, local_risco").eq("nosso_numero", String(d.nosso_numero_corp)).limit(10)
       : Promise.resolve({ data: [] as { id: string; arquivo_nome: string | null; fonte: string | null; numero_apolice: string | null; produto: string | null; local_risco?: string | null }[] }),
     sb.from("erp_documento_eventos").select("id, tipo, data, canal, destinatario, usuario_email").eq("documento_id", id).order("data", { ascending: false }).limit(50),
     d.documento_renovado_id ? sb.from("erp_documentos").select("id, nosso_numero").eq("id", d.documento_renovado_id).maybeSingle() : Promise.resolve({ data: null }),
@@ -655,8 +655,9 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
         comissao_previsao: c?.previsao_recebimento ?? null,
       };
     }),
-    anexos: ((anexos ?? []) as { id: string; arquivo_nome: string | null; fonte: string | null; numero_apolice: string | null; produto: string | null; local_risco?: string | null }[]).map((a) => ({
+    anexos: ((anexos ?? []) as { id: string; arquivo_id?: string | null; arquivo_nome: string | null; fonte: string | null; numero_apolice: string | null; produto: string | null; local_risco?: string | null }[]).map((a) => ({
       id: a.id,
+      arquivo_id: a.arquivo_id ?? null,
       tipo: "apolice",
       arquivo_nome: a.arquivo_nome,
       fonte: a.fonte,

@@ -184,10 +184,9 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
         <nav className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
           <span className="text-[11px] uppercase tracking-wide text-gray-500">Anexos e vínculos:</span>
           <InfoLegenda titulo="Anexos e vínculos">
-            Atalhos que levam às seções mais abaixo desta página. Aba Anexos do Corp: arquivos que estão na aba Anexos do documento no Corp. Acervo de apólices: PDFs de apólice do acervo ligados a este documento. Card do Bitrix: cards que deram origem ao documento. O número entre parênteses é a quantidade de itens em cada um.
+            Atalhos que levam às seções mais abaixo desta página. Anexos: lista única dos arquivos deste documento, com a coluna Origem (aba Anexos do Corp ou acervo de apólices). Card do Bitrix: cards que deram origem ao documento. O número entre parênteses é a quantidade de itens em cada um.
           </InfoLegenda>
-          <a href="#anexos-corp" className="rounded-full border border-gray-300 px-3 py-1 hover:bg-gray-50">Aba Anexos do Corp ({anexosCorp.length})</a>
-          <a href="#anexos-acervo" className="rounded-full border border-gray-300 px-3 py-1 hover:bg-gray-50">Acervo de apólices ({d.anexos.length})</a>
+          <a href="#anexos" className="rounded-full border border-gray-300 px-3 py-1 hover:bg-gray-50">Anexos ({anexosCorp.length + d.anexos.length})</a>
           <a href="#origem-bitrix" className="rounded-full border border-gray-300 px-3 py-1 hover:bg-gray-50">Card do Bitrix ({d.origens.length})</a>
         </nav>
 
@@ -601,34 +600,32 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
         </section>
 
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
-          <h2 id="anexos-corp" className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Anexos (como no Corp)
-            <InfoLegenda titulo="Anexos (como no Corp)">
-              Cópia da aba Anexos deste documento no Corp, trazida por um robô, na mesma ordem e com os mesmos nomes. Tipo é como aparece no Corp; Tamanho é o do arquivo. O botão Abrir gera um link temporário (vale por 10 minutos). Documento que nasceu no ERP não tem aba Anexos no Corp; se o robô ainda não passou por este documento, a lista fica vazia.
+          <h2 id="anexos" className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Anexos
+            <InfoLegenda titulo="Anexos">
+              Lista única dos arquivos deste documento, vindos de duas fontes que aparecem na coluna Origem. Corp (aba Anexos): cópia da aba Anexos do documento no Corp, trazida por um robô, com o nome e o tipo como no Corp; o botão Abrir gera um link temporário (vale por 10 minutos). Acervo de apólices: PDFs do acervo ligados a este documento pelo Nosso nº do Corp; quando o PDF está no Drive, o botão Abrir leva a ele. As partes e as coberturas da apólice mostradas nesta página são lidas desses PDFs. Os anexos que chegaram por e-mail aparecem na seção de e-mails do documento.
             </InfoLegenda>
           </h2>
-          {!d.nosso_numero_corp ? (
-            <p className="text-xs text-gray-500">Documento nascido no ERP: não tem aba Anexos no Corp.</p>
-          ) : anexosCorp.length === 0 ? (
-            <p className="text-xs text-gray-500">O robô ainda não trouxe a aba Anexos deste documento do Corp (ou ela está vazia).</p>
+          {anexosCorp.length === 0 && d.anexos.length === 0 ? (
+            <p className="text-xs text-gray-500">
+              {d.nosso_numero_corp ? "Nenhum anexo ainda: o robô não trouxe a aba Anexos deste documento do Corp (ou ela está vazia) e não há PDF ligado no acervo." : "Documento nascido no ERP: não tem aba Anexos no Corp e não há PDF ligado no acervo."}
+            </p>
           ) : (
             <table className="w-full text-xs">
               <thead className="text-left text-[11px] uppercase tracking-wide text-gray-500">
                 <tr>
-                  <th className="w-8 py-1">#</th>
                   <th className="py-1">Arquivo</th>
                   <th className="py-1">Tipo</th>
+                  <th className="py-1">Origem</th>
                   <th className="py-1 text-right">Tamanho</th>
                   <th className="py-1" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {anexosCorp.map((a) => (
-                  <tr key={a.ordem}>
-                    <td className="py-1.5 text-gray-400">{a.ordem}</td>
+                  <tr key={`corp-${a.ordem}`}>
                     <td className="py-1.5 text-gray-900">{a.nome}</td>
-                    <td className="py-1.5">
-                      {a.tipo ?? (a.tipoImagem ? <img src={a.tipoImagem} alt="tipo como no Corp" className="h-[18px]" /> : "—")}
-                    </td>
+                    <td className="py-1.5">{a.tipo ?? (a.tipoImagem ? <img src={a.tipoImagem} alt="tipo como no Corp" className="h-[18px]" /> : "—")}</td>
+                    <td className="py-1.5 text-gray-600">Corp (aba Anexos)</td>
                     <td className="py-1.5 text-right text-gray-500">{a.bytes ? `${Math.max(1, Math.round(a.bytes / 1024))} KB` : "—"}</td>
                     <td className="py-1.5 text-right">
                       {a.url && (
@@ -639,29 +636,25 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
                     </td>
                   </tr>
                 ))}
+                {d.anexos.map((a) => (
+                  <tr key={`acervo-${a.id}`}>
+                    <td className="py-1.5 text-gray-900">{a.arquivo_nome ?? "apólice"}</td>
+                    <td className="py-1.5">Apólice{a.numero_apolice ? <span className="text-gray-400"> · nº {a.numero_apolice}</span> : null}</td>
+                    <td className="py-1.5 text-gray-600">Acervo de apólices{a.fonte ? <span className="text-gray-400"> · {a.fonte}</span> : null}</td>
+                    <td className="py-1.5 text-right text-gray-500">—</td>
+                    <td className="py-1.5 text-right">
+                      {a.fonte === "drive" && a.arquivo_id && (
+                        <a href={`https://drive.google.com/file/d/${a.arquivo_id}/view`} target="_blank" rel="noreferrer" className="font-semibold text-o2-navy underline">
+                          Abrir
+                        </a>
+                      )}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           )}
-          {anexosCorp.length > 0 && <p className="text-[11px] text-gray-400">Cópia da aba Anexos do Corp, trazida pelo robô em {formatarData(anexosCorp[0].vistoEm)}.</p>}
-        </section>
-
-        <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
-          <h2 id="anexos-acervo" className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Anexos (acervo de apólices)
-            <InfoLegenda titulo="Anexos (acervo de apólices)">
-              PDFs do acervo de apólices que foram ligados a este documento (a ligação usa o Nosso nº do Corp). Cada linha mostra o nome do arquivo, a origem do PDF e o Nº da apólice lido nele. As partes e as coberturas da apólice mostradas nesta página são lidas desses PDFs.
-            </InfoLegenda>
-          </h2>
-          {d.anexos.length === 0 ? (
-            <p className="text-xs text-gray-500">Nenhum PDF ligado a este documento no acervo ainda.</p>
-          ) : (
-            <ul className="space-y-1 text-xs">
-              {d.anexos.map((a) => (
-                <li key={a.id}>
-                  📄 {a.arquivo_nome ?? "apólice"} <span className="text-gray-400">· {a.fonte} · apólice {a.numero_apolice ?? "—"}</span>
-                </li>
-              ))}
-            </ul>
-          )}
+          {anexosCorp.length > 0 && <p className="text-[11px] text-gray-400">Linhas da origem Corp: cópia da aba Anexos do Corp, trazida pelo robô em {formatarData(anexosCorp[0].vistoEm)}.</p>}
         </section>
 
         {d.origens.map((o) => (
