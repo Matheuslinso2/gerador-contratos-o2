@@ -46,7 +46,7 @@ async function todas<T>(tabela: string, cols: string): Promise<T[]> {
     if (exato?.size === 1) {
       const id = [...exato][0]; res.ligado++; res.ligadoCombinados += ids.length;
       (ligar.get(id) ?? ligar.set(id, []).get(id)!).push(...ids);
-      registros.push({ fonte: FONTE, chave_externa: k, nome_original: nome, imobiliaria_id: id, situacao: "confirmado", metodo_vinculo: "nome_igual_unico", volume: ids.length });
+      registros.push({ fonte: FONTE, chave_externa: k, nome_original: nome, imobiliaria_id: id, situacao: "confirmado", metodo_vinculo: "nome_igual_unico", volume: ids.length, sugestoes: [] });
     } else if (exato && exato.size > 1) {
       res.ambiguo++; res.combAmbiguo += ids.length;
       registros.push({ fonte: FONTE, chave_externa: k, nome_original: nome, imobiliaria_id: null, situacao: "a_identificar", metodo_vinculo: null, volume: ids.length, sugestoes: [...exato].slice(0, 5) });
@@ -56,7 +56,7 @@ async function todas<T>(tabela: string, cols: string): Promise<T[]> {
       const cand = new Set<string>();
       if (toks.length) for (const [n, s] of mapa) if (toks.every((t) => n.split(" ").includes(t))) for (const id of s) cand.add(id);
       if (cand.size >= 1 && cand.size <= 3) { res.sugerido++; res.combSug += ids.length; registros.push({ fonte: FONTE, chave_externa: k, nome_original: nome, imobiliaria_id: null, situacao: "sugerido", metodo_vinculo: "nome_parecido", volume: ids.length, sugestoes: [...cand] }); }
-      else { res.semCandidato++; res.combSem += ids.length; registros.push({ fonte: FONTE, chave_externa: k, nome_original: nome, imobiliaria_id: null, situacao: "a_identificar", metodo_vinculo: null, volume: ids.length }); }
+      else { res.semCandidato++; res.combSem += ids.length; registros.push({ fonte: FONTE, chave_externa: k, nome_original: nome, imobiliaria_id: null, situacao: "a_identificar", metodo_vinculo: null, volume: ids.length, sugestoes: [] }); }
     }
   }
   console.log(`IMOBILIÁRIAS (${porNome.size} nomes): ligados ${res.ligado} (${res.ligadoCombinados} combinados) | ambíguos ${res.ambiguo} (${res.combAmbiguo}) | sugeridos ${res.sugerido} (${res.combSug}) | sem candidato ${res.semCandidato} (${res.combSem}) | não é imobiliária ${res.naoEImob}`);
@@ -93,8 +93,9 @@ async function todas<T>(tabela: string, cols: string): Promise<T[]> {
 
   if (!GRAVAR) { console.log("ENSAIO: nada gravado"); return; }
   // ---------------------------------------------------------------- gravação
-  for (let i = 0; i < registros.length; i += 100) {
-    const { error: e } = await sb.from("imobiliaria_registros_fonte").upsert(registros.slice(i, i + 100), { onConflict: "fonte,chave_externa" });
+  const unicos = [...new Map(registros.map((r) => [r.fonte + "|" + r.chave_externa, r])).values()];
+  for (let i = 0; i < unicos.length; i += 100) {
+    const { error: e } = await sb.from("imobiliaria_registros_fonte").upsert(unicos.slice(i, i + 100), { onConflict: "fonte,chave_externa" });
     if (e) throw new Error("registros_fonte: " + e.message);
   }
   for (const [imobId, ids] of ligar) for (let i = 0; i < ids.length; i += 200) {
