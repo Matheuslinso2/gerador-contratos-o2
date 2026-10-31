@@ -57,3 +57,8 @@ create trigger erp_repasse_da_baixa after insert on erp_comissao_recebimentos fo
 --   erp_atualizar_repasse_resumo(mes) refaz um mês; erp_atualizar_repasse_resumo_abertos() refaz anterior/atual/seguinte e só cria os mais antigos se faltarem.
 --   Cron /api/cron/erp-repasse-resumo às :58 (depois da baixa automática :55) + refeito a cada autorização/cancelamento + botão “Atualizar agora”.
 --   Medido como usuário autenticado (RLS): tela principal 2.365 ms -> 0,7 ms; ficha da imobiliária (mês aberto) 47 ms; aviso “Comissão recebida” 40 ms.
+
+-- GUIA DE FONTES (31/10, migration erp_repasse_regerar_da_baixa): erp_regerar_repasse_da_baixa(recebimento) refaz o repasse de UMA baixa já gravada
+-- (idempotente pelo índice único) e é o que o gatilho passa a chamar. Serve quando um produtor/imobiliária é vinculado depois da baixa.
+-- Caso aplicado: 8 apólices Tokio (7784535 a 7784575, baixadas em 28/10) sem produtor; imobiliária principal do documento = PINTAS, confirmada pelo PDF da apólice
+-- (nome e CNPJ, nível 1); regra da ficha Pintas × Tokio = 0% -> vínculo gravado com a fonte em motivo_diferenca, sem repasse a pagar.
