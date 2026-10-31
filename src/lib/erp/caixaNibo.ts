@@ -145,11 +145,13 @@ export function compararDias(extratos: ExtratoDia[], entradas: EntradaNibo[]): M
     // 4. mesmo valor exato, data distante (até 90 dias), um único candidato
     for (const d of ordem()) {
       const a = dias.get(d);
-      if (!a || a.banco > 0.005 || a.extrato <= TOLERANCIA_CAIXA) continue;
+      // vale também quando o dia tem outro depósito que não fecha (ex.: Brasilcap, extrato de 28/10 = depósito de 25/09)
+      if (!a || a.extrato <= TOLERANCIA_CAIXA || Math.abs(a.banco - a.extrato) <= TOLERANCIA_CAIXA) continue;
       const cand = ordem().filter((x) => x !== d && Math.abs(gap(d, x)) <= 90 && dias.get(x)!.extrato <= 0.005 && Math.abs(dias.get(x)!.banco - a.extrato) <= 0.05);
       if (cand.length !== 1) continue;
       const b = dias.get(cand[0])!;
-      b.extrato += a.extrato; a.extratoDias.forEach((z) => b.extratoDias.add(z)); dias.delete(d);
+      b.extrato += a.extrato; a.extratoDias.forEach((z) => b.extratoDias.add(z));
+      if (a.banco > 0.005) { a.extrato = 0; a.extratoDias.clear(); } else dias.delete(d);
     }
     // 5. soma do mês = soma do mês (só o que sobrou sem par)
     const meses = new Set(ordem().map((d) => d.slice(0, 7)));
