@@ -1,0 +1,8 @@
+-- 31/10/2026 — comissão prevista dos documentos do lote TOKIO-PORTAL-20261030 (origem_ref 'lote:TOKIO%').
+-- Regra do Matheus: % trabalhado no produto sobre o prêmio LÍQUIDO; depois parcelas/proporcionalidade (regra 'proporcional' de erp_comissao_regras: valor/qtd, resto na 1ª; previsão = vencimento + prazo).
+-- % = o dominante (>=90% dos documentos) das apólices Tokio do Corp, mesma corretora + ramo + imobiliária, vigência desde 2025-10-01. Sem referência dominante = NÃO grava (lista para o Matheus).
+-- Gravado: 114 documentos (89 2IMO + 25 IMOB), 360 comissões. NÃO gravado: 26 IMOB (Expan 7, Silvério 7, Ramiro 5, Humberto Canale 4, Intex 2, Legal 1) + 7 RESI (% varia).
+-- DESFAZER (só toca nos documentos do lote; antes deles não havia comissão):
+--   delete from erp_comissoes where parcela_id in (select p.id from erp_parcelas p join erp_documentos d on d.id=p.documento_id where d.origem_ref like 'lote:TOKIO%');
+--   update erp_documentos set comissao_pct=0, comissao_valor=0 where origem_ref like 'lote:TOKIO%';
+-- (a geração está na conversa de 31/10; o gerador do ERP é erp_recalcular_comissoes, que NÃO foi usado por reescrever todos os documentos da competência)
