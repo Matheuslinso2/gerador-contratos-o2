@@ -16,6 +16,7 @@ import { podeVerBaixas } from "@/lib/erp/acessoBaixas";
 import { avaliarBaixaAutomatica, bancoDoExtrato } from "@/lib/erp/baixaAutomatica";
 import PainelControleBloco from "./gestao/PainelControleBloco";
 import ControleExtrato from "./gestao/ControleExtrato";
+import PainelResumoAba from "@/app/erp/PainelResumoAba";
 
 export const dynamic = "force-dynamic";
 
@@ -458,6 +459,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
   return (
     <>
       <main className="mx-auto w-full max-w-[1500px] flex-1 space-y-6 p-6">
+        {modo === "conferencia" && <PainelResumoAba funcao="erp_resumo_baixas" titulo="Baixa de comissão" legendas={{"Linhas de extrato por estado (desde setembro)":"Situação de cada linha dos extratos pagos desde setembro: identificada, pendente de identificação, sem parcela e as demais.","Baixas do ERP por mês":"Baixas feitas pelo ERP em cada mês, separando as que seguiram a regra das que ficaram fora da regra.","Extratos por seguradora (desde setembro)":"Extratos pagos desde setembro, por seguradora, com a baixa aprovada ou ainda pendente."}} />}
         <PageHeader
           icon={<IconReport />}
           titulo={modo === "gestao" ? "ERP O2 — Gestão das baixas de comissão" : "ERP O2 — Conferência de baixa de comissão"}

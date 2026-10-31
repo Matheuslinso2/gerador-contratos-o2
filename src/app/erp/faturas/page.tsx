@@ -5,6 +5,7 @@ import { lerFiltros } from "@/lib/erp/filtros";
 import { listarFaturas, TOLERANCIA_FATURA } from "@/lib/erp/faturaTela";
 import FiltrosErp from "../FiltrosErp";
 import InfoLegenda from "@/components/InfoLegenda";
+import PainelResumoAba from "@/app/erp/PainelResumoAba";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Faturas" };
@@ -32,6 +33,7 @@ export default async function ErpFaturasPage({ searchParams }: { searchParams: P
 
   return (
     <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-4 p-8">
+      <PainelResumoAba funcao="erp_resumo_faturas" titulo="Faturas" legendas={{"Itens lidos por competência":"Quantidade de itens lidos nas faturas das seguradoras, por competência (as 6 mais recentes).","Alertas por tipo":"Alertas de fatura abertos, por tipo de alerta.","Apólices fora da fatura por seguradora":"Apólices que deveriam estar numa fatura da seguradora e não aparecem em nenhuma carregada, por seguradora."}} />
       <div>
         <h1 className="text-xl font-semibold text-o2-navy">
           Faturas

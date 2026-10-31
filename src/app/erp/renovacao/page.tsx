@@ -11,6 +11,7 @@ import { urlCard } from "@/lib/erp/renovacaoCards";
 import { dadosDeCabecalhoPorId, tipoDoCabecalho } from "@/lib/erp/documentos";
 import BotaoVerDocumento from "../BotaoVerDocumento";
 import InfoLegenda from "@/components/InfoLegenda";
+import PainelResumoAba from "@/app/erp/PainelResumoAba";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Renovação" };
@@ -179,6 +180,7 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
 
   return (
     <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-5 p-8">
+      <PainelResumoAba funcao="erp_resumo_renovacao" titulo="Renovação" legendas={{"Renovações por situação":"Renovações em controle, por situação.","Vencimentos por mês":"Quantas renovações vencem em cada mês (um mês atrás até cinco à frente).","Card do Bitrix: com e sem":"Renovações que já têm card no Bitrix e as que ainda não têm."}} />
       <PageHeader
         icon={<IconReport />}
         titulo="ERP O2 — Renovação"

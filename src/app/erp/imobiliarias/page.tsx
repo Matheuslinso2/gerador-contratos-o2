@@ -4,6 +4,7 @@ import { lerFiltros, SEGURADORA_FATURA } from "@/lib/erp/filtros";
 import { formatarReais } from "@/lib/sinistros/regras";
 import FiltrosErp from "../FiltrosErp";
 import InfoLegenda from "@/components/InfoLegenda";
+import PainelResumoAba from "@/app/erp/PainelResumoAba";
 
 export const metadata = { title: "Imobiliárias" };
 export const dynamic = "force-dynamic";
@@ -83,6 +84,7 @@ export default async function ErpImobiliarias({ searchParams }: { searchParams: 
 
   return (
     <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-4 p-8">
+      <PainelResumoAba funcao="erp_resumo_imobiliarias" titulo="Imobiliárias" legendas={{"Documentos vigentes por imobiliária":"As 8 imobiliárias com mais documentos vigentes.","Prêmio vigente por imobiliária (R$)":"As 8 imobiliárias com maior prêmio vigente.","Imobiliárias por estado":"Imobiliárias cadastradas por estado (os 6 maiores)."}} />
       <div>
         <h1 className="text-xl font-semibold text-o2-navy">Imobiliárias<InfoLegenda titulo="Imobiliárias no ERP">É o cadastro único de imobiliárias da O2, o mesmo do Workspace e do Power BI. O cadastro (dados, contatos, grupo) é editado no Workspace; aqui aparece o que importa para a gestão: apólices vigentes, propostas pendentes de emissão, faturas e pró-labore. Os totais por imobiliária são recalculados a cada hora.</InfoLegenda></h1>
         <p className="text-sm text-gray-600">

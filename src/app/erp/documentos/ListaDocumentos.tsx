@@ -11,6 +11,7 @@ import { codigoCliente } from "@/lib/erp/clientes";
 import FiltrosErp from "../FiltrosErp";
 import BotaoVerDocumento from "../BotaoVerDocumento";
 import InfoLegenda from "@/components/InfoLegenda";
+import PainelResumoAba from "@/app/erp/PainelResumoAba";
 
 
 // ERP O2 — Fase 0: tela mínima de consulta de documentos (só leitura), para o
@@ -94,6 +95,7 @@ export default async function ListaDocumentos({
   return (
     <>
       <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-6 p-8">
+        <PainelResumoAba funcao="erp_resumo_documentos" titulo="Apólices" legendas={{"Vigentes por produto":"Apólices e faturas vigentes por produto (os 8 maiores).","Emitidas por mês":"Documentos emitidos em cada um dos últimos seis meses, pela data de emissão.","Endossos por tipo":"Todos os endossos do ERP por tipo: cobrança, cancelamento de item, sem prêmio, restituição e cancelamento de apólice."}} />
         <PageHeader
           icon={<IconReport />}
           titulo={titulo}

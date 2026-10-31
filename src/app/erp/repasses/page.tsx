@@ -7,6 +7,7 @@ import { DESCONTO_PCT, REPASSE_ERP_EM_TESTE, arredonda, mesAnterior, mesRepasse,
 import InfoLegenda from "@/components/InfoLegenda";
 import FiltrosErp from "../FiltrosErp";
 import { atualizarResumoRepasse, autorizarRepasse } from "./actions";
+import PainelResumoAba from "@/app/erp/PainelResumoAba";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Repasses" };
@@ -44,6 +45,7 @@ export default async function ErpRepassesPage({ searchParams }: { searchParams: 
 
   return (
     <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-4 p-8">
+      <PainelResumoAba funcao="erp_resumo_repasses" titulo="Repasses" legendas={{"Repasses por situação":"Quantidade de repasses em cada situação.","Valor líquido por competência (R$)":"Valor líquido dos repasses por competência (os últimos meses).","Maiores valores líquidos pendentes por imobiliária (R$)":"As 8 imobiliárias com maior valor líquido de repasse pendente."}} />
       <div>
         <h1 className="flex items-center gap-2 text-xl font-semibold text-o2-navy">
           Repasses · {rotuloMes(mes)}
