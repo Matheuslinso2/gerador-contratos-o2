@@ -6,6 +6,7 @@ import FiltrosErp from "../../FiltrosErp";
 import BotaoVerDocumento from "../../BotaoVerDocumento";
 import InfoLegenda from "@/components/InfoLegenda";
 import PainelResumoAba from "@/app/erp/PainelResumoAba";
+import QuemCobrar from "./QuemCobrar";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Parcelas · cobrança" };
@@ -92,9 +93,11 @@ export default async function ParcelasCobrancaPage({ searchParams }: { searchPar
       {provisorias.length > 0 && (
         <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-900">
           Status provisório em: <b>{provisorias.join(", ")}</b>. O extrato dessas seguradoras ainda está pouco ligado às parcelas (menos de 90%), então parte do "em aberto" pode
-          ser só falta de leitura do extrato. Confira com a seguradora antes de cobrar o cliente.<InfoLegenda titulo="Status provisório">Compara, nos últimos 180 dias, quantas linhas do extrato de cada seguradora foram ligadas a uma parcela. Quando menos de 90% estão ligadas (ou não há extrato), o ERP ainda pode estar sem enxergar parte dos pagamentos, e por isso o em aberto dessa seguradora pode ser só falta de leitura do extrato.</InfoLegenda>
+          ser só falta de leitura do extrato. Confira com a seguradora antes de cobrar a imobiliária.<InfoLegenda titulo="Status provisório">Compara, nos últimos 180 dias, quantas linhas do extrato de cada seguradora foram ligadas a uma parcela. Quando menos de 90% estão ligadas (ou não há extrato), o ERP ainda pode estar sem enxergar parte dos pagamentos, e por isso o em aberto dessa seguradora pode ser só falta de leitura do extrato.</InfoLegenda>
         </p>
       )}
+
+      <QuemCobrar />
 
       <p className="text-xs font-semibold uppercase tracking-wide text-o2-navy">Seguradora × status<InfoLegenda titulo="Seguradora × status">Matriz com a quantidade de parcelas e a comissão em cada status, por seguradora. Não mostra as pagas nem as a vencer. Os status, do mais grave ao mais leve: Risco de cancelamento (só onde a regra de cancelamento da seguradora está cadastrada); Em aberto, urgente; Em aberto, atenção; Vencida, dentro do prazo da seguradora (a comissão ainda pode chegar); Vence em até 5 dias. O prazo normal é a mediana e o limite é o percentil 90 do tempo que a seguradora levou para pagar a comissão, nos últimos 16 meses, por seguradora e ramo, com 2 dias de tolerância. Clicar em um número filtra a lista abaixo. O filtro de produto vale para a matriz também.</InfoLegenda></p>
       <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
