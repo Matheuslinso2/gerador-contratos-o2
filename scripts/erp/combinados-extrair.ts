@@ -11,7 +11,8 @@ const arg = (n: string) => { const i = process.argv.indexOf(`--${n}`); return i 
 const GRAVAR = process.argv.includes("--gravar");
 const desde = arg("desde") ?? "2025-01-01";
 
-const iso = (d: string) => d.split("/").reverse().join("-");
+/** dd/mm/aaaa -> aaaa-mm-dd; data impossível escrita na mensagem (ex.: 31/11) vira null em vez de quebrar a carga. */
+const iso = (d: string) => { const [dd, mm, aa] = d.split("/"); const x = new Date(Date.UTC(+aa, +mm - 1, +dd)); return x.getUTCDate() === +dd && x.getUTCMonth() === +mm - 1 ? `${aa}-${mm}-${dd}` : null; };
 const PLANOS = /\b(PORTO|POTTENCIAL|TOKIO|TOO|YELUM|LIBERTY|ALFA|SUHAI|HDI|SOMPO|BRASILCAP|ALLIANZ|ZURICH|ICATU|AZUL|SUL ?AM[EÉ]RICA|MAPFRE)\b/i;
 type Comb = Record<string, unknown>;
 
