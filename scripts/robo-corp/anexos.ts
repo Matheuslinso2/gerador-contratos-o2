@@ -25,6 +25,7 @@ import { createHash } from "node:crypto";
 import sharp from "sharp";
 import { chromium, type BrowserContext, type Page } from "playwright";
 import { createServiceClient } from "@/lib/supabase/service";
+import { estaPulado, registrarErro, selecionarPendentes } from "./anexos-fila";
 import { agora, acharTodos, acharNaTela, definirPastaFotos, entrar, espera, esperarModelo, foto, lerConfig, log, RAIZ, VIEWPORT } from "./_corp";
 
 const args = process.argv.slice(2);
@@ -51,13 +52,23 @@ export type LinhaAnexo = { ordem: number; nome: string; rotulo: string; arquivo:
 type Estado = Record<string, {
   quando: string; versao?: number;
   resultado: "baixado" | "sem_anexo" | "sem_anexo_apolice" | "nao_achou" | "erro";
-  arquivos?: string[]; outros?: string[]; erro?: string;
+  arquivos?: string[]; outros?: string[]; erro?: string; tentativas?: number; pulado?: boolean;
   /** por linha da lista, na ordem do Corp: imagem do rótulo de tipo (rotulos/<id>.png) */
   rotulos?: string[];
   /** a aba Anexos como o Corp mostra: ordem, nome do arquivo, recorte do tipo e onde o arquivo ficou (relativo à pasta) */
   lista?: LinhaAnexo[];
 }>;
-const aVisitar = (e: Estado[string] | undefined) => !e || e.resultado === "erro" || (e.versao ?? 1) < VERSAO_VISITA;
+const PULADOS = path.join(PASTA, "pulados-revisar.json");
+/** documentos que deram erro neste processo: não voltam nem depois de um reinício da sessão */
+const falhouNesteProcesso = new Set<string>();
+/** documentos concluídos (qualquer resultado menos erro) desde o último reinício: prova que a sessão andou */
+let progressoDaSessao = 0;
+/** lista à parte "pulados — revisar" (2 tentativas falharam), para diagnóstico de dia */
+function gravarPulados(estado: Estado) {
+  const lista = Object.entries(estado).filter(([, e]) => estaPulado(e)).map(([nn, e]) => ({ nn, tentativas: e.tentativas ?? 1, erro: e.erro, quando: e.quando }));
+  fs.writeFileSync(PULADOS, JSON.stringify(lista, null, 1));
+  return lista.length;
+}
 const lerJson = <T>(f: string, padrao: T): T => (fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, "utf8")) : padrao);
 
 // ------------------------------------------------------------ fila
@@ -323,19 +334,22 @@ async function main() {
     const browser = await chromium.launch({ channel: "chrome", headless: false, args: ["--start-maximized"] });
     const ctx = await browser.newContext({ viewport: VIEWPORT, acceptDownloads: true, locale: "pt-BR" });
     let terminou = false;
+    progressoDaSessao = 0;
     try {
       terminou = await rodada(ctx, cfg, { MAPEAR, limite, ate, pararEm });
     } catch (e) {
       const msg = (e as Error).message ?? String(e);
       log(`sessão caiu: ${msg}`);
-      if (MAPEAR || reinicio >= MAX_REINICIOS) throw e;
+      if (MAPEAR || (reinicio >= MAX_REINICIOS && progressoDaSessao === 0)) throw e;
     } finally {
       if (args.includes("--manter")) log("navegador mantido aberto (--manter)");
       else await browser.close().catch(() => {});
     }
     if (terminou || MAPEAR) return;
     if (pararEm && new Date() >= pararEm) { log(`horário-limite ${ate}: parando`); return; }
-    const pausa = Math.min(60 * (reinicio + 1), 300);
+    // o limite de reinícios não é gasto por sessão que andou: só conta queda sem nenhum documento concluído
+    if (progressoDaSessao > 0) reinicio = -1;
+    const pausa = Math.max(60, Math.min(60 * (reinicio + 1), 300));
     log(`reinício ${reinicio + 1}/${MAX_REINICIOS} em ${pausa} s (fecha o navegador e refaz o login)`);
     await espera(pausa * 1000);
   }
@@ -386,10 +400,10 @@ async function rodada(
     const naPrioridade = new Set(prioridade.map((i) => i.nn));
     const fila = [...prioridade, ...lerJson<Item[]>(FILA, []).filter((i) => !naPrioridade.has(i.nn))];
     if (!fila.length) throw new Error("fila vazia: rode com --fila fianca-vigentes");
-    if (prioridade.length) log(`prioridade: ${prioridade.filter((i) => aVisitar(estado0[i.nn])).length} de ${prioridade.length} ainda a visitar`);
+    if (prioridade.length) log(`prioridade: ${selecionarPendentes(prioridade, estado0, VERSAO_VISITA, falhouNesteProcesso).length} de ${prioridade.length} ainda a visitar`);
     const estado = estado0;
-    const pendentes = fila.filter((i) => aVisitar(estado[i.nn]));
-    log(`fila: ${fila.length} | já visitados: ${fila.length - pendentes.length} | nesta rodada: até ${Math.min(limite, pendentes.length)}`);
+    const pendentes = selecionarPendentes(fila, estado, VERSAO_VISITA, falhouNesteProcesso);
+    log(`fila: ${fila.length} | já visitados: ${fila.length - pendentes.length} | nesta rodada: até ${Math.min(limite, pendentes.length)} | pulados (revisar): ${gravarPulados(estado)}`);
     let feitos = 0, erros = 0, limiteHorario = false;
     for (const item of pendentes.slice(0, limite)) {
       if (pararEm && new Date() >= pararEm) { log(`horário-limite ${ate}: parando`); limiteHorario = true; break; }
@@ -405,17 +419,18 @@ async function rodada(
           estado[item.nn] = { quando: new Date().toISOString(), versao: VERSAO_VISITA, resultado: apolices.length || outros.length ? "baixado" : "sem_anexo", arquivos: apolices, outros, rotulos, lista };
           await fecharDocumento(page);
         }
-        erros = 0;
+        erros = 0; progressoDaSessao++;
       } catch (e) {
-        estado[item.nn] = { quando: new Date().toISOString(), resultado: "erro", erro: (e as Error).message };
+        const tentativas = registrarErro(estado, item.nn, (e as Error).message);
+        falhouNesteProcesso.add(item.nn);
         await foto(page, `erro-${item.nn}`);
-        log(`erro no ${item.nn}: ${(e as Error).message}`);
+        log(`erro no ${item.nn}: ${(e as Error).message} (tentativa ${tentativas}/2${tentativas >= 2 ? " — PULADO, vai para pulados-revisar.json" : ", tenta de novo só no fim da fila"})`);
         // volta para um estado conhecido: fecha janelas e reabre a busca
         await page.keyboard.press("Escape").catch(() => {});
         await fecharDocumento(page).catch(() => {});
         fs.writeFileSync(ESTADO, JSON.stringify(estado));
         // 5 erros seguidos = a tela saiu do lugar conhecido: refaz a sessão inteira (login do zero)
-        if (++erros >= 5) throw new Error("5 erros seguidos: refazendo o login do zero");
+        if (++erros >= 5) { gravarPulados(estado); throw new Error("5 erros seguidos: refazendo o login do zero"); }
         await abrirConsultaDocumentos(page).catch(() => {});
       }
       fs.writeFileSync(ESTADO, JSON.stringify(estado));
