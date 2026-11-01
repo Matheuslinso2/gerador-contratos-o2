@@ -38,7 +38,7 @@ const TABELAS_DESCRICAO: Record<string, string> = {
   erp_corretoras: "Corretoras (O2 e outras).",
   erp_canais: "Canais de venda.",
   erp_clientes_resumo: "Resumo por cliente (sem CPF).",
-  erp_emissao_fila_pronta: "Fila de Emissão: propostas efetivadas ainda sem documento oficial (pendência).",
+  erp_emissao_fila_pronta: "Fila de Emissão = PROPOSTAS (efetivadas ainda sem documento oficial). produto: fianca, incendio, capitalizacao, automovel, vida, condominio, rc, saude, portateis, pet, outros. tipo A = proposta de apólice, X = cancelamento. seguradora vem como SIGLA de 4 letras (TOKI=Tokio Marine, PORT=Porto, YELU=Yelum, ALFA/ALF=Alfa, POTT=Pottencial, BRAS=Brasilcap, ICAT=Icatu, TOO=Too, MARI=Sompo, ALLI=Allianz, HDI, SUHA=Suhai, BRAD=Bradesco, MAPF=Mapfre, PESS=Porto Essencial). Para contar por produto: consultar_dados com agrupar_por \"produto\" (um total por produto).",
   erp_emissao_kpis_pronta: "KPIs prontos da tela Emissão.",
   erp_inicio_kpis_pronta: "KPIs prontos da tela Início do ERP.",
   erp_vencimentos_pronto: "Vencimentos prontos.",

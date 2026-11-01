@@ -36,13 +36,21 @@ async function buscarPessoa(termo: string, verComissao: boolean): Promise<string
   const ehNumero = digitos.length >= 6 && digitos.length >= t.replace(/[\s().\-/]/g, "").length - 1;
   const COLS = "id, cpf, nome, email, telefone, codigo_cliente, codigo_corp_cliente, tipo_documento";
   let q = sb.from("locatarios").select(COLS).limit(15);
-  if (t.includes("@")) q = q.ilike("email", `%${t}%`);
+  const emailCompleto = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t);
+  if (t.includes("@")) q = emailCompleto ? q.ilike("email", t) : q.ilike("email", `%${t}%`);
   else if (ehNumero && (digitos.length === 11 || digitos.length === 14)) q = q.eq("cpf", digitos);
   else if (ehNumero) q = q.or(`cpf.ilike.%${digitos}%,telefone.ilike.%${digitos.slice(-8, -4)}%${digitos.slice(-4)}%,codigo_cliente.eq.${Number(digitos) || 0}`);
   else for (const tok of normalizar(t).split(" ").filter(Boolean)) q = q.ilike("nome_normalizado", `%${tok}%`);
   const { data: pessoasBrutas, error } = await q;
   if (error) return `Erro: ${error.message}`;
-  const pessoas = (pessoasBrutas ?? []) as unknown as Pessoa[];
+  // E-mail completo sem resultado exato: cai para busca parcial. Saída limitada a 8 pessoas (a lista inteira estoura o limite).
+  let pessoasAch = (pessoasBrutas ?? []) as unknown as Pessoa[];
+  if (!pessoasAch.length && emailCompleto) {
+    const { data: parcial } = await sb.from("locatarios").select(COLS).ilike("email", `%${t}%`).limit(15);
+    pessoasAch = (parcial ?? []) as unknown as Pessoa[];
+  }
+  const pessoas = pessoasAch.slice(0, 8);
+  const pessoasNaoMostradas = pessoasAch.length - pessoas.length;
 
   // Pessoas só citadas pelo nome em itens de documento (sem cadastro ligado).
   let soNome: { documento_id: string | null; papel: string | null; nome: string | null; documento_numero: string | null; item_id: string }[] = [];
@@ -83,7 +91,7 @@ async function buscarPessoa(termo: string, verComissao: boolean): Promise<string
     for (const r of soNome) marca(docDoItem.get(r.item_id), String(r.papel ?? "parte"));
   }
 
-  const docIds = [...papeis.keys()].slice(0, 60);
+  const docIds = [...papeis.keys()].slice(0, 25);
   let documentos: unknown[] = [];
   if (docIds.length) {
     const [{ data: docs }, { data: segs }, { data: ramos }] = await Promise.all([
@@ -131,7 +139,21 @@ async function buscarPessoa(termo: string, verComissao: boolean): Promise<string
   }
 
   return compacto({
-    pessoas: pessoas.map((p) => ({ nome: p.nome, documento: p.cpf, tipoDocumento: p.tipo_documento, email: p.email, telefone: p.telefone, codigoCliente: p.codigo_cliente, codigoCorpCliente: p.codigo_corp_cliente })),
+    pessoas: pessoas.map((p) => {
+      const tel = String(p.telefone ?? "").replace(/\D/g, "");
+      const suspeito = /@o2seguros\.com\.br$/i.test(String(p.email ?? "")) || (tel.length >= 8 && (/^(\d)\1+$/.test(tel) || /^(\d\d)\1+\d?$/.test(tel)));
+      return {
+        nome: p.nome,
+        documento: p.cpf,
+        tipoDocumento: p.tipo_documento,
+        email: p.email,
+        telefone: p.telefone,
+        codigoCliente: p.codigo_cliente,
+        codigoCorpCliente: p.codigo_corp_cliente,
+        ...(suspeito ? { avisoDados: "E-mail ou telefone parece preenchimento provisório (da própria O2 ou número repetido): avise o usuário que o contato pode não ser do cliente." } : {}),
+      };
+    }),
+    ...(pessoasNaoMostradas > 0 ? { pessoasNaoMostradas, aviso: "Há mais cadastros com esse dado: peça um nome completo ou CPF para refinar." } : {}),
     ...(soNome.length ? { citadosApenasPeloNome: soNome.map((r) => ({ nome: r.nome, documento: r.documento_numero, papel: r.papel })).slice(0, 15) } : {}),
     documentosDoErp: documentos,
     cotacoesEProducao: producao,

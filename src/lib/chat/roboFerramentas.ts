@@ -68,7 +68,9 @@ export async function resolverImobiliarias(nome: string): Promise<{ fichas: Fich
   for (const i of todas) if (i.grupo_id && gruposAchados.has(i.grupo_id)) fichas.set(i.id, i);
   const lista = [...fichas.values()];
   const grupo = gruposAchados.size === 1 ? (nomeGrupo.get([...gruposAchados][0]) ?? null) : null;
-  return { fichas: lista, grupo, ambiguo: lista.length > MAX_FICHAS, aproximado };
+  // Nome que casa com UM grupo só (ex.: Adjuve, 23 fichas) não é ambíguo, por maior que seja o grupo.
+  const umGrupoSo = gruposAchados.size === 1 && lista.every((f) => f.grupo_id === [...gruposAchados][0]);
+  return { fichas: lista, grupo, ambiguo: lista.length > (umGrupoSo ? 80 : MAX_FICHAS), aproximado };
 }
 
 export const FERRAMENTAS_ERP: Anthropic.Tool[] = [
@@ -124,9 +126,10 @@ async function buscarImobiliaria(e: { nome: string }, verComissao: boolean): Pro
     .select("imobiliaria_id, docs_total, docs_vigentes, premio_vigente, comissao_vigente, produtos, seguradoras, propostas_pendentes, faturas, ultima_vigencia, calculado_em")
     .in("imobiliaria_id", fichas.map((f) => f.id));
   const porId = new Map((resumos ?? []).map((r) => [r.imobiliaria_id as string, r]));
-  const linhas = fichas.map((f) => {
+  const linhasTodas = fichas.map((f) => {
     const r = porId.get(f.id);
     return {
+      id: f.id,
       ficha: f.nome,
       apelido: f.apelido,
       codigoCorp: f.codigo_produtor_corp,
@@ -142,13 +145,17 @@ async function buscarImobiliaria(e: { nome: string }, verComissao: boolean): Pro
       resumoAtualizadoEm: r?.calculado_em ?? null,
     };
   });
-  const soma = (k: "docsTotal" | "docsVigentesNaFichaDoErp" | "premioVigente") => linhas.reduce((a, l) => a + (Number(l[k]) || 0), 0);
+  const linhas = [...linhasTodas].sort((a, b) => b.docsVigentesNaFichaDoErp - a.docsVigentesNaFichaDoErp).slice(0, 15);
+  const soma = (k: "docsTotal" | "docsVigentesNaFichaDoErp" | "premioVigente") => linhasTodas.reduce((a, l) => a + (Number(l[k]) || 0), 0);
   return JSON.stringify({
     encontrou: true,
     grupo,
+    totalDeFichas: linhasTodas.length,
+    idsDeTodasAsFichas: fichas.map((f) => f.id),
     fichas: linhas,
+    ...(linhasTodas.length > 15 ? { fichasNaoMostradas: linhasTodas.length - 15, avisoFichas: "Só as 15 fichas com mais documentos vigentes estão listadas; os totais do grupo (totalDoGrupo) incluem todas." } : {}),
     ...(aproximado ? { aproximado: true, avisoBusca: "Nenhum nome igual; estas fichas têm nome parecido com o digitado. Diga ao usuário como entendeu (ex.: \"entendi Canale\") para ele confirmar." } : {}),
-    totalDoGrupo: { docsTotal: soma("docsTotal"), docsVigentesNaFichaDoErp: soma("docsVigentesNaFichaDoErp"), premioVigente: Math.round(soma("premioVigente") * 100) / 100 },
+    totalDoGrupo: { propostasEmEmissao: linhasTodas.reduce((a, l) => a + (Number(l.propostasEmEmissao) || 0), 0), faturas: linhasTodas.reduce((a, l) => a + (Number(l.faturas) || 0), 0), docsTotal: soma("docsTotal"), docsVigentesNaFichaDoErp: soma("docsVigentesNaFichaDoErp"), premioVigente: Math.round(soma("premioVigente") * 100) / 100 },
     nota: "docsVigentesNaFichaDoErp conta TODO documento vigente (apólices, endossos, faturas). Para separar apólices (tipo A) de endossos (C, D, I, M, R, X) vigentes, use contar_documentos_erp com situacao ['vigente'] e agrupar_por 'tipo'.",
   });
 }

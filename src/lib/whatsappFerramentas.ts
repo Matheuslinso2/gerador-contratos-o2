@@ -111,6 +111,8 @@ export const FERRAMENTAS: Anthropic.Tool[] = [
         painel: { type: "string", enum: Object.keys(PAINEIS) },
         competencia: { type: "string", description: "Mês no formato YYYY-MM." },
         partes: { type: "array", items: { type: "string" }, description: "Chaves do retrato a devolver (ex: [\"topImobiliarias\"])." },
+        caminho: { type: "string", description: "Caminho dentro do retrato com pontos para pegar só um pedaço (ex.: \"novos.mes.porImobiliaria\" ou \"reaplicacao.kpis\"). Use quando a parte inteira é grande demais." },
+        filtrar_texto: { type: "string", description: "Com um caminho que aponta para uma lista: devolve só os itens que contêm esse texto (ex.: nome da imobiliária)." },
       },
       required: ["painel", "competencia"],
     },
@@ -143,7 +145,7 @@ export const FERRAMENTAS: Anthropic.Tool[] = [
         decrescente: { type: "boolean" },
         limite: { type: "integer", description: `Máximo de linhas (até ${LIMITE_LINHAS}).` },
         apenas_contar: { type: "boolean", description: "Só devolve a quantidade de linhas que batem com os filtros." },
-        agrupar_por: { type: "string", description: "Coluna para agrupar (opcional, junto com 'somar')." },
+        agrupar_por: { type: "string", description: "Coluna(s) para agrupar, separadas por vírgula (ex.: \"produto,tipo,fonte\"). Opcional; pode vir sem 'somar' (então só conta linhas por grupo)." },
         somar: { type: "array", items: { type: "string" }, description: "Colunas numéricas para somar (total geral, ou por grupo se houver agrupar_por)." },
       },
       required: ["tabela"],
@@ -188,7 +190,7 @@ export function semCamposFinanceiros<T>(valor: T): T {
   return valor;
 }
 
-async function consultarPainel(entrada: { painel: string; competencia: string; partes?: string[] }, semFinanceiro = false): Promise<string> {
+async function consultarPainel(entrada: { painel: string; competencia: string; partes?: string[]; caminho?: string; filtrar_texto?: string }, semFinanceiro = false): Promise<string> {
   const painel = PAINEIS[entrada.painel];
   if (!painel) return `Painel desconhecido. Use: ${Object.keys(PAINEIS).join(", ")}`;
   const { data, error } = await createServiceClient()
@@ -199,6 +201,16 @@ async function consultarPainel(entrada: { painel: string; competencia: string; p
   if (error) return `Erro ao ler o painel: ${error.message}`;
   if (!data) return `Não há retrato salvo do painel ${entrada.painel} em ${entrada.competencia}.`;
   const payload = (semFinanceiro ? semCamposFinanceiros(data.payload) : data.payload) as Record<string, unknown>;
+  if (entrada.caminho) {
+    let no: unknown = payload;
+    for (const k of entrada.caminho.split(".")) no = no && typeof no === "object" ? (no as Record<string, unknown>)[k] : undefined;
+    if (no === undefined) return `Caminho ${entrada.caminho} não existe no retrato. Partes disponíveis: ${Object.keys(payload).join(", ")}`;
+    if (entrada.filtrar_texto && Array.isArray(no)) {
+      const alvo = entrada.filtrar_texto.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+      no = no.filter((i) => JSON.stringify(i).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().includes(alvo));
+    }
+    return compacto({ painel: entrada.painel, competencia: entrada.competencia, atualizadoEm: data.atualizado_em, caminho: entrada.caminho, dados: no });
+  }
   const partes = entrada.partes?.length ? entrada.partes : ["kpis", "visaoGeral", "financeiro"].filter((k) => k in payload);
   const escolhido = Object.fromEntries(partes.filter((k) => k in payload).map((k) => [k, payload[k]]));
   return compacto({
@@ -228,15 +240,17 @@ export async function consultarTabela(e: EntradaTabela, tabelas: Record<string, 
   const config = tabelas[e.tabela];
   if (!config) return `Tabela não permitida. Use: ${Object.keys(tabelas).join(", ")}`;
   const permitida = (c: string) => config.colunas.includes(c);
-  const usadas = [...(e.colunas ?? []), ...(e.filtros ?? []).map((f) => f.coluna), e.ordenar_por, e.agrupar_por, ...(e.somar ?? [])].filter(
+  // agrupar_por aceita várias colunas separadas por vírgula (ex.: "produto,tipo,fonte").
+  const colsAgrupar = (e.agrupar_por ?? "").split(",").map((c) => c.trim()).filter(Boolean);
+  const usadas = [...(e.colunas ?? []), ...(e.filtros ?? []).map((f) => f.coluna), e.ordenar_por, ...colsAgrupar, ...(e.somar ?? [])].filter(
     (c): c is string => !!c
   );
   const proibidas = usadas.filter((c) => !permitida(c));
   if (proibidas.length) return `Colunas não permitidas em ${e.tabela}: ${proibidas.join(", ")}. Permitidas: ${config.colunas.join(", ")}`;
 
-  const agregando = !!e.somar?.length || !!e.agrupar_por;
+  const agregando = !!e.somar?.length || colsAgrupar.length > 0;
   const colunas = agregando
-    ? [...new Set([e.agrupar_por, ...(e.somar ?? [])].filter((c): c is string => !!c))]
+    ? [...new Set([...colsAgrupar, ...(e.somar ?? [])].filter((c): c is string => !!c))]
     : e.colunas?.length
       ? e.colunas
       : config.colunas;
@@ -264,7 +278,7 @@ export async function consultarTabela(e: EntradaTabela, tabelas: Record<string, 
     return contar ? q : q.range(de, ate);
   };
 
-  if (e.apenas_contar) {
+  if (e.apenas_contar && !agregando) {
     const { count, error } = await montar(0, 0, true);
     return error ? `Erro: ${error.message}` : JSON.stringify({ tabela: e.tabela, quantidade: count });
   }
@@ -279,7 +293,7 @@ export async function consultarTabela(e: EntradaTabela, tabelas: Record<string, 
     }
     const grupos = new Map<string, { grupo: string; linhas: number; somas: Record<string, number> }>();
     for (const l of linhas) {
-      const chave = e.agrupar_por ? String(l[e.agrupar_por] ?? "(vazio)") : "total";
+      const chave = colsAgrupar.length ? colsAgrupar.map((c) => String(l[c] ?? "(vazio)")).join(" | ") : "total";
       const g = grupos.get(chave) ?? { grupo: chave, linhas: 0, somas: Object.fromEntries((e.somar ?? []).map((c) => [c, 0])) };
       g.linhas++;
       for (const c of e.somar ?? []) g.somas[c] += Number(l[c]) || 0;
@@ -318,7 +332,7 @@ export async function consultarTabela(e: EntradaTabela, tabelas: Record<string, 
 
 export async function executarFerramenta(nome: string, entrada: unknown, opcoes?: { semFinanceiro?: boolean }): Promise<string> {
   try {
-    if (nome === "consultar_painel") return await consultarPainel(entrada as { painel: string; competencia: string; partes?: string[] }, opcoes?.semFinanceiro);
+    if (nome === "consultar_painel") return await consultarPainel(entrada as { painel: string; competencia: string; partes?: string[]; caminho?: string; filtrar_texto?: string }, opcoes?.semFinanceiro);
     if (nome === "consultar_tabela") return await consultarTabela(entrada as EntradaTabela);
     return `Ferramenta desconhecida: ${nome}`;
   } catch (e) {
