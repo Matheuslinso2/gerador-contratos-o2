@@ -71,7 +71,7 @@ export default async function ErpParcelasPage({ searchParams }: { searchParams: 
                 <th className="px-3 py-2">Nº da apólice</th>
                 <th className="px-3 py-2">Imobiliária</th>
                 <th className="px-3 py-2">Parcela</th>
-                <th className="px-3 py-2">Vencimento no ERP</th>
+                <th className="px-3 py-2">Vencimento estimado pelo Corp</th>
                 <th className="px-3 py-2">Cobrado pela seguradora</th>
                 <th className="px-3 py-2">Diferença</th>
                 <th className="px-3 py-2 text-right">Comissão prevista</th>
