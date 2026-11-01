@@ -4,6 +4,7 @@ import { CADASTROS, ETAPAS } from "@/lib/erp/processo";
 import { podeVerBaixas } from "@/lib/erp/acessoBaixas";
 import InfoLegenda from "@/components/InfoLegenda";
 import PainelResumoAba from "@/app/erp/PainelResumoAba";
+import NavegadorMes from "@/app/erp/NavegadorMes";
 
 export const metadata = { title: { absolute: "ERP O2" } };
 export const dynamic = "force-dynamic";
@@ -125,7 +126,8 @@ export default async function ErpInicio({ searchParams }: { searchParams: Promis
 
   return (
     <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-6 p-8">
-      <PainelResumoAba funcao="erp_resumo_inicio" titulo="Início" legendas={{"Apólices e faturas por situação":"Quantas apólices e faturas existem em cada situação: vigente, vencida, cancelada, proposta e as demais.","Novos documentos por mês (início da vigência)":"Documentos que começam a vigorar em cada mês, dos últimos seis meses.","Documentos vigentes por seguradora":"As seguradoras com mais apólices e faturas vigentes (as 8 maiores)."}} />
+      <NavegadorMes caminho="/erp" mes={pedido} />
+      <PainelResumoAba mes={pedido} funcao="erp_resumo_inicio" titulo="Início" legendas={{"Apólices e faturas por situação":"Quantas apólices e faturas existem em cada situação: vigente, vencida, cancelada, proposta e as demais.","Novos documentos por mês (início da vigência)":"Documentos que começam a vigorar em cada mês, dos últimos seis meses.","Documentos vigentes por seguradora":"As seguradoras com mais apólices e faturas vigentes (as 8 maiores)."}} />
       <div>
         <h1 className="text-xl font-semibold text-o2-navy">ERP O2</h1>
         <p className="text-sm text-gray-600">Sistema de gestão da O2 Seguros, separado do Workspace. Até dezembro/2026 roda ao lado do Corp; a partir de 2027 substitui o Corp.</p>

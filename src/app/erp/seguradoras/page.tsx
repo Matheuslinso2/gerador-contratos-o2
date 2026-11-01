@@ -9,6 +9,7 @@ import { formatarData } from "@/lib/sinistros/regras";
 import { salvarRegraSeguradora, salvarRegraProduto } from "./actions";
 import InfoLegenda from "@/components/InfoLegenda";
 import PainelResumoAba from "@/app/erp/PainelResumoAba";
+import NavegadorMes from "@/app/erp/NavegadorMes";
 
 export const dynamic = "force-dynamic";
 
@@ -63,8 +64,8 @@ const inputClass = "rounded-lg border border-gray-300 px-2 py-1 text-xs focus:bo
 
 export const metadata = { title: "Seguradoras" };
 
-export default async function ErpSeguradorasPage({ searchParams }: { searchParams: Promise<{ erro?: string; sucesso?: string }> }) {
-  const { erro, sucesso } = await searchParams;
+export default async function ErpSeguradorasPage({ searchParams }: { searchParams: Promise<{ erro?: string; sucesso?: string; mes?: string }> }) {
+  const { erro, sucesso, mes } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -96,7 +97,8 @@ export default async function ErpSeguradorasPage({ searchParams }: { searchParam
   return (
     <>
       <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-6 p-8">
-        <PainelResumoAba funcao="erp_resumo_seguradoras" titulo="Seguradoras" legendas={{"Apólices vigentes por seguradora":"As 10 seguradoras com mais apólices vigentes.","Prazo de pagamento da comissão (dias)":"Prazo, em dias, que cada seguradora tem para pagar a comissão, quando está cadastrado.","Seguradoras por formato de extrato":"Seguradoras ativas por formato do extrato de comissão que enviam."}} />
+        <NavegadorMes caminho="/erp/seguradoras" mes={mes} />
+        <PainelResumoAba mes={mes} funcao="erp_resumo_seguradoras" titulo="Seguradoras" legendas={{"Apólices vigentes por seguradora":"As 10 seguradoras com mais apólices vigentes.","Prazo de pagamento da comissão (dias)":"Prazo, em dias, que cada seguradora tem para pagar a comissão, quando está cadastrado.","Seguradoras por formato de extrato":"Seguradoras ativas por formato do extrato de comissão que enviam."}} />
         <PageHeader
           icon={<IconReport />}
           titulo="ERP O2 — Seguradoras: regra de comissão"

@@ -9,6 +9,7 @@ import { lerFiltros } from "@/lib/erp/filtros";
 import FiltrosErp from "../FiltrosErp";
 import InfoLegenda from "@/components/InfoLegenda";
 import PainelResumoAba from "@/app/erp/PainelResumoAba";
+import NavegadorMes from "@/app/erp/NavegadorMes";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Clientes" };
@@ -58,7 +59,8 @@ export default async function ErpClientesPage({ searchParams }: { searchParams: 
 
   return (
     <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-6 p-8">
-      <PainelResumoAba funcao="erp_resumo_clientes" titulo="Clientes" legendas={{"Clientes por tipo de documento":"Clientes por tipo de documento: CPF, CNPJ e os sem tipo.","Cadastro completo e incompleto":"Clientes com cadastro completo e incompleto (faltam CPF/CNPJ, e-mail ou telefone).","Clientes por origem do cadastro":"De onde veio o cadastro de cada cliente (as 6 origens mais comuns)."}} />
+      <NavegadorMes caminho="/erp/clientes" mes={f.mes} />
+      <PainelResumoAba mes={f.mes} funcao="erp_resumo_clientes" titulo="Clientes" legendas={{"Clientes por tipo de documento":"Clientes por tipo de documento: CPF, CNPJ e os sem tipo.","Cadastro completo e incompleto":"Clientes com cadastro completo e incompleto (faltam CPF/CNPJ, e-mail ou telefone).","Clientes por origem do cadastro":"De onde veio o cadastro de cada cliente (as 6 origens mais comuns)."}} />
       <PageHeader
         icon={<IconReport />}
         titulo="ERP O2 — Clientes"
