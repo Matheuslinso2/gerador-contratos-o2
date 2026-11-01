@@ -1,0 +1,4 @@
+-- 01/11/2026 — erp_resumo_emissao(p_de, p_ate) passa a respeitar o mês escolhido (período padrão do ERP).
+-- KPIs: efetivadas/emitidas no mês (erp_emissao_kpis_pronta), pendentes do mês, herdadas de meses anteriores (e há mais de 60 dias), pendentes Bitrix/Corp.
+-- Pendência = fila atual com data_efetivacao <= fim do mês escolhido (mês fechado = o que já existia até aquela data e ainda está sem nº). Idade pela data de referência
+-- least(fim do mês, hoje). Gráficos: 6 meses até o mês escolhido, pendentes por seguradora e faixas de dias. A definição aplicada está no banco (migração erp_resumo_emissao_periodo).
