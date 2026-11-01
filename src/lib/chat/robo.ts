@@ -7,6 +7,7 @@ import { FERRAMENTAS_ERP, executarFerramentaErp } from "./roboFerramentas";
 import { FERRAMENTAS_GERAIS, executarFerramentaGeral } from "./roboGeral";
 import { FERRAMENTAS_BUSCA, executarFerramentaBusca } from "./roboBusca";
 import { FERRAMENTA_RELATORIO, executarFerramentaRelatorio } from "./roboRelatorio";
+import { FERRAMENTA_ARQUIVOS, executarFerramentaArquivos } from "./roboArquivos";
 import { FERRAMENTA_LOGICA, chamadaTemDadosPessoais, descreverChamada, textoTemDadosPessoais } from "./privacidadePdf";
 
 // Robô O2 do chat da equipe (Fase 2, 29/10/2026). Mesmo "cérebro" da IA do WhatsApp (painéis + tabelas do
@@ -56,6 +57,7 @@ MAPA DE FONTES — consulte TODAS as que a pergunta abrange; nunca responda com 
 - LISTAS GRANDES E RELATÓRIOS: o chat não comporta lista de mais de ~15 itens. Quando pedirem "traga todas", "lista", "relatório" de apólices/endossos/faturas, use gerar_relatorio_pdf (a lista sai do banco, sem passar por você) e responda com o LINK do PDF em uma linha própria (cole a URL inteira, sem formatação) + 2 ou 3 linhas de resumo (total, prêmio, principais seguradoras). Se o período for ambíguo (ex.: "primeiro semestre"), pergunte antes qual critério: apólices que COMEÇARAM no período (inicio_vigencia), que estavam VIGENTES em algum dia do período (vigente_no_periodo) ou que VENCEM no período (fim_vigencia). Ao sugerir, ofereça o PDF em forma de relatório (nunca Excel). O link vale por 6 horas.
 - Regras de leitura aprendidas nos testes: (1) Planilhas (fonte "planilha") são histórico anterior ao Bitrix: as cotações "Em análise"/"Aprovado" delas estão desatualizadas e NÃO entram em "em aberto" — informe o número atual (fonte bitrix) e cite o histórico à parte, sem somar. (2) Se um painel e producao_resolvida divergirem, o número oficial é o do PAINEL (é o que as telas mostram): responda com ele e avise da diferença. (3) Capitalização no ERP é tipo Apólice (certificado/título). Renovações de Capitalização: painel capitalizacao, parte reaplicacao (kpis.entradas, renovadas, naoRenovaram, vigenciaNoMes). (4) Seguro Auto: producao_resolvida pode classificar renovações de outubro como "novo"; o título das fichas do painel seguro_auto traz o prefixo RENOVAÇÃO/NOVO — se usar isso, avise que é aproximado. Cards de Auto não têm imobiliária ligada: não dá para ranquear Auto por imobiliária, diga isso. (5) Para um pedaço de um painel grande use consultar_painel com "caminho" (ex.: "novos.mes.porImobiliaria" ou "imobiliariasConsolidado") e "filtrar_texto" (nome da imobiliária). (6) Agrupar por várias colunas é permitido: agrupar_por "produto,tipo,fonte". (7) PROPOSTAS em Emissão: conte só tipo A (proposta de apólice) na erp_emissao_fila_pronta; tipo X é cancelamento: informe à parte, nunca some (consultar_dados com agrupar_por "produto,tipo"). (8) E-mail ou telefone de cliente que seja da própria O2 (@o2seguros.com.br) ou repetido (929292929) é preenchimento provisório: avise. (9) Nunca some números de fontes diferentes sem dizer; se não tiver certeza do que "desde agosto" significa (entrada do card ou efetivação), diga o critério usado (data de recebimento/entrada).
 - RELATÓRIO EM PDF: toda resposta com dados (cotação, emissão, apólice, proposta, endosso, repasse, fatura, campanha, painel) ganha na tela um botão "Gerar relatório em PDF"; você não precisa gerar nada. Em TODA resposta com dados chame registrar_logica_do_filtro UMA vez com a frase do filtro aplicado (ex.: "Propostas emitidas (apólices) pertencentes à imobiliária XPFG, com início de vigência entre 01/01/2026 e 30/06/2026; fonte: ERP"): ela vai no cabeçalho do relatório. Respostas com dados pessoais (nome de cliente/segurado/inquilino, CPF/CNPJ, e-mail, telefone) NÃO geram PDF e ficam só em texto: nesse caso não ofereça PDF.
+- ARQUIVOS (apólice, proposta, endosso, certificado em PDF): quando pedirem "quero a apólice", "me traz o documento/PDF/cópia" de um cliente, CPF, nº de apólice ou imobiliária, use buscar_arquivos_documento e entregue o(s) link(s) de download no chat, um por linha, no formato [Apólice 123456 – Tokio, Fiança](URL) com a URL inteira. Diga que o link vale 1 hora. Se vierem vários documentos, liste os candidatos (nº, seguradora, vigência) e pergunte qual antes de soltar todos os links. Se o documento existe mas não tem arquivo guardado, diga isso (e o nº da apólice). Esses pedidos ficam registrados (quem pediu e o quê). Cópia de arquivo não é "relatório em PDF": não ofereça o botão de relatório nesse caso. FOTO DO CARD: quando pedirem o card (de cliente, de imobiliária, "o card recusado/perdido de...", nº do card), use buscar_arquivos_documento com tipo_documento "card" (numero_card, nome, cpf_cnpj, imobiliaria, produto, situacao recusado/perdido...). A foto é uma cópia do card como estava quando foi guardado no banco (campos, histórico de etapas, comentários) e existe mesmo depois que o card some do funil do Bitrix; diga a data de fotoGuardadaEm. Nunca consulte o Bitrix ao vivo.
 - Ao final de qualquer contagem diga de quais fontes/produtos/tipos ela veio e o que ficou de fora.
 - Para qualquer pergunta sobre uma imobiliária, comece por buscar_imobiliaria. Imobiliárias do mesmo grupo (ex.: Ramiro Sá) são somadas e você diz quais fichas entraram.
 - Pergunta de VALOR de uma imobiliária num mês (comissão efetivada, prêmio, efetivados, cotações) sem citar produto: NÃO responda com um painel só. Consulte TODOS os painéis com consultar_painel na competência — seguro_fianca (parte topImobiliarias), ramos_elementares (partes novos e renovacoes, porImobiliaria), capitalizacao (parte titulos), seguro_auto — procurando a imobiliária por TODOS os nomes das fichas do grupo (use buscar_imobiliaria antes; no painel o nome pode vir diferente, ex.: "Ramiro Sá Imóveis"; procure por um pedaço do nome). Responda com o *total somado* e a quebra por produto, e diga os produtos em que ela não tem registro naquele mês ("sem registro"). Se citarem um produto, responda só dele.
@@ -76,12 +78,13 @@ ESTILO
 // Conjunto de ferramentas e roteamento do robô: usados pela produção e pelos testes (mesmo código, mesmo comportamento).
 export function ferramentasDoRobo(verComissao: boolean): Anthropic.Tool[] {
   return verComissao
-    ? [...FERRAMENTAS_ERP, ...FERRAMENTAS_GERAIS, ...FERRAMENTAS_BUSCA, FERRAMENTA_RELATORIO, ...FERRAMENTAS]
+    ? [...FERRAMENTAS_ERP, ...FERRAMENTAS_GERAIS, ...FERRAMENTAS_BUSCA, FERRAMENTA_RELATORIO, FERRAMENTA_ARQUIVOS, ...FERRAMENTAS]
     : [
         ...FERRAMENTAS_ERP,
         ...FERRAMENTAS_GERAIS.filter((f) => f.name !== "consultar_painel_extra"),
         ...FERRAMENTAS_BUSCA,
         FERRAMENTA_RELATORIO,
+        FERRAMENTA_ARQUIVOS,
         ...FERRAMENTAS.filter((f) => f.name === "consultar_painel"), // sem comissão/repasse para quem não é admin
       ];
 }
@@ -92,6 +95,7 @@ export async function executarFerramentaDoRobo(nome: string, entrada: unknown, e
     (await executarFerramentaGeral(nome, entrada, verComissao)) ??
     (await executarFerramentaBusca(nome, entrada, verComissao)) ??
     (await executarFerramentaRelatorio(nome, entrada, email, verComissao)) ??
+    (await executarFerramentaArquivos(nome, entrada, email)) ??
     (verComissao || nome === "consultar_painel"
       ? await executarFerramenta(nome, entrada, { semFinanceiro: !verComissao })
       : "Ferramenta indisponível para o seu perfil.")

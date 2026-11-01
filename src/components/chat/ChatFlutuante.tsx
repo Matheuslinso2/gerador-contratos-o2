@@ -22,15 +22,18 @@ const ROBO: Colega = { email: "robo@o2.interno", nome: "Robô O2" };
 function ComLinks({ texto, escuro }: { texto: string; escuro: boolean }) {
   return (
     <>
-      {texto.split(/(https?:\/\/\S+)/g).map((parte, i) =>
-        /^https?:\/\//.test(parte) ? (
-          <a key={i} href={parte} target="_blank" rel="noopener noreferrer" className={`font-semibold underline ${escuro ? "text-white" : "text-o2-blue"}`}>
-            {parte.includes("/storage/") ? "📄 Abrir o relatório (PDF)" : "abrir link"}
+      {texto.split(/(\[[^\]]+\]\(https?:\/\/[^)\s]+\)|https?:\/\/\S+)/g).map((parte, i) => {
+        const md = /^\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)$/.exec(parte);
+        const url = md ? md[2] : /^https?:\/\//.test(parte) ? parte : null;
+        if (!url) return parte;
+        // [texto](url) vira link com o texto (arquivos de apólice/card); URL solta do storage é o relatório em PDF
+        const rotulo = md ? `📎 ${md[1]}` : url.includes("/storage/") ? "📄 Abrir o relatório (PDF)" : "abrir link";
+        return (
+          <a key={i} href={url} target="_blank" rel="noopener noreferrer" className={`font-semibold underline ${escuro ? "text-white" : "text-o2-blue"}`}>
+            {rotulo}
           </a>
-        ) : (
-          parte
-        )
-      )}
+        );
+      })}
     </>
   );
 }

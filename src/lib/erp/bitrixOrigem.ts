@@ -456,7 +456,28 @@ export async function sincronizarSpa(sb: SupabaseClient, cfg: ConfigSpa, o: Opco
       const premio = sep.liquido;
       const comissaoPct = x.comissaoPct ?? 0;
       // Matheus 28/10: card perdido/recusado fica só no workspace; não cria documento novo no ERP (os que já existem ficam como histórico escondido)
-      if (!docId && (sit.situacao === "perdido" || sit.situacao === "recusado")) continue;
+      // ...mas a FOTO do card é guardada em bitrix_cards_arquivo (Matheus 01/11): card que some do funil não pode levar a informação junto.
+      if (!docId && (sit.situacao === "perdido" || sit.situacao === "recusado")) {
+        if (o.gravar) {
+          const eventosArq = (eventosPorCard.get(id) ?? []).sort((a, b) => a.CREATED_TIME.localeCompare(b.CREATED_TIME)).map((e) => ({ quando: e.CREATED_TIME, categoria: e.CATEGORY_ID, etapa: etapas.get(e.STAGE_ID)?.nome ?? e.STAGE_ID, semantica: e.STAGE_SEMANTIC_ID }));
+          const { data: jaTem } = await sb.from("bitrix_cards_arquivo").select("comentarios_capturados_em").eq("entity_type_id", cfg.entityTypeId).eq("item_id", id).maybeSingle();
+          let comentariosArq: unknown[] | undefined;
+          if (comentariosRestantes > 0 && !jaTem?.comentarios_capturados_em) {
+            comentariosArq = await lerComentarios(cfg.entityTypeId, id);
+            comentariosRestantes--;
+            r.comentarios_capturados++;
+          }
+          const { error: eArq } = await sb.from("bitrix_cards_arquivo").upsert({
+            entity_type_id: cfg.entityTypeId, item_id: id, categoria_id: Number(item.categoryId), etapa: etapas.get(item.stageId)?.nome ?? String(item.stageId),
+            situacao: sit.situacao, motivo: sit.motivo ?? null, produto: x.produto, titulo: item.title, url: gerarLinkCard(cfg.entityTypeId, id),
+            imobiliaria_id: imobId, locatario_id: locatarioId, dados: item, dados_legiveis: dadosLegiveis(item, defs), historico_etapas: eventosArq,
+            card_criado_em: item.createdTime, card_atualizado_em: item.updatedTime, capturado_em: new Date().toISOString(),
+            ...(comentariosArq ? { comentarios: comentariosArq, comentarios_capturados_em: new Date().toISOString() } : {}),
+          }, { onConflict: "entity_type_id,item_id" });
+          if (eArq) r.erros.push({ card: id, erro: `arquivo do card: ${eArq.message}` });
+        }
+        continue;
+      }
       if (!docId) {
         modo = "criado";
         if (!o.gravar) { r.criados++; continue; }
