@@ -15,12 +15,16 @@ export async function GET(request: NextRequest) {
   const desde = desdeParam && /^\d{4}-\d{2}-\d{2}$/.test(desdeParam) ? desdeParam : new Date(Date.now() - 120 * 86400000).toISOString().slice(0, 10);
   try {
     const sb = createServiceClient();
-    const resumo = await sincronizarNibo(sb, { desde });
+    // histórico: ?desde=2021-11-01&pagina=0&paginas=20 lê 20 páginas (10 mil lançamentos) por empresa e rota; repita com pagina=<proxima_pagina> até vir null
+    const paginaParam = request.nextUrl.searchParams.get("pagina");
+    const paginasParam = request.nextUrl.searchParams.get("paginas");
+    const resumo = await sincronizarNibo(sb, { desde, ...(paginaParam !== null && /^d+$/.test(paginaParam) ? { paginaIni: Number(paginaParam), paginas: paginasParam && /^d+$/.test(paginasParam) ? Math.min(Number(paginasParam), 40) : 20 } : {}) });
     console.log("erp-nibo", JSON.stringify(resumo)); // aparece nos logs da Vercel (sem token, só contagens e mensagens de erro)
     // Aproveita a rodada horária para remedir os prazos de pagamento das seguradoras (erp_prazos_comissao; os editados à mão não mudam).
     const { data: prazos, error: erroPrazos } = await sb.rpc("erp_atualizar_prazos_comissao");
     console.log("erp-prazos-comissao", erroPrazos ? `erro: ${erroPrazos.message}` : `${prazos} linha(s) atualizada(s)`);
-    return NextResponse.json({ ...resumo, prazos_comissao: erroPrazos ? { erro: erroPrazos.message } : { atualizadas: prazos } }, { status: resumo.ok ? 200 : 503 });
+    const proximas = ("resumo" in resumo && resumo.resumo ? Object.values(resumo.resumo) : []).flatMap((x) => (x.proxima ? [x.proxima.recebimento, x.proxima.pagamento] : [])).filter((v): v is number => v !== null);
+    return NextResponse.json({ ...resumo, ...(paginaParam !== null ? { proxima_pagina: proximas.length ? Math.max(...proximas) : null } : {}), prazos_comissao: erroPrazos ? { erro: erroPrazos.message } : { atualizadas: prazos } }, { status: resumo.ok ? 200 : 503 });
   } catch (e) {
     return NextResponse.json({ ok: false, erro: (e as Error).message }, { status: 500 });
   }

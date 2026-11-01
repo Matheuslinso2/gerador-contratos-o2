@@ -37,6 +37,19 @@ async function listarDesde<T extends { date?: string }>(token: string, caminho: 
   return todos.filter((i) => (i.date ?? "").slice(0, 10) >= desde);
 }
 
+/** Histórico por janela de páginas (500 por página, mais novos primeiro): lê `paginas` páginas a partir de `paginaIni` e devolve a próxima página
+ *  a ler (null quando acabou ou já passou de `desde`). Permite puxar anos de histórico em várias chamadas, sem estourar o tempo da função. */
+async function listarJanela<T extends { date?: string }>(token: string, caminho: string, desde: string, paginaIni: number, paginas: number): Promise<{ itens: T[]; proxima: number | null }> {
+  const todos: T[] = [];
+  for (let p = paginaIni; p < paginaIni + paginas; p++) {
+    const { items } = await niboGet<T>(token, caminho, { $orderby: "date desc", $top: "500", $skip: String(p * 500) });
+    todos.push(...items);
+    const ultimo = items.at(-1)?.date?.slice(0, 10);
+    if (items.length < 500 || (ultimo && ultimo < desde)) return { itens: todos.filter((i) => (i.date ?? "").slice(0, 10) >= desde), proxima: null };
+  }
+  return { itens: todos.filter((i) => (i.date ?? "").slice(0, 10) >= desde), proxima: paginaIni + paginas };
+}
+
 type Conta = { id: string; name: string; type: string; bankNumber?: string; bankAgency?: string; bankAccount?: string; isArchived?: boolean };
 type Lanc = {
   entryId: string;
@@ -57,10 +70,10 @@ type Lanc = {
 const dia = (v?: string) => (v ? v.slice(0, 10) : null);
 
 /** Sincroniza contas, recebimentos e pagamentos realizados desde `desde` (AAAA-MM-DD) de cada empresa configurada. */
-export async function sincronizarNibo(sb: SupabaseClient, o: { desde: string }) {
+export async function sincronizarNibo(sb: SupabaseClient, o: { desde: string; paginaIni?: number; paginas?: number }) {
   const empresas = empresasNibo();
   if (!empresas.length) return { ok: false, erro: "NIBO_API_TOKEN não configurado na Vercel" };
-  const resumo: Record<string, { contas: number; recebimentos: number; pagamentos: number; erros: string[] }> = {};
+  const resumo: Record<string, { contas: number; recebimentos: number; pagamentos: number; erros: string[]; proxima?: { recebimento: number | null; pagamento: number | null } }> = {};
   for (const { empresa, token } of empresas) {
     const erros: string[] = [];
     const { items: contas } = await niboGet<Conta>(token, "/accounts", { $orderby: "name", $top: "500" }).catch((e) => { erros.push((e as Error).message); return { items: [] as Conta[] }; });
@@ -70,10 +83,17 @@ export async function sincronizarNibo(sb: SupabaseClient, o: { desde: string }) 
       );
       if (error) throw new Error(`erp_nibo_contas: ${error.message}`);
     }
-    const r = { contas: contas.length, recebimentos: 0, pagamentos: 0, erros };
+    const r: { contas: number; recebimentos: number; pagamentos: number; erros: string[]; proxima?: { recebimento: number | null; pagamento: number | null } } = { contas: contas.length, recebimentos: 0, pagamentos: 0, erros };
     for (const [tipo, caminho] of [["recebimento", "/receipts"], ["pagamento", "/payments"]] as const) {
       // um erro numa rota não impede a outra nem a outra empresa
-      const itens = await listarDesde<Lanc>(token, caminho, o.desde).catch((e) => { erros.push((e as Error).message); return [] as Lanc[]; });
+      let itens: Lanc[];
+      if (o.paginaIni === undefined) itens = await listarDesde<Lanc>(token, caminho, o.desde).catch((e) => { erros.push((e as Error).message); return [] as Lanc[]; });
+      else {
+        // modo histórico: janela de páginas; r.proxima diz de onde continuar (null = acabou)
+        const j = await listarJanela<Lanc>(token, caminho, o.desde, o.paginaIni, o.paginas ?? 20).catch((e) => { erros.push((e as Error).message); return { itens: [] as Lanc[], proxima: null }; });
+        itens = j.itens;
+        r.proxima = { recebimento: r.proxima?.recebimento ?? null, pagamento: r.proxima?.pagamento ?? null, [tipo]: j.proxima };
+      }
       const linhas = itens.map((l) => ({
         entry_id: l.entryId,
         empresa,
@@ -92,6 +112,7 @@ export async function sincronizarNibo(sb: SupabaseClient, o: { desde: string }) 
         identificador: l.identifier ?? null,
         conciliado: l.isReconciliated ?? null,
         schedule_id: l.scheduleId ?? null,
+        bruto: l, // registro inteiro como veio do Nibo (todos os campos; nível 2, banco)
         sincronizado_em: new Date().toISOString(),
       }));
       for (let i = 0; i < linhas.length; i += 500) {
