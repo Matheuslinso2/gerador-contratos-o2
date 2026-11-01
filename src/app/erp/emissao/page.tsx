@@ -12,6 +12,8 @@ import type { ReactNode } from "react";
 import FiltrosErp from "../FiltrosErp";
 import BotaoVerDocumento from "../BotaoVerDocumento";
 import PainelResumoAba from "@/app/erp/PainelResumoAba";
+import NavegadorMes from "../NavegadorMes";
+import { periodoDoMes } from "@/lib/erp/periodo";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Emissão" };
@@ -73,7 +75,10 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
   if (!isAdmin(user?.email) && !isColaboradorO2(user?.email)) redirect("/");
 
   const hoje = new Date();
-  const mes = f.mes ?? dia(hoje).slice(0, 7); // abre no mês corrente (regra do ERP)
+  const per = periodoDoMes(f.mes); // período padrão do ERP: abre no mês corrente; mês fechado congela (retrato)
+  const mes = per.mes;
+  const refDia = per.fechado ? per.ate : dia(hoje); // data de referência da idade das pendências (mês fechado = fim do mês)
+  const refData = new Date(`${refDia}T12:00:00Z`);
   const ini = `${mes}-01`;
   const [a, m] = mes.split("-").map(Number);
   const fim = dia(new Date(Date.UTC(a, m, 1)));
@@ -89,10 +94,11 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
   const idsDoMotivo = motivo ? ((acompRows ?? []) as Acomp[]).filter((x) => x.motivo === motivo).map((x) => x.documento_id) : null;
 
   // escopo: pendentes efetivadas no mês escolhido, ou todo o atraso (meses anteriores ao escolhido)
-  const base = () => {
+  const base = (esc: "mes" | "herd") => {
     let q = supabase.from("erp_emissao_fila_pronta").select("*", { count: "exact" });
     if (idsDoMotivo) q = q.in("id", idsDoMotivo.length ? idsDoMotivo : ["00000000-0000-0000-0000-000000000000"]);
-    if (!todas) q = atraso ? q.lt("data_efetivacao", ini) : q.gte("data_efetivacao", ini).lt("data_efetivacao", fim);
+    // "do mês" = efetivadas no mês escolhido; "herdada" = efetivada antes do mês e ainda sem nº (herança rotulada e separada)
+    q = esc === "herd" ? q.lt("data_efetivacao", ini) : q.gte("data_efetivacao", ini).lt("data_efetivacao", fim);
     if (f.seguradora) q = q.eq("seguradora", f.seguradora);
     if (f.produto) q = q.eq("produto", f.produto);
     if (f.tipo) q = q.eq("tipo", f.tipo);
@@ -112,8 +118,7 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
     return q;
   };
   const contarFaixa = async (chave: (typeof FAIXAS)[number]["chave"]) => {
-    let q = supabase.from("erp_emissao_fila_pronta").select("id", { count: "exact", head: true });
-    if (!todas) q = atraso ? q.lt("data_efetivacao", ini) : q.gte("data_efetivacao", ini).lt("data_efetivacao", fim);
+    let q = supabase.from("erp_emissao_fila_pronta").select("id", { count: "exact", head: true }).lte("data_efetivacao", per.ate);
     if (f.seguradora) q = q.eq("seguradora", f.seguradora);
     if (f.produto) q = q.eq("produto", f.produto);
     if (f.tipo) q = q.eq("tipo", f.tipo);
@@ -128,15 +133,19 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
   };
 
   const limite = Math.min(Number(um("limite")) || 100, 1000);
-  const [{ data: kpiRow }, { count: atrasoTotal }, linhasRes, ...contagens] = await Promise.all([
+  const [{ data: kpiRow }, { count: atrasoTotal }, mesRes, herdRes, { count: mais60 }, ...contagens] = await Promise.all([
     supabase.from("erp_emissao_kpis_pronta").select("dados").eq("mes", ini).maybeSingle(),
     supabase.from("erp_emissao_fila_pronta").select("id", { count: "exact", head: true }).lt("data_efetivacao", ini),
-    base().order("data_efetivacao", { ascending: true }).limit(limite),
+    base("mes").order("data_efetivacao", { ascending: true }).limit(limite),
+    base("herd").order("data_efetivacao", { ascending: true }).limit(limite),
+    supabase.from("erp_emissao_fila_pronta").select("id", { count: "exact", head: true }).lt("data_efetivacao", ini).lt("data_efetivacao", somarDias(refData, -60)),
     ...FAIXAS.map((x) => contarFaixa(x.chave)),
   ]);
   const kpi = (kpiRow?.dados ?? null) as Kpis | null;
-  const linhas = (linhasRes.data ?? []) as Linha[];
-  const total = linhasRes.count ?? linhas.length;
+  const mesLinhas = (mesRes.data ?? []) as Linha[];
+  const herdLinhas = (herdRes.data ?? []) as Linha[];
+  const linhas = [...mesLinhas, ...herdLinhas];
+  const total = (mesRes.count ?? mesLinhas.length) + (herdRes.count ?? herdLinhas.length);
   // cabeçalho padrão (Matheus 28/10): tipo, titular, produto, seguradora e vigência
   const cab = await dadosDeCabecalhoPorId(supabase, linhas.map((l) => l.id));
   // endosso de cobrança sem parcelas: avisa "parcelas a informar" (as parcelas nascem quando o card traz valor, nº de parcelas e 1º vencimento)
@@ -157,7 +166,8 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
 
   return (
     <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-6 p-8">
-      <PainelResumoAba funcao="erp_resumo_emissao" titulo="Emissão" legendas={{"Efetivadas, emitidas e pendentes por mês":"Para cada mês: quantas propostas foram efetivadas, quantas já viraram apólice (emitidas) e quantas ainda estão pendentes de emissão. Fonte: o mesmo quadro mensal da aba.","Pendentes por seguradora":"As seguradoras com mais propostas aguardando emissão agora (as 10 maiores).","Pendência por faixa de dias desde a efetivação":"Há quantos dias cada proposta pendente foi efetivada. As faixas mais longas são as que mais pedem atenção."}} />
+      <NavegadorMes caminho="/erp/emissao" mes={f.mes} params={{ ...f, origem, faixa, motivo } as Record<string, string | undefined>} />
+      <PainelResumoAba mes={f.mes} funcao="erp_resumo_emissao" titulo="Emissão" legendas={{"Efetivadas, emitidas e pendentes por mês":"Para cada mês: quantas propostas foram efetivadas, quantas já viraram apólice (emitidas) e quantas ainda estão pendentes de emissão. Fonte: o mesmo quadro mensal da aba.","Pendentes por seguradora":"As seguradoras com mais propostas aguardando emissão agora (as 10 maiores).","Pendência por faixa de dias desde a efetivação":"Há quantos dias cada proposta pendente foi efetivada. As faixas mais longas são as que mais pedem atenção."}} />
       <PageHeader
         icon={<IconReport />}
         titulo="ERP O2 — Emissão"
@@ -173,7 +183,7 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
         tipos={TIPOS_DOCUMENTO}
         resumo={
           <>
-            {todas ? "todas as propostas pendentes de emissão (de qualquer mês)" : atraso ? `atraso de meses anteriores a ${rotuloMes}` : `efetivadas em ${rotuloMes}`} · {total.toLocaleString("pt-BR")} pendente(s)
+            {per.fechado ? `${rotuloMes} (mês fechado: pendências que já existiam até ${formatarData(per.ate)})` : rotuloMes} · do mês e herdadas de meses anteriores · {total.toLocaleString("pt-BR")} pendente(s)
             <InfoLegenda titulo="Lista de propostas pendentes">
               A lista abaixo mostra as propostas efetivadas ainda sem Nº da apólice (ou do endosso), da mais antiga para a mais nova. O mês do filtro é o mês da efetivação; com o atraso ligado, mostra as efetivadas em meses anteriores ao escolhido. Os demais filtros (produto, imobiliária, tipo, seguradora e busca) recortam a lista. Dias = hoje menos a data de efetivação. A data de efetivação vem do cartão concluído no Bitrix; sem cartão, da proposta do Corp (a fonte da data aparece embaixo dela). Atualizada a cada hora.
             </InfoLegenda>
@@ -186,9 +196,9 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
         <Cartao titulo="Emitidas (já têm nº)" valor={kpi?.emitidos} nota={kpi && kpi.efetivados ? `${Math.round((kpi.emitidos / kpi.efetivados) * 100)}% das efetivadas do mês` : undefined} cor="text-green-700" info="Das efetivadas do mês, quantas já têm Nº da apólice (ou Nº do endosso). Por enquanto esse número é a prova de que a seguradora emitiu. A porcentagem é emitidas dividido por efetivadas." />
         <Cartao titulo="Pendentes do mês" valor={kpi?.pendentes} nota="efetivadas no mês, sem nº" cor="text-orange-700" info="Propostas efetivadas no mês escolhido que ainda não têm Nº da apólice (nem do endosso): seguem em Emissão até virarem apólice." />
         <div className="relative">
-          <Link href={href({ atraso: "1", faixa: undefined })} className="block">
-            <Cartao titulo="Atraso de meses anteriores" valor={atrasoTotal ?? 0} nota="ver todas · sem nº de apólice" cor="text-red-700" realce={atraso} />
-          </Link>
+          <div className="block">
+            <Cartao titulo="Herdadas de meses anteriores" valor={atrasoTotal ?? 0} nota={`${(mais60 ?? 0).toLocaleString("pt-BR")} há mais de 60 dias`} cor="text-red-700" />
+          </div>
           <span className="absolute bottom-2 right-2">
             <InfoLegenda titulo="Atraso de meses anteriores" alinhar="direita">
               Propostas efetivadas antes do mês escolhido que continuam sem Nº da apólice (ou do endosso), de qualquer época anterior. Não muda com os filtros de produto, imobiliária ou seguradora. Clique no cartão para ver a lista.
@@ -229,8 +239,16 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
         ))}
       </section>
 
-      {linhas.length === 0 ? (
-        <p className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">Nenhuma proposta pendente de emissão neste recorte.</p>
+      {[{ lista: mesLinhas, herd: false, total: mesRes.count ?? mesLinhas.length }, { lista: herdLinhas, herd: true, total: herdRes.count ?? herdLinhas.length }].map(({ lista, herd, total: totalSecao }) => (
+      <section key={herd ? "herdadas" : "do-mes"} className="space-y-2">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">
+          {herd ? `Herdadas de meses anteriores (efetivadas antes de ${rotuloMes})` : `Do mês: efetivadas em ${rotuloMes}`} · {totalSecao.toLocaleString("pt-BR")}
+          <InfoLegenda titulo={herd ? "Herdadas de meses anteriores" : "Do mês"}>
+            {herd ? "Propostas efetivadas ANTES do mês escolhido que continuam sem Nº da apólice. Cada linha diz de que mês veio e há quantos dias está pendente; as de mais de 60 dias ficam com destaque vermelho: são as apólices paradas que precisam de uma resposta (veja a coluna Situação / motivo). Nada sai daqui sozinho." : "Propostas efetivadas no mês escolhido que ainda não têm Nº da apólice."}
+          </InfoLegenda>
+        </h2>
+      {lista.length === 0 ? (
+        <p className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">{herd ? "Nenhuma proposta herdada neste recorte." : "Nenhuma proposta pendente efetivada neste mês."}</p>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
           <table className="w-full text-xs">
@@ -253,8 +271,8 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {linhas.map((d) => {
-                const dias = diasEntre(d.data_efetivacao, hoje);
+              {lista.map((d) => {
+                const dias = diasEntre(d.data_efetivacao, refData);
                 const c = cab.get(d.id);
                 const tipo = tipoDoCabecalho({ tipo: d.tipo, tipo_corp: d.tipo_corp, situacao: "proposta", modo_cobranca: c?.modo_cobranca ?? null });
                 return (
@@ -272,8 +290,8 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
                     <td className="px-3 py-2">{c?.produto_nome ?? d.ramo ?? "—"}</td>
                     <td className="px-3 py-2">{c?.seguradora_nome ?? d.seguradora ?? "—"}</td>
                     <td className="whitespace-nowrap px-3 py-2">{c?.vigencia_inicio || c?.vigencia_fim ? `${formatarData(c?.vigencia_inicio ?? null)} a ${formatarData(c?.vigencia_fim ?? null)}` : formatarData(d.vigencia_inicio)}</td>
-                    <td className="px-3 py-2" title={`data vinda de: ${d.fonte_data}`}>{formatarData(d.data_efetivacao)}<span className="block text-[10px] text-gray-400">{d.fonte_data}</span></td>
-                    <td className="px-3 py-2 text-right"><span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${corDias(dias)}`}>{dias}</span></td>
+                    <td className="px-3 py-2" title={`data vinda de: ${d.fonte_data}`}>{formatarData(d.data_efetivacao)}<span className="block text-[10px] text-gray-400">{d.fonte_data}</span>{herd ? <span className="block text-[10px] font-medium text-orange-700">herdada de {d.data_efetivacao.slice(5, 7)}/{d.data_efetivacao.slice(0, 4)}</span> : null}</td>
+                    <td className="px-3 py-2 text-right"><span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${corDias(dias)} ${dias > 60 ? "font-bold ring-2 ring-red-500" : ""}`} title={dias > 60 ? "Mais de 60 dias sem virar apólice" : undefined}>{dias}</span></td>
                     <td className="px-3 py-2 font-medium">
                       <Link href={`/erp/documentos/${d.id}`} className="text-o2-navy hover:underline">{d.nosso_numero}</Link>
                       <span className="block text-[10px] font-normal text-gray-400">{d.nosso_numero_corp ? `Corp ${d.nosso_numero_corp}` : "ainda não existe no Corp"}</span>
@@ -305,6 +323,8 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
           </table>
         </div>
       )}
+      </section>
+      ))}
       {total > linhas.length && (
         <Link href={href({ limite: String(linhas.length + 100) })} className="inline-block rounded-full border border-o2-navy px-3 py-1 text-xs font-medium text-o2-navy hover:bg-o2-navy hover:text-white">
           Mostrar mais ({linhas.length} de {total})
