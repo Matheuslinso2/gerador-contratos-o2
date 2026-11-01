@@ -65,8 +65,41 @@ type Ev = { motivo: string; tipo: string; ref: string; resumo: string; data: str
     if (cand.size === 1) poe([...cand][0], { motivo, tipo: "email", ref: e.message_id, resumo: motivo === "retransmitida" ? "E-mail de retransmissão" : "E-mail de cancelamento", data: e.data, confianca: "provavel", detalhes: { padrao: "assunto_" + motivo } });
   }
 
+  // 2b) e-mail de controle já ligado à proposta por nome (erp_emails_evidencia_emissao: "apólice enviada"/"emitida") também prova a emissão
+  const evEmail: any[] = []; // a tabela não tem coluna id: pagina por message_id
+  for (let de = 0; ; de += 1000) {
+    const { data, error } = await sb.from("erp_emails_evidencia_emissao").select("documento_id,message_id,palavra,criterio").order("message_id").order("documento_id").range(de, de + 999);
+    if (error) throw new Error("erp_emails_evidencia_emissao: " + error.message);
+    evEmail.push(...(data ?? [])); if (!data || data.length < 1000) break;
+  }
+  const setPend = new Set(ids);
+  const msgInfo = new Map<string, { data: string; tem_anexo: boolean }>();
+  const msgIds = [...new Set(evEmail.filter((x) => setPend.has(x.documento_id)).map((x) => x.message_id))];
+  for (const g of em(msgIds, 100)) { const { data } = await sb.from("erp_emails").select("message_id,data,tem_anexo").in("message_id", g); for (const m of data ?? []) msgInfo.set(m.message_id, { data: m.data, tem_anexo: !!m.tem_anexo }); }
+  for (const x of evEmail) if (setPend.has(x.documento_id)) { const mi = msgInfo.get(x.message_id); poe(x.documento_id, { motivo: "emitida_pela_seguradora", tipo: "email", ref: x.message_id, resumo: `E-mail de controle: ${x.palavra}`, data: mi?.data ?? new Date().toISOString(), confianca: "provavel", detalhes: { criterio: x.criterio, email_com_anexo: mi?.tem_anexo ?? null } }); }
+
+  // 2c) emitida e SEM PDF oficial da apólice (Corp, acervo, anexos do documento ou e-mail com anexo) = "Emitida, sem anexo da apólice": fila do portal
+  const emitidas = pend.filter((p) => (evid.get(p.id) ?? []).some((e) => e.motivo === "emitida_pela_seguradora"));
+  const semAnexo = new Set<string>();
+  for (const p of emitidas) {
+    const evs = evid.get(p.id)!.filter((e) => e.motivo === "emitida_pela_seguradora");
+    if (evs.some((e) => e.detalhes?.email_com_anexo === true)) continue;
+    const { data: dx } = await sb.from("erp_documentos").select("nosso_numero_corp").eq("id", p.id).maybeSingle();
+    const nnc = dx?.nosso_numero_corp ?? null;
+    const { count: a1 } = await sb.from("erp_documento_anexos").select("id", { count: "exact", head: true }).eq("documento_id", p.id).in("tipo", ["apolice", "certificado"]);
+    if ((a1 ?? 0) > 0) continue;
+    if (nnc) {
+      const { count: a2 } = await sb.from("corp_anexos").select("nosso_numero", { count: "exact", head: true }).eq("nosso_numero", String(nnc)).eq("apolice", true);
+      if ((a2 ?? 0) > 0) continue;
+      const { count: a3 } = await sb.from("apolice_documentos").select("id", { count: "exact", head: true }).eq("nosso_numero", String(nnc)).eq("situacao", "certa");
+      if ((a3 ?? 0) > 0) continue;
+    }
+    semAnexo.add(p.id);
+  }
+  for (const id of semAnexo) { const evs = evid.get(id)!.filter((e) => e.motivo === "emitida_pela_seguradora").sort((a, b) => String(b.data).localeCompare(String(a.data))); const e = evs[0]; poe(id, { ...e, motivo: "emitida_sem_anexo_apolice", resumo: `${e.resumo} — sem PDF da apólice (baixar no portal)`, detalhes: { ...e.detalhes, baixar_no_portal: true, seguradora: segDoc.get(id) ?? null, data_email: e.data } }); }
+
   // decisão por proposta: o e-mail mais recente de maior força
-  const PESO: Record<string, number> = { emitida_pela_seguradora: 5, cancelada: 4, retransmitida: 4, recusada_pela_seguradora: 3, pendencia_cadastral: 2, credito_aprovado_aguardando: 1 };
+  const PESO: Record<string, number> = { emitida_sem_anexo_apolice: 6, emitida_pela_seguradora: 5, cancelada: 4, retransmitida: 4, recusada_pela_seguradora: 3, pendencia_cadastral: 2, credito_aprovado_aguardando: 1 };
   const linhas: any[] = []; const cont: Record<string, number> = {};
   for (const p of pend) {
     const evs = (evid.get(p.id) ?? []).sort((a, b) => (PESO[b.motivo] - PESO[a.motivo]) || String(b.data).localeCompare(String(a.data)));

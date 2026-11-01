@@ -38,6 +38,7 @@ const FAIXAS = [
 // Situação / motivo da proposta pendente (1/11): classificação COM PROVA (e-mail de controle da seguradora, parecer de crédito...) em erp_proposta_acompanhamento.
 // Nada sai desta lista sozinho: a proposta fica aqui até virar apólice; o motivo só sinaliza para o Matheus decidir. Sem prova = "sem informação".
 const MOTIVOS: Record<string, { rotulo: string; cor: string }> = {
+  emitida_sem_anexo_apolice: { rotulo: "Emitida, sem anexo da apólice (buscar no portal)", cor: "bg-indigo-50 text-indigo-800 border-indigo-300" },
   emitida_pela_seguradora: { rotulo: "Emitida pela seguradora (falta o nº no ERP)", cor: "bg-blue-50 text-blue-800 border-blue-200" },
   credito_aprovado_aguardando: { rotulo: "Crédito aprovado, aguardando emissão", cor: "bg-green-50 text-green-800 border-green-200" },
   recusada_pela_seguradora: { rotulo: "Recusada pela seguradora", cor: "bg-red-50 text-red-800 border-red-200" },
@@ -50,7 +51,7 @@ const MOTIVOS: Record<string, { rotulo: string; cor: string }> = {
   aguardando_seguradora: { rotulo: "Aguardando a seguradora", cor: "bg-yellow-50 text-yellow-800 border-yellow-200" },
   sem_informacao: { rotulo: "Sem informação", cor: "bg-white text-gray-600 border-gray-300" },
 };
-type Acomp = { documento_id: string; motivo: string; evidencia_resumo: string | null; evidencia_tipo: string | null; data_evidencia: string | null; confianca: string | null };
+type Acomp = { documento_id: string; motivo: string; evidencia_resumo: string | null; evidencia_tipo: string | null; data_evidencia: string | null; confianca: string | null; detalhes: { seguradora?: string | null } | null };
 
 const dia = (d: Date) => d.toISOString().slice(0, 10);
 const somarDias = (hoje: Date, n: number) => dia(new Date(hoje.getTime() + n * 86400000));
@@ -78,10 +79,13 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
   const fim = dia(new Date(Date.UTC(a, m, 1)));
 
   // situação/motivo de cada pendente (tabela pequena: no máximo ~1.000 linhas); alimenta a coluna, o filtro e os chips por motivo
-  const { data: acompRows } = await supabase.from("erp_proposta_acompanhamento").select("documento_id,motivo,evidencia_resumo,evidencia_tipo,data_evidencia,confianca").limit(2000);
+  const { data: acompRows } = await supabase.from("erp_proposta_acompanhamento").select("documento_id,motivo,evidencia_resumo,evidencia_tipo,data_evidencia,confianca,detalhes").limit(2000);
   const acompPorDoc = new Map(((acompRows ?? []) as Acomp[]).map((x) => [x.documento_id, x]));
   const contaMotivo: Record<string, number> = {};
   for (const x of (acompRows ?? []) as Acomp[]) contaMotivo[x.motivo] = (contaMotivo[x.motivo] ?? 0) + 1;
+  // por seguradora dentro de cada motivo (tooltip do botão): "quantas, por seguradora"
+  const porSegMotivo: Record<string, Record<string, number>> = {};
+  for (const x of (acompRows ?? []) as Acomp[]) { const sg = x.detalhes?.seguradora; if (!sg) continue; ((porSegMotivo[x.motivo] ??= {})[sg] = (porSegMotivo[x.motivo][sg] ?? 0) + 1); }
   const idsDoMotivo = motivo ? ((acompRows ?? []) as Acomp[]).filter((x) => x.motivo === motivo).map((x) => x.documento_id) : null;
 
   // escopo: pendentes efetivadas no mês escolhido, ou todo o atraso (meses anteriores ao escolhido)
@@ -209,7 +213,7 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
           Por que a proposta ainda não virou apólice, quando há PROVA (e-mail de controle da seguradora, parecer de crédito, cancelamento ou retransmissão). Sem prova aparece "sem informação": nunca é chute. A proposta continua nesta lista até emitir; o motivo só sinaliza para você decidir o que fazer.
         </InfoLegenda>
         {Object.entries(MOTIVOS).filter(([k]) => (contaMotivo[k] ?? 0) > 0).map(([k, v]) => (
-          <Link key={k} href={href({ motivo: motivo === k ? undefined : k })} className={`rounded-full border px-3 py-1 font-medium ${v.cor} ${motivo === k ? "ring-2 ring-o2-navy" : ""}`}>
+          <Link key={k} href={href({ motivo: motivo === k ? undefined : k })} title={porSegMotivo[k] ? `Por seguradora: ${Object.entries(porSegMotivo[k]).map(([sg, n]) => `${sg} ${n}`).join(" · ")}` : undefined} className={`rounded-full border px-3 py-1 font-medium ${v.cor} ${motivo === k ? "ring-2 ring-o2-navy" : ""}`}>
             {v.rotulo} · {(contaMotivo[k] ?? 0).toLocaleString("pt-BR")}
           </Link>
         ))}
