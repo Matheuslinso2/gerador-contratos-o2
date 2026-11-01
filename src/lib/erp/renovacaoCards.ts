@@ -74,6 +74,18 @@ const norm = (t: string) => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCa
 const mesmoProdutoDoFunil = (c: CardBitrix, d: DocMin) => (c.produto === "re" ? !["fianca", "capitalizacao", "automovel"].includes(d.produto) : d.produto === c.produto);
 const SEG_TITULO: [RegExp, string][] = [[/TOKIO/, "TOKI"], [/YELL?UM/, "YELU"], [/PORTO/, "PORT"], [/ALLIANZ/, "ALLI"], [/ZURICH/, "ZURI"], [/SULAMERICA/, "SULA"], [/ALFA/, "ALF"], [/BRADESCO/, "BRAD"]];
 /** título tipo "RENOVAÇÃO [RAMO] - IMOBILIÁRIA - [SEG/]SEGURADORA - MM.AAAA": o documento é do lote? */
+const MESES_PT = ["JANEIRO", "FEVEREIRO", "MARCO", "ABRIL", "MAIO", "JUNHO", "JULHO", "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO"];
+/** "RENOVAÇÃO SEGURO FIANÇA - PROCED ADM E PROCED LOPES - DEZEMBRO/2026": a fiança é de uma imobiliária citada no título e vence no mês do título? */
+export function loteFiancaDoTitulo(c: CardBitrix, d: DocMin): boolean {
+  if (d.produto !== "fianca" || !d.vigencia_fim) return false;
+  const t = norm(c.titulo);
+  const m = t.match(/^RENOVACAO\s+(?:SEGURO\s+)?(?:FIANCA\s+)?(.+?)\s+(JANEIRO|FEVEREIRO|MARCO|ABRIL|MAIO|JUNHO|JULHO|AGOSTO|SETEMBRO|OUTUBRO|NOVEMBRO|DEZEMBRO)\s*(\d{4})/);
+  if (!m) return false;
+  if (d.vigencia_fim.slice(0, 7) !== m[3] + "-" + String(MESES_PT.indexOf(m[2]) + 1).padStart(2, "0")) return false;
+  const nomes = m[1].split(/\s+E\s+/).map((p) => p.replace(/\(.*?\)/g, "").trim()).filter((p) => p.length >= 3);
+  const alvos = d.imob.split(" | ").map(norm).filter((a) => a.length >= 3);
+  return nomes.some((n) => alvos.some((a) => a.includes(n) || n.includes(a)));
+}
 export function loteDoTitulo(c: CardBitrix, d: DocMin): boolean {
   if (!mesmoProdutoDoFunil(c, d) || !d.vigencia_fim) return false;
   const t = norm(c.titulo);
@@ -101,7 +113,11 @@ export function casarCardsComDocumentos(cards: CardBitrix[], docs: DocMin[]): { 
   const ligacoes: Ligacao[] = [];
   const semDoc: CardBitrix[] = [];
   const usados = new Set<string>(); // documento já ligado a um card mais recente não é ligado de novo
-  for (const c of [...cards].sort((a, b) => b.id - a.id)) {
+  // 2 passes: no 1º valem as ligações específicas (Nº da apólice, Nosso nº do Corp, nome+fim); só no 2º os cards de LOTE (imobiliária+mês) ficam com o que sobrou,
+  // para um card de lote mensal não "roubar" o documento de um card individual
+  const lista = [...cards].sort((a, b) => b.id - a.id);
+  const adiados: CardBitrix[] = [];
+  for (const passe of [1, 2]) for (const c of passe === 1 ? lista : adiados) {
     const achados = new Map<string, { d: DocMin; via: Ligacao["via"] }>();
     for (const ap of c.apolices) for (const d of porApolice.get(ap) ?? []) {
       const mesmoProduto = c.produto === "re" ? !["fianca", "capitalizacao", "automovel"].includes(d.produto) : d.produto === c.produto;
@@ -124,12 +140,24 @@ export function casarCardsComDocumentos(cards: CardBitrix[], docs: DocMin[]): { 
       }
     }
     // Ramos Elementares sem Nº da apólice no card (lotes manuais): imobiliária (ou cliente) do título + seguradora do título + mês do título
-    if (!achados.size && c.produto === "re" && !c.apolices.length) for (const d of docs) if (loteDoTitulo(c, d)) achados.set(d.id, { d, via: "imobiliaria_seguradora_mes" });
+    if (passe === 2 && !achados.size && c.produto === "re" && !c.apolices.length) for (const d of docs) if (loteDoTitulo(c, d)) achados.set(d.id, { d, via: "imobiliaria_seguradora_mes" });
+    // Fiança — card de lote mensal "RENOVAÇÃO SEGURO FIANÇA - IMOBILIÁRIA - DEZEMBRO/2026": todas as fianças daquela imobiliária que vencem no mês
+    if (passe === 2 && !achados.size && c.produto === "fianca") for (const d of docs) if (loteFiancaDoTitulo(c, d)) achados.set(d.id, { d, via: "imobiliaria_seguradora_mes" });
+    // Fiança individual sem Nº da apólice (título "CLIENTE - IMOBILIÁRIA"): imobiliária do título + fim da vigência anterior igual — só vale com 1 candidato certo
+    if (!achados.size && c.produto === "fianca" && c.fim) {
+      const imobTitulo = norm(c.titulo.split(/\s+-\s+/).slice(1).join(" ").replace(/\(.*?\)/g, ""));
+      const cand = imobTitulo.length >= 5 ? docs.filter((d) => d.produto === "fianca" && d.vigencia_fim === c.fim && norm(d.imob).split(" | ").some((a) => a.length >= 5 && (a.includes(imobTitulo) || imobTitulo.includes(a)))) : [];
+      if (cand.length === 1) achados.set(cand[0].id, { d: cand[0], via: "nome_e_fim" });
+    }
     let ok = [...achados.values()].filter(({ d }) => !(c.fim && d.vigencia_fim) || dias(c.fim, d.vigencia_fim) <= 120);
     // mesmo Nº de apólice em mais de um documento: fica o de fim de vigência mais próximo do card (não vale para lote RE, que tem várias apólices diferentes)
     if (c.apolices.length <= 1 && ok.length > 1 && c.fim) ok = [ok.sort((x, y) => dias(c.fim!, x.d.vigencia_fim ?? c.fim!) - dias(c.fim!, y.d.vigencia_fim ?? c.fim!))[0]];
     ok = ok.filter(({ d }) => !usados.has(d.id));
-    if (!ok.length) { semDoc.push(c); continue; }
+    if (!ok.length) {
+      if (passe === 1 && ((c.produto === "re" && !c.apolices.length) || c.produto === "fianca")) adiados.push(c);
+      else semDoc.push(c);
+      continue;
+    }
     for (const { d, via } of ok) { usados.add(d.id); ligacoes.push({ documentoId: d.id, card: c, via }); }
   }
   return { ligacoes, cardsSemDocumento: semDoc };
