@@ -12,7 +12,7 @@ export const FUNIS_RENOVACAO = [
   { entity: 1046, cat: 34, nome: "Ramos Elementares", produto: "re", camposApolice: ["ufCrm12NumApolice"], campoFim: "ufCrm12FimVigencia", campoCorp: "" },
 ] as const;
 
-export type CardBitrix = { entity: number; id: number; titulo: string; etapa: string; funil: string; produto: string; apolices: string[]; corp: string[]; fim: string | null; nome: string };
+export type CardBitrix = { entity: number; id: number; titulo: string; etapa: string; funil: string; produto: string; apolices: string[]; corp: string[]; fim: string | null; nome: string; bruto: Record<string, unknown> };
 
 const so1a9 = (t: string) => /[1-9]/.test(t);
 
@@ -30,7 +30,7 @@ export async function lerCardsRenovacao(): Promise<CardBitrix[]> {
       if (f.produto === "capitalizacao") { const m = titulo.match(/VENCE\s+(\d{2})\/(\d{2})\/(\d{4})/i); if (m) fimBruto = m[3] + "-" + m[2] + "-" + m[1]; }
       out.push({
         entity: f.entity, id: Number(i.id), titulo, etapa: String(i.stageId ?? ""), funil: f.nome, produto: f.produto,
-        apolices: [...apolices], corp, fim: /^\d{4}-\d{2}-\d{2}/.test(fimBruto) ? fimBruto.slice(0, 10) : null, nome: titulo.split(" - ")[0].trim(),
+        apolices: [...apolices], corp, fim: /^\d{4}-\d{2}-\d{2}/.test(fimBruto) ? fimBruto.slice(0, 10) : null, nome: titulo.split(" - ")[0].trim(), bruto: i,
       });
     }
   }
