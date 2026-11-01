@@ -4,31 +4,13 @@
 //   npx tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/erp/coberturas-fianca-acervo.ts [--gravar] [--desfazer] [--lote NOME] [--amostra N]
 process.loadEnvFile(".env.local");
 import { createServiceClient } from "@/lib/supabase/service";
+import { padronizarCoberturaFianca } from "@/lib/erp/coberturasFianca";
 
 const arg = (n: string) => { const i = process.argv.indexOf(`--${n}`); return i >= 0 ? process.argv[i + 1] : undefined; };
 const GRAVAR = process.argv.includes("--gravar");
 const LOTE = arg("lote") ?? "COBERTURAS-FIANCA-ACERVO-20261031";
 const sb = createServiceClient();
-const sem = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/\s+/g, " ").trim();
-
-type Pad = { nome: string; tipo: "basica" | "adicional" | "servico" };
-/** nome do PDF -> nome padrão (ordem importa: o mais específico primeiro) */
-function padronizar(original: string): Pad | null {
-  const n = sem(original);
-  if (/PINTURA/.test(n)) return { nome: /INTERNA/.test(n) && /EXTERNA/.test(n) ? "Pintura interna e externa" : /EXTERNA/.test(n) ? "Pintura externa" : "Pintura interna", tipo: "adicional" };
-  if (/DANOS/.test(n)) return { nome: "Danos ao imóvel", tipo: "adicional" };
-  if (/MULTA|RESCIS/.test(n)) return { nome: "Multa por rescisão contratual", tipo: "adicional" };
-  if (/ASSIST/.test(n)) return { nome: "Assistência 24 horas", tipo: "servico" };
-  if (/INADIMPLENCIA|ALUGUEL \+ ENCARGOS|ALUGUEL E ENCARGOS/.test(n)) return { nome: "Aluguel e encargos legais", tipo: "basica" };
-  if (/^ALUGUEL$/.test(n)) return { nome: "Aluguel", tipo: "basica" };
-  if (/I\.?P\.?T\.?U/.test(n)) return { nome: "IPTU", tipo: "basica" };
-  if (/CONDOMIN|DESP\.? ORD/.test(n)) return { nome: "Condomínio (despesas ordinárias)", tipo: "basica" };
-  if (/^AGUA$/.test(n)) return { nome: "Água", tipo: "basica" };
-  if (/ENERGIA|^LUZ$/.test(n)) return { nome: "Energia elétrica", tipo: "basica" };
-  if (/^GAS$/.test(n)) return { nome: "Gás", tipo: "basica" };
-  if (/^ALUGUEL/.test(n)) return { nome: "Aluguel", tipo: "basica" };
-  return null;
-}
+const padronizar = padronizarCoberturaFianca;
 
 async function todas<T>(tabela: string, cols: string, filtro: (q: any) => any): Promise<T[]> {
   const out: T[] = [];

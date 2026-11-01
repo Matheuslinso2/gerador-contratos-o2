@@ -51,4 +51,7 @@ const lerJson = <T>(f: string, padrao: T): T => (fs.existsSync(f) ? JSON.parse(f
     if (++docs % 100 === 0) log(`  ${docs} documentos, ${imagens} imagens, ${Math.round(bytes / 1e6)} MB`);
   }
   log(`telas enviadas: ${docs} documentos, ${imagens} imagens, ${Math.round(bytes / 1e6)} MB`);
+  // liga cada tela ao documento/imobiliária/cliente/seguradora do ERP pelo Nosso nº do Corp (só com 1 candidato; o resto fica com o motivo)
+  const { data: lig, error: eLig } = await sb.rpc("erp_ligar_telas");
+  if (eLig) log(`ligação ao ERP falhou: ${eLig.message}`); else log(`ligação ao ERP: ${JSON.stringify(lig)}`);
 })().catch((e) => { console.error("ERRO:", e.message ?? e); process.exit(1); });
