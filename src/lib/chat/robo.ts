@@ -5,6 +5,7 @@ import { isAdmin } from "@/lib/admin";
 import { FERRAMENTAS, executarFerramenta } from "@/lib/whatsappFerramentas";
 import { FERRAMENTAS_ERP, executarFerramentaErp } from "./roboFerramentas";
 import { FERRAMENTAS_GERAIS, executarFerramentaGeral } from "./roboGeral";
+import { FERRAMENTAS_BUSCA, executarFerramentaBusca } from "./roboBusca";
 
 // Robô O2 do chat da equipe (Fase 2, 29/10/2026). Mesmo "cérebro" da IA do WhatsApp (painéis + tabelas do
 // Workspace) mais as ferramentas do ERP. Somente leitura. Comissão/repasse só para admin (mesma cautela do
@@ -39,7 +40,18 @@ FONTE DOS DADOS — REGRA MAIS IMPORTANTE
 - COTAÇÕES EM ABERTO de uma imobiliária: buscar_imobiliaria (pegue os ids de todas as fichas do grupo) e depois consultar_dados em producao_resolvida filtrando imobiliaria_id (in) e status_padrao "Em análise" (e "Aprovado" na Fiança, aprovada mas ainda não efetivada), agrupando por produto e fonte. Produtos: fianca; re = ramos elementares (incêndio/imobiliário); capitalizacao; automovel. "Cotações de imobiliário/incêndio" = produto re. Fonte "bitrix" é a atual; "planilha" é o histórico anterior — informe separado e diga qual é a atual. Responda com o número e a quebra por produto; se a pergunta citar um produto, só ele.
 - Se o nome da imobiliária vier com grafia parecida (aproximado), diga como entendeu ("entendi Canale") para o usuário confirmar.
 - Você tem acesso ao Workspace e ao ERP inteiros: painéis (consultar_painel e consultar_painel_extra: Fiança, Renovação, Capitalização, Auto, Ramos Elementares, Painel Comercial, Sinistros, Endossos), campanhas comerciais (campanhas, campanhas_envios, campanhas_metas, campanhas_producao), faturas, repasses, sinistros, produção do Corp e todas as telas do ERP (documentos, parcelas, comissões, baixas, extratos, renovações, emissão). Para qualquer assunto, use descrever_tabelas se não souber a tabela e consultar_dados para ler. Não diga "não tenho acesso" sem antes procurar.
-- Dados sensíveis (CPF, senhas, conversas, e-mails) não estão disponíveis; se pedirem, explique que são protegidos.
+- PESSOAS: a equipe da O2 usa nomes, CPF/CNPJ, e-mails, telefones e contatos de clientes, inquilinos (locatários), proprietários e segurados todos os dias para cotar e emitir. Você PODE e DEVE informar esses dados quando pedirem (buscar_pessoa, e consultar_dados em locatarios/erp_item_partes etc.). Só não existem para você: senhas/credenciais, conversas privadas do chat/WhatsApp e o corpo dos e-mails.
+- Cotações em andamento do Bitrix ainda sem documento no ERP não estão ligadas a uma pessoa cadastrada: para achá-las pelo nome do cliente, nº de apólice ou nome do cotador/negociador use buscar_nos_paineis.
+
+MAPA DE FONTES — consulte TODAS as que a pergunta abrange; nunca responda com uma só quando houver mais (foi o erro das primeiras respostas: só incêndio, só novos)
+- Cotações por produto (fianca, re = ramos elementares, capitalizacao, automovel) e imobiliária: producao_resolvida. Colunas-chave: produto, tipo (novo | renovacao | emissao), fonte (bitrix = atual desde ago/2026; planilha = histórico; corp = apólices emitidas, tipo emissao), status_padrao, ramo_padrao, seguradora, responsavel (negociador). SEMPRE agrupe por produto E tipo (novo x renovacao) E fonte, ou diga explicitamente o que filtrou. "Cotações em aberto" = status_padrao "Em análise" (+ "Aprovado" na Fiança). Produto re inclui incêndio/imobiliário, residencial, empresarial, condomínio, vida individual e outros ramos: não chame tudo de incêndio.
+- Ramos Elementares (re) em detalhe: painel ramos_elementares, partes: novos (cotações novas), renovacoes (renovações do mês; existem retratos de meses futuros: competência do mês de vencimento), controleRenovacao, endossos, imobiliariasConsolidado, negociacoes (cada negociação com segurado, negociador e status). Pergunta sobre "novos" e "renovações" pede as duas partes.
+- Fiança: painel seguro_fianca (cotações/análises, novos) e renovacao_fianca (renovações) e endossos: consultar_painel_extra endosso_fianca.
+- Capitalização: painel capitalizacao (titulos = cada título com titular). Auto: painel seguro_auto (fichas).
+- Propostas: ERP aba Em emissão (erp_emissao_fila_pronta). Apólices, endossos, faturas, parcelas, comissões, baixas, renovações do ERP (erp_renovacoes): tabelas erp_* e contar_documentos_erp.
+- Campanhas: campanhas, campanhas_envios, campanhas_metas, campanhas_producao. Painel Comercial: consultar_painel_extra painel_comercial. Sinistros: sinistros, sinistros_corp, painel sinistros.
+- Pessoa/cliente/inquilino/proprietário/CPF/e-mail/telefone: buscar_pessoa. Cotação em andamento pelo nome: buscar_nos_paineis.
+- Ao final de qualquer contagem diga de quais fontes/produtos/tipos ela veio e o que ficou de fora.
 - Para qualquer pergunta sobre uma imobiliária, comece por buscar_imobiliaria. Imobiliárias do mesmo grupo (ex.: Ramiro Sá) são somadas e você diz quais fichas entraram.
 - Pergunta de VALOR de uma imobiliária num mês (comissão efetivada, prêmio, efetivados, cotações) sem citar produto: NÃO responda com um painel só. Consulte TODOS os painéis com consultar_painel na competência — seguro_fianca (parte topImobiliarias), ramos_elementares (partes novos e renovacoes, porImobiliaria), capitalizacao (parte titulos), seguro_auto — procurando a imobiliária por TODOS os nomes das fichas do grupo (use buscar_imobiliaria antes; no painel o nome pode vir diferente, ex.: "Ramiro Sá Imóveis"; procure por um pedaço do nome). Responda com o *total somado* e a quebra por produto, e diga os produtos em que ela não tem registro naquele mês ("sem registro"). Se citarem um produto, responda só dele.
 - Perguntas sobre o que está vigente: use contar_documentos_erp com situacao ["vigente"] e agrupar_por "tipo", e responda separado, no formato "*582 apólices* e *8 endossos* vigentes". Apólices = tipo A (mesma regra da tela ERP > Apólices > Vigentes); endossos = tipos C, D, I, M, R, X somados; faturas = tipo F (só cite se houver). O total da ficha da imobiliária no ERP soma tudo isso junto, por isso é maior que o número de apólices.
@@ -61,8 +73,13 @@ export async function responderComoRobo(email: string, historico: TurnoChat[]): 
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY não configurada");
   const verComissao = isAdmin(email);
   const ferramentas: Anthropic.Tool[] = verComissao
-    ? [...FERRAMENTAS_ERP, ...FERRAMENTAS_GERAIS, ...FERRAMENTAS]
-    : [...FERRAMENTAS_ERP, ...FERRAMENTAS_GERAIS.filter((f) => f.name !== "consultar_painel_extra")];
+    ? [...FERRAMENTAS_ERP, ...FERRAMENTAS_GERAIS, ...FERRAMENTAS_BUSCA, ...FERRAMENTAS]
+    : [
+        ...FERRAMENTAS_ERP,
+        ...FERRAMENTAS_GERAIS.filter((f) => f.name !== "consultar_painel_extra"),
+        ...FERRAMENTAS_BUSCA,
+        ...FERRAMENTAS.filter((f) => f.name === "consultar_painel"), // sem comissão/repasse para quem não é admin
+      ];
 
   const anthropic = new Anthropic({ apiKey });
   const mensagens: Anthropic.MessageParam[] = historico.map((t) => ({ role: t.role, content: t.content }));
@@ -90,7 +107,10 @@ export async function responderComoRobo(email: string, historico: TurnoChat[]): 
         content:
           (await executarFerramentaErp(c.name, c.input, verComissao)) ??
           (await executarFerramentaGeral(c.name, c.input, verComissao)) ??
-          (verComissao ? await executarFerramenta(c.name, c.input) : "Ferramenta indisponível para o seu perfil."),
+          (await executarFerramentaBusca(c.name, c.input, verComissao)) ??
+          (verComissao || c.name === "consultar_painel"
+            ? await executarFerramenta(c.name, c.input, { semFinanceiro: !verComissao })
+            : "Ferramenta indisponível para o seu perfil."),
       }))
     );
     mensagens.push({ role: "user", content: resultados });

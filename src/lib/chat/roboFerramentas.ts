@@ -13,7 +13,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 const MAX_FICHAS = 15;
 const LIMITE_LEITURA = 40000;
 
-function normalizar(s: string | null | undefined) {
+export function normalizar(s: string | null | undefined) {
   return (s ?? "")
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")

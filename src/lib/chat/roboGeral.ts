@@ -48,7 +48,6 @@ const TABELAS_DESCRICAO: Record<string, string> = {
   erp_saldo_cobrar_seguradora: "Saldo a cobrar das seguradoras.",
   erp_nibo_contas: "Contas do Nibo (somente leitura).",
   erp_nibo_lancamentos: "Lançamentos financeiros do Nibo (somente leitura).",
-  erp_documento_itens: "Itens (bens segurados) de cada documento.",
   erp_documento_coberturas: "Coberturas do documento.",
   erp_documento_eventos: "Linha do tempo do documento.",
   erp_gestao_baixas_notas: "Notas da Gestão das baixas.",
@@ -57,7 +56,18 @@ const TABELAS_DESCRICAO: Record<string, string> = {
   erp_estornos_endosso_pronto: "Estornos por endosso.",
   erp_prazos_comissao: "Prazos de pagamento de comissão por seguradora.",
   erp_formas_pagamento: "Formas de pagamento.",
-  erp_origens: "Origem dos documentos (card do Bitrix, Corp...).",
+  // --- Pessoas (clientes, inquilinos, proprietários) -- liberado para a equipe O2 (CPF, e-mail, telefone)
+  locatarios: "CADASTRO ÚNICO DE PESSOAS (clientes, locatários/inquilinos, proprietários, segurados): cpf (só dígitos; 14 = CNPJ), nome, email, telefone, codigo_cliente (CLI), codigo_corp_cliente. Para achar alguém prefira a ferramenta buscar_pessoa.",
+  erp_item_partes: "Pessoas de cada item do documento: papel (segurado, garantido, locatário...), nome, documento_numero (CPF/CNPJ), locatario_id.",
+  erp_doc_partes_acervo: "Papel de cada pessoa em cada documento do acervo (documento_id, papel, locatario_id).",
+  apolice_partes: "Pessoas por apólice do acervo de PDFs (papel, locatario_id).",
+  erp_documento_itens: "Itens/bens de cada documento: endereço do imóvel, valor do aluguel, plano, placa/chassi do veículo.",
+  erp_origens: "Card de origem de cada documento (Bitrix/Corp): titulo, url, etapa e dados_legiveis (campos do card, legíveis).",
+  erp_emails: "E-mails das 34 caixas da O2 ligados a imobiliária/documento: de, para, cc, assunto, trecho, data (sem o corpo).",
+  imobiliaria_contatos: "Contatos feitos com imobiliárias (canal, data, quem fez).",
+  campanhas_grupos_contatos: "Contatos dos grupos de campanha (nome, cpf_cnpj, e-mail).",
+  erp_clientes_mesclados: "Clientes mesclados (duplicidades unidas).",
+  erp_contato_cliente_log: "Registro de contatos feitos com clientes.",
   // --- Imobiliárias (banco único)
   imobiliarias: "Ficha única das imobiliárias (banco unificado). grupo_id liga ao grupo.",
   imobiliaria_grupos: "Grupos de imobiliárias (ex.: Ramiro Sá).",
@@ -118,7 +128,9 @@ const TABELAS_DESCRICAO: Record<string, string> = {
   tipos_garantia: "Tipos de garantia locatícia.",
 };
 
-const COLUNA_SENSIVEL = /cpf|senha|password|token|secret|api_?key|corpo|html|nascimento|observa|(^|_)documento$|favorecido_(banco|agencia|conta)|telefone|ciencia_texto|(^|_)nota(s)?$|(^|_)texto$|parcela_texto/i;
+// Equipe O2 trabalha com CPF, telefone, e-mail e nomes todo dia (Matheus, 01/11/2026): esses campos estão LIBERADOS. Seguem bloqueados só credenciais, corpo de e-mail, observações do Corp (têm senhas), dados bancários de terceiros e textos livres.
+const COLUNA_SENSIVEL = /senha|password|token|secret|api_?key|corpo|html|observa|favorecido_(banco|agencia|conta)|ciencia_texto|(^|_)nota(s)?$|(^|_)texto$|parcela_texto/i;
+const JSON_PERMITIDO = new Set(["erp_origens.dados_legiveis"]);
 const COLUNA_PERMITIDA_APESAR = new Set(["imobiliaria_texto"]);
 const TIPOS_BLOQUEADOS = new Set(["jsonb", "json", "bytea"]);
 // Quem não é admin não vê comissão, repasse, saldo, imposto, desconto, premiação.
@@ -155,7 +167,7 @@ async function tabelasPermitidas(verComissao: boolean): Promise<Record<string, C
     if (!cols) continue;
     if (!verComissao && TABELA_FINANCEIRA.test(nome)) continue;
     const colunas = cols
-      .filter((c) => !TIPOS_BLOQUEADOS.has(c.tipo))
+      .filter((c) => !TIPOS_BLOQUEADOS.has(c.tipo) || JSON_PERMITIDO.has(`${nome}.${c.coluna}`))
       .filter((c) => COLUNA_PERMITIDA_APESAR.has(c.coluna) || !COLUNA_SENSIVEL.test(c.coluna))
       .filter((c) => verComissao || !COLUNA_FINANCEIRA.test(c.coluna))
       .map((c) => c.coluna);

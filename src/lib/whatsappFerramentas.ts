@@ -89,7 +89,7 @@ const PAINEIS: Record<string, { tabela: string; descricao: string }> = {
   },
   ramos_elementares: {
     tabela: "ramos_elementares_snapshots",
-    descricao: "visaoGeral, novos (consolidado/mes/pendentes: total, efetivados, conversao, premio, comissao, porStatus, porRamo, porCotador, porImobiliaria, porSeguradora), renovacoes (atual/futura, mesma forma), financeiro, endossos, alertasOperacionais, qualidade, negociacoes",
+    descricao: "visaoGeral, novos (consolidado/mes/pendentes: total, efetivados, conversao, premio, comissao, porStatus, porRamo, porCotador, porImobiliaria, porSeguradora), renovacoes (atual/futura, mesma forma: são as RENOVAÇÕES do mês), controleRenovacao (entradas, efetivadasNoMes, carteiraDaVigencia), imobiliariasConsolidado (uma linha por imobiliária: total, efetivados, emAndamento, itensCotados, premioEfetivado, comissaoEfetivada), financeiro, endossos, alertasOperacionais, qualidade, negociacoes (lista de cada negociação: segurado, nomePrincipal, apólice, negociador, imobiliária, status, seguradora, ramo, tipo novo/renovação, diasSemContato). Existem retratos de meses futuros (renovações dos próximos meses) além do mês atual",
   },
   comercial: {
     tabela: "comercial_kpis_snapshots",
@@ -175,7 +175,20 @@ export function compacto(valor: unknown): string {
   return texto.length > LIMITE_CARACTERES ? texto.slice(0, LIMITE_CARACTERES) + "… [cortado -- peça partes/filtros mais específicos]" : texto;
 }
 
-async function consultarPainel(entrada: { painel: string; competencia: string; partes?: string[] }): Promise<string> {
+// Tira de um retrato (em qualquer profundidade) os campos de comissão/repasse/premiação, para quem não é admin.
+export function semCamposFinanceiros<T>(valor: T): T {
+  if (Array.isArray(valor)) return valor.map((v) => semCamposFinanceiros(v)) as T;
+  if (valor && typeof valor === "object") {
+    return Object.fromEntries(
+      Object.entries(valor as Record<string, unknown>)
+        .filter(([k]) => !/comiss|repasse|premiacao|pro_?labore/i.test(k))
+        .map(([k, v]) => [k, semCamposFinanceiros(v)])
+    ) as T;
+  }
+  return valor;
+}
+
+async function consultarPainel(entrada: { painel: string; competencia: string; partes?: string[] }, semFinanceiro = false): Promise<string> {
   const painel = PAINEIS[entrada.painel];
   if (!painel) return `Painel desconhecido. Use: ${Object.keys(PAINEIS).join(", ")}`;
   const { data, error } = await createServiceClient()
@@ -185,7 +198,7 @@ async function consultarPainel(entrada: { painel: string; competencia: string; p
     .maybeSingle();
   if (error) return `Erro ao ler o painel: ${error.message}`;
   if (!data) return `Não há retrato salvo do painel ${entrada.painel} em ${entrada.competencia}.`;
-  const payload = data.payload as Record<string, unknown>;
+  const payload = (semFinanceiro ? semCamposFinanceiros(data.payload) : data.payload) as Record<string, unknown>;
   const partes = entrada.partes?.length ? entrada.partes : ["kpis", "visaoGeral", "financeiro"].filter((k) => k in payload);
   const escolhido = Object.fromEntries(partes.filter((k) => k in payload).map((k) => [k, payload[k]]));
   return compacto({
@@ -303,9 +316,9 @@ export async function consultarTabela(e: EntradaTabela, tabelas: Record<string, 
   });
 }
 
-export async function executarFerramenta(nome: string, entrada: unknown): Promise<string> {
+export async function executarFerramenta(nome: string, entrada: unknown, opcoes?: { semFinanceiro?: boolean }): Promise<string> {
   try {
-    if (nome === "consultar_painel") return await consultarPainel(entrada as { painel: string; competencia: string; partes?: string[] });
+    if (nome === "consultar_painel") return await consultarPainel(entrada as { painel: string; competencia: string; partes?: string[] }, opcoes?.semFinanceiro);
     if (nome === "consultar_tabela") return await consultarTabela(entrada as EntradaTabela);
     return `Ferramenta desconhecida: ${nome}`;
   } catch (e) {
