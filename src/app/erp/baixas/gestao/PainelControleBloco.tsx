@@ -56,7 +56,7 @@ export default async function PainelControleBloco({ seg, corretora, mes, ancora,
   return (
     <div className="grid gap-3 border-t border-gray-100 p-3 text-xs lg:grid-cols-2">
       <div className="rounded-lg bg-gray-50 p-3">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Histórico desta seguradora (6 meses, calculado) <InfoLegenda titulo="Histórico desta seguradora">Olha os extratos dos últimos 6 meses desta seguradora nesta empresa: quantos foram lidos, quantos vieram sem nenhuma linha a tratar (estorno, diferente do previsto ou não encontrada), em quantos meses houve problema e quantos estornos e linhas de pró-labore pago direto apareceram. Embaixo ficam suas anotações sobre o padrão da seguradora.</InfoLegenda></h3>
+        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Histórico da seguradora <span className="ml-1 text-[10px] font-normal normal-case tracking-normal text-gray-400">(últimos 6 meses · calculado)</span> <InfoLegenda titulo="Histórico desta seguradora">Olha os extratos dos últimos 6 meses desta seguradora nesta empresa: quantos foram lidos, quantos vieram sem nenhuma linha a tratar (estorno, diferente do previsto ou não encontrada), em quantos meses houve problema e quantos estornos e linhas de pró-labore pago direto apareceram. Embaixo ficam suas anotações sobre o padrão da seguradora.</InfoLegenda></h3>
         {hist.length > 0 ? (
           <p className="mt-1 text-gray-700">
             {hist.length} extrato(s) lidos; <b>{limpos}</b> sem nenhuma linha a tratar ({Math.round((limpos / hist.length) * 100)}%).

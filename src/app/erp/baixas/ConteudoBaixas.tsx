@@ -479,7 +479,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
           <>
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-sm font-bold uppercase tracking-wide text-o2-navy">Controle mensal de baixa de comissão - Corp - ERP O2 <InfoLegenda titulo="Controle mensal de baixa de comissão">Mostra, mês a mês e por seguradora, de onde vem o dinheiro: o que deveria cair (pela regra de cada seguradora e pela experiência), o que os extratos dizem que ela pagou, o que já foi baixado no Corp e o que entrou na conta pelo Nibo. Os valores são líquidos do imposto retido, como entram na conta. As duas últimas colunas são diferenças; passam em vermelho quando a diferença é maior que R$ 6. Abre no mês atual e dá para navegar pelos meses.</InfoLegenda></h2>
+            <h2 className="text-sm font-bold uppercase tracking-wide text-o2-navy">Controle mensal de baixa de comissão <span className="ml-1 text-[10px] font-normal normal-case tracking-normal text-gray-400">(fonte: Corp e ERP O2)</span> <InfoLegenda titulo="Controle mensal de baixa de comissão">Mostra, mês a mês e por seguradora, de onde vem o dinheiro: o que deveria cair (pela regra de cada seguradora e pela experiência), o que os extratos dizem que ela pagou, o que já foi baixado no Corp e o que entrou na conta pelo Nibo. Os valores são líquidos do imposto retido, como entram na conta. As duas últimas colunas são diferenças; passam em vermelho quando a diferença é maior que R$ 6. Abre no mês atual e dá para navegar pelos meses.</InfoLegenda></h2>
             {!usaPeriodo ? (
               <div className="flex items-center gap-2 text-sm" aria-label="Mês">
                 <Link href={hrefTela({ mes: somaMes(mesSel, -1) })} className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-gray-700 hover:bg-gray-50" title="mês anterior">◀</Link>
@@ -504,7 +504,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
         </section>
 
         <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-o2-navy">Comportamento diário de comissões - previsão de receitas versus recebido por vencimento de parcelas <InfoLegenda titulo="Comportamento diário de comissões">Para cada dia do mês, três barras: a comissão que deveria cair pela regra da seguradora (boleto, fatura ou nota fiscal mais o prazo próprio dela, sem atraso nem inadimplência), a que deveria cair pela experiência (vencimento da parcela mais o prazo que a seguradora costuma levar, pelo histórico) e o que realmente entrou na conta pelo Nibo. Fim de semana conta na segunda-feira. A escala é por faixas de valor. O quadro consolidado soma as duas empresas.</InfoLegenda></h2>
+          <h2 className="text-sm font-bold uppercase tracking-wide text-o2-navy">Comportamento diário de comissões <span className="ml-1 text-[10px] font-normal normal-case tracking-normal text-gray-400">(previsão × recebido, por vencimento da parcela)</span> <InfoLegenda titulo="Comportamento diário de comissões">Para cada dia do mês, três barras: a comissão que deveria cair pela regra da seguradora (boleto, fatura ou nota fiscal mais o prazo próprio dela, sem atraso nem inadimplência), a que deveria cair pela experiência (vencimento da parcela mais o prazo que a seguradora costuma levar, pelo histórico) e o que realmente entrou na conta pelo Nibo. Fim de semana conta na segunda-feira. A escala é por faixas de valor. O quadro consolidado soma as duas empresas.</InfoLegenda></h2>
           <GraficoDiario titulo="Consolidado · O2 Corretora + O2 Capitalização" pontos={consolidarDias(graficoTopo["O2 Corretora"] ?? [], graficoTopo["O2 Capitalização"] ?? [])} />
           <details className="rounded-lg border border-gray-200">
             <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-o2-navy">Ver o comportamento diário de cada empresa separadamente</summary>
@@ -559,7 +559,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
         {modo === "gestao" && pendentesLinhas.length > 0 && (
           <section className="space-y-2 rounded-xl border border-red-200 bg-white p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-red-700">Para identificar: recebido, ainda sem parcela <InfoLegenda titulo="Para identificar">Linhas de extrato que a seguradora pagou e o ERP ainda não ligou a uma parcela. Toda linha de extrato é tratada como parcela até se provar o contrário. O quadro agrupa por empresa e seguradora: quantidade de linhas, valor e há quantos dias está a mais antiga. Abaixo, as linhas mais antigas com o candidato mais provável, quando o ERP encontrou algum.</InfoLegenda></h2>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-red-700">Recebido sem parcela <InfoLegenda titulo="Para identificar">Linhas de extrato que a seguradora pagou e o ERP ainda não ligou a uma parcela. Toda linha de extrato é tratada como parcela até se provar o contrário. O quadro agrupa por empresa e seguradora: quantidade de linhas, valor e há quantos dias está a mais antiga. Abaixo, as linhas mais antigas com o candidato mais provável, quando o ERP encontrou algum.</InfoLegenda></h2>
               <span />
             </div>
             <p className="text-xs text-gray-600">Toda linha de extrato é parcela até se provar o contrário. Enquanto não for identificada (ou confirmada como não-parcela), o valor conta como recebido, ainda sem parcela.</p>
@@ -743,7 +743,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
                     </summary>
                     {c.motivos.length > 0 && (
                       <div className="border-t border-gray-100 bg-amber-50/50 px-3 py-2 text-xs">
-                        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Motivo provável (hipótese para investigar) <InfoLegenda titulo="Motivo provável">Hipóteses para a diferença deste mês, montadas a partir dos dados: desconto da seguradora, pró-labore pago direto à imobiliária, estornos, nota fiscal ainda não registrada, extrato sem banco, valores diferentes. São pistas para investigar, não conclusões.</InfoLegenda></h3>
+                        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Motivo provável <InfoLegenda titulo="Motivo provável">Hipóteses para a diferença deste mês, montadas a partir dos dados: desconto da seguradora, pró-labore pago direto à imobiliária, estornos, nota fiscal ainda não registrada, extrato sem banco, valores diferentes. São pistas para investigar, não conclusões.</InfoLegenda></h3>
                         <ul className="mt-1 list-disc space-y-0.5 pl-4 text-gray-700">{c.motivos.map((t, i) => <li key={i}>{t}</li>)}</ul>
                       </div>
                     )}
@@ -784,7 +784,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
                     )}
                     {c.inad && (
                       <div className="space-y-1 border-t border-gray-100 px-3 py-2 text-xs">
-                        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Provável inadimplência (pelo extrato) <InfoLegenda titulo="Provável inadimplência">Parcelas cuja data prevista pela regra da seguradora já passou e que não aparecem em nenhum extrato nem foram baixadas. O cliente que paga em dia gera a comissão na data da regra; parcela não paga não cai depois. Mesmo com a comissão do esgotamento já recebida, a parcela continua esperada. Só conclui quando o extrato da seguradora está ligado às parcelas e confere com o banco.</InfoLegenda></h3>
+                        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Provável inadimplência <span className="ml-1 text-[10px] font-normal normal-case tracking-normal text-gray-400">(fonte: extrato)</span> <InfoLegenda titulo="Provável inadimplência">Parcelas cuja data prevista pela regra da seguradora já passou e que não aparecem em nenhum extrato nem foram baixadas. O cliente que paga em dia gera a comissão na data da regra; parcela não paga não cai depois. Mesmo com a comissão do esgotamento já recebida, a parcela continua esperada. Só conclui quando o extrato da seguradora está ligado às parcelas e confere com o banco.</InfoLegenda></h3>
                         {c.inad.conclusivo ? (
                           <>
                             <p className="text-gray-700">
@@ -933,7 +933,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
                           <PainelControleBloco seg={c.seg} corretora={c.corretora} mes={mesSel} ancora={`bloco-${c.chave.replace(/\W/g, "")}`} />
                         </Suspense>
                         <div className="space-y-2 border-t border-gray-100 p-3">
-                          <h4 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Extratos desta seguradora no mês — conferir linhas e aprovar a baixa <InfoLegenda titulo="Extratos desta seguradora">Cada extrato lido da seguradora neste mês. Acima de cada um, uma faixa com a conferência do banco, as linhas sem parcela e a comparação entre o que o ERP baixou e o que o Corp baixou (trilha de teste). Abra as linhas para conferir parcela a parcela e aprove a baixa quando estiver certo.</InfoLegenda></h4>
+                          <h4 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Extratos da seguradora no mês <InfoLegenda titulo="Extratos desta seguradora">Cada extrato lido da seguradora neste mês. Acima de cada um, uma faixa com a conferência do banco, as linhas sem parcela e a comparação entre o que o ERP baixou e o que o Corp baixou (trilha de teste). Abra as linhas para conferir parcela a parcela e aprove a baixa quando estiver certo.</InfoLegenda></h4>
                           {extratos.filter((e) => e.corretora === c.corretora && e.seg_abrev === c.seg).sort((a, b) => Number(Boolean(a.baixa_aprovada_em)) - Number(Boolean(b.baixa_aprovada_em))).map((e) => {
                             const { situacao: banco, dia: bancoDia } = bancoDoExtrato(c.dias, e.data_recebimento);
                             const auto = avaliarBaixaAutomatica(e, banco, Number(totaisPor.get(e.id)?.qtd_pendente ?? 0));

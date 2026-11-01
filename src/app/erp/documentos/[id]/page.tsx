@@ -253,7 +253,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
           {d.familia.length > 1 && (
             <div className="rounded-lg border border-gray-100 bg-gray-50 p-3 text-xs">
               <div className="mb-1 text-[11px] uppercase tracking-wide text-gray-500">
-                Família (corrente de renovações, como no Corp)
+                Família de renovações
                 <InfoLegenda titulo="Família de renovações">
                   A corrente de renovações do documento: as versões anteriores e as seguintes, como na coluna da esquerda do Controle de Documentos do Corp. O símbolo ▶ marca o documento que você está vendo; clique em outro para abri-lo. Cada linha mostra o Código O2 do documento, o Nosso nº do Corp, se é novo ou renovação, a situação, a vigência e o Nº da apólice.
                 </InfoLegenda>
