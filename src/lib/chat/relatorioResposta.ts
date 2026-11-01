@@ -25,7 +25,7 @@ function trechos(linha: string): Trecho[] {
     .map((p) => (/^\*[^*\n]+\*$/.test(p) ? { texto: p.slice(1, -1), negrito: true } : { texto: p, negrito: false }));
 }
 
-export async function gerarPdfDaResposta(p: { pergunta: string; resposta: string; email: string }): Promise<{ url: string } | { erro: string }> {
+export async function gerarPdfDaResposta(p: { pergunta: string; resposta: string; email: string; logica?: string | null; fontes?: string[] }): Promise<{ url: string } | { erro: string }> {
   const pergunta = limpar(p.pergunta).slice(0, 600);
   const resposta = limpar(p.resposta).slice(0, 8000);
   if (!resposta.trim()) return { erro: "Resposta vazia." };
@@ -76,7 +76,25 @@ export async function gerarPdfDaResposta(p: { pergunta: string; resposta: string
   pagina.drawText("Relatório do Robô O2", { x: MARGEM, y, size: 20, font: negrito, color: navy });
   y -= 18;
   pagina.drawText(limpar(`Gerado em ${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })} por ${p.email}`), { x: MARGEM, y, size: 9, font: fonte, color: cinza });
-  y -= 30;
+  y -= 14;
+  // Lógica do filtro: frase pequena, em cinza (menor destaque que o título), como pedido pelo Matheus.
+  const frase = limpar(p.logica?.trim() ? `Filtro aplicado: ${p.logica.trim().slice(0, 700)}` : p.fontes?.length ? `Consultas feitas: ${p.fontes.slice(0, 8).join(" | ").slice(0, 700)}` : "");
+  if (frase) {
+    let linha = "";
+    for (const palavra of frase.split(" ")) {
+      const cand = linha ? linha + " " + palavra : palavra;
+      if (fonte.widthOfTextAtSize(cand, 8) > util && linha) {
+        pagina.drawText(linha, { x: MARGEM, y, size: 8, font: fonte, color: cinza });
+        y -= 10;
+        linha = palavra;
+      } else linha = cand;
+    }
+    if (linha) {
+      pagina.drawText(linha, { x: MARGEM, y, size: 8, font: fonte, color: cinza });
+      y -= 10;
+    }
+  }
+  y -= 18;
 
   pagina.drawText("Pergunta", { x: MARGEM, y, size: 10, font: negrito, color: coral });
   y -= 16;

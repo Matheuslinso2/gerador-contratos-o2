@@ -26,8 +26,8 @@ export async function POST(req: Request) {
   if (!turnos.length || turnos[turnos.length - 1].role !== "user") return NextResponse.json({ erro: "mensagem vazia" }, { status: 400 });
 
   try {
-    const resposta = await responderComoRobo(user.email, turnos);
-    return NextResponse.json({ resposta });
+    const r = await responderComoRobo(user.email, turnos);
+    return NextResponse.json({ resposta: r.texto, pdfPermitido: r.pdfPermitido, dadosPessoais: r.dadosPessoais, logica: r.logica, fontes: r.fontes });
   } catch (e) {
     console.error("[chat/robo]", e);
     return NextResponse.json({ erro: "falha" }, { status: 500 });

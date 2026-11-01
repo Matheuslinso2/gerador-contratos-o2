@@ -20,7 +20,7 @@ const TIPOS: Record<string, string> = { A: "Apólice", C: "End. cobrança", D: "
 export const FERRAMENTA_RELATORIO: Anthropic.Tool = {
   name: "gerar_relatorio_pdf",
   description:
-    "Gera um RELATÓRIO EM PDF com a lista completa de documentos do ERP (apólices, endossos, faturas) com filtros, e devolve um link para baixar. Use quando o usuário pedir 'traga todas', 'lista', 'relatório' ou quando a lista tiver mais de ~15 itens (o chat não comporta listas grandes). O PDF traz resumo (total, prêmio, por seguradora e por mês) e a tabela completa (nº da apólice, locatário ou titular, seguradora, ramo, vigência, situação, prêmio). Se o período for pedido, 'campo_periodo' é OBRIGATÓRIO: se o usuário não deixou claro o critério (ex.: 'primeiro semestre'), PERGUNTE antes qual quer: inicio_vigencia (apólices que começaram no período), vigente_no_periodo (vigentes em algum dia do período) ou fim_vigencia (que vencem no período). Depois de gerar, mostre o link e um resumo curto (total e principais números do PDF).",
+    "Gera um RELATÓRIO EM PDF com a lista completa de documentos do ERP (apólices, endossos, faturas) com filtros, e devolve um link para baixar. Use quando o usuário pedir 'traga todas', 'lista', 'relatório' ou quando a lista tiver mais de ~15 itens (o chat não comporta listas grandes). O PDF traz resumo (total, prêmio, por seguradora e por mês) e a tabela completa (nº do documento, tipo, imobiliária, seguradora, ramo, vigência, situação, prêmio). O relatório NÃO traz dados pessoais de segurados ou inquilinos (nome, CPF, e-mail, telefone): isso fica só em texto no chat. Escreva também descricao_do_filtro. Se o período for pedido, 'campo_periodo' é OBRIGATÓRIO: se o usuário não deixou claro o critério (ex.: 'primeiro semestre'), PERGUNTE antes qual quer: inicio_vigencia (apólices que começaram no período), vigente_no_periodo (vigentes em algum dia do período) ou fim_vigencia (que vencem no período). Depois de gerar, mostre o link e um resumo curto (total e principais números do PDF).",
   input_schema: {
     type: "object",
     properties: {
@@ -33,6 +33,7 @@ export const FERRAMENTA_RELATORIO: Anthropic.Tool = {
       de: { type: "string", description: "AAAA-MM-DD" },
       ate: { type: "string", description: "AAAA-MM-DD" },
       titulo: { type: "string", description: "Título do relatório (opcional)." },
+      descricao_do_filtro: { type: "string", description: "Frase em português com a lógica do filtro, para o cabeçalho. Ex.: 'Propostas emitidas (apólices) pertencentes à imobiliária XPFG, com início de vigência entre 01/01/2026 e 30/06/2026.' Se omitida, o relatório monta uma a partir dos filtros." },
     },
   },
 };
@@ -47,6 +48,7 @@ type Entrada = {
   de?: string;
   ate?: string;
   titulo?: string;
+  descricao_do_filtro?: string;
 };
 
 type Doc = {
@@ -118,11 +120,24 @@ async function montarPdf(p: {
   y -= 30;
   texto(p.titulo, M, y, 17, negrito, navy);
   y -= 16;
-  for (const f of p.filtros) {
-    texto(f, M, y, 9, fonte, cinza);
-    y -= 12;
+  // Lógica do filtro: frase única, em tamanho menor que o título (padrão pedido pelo Matheus em 01/11/2026).
+  {
+    const frase = limpar("Filtro aplicado: " + p.filtros.join(" "));
+    let linha = "";
+    for (const palavra of frase.split(" ")) {
+      const cand = linha ? linha + " " + palavra : palavra;
+      if (fonte.widthOfTextAtSize(cand, 8) > L - M * 2 && linha) {
+        texto(linha, M, y, 8, fonte, cinza);
+        y -= 10;
+        linha = palavra;
+      } else linha = cand;
+    }
+    if (linha) {
+      texto(linha, M, y, 8, fonte, cinza);
+      y -= 10;
+    }
   }
-  y -= 8;
+  y -= 10;
 
   // Resumo
   texto("Resumo", M, y, 11, negrito, navy);
@@ -262,9 +277,6 @@ export async function gerarRelatorioPdf(e: Entrada, email: string, verComissao: 
   const truncado = docs.length >= LIMITE_DOCS;
 
   // Nomes: segurado/titular, seguradora, ramo, imobiliária.
-  const locIds = [...new Set(docs.map((d) => d.locatario_id).filter((v): v is string => !!v))];
-  const locs = await buscarEmLotes(locIds, (lote) => sb.from("locatarios").select("id, nome").in("id", lote));
-  const nomeLoc = new Map(locs.map((l) => [l.id as string, l.nome as string]));
   const segNome = new Map((segs ?? []).map((s) => [s.id as string, ((s.nome as string) || (s.abreviacao as string)).replace(/ SEGUROS?.*$/i, "")]));
   const ramoNome = new Map((ramos ?? []).map((r) => [r.id as string, r.nome as string]));
   const imobIds = [...new Set(docs.map((d) => d.imobiliaria_principal_id).filter((v): v is string => !!v))];
@@ -291,10 +303,9 @@ export async function gerarRelatorioPdf(e: Entrada, email: string, verComissao: 
   const colunas = [
     { nome: "Nº documento", largura: 92 },
     { nome: "Tipo", largura: 62 },
-    { nome: "Locatário / titular", largura: mostrarImob ? 130 : 190 },
-    ...(mostrarImob ? [{ nome: "Imobiliária", largura: 120 }] : []),
-    { nome: "Seguradora", largura: 78 },
-    { nome: "Ramo", largura: 80 },
+    ...(mostrarImob ? [{ nome: "Imobiliária", largura: 190 }] : []),
+    { nome: "Seguradora", largura: mostrarImob ? 100 : 170 },
+    { nome: "Ramo", largura: mostrarImob ? 100 : 170 },
     { nome: "Início", largura: 52 },
     { nome: "Fim", largura: 52 },
     { nome: "Situação", largura: 50 },
@@ -305,7 +316,6 @@ export async function gerarRelatorioPdf(e: Entrada, email: string, verComissao: 
     cols: [
       d.numero_apolice ?? d.numero_endosso ?? "—",
       TIPOS[d.tipo] ?? d.tipo,
-      nomeLoc.get(d.locatario_id ?? "") ?? "—",
       ...(mostrarImob ? [nomeImob.get(d.imobiliaria_principal_id ?? "") ?? "—"] : []),
       segNome.get(d.seguradora_id ?? "") ?? "—",
       ramoNome.get(d.ramo_id ?? "") ?? "—",
@@ -320,7 +330,7 @@ export async function gerarRelatorioPdf(e: Entrada, email: string, verComissao: 
   const titulo = e.titulo ?? `Relatório de ${tipos.length === 1 && tipos[0] === "A" ? "apólices" : "documentos"} do ERP`;
   const bytes = await montarPdf({
     titulo,
-    filtros,
+    filtros: [e.descricao_do_filtro?.trim() ? limpar(e.descricao_do_filtro.trim().slice(0, 600)) : filtros.join("; ") + "."],
     docs: linhas,
     colunas,
     resumo: {

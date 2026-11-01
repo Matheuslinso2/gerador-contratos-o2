@@ -4,7 +4,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 
 type Colega = { email: string; nome: string | null };
-type Mensagem = { id: string; conversa_id: string; autor_email: string; texto: string; criado_em: string };
+type Mensagem = {
+  id: string;
+  conversa_id: string;
+  autor_email: string;
+  texto: string;
+  criado_em: string;
+  /** Só nas respostas do robô: se pode virar PDF e o que vai no cabeçalho do relatório. */
+  robo?: { pdfPermitido: boolean; dadosPessoais: boolean; logica: string | null; fontes: string[] };
+};
 type Part = { conversa_id: string; email: string; lido_ate: string };
 
 // O Robô O2 aparece como mais um contato; a conversa com ele fica só na tela (não grava no banco).
@@ -138,13 +146,13 @@ export default function ChatFlutuante({ meuEmail }: { meuEmail: string }) {
   const ehRobo = ativo?.email === ROBO.email;
 
   // Botão "Gerar relatório em PDF" embaixo de cada resposta do robô (pergunta + resposta, com data e quem gerou).
-  async function gerarPdf(id: string, resposta: string, pergunta: string) {
+  async function gerarPdf(id: string, resposta: string, pergunta: string, logica: string | null, fontes: string[]) {
     setPdfs((p) => ({ ...p, [id]: { estado: "gerando" } }));
     try {
       const r = await fetch("/api/chat/robo/relatorio", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pergunta, resposta }),
+        body: JSON.stringify({ pergunta, resposta, logica, fontes }),
       });
       const j = (await r.json().catch(() => ({}))) as { url?: string };
       if (!r.ok || !j.url) throw new Error("falha");
@@ -168,11 +176,18 @@ export default function ChatFlutuante({ meuEmail }: { meuEmail: string }) {
           mensagens: historico.map((m) => ({ role: m.autor_email === ROBO.email ? "assistant" : "user", content: m.texto })),
         }),
       });
-      const j = (await r.json().catch(() => ({}))) as { resposta?: string };
+      const j = (await r.json().catch(() => ({}))) as { resposta?: string; pdfPermitido?: boolean; dadosPessoais?: boolean; logica?: string | null; fontes?: string[] };
       if (!r.ok || !j.resposta) throw new Error("falha");
       setRoboMsgs((atual) => [
         ...atual,
-        { id: crypto.randomUUID(), conversa_id: "robo", autor_email: ROBO.email, texto: j.resposta!, criado_em: new Date().toISOString() },
+        {
+          id: crypto.randomUUID(),
+          conversa_id: "robo",
+          autor_email: ROBO.email,
+          texto: j.resposta!,
+          criado_em: new Date().toISOString(),
+          robo: { pdfPermitido: !!j.pdfPermitido, dadosPessoais: !!j.dadosPessoais, logica: j.logica ?? null, fontes: j.fontes ?? [] },
+        },
       ]);
     } catch {
       setErro("O robô não conseguiu responder agora. Tente de novo.");
@@ -330,7 +345,10 @@ export default function ChatFlutuante({ meuEmail }: { meuEmail: string }) {
                         className={`max-w-[80%] whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-sm ${minha ? "bg-o2-blue text-white" : "bg-white text-o2-navy"}`}
                       >
                         <ComLinks texto={m.texto} escuro={minha} />
-                        {ehRobo && !minha && (
+                        {ehRobo && !minha && m.robo?.dadosPessoais && (
+                          <span className="mt-2 block border-t border-black/10 pt-1.5 text-[10px] text-o2-cinza-medio">Resposta com dados pessoais: só em texto, não gera PDF.</span>
+                        )}
+                        {ehRobo && !minha && m.robo?.pdfPermitido && (
                           <span className="mt-2 block border-t border-black/10 pt-1.5">
                             {pdf?.estado === "pronto" ? (
                               <a href={pdf.url} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-o2-blue underline">
@@ -340,7 +358,7 @@ export default function ChatFlutuante({ meuEmail }: { meuEmail: string }) {
                               <button
                                 type="button"
                                 disabled={pdf?.estado === "gerando"}
-                                onClick={() => void gerarPdf(m.id, m.texto, [...lista].slice(0, idx).reverse().find((x) => x.autor_email.toLowerCase() === meuEmail)?.texto ?? "")}
+                                onClick={() => void gerarPdf(m.id, m.texto, [...lista].slice(0, idx).reverse().find((x) => x.autor_email.toLowerCase() === meuEmail)?.texto ?? "", m.robo?.logica ?? null, m.robo?.fontes ?? [])}
                                 className="text-xs font-semibold text-o2-coral hover:underline disabled:opacity-60"
                               >
                                 {pdf?.estado === "gerando" ? "Gerando o PDF…" : pdf?.estado === "erro" ? "Não deu certo, tentar de novo" : "📄 Gerar relatório em PDF"}

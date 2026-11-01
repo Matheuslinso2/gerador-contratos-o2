@@ -7,6 +7,7 @@ import { FERRAMENTAS_ERP, executarFerramentaErp } from "./roboFerramentas";
 import { FERRAMENTAS_GERAIS, executarFerramentaGeral } from "./roboGeral";
 import { FERRAMENTAS_BUSCA, executarFerramentaBusca } from "./roboBusca";
 import { FERRAMENTA_RELATORIO, executarFerramentaRelatorio } from "./roboRelatorio";
+import { FERRAMENTA_LOGICA, chamadaTemDadosPessoais, descreverChamada, textoTemDadosPessoais } from "./privacidadePdf";
 
 // Robô O2 do chat da equipe (Fase 2, 29/10/2026). Mesmo "cérebro" da IA do WhatsApp (painéis + tabelas do
 // Workspace) mais as ferramentas do ERP. Somente leitura. Comissão/repasse só para admin (mesma cautela do
@@ -54,6 +55,7 @@ MAPA DE FONTES — consulte TODAS as que a pergunta abrange; nunca responda com 
 - Pessoa/cliente/inquilino/proprietário/CPF/e-mail/telefone: buscar_pessoa. Cotação em andamento pelo nome: buscar_nos_paineis.
 - LISTAS GRANDES E RELATÓRIOS: o chat não comporta lista de mais de ~15 itens. Quando pedirem "traga todas", "lista", "relatório" de apólices/endossos/faturas, use gerar_relatorio_pdf (a lista sai do banco, sem passar por você) e responda com o LINK do PDF em uma linha própria (cole a URL inteira, sem formatação) + 2 ou 3 linhas de resumo (total, prêmio, principais seguradoras). Se o período for ambíguo (ex.: "primeiro semestre"), pergunte antes qual critério: apólices que COMEÇARAM no período (inicio_vigencia), que estavam VIGENTES em algum dia do período (vigente_no_periodo) ou que VENCEM no período (fim_vigencia). Ao sugerir, ofereça o PDF em forma de relatório (nunca Excel). O link vale por 6 horas.
 - Regras de leitura aprendidas nos testes: (1) Planilhas (fonte "planilha") são histórico anterior ao Bitrix: as cotações "Em análise"/"Aprovado" delas estão desatualizadas e NÃO entram em "em aberto" — informe o número atual (fonte bitrix) e cite o histórico à parte, sem somar. (2) Se um painel e producao_resolvida divergirem, o número oficial é o do PAINEL (é o que as telas mostram): responda com ele e avise da diferença. (3) Capitalização no ERP é tipo Apólice (certificado/título). Renovações de Capitalização: painel capitalizacao, parte reaplicacao (kpis.entradas, renovadas, naoRenovaram, vigenciaNoMes). (4) Seguro Auto: producao_resolvida pode classificar renovações de outubro como "novo"; o título das fichas do painel seguro_auto traz o prefixo RENOVAÇÃO/NOVO — se usar isso, avise que é aproximado. Cards de Auto não têm imobiliária ligada: não dá para ranquear Auto por imobiliária, diga isso. (5) Para um pedaço de um painel grande use consultar_painel com "caminho" (ex.: "novos.mes.porImobiliaria" ou "imobiliariasConsolidado") e "filtrar_texto" (nome da imobiliária). (6) Agrupar por várias colunas é permitido: agrupar_por "produto,tipo,fonte". (7) PROPOSTAS em Emissão: conte só tipo A (proposta de apólice) na erp_emissao_fila_pronta; tipo X é cancelamento: informe à parte, nunca some (consultar_dados com agrupar_por "produto,tipo"). (8) E-mail ou telefone de cliente que seja da própria O2 (@o2seguros.com.br) ou repetido (929292929) é preenchimento provisório: avise. (9) Nunca some números de fontes diferentes sem dizer; se não tiver certeza do que "desde agosto" significa (entrada do card ou efetivação), diga o critério usado (data de recebimento/entrada).
+- RELATÓRIO EM PDF: toda resposta com dados (cotação, emissão, apólice, proposta, endosso, repasse, fatura, campanha, painel) ganha na tela um botão "Gerar relatório em PDF"; você não precisa gerar nada. Em TODA resposta com dados chame registrar_logica_do_filtro UMA vez com a frase do filtro aplicado (ex.: "Propostas emitidas (apólices) pertencentes à imobiliária XPFG, com início de vigência entre 01/01/2026 e 30/06/2026; fonte: ERP"): ela vai no cabeçalho do relatório. Respostas com dados pessoais (nome de cliente/segurado/inquilino, CPF/CNPJ, e-mail, telefone) NÃO geram PDF e ficam só em texto: nesse caso não ofereça PDF.
 - Ao final de qualquer contagem diga de quais fontes/produtos/tipos ela veio e o que ficou de fora.
 - Para qualquer pergunta sobre uma imobiliária, comece por buscar_imobiliaria. Imobiliárias do mesmo grupo (ex.: Ramiro Sá) são somadas e você diz quais fichas entraram.
 - Pergunta de VALOR de uma imobiliária num mês (comissão efetivada, prêmio, efetivados, cotações) sem citar produto: NÃO responda com um painel só. Consulte TODOS os painéis com consultar_painel na competência — seguro_fianca (parte topImobiliarias), ramos_elementares (partes novos e renovacoes, porImobiliaria), capitalizacao (parte titulos), seguro_auto — procurando a imobiliária por TODOS os nomes das fichas do grupo (use buscar_imobiliaria antes; no painel o nome pode vir diferente, ex.: "Ramiro Sá Imóveis"; procure por um pedaço do nome). Responda com o *total somado* e a quebra por produto, e diga os produtos em que ela não tem registro naquele mês ("sem registro"). Se citarem um produto, responda só dele.
@@ -96,11 +98,26 @@ export async function executarFerramentaDoRobo(nome: string, entrada: unknown, e
   );
 }
 
-export async function responderComoRobo(email: string, historico: TurnoChat[]): Promise<string> {
+export type RespostaRobo = {
+  texto: string;
+  /** false quando a resposta tem dados pessoais/documentos: fica só em texto, sem botão de PDF. */
+  pdfPermitido: boolean;
+  /** true quando a resposta traz dados pessoais/documentos (mostra o aviso "sem PDF" na tela). */
+  dadosPessoais: boolean;
+  /** Frase do filtro aplicado (cabeçalho do relatório). */
+  logica: string | null;
+  /** Consultas feitas, em linguagem simples (rodapé "fontes" do relatório). */
+  fontes: string[];
+};
+
+export async function responderComoRobo(email: string, historico: TurnoChat[]): Promise<RespostaRobo> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY não configurada");
   const verComissao = isAdmin(email);
-  const ferramentas = ferramentasDoRobo(verComissao);
+  const ferramentas = [...ferramentasDoRobo(verComissao), FERRAMENTA_LOGICA];
+  let pessoal = false;
+  let logica: string | null = null;
+  const fontes: string[] = [];
 
   const anthropic = new Anthropic({ apiKey });
   const mensagens: Anthropic.MessageParam[] = historico.map((t) => ({ role: t.role, content: t.content }));
@@ -122,20 +139,30 @@ export async function responderComoRobo(email: string, historico: TurnoChat[]): 
     mensagens.push({ role: "assistant", content: resposta.content });
     const chamadas = resposta.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
     const resultados = await Promise.all(
-      chamadas.map(async (c) => ({
-        type: "tool_result" as const,
-        tool_use_id: c.id,
-        content: await executarFerramentaDoRobo(c.name, c.input, email, verComissao),
-      }))
+      chamadas.map(async (c) => {
+        if (c.name === FERRAMENTA_LOGICA.name) {
+          const t = String((c.input as { texto?: string })?.texto ?? "").trim();
+          if (t) logica = t.slice(0, 700);
+          return { type: "tool_result" as const, tool_use_id: c.id, content: "registrado" };
+        }
+        if (chamadaTemDadosPessoais(c.name, c.input)) pessoal = true;
+        const d = descreverChamada(c.name, c.input);
+        if (d && !fontes.includes(d) && fontes.length < 8) fontes.push(d);
+        return { type: "tool_result" as const, tool_use_id: c.id, content: await executarFerramentaDoRobo(c.name, c.input, email, verComissao) };
+      })
     );
     mensagens.push({ role: "user", content: resultados });
   }
 
-  if (resposta?.stop_reason === "refusal") return "Não consigo responder essa pergunta por aqui.";
+  if (resposta?.stop_reason === "refusal") return { texto: "Não consigo responder essa pergunta por aqui.", pdfPermitido: false, dadosPessoais: false, logica: null, fontes: [] };
   const texto = (resposta?.content ?? [])
     .filter((b): b is Anthropic.TextBlock => b.type === "text")
     .map((b) => b.text)
     .join("\n")
     .trim();
-  return texto || "Não consegui montar uma resposta agora. Tente de novo em instantes.";
+  if (!texto) return { texto: "Não consegui montar uma resposta agora. Tente de novo em instantes.", pdfPermitido: false, dadosPessoais: false, logica: null, fontes: [] };
+  // Sem nenhuma consulta de dados (conversa) ou com dado pessoal/documento no texto: sem PDF.
+  const dadosPessoais = pessoal || textoTemDadosPessoais(texto);
+  const pdfPermitido = fontes.length > 0 && !dadosPessoais;
+  return { texto, pdfPermitido, dadosPessoais, logica, fontes };
 }
