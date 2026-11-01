@@ -38,7 +38,7 @@ export default async function ParcelasCobrancaPage({ searchParams }: { searchPar
   const supabase = await createClient();
   const seg = f.seguradora ? (f.seguradora === "ALF" ? "ALFA" : f.seguradora) : null;
 
-  let q = supabase.from("erp_parcelas_cobranca").select("*");
+  let q = supabase.from("erp_parcelas_cobranca_pronta").select("*");
   if (seg) q = q.eq("seg", seg);
   if (f.produto) q = q.eq("produto", f.produto);
   if (f.situacao && STATUS[f.situacao]) q = q.eq("status", f.situacao);

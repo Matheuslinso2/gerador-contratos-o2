@@ -158,6 +158,10 @@
     {
       "path": "/api/cron/erp-repasse-resumo",
       "schedule": "58 * * * *"
+    },
+    {
+      "path": "/api/cron/erp-cobranca-pronta",
+      "schedule": "3-59/10 7-22 * * *"
     }
   ]
 }
