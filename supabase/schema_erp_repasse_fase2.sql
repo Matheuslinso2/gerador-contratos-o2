@@ -78,3 +78,9 @@ create trigger erp_repasse_da_baixa after insert on erp_comissao_recebimentos fo
 --   Views: erp_repasse_relatorios_corp_fila (o que falta ligar) e erp_repasse_corp_por_parcela (leitura por parcela para as telas de parcelas/documentos/repasse).
 --   Padronização com erp_dominios: status_repasse (em_lote virou autorizado), vinculo_status, fonte_arquivo. Carga: scripts/erp/carregar-relatorios-repasse-corp.ts.
 --   01/11: 76 relatórios, 934 linhas, soma das linhas = rodapé em todos; 689 ligadas, 126 parciais (documento sem parcela certa), 119 pendentes (apólice não achada ou em cadeia).
+
+-- CONTROLE DE REPASSE DO CORP (01/11, migration erp_repasse_corp_controle): planilha "Controle_repasse" exportada do Corp (25.718 linhas, previsão nov/2025 a out/2026, 247 produtores,
+--   Dt. Previsão e Dt. Repasse). Carga erp_repasse_cargas (corp_export, nível 8, hash único, desfazível) -> erp_repasse_corp_controle (TODOS os campos estruturados; "Observações Doc." NÃO gravado,
+--   só tem_observacao). Chaves do ERP por linha (erp_repasse_vincular_controle_corp): imobiliária pelo código do produtor, seguradora pela abreviação, documento pelo Nosso Nº do Corp,
+--   parcela pela comissão recebida do mês anterior à previsão com a mesma base (±0,02), locatário do documento. Fila: erp_repasse_corp_controle_fila. Carga: scripts/erp/carregar-controle-repasse-corp.ts.
+--   01/11: 20.162 ligadas (78%), 5.539 só com documento (parcela não identificada), 17 outras. Só 6.261 linhas (R$ 132,6 mil) têm Dt. Repasse no Corp; 483,8 mil bruto sem data (o financeiro paga pelo Nibo).
