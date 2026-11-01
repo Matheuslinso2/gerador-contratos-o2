@@ -69,3 +69,12 @@ create trigger erp_repasse_da_baixa after insert on erp_comissao_recebimentos fo
 --   (status 'cancelado' + motivo); parcial = 'pendente' com valor abatido. Só repasses sem lote. Coluna erp_repasses.pro_labore_abatido guarda o abatimento.
 --   Roda no gatilho da baixa e a cada atualização horária do retrato (os extratos do Segimob chegam depois da baixa). 31/10: 49 quitados (R$ 664) e 2 abatidos.
 --   Parcelas sem linha de pró-labore ficam como estão (a regra se corrige sozinha quando o extrato do Segimob chegar, enquanto o repasse não estiver em lote).
+
+-- REGISTRO DOS RELATÓRIOS DO CORP (01/11, migrations erp_repasse_registro_relatorios_corp, erp_repasse_relatorios_vinculos, erp_repasse_padroniza_dominios):
+--   erp_repasse_cargas (uma por PDF, hash único, fonte 'corp_export', nível 8, desfazível por erp_repasse_desfazer_carga) -> erp_repasse_relatorios_corp (cabeçalho/rodapé:
+--   produtor, período, gerado no Corp, totais, desconto, líquido, qtde) -> erp_repasse_relatorios_corp_linhas (todas as colunas do Prg. 316). Sem dados bancários nem e-mail do produtor.
+--   Chaves do ERP por linha (erp_repasse_vincular_relatorios_corp): seguradora_id, documento_id (nº da apólice na seguradora, 1 candidato), parcela_id (comissão recebida do mês anterior,
+--   mesma base ±0,02), locatario_id; vinculo_status (ligado|parcial|pendente) e vinculo_motivo (código de erp_dominios.motivo_vinculo_pendente) + vinculo_detalhe.
+--   Views: erp_repasse_relatorios_corp_fila (o que falta ligar) e erp_repasse_corp_por_parcela (leitura por parcela para as telas de parcelas/documentos/repasse).
+--   Padronização com erp_dominios: status_repasse (em_lote virou autorizado), vinculo_status, fonte_arquivo. Carga: scripts/erp/carregar-relatorios-repasse-corp.ts.
+--   01/11: 76 relatórios, 934 linhas, soma das linhas = rodapé em todos; 689 ligadas, 126 parciais (documento sem parcela certa), 119 pendentes (apólice não achada ou em cadeia).
