@@ -46,6 +46,7 @@ export default function ChatFlutuante({ meuEmail }: { meuEmail: string }) {
   const [erro, setErro] = useState<string | null>(null);
   const [roboMsgs, setRoboMsgs] = useState<Mensagem[]>([]);
   const [roboPensando, setRoboPensando] = useState(false);
+  const [pdfs, setPdfs] = useState<Record<string, { estado: "gerando" | "pronto" | "erro"; url?: string }>>({});
   const colegaPorConversa = useRef<Record<string, string>>({});
   const conversaAbertaRef = useRef<string | null>(null);
   const fimRef = useRef<HTMLDivElement>(null);
@@ -135,6 +136,23 @@ export default function ChatFlutuante({ meuEmail }: { meuEmail: string }) {
   }, [mensagens, roboMsgs, roboPensando, ativo]);
 
   const ehRobo = ativo?.email === ROBO.email;
+
+  // Botão "Gerar relatório em PDF" embaixo de cada resposta do robô (pergunta + resposta, com data e quem gerou).
+  async function gerarPdf(id: string, resposta: string, pergunta: string) {
+    setPdfs((p) => ({ ...p, [id]: { estado: "gerando" } }));
+    try {
+      const r = await fetch("/api/chat/robo/relatorio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pergunta, resposta }),
+      });
+      const j = (await r.json().catch(() => ({}))) as { url?: string };
+      if (!r.ok || !j.url) throw new Error("falha");
+      setPdfs((p) => ({ ...p, [id]: { estado: "pronto", url: j.url } }));
+    } catch {
+      setPdfs((p) => ({ ...p, [id]: { estado: "erro" } }));
+    }
+  }
 
   async function perguntarAoRobo(t: string) {
     const nova: Mensagem = { id: crypto.randomUUID(), conversa_id: "robo", autor_email: meuEmail, texto: t, criado_em: new Date().toISOString() };
@@ -303,14 +321,33 @@ export default function ChatFlutuante({ meuEmail }: { meuEmail: string }) {
                     Pergunte em português, por exemplo: “quantas apólices vigentes a Ramiro Sá tem?”. Eu só consulto o que está no Workspace e no ERP e não altero nada.
                   </p>
                 )}
-                {(ehRobo ? roboMsgs : mensagens).map((m) => {
+                {(ehRobo ? roboMsgs : mensagens).map((m, idx, lista) => {
                   const minha = m.autor_email.toLowerCase() === meuEmail;
+                  const pdf = pdfs[m.id];
                   return (
                     <div key={m.id} className={`flex ${minha ? "justify-end" : "justify-start"}`}>
                       <div
                         className={`max-w-[80%] whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-sm ${minha ? "bg-o2-blue text-white" : "bg-white text-o2-navy"}`}
                       >
                         <ComLinks texto={m.texto} escuro={minha} />
+                        {ehRobo && !minha && (
+                          <span className="mt-2 block border-t border-black/10 pt-1.5">
+                            {pdf?.estado === "pronto" ? (
+                              <a href={pdf.url} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-o2-blue underline">
+                                📄 Abrir o relatório (PDF)
+                              </a>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={pdf?.estado === "gerando"}
+                                onClick={() => void gerarPdf(m.id, m.texto, [...lista].slice(0, idx).reverse().find((x) => x.autor_email.toLowerCase() === meuEmail)?.texto ?? "")}
+                                className="text-xs font-semibold text-o2-coral hover:underline disabled:opacity-60"
+                              >
+                                {pdf?.estado === "gerando" ? "Gerando o PDF…" : pdf?.estado === "erro" ? "Não deu certo, tentar de novo" : "📄 Gerar relatório em PDF"}
+                              </button>
+                            )}
+                          </span>
+                        )}
                         <span className={`mt-0.5 block text-right text-[10px] ${minha ? "text-white/60" : "text-o2-cinza-medio"}`}>
                           {new Date(m.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                         </span>
