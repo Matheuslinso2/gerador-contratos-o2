@@ -180,7 +180,7 @@ async function abrirConsultaDocumentos(page: Page) {
 async function temLinhaNoResultado(page: Page): Promise<boolean> {
   const { data } = await sharp(await page.screenshot({ clip: { x: 845, y: 168, width: 68, height: 14 } })).greyscale().raw().toBuffer({ resolveWithObject: true });
   let escuros = 0;
-  for (const v of data) if (v < 110) escuros++;
+  for (const v of data) if (v < 170) escuros++; // 170: o texto cinza itálico (documento renovado/não vigente) tem mínimo ~135 e antes dava "não achou" falso
   return escuros > 15;
 }
 
@@ -427,9 +427,11 @@ async function rodada(
         if (!achou && CAPTURAR_TELAS) await capturarBuscaSemResultado(page, item.nn);
         if (!achou) estado[item.nn] = { quando: new Date().toISOString(), versao: VERSAO_VISITA, resultado: "nao_achou" };
         else {
+          const cap = CAPTURAR_TELAS ? await capturarTelasDoDocumento(page, item.nn) : null;
+          if (cap?.erro) log(`${item.nn}: captura de telas: ${cap.erro}`);
           const { apolices, outros, rotulos, lista, ignorados, total } = await baixarAnexos(page, item.nn);
           estado[item.nn] = { quando: new Date().toISOString(), versao: VERSAO_VISITA, resultado: apolices.length || outros.length ? "baixado" : total ? "sem_anexo_alvo" : "sem_anexo", arquivos: apolices, outros, rotulos, lista, ignorados, total };
-          if (CAPTURAR_TELAS) { const t = await capturarTelasDoDocumento(page, item.nn); estado[item.nn].telas = t.telas; estado[item.nn].telas_bytes = t.bytes; if (t.erro) log(`${item.nn}: captura de telas: ${t.erro}`); }
+          if (cap) { estado[item.nn].telas = cap.telas; estado[item.nn].telas_bytes = cap.bytes; }
           await fecharDocumento(page);
         }
         erros = 0; progressoDaSessao++;

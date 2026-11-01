@@ -27,22 +27,24 @@ async function salvar(page: Page, nn: string, tela: string): Promise<number> {
   return webp.length;
 }
 
-/** Com o documento aberto: fotografa todas as abas. Devolve quantas telas e quantos bytes. Não lança erro. */
+/** Com o documento acabado de abrir (aba Documento ativa, aba Anexos ainda "não selecionada": é assim que o modelo doc-aba-anexos casa): fotografa todas as abas e
+ *  volta para a aba Documento, deixando a tela como estava para o download dos anexos. Devolve quantas telas e quantos bytes. Não lança erro. */
 export async function capturarTelasDoDocumento(page: Page, nn: string): Promise<{ telas: number; bytes: number; erro?: string }> {
   let telas = 0, bytes = 0;
   try {
     const ref = await acharNaTela(page, "doc-aba-anexos");
     if (!ref) return { telas, bytes, erro: "aba Anexos não encontrada na tela (referência das abas)" };
-    for (const a of ABAS) {
+    bytes += await salvar(page, nn, "documento"); telas++; // a aba já aberta, sem clicar
+    for (const a of ABAS.filter((x) => x.tela !== "documento")) {
       try {
         await page.mouse.click(Math.round(ref.x + a.delta * PASSO), ref.y);
-        await espera(a.tela === "documento" ? 900 : 1200);
+        await espera(1200);
         bytes += await salvar(page, nn, a.tela);
         telas++;
       } catch (e) { log(`${nn}: tela ${a.tela} não capturada: ${(e as Error).message.slice(0, 80)}`); }
     }
-    // volta para a aba Anexos (a que o restante da visita espera)
-    await page.mouse.click(ref.x, ref.y); await espera(800);
+    // volta para a aba Documento (a 1ª): a aba Anexos volta a ficar "não selecionada" para o passo seguinte da visita
+    await page.mouse.click(Math.round(ref.x - 5 * PASSO), ref.y); await espera(900);
     return { telas, bytes };
   } catch (e) {
     return { telas, bytes, erro: (e as Error).message.slice(0, 120) };
