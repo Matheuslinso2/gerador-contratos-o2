@@ -98,7 +98,7 @@ async function main() {
     if (confereAp === false) div.push("nº da apólice não aparece no PDF");
     if (confereVig === false) div.push("vigência do documento não aparece no PDF");
     if (confereDoc === false) { if (confereAp && confereVig) avisos.push("CPF/CNPJ do documento não localizado entre os do PDF (nº e vigência conferem)"); else div.push("CPF/CNPJ do documento não aparece no PDF"); }
-    const parser = PARSERS[chave]; const bruto = parser ? parser(t) : [];
+    const parser = PARSERS[chave] as (typeof PARSERS)[string] | undefined; const bruto = parser ? parser(t) : [];
     const porN = new Map<number, string>(); for (const p of bruto) if (!porN.has(p.n)) porN.set(p.n, p.venc);
     const ns = [...porN.keys()].sort((a, b) => a - b);
     const seqOk = ns.length > 0 && ns.every((n, k) => n === k + 1) && ns.every((n, k) => k === 0 || porN.get(n)! > porN.get(ns[k - 1])!) && ns.length <= 60;
