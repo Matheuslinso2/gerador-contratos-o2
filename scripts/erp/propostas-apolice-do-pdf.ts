@@ -72,7 +72,7 @@ function candidatos(t: string): string[] {
     const numero = cand[0];
     const { data: dup } = await sb.from("erp_documentos").select("id").eq("seguradora_id", d?.seguradora_id ?? "").neq("id", a.id).like("numero_apolice", `%${dig(numero).replace(/^0+/, "")}`).limit(2);
     const forte = nomeBate && cand.length <= 2 && !(dup?.length);
-    if (dup?.length) { res.duplicado++; rel.push({ nn: a.nosso_numero, seg: a.seguradora, situacao: "nº já existe em outro documento da seguradora", numero }); saida.push({ id: a.id, tipo: "duplicado", numero, arq: arqUsado }); continue; }
+    if (dup?.length) { res.duplicado++; rel.push({ nn: a.nosso_numero, seg: a.seguradora, situacao: "nº já existe em outro documento da seguradora", numero }); saida.push({ id: a.id, tipo: "duplicado", numero, arq: arqUsado, existente: dup[0].id, varios: dup.length > 1 }); continue; }
     if (forte) { res.forte++; saida.push({ id: a.id, tipo: "forte", numero, vigBate, arq: arqUsado, nn: a.nosso_numero, seg: a.seguradora }); rel.push({ nn: a.nosso_numero, seg: a.seguradora, situacao: `FORTE (nome${vigBate ? " + vigência" : ""} batem)`, numero: numero.slice(0, 4) + "…" }); }
     else { res.provavel++; saida.push({ id: a.id, tipo: "provavel", numero, vigBate, nomeBate, candidatos: cand, arq: arqUsado }); rel.push({ nn: a.nosso_numero, seg: a.seguradora, situacao: `provável (${nomeBate ? "nome ok" : "nome não confere"}${cand.length > 2 ? `, ${cand.length} candidatos` : ""})`, numero: numero.slice(0, 4) + "…" }); }
   }
@@ -91,7 +91,7 @@ function candidatos(t: string): string[] {
       gravados++;
     }
     // registro do que foi visto, sem texto bruto
-    await sb.from("erp_proposta_acompanhamento").upsert({ documento_id: s.id, motivo: s.tipo === "forte" ? "emitida_pela_seguradora" : "sem_informacao", evidencia_tipo: "corp_anexo", evidencia_ref: s.arq ?? null, evidencia_resumo: s.tipo === "forte" ? "Nº da apólice lido do PDF do Corp (nome confere): gravado" : `PDF de apólice no Corp: ${s.tipo}`, data_evidencia: new Date().toISOString(), confianca: s.tipo === "forte" ? "forte" : "provavel", detalhes: { resultado: s.tipo, vigencia_bate: s.vigBate ?? null, numero_candidato: s.tipo === "provavel" ? s.numero : null }, fonte: "pdf_corp_anexo", nivel: s.tipo === "forte" ? 1 : 8, lote: `PDF-APOLICE-${new Date().toISOString().slice(0, 10)}` }, { onConflict: "documento_id" });
+    await sb.from("erp_proposta_acompanhamento").upsert({ documento_id: s.id, motivo: s.tipo === "forte" ? "emitida_pela_seguradora" : "sem_informacao", evidencia_tipo: "corp_anexo", evidencia_ref: s.arq ?? null, evidencia_resumo: s.tipo === "forte" ? "Nº da apólice lido do PDF do Corp (nome confere): gravado" : `PDF de apólice no Corp: ${s.tipo}`, data_evidencia: new Date().toISOString(), confianca: s.tipo === "forte" ? "forte" : "provavel", detalhes: { resultado: s.tipo, vigencia_bate: s.vigBate ?? null, numero_candidato: s.tipo === "provavel" || s.tipo === "duplicado" ? s.numero : null, documento_existente_id: s.existente ?? null }, fonte: "pdf_corp_anexo", nivel: s.tipo === "forte" ? 1 : 8, lote: `PDF-APOLICE-${new Date().toISOString().slice(0, 10)}` }, { onConflict: "documento_id" });
   }
   console.log(`numero_apolice gravado em ${gravados} documentos`);
 })();
