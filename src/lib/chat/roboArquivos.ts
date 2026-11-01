@@ -74,7 +74,12 @@ export async function buscarArquivosDocumento(e: Entrada, email: string): Promis
     let q = sb.from("locatarios").select("id, nome").limit(10);
     const dig = (e.cpf_cnpj ?? "").replace(/\D/g, "");
     if (dig.length >= 11) q = q.eq("cpf", dig);
-    else for (const tok of normalizar(e.nome ?? "").split(" ").filter(Boolean)) q = q.ilike("nome_normalizado", `%${tok}%`);
+    else {
+      // nome PARECIDO (grafia/som): "Raquel" acha "Rachel"
+      const { data: pr } = await sb.rpc("chat_nomes_parecidos", { p_termo: e.nome ?? "", p_limite: 20 });
+      const idsCad = ((pr ?? []) as { fonte: string; ref: string }[]).filter((x) => x.fonte === "cadastro").map((x) => x.ref);
+      q = q.in("id", idsCad.length ? idsCad : ["00000000-0000-0000-0000-000000000000"]);
+    }
     const { data: pessoas } = await q;
     const ids = (pessoas ?? []).map((p) => p.id as string);
     const nomePessoa = new Map((pessoas ?? []).map((p) => [p.id as string, p.nome as string]));
@@ -261,7 +266,15 @@ async function buscarFotosDeCards(e: Entrada, email: string): Promise<string> {
     const { data } = await sb.from("locatarios").select("id").eq("cpf", dig).limit(10);
     pessoaIds = (data ?? []).map((p) => p.id as string);
   }
-  const tokens = normalizar(e.nome ?? "").split(" ").filter(Boolean);
+  // nome do cliente no título do card: busca por nome PARECIDO ("Raquel" acha "Rachel")
+  let refsArquivo: number[] | null = null;
+  let refsErp: number[] | null = null;
+  if (e.nome) {
+    const { data: pr } = await sb.rpc("chat_nomes_parecidos", { p_termo: e.nome, p_limite: 30 });
+    const linhasPr = (pr ?? []) as { fonte: string; ref: string }[];
+    refsArquivo = linhasPr.filter((x) => x.fonte === "card_arquivo").map((x) => Number(x.ref));
+    refsErp = linhasPr.filter((x) => x.fonte === "card_erp").map((x) => Number(x.ref));
+  }
   const situacao = e.situacao ? normalizar(e.situacao) : null;
   const candidatos: LinhaCard[] = [];
 
@@ -273,7 +286,7 @@ async function buscarFotosDeCards(e: Entrada, email: string): Promise<string> {
       .order("card_atualizado_em", { ascending: false })
       .limit(8);
     if (e.numero_card) q = q.eq("item_id", Number(e.numero_card));
-    for (const t of tokens) q = q.ilike("titulo", `%${t}%`);
+    if (refsArquivo) q = q.in("item_id", refsArquivo.length ? refsArquivo : [-1]);
     if (imobIds) q = q.in("imobiliaria_id", imobIds);
     if (entidade) q = q.eq("entity_type_id", entidade);
     if (situacao) q = q.eq("situacao", situacao);
@@ -301,7 +314,7 @@ async function buscarFotosDeCards(e: Entrada, email: string): Promise<string> {
         .order("card_atualizado_em", { ascending: false })
         .limit(8);
       if (e.numero_card) q = q.eq("item_id", Number(e.numero_card));
-      for (const t of tokens) q = q.ilike("titulo", `%${t}%`);
+      if (refsErp) q = q.in("item_id", refsErp.length ? refsErp : [-1]);
       if (entidade) q = q.eq("entity_type_id", entidade);
       if (docIds) q = q.in("documento_id", docIds.slice(0, 300));
       const { data } = await q;

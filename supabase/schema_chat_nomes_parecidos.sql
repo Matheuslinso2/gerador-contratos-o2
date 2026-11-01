@@ -1,0 +1,5 @@
+-- Busca de nome PARECIDO (grafia/som) para o Robô O2 + correção do nome_normalizado dos cadastros novos (01/11/2026).
+-- (Aplicado no Supabase pelas migrações chat_nomes_parecidos e locatarios_nome_normalizado_automatico.)
+-- chat_norm(texto): minúsculas, sem acento, só letras/números.  chat_fonetica(texto): junta grafias que soam igual (ch/qu/k, tt/t, ph/f, y/i, h mudo).
+-- chat_nomes_parecidos(termo, limite): nomes parecidos em locatarios, erp_item_partes, erp_origens (título do card) e bitrix_cards_arquivo, por pg_trgm word_similarity >= 0.75.
+-- Gatilho locatarios_nome_normalizado_trg: preenche nome_normalizado (MAIÚSCULAS, sem acento) quando vier vazio; os 7.512 antigos foram corrigidos.

@@ -22,6 +22,18 @@ export function normalizar(s: string | null | undefined) {
     .trim();
 }
 
+// Chave de SOM de uma palavra (igual à função chat_fonetica do banco): junta grafias que soam igual em português
+// (ch/qu/k, c antes de a/o/u, ph/f, y/w/i, h mudo, letras dobradas). "raquel" e "rachel" dão a mesma chave.
+export function chaveFonetica(palavra: string): string {
+  return normalizar(palavra)
+    .replace(/ph/g, "f")
+    .replace(/ch|qu|ck|k/g, "k")
+    .replace(/c(?=[aou])/g, "k")
+    .replace(/[yw]/g, "i")
+    .replace(/h/g, "")
+    .replace(/(.)\1+/g, "$1");
+}
+
 // Distância de edição <= 1 (uma letra trocada, a mais ou a menos): "canele" casa com "canale".
 function quaseIgual(a: string, b: string) {
   if (Math.abs(a.length - b.length) > 1) return false;
