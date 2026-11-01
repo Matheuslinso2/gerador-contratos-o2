@@ -1,0 +1,5 @@
+-- Nota (01/11): migração aplicada no Supabase como "erp_prazo_emissao_ref".
+-- Cria erp_prazo_emissao_ref (fonte_inicio card|proposta_corp, seguradora, produto '*'=seguradora, n, mediana, p75, p90, pct_ate_7_dias, utilizavel n>=10, calculada_em),
+-- a função erp_atualizar_prazo_emissao_ref() e chama-a no começo de erp_atualizar_emissao() (cron horário). Amostra: apólices/contratos emitidos (tipo A/C com nº e dt_emissao,
+-- dt_emissao = PDF > e-mail > Corp) menos a efetivação (card Bitrix funis 18/20 etapa SUCESSO, ou dt_proposta); dias entre 0 e 365.
+-- Usada na tela /erp/emissao (Situação de prazo). Para desfazer: restaurar erp_atualizar_emissao() sem a chamada e dropar a tabela.

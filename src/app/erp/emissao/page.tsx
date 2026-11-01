@@ -55,6 +55,18 @@ const MOTIVOS: Record<string, { rotulo: string; cor: string }> = {
 };
 type Acomp = { documento_id: string; motivo: string; evidencia_resumo: string | null; evidencia_tipo: string | null; data_evidencia: string | null; confianca: string | null; detalhes: { seguradora?: string | null } | null };
 
+// Situação de prazo (Matheus 01/11): compara os dias desde a efetivação com a cadência REAL efetivação→emissão (erp_prazo_emissao_ref, por seguradora×produto,
+// cai para a seguradora; só vale com n >= 10). fonte_inicio: 'card' (SUCESSO do card) ou 'proposta_corp' (dt_proposta). Sem referência = "sem referência", nunca chute.
+type Ref = { fonte_inicio: string; seguradora: string; produto: string; nivel: string; n: number; mediana_dias: number; p75_dias: number; p90_dias: number; pct_ate_7_dias: number; utilizavel: boolean; n_minimo: number; calculada_em: string };
+const PRAZOS = {
+  no_prazo: { rotulo: "no prazo", cor: "bg-green-50 text-green-800 border-green-200" },
+  atencao: { rotulo: "atenção", cor: "bg-yellow-50 text-yellow-800 border-yellow-200" },
+  atrasada: { rotulo: "atrasada", cor: "bg-orange-50 text-orange-800 border-orange-200" },
+  muito_atrasada: { rotulo: "muito atrasada", cor: "bg-red-50 text-red-800 border-red-200" },
+  sem_ref: { rotulo: "sem referência", cor: "bg-white text-gray-600 border-gray-300" },
+} as const;
+type ChavePrazo = keyof typeof PRAZOS;
+
 const dia = (d: Date) => d.toISOString().slice(0, 10);
 const somarDias = (hoje: Date, n: number) => dia(new Date(hoje.getTime() + n * 86400000));
 const diasEntre = (data: string, hoje: Date) => Math.round((Date.parse(dia(hoje)) - Date.parse(data)) / 86400000);
@@ -68,6 +80,7 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
   const origem = um("origem") === "bitrix" || um("origem") === "corp" ? um("origem") : undefined;
   const atraso = um("atraso") === "1";
   const motivo = um("motivo") && MOTIVOS[um("motivo")!] ? um("motivo") : undefined;
+  const prazoSel = (Object.keys(PRAZOS) as ChavePrazo[]).find((k) => k === um("prazo"));
   const todas = !f.mes && !atraso; // sem mês escolhido: TODAS as pendentes (a proposta fica na tela até virar apólice, qualquer que seja o mês da efetivação)
 
   const supabase = await createClient();
@@ -92,6 +105,23 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
   const porSegMotivo: Record<string, Record<string, number>> = {};
   for (const x of (acompRows ?? []) as Acomp[]) { const sg = x.detalhes?.seguradora; if (!sg) continue; ((porSegMotivo[x.motivo] ??= {})[sg] = (porSegMotivo[x.motivo][sg] ?? 0) + 1); }
   const idsDoMotivo = motivo ? ((acompRows ?? []) as Acomp[]).filter((x) => x.motivo === motivo).map((x) => x.documento_id) : null;
+
+  // referências de prazo (tabela pequena, recalculada com a fila): seguradora×produto primeiro, depois a seguradora; só n >= n_minimo
+  const { data: refRows } = await supabase.from("erp_prazo_emissao_ref").select("*").limit(2000);
+  const refs = new Map(((refRows ?? []) as Ref[]).map((r) => [`${r.fonte_inicio}|${r.seguradora}|${r.produto}`, r]));
+  const refDe = (l: { seguradora: string | null; produto: string | null; fonte_data: string }): Ref | null => {
+    if (!l.seguradora) return null;
+    const fi = l.fonte_data === "card" ? "card" : "proposta_corp";
+    const a1 = refs.get(`${fi}|${l.seguradora}|${l.produto ?? "*"}`);
+    if (a1?.utilizavel) return a1;
+    const a2 = refs.get(`${fi}|${l.seguradora}|*`);
+    return a2?.utilizavel ? a2 : null;
+  };
+  const prazoDe = (l: Linha, dias: number): { chave: ChavePrazo; ref: Ref | null } => {
+    const r = refDe(l);
+    if (!r) return { chave: "sem_ref", ref: null };
+    return { chave: dias <= r.mediana_dias ? "no_prazo" : dias <= r.p75_dias ? "atencao" : dias <= r.p90_dias ? "atrasada" : "muito_atrasada", ref: r };
+  };
 
   // escopo: pendentes efetivadas no mês escolhido, ou todo o atraso (meses anteriores ao escolhido)
   const base = (esc: "mes" | "herd") => {
@@ -136,16 +166,34 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
   const [{ data: kpiRow }, { count: atrasoTotal }, mesRes, herdRes, { count: mais60 }, ...contagens] = await Promise.all([
     supabase.from("erp_emissao_kpis_pronta").select("dados").eq("mes", ini).maybeSingle(),
     supabase.from("erp_emissao_fila_pronta").select("id", { count: "exact", head: true }).lt("data_efetivacao", ini),
-    base("mes").order("data_efetivacao", { ascending: true }).limit(limite),
-    base("herd").order("data_efetivacao", { ascending: true }).limit(limite),
+    base("mes").order("data_efetivacao", { ascending: true }).range(0, 999),
+    base("herd").order("data_efetivacao", { ascending: true }).range(0, 999),
     supabase.from("erp_emissao_fila_pronta").select("id", { count: "exact", head: true }).lt("data_efetivacao", ini).lt("data_efetivacao", somarDias(refData, -60)),
     ...FAIXAS.map((x) => contarFaixa(x.chave)),
   ]);
   const kpi = (kpiRow?.dados ?? null) as Kpis | null;
-  const mesLinhas = (mesRes.data ?? []) as Linha[];
-  const herdLinhas = (herdRes.data ?? []) as Linha[];
+  // todas as pendentes do recorte (até 1.000 por seção) recebem a situação de prazo; o filtro de prazo e o KPI por seguradora usam o conjunto inteiro
+  const comPrazo = (xs: Linha[]) => xs.map((l) => ({ l, ...prazoDe(l, diasEntre(l.data_efetivacao, refData)) }));
+  const mesTodas = comPrazo((mesRes.data ?? []) as Linha[]);
+  const herdTodas = comPrazo((herdRes.data ?? []) as Linha[]);
+  const contaPrazo: Record<ChavePrazo, number> = { no_prazo: 0, atencao: 0, atrasada: 0, muito_atrasada: 0, sem_ref: 0 };
+  const porSegPrazo = new Map<string, Record<ChavePrazo, number>>();
+  const refsUsadas = new Map<string, Ref>();
+  for (const x of [...mesTodas, ...herdTodas]) {
+    contaPrazo[x.chave]++;
+    const sg = x.l.seguradora ?? "(sem seguradora)";
+    const o = porSegPrazo.get(sg) ?? { no_prazo: 0, atencao: 0, atrasada: 0, muito_atrasada: 0, sem_ref: 0 };
+    o[x.chave]++; porSegPrazo.set(sg, o);
+    if (x.ref) refsUsadas.set(`${x.ref.fonte_inicio}|${x.ref.seguradora}|${x.ref.produto}`, x.ref);
+  }
+  const filtraPrazo = (xs: ReturnType<typeof comPrazo>) => (prazoSel ? xs.filter((x) => x.chave === prazoSel) : xs);
+  const mesFiltradas = filtraPrazo(mesTodas);
+  const herdFiltradas = filtraPrazo(herdTodas);
+  const prazoPorId = new Map([...mesTodas, ...herdTodas].map((x) => [x.l.id, x]));
+  const mesLinhas = mesFiltradas.slice(0, limite).map((x) => x.l);
+  const herdLinhas = herdFiltradas.slice(0, limite).map((x) => x.l);
   const linhas = [...mesLinhas, ...herdLinhas];
-  const total = (mesRes.count ?? mesLinhas.length) + (herdRes.count ?? herdLinhas.length);
+  const total = mesFiltradas.length + herdFiltradas.length;
   // cabeçalho padrão (Matheus 28/10): tipo, titular, produto, seguradora e vigência
   const cab = await dadosDeCabecalhoPorId(supabase, linhas.map((l) => l.id));
   // endosso de cobrança sem parcelas: avisa "parcelas a informar" (as parcelas nascem quando o card traz valor, nº de parcelas e 1º vencimento)
@@ -159,14 +207,14 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
   }
 
   const href = (extra: Record<string, string | undefined>) => {
-    const p = new URLSearchParams(Object.entries({ ...f, origem, faixa, motivo, atraso: atraso ? "1" : undefined, ...extra }).filter(([, v]) => v) as [string, string][]);
+    const p = new URLSearchParams(Object.entries({ ...f, origem, faixa, motivo, prazo: prazoSel, atraso: atraso ? "1" : undefined, ...extra }).filter(([, v]) => v) as [string, string][]);
     return `/erp/emissao${p.size ? `?${p}` : ""}`;
   };
   const rotuloMes = new Date(Date.UTC(a, m - 1, 1)).toLocaleDateString("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" });
 
   return (
     <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-6 p-8">
-      <NavegadorMes caminho="/erp/emissao" mes={f.mes} params={{ ...f, origem, faixa, motivo } as Record<string, string | undefined>} />
+      <NavegadorMes caminho="/erp/emissao" mes={f.mes} params={{ ...f, origem, faixa, motivo, prazo: prazoSel } as Record<string, string | undefined>} />
       <PainelResumoAba mes={f.mes} funcao="erp_resumo_emissao" titulo="Emissão" legendas={{"Efetivadas, emitidas e pendentes por mês":"Para cada mês: quantas propostas foram efetivadas, quantas já viraram apólice (emitidas) e quantas ainda estão pendentes de emissão. Fonte: o mesmo quadro mensal da aba.","Pendentes por seguradora":"As seguradoras com mais propostas aguardando emissão agora (as 10 maiores).","Pendência por faixa de dias desde a efetivação":"Há quantos dias cada proposta pendente foi efetivada. As faixas mais longas são as que mais pedem atenção."}} />
       <PageHeader
         icon={<IconReport />}
@@ -239,7 +287,57 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
         ))}
       </section>
 
-      {[{ lista: mesLinhas, herd: false, total: mesRes.count ?? mesLinhas.length }, { lista: herdLinhas, herd: true, total: herdRes.count ?? herdLinhas.length }].map(({ lista, herd, total: totalSecao }) => (
+      <section className="space-y-2 rounded-xl border border-gray-200 bg-white p-4">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-[11px] uppercase tracking-wide text-gray-500">Situação de prazo:</span>
+          <InfoLegenda titulo="Situação de prazo">
+            Compara os dias desde a efetivação com o que costuma levar para emitir na MESMA seguradora e produto (cadência real das apólices já emitidas: data de emissão do PDF, e-mail ou Corp menos a data de efetivação). No prazo = até a mediana; atenção = entre a mediana e o percentil 75; atrasada = entre o 75 e o 90; muito atrasada = acima do 90. Sem referência quando há menos de 10 apólices emitidas no grupo (e na seguradora inteira): nunca é chute. Nada sai da lista sozinho.
+          </InfoLegenda>
+          {(Object.keys(PRAZOS) as ChavePrazo[]).map((k) => (
+            <Link key={k} href={href({ prazo: prazoSel === k ? undefined : k })} className={`rounded-full border px-3 py-1 font-medium ${PRAZOS[k].cor} ${prazoSel === k ? "ring-2 ring-o2-navy" : ""}`}>
+              {PRAZOS[k].rotulo} · {contaPrazo[k].toLocaleString("pt-BR")}
+            </Link>
+          ))}
+        </div>
+        {porSegPrazo.size > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="text-left text-[11px] uppercase tracking-wide text-gray-500">
+                <tr><th className="px-2 py-1">Seguradora</th><th className="px-2 py-1 text-right">No prazo</th><th className="px-2 py-1 text-right">Atenção</th><th className="px-2 py-1 text-right">Atrasadas</th><th className="px-2 py-1 text-right">Muito atrasadas</th><th className="px-2 py-1 text-right">Sem referência</th></tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {[...porSegPrazo.entries()].sort((x, y) => (y[1].atrasada + y[1].muito_atrasada) - (x[1].atrasada + x[1].muito_atrasada)).map(([sg, o]) => (
+                  <tr key={sg}>
+                    <td className="px-2 py-1 font-medium">{sg}</td>
+                    <td className="px-2 py-1 text-right">{o.no_prazo}</td>
+                    <td className="px-2 py-1 text-right">{o.atencao}</td>
+                    <td className="px-2 py-1 text-right font-medium text-orange-700">{o.atrasada}</td>
+                    <td className="px-2 py-1 text-right font-semibold text-red-700">{o.muito_atrasada}</td>
+                    <td className="px-2 py-1 text-right text-gray-500">{o.sem_ref}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <details className="text-[11px] text-gray-600">
+          <summary className="cursor-pointer font-medium text-o2-navy">De onde vem cada referência de prazo ({refsUsadas.size})</summary>
+          <p className="mt-1">Dias entre a efetivação e a emissão das apólices já emitidas. Início = “card” (etapa SUCESSO do card no Bitrix) ou “proposta do Corp” (data da proposta). Usa-se a referência da mesma origem da data da proposta pendente. Só vale com n ≥ 10. Calculada em {refsUsadas.size ? formatarData([...refsUsadas.values()][0].calculada_em.slice(0, 10)) : "—"} e recalculada a cada hora junto com a fila.</p>
+          <table className="mt-1 w-full">
+            <thead className="text-left uppercase text-gray-500"><tr><th className="pr-2">Início</th><th className="pr-2">Seguradora</th><th className="pr-2">Produto</th><th className="pr-2 text-right">n</th><th className="pr-2 text-right">Mediana</th><th className="pr-2 text-right">P75</th><th className="pr-2 text-right">P90</th><th className="text-right">% até 7 dias</th></tr></thead>
+            <tbody>
+              {[...refsUsadas.values()].sort((x, y) => x.fonte_inicio.localeCompare(y.fonte_inicio) || x.seguradora.localeCompare(y.seguradora) || x.produto.localeCompare(y.produto)).map((r) => (
+                <tr key={`${r.fonte_inicio}${r.seguradora}${r.produto}`}>
+                  <td className="pr-2">{r.fonte_inicio === "card" ? "card (SUCESSO)" : "proposta do Corp"}</td><td className="pr-2">{r.seguradora}</td><td className="pr-2">{r.produto === "*" ? "todos (nível seguradora)" : r.produto}</td>
+                  <td className="pr-2 text-right">{r.n.toLocaleString("pt-BR")}</td><td className="pr-2 text-right">{r.mediana_dias} d</td><td className="pr-2 text-right">{r.p75_dias} d</td><td className="pr-2 text-right">{r.p90_dias} d</td><td className="text-right">{r.pct_ate_7_dias}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </details>
+      </section>
+
+      {[{ lista: mesLinhas, herd: false, total: mesFiltradas.length }, { lista: herdLinhas, herd: true, total: herdFiltradas.length }].map(({ lista, herd, total: totalSecao }) => (
       <section key={herd ? "herdadas" : "do-mes"} className="space-y-2">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">
           {herd ? `Herdadas de meses anteriores (efetivadas antes de ${rotuloMes})` : `Do mês: efetivadas em ${rotuloMes}`} · {totalSecao.toLocaleString("pt-BR")}
@@ -262,6 +360,8 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
                 <th className="px-3 py-2">Vigência</th>
                 <th className="px-3 py-2">Efetivada em</th>
                 <th className="px-3 py-2 text-right">Dias</th>
+                <th className="px-3 py-2">Prazo esperado</th>
+                <th className="px-3 py-2">Situação de prazo</th>
                 <th className="px-3 py-2">Código O2 do documento</th>
                 <th className="px-3 py-2">Origem</th>
                 <th className="px-3 py-2">Imobiliária</th>
@@ -292,6 +392,19 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
                     <td className="whitespace-nowrap px-3 py-2">{c?.vigencia_inicio || c?.vigencia_fim ? `${formatarData(c?.vigencia_inicio ?? null)} a ${formatarData(c?.vigencia_fim ?? null)}` : formatarData(d.vigencia_inicio)}</td>
                     <td className="px-3 py-2" title={`data vinda de: ${d.fonte_data}`}>{formatarData(d.data_efetivacao)}<span className="block text-[10px] text-gray-400">{d.fonte_data}</span>{herd ? <span className="block text-[10px] font-medium text-orange-700">herdada de {d.data_efetivacao.slice(5, 7)}/{d.data_efetivacao.slice(0, 4)}</span> : null}</td>
                     <td className="px-3 py-2 text-right"><span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${corDias(dias)} ${dias > 60 ? "font-bold ring-2 ring-red-500" : ""}`} title={dias > 60 ? "Mais de 60 dias sem virar apólice" : undefined}>{dias}</span></td>
+                    {(() => {
+                      const pz = prazoPorId.get(d.id);
+                      const r = pz?.ref ?? null;
+                      const k = pz?.chave ?? "sem_ref";
+                      return (
+                        <>
+                          <td className="whitespace-nowrap px-3 py-2" title={r ? `Referência: ${r.nivel === "seguradora_produto" ? `${r.seguradora} ${r.produto}` : `${r.seguradora} (todos os produtos)`}, início = ${r.fonte_inicio === "card" ? "card (SUCESSO)" : "proposta do Corp"}, n = ${r.n}, p90 ${r.p90_dias} d` : "Menos de 10 apólices emitidas com esta origem de data: sem referência"}>
+                            {r ? <>{r.mediana_dias} d<span className="text-gray-400"> mediana · {r.p75_dias} d p75</span><span className="block text-[10px] text-gray-400">{r.nivel === "seguradora" ? "da seguradora" : "do produto"} · {r.fonte_inicio === "card" ? "card" : "proposta Corp"} · n {r.n.toLocaleString("pt-BR")}</span></> : <span className="text-gray-400">—</span>}
+                          </td>
+                          <td className="px-3 py-2"><span className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-medium ${PRAZOS[k].cor}`}>{PRAZOS[k].rotulo}</span></td>
+                        </>
+                      );
+                    })()}
                     <td className="px-3 py-2 font-medium">
                       <Link href={`/erp/documentos/${d.id}`} className="text-o2-navy hover:underline">{d.nosso_numero}</Link>
                       <span className="block text-[10px] font-normal text-gray-400">{d.nosso_numero_corp ? `Corp ${d.nosso_numero_corp}` : "ainda não existe no Corp"}</span>
