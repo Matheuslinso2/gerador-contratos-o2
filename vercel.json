@@ -160,6 +160,10 @@
       "schedule": "58 * * * *"
     },
     {
+      "path": "/api/cron/chat-cubo",
+      "schedule": "59 * * * *"
+    },
+    {
       "path": "/api/cron/erp-cobranca-pronta",
       "schedule": "3-59/10 7-22 * * *"
     },

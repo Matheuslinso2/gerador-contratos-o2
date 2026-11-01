@@ -8,7 +8,7 @@ import { FERRAMENTAS_GERAIS, executarFerramentaGeral } from "./roboGeral";
 import { FERRAMENTAS_BUSCA, executarFerramentaBusca } from "./roboBusca";
 import { FERRAMENTA_RELATORIO, executarFerramentaRelatorio } from "./roboRelatorio";
 import { FERRAMENTA_ARQUIVOS, executarFerramentaArquivos } from "./roboArquivos";
-import { FERRAMENTA_PRIMEIRA_COTACAO, executarFerramentaAnalises } from "./roboAnalises";
+import { FERRAMENTA_PRIMEIRA_COTACAO, FERRAMENTA_CUBO, executarFerramentaAnalises } from "./roboAnalises";
 import { FERRAMENTA_LOGICA, chamadaTemDadosPessoais, descreverChamada, textoTemDadosPessoais } from "./privacidadePdf";
 
 // Robô O2 do chat da equipe (Fase 2, 29/10/2026). Mesmo "cérebro" da IA do WhatsApp (painéis + tabelas do
@@ -67,6 +67,7 @@ MAPA DE FONTES — consulte TODAS as que a pergunta abrange; nunca responda com 
 - Apólice: sim/não — dado principal (nº e vigência)
 Se houver mais de um produto ou mais de um item, uma linha por item. Não repita o mesmo fato em duas linhas.
 - COMO LER O QUE ACHAR (glossário): card do Bitrix em etapa de sucesso ("Efetivado") = cotação efetivada, que VIROU PROPOSTA; documento do ERP com conceito "PROPOSTA em emissão" = existe proposta (é normal não ter nº de apólice nem vigência até a seguradora emitir; data = efetivadaEm); só é APÓLICE o que tiver conceito de apólice (vigente, vencida, cancelada). Linha de painel/planilha com status EFETIVADO = cotação efetivada; NÃO EFETIVADO = cotação encerrada sem virar proposta; EM ANDAMENTO = cotação em aberto. A cotação antiga não efetivada e a proposta nova da mesma pessoa são itens DIFERENTES: não os misture nem use um para negar o outro. O mês do pedido vale pela data da cotação (criação do card/linha) ou da efetivação (proposta): se a proposta foi efetivada neste mês, diga que SIM, existe proposta este mês.
+- ESTATÍSTICAS E CRUZAMENTOS (totais, médias, ticket médio, prêmio, comissão, aluguel, parcelas, rankings, evolução por mês/trimestre/semestre/ano, por produto, seguradora, imobiliária, responsável, bairro, faixa de aluguel): use PRIMEIRO consultar_cubo (instantâneo, dados prontos), com agrupar = as dimensões pedidas. Só use consultar_dados/painéis quando o cubo não tiver a dimensão ou para listar itens. Comissão por produto/seguradora/período: consultar_cubo com fato (apolice = comissão das apólices; cotacao = previsto das cotações; não some fatos). Responda com o número e diga a cobertura quando faltar dado (aluguel só na Fiança; bairro e renda quase não existem).
 - PERGUNTAS DE "PRIMEIRA VEZ" (quantas/quais imobiliárias fizeram a primeira cotação em um período, imobiliárias que começaram a cotar): use analisar_primeira_cotacao (de, ate, produto opcional). NUNCA leia tabelas inteiras para isso: estoura o tempo. Diga o que a base cobre (o histórico começa em 2020 na Fiança e é bem mais recente nos outros produtos: "primeira" = primeira registrada) e que grupo de imobiliárias conta como uma.
 - QUANDO NÃO ENCONTRAR (pessoa, card, apólice, cotação): seja curto e honesto. Diga em 1 ou 2 linhas o que foi consultado (cadastro de pessoas, cards do Bitrix já guardados, apólices e propostas do ERP, painéis) e que a base é atualizada de hora em hora a partir do Bitrix e do Corp — por isso um card criado há minutos ou um documento ainda não digitado podem não aparecer. Nunca afirme "não existe em nenhum período"; diga "não encontrei na base". Se a busca trouxe nomes parecidos (mesmo primeiro nome e sobrenome diferente, ou grafia parecida), liste até 3 e pergunte se é algum deles. Use só *um asterisco* para negrito (nunca **dois**), sem listas longas.
 - Ao final de qualquer contagem diga de quais fontes/produtos/tipos ela veio e o que ficou de fora.
@@ -89,7 +90,7 @@ ESTILO
 // Conjunto de ferramentas e roteamento do robô: usados pela produção e pelos testes (mesmo código, mesmo comportamento).
 export function ferramentasDoRobo(verComissao: boolean): Anthropic.Tool[] {
   return verComissao
-    ? [...FERRAMENTAS_ERP, ...FERRAMENTAS_GERAIS, ...FERRAMENTAS_BUSCA, FERRAMENTA_RELATORIO, FERRAMENTA_ARQUIVOS, FERRAMENTA_PRIMEIRA_COTACAO, ...FERRAMENTAS]
+    ? [...FERRAMENTAS_ERP, ...FERRAMENTAS_GERAIS, ...FERRAMENTAS_BUSCA, FERRAMENTA_RELATORIO, FERRAMENTA_ARQUIVOS, FERRAMENTA_PRIMEIRA_COTACAO, FERRAMENTA_CUBO, ...FERRAMENTAS]
     : [
         ...FERRAMENTAS_ERP,
         ...FERRAMENTAS_GERAIS.filter((f) => f.name !== "consultar_painel_extra"),
@@ -97,6 +98,7 @@ export function ferramentasDoRobo(verComissao: boolean): Anthropic.Tool[] {
         FERRAMENTA_RELATORIO,
         FERRAMENTA_ARQUIVOS,
         FERRAMENTA_PRIMEIRA_COTACAO,
+        FERRAMENTA_CUBO,
         ...FERRAMENTAS.filter((f) => f.name === "consultar_painel"), // sem comissão/repasse para quem não é admin
       ];
 }
@@ -108,7 +110,7 @@ export async function executarFerramentaDoRobo(nome: string, entrada: unknown, e
     (await executarFerramentaBusca(nome, entrada, verComissao)) ??
     (await executarFerramentaRelatorio(nome, entrada, email, verComissao)) ??
     (await executarFerramentaArquivos(nome, entrada, email)) ??
-    (await executarFerramentaAnalises(nome, entrada)) ??
+    (await executarFerramentaAnalises(nome, entrada, verComissao)) ??
     (verComissao || nome === "consultar_painel"
       ? await executarFerramenta(nome, entrada, { semFinanceiro: !verComissao })
       : "Ferramenta indisponível para o seu perfil.")

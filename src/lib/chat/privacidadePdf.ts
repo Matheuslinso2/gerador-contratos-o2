@@ -103,6 +103,13 @@ export function descreverChamada(nome: string, entrada: unknown): string | null 
     return `Painel ${String(e.painel)}${e.competencia ? `, competência ${String(e.competencia)}` : ""}${Array.isArray(e.partes) && e.partes.length ? `, partes ${lista(e.partes)}` : ""}${e.caminho ? `, caminho ${String(e.caminho)}` : ""}`;
   }
   if (nome === "gerar_relatorio_pdf") return "Relatório de documentos do ERP";
+  if (nome === "consultar_cubo") {
+    const filtros = [e.fato, e.produto, e.tipo, e.fonte, e.status, e.seguradora, e.imobiliaria].filter(Boolean).map(String).join(", ") || "todos os dados";
+    const periodo = e.mes_de || e.mes_ate ? `, de ${String(e.mes_de ?? "…")} a ${String(e.mes_ate ?? "…")}` : "";
+    const agrup = Array.isArray(e.agrupar) && e.agrupar.length ? `, agrupado por ${lista(e.agrupar)}` : "";
+    return `Cubo de estatísticas (${filtros}${periodo}${agrup})`;
+  }
+  if (nome === "analisar_primeira_cotacao") return `Primeira cotação por imobiliária, de ${String(e.de)} a ${String(e.ate)}${e.produto ? `, produto ${String(e.produto)}` : ""}`;
   return null;
 }
 

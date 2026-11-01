@@ -1,0 +1,9 @@
+-- CUBO de estatísticas do Robô O2 (01/11/2026). Aplicado pelas migrações chat_cubo_v1 e chat_cubo_consultar.
+-- chat_cubo (view materializada, ~57 mil linhas): fato (cotacao | proposta | apolice | endosso) x mês x produto x tipo (novo | renovacao | endosso) x fonte x status x
+--   imobiliária/grupo x seguradora (normalizada) x responsável x faixa de aluguel x bairro x cidade x parcelas x forma de pagamento,
+--   com qtd, prêmio líquido/total, comissão, aluguel (soma e qtd). cotacao vem de producao_resolvida (Bitrix + planilhas); proposta/apolice/endosso vêm de erp_documentos
+--   (+ item do documento e endereços do Corp para bairro/aluguel). Corp "emissao" fica de fora (já está em erp_documentos).
+-- chat_cubo_atualizar(): refaz a view e grava chat_cubo_meta; chamada de hora em hora por /api/cron/chat-cubo (:59).
+-- chat_cubo_consultar(jsonb): filtros e agrupamentos só por colunas da lista permitida (sem SQL livre); período do ano: mes, trimestre, semestre, ano.
+-- chat_seguradora_norm / chat_faixa_aluguel: normalizações usadas na view. Só service_role executa.
+-- (corpo completo das funções: histórico de migrações do projeto Supabase)
