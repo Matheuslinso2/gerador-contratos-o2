@@ -91,7 +91,15 @@ const ESTADO_LINHA: Record<string, { t: string; cor: string }> = {
   nao_parcela_confirmada: { t: "não é parcela (confirmado)", cor: "bg-blue-100 text-blue-800" },
   pendente_identificacao: { t: "pendente de identificação", cor: "bg-red-100 text-red-700" },
 };
-type PontoDia = { dia: number; regra: number; exper: number; recebido: number };
+// outrasReceita: entradas que são receita mas não são comissão de seguro (rendimento, novas receitas);
+// outrasNaoReceita: entradas na conta que NÃO são receita (empréstimo, estorno/devolução, sem categoria)
+type PontoDia = { dia: number; regra: number; exper: number; recebido: number; outrasReceita: number; outrasNaoReceita: number };
+type OutraEntrada = { classe: string; eReceita: boolean; qtd: number; valor: number; previsao: number | null };
+const EMPRESA_NIBO: Record<string, string> = { corretora: "O2 Corretora", capitalizacao: "O2 Capitalização" };
+const ROTULO_ENTRADA: Record<string, string> = {
+  rendimento: "Rendimento de aplicações", nova_receita: "Novas receitas", emprestimo: "Empréstimo (não é receita)",
+  estorno_devolucao: "Estorno e devolução (não é receita)", sem_categoria: "Sem categoria no Nibo (classificar)", outra: "Outra categoria",
+};
 type LinhaTopo = { seg: string; nome: string; prevista: number; regra: number; extratos: number; baixadas: number; baixadasErp: number; proLabore: number; foraSeguro: number; nibo: number };
 const COLUNAS_CAIXA = "grid grid-cols-[minmax(150px,1.5fr)_64px_repeat(5,minmax(100px,1fr))_minmax(150px,1.2fr)] items-center gap-x-2";
 
@@ -191,6 +199,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
   let linhasCaixa: LinhaCaixa[] = [];
   const quadroTopo: Record<string, LinhaTopo[]> = {};
   const graficoTopo: Record<string, PontoDia[]> = {};
+  const outrasTopo: Record<string, OutraEntrada[]> = {};
   let inadLinhas: LinhaInad[] = [];
   let erroListaInad: string | null = null;
   let confLinhas: LinhaConf[] = [];
@@ -202,7 +211,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
     const qDias = supabase.from("erp_baixa_assistida_resumo")
       .select("seg_abrev, corretora, data_recebimento, total_extrato, soma_linhas, liquido_sem_desconto, linhas")
       .neq("tipo", "resumo_mensal").gte("data_recebimento", desdeCaixa).lte("data_recebimento", ateCaixa).limit(5000);
-    const [{ data: diasBrutos }, entradas, { data: segsBrutas }, { data: previsaoBruta }, { data: nfsBrutas }, { data: baixadasBrutas }, { data: previstoDiaBruto }, { data: regraBruta }, { data: inadBruta }, { data: ligacaoBruta }, { data: inadLinhasBruta, error: erroInadLinhas }, { data: confBruta }, { data: confLinhasBruta }, { data: baixadasErpBrutas }, { data: proLaboreBrutas }, { data: foraSeguroBrutas }] = await Promise.all([
+    const [{ data: diasBrutos }, entradas, { data: segsBrutas }, { data: previsaoBruta }, { data: nfsBrutas }, { data: baixadasBrutas }, { data: previstoDiaBruto }, { data: regraBruta }, { data: inadBruta }, { data: ligacaoBruta }, { data: inadLinhasBruta, error: erroInadLinhas }, { data: confBruta }, { data: confLinhasBruta }, { data: baixadasErpBrutas }, { data: proLaboreBrutas }, { data: foraSeguroBrutas }, { data: outrasBrutas }] = await Promise.all([
       qDias, entradasNibo(supabase, desdeCaixa, ateCaixa), supabase.from("erp_seguradoras").select("abreviacao, nome"),
       supabase.rpc("erp_retrato", { p_funcao: "erp_previsao_caixa_mensal", p_de: desdeCaixa, p_ate: fimCaixa }),
       supabase.from("erp_extratos_seguradora").select("nf_numero, nf_emitida_em, seguradora:erp_seguradoras!inner(abreviacao)").in("seguradora.abreviacao", ["POTT", "TOO"]).gte("competencia", desdeCaixa).lte("competencia", fimCaixa),
@@ -217,6 +226,8 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
       supabase.rpc("erp_baixadas_erp_mensal", { p_de: desdeCaixa, p_ate: fimCaixa }),
       supabase.rpc("erp_pro_labore_mensal_quadro", { p_de: desdeCaixa, p_ate: fimCaixa }),
       supabase.rpc("erp_fora_seguro_mensal_quadro", { p_de: desdeCaixa, p_ate: fimCaixa }),
+      // entradas na conta que não são comissão de seguro (rendimento, novas receitas, empréstimo, devolução), com 5 meses de histórico para a previsão
+      supabase.rpc("erp_nibo_outras_entradas", { p_de: new Date(Date.UTC(Number(mesesOrd[0].slice(0, 4)), Number(mesesOrd[0].slice(5, 7)) - 6, 1)).toISOString().slice(0, 10), p_ate: fimCaixa }),
     ]);
     confLinhas = (confLinhasBruta ?? []) as LinhaConf[];
     inadLinhas = (inadLinhasBruta ?? []) as LinhaInad[];
@@ -283,14 +294,48 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
     const [aTopo, mTopo] = mesTopo.split("-").map(Number);
     const diasDoMes = new Date(Date.UTC(aTopo, mTopo, 0)).getUTCDate();
     for (const corr of CORRETORAS) {
-      const pontos: PontoDia[] = Array.from({ length: diasDoMes }, (_, i) => ({ dia: i + 1, regra: 0, exper: 0, recebido: 0 }));
+      const pontos: PontoDia[] = Array.from({ length: diasDoMes }, (_, i) => ({ dia: i + 1, regra: 0, exper: 0, recebido: 0, outrasReceita: 0, outrasNaoReceita: 0 }));
+      for (const o of (outrasBrutas ?? []) as { empresa: string; dia: string; e_receita: boolean; valor: number | string }[]) {
+        if (EMPRESA_NIBO[o.empresa] === corr && o.dia.startsWith(mesTopo)) pontos[Number(o.dia.slice(8, 10)) - 1][o.e_receita ? "outrasReceita" : "outrasNaoReceita"] += Number(o.valor);
+      }
       for (const p of (previstoDiaBruto ?? []) as { corretora: string; dia: string; regra_liquido: number | string; experiencia_liquido: number | string }[]) {
         if (p.corretora === corr && p.dia.startsWith(mesTopo)) { const i = Number(p.dia.slice(8, 10)) - 1; pontos[i].regra += Number(p.regra_liquido); pontos[i].exper += Number(p.experiencia_liquido); }
       }
       for (const n of entradas) {
         if (n.corretora === corr && n.dia.startsWith(mesTopo)) pontos[Number(n.dia.slice(8, 10)) - 1].recebido += n.valor;
       }
-      graficoTopo[corr] = pontos.map((p) => ({ dia: p.dia, regra: Math.round(p.regra * 100) / 100, exper: Math.round(p.exper * 100) / 100, recebido: Math.round(p.recebido * 100) / 100 }));
+      graficoTopo[corr] = pontos.map((p) => ({ dia: p.dia, regra: Math.round(p.regra * 100) / 100, exper: Math.round(p.exper * 100) / 100, recebido: Math.round(p.recebido * 100) / 100, outrasReceita: Math.round(p.outrasReceita * 100) / 100, outrasNaoReceita: Math.round(p.outrasNaoReceita * 100) / 100 }));
+    }
+    // ---- Outras entradas na conta (não são comissão de seguro): valor do mês por tipo + previsão pela frequência dos meses anteriores ----
+    // previsão = média mensal dos meses anteriores em que o tipo apareceu, só quando apareceu em 3 ou mais dos 4 meses anteriores
+    {
+      const porEmpresa = new Map<string, Map<string, { eReceita: boolean; meses: Map<string, { qtd: number; valor: number }> }>>();
+      for (const o of (outrasBrutas ?? []) as { empresa: string; dia: string; classe: string; e_receita: boolean; qtd: number | string; valor: number | string }[]) {
+        const corr = EMPRESA_NIBO[o.empresa];
+        if (!corr) continue;
+        for (const alvo of [corr, "Consolidado"]) {
+          const classes = porEmpresa.get(alvo) ?? new Map();
+          porEmpresa.set(alvo, classes);
+          const c = classes.get(o.classe) ?? { eReceita: o.e_receita, meses: new Map() };
+          classes.set(o.classe, c);
+          const m = c.meses.get(o.dia.slice(0, 7)) ?? { qtd: 0, valor: 0 };
+          m.qtd += Number(o.qtd); m.valor += Number(o.valor);
+          c.meses.set(o.dia.slice(0, 7), m);
+        }
+      }
+      const [aM, mM] = mesTopo.split("-").map(Number);
+      const anteriores = [1, 2, 3, 4].map((k) => { const d = new Date(Date.UTC(aM, mM - 1 - k, 1)); return d.toISOString().slice(0, 7); });
+      for (const [alvo, classes] of porEmpresa) {
+        const lista: OutraEntrada[] = [];
+        for (const [classe, c] of classes) {
+          const atual = c.meses.get(mesTopo);
+          const ocorridos = anteriores.map((mm) => c.meses.get(mm)?.valor).filter((v): v is number => v !== undefined);
+          const previsao = ocorridos.length >= 3 ? Math.round((ocorridos.reduce((t, v) => t + v, 0) / ocorridos.length) * 100) / 100 : null;
+          if (!atual && previsao === null) continue;
+          lista.push({ classe, eReceita: c.eReceita, qtd: atual?.qtd ?? 0, valor: Math.round((atual?.valor ?? 0) * 100) / 100, previsao });
+        }
+        outrasTopo[alvo] = lista.sort((x, y) => Number(y.eReceita) - Number(x.eReceita) || y.valor - x.valor);
+      }
     }
     const bancoMes = new Map<string, number>();
     for (const n of entradas) {
@@ -496,6 +541,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
             <TabelaControle titulo="o2 Capitalização e Seguros" info={<InfoLegenda titulo="Quadro da O2 Capitalização">Um quadro só desta empresa, uma linha por seguradora (não por produto), com as mesmas colunas do quadro da O2 Corretora. Líquido do imposto retido.</InfoLegenda>} linhas={quadroTopo["O2 Capitalização"] ?? []} />
           </div>
           <TabelaControle titulo="Consolidado · O2 Corretora + O2 Capitalização (uma linha por seguradora)" info={<InfoLegenda titulo="Quadro consolidado">Junta as duas empresas numa visão só: para cada seguradora, soma o que foi previsto, o que os extratos dizem que foi pago, o que o Corp baixou, o que o ERP baixou e o que entrou no Nibo nas duas empresas. As diferenças são calculadas sobre essas somas. Líquido do imposto retido.</InfoLegenda>} linhas={consolidarQuadros(quadroTopo["O2 Corretora"] ?? [], quadroTopo["O2 Capitalização"] ?? [])} />
+          <QuadroOutrasEntradas consolidado={outrasTopo["Consolidado"] ?? []} porEmpresa={{ "O2 Corretora": outrasTopo["O2 Corretora"] ?? [], "O2 Capitalização": outrasTopo["O2 Capitalização"] ?? [] }} />
           <p className="text-[11px] leading-relaxed text-gray-500">
             Valores líquidos do imposto retido, como entram na conta. <b>Prevista (regra)</b>: o que deveria cair no mês pela regra de cada seguradora (boleto, fatura ou nota fiscal + o prazo próprio dela), sem atraso nem inadimplência. <b>Prevista (experiência)</b>: vencimento da parcela + o prazo que a seguradora costuma levar, pelo histórico.
             <b> Extratos de comissão</b>: o que a seguradora pagou segundo os extratos lidos. <b>Baixadas</b>: o que já foi baixado no Corp no mês (data da quitação). <b>Nibo</b>: o que entrou na conta (receita de seguros).
@@ -1157,9 +1203,9 @@ function consolidarDias(a: PontoDia[], b: PontoDia[]): PontoDia[] {
   const m = new Map<number, PontoDia>();
   for (const p of [...a, ...b]) {
     const x = m.get(p.dia);
-    if (x) { x.regra += p.regra; x.exper += p.exper; x.recebido += p.recebido; } else m.set(p.dia, { ...p });
+    if (x) { x.regra += p.regra; x.exper += p.exper; x.recebido += p.recebido; x.outrasReceita += p.outrasReceita; x.outrasNaoReceita += p.outrasNaoReceita; } else m.set(p.dia, { ...p });
   }
-  return [...m.values()].sort((x, y) => x.dia - y.dia).map((p) => ({ dia: p.dia, regra: Math.round(p.regra * 100) / 100, exper: Math.round(p.exper * 100) / 100, recebido: Math.round(p.recebido * 100) / 100 }));
+  return [...m.values()].sort((x, y) => x.dia - y.dia).map((p) => ({ dia: p.dia, regra: Math.round(p.regra * 100) / 100, exper: Math.round(p.exper * 100) / 100, recebido: Math.round(p.recebido * 100) / 100, outrasReceita: Math.round(p.outrasReceita * 100) / 100, outrasNaoReceita: Math.round(p.outrasNaoReceita * 100) / 100 }));
 }
 
 function consolidarQuadros(a: LinhaTopo[], b: LinhaTopo[]): LinhaTopo[] {
@@ -1267,8 +1313,60 @@ const FAIXAS_BASE = [0, 1000, 2000, 3000, 5000, 10000, 15000, 20000, 25000, 3000
 const FAIXAS_EXTRA = [80000, 100000, 150000, 200000, 250000, 300000, 400000, 500000];
 const rotuloFaixa = (lo: number, hi: number) => (lo === 0 ? "até 1 mil" : `${lo / 1000}–${hi / 1000} mil`);
 
+// Entradas na conta que NÃO são comissão de seguro. Rendimento e novas receitas contam como receita (baixa de receita pelo banco, nível 2);
+// empréstimo, estorno/devolução e entrada sem categoria entram na conta mas não são receita. Previsão = média dos meses anteriores,
+// só quando o tipo apareceu em 3 ou mais dos 4 meses anteriores.
+function QuadroOutrasEntradas({ consolidado, porEmpresa }: { consolidado: OutraEntrada[]; porEmpresa: Record<string, OutraEntrada[]> }) {
+  const totRec = consolidado.filter((o) => o.eReceita).reduce((t, o) => t + o.valor, 0);
+  const totNao = consolidado.filter((o) => !o.eReceita).reduce((t, o) => t + o.valor, 0);
+  const valorDe = (lista: OutraEntrada[] | undefined, classe: string) => lista?.find((o) => o.classe === classe);
+  return (
+    <div className="space-y-2 rounded-lg border border-gray-300 p-3">
+      <h3 className="text-sm font-bold text-o2-navy">
+        Outras entradas na conta · não são comissão de seguro
+        <InfoLegenda titulo="Outras entradas na conta">O que entrou na conta no mês fora da categoria Receita de seguros do Nibo. <b>Rendimento de aplicações</b> e <b>novas receitas</b> são receita (baixa de receita pelo banco). <b>Empréstimo</b>, <b>estorno e devolução</b> e <b>entrada sem categoria</b> entram na conta, mas não são receita: ficam separados para não distorcer a conferência dos extratos. A previsão é a média dos meses anteriores e só aparece quando o tipo se repetiu em 3 ou mais dos 4 meses anteriores.</InfoLegenda>
+      </h3>
+      {consolidado.length === 0 ? <p className="text-xs text-gray-500">Nenhuma outra entrada no mês.</p> : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-xs">
+            <thead className="text-gray-500">
+              <tr>
+                <th className="px-2 py-1 text-left font-semibold">Tipo</th>
+                <th className="px-2 py-1 text-left font-semibold">É receita?</th>
+                <th className="px-2 py-1 text-right font-semibold">O2 Corretora</th>
+                <th className="px-2 py-1 text-right font-semibold">O2 Capitalização</th>
+                <th className="px-2 py-1 text-right font-semibold">Consolidado</th>
+                <th className="px-2 py-1 text-right font-semibold">Lançamentos</th>
+                <th className="px-2 py-1 text-right font-semibold">Previsão mensal</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {consolidado.map((o) => (
+                <tr key={o.classe}>
+                  <td className="px-2 py-1 font-medium">{ROTULO_ENTRADA[o.classe] ?? o.classe}</td>
+                  <td className="px-2 py-1">{o.eReceita ? <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700">receita</span> : <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-600">não é receita</span>}</td>
+                  <td className="px-2 py-1 text-right">{brl(valorDe(porEmpresa["O2 Corretora"], o.classe)?.valor ?? 0)}</td>
+                  <td className="px-2 py-1 text-right">{brl(valorDe(porEmpresa["O2 Capitalização"], o.classe)?.valor ?? 0)}</td>
+                  <td className="px-2 py-1 text-right font-semibold">{brl(o.valor)}</td>
+                  <td className="px-2 py-1 text-right">{o.qtd}</td>
+                  <td className="px-2 py-1 text-right text-gray-600">{o.previsao === null ? "–" : brl(o.previsao)}</td>
+                </tr>
+              ))}
+              <tr className="bg-gray-50 font-bold">
+                <td className="px-2 py-1" colSpan={4}>Receita fora do seguro (baixa pelo banco) · entrou na conta e não é receita</td>
+                <td className="px-2 py-1 text-right">{brl(totRec)} · {brl(totNao)}</td>
+                <td colSpan={2} />
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function GraficoDiario({ titulo, pontos }: { titulo: string; pontos: PontoDia[] }) {
-  const maior = Math.max(0, ...pontos.map((p) => Math.max(p.regra, p.exper, p.recebido)));
+  const maior = Math.max(0, ...pontos.map((p) => Math.max(p.regra, p.exper, p.recebido, p.outrasReceita, p.outrasNaoReceita)));
   const limites = [...FAIXAS_BASE];
   for (const e of FAIXAS_EXTRA) if (limites[limites.length - 1] < maior) limites.push(e);
   const nFaixas = limites.length - 1;
@@ -1281,12 +1379,14 @@ function GraficoDiario({ titulo, pontos }: { titulo: string; pontos: PontoDia[] 
   const H = topo + nFaixas * alturaFaixa + base;
   const largura = W - esq - dir;
   const slot = largura / Math.max(pontos.length, 1);
-  const barra = slot * 0.27;
+  const barra = slot * 0.17;
   const yDe = (v: number) => topo + (nFaixas - posicao(v)) * alturaFaixa;
   const mil = (v: number) => (Math.abs(v) < 0.5 ? "–" : Math.round(v).toLocaleString("pt-BR"));
   const totalRegra = pontos.reduce((t, p) => t + p.regra, 0);
   const totalExper = pontos.reduce((t, p) => t + p.exper, 0);
   const totalRec = pontos.reduce((t, p) => t + p.recebido, 0);
+  const totalOutRec = pontos.reduce((t, p) => t + p.outrasReceita, 0);
+  const totalOutNao = pontos.reduce((t, p) => t + p.outrasNaoReceita, 0);
   return (
     <div className="space-y-2 rounded-lg border border-gray-300 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1295,6 +1395,8 @@ function GraficoDiario({ titulo, pontos }: { titulo: string; pontos: PontoDia[] 
           <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-emerald-700" /> Prevista (regra)</span>
           <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-emerald-300" /> Prevista (experiência)</span>
           <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-sky-500" /> Recebido no dia</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-violet-500" /> Outras receitas (fora do seguro)</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-gray-400" /> Entrou na conta, não é receita</span>
         </div>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label={`Prevista pela regra, prevista pela experiência e recebida no dia — ${titulo}`}>
@@ -1314,18 +1416,28 @@ function GraficoDiario({ titulo, pontos }: { titulo: string; pontos: PontoDia[] 
           return (
             <g key={p.dia}>
               {p.regra > 0 && (
-                <rect x={x0 + slot * 0.06} y={yDe(p.regra)} width={barra} height={Math.max(base0 - yDe(p.regra), 1)} className="fill-emerald-700">
+                <rect x={x0 + slot * 0.04} y={yDe(p.regra)} width={barra} height={Math.max(base0 - yDe(p.regra), 1)} className="fill-emerald-700">
                   <title>{`Dia ${p.dia} · prevista pela regra ${brl(p.regra)}`}</title>
                 </rect>
               )}
               {p.exper > 0 && (
-                <rect x={x0 + slot * 0.35} y={yDe(p.exper)} width={barra} height={Math.max(base0 - yDe(p.exper), 1)} className="fill-emerald-300">
+                <rect x={x0 + slot * 0.21} y={yDe(p.exper)} width={barra} height={Math.max(base0 - yDe(p.exper), 1)} className="fill-emerald-300">
                   <title>{`Dia ${p.dia} · prevista pela experiência ${brl(p.exper)}`}</title>
                 </rect>
               )}
               {p.recebido > 0 && (
-                <rect x={x0 + slot * 0.64} y={yDe(p.recebido)} width={barra} height={Math.max(base0 - yDe(p.recebido), 1)} className="fill-sky-500">
+                <rect x={x0 + slot * 0.38} y={yDe(p.recebido)} width={barra} height={Math.max(base0 - yDe(p.recebido), 1)} className="fill-sky-500">
                   <title>{`Dia ${p.dia} · recebido ${brl(p.recebido)}`}</title>
+                </rect>
+              )}
+              {p.outrasReceita > 0 && (
+                <rect x={x0 + slot * 0.55} y={yDe(p.outrasReceita)} width={barra} height={Math.max(base0 - yDe(p.outrasReceita), 1)} className="fill-violet-500">
+                  <title>{`Dia ${p.dia} · outras receitas (fora do seguro) ${brl(p.outrasReceita)}`}</title>
+                </rect>
+              )}
+              {p.outrasNaoReceita > 0 && (
+                <rect x={x0 + slot * 0.72} y={yDe(p.outrasNaoReceita)} width={barra} height={Math.max(base0 - yDe(p.outrasNaoReceita), 1)} className="fill-gray-400">
+                  <title>{`Dia ${p.dia} · entrou na conta e não é receita (empréstimo, devolução, sem categoria) ${brl(p.outrasNaoReceita)}`}</title>
                 </rect>
               )}
               <text x={x0 + slot / 2} y={H - 9} textAnchor="middle" fontSize={10} className="fill-gray-600">{p.dia}</text>
@@ -1357,6 +1469,16 @@ function GraficoDiario({ titulo, pontos }: { titulo: string; pontos: PontoDia[] 
               <td className="whitespace-nowrap px-1 py-0.5 font-semibold text-o2-coral">Recebido no dia</td>
               {pontos.map((p) => <td key={p.dia} className="px-0.5 py-0.5 text-right" title={brl(p.recebido)}>{mil(p.recebido)}</td>)}
               <td className="whitespace-nowrap px-1 py-0.5 text-right font-bold">{mil(totalRec)}</td>
+            </tr>
+            <tr>
+              <td className="whitespace-nowrap px-1 py-0.5 font-semibold text-violet-600">Outras receitas (fora do seguro)</td>
+              {pontos.map((p) => <td key={p.dia} className="px-0.5 py-0.5 text-right" title={brl(p.outrasReceita)}>{p.outrasReceita > 0 && p.outrasReceita < 0.5 ? "<1" : mil(p.outrasReceita)}</td>)}
+              <td className="whitespace-nowrap px-1 py-0.5 text-right font-bold">{brl(totalOutRec)}</td>
+            </tr>
+            <tr>
+              <td className="whitespace-nowrap px-1 py-0.5 font-semibold text-gray-500">Entrou na conta, não é receita</td>
+              {pontos.map((p) => <td key={p.dia} className="px-0.5 py-0.5 text-right" title={brl(p.outrasNaoReceita)}>{mil(p.outrasNaoReceita)}</td>)}
+              <td className="whitespace-nowrap px-1 py-0.5 text-right font-bold">{brl(totalOutNao)}</td>
             </tr>
           </tbody>
         </table>
