@@ -27,6 +27,7 @@ import { chromium, type BrowserContext, type Page } from "playwright";
 import { createServiceClient } from "@/lib/supabase/service";
 import { TIPO_POR_ROTULO, deveBaixar, estaPulado, registrarErro, selecionarPendentes } from "./anexos-fila";
 import { capturarBuscaSemResultado, capturarTelasDoDocumento } from "./telas";
+import { yDaLinhaDoDocumento } from "./linha-certa";
 import { agora, acharTodos, acharNaTela, definirPastaFotos, entrar, espera, esperarModelo, foto, lerConfig, log, RAIZ, VIEWPORT } from "./_corp";
 
 const args = process.argv.slice(2);
@@ -218,8 +219,10 @@ async function abrirDocumento(page: Page, nn: string): Promise<boolean> {
   if (!(await temLinhaNoResultado(page))) return false;
   // Às vezes o Corp responde "Não posso abrir a área de transferência" (o Windows estava com
   // o copiar/colar ocupado): Enter fecha o aviso e tenta abrir de novo, até 3 vezes.
+  // a busca traz também os documentos associados: abre a linha cujo Nosso Nº é o buscado (antes abria sempre a 1ª, que podia ser outro documento)
+  const yLinha = await yDaLinhaDoDocumento(page, nn, log);
   for (let tentativa = 1; ; tentativa++) {
-    await page.mouse.dblclick(370, 175);
+    await page.mouse.dblclick(370, yLinha);
     const fim = Date.now() + 12_000;
     while (Date.now() < fim) {
       if (await acharNaTela(page, "doc-aba-anexos")) return true;
