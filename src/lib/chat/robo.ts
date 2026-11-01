@@ -103,6 +103,28 @@ export function ferramentasDoRobo(verComissao: boolean): Anthropic.Tool[] {
       ];
 }
 
+// Os links de download (storage assinado) têm um token longo; quando a IA recopia o texto ele pode sair cortado ou alterado ("Invalid Compact JWS").
+// Aqui o texto final volta a usar o link EXATO devolvido pela ferramenta: casa pelo caminho do arquivo (antes do "?token=").
+const REGEX_LINK_ASSINADO = /https:\/\/[^\s"\\)\]]+\/storage\/v1\/object\/sign\/[^\s"\\)\]]+/g;
+function restaurarLinksAssinados(texto: string, originais: string[]): string {
+  if (!originais.length) return texto;
+  const caminho = (u: string) => u.split("?")[0];
+  return texto.replace(REGEX_LINK_ASSINADO, (u) => {
+    const exato = originais.find((o) => caminho(o) === caminho(u));
+    if (exato) return exato;
+    let melhor: string | null = null;
+    let melhorN = 0;
+    for (const o of originais) {
+      const a = caminho(o);
+      const b = caminho(u);
+      let n = 0;
+      while (n < a.length && n < b.length && a[n] === b[n]) n++;
+      if (n > melhorN) { melhorN = n; melhor = o; }
+    }
+    return melhor && melhorN >= 90 ? melhor : u;
+  });
+}
+
 export async function executarFerramentaDoRobo(nome: string, entrada: unknown, email: string, verComissao: boolean): Promise<string> {
   return (
     (await executarFerramentaErp(nome, entrada, verComissao)) ??
@@ -142,6 +164,7 @@ export async function responderComoRobo(email: string, historico: TurnoChat[]): 
   const mensagens: Anthropic.MessageParam[] = historico.map((t) => ({ role: t.role, content: t.content }));
   const inicio = Date.now();
 
+  const linksAssinados: string[] = [];
   let resposta: Anthropic.Message | null = null;
   for (let rodada = 0; rodada <= MAX_RODADAS; rodada++) {
     const semFerramentas = rodada === MAX_RODADAS || Date.now() - inicio > PRAZO_FERRAMENTAS_MS;
@@ -170,18 +193,23 @@ export async function responderComoRobo(email: string, historico: TurnoChat[]): 
         // Cada consulta tem prazo: o que demorar demais é cortado e o robô responde com o que já tem (antes a função inteira estourava 60 s e o chat dava erro).
         const restante = Math.max(8_000, TEMPO_TOTAL_MS - (Date.now() - inicio));
         const cortada = new Promise<string>((resolve) => setTimeout(() => resolve("A consulta demorou demais e foi interrompida. Use filtros menores (um produto, um mês, uma imobiliária) ou diga que não deu para calcular."), restante));
-        return { type: "tool_result" as const, tool_use_id: c.id, content: await Promise.race([executarFerramentaDoRobo(c.name, c.input, email, verComissao), cortada]) };
+        const saida = await Promise.race([executarFerramentaDoRobo(c.name, c.input, email, verComissao), cortada]);
+        for (const u of saida.match(REGEX_LINK_ASSINADO) ?? []) if (!linksAssinados.includes(u)) linksAssinados.push(u);
+        return { type: "tool_result" as const, tool_use_id: c.id, content: saida };
       })
     );
     mensagens.push({ role: "user", content: resultados });
   }
 
   if (resposta?.stop_reason === "refusal") return { texto: "Não consigo responder essa pergunta por aqui.", pdfPermitido: false, dadosPessoais: false, logica: null, fontes: [] };
-  const texto = (resposta?.content ?? [])
-    .filter((b): b is Anthropic.TextBlock => b.type === "text")
-    .map((b) => b.text)
-    .join("\n")
-    .trim();
+  const texto = restaurarLinksAssinados(
+    (resposta?.content ?? [])
+      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .map((b) => b.text)
+      .join("\n")
+      .trim(),
+    linksAssinados
+  );
   if (!texto) return { texto: "Não consegui montar uma resposta agora. Tente de novo em instantes.", pdfPermitido: false, dadosPessoais: false, logica: null, fontes: [] };
   // Sem nenhuma consulta de dados (conversa) ou com dado pessoal/documento no texto: sem PDF.
   const dadosPessoais = pessoal || textoTemDadosPessoais(texto);

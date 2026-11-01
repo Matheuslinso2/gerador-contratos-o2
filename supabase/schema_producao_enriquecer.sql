@@ -1,0 +1,6 @@
+-- Enriquecimento das linhas de planilha (01/11/2026). Aplicado pela migração producao_enriquecer + chat_cubo_v2_bairro_planilhas.
+-- producao_enriquecer(p_lote jsonb): grava em producao_unificada.extras os campos que a importação não lia (endereco, bairro, cidade_endereco, cep, iptu,
+--   condominio, m2, ocupacao, pct_do_aluguel) e o aluguel SÓ se estava vazio; o que já existe em extras vence. Casa por arquivo + aba + linha da planilha.
+-- Quem chama: scripts/base-unica/enriquecer-planilhas.mjs [--anos 2025,2026] [--re] [--gravar]  (lê as cópias congeladas; pula arquivo com aluguel <85% igual ao banco).
+-- Bairro inferido: linhas sem bairro mas com CEP recebem o bairro mais comum (>=80%) das demais linhas do mesmo CEP; marcadas com extras.bairro_origem = 'inferido_cep'.
+-- chat_cubo v2: cotações passam a trazer bairro/cidade de extras (antes eram NULL).
