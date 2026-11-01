@@ -11,10 +11,11 @@ type Regra = { codigo: string; seg: string; dominio: string; assunto: RegExp; ex
 const dig = (s: string) => s.replace(/\D/g, "").replace(/^0+/, "");
 const REGRAS: Regra[] = [
   { codigo: "porto_apolice_fianca", seg: "PORT", dominio: "portoseguro", assunto: /ap[oó]lice do seu porto seguro fianca locaticia foi emitida/i, extrai: (a) => { const m = /Documento:\s*\d+\s*\/\s*\d+\s*\/\s*(\d+)/i.exec(a); return m ? dig(m[1]) : null; }, prova: "emissao_apolice" },
+  { codigo: "porto_apolice_seguro", seg: "PORT", dominio: "portoseguro", assunto: /a ap[oó]lice do seu seguro foi emitida/i, extrai: (a) => { const m = /Ap[oó]lice:\s*#?\s*([\d.\/ -]+)/i.exec(a); const d = m ? m[1].replace(/\D/g, "") : ""; return d.length === 20 ? d.slice(9, 16) : null; /* 20 dígitos = sucursal+ramo+nº da apólice (7 dígitos, é o que o Corp/ERP guarda)+endosso 0000 */ }, prova: "emissao_apolice" },
   { codigo: "porto_endosso_fianca", seg: "PORT", dominio: "portoseguro", assunto: /endosso do seu porto seguro fianca locaticia foi emitido/i, extrai: (a) => { const m = /Documento:\s*\d+\s*\/\s*\d+\s*\/\s*(\d+)/i.exec(a); return m ? dig(m[1]) : null; }, prova: "emissao_endosso" },
   { codigo: "porto_endosso_seguro", seg: "PORT", dominio: "portoseguro", assunto: /endosso do seu seguro foi emitido/i, extrai: (a) => { const m = /Ap[oó]lice:\s*#?\s*([\d.\/ -]+)/i.exec(a); return m ? dig(m[1]) : null; }, prova: "emissao_endosso" },
   { codigo: "tokio_apolice_digital", seg: "TOKI", dominio: "tokiomarine", assunto: /ap[oó]lice digital/i, extrai: (a) => { const m = /Ap[oó]lice Digital\s*-?\s*([\d.]+)/i.exec(a); return m ? dig(m[1].split(".").pop() ?? "") : null; }, prova: "emissao_apolice" },
-  { codigo: "alfa_faturamento_apolice", seg: "ALFA", dominio: "alfaseg", assunto: /faturamento - ap[oó]lice/i, extrai: (a) => { const m = /\(\s*([\d.]+)\s*\)/.exec(a); return m ? dig(m[1]) : null; }, prova: "faturamento_apolice" },
+  { codigo: "alfa_faturamento_apolice", seg: "ALF", dominio: "alfaseg", assunto: /faturamento - ap[oó]lice/i, extrai: (a) => { const m = /\(\s*([\d.]+)\s*\)/.exec(a); return m ? dig(m[1]) : null; }, prova: "faturamento_apolice" },
 ];
 
 (async () => {
@@ -27,7 +28,9 @@ const REGRAS: Regra[] = [
     const x = (res[r.codigo] = { emails: 0, semNumero: 0, ligado: 0, ambiguo: 0, semDoc: 0 });
     const emails: { message_id: string; assunto: string }[] = [];
     for (let de = 0; ; de += 1000) {
-      const { data, error } = await sb.from("erp_emails").select("message_id,assunto").ilike("de", `%@%${r.dominio}%`).order("message_id").range(de, de + 999);
+      // depois de mai/2025 os e-mails da Porto chegam por grupo do Google ("emissao.portoimobiliaria via CONTATO" <contato@o2seguros...>), sem o domínio da seguradora no remetente
+      const filtroDe = r.seg === "PORT" ? `de.ilike.%@%${r.dominio}%,de.ilike.%emissao.portoimobiliaria%,de.ilike.%emissao.aluguel%,de.ilike.%emissao.ramoselementares%` : `de.ilike.%@%${r.dominio}%`;
+      const { data, error } = await sb.from("erp_emails").select("message_id,assunto").or(filtroDe).order("message_id").range(de, de + 999);
       if (error) throw new Error(error.message);
       emails.push(...((data ?? []) as any[]).filter((e) => r.assunto.test((e.assunto ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "")) || r.assunto.test(e.assunto ?? "")));
       if (!data || data.length < 1000) break;
@@ -37,7 +40,7 @@ const REGRAS: Regra[] = [
       const n = r.extrai(e.assunto ?? "");
       if (!n || n.length < 5) { x.semNumero++; continue; }
       const ids = segId.get(r.seg) ?? [];
-      const { data: ds } = await sb.from("erp_documentos").select("id,numero_apolice").in("seguradora_id", ids).like("numero_apolice", `%${n}`).limit(4);
+      const { data: ds } = await sb.from("erp_documentos").select("id,numero_apolice").in("seguradora_id", ids).neq("tipo", "X").like("numero_apolice", `%${n}`).limit(4);
       const exatos = (ds ?? []).filter((d) => dig(d.numero_apolice ?? "").endsWith(n));
       if (exatos.length === 1) { x.ligado++; evid.push({ documento_id: exatos[0].id, message_id: e.message_id, criterio: "numero_apolice", palavra: r.prova, numero_citado: n }); }
       else if (exatos.length > 1) x.ambiguo++; else x.semDoc++;
