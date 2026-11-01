@@ -12,6 +12,8 @@ import { dadosDeCabecalhoPorId, tipoDoCabecalho } from "@/lib/erp/documentos";
 import BotaoVerDocumento from "../BotaoVerDocumento";
 import InfoLegenda from "@/components/InfoLegenda";
 import PainelResumoAba from "@/app/erp/PainelResumoAba";
+import NavegadorMes from "../NavegadorMes";
+import { periodoDoMes } from "@/lib/erp/periodo";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Renovação" };
@@ -53,20 +55,13 @@ const isoData = (d: Date) => d.toISOString().slice(0, 10);
 const nomeSeg = (s: string | null) => (s ? NOME_SEG[s] ?? s : "SEM SEGURADORA");
 const lotes = <T,>(a: T[], n: number) => Array.from({ length: Math.ceil(a.length / n) }, (_, i) => a.slice(i * n, (i + 1) * n));
 
-function padraoMaisDois() {
-  // ciclo do robô de renovações: dia 25 trata os vencimentos de M+2; a tela abre nesse mês (os filtros mudam)
-  const hoje = new Date();
-  const ini = new Date(Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth() + 2, 1));
-  const fim = new Date(Date.UTC(ini.getUTCFullYear(), ini.getUTCMonth() + 1, 0));
-  return { de: isoData(ini), ate: isoData(fim) };
-}
-
 export default async function ErpRenovacaoPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const sp = await searchParams;
   const f = lerFiltros(sp);
-  const padrao = padraoMaisDois();
-  const de = f.de ?? padrao.de;
-  const ate = f.ate ?? padrao.ate;
+  // Período padrão do ERP (Matheus 01/11): abre no MÊS CORRENTE; ?mes=AAAA-MM navega. O mês define o recorte (fim de vigência no mês = "do mês").
+  const per = periodoDoMes(f.mes);
+  const de = per.de;
+  const ate = per.ate;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!isAdmin(user?.email) && !isColaboradorO2(user?.email)) redirect("/");
@@ -168,6 +163,17 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
   const abertasPorCard = new Map<string, Aberta[]>();
   for (const a of abertas) abertasPorCard.set(a.bitrix_card_id, [...(abertasPorCard.get(a.bitrix_card_id) ?? []), a]);
 
+  // Herança (Matheus 01/11): apólices que venceram nos 90 dias antes do mês escolhido e ainda sem desfecho — separada e rotulada, com os dias desde o vencimento
+  type Herdada = { documento_id: string; nosso_numero: number; numero_apolice: string | null; produto: string; ramo: string; seguradora: string | null; cliente_id: string | null; cliente: string | null; imobiliaria: string | null; vigencia_fim: string; dias_desde_vencimento: number; mes_origem: string; bitrix_card_id: string | null; status_renovacao: string | null; situacao_renovacao: string };
+  const { data: herdRaw } = await supabase.rpc("erp_renovacao_heranca", { p_de: per.de, p_dias: 90 });
+  const heranca = ((herdRaw ?? []) as Herdada[]).sort((a, b) => b.vigencia_fim.localeCompare(a.vigencia_fim)).slice(0, 300);
+  const herancaMap = new Map<string, Herdada[]>();
+  for (const h of heranca) herancaMap.set(h.mes_origem, [...(herancaMap.get(h.mes_origem) ?? []), h]);
+  const herancaMeses = [...herancaMap.entries()].sort((x, y) => y[0].localeCompare(x[0]));
+  // mês do ciclo do robô de renovações: no dia 25 ele trata os vencimentos de M+2
+  const hojeR = new Date();
+  const cicloRobo = (() => { const t = hojeR.getUTCFullYear() * 12 + hojeR.getUTCMonth() + 2; return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, "0")}`; })();
+
   // atalhos de mês: o mês atual +1 até +4
   const hoje = new Date();
   const atalhos = [1, 2, 3, 4].map((n) => {
@@ -180,7 +186,7 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
 
   return (
     <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-5 p-8">
-      <PainelResumoAba funcao="erp_resumo_renovacao" titulo="Renovação" legendas={{"Renovações por situação":"Renovações em controle, por situação.","Vencimentos por mês":"Quantas renovações vencem em cada mês (um mês atrás até cinco à frente).","Card do Bitrix: com e sem":"Renovações que já têm card no Bitrix e as que ainda não têm."}} />
+      <PainelResumoAba funcao="erp_resumo_renovacao" titulo="Renovação" mes={f.mes} legendas={{"Do mês: situação da renovação":"Apólices que vencem no mês escolhido, por situação da renovação: sem card, card criado, em cotação, renovado ou não renovado.","Do mês: por produto":"Apólices que vencem no mês, por produto.","Herdadas: mês de origem":"Apólices de meses anteriores (até 90 dias antes do mês escolhido) que venceram e ainda não têm desfecho, por mês em que venceram."}} />
       <PageHeader
         icon={<IconReport />}
         titulo="ERP O2 — Renovação"
@@ -189,45 +195,86 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
 
       <FiltrosErp
         caminho="/erp/renovacao"
-        campos={["busca", "seguradora", "produto", "imobiliaria", "periodo"]}
-        valores={{ ...f, de, ate }}
+        campos={["busca", "seguradora", "produto", "imobiliaria"]}
+        valores={{ ...f }}
         rotuloBusca="Cliente ou nº da apólice"
         placeholderBusca="Nome do cliente · Nº da apólice · Código O2 do documento · Nosso nº do Corp"
-        rotuloPeriodo="Fim de vigência"
         resumo={
           <>
-            {docs.length.toLocaleString("pt-BR")} apólice(s) vigente(s) · {cards.length.toLocaleString("pt-BR")} card(s) a criar
+            {docs.length.toLocaleString("pt-BR")} apólice(s) que vencem em {per.rotulo} · {cards.length.toLocaleString("pt-BR")} card(s) a criar
             {truncado ? " · lista limitada a 4.000 documentos: afunile o período" : ""}
             <InfoLegenda titulo="Período e filtros da renovação">
-              O período filtra pelo fim de vigência da apólice. Ao abrir, a tela mostra o mês que vence daqui a dois meses (o ciclo do robô de renovações). Entram só apólices vigentes; propostas que ainda não viraram apólice não aparecem. Os filtros de busca, seguradora, produto e imobiliária recortam as apólices. Apólices com endosso de cancelamento ficam de fora. A tela só mostra a prévia: nada é criado no Bitrix a partir dela.
+              A tela abre no mês corrente e navega por mês e por ano. O mês filtra pelo fim de vigência da apólice (apólices vigentes ou já vencidas; canceladas e propostas que ainda não viraram apólice não entram). O atalho do ciclo do robô leva ao mês que o robô trata no dia 25. As apólices de meses anteriores sem desfecho aparecem à parte, em Herdadas de meses anteriores. Os filtros de busca, seguradora, produto e imobiliária recortam as apólices. Apólices com endosso de cancelamento ficam de fora. A tela só mostra a prévia: nada é criado no Bitrix a partir dela.
             </InfoLegenda>
           </>
         }
       />
 
+      <NavegadorMes caminho="/erp/renovacao" mes={f.mes} params={{ q: f.q ?? undefined, seguradora: f.seguradora ?? undefined, produto: f.produto ?? undefined, imobiliaria: f.imobiliaria ?? undefined }} />
       <div className="flex flex-wrap items-center gap-2 text-xs">
-        <span className="text-gray-500">Vencimento em:</span>
-        <InfoLegenda titulo="Vencimento em">
-          Atalhos para trocar o período pelo mês inteiro, do próximo mês até quatro meses à frente. O mês é o do fim de vigência das apólices. Os filtros de busca, seguradora, produto e imobiliária são mantidos.
-        </InfoLegenda>
-        {atalhos.map((a) => {
-          const q = new URLSearchParams(base);
-          q.set("de", a.de); q.set("ate", a.ate);
-          const ativo = a.de === de && a.ate === ate;
-          return (
-            <Link key={a.de} href={`/erp/renovacao?${q.toString()}`} className={`rounded-full border px-3 py-1 capitalize ${ativo ? "border-o2-navy bg-o2-navy text-white" : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"}`}>
-              {a.rotulo}
-            </Link>
-          );
-        })}
+        <span className="text-gray-500">Atalho do ciclo do robô:</span>
+        <Link
+          href={`/erp/renovacao?${new URLSearchParams({ ...(f.q ? { q: f.q } : {}), ...(f.seguradora ? { seguradora: f.seguradora } : {}), ...(f.produto ? { produto: f.produto } : {}), ...(f.imobiliaria ? { imobiliaria: f.imobiliaria } : {}), mes: cicloRobo }).toString()}`}
+          className={`rounded-full border px-3 py-1 capitalize ${per.mes === cicloRobo ? "border-o2-navy bg-o2-navy text-white" : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"}`}
+        >
+          {periodoDoMes(cicloRobo).rotulo} (vencimentos tratados no dia 25)
+        </Link>
       </div>
+
+      {heranca.length > 0 && (
+        <section className="space-y-2 rounded-2xl border border-orange-200 bg-orange-50/60 p-4">
+          <h2 className="text-base font-semibold text-gray-900">
+            Herdadas de meses anteriores
+            <InfoLegenda titulo="Herdadas de meses anteriores">
+              Apólices que venceram antes de {per.rotulo} (até 90 dias antes) e ainda não têm desfecho: sem renovação lançada, sem “não renovado” e sem endosso de cancelamento. Ficam separadas das do mês e rotuladas pelo mês em que venceram, com os dias desde o vencimento.
+            </InfoLegenda>
+          </h2>
+          <p className="text-xs text-gray-600">{heranca.length} apólice(s) sem desfecho, de {herancaMeses.length} mês(es) anterior(es). Só os 300 vencimentos mais recentes aparecem na lista.</p>
+          <div className="space-y-2">
+            {herancaMeses.map(([mesOrigem, lista]) => (
+              <details key={mesOrigem} className="rounded-xl border border-gray-200 bg-white">
+                <summary className="flex cursor-pointer flex-wrap items-center gap-x-4 px-4 py-2 text-xs">
+                  <span className="text-sm font-medium capitalize text-gray-900">herdada de {periodoDoMes(mesOrigem).rotulo}</span>
+                  <span>{lista.length} apólice(s)</span>
+                  <span className="text-gray-500">{lista.filter((h) => h.situacao_renovacao === "Sem card").length} sem card · {lista.filter((h) => h.situacao_renovacao !== "Sem card").length} com card</span>
+                </summary>
+                <div className="overflow-x-auto border-t border-gray-100">
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+                      <tr><th className="px-3 py-2">Código O2 do documento</th><th className="px-3 py-2">Nº da apólice</th><th className="px-3 py-2">Cliente</th><th className="px-3 py-2">Imobiliária</th><th className="px-3 py-2">Seg.</th><th className="px-3 py-2">Venceu em</th><th className="px-3 py-2 text-right">Dias desde o vencimento</th><th className="px-3 py-2">Situação</th><th className="px-3 py-2">Card</th></tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {lista.map((h) => {
+                        const [ent, cid] = (h.bitrix_card_id ?? "").split(":").map(Number);
+                        return (
+                          <tr key={h.documento_id} className="hover:bg-gray-50">
+                            <td className="px-3 py-1.5 font-medium"><Link href={`/erp/documentos/${h.documento_id}`} className="text-o2-navy hover:underline">{h.nosso_numero}</Link></td>
+                            <td className="px-3 py-1.5">{h.numero_apolice ?? "—"}</td>
+                            <td className="px-3 py-1.5">{h.cliente ?? "—"}</td>
+                            <td className="px-3 py-1.5">{h.imobiliaria ?? "—"}</td>
+                            <td className="px-3 py-1.5">{h.seguradora ?? "—"}</td>
+                            <td className="px-3 py-1.5">{formatarData(h.vigencia_fim)}</td>
+                            <td className="px-3 py-1.5 text-right">{h.dias_desde_vencimento}</td>
+                            <td className="px-3 py-1.5">{h.situacao_renovacao}</td>
+                            <td className="px-3 py-1.5">{ent && cid ? <a href={urlCard(ent, cid)} target="_blank" rel="noreferrer" className="text-o2-navy hover:underline">#{cid}</a> : <span className="text-gray-300">sem card</span>}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            ))}
+          </div>
+        </section>
+      )}
 
       {abertasPorCard.size > 0 && (
         <section className="space-y-2 rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
           <h2 className="text-base font-semibold text-gray-900">
             Em acompanhamento até o desfecho
             <InfoLegenda titulo="Em acompanhamento até o desfecho">
-              Cards de renovação já criados no Bitrix que ainda estão em A renovar ou Em cotação, mas cuja apólice já não está vigente (a vigência acabou). Continuam listados até o card chegar a Renovado ou Não renovado. Apólices com endosso de cancelamento ficam de fora. Esta lista não muda com o período nem com os filtros da tela.
+              Cards de renovação já criados no Bitrix que ainda estão em A renovar ou Em cotação, mas cuja apólice já não está vigente (inclui os mais antigos que 90 dias, que não entram na herança) (a vigência acabou). Continuam listados até o card chegar a Renovado ou Não renovado. Apólices com endosso de cancelamento ficam de fora. Esta lista não muda com o período nem com os filtros da tela.
             </InfoLegenda>
           </h2>
           <p className="text-xs text-gray-600">
