@@ -35,6 +35,23 @@ const FAIXAS = [
   { chave: "mais15", rotulo: "mais de 15 dias", cor: "bg-red-50 text-red-800 border-red-200" },
 ] as const;
 
+// Situação / motivo da proposta pendente (1/11): classificação COM PROVA (e-mail de controle da seguradora, parecer de crédito...) em erp_proposta_acompanhamento.
+// Nada sai desta lista sozinho: a proposta fica aqui até virar apólice; o motivo só sinaliza para o Matheus decidir. Sem prova = "sem informação".
+const MOTIVOS: Record<string, { rotulo: string; cor: string }> = {
+  emitida_pela_seguradora: { rotulo: "Emitida pela seguradora (falta o nº no ERP)", cor: "bg-blue-50 text-blue-800 border-blue-200" },
+  credito_aprovado_aguardando: { rotulo: "Crédito aprovado, aguardando emissão", cor: "bg-green-50 text-green-800 border-green-200" },
+  recusada_pela_seguradora: { rotulo: "Recusada pela seguradora", cor: "bg-red-50 text-red-800 border-red-200" },
+  pendencia_cadastral: { rotulo: "Pendência cadastral", cor: "bg-orange-50 text-orange-800 border-orange-200" },
+  cancelada: { rotulo: "Cancelada", cor: "bg-gray-100 text-gray-800 border-gray-300" },
+  retransmitida: { rotulo: "Retransmitida", cor: "bg-purple-50 text-purple-800 border-purple-200" },
+  cliente_nao_pagou_1o_boleto: { rotulo: "Cliente não pagou o 1º boleto", cor: "bg-red-50 text-red-800 border-red-200" },
+  negocio_desfeito: { rotulo: "Negócio desfeito", cor: "bg-red-50 text-red-800 border-red-200" },
+  erro_de_processo: { rotulo: "Erro de processo", cor: "bg-red-50 text-red-800 border-red-200" },
+  aguardando_seguradora: { rotulo: "Aguardando a seguradora", cor: "bg-yellow-50 text-yellow-800 border-yellow-200" },
+  sem_informacao: { rotulo: "Sem informação", cor: "bg-white text-gray-600 border-gray-300" },
+};
+type Acomp = { documento_id: string; motivo: string; evidencia_resumo: string | null; evidencia_tipo: string | null; data_evidencia: string | null; confianca: string | null };
+
 const dia = (d: Date) => d.toISOString().slice(0, 10);
 const somarDias = (hoje: Date, n: number) => dia(new Date(hoje.getTime() + n * 86400000));
 const diasEntre = (data: string, hoje: Date) => Math.round((Date.parse(dia(hoje)) - Date.parse(data)) / 86400000);
@@ -47,6 +64,7 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
   const faixa = FAIXAS.find((x) => x.chave === um("faixa"))?.chave;
   const origem = um("origem") === "bitrix" || um("origem") === "corp" ? um("origem") : undefined;
   const atraso = um("atraso") === "1";
+  const motivo = um("motivo") && MOTIVOS[um("motivo")!] ? um("motivo") : undefined;
   const todas = !f.mes && !atraso; // sem mês escolhido: TODAS as pendentes (a proposta fica na tela até virar apólice, qualquer que seja o mês da efetivação)
 
   const supabase = await createClient();
@@ -59,9 +77,17 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
   const [a, m] = mes.split("-").map(Number);
   const fim = dia(new Date(Date.UTC(a, m, 1)));
 
+  // situação/motivo de cada pendente (tabela pequena: no máximo ~1.000 linhas); alimenta a coluna, o filtro e os chips por motivo
+  const { data: acompRows } = await supabase.from("erp_proposta_acompanhamento").select("documento_id,motivo,evidencia_resumo,evidencia_tipo,data_evidencia,confianca").limit(2000);
+  const acompPorDoc = new Map(((acompRows ?? []) as Acomp[]).map((x) => [x.documento_id, x]));
+  const contaMotivo: Record<string, number> = {};
+  for (const x of (acompRows ?? []) as Acomp[]) contaMotivo[x.motivo] = (contaMotivo[x.motivo] ?? 0) + 1;
+  const idsDoMotivo = motivo ? ((acompRows ?? []) as Acomp[]).filter((x) => x.motivo === motivo).map((x) => x.documento_id) : null;
+
   // escopo: pendentes efetivadas no mês escolhido, ou todo o atraso (meses anteriores ao escolhido)
   const base = () => {
     let q = supabase.from("erp_emissao_fila_pronta").select("*", { count: "exact" });
+    if (idsDoMotivo) q = q.in("id", idsDoMotivo.length ? idsDoMotivo : ["00000000-0000-0000-0000-000000000000"]);
     if (!todas) q = atraso ? q.lt("data_efetivacao", ini) : q.gte("data_efetivacao", ini).lt("data_efetivacao", fim);
     if (f.seguradora) q = q.eq("seguradora", f.seguradora);
     if (f.produto) q = q.eq("produto", f.produto);
@@ -120,7 +146,7 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
   }
 
   const href = (extra: Record<string, string | undefined>) => {
-    const p = new URLSearchParams(Object.entries({ ...f, origem, faixa, atraso: atraso ? "1" : undefined, ...extra }).filter(([, v]) => v) as [string, string][]);
+    const p = new URLSearchParams(Object.entries({ ...f, origem, faixa, motivo, atraso: atraso ? "1" : undefined, ...extra }).filter(([, v]) => v) as [string, string][]);
     return `/erp/emissao${p.size ? `?${p}` : ""}`;
   };
   const rotuloMes = new Date(Date.UTC(a, m - 1, 1)).toLocaleDateString("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" });
@@ -178,6 +204,16 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
           </Link>
         ))}
         <span className="mx-2 text-gray-300">|</span>
+        <span className="text-[11px] uppercase tracking-wide text-gray-500">Situação / motivo:</span>
+        <InfoLegenda titulo="Situação / motivo">
+          Por que a proposta ainda não virou apólice, quando há PROVA (e-mail de controle da seguradora, parecer de crédito, cancelamento ou retransmissão). Sem prova aparece "sem informação": nunca é chute. A proposta continua nesta lista até emitir; o motivo só sinaliza para você decidir o que fazer.
+        </InfoLegenda>
+        {Object.entries(MOTIVOS).filter(([k]) => (contaMotivo[k] ?? 0) > 0).map(([k, v]) => (
+          <Link key={k} href={href({ motivo: motivo === k ? undefined : k })} className={`rounded-full border px-3 py-1 font-medium ${v.cor} ${motivo === k ? "ring-2 ring-o2-navy" : ""}`}>
+            {v.rotulo} · {(contaMotivo[k] ?? 0).toLocaleString("pt-BR")}
+          </Link>
+        ))}
+        <span className="mx-2 text-gray-300">|</span>
         <span className="text-[11px] uppercase tracking-wide text-gray-500">Origem:</span>
         <InfoLegenda titulo="Origem">
           Bitrix = proposta que veio de um cartão concluído no Bitrix. Corp = proposta que veio do cadastro do Corp. Todas = as duas na mesma lista.
@@ -208,6 +244,7 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
                 <th className="px-3 py-2">Origem</th>
                 <th className="px-3 py-2">Imobiliária</th>
                 <th className="px-3 py-2 text-right">Pr. líquido</th>
+                <th className="px-3 py-2">Situação / motivo</th>
                 <th className="px-3 py-2">Card</th>
               </tr>
             </thead>
@@ -244,6 +281,18 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
                       {d.imobiliaria_id ? <Link href={`/admin/imobiliarias/${d.imobiliaria_id}`} className="hover:underline">{d.imobiliaria}</Link> : <span className="text-gray-400">{d.canal_venda ?? "—"}</span>}
                     </td>
                     <td className="px-3 py-2 text-right">{formatarReais(d.premio_liquido)}</td>
+                    <td className="px-3 py-2">
+                      {(() => {
+                        const ac = acompPorDoc.get(d.id); const mt = MOTIVOS[ac?.motivo ?? "sem_informacao"] ?? MOTIVOS.sem_informacao;
+                        return (
+                          <span title={ac?.evidencia_resumo ?? undefined}>
+                            <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${mt.cor}`}>{mt.rotulo}</span>
+                            {ac?.confianca === "provavel" && <span className="ml-1 text-[10px] text-orange-700">provável — confirmar</span>}
+                            {ac?.evidencia_resumo && ac.motivo !== "sem_informacao" && <span className="block text-[10px] text-gray-400">{ac.evidencia_resumo}{ac.data_evidencia ? ` · ${formatarData(ac.data_evidencia.slice(0, 10))}` : ""} · nível 5</span>}
+                          </span>
+                        );
+                      })()}
+                    </td>
                     <td className="px-3 py-2">{d.card_url ? <a href={d.card_url} target="_blank" rel="noreferrer" className="text-o2-navy hover:underline">abrir</a> : <span className="text-gray-300">—</span>}</td>
                   </tr>
                 );
