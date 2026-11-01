@@ -49,22 +49,9 @@ type Ev = { motivo: string; tipo: string; ref: string; resumo: string; data: str
   const evid = new Map<string, Ev[]>();
   const poe = (id: string, e: Ev) => (evid.get(id) ?? evid.set(id, []).get(id)!).push(e);
 
-  // 1) Tokio: parecer de crédito e pendência cadastral (pretendente + negócio + cotação)
-  const tokio = await todas<any>("erp_emails", "id,message_id,assunto,trecho,data", (q) => q.ilike("de", "%@%tokiomarine%").or("assunto.ilike.%parecer de cr%,assunto.ilike.%pend_ncia cadastral%"));
-  let tokioSemNome = 0, tokioAmbiguo = 0, tokioSemProposta = 0;
-  for (const e of tokio) {
-    const a = sem(e.assunto ?? "").toLowerCase();
-    const motivo = /reprovado/.test(a) ? "recusada_pela_seguradora" : /pendencia cadastral/.test(a) ? "pendencia_cadastral" : /aprovado/.test(a) ? "credito_aprovado_aguardando" : null;
-    if (!motivo) continue;
-    const m = /pretendente\s+(.+?)\s+vinculado ao neg[oó]cio\s+(\d+)(?:\s+e cota[cç][aã]o\s+(\d+))?/i.exec(e.trecho ?? "");
-    const negocio = /Neg[oó]cio:\s*(\d+)/i.exec(e.assunto ?? "")?.[1] ?? m?.[2] ?? null;
-    const nome = m ? normNome(m[1]) : null;
-    if (!nome) { tokioSemNome++; continue; }
-    const props = [...(porNome.get(nome) ?? [])].filter((id) => /TOKI/i.test(segDoc.get(id) ?? ""));
-    if (props.length === 0) { tokioSemProposta++; continue; }
-    if (props.length > 1) { tokioAmbiguo++; continue; }
-    poe(props[0], { motivo, tipo: "email", ref: e.message_id, resumo: `Tokio: ${/reprovado/.test(a) ? "cadastro reprovado" : motivo === "pendencia_cadastral" ? "pendência cadastral" : "crédito aprovado"}`, data: e.data, confianca: "forte", detalhes: { negocio, cotacao: m?.[3] ?? null, padrao: "tokio_parecer_credito" } });
-  }
+  // 1) (removido 01/11, correção do Matheus) Parecer de crédito da Tokio NÃO é sobre emissão: são as análises do seguro fiança, ligadas ao card da SPA de Fiança
+  //    (scripts/erp/analises-credito-fianca.ts -> erp_fianca_analise_credito). Aqui só entra o que prova o destino da PROPOSTA já efetivada.
+  const tokio: any[] = []; const tokioSemNome = 0, tokioAmbiguo = 0, tokioSemProposta = 0;
   // 2) e-mail de emissão que casou com a proposta
   const emis = await todas<any>("erp_emissao_sem_documento", "message_id,data_email,classificacao,proposta_documento_id,seguradora,numero_extraido,codigo_padrao", (q) => q.in("classificacao", ["provavel", "forte"]).not("proposta_documento_id", "is", null));
   for (const x of emis) poe(x.proposta_documento_id, { motivo: "emitida_pela_seguradora", tipo: "email", ref: x.message_id, resumo: `E-mail de emissão (${x.codigo_padrao})`, data: x.data_email, confianca: x.classificacao === "forte" ? "forte" : "provavel", detalhes: { numero_no_email: x.numero_extraido, padrao: x.codigo_padrao } });
