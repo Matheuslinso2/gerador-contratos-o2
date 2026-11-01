@@ -1,0 +1,5 @@
+-- Nota (01/11): migração aplicada no Supabase como "erp_corp_tela_vinculos".
+-- Cria erp_corp_tela_vinculos (nosso_numero_corp, documento_id, parcela_id, tela, campo, acao preenchido|conferido|divergente|sugestao, valor_erp, valor_tela, fonte, nivel 8, versao_leitor, lote)
+-- = log do que a leitura das telas do Corp (OCR local do Windows) fez no ERP + lista de divergências. RLS: só colaborador O2.
+-- Domínios novos em erp_dominios: fonte_dt_emissao=corp_tela, vencimento_origem=tela_corp, acao_vinculo_tela (preenchido, conferido, divergente, sugestao).
+-- Desfazer um preenchimento: valor_anterior era sempre vazio (só se preenche campo vazio); basta anular o campo do documento/parcela/item em questão.

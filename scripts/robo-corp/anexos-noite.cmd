@@ -22,5 +22,13 @@ call npx.cmd tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/rob
 rem 3) envia ao Workspace o que foi baixado (e apaga da pasta local o que nao e apolice)
 call npx.cmd tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/robo-corp/enviar-anexos.ts >> %LOG% 2>&1
 
+rem 4) telas do documento (fotos que o robo tira ao abrir cada documento): envia ao bucket privado corp-telas e liga ao ERP; OCR local e gratuito (Windows) le os campos;
+rem    o vinculador compara com o ERP (preenche so o vazio, lista divergencias) e so entao libera o disco das fotos ja enviadas e lidas
+call npx.cmd tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/robo-corp/enviar-telas.ts >> %LOG% 2>&1
+call npx.cmd tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/robo-corp/ocr-telas.ts >> %LOG% 2>&1
+call npx.cmd tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/robo-corp/ler-telas.ts --gravar >> %LOG% 2>&1
+call npx.cmd tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/robo-corp/vincular-telas.ts --gravar >> %LOG% 2>&1
+call npx.cmd tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/robo-corp/limpar-telas.ts --gravar >> %LOG% 2>&1
+
 echo fim: %date% %time% >> %LOG%
 exit /b 0

@@ -32,24 +32,26 @@ const lerJson = <T>(f: string, padrao: T): T => (fs.existsSync(f) ? JSON.parse(f
   const pendentes = fs.readdirSync(TELAS).filter((nn) => /^\d+$/.test(nn) && fs.readdirSync(path.join(TELAS, nn)).some((f) => f.endsWith(".webp")) && enviadas[nn] !== (estado[nn]?.quando ?? "?")).slice(0, limite);
   log(`documentos com telas ainda não enviadas: ${pendentes.length}`);
   let docs = 0, imagens = 0, bytes = 0;
-  for (const nn of pendentes) {
-    const linhas: Record<string, unknown>[] = [];
-    for (const f of fs.readdirSync(path.join(TELAS, nn)).filter((x) => x.endsWith(".webp"))) {
+  // 6 documentos em paralelo, e as 8 imagens de cada documento também em paralelo (o envio em série levava ~15 s por documento). Upsert: refazer não duplica nem apaga nada.
+  const enviarDoc = async (nn: string) => {
+    const arqs = fs.readdirSync(path.join(TELAS, nn)).filter((x) => x.endsWith(".webp"));
+    const linhas = await Promise.all(arqs.map(async (f) => {
       const tela = f.replace(/\.webp$/, "");
       const buf = fs.readFileSync(path.join(TELAS, nn, f));
       const caminho = `${nn}/${f}`;
       const up = await sb.storage.from(BUCKET).upload(caminho, buf, { contentType: "image/webp", upsert: true });
       if (up.error) throw new Error(`${nn}/${f}: ${up.error.message}`);
       const naoAchou = tela === "busca";
-      linhas.push({ nosso_numero_corp: Number(nn), tela, status: naoAchou ? "nao_achou" : "capturada", imagem_path: caminho, imagem_bytes: buf.length, motivo: naoAchou ? "busca por Nosso Nº sem linha no resultado (foto da busca guardada)" : null, fonte: "corp_tela", nivel: 8, versao_leitor: 1, lote: LOTE, lido_em: estado[nn]?.quando ?? new Date().toISOString() });
       imagens++; bytes += buf.length;
-    }
-    const { error } = await sb.from("erp_corp_telas_documento").upsert(linhas, { onConflict: "nosso_numero_corp,tela" });
+      return { nosso_numero_corp: Number(nn), tela, status: naoAchou ? "nao_achou" : "capturada", imagem_path: caminho, imagem_bytes: buf.length, motivo: naoAchou ? "busca por Nosso Nº sem linha no resultado (foto da busca guardada)" : null, fonte: "corp_tela", nivel: 8, versao_leitor: 1, lote: LOTE, lido_em: estado[nn]?.quando ?? new Date().toISOString() } as Record<string, unknown>;
+    }));
+    const { error } = await sb.from("erp_corp_telas_documento").upsert(linhas, { onConflict: "nosso_numero_corp,tela", ignoreDuplicates: false });
     if (error) throw new Error(`${nn}: ${error.message}`);
     enviadas[nn] = estado[nn]?.quando ?? "?";
-    fs.writeFileSync(ENVIADAS, JSON.stringify(enviadas));
-    if (++docs % 100 === 0) log(`  ${docs} documentos, ${imagens} imagens, ${Math.round(bytes / 1e6)} MB`);
-  }
+    if (++docs % 50 === 0) { fs.writeFileSync(ENVIADAS, JSON.stringify(enviadas)); log(`  ${docs} documentos, ${imagens} imagens, ${Math.round(bytes / 1e6)} MB`); }
+  };
+  for (let i = 0; i < pendentes.length; i += 6) await Promise.all(pendentes.slice(i, i + 6).map(enviarDoc));
+  fs.writeFileSync(ENVIADAS, JSON.stringify(enviadas));
   log(`telas enviadas: ${docs} documentos, ${imagens} imagens, ${Math.round(bytes / 1e6)} MB`);
   // liga cada tela ao documento/imobiliária/cliente/seguradora do ERP pelo Nosso nº do Corp (só com 1 candidato; o resto fica com o motivo)
   const { data: lig, error: eLig } = await sb.rpc("erp_ligar_telas");
