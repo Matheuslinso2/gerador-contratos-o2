@@ -10,6 +10,23 @@ type Part = { conversa_id: string; email: string; lido_ate: string };
 // O Robô O2 aparece como mais um contato; a conversa com ele fica só na tela (não grava no banco).
 const ROBO: Colega = { email: "robo@o2.interno", nome: "Robô O2" };
 
+// Transforma links (https://...) do texto em links clicáveis; o do relatório PDF do robô vira um botão.
+function ComLinks({ texto, escuro }: { texto: string; escuro: boolean }) {
+  return (
+    <>
+      {texto.split(/(https?:\/\/\S+)/g).map((parte, i) =>
+        /^https?:\/\//.test(parte) ? (
+          <a key={i} href={parte} target="_blank" rel="noopener noreferrer" className={`font-semibold underline ${escuro ? "text-white" : "text-o2-blue"}`}>
+            {parte.includes("/storage/") ? "📄 Abrir o relatório (PDF)" : "abrir link"}
+          </a>
+        ) : (
+          parte
+        )
+      )}
+    </>
+  );
+}
+
 function nomeDe(c: { email: string; nome?: string | null }) {
   if (c.nome) return c.nome;
   const l = c.email.split("@")[0].replace(/[._]/g, " ");
@@ -293,7 +310,7 @@ export default function ChatFlutuante({ meuEmail }: { meuEmail: string }) {
                       <div
                         className={`max-w-[80%] whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-sm ${minha ? "bg-o2-blue text-white" : "bg-white text-o2-navy"}`}
                       >
-                        {m.texto}
+                        <ComLinks texto={m.texto} escuro={minha} />
                         <span className={`mt-0.5 block text-right text-[10px] ${minha ? "text-white/60" : "text-o2-cinza-medio"}`}>
                           {new Date(m.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                         </span>

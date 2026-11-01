@@ -6,6 +6,7 @@ import { FERRAMENTAS, executarFerramenta } from "@/lib/whatsappFerramentas";
 import { FERRAMENTAS_ERP, executarFerramentaErp } from "./roboFerramentas";
 import { FERRAMENTAS_GERAIS, executarFerramentaGeral } from "./roboGeral";
 import { FERRAMENTAS_BUSCA, executarFerramentaBusca } from "./roboBusca";
+import { FERRAMENTA_RELATORIO, executarFerramentaRelatorio } from "./roboRelatorio";
 
 // Robô O2 do chat da equipe (Fase 2, 29/10/2026). Mesmo "cérebro" da IA do WhatsApp (painéis + tabelas do
 // Workspace) mais as ferramentas do ERP. Somente leitura. Comissão/repasse só para admin (mesma cautela do
@@ -17,7 +18,7 @@ const MODELO = "claude-sonnet-5-5";
 
 export type TurnoChat = { role: "user" | "assistant"; content: string };
 
-function systemPrompt(verComissao: boolean) {
+export function systemPrompt(verComissao: boolean) {
   return `Você é o Robô O2, o assistente do chat interno da equipe da O2 Seguros (corretora de seguros imobiliários do Rio de Janeiro). Responde perguntas dos colegas sobre os dados que existem no Workspace e no ERP O2.
 
 CONCEITOS DA O2 — NUNCA MISTURAR (cotação é cotação, proposta é proposta, apólice é apólice)
@@ -51,6 +52,7 @@ MAPA DE FONTES — consulte TODAS as que a pergunta abrange; nunca responda com 
 - Propostas: ERP aba Em emissão (erp_emissao_fila_pronta). Apólices, endossos, faturas, parcelas, comissões, baixas, renovações do ERP (erp_renovacoes): tabelas erp_* e contar_documentos_erp.
 - Campanhas: campanhas, campanhas_envios, campanhas_metas, campanhas_producao. Painel Comercial: consultar_painel_extra painel_comercial. Sinistros: sinistros, sinistros_corp, painel sinistros.
 - Pessoa/cliente/inquilino/proprietário/CPF/e-mail/telefone: buscar_pessoa. Cotação em andamento pelo nome: buscar_nos_paineis.
+- LISTAS GRANDES E RELATÓRIOS: o chat não comporta lista de mais de ~15 itens. Quando pedirem "traga todas", "lista", "relatório" de apólices/endossos/faturas, use gerar_relatorio_pdf (a lista sai do banco, sem passar por você) e responda com o LINK do PDF em uma linha própria (cole a URL inteira, sem formatação) + 2 ou 3 linhas de resumo (total, prêmio, principais seguradoras). Se o período for ambíguo (ex.: "primeiro semestre"), pergunte antes qual critério: apólices que COMEÇARAM no período (inicio_vigencia), que estavam VIGENTES em algum dia do período (vigente_no_periodo) ou que VENCEM no período (fim_vigencia). Ao sugerir, ofereça o PDF em forma de relatório (nunca Excel). O link vale por 6 horas.
 - Ao final de qualquer contagem diga de quais fontes/produtos/tipos ela veio e o que ficou de fora.
 - Para qualquer pergunta sobre uma imobiliária, comece por buscar_imobiliaria. Imobiliárias do mesmo grupo (ex.: Ramiro Sá) são somadas e você diz quais fichas entraram.
 - Pergunta de VALOR de uma imobiliária num mês (comissão efetivada, prêmio, efetivados, cotações) sem citar produto: NÃO responda com um painel só. Consulte TODOS os painéis com consultar_painel na competência — seguro_fianca (parte topImobiliarias), ramos_elementares (partes novos e renovacoes, porImobiliaria), capitalizacao (parte titulos), seguro_auto — procurando a imobiliária por TODOS os nomes das fichas do grupo (use buscar_imobiliaria antes; no painel o nome pode vir diferente, ex.: "Ramiro Sá Imóveis"; procure por um pedaço do nome). Responda com o *total somado* e a quebra por produto, e diga os produtos em que ela não tem registro naquele mês ("sem registro"). Se citarem um produto, responda só dele.
@@ -68,18 +70,36 @@ ESTILO
 - Hoje é ${new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "full" }).format(new Date())}.`;
 }
 
-export async function responderComoRobo(email: string, historico: TurnoChat[]): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("ANTHROPIC_API_KEY não configurada");
-  const verComissao = isAdmin(email);
-  const ferramentas: Anthropic.Tool[] = verComissao
-    ? [...FERRAMENTAS_ERP, ...FERRAMENTAS_GERAIS, ...FERRAMENTAS_BUSCA, ...FERRAMENTAS]
+// Conjunto de ferramentas e roteamento do robô: usados pela produção e pelos testes (mesmo código, mesmo comportamento).
+export function ferramentasDoRobo(verComissao: boolean): Anthropic.Tool[] {
+  return verComissao
+    ? [...FERRAMENTAS_ERP, ...FERRAMENTAS_GERAIS, ...FERRAMENTAS_BUSCA, FERRAMENTA_RELATORIO, ...FERRAMENTAS]
     : [
         ...FERRAMENTAS_ERP,
         ...FERRAMENTAS_GERAIS.filter((f) => f.name !== "consultar_painel_extra"),
         ...FERRAMENTAS_BUSCA,
+        FERRAMENTA_RELATORIO,
         ...FERRAMENTAS.filter((f) => f.name === "consultar_painel"), // sem comissão/repasse para quem não é admin
       ];
+}
+
+export async function executarFerramentaDoRobo(nome: string, entrada: unknown, email: string, verComissao: boolean): Promise<string> {
+  return (
+    (await executarFerramentaErp(nome, entrada, verComissao)) ??
+    (await executarFerramentaGeral(nome, entrada, verComissao)) ??
+    (await executarFerramentaBusca(nome, entrada, verComissao)) ??
+    (await executarFerramentaRelatorio(nome, entrada, email, verComissao)) ??
+    (verComissao || nome === "consultar_painel"
+      ? await executarFerramenta(nome, entrada, { semFinanceiro: !verComissao })
+      : "Ferramenta indisponível para o seu perfil.")
+  );
+}
+
+export async function responderComoRobo(email: string, historico: TurnoChat[]): Promise<string> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error("ANTHROPIC_API_KEY não configurada");
+  const verComissao = isAdmin(email);
+  const ferramentas = ferramentasDoRobo(verComissao);
 
   const anthropic = new Anthropic({ apiKey });
   const mensagens: Anthropic.MessageParam[] = historico.map((t) => ({ role: t.role, content: t.content }));
@@ -104,13 +124,7 @@ export async function responderComoRobo(email: string, historico: TurnoChat[]): 
       chamadas.map(async (c) => ({
         type: "tool_result" as const,
         tool_use_id: c.id,
-        content:
-          (await executarFerramentaErp(c.name, c.input, verComissao)) ??
-          (await executarFerramentaGeral(c.name, c.input, verComissao)) ??
-          (await executarFerramentaBusca(c.name, c.input, verComissao)) ??
-          (verComissao || c.name === "consultar_painel"
-            ? await executarFerramenta(c.name, c.input, { semFinanceiro: !verComissao })
-            : "Ferramenta indisponível para o seu perfil."),
+        content: await executarFerramentaDoRobo(c.name, c.input, email, verComissao),
       }))
     );
     mensagens.push({ role: "user", content: resultados });

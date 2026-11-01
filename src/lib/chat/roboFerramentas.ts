@@ -44,7 +44,7 @@ function casaTodos(texto: string, consulta: string, aproximado = false) {
 
 type Ficha = { id: string; nome: string; apelido: string | null; grupo_id: string | null; codigo_produtor_corp: string | null };
 
-async function resolverImobiliarias(nome: string): Promise<{ fichas: Ficha[]; grupo: string | null; ambiguo: boolean; aproximado: boolean }> {
+export async function resolverImobiliarias(nome: string): Promise<{ fichas: Ficha[]; grupo: string | null; ambiguo: boolean; aproximado: boolean }> {
   const sb = createServiceClient();
   const [{ data: imobs }, { data: grupos }] = await Promise.all([
     sb.from("imobiliarias").select("id, nome, apelido, grupo_id, codigo_produtor_corp").limit(5000),
