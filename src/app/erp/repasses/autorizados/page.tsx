@@ -2,9 +2,10 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { formatarData, formatarReais } from "@/lib/sinistros/regras";
 import { lerFiltros } from "@/lib/erp/filtros";
-import { DESCONTO_PCT, arredonda, mesRepasse, rotuloMes } from "@/lib/erp/repasse";
+import { DESCONTO_PCT, arredonda, rotuloMes } from "@/lib/erp/repasse";
+import { periodoDoMes } from "@/lib/erp/periodo";
+import NavegadorMes from "../../NavegadorMes";
 import InfoLegenda from "@/components/InfoLegenda";
-import FiltrosErp from "../../FiltrosErp";
 import { cancelarAutorizacao } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +31,7 @@ type Lote = {
 export default async function ErpRepassesAutorizadosPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const sp = await searchParams;
   const f = lerFiltros(sp);
-  const { mes } = mesRepasse(f.mes);
+  const mes = periodoDoMes(f.mes).mes;
   const ok = typeof sp.ok === "string" ? sp.ok : undefined;
   const erro = typeof sp.erro === "string" ? sp.erro : undefined;
   const sb = await createClient();
@@ -41,7 +42,16 @@ export default async function ErpRepassesAutorizadosPage({ searchParams }: { sea
     .in("status", ["autorizado", "pago", "enviado"])
     .order("autorizado_em", { ascending: false })
     .limit(1000);
+  // herança (período padrão do ERP): lotes autorizados de meses anteriores que ainda aguardam o pagamento, separados e rotulados
+  const { data: herdadosData } = await sb
+    .from("erp_repasse_lotes")
+    .select("id, imobiliaria_id, competencia, total_bruto, total_retido, total_liquido, status, autorizado_em, pago_em, nibo_valor, relatorio_enviado_em, imobiliarias(nome)")
+    .lt("competencia", `${mes}-01`)
+    .eq("status", "autorizado")
+    .order("competencia", { ascending: true })
+    .limit(500);
   const busca = f.imobiliaria?.toLowerCase();
+  const herdados = ((herdadosData ?? []) as unknown as Lote[]).filter((l) => !busca || (l.imobiliarias?.nome ?? "").toLowerCase().includes(busca));
   const lotes = ((data ?? []) as unknown as Lote[]).filter((l) => !busca || (l.imobiliarias?.nome ?? "").toLowerCase().includes(busca));
   const soma = (fn: (l: Lote) => boolean) => arredonda(lotes.filter(fn).reduce((s, l) => s + Number(l.total_liquido), 0));
   const aguardando = lotes.filter((l) => l.status === "autorizado");
@@ -63,17 +73,17 @@ export default async function ErpRepassesAutorizadosPage({ searchParams }: { sea
       </div>
       {ok && <p className="rounded-lg border border-green-300 bg-green-50 p-2 text-sm text-green-800">{ok}</p>}
       {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-2 text-sm text-red-800">{erro}</p>}
-      <FiltrosErp
-        caminho="/erp/repasses/autorizados"
-        campos={["mes", "imobiliaria"]}
-        valores={f}
-        resumo={
-          <>
-            {lotes.length} autorizados · aguardando o Nibo {formatarReais(soma((l) => l.status === "autorizado"))} ({aguardando.length}) · pagos {formatarReais(soma((l) => l.status !== "autorizado"))} ({pagos.length})
-          </>
-        }
-      />
-      {lotes.length === 0 ? (
+      <NavegadorMes caminho="/erp/repasses/autorizados" mes={f.mes} params={{ imobiliaria: f.imobiliaria }} />
+      <form method="get" action="/erp/repasses/autorizados" className="flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 bg-white p-3">
+        <input type="hidden" name="mes" value={mes} />
+        <label className="flex flex-col gap-1 text-[11px] font-medium uppercase tracking-wide text-gray-500">
+          Imobiliária
+          <input name="imobiliaria" defaultValue={f.imobiliaria ?? ""} placeholder="nome ou parte do nome" className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm normal-case tracking-normal text-gray-800" />
+        </label>
+        <button type="submit" className="rounded-lg bg-o2-navy px-3 py-1.5 text-sm font-medium text-white">Filtrar</button>
+        <p className="text-xs text-gray-600">{lotes.length} autorizados · aguardando o Nibo {formatarReais(soma((l) => l.status === "autorizado"))} ({aguardando.length}) · pagos {formatarReais(soma((l) => l.status !== "autorizado"))} ({pagos.length})</p>
+      </form>
+     {lotes.length === 0 ? (
         <p className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-600">Nenhum repasse autorizado para {rotuloMes(mes)} ainda. Autorize na tela de Repasses.</p>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
@@ -138,6 +148,33 @@ export default async function ErpRepassesAutorizadosPage({ searchParams }: { sea
                       </Link>
                     )}
                   </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {herdados.length > 0 && (
+        <div className="overflow-x-auto rounded-xl border border-amber-300 bg-white">
+          <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
+            Herdados de meses anteriores: autorizados e ainda aguardando o pagamento pelo Nibo ({herdados.length} · {formatarReais(arredonda(herdados.reduce((t, l) => t + Number(l.total_liquido), 0)))})
+          </div>
+          <table className="w-full text-xs">
+            <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+              <tr>
+                <th className="px-3 py-1.5">Imobiliária</th>
+                <th className="px-3 py-1.5">Herdado de</th>
+                <th className="px-3 py-1.5">Autorizado em</th>
+                <th className="px-3 py-1.5 text-right">Líquido</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {herdados.map((l) => (
+                <tr key={l.id}>
+                  <td className="px-3 py-1">{l.imobiliarias?.nome ?? "—"}</td>
+                  <td className="px-3 py-1 text-amber-800">{rotuloMes(l.competencia.slice(0, 7))}</td>
+                  <td className="px-3 py-1">{l.autorizado_em ? formatarData(l.autorizado_em.slice(0, 10)) : "—"}</td>
+                  <td className="px-3 py-1 text-right font-medium">{formatarReais(Number(l.total_liquido))}</td>
                 </tr>
               ))}
             </tbody>

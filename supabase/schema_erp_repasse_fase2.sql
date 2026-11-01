@@ -84,3 +84,8 @@ create trigger erp_repasse_da_baixa after insert on erp_comissao_recebimentos fo
 --   só tem_observacao). Chaves do ERP por linha (erp_repasse_vincular_controle_corp): imobiliária pelo código do produtor, seguradora pela abreviação, documento pelo Nosso Nº do Corp,
 --   parcela pela comissão recebida do mês anterior à previsão com a mesma base (±0,02), locatário do documento. Fila: erp_repasse_corp_controle_fila. Carga: scripts/erp/carregar-controle-repasse-corp.ts.
 --   01/11: 20.162 ligadas (78%), 5.539 só com documento (parcela não identificada), 17 outras. Só 6.261 linhas (R$ 132,6 mil) têm Dt. Repasse no Corp; 483,8 mil bruto sem data (o financeiro paga pelo Nibo).
+
+-- PERÍODO PADRÃO (01/11, migration erp_repasse_periodo_padrao): aba Repasses abre no mês corrente, com navegação por mês e ano (NavegadorMes). "Do mês" (competência escolhida) e
+--   "herdado" (pendente de competências anteriores, com o mês mais antigo) vêm SEPARADOS e rotulados: erp_repasse_resumo_pronto ganhou erp_pend_mes_*, erp_pend_herd_* e herd_desde;
+--   erp_resumo_repasses(p_de,p_ate) passou a respeitar o mês (KPIs e gráficos do mês + herdado em separado). Repasses autorizados também lista, à parte, os lotes autorizados de meses anteriores
+--   ainda sem pagamento. Mês fechado congela pelo erp_retrato (só o que o retrato guardou no fechamento).

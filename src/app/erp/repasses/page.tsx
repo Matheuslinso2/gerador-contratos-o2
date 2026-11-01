@@ -3,9 +3,10 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { formatarReais } from "@/lib/sinistros/regras";
 import { lerFiltros, type ValoresFiltro } from "@/lib/erp/filtros";
-import { DESCONTO_PCT, REPASSE_ERP_EM_TESTE, arredonda, mesAnterior, mesRepasse, repasseRetidoPossivel, rotuloMes } from "@/lib/erp/repasse";
+import { DESCONTO_PCT, REPASSE_ERP_EM_TESTE, arredonda, mesAnterior, repasseRetidoPossivel, rotuloMes } from "@/lib/erp/repasse";
+import { periodoDoMes } from "@/lib/erp/periodo";
+import NavegadorMes from "../NavegadorMes";
 import InfoLegenda from "@/components/InfoLegenda";
-import FiltrosErp from "../FiltrosErp";
 import { atualizarResumoRepasse, autorizarRepasse } from "./actions";
 import PainelResumoAba from "@/app/erp/PainelResumoAba";
 
@@ -26,6 +27,11 @@ type Resumo = {
   sem_email_repasse: boolean;
   erp_pend_n: number;
   erp_pend_bruto: number;
+  erp_pend_mes_n: number;
+  erp_pend_mes_bruto: number;
+  erp_pend_herd_n: number;
+  erp_pend_herd_bruto: number;
+  herd_desde: string | null;
   erp_mes_n: number;
   erp_mes_bruto: number;
   erp_autorizadas_n: number;
@@ -39,13 +45,14 @@ type Resumo = {
 export default async function ErpRepassesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const sp = await searchParams;
   const f = lerFiltros(sp);
-  const { mes } = mesRepasse(f.mes);
+  const mes = periodoDoMes(f.mes).mes;
   const ok = typeof sp.ok === "string" ? sp.ok : undefined;
   const erro = typeof sp.erro === "string" ? sp.erro : undefined;
 
   return (
     <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-4 p-8">
-      <PainelResumoAba funcao="erp_resumo_repasses" titulo="Repasses" legendas={{"Repasses por situação":"Quantidade de repasses em cada situação.","Valor líquido por competência (R$)":"Valor líquido dos repasses por competência (os últimos meses).","Maiores valores líquidos pendentes por imobiliária (R$)":"As 8 imobiliárias com maior valor líquido de repasse pendente."}} />
+      <NavegadorMes caminho="/erp/repasses" mes={f.mes} params={{ imobiliaria: f.imobiliaria }} />
+      <PainelResumoAba mes={f.mes} funcao="erp_resumo_repasses" titulo="Repasses" legendas={{"Repasses do mês por situação":"Quantidade de repasses do mês escolhido em cada situação (pendente, autorizado, pago ou cancelado).","Valor líquido por competência (R$)":"Valor líquido dos repasses das últimas competências, até o mês escolhido. Não inclui os cancelados (quitados por pró-labore).","Pendente por imobiliária (R$)":"As 8 imobiliárias com maior valor líquido pendente de autorização. “Do mês” é o repasse da competência escolhida; “Herdado” é o que ficou pendente de meses anteriores."}} />
       <div>
         <h1 className="flex items-center gap-2 text-xl font-semibold text-o2-navy">
           Repasses · {rotuloMes(mes)}
@@ -110,31 +117,32 @@ async function TabelaRepasses({ mes, f }: { mes: string; f: ValoresFiltro }) {
       const mesBruto = Number(r.erp_mes_bruto);
       const dif = arredonda(corp - mesBruto);
       const aviso = r.erp_mes_n === 0 && corp === 0 ? null : Math.abs(dif) <= 1 ? "bate" : dif > 0 ? "maior" : "menor";
-      return { ...r, nome: r.imobiliaria ?? "—", corp, mesBruto, dif, aviso, pendBruto: Number(r.erp_pend_bruto) };
+      return { ...r, nome: r.imobiliaria ?? "—", corp, mesBruto, dif, aviso, pendBruto: Number(r.erp_pend_bruto), pendMes: Number(r.erp_pend_mes_bruto), pendHerd: Number(r.erp_pend_herd_bruto) };
     })
     .filter((l) => (!busca || l.nome.toLowerCase().includes(busca)) && (l.erp_pend_n > 0 || l.erp_mes_n > 0 || l.corp > 0 || l.erp_autorizadas_n > 0))
     .sort((a, b) => b.pendBruto - a.pendBruto || b.corp - a.corp);
 
-  const totPend = arredonda(linhas.reduce((s, l) => s + l.pendBruto, 0));
+  const totPendMes = arredonda(linhas.reduce((s, l) => s + l.pendMes, 0));
+  const totPendHerd = arredonda(linhas.reduce((s, l) => s + l.pendHerd, 0));
   const semBaixa = linhas.reduce((s, l) => s + l.previstas_sem_baixa, 0);
   const valorSemBaixa = arredonda(linhas.reduce((s, l) => s + Number(l.comissao_prevista_sem_baixa), 0));
   const chip = (n: number, txt: string, cor: string) => (n > 0 ? <span className={`mr-1.5 inline-block rounded px-1.5 py-0.5 ${cor}`}>{txt}</span> : null);
 
   return (
     <>
-      <FiltrosErp
-        caminho="/erp/repasses"
-        campos={["mes", "imobiliaria"]}
-        valores={f}
-        resumo={
-          <>
-            {linhas.length} imobiliárias · pendente de autorização {formatarReais(totPend)} bruto · comissão de {rotuloMes(mesAnterior(mes))} ainda sem baixa {formatarReais(valorSemBaixa)} (
-            {semBaixa.toLocaleString("pt-BR")} parcelas)
-            {geradoEm ? ` · atualizado em ${new Date(geradoEm).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}` : ""}
-          </>
-        }
-      />
-      <form action={atualizarResumoRepasse} className="-mt-2">
+      <form method="get" action="/erp/repasses" className="flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 bg-white p-3">
+        <input type="hidden" name="mes" value={mes} />
+        <label className="flex flex-col gap-1 text-[11px] font-medium uppercase tracking-wide text-gray-500">
+          Imobiliária
+          <input name="imobiliaria" defaultValue={f.imobiliaria ?? ""} placeholder="nome ou parte do nome" className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm normal-case tracking-normal text-gray-800" />
+        </label>
+        <button type="submit" className="rounded-lg bg-o2-navy px-3 py-1.5 text-sm font-medium text-white">Filtrar</button>
+        <p className="text-xs text-gray-600">
+          {linhas.length} imobiliárias · pendente <b>do mês</b> {formatarReais(totPendMes)} · pendente <b>herdado</b> de meses anteriores {formatarReais(totPendHerd)} (bruto) · comissão de {rotuloMes(mesAnterior(mes))} ainda sem baixa {formatarReais(valorSemBaixa)} ({semBaixa.toLocaleString("pt-BR")} parcelas)
+          {geradoEm ? ` · atualizado em ${new Date(geradoEm).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}` : ""}
+        </p>
+      </form>
+     <form action={atualizarResumoRepasse} className="-mt-2">
         <input type="hidden" name="mes" value={mes} />
         <button type="submit" className="text-xs text-gray-500 underline hover:text-o2-navy">
           {geradoEm ? "Atualizar agora" : "Gerar o retrato deste mês"}
@@ -151,7 +159,7 @@ async function TabelaRepasses({ mes, f }: { mes: string; f: ValoresFiltro }) {
                 <th className="px-3 py-2 text-right">
                   Pendente (ERP){" "}
                   <InfoLegenda titulo="Pendente (ERP)">
-                    Repasse que o ERP gerou das baixas e que ainda não foi autorizado, acumulado até este mês. Bruto, antes do desconto de {DESCONTO_PCT}%, que é aplicado sobre o total na autorização.
+                    Repasse que o ERP gerou das baixas e que ainda não foi autorizado. “Do mês” é a competência escolhida; “herdado” é o que ficou pendente de meses anteriores, com o mês mais antigo ao lado. Bruto, antes do desconto de {DESCONTO_PCT}%, que é aplicado sobre o total na autorização (do mês + herdado).
                   </InfoLegenda>
                 </th>
                 <th className="px-3 py-2">
@@ -182,8 +190,19 @@ async function TabelaRepasses({ mes, f }: { mes: string; f: ValoresFiltro }) {
                   <td className="px-3 py-1.5 text-right">
                     {l.erp_pend_n > 0 ? (
                       <>
-                        <b>{formatarReais(arredonda(l.pendBruto))}</b>
-                        <span className="block text-[11px] text-gray-500">{l.erp_pend_n} parcela(s)</span>
+                        {l.erp_pend_mes_n > 0 && (
+                          <span className="block">
+                            <b>{formatarReais(arredonda(l.pendMes))}</b> <span className="text-[11px] text-gray-500">do mês · {l.erp_pend_mes_n} parcela(s)</span>
+                          </span>
+                        )}
+                        {l.erp_pend_herd_n > 0 && (
+                          <span className="block text-amber-800">
+                            <b>{formatarReais(arredonda(l.pendHerd))}</b>{" "}
+                            <span className="text-[11px]">
+                              herdado desde {l.herd_desde ? `${l.herd_desde.slice(5, 7)}/${l.herd_desde.slice(0, 4)}` : "—"} · {l.erp_pend_herd_n} parcela(s)
+                            </span>
+                          </span>
+                        )}
                       </>
                     ) : (
                       <span className="text-gray-400">—</span>
