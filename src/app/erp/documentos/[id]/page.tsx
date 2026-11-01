@@ -498,7 +498,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
               <p className="mt-1 text-red-800">Sem pagamento do cliente não há comissão; o repasse só acontece depois que a comissão for recebida (competência do recebimento real).</p>
             </div>
           )}
-          {d.parcelas.length === 0 ? (
+          {d.parcelas.length === 0 && d.parcelas_historicas.length === 0 ? (
             <p className="text-xs text-gray-500">Sem parcelas carregadas (histórico anterior a 2024 entra só com os totais).</p>
           ) : (
             <table className="w-full text-xs">
@@ -516,6 +516,14 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
+                {d.parcelas_historicas.map((h) => (
+                  <tr key={"h" + h.n} className="text-gray-400" title="Calendário do PDF da apólice; fora dos totais, da cobrança, da previsão e do repasse">
+                    <td className="py-1 pr-3">{h.n}</td>
+                    <td className="py-1 pr-3">{formatarData(h.vencimento)}</td>
+                    <td className="py-1 pr-3 text-right">{h.valor_referencia === null ? "—" : formatarReais(h.valor_referencia)}</td>
+                    <td className="py-1 pr-3" colSpan={6}>histórica · quitação não comprovada</td>
+                  </tr>
+                ))}
                 {d.parcelas.map((p, i) => (
                   <tr key={p.id}>
                     <td className="py-1 pr-3">
@@ -551,6 +559,9 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
                 </tr>
               </tbody>
             </table>
+          )}
+          {d.parcelas_historicas.length > 0 && (
+            <p className="text-[11px] text-gray-500">Linhas apagadas = parcelas históricas do calendário oficial (PDF) sem quitação comprovada; o valor é só referência e elas não entram nos totais, na cobrança, na previsão de receita nem no repasse.</p>
           )}
           {d.parcelas.length > 0 && (
             <p className="text-[11px] text-gray-500">

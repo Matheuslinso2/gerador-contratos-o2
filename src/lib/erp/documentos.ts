@@ -395,6 +395,8 @@ export type DocumentoFicha = DocumentoLista & {
   digitado_em: string | null;
   produtores: ProdutorDoc[];
   parcelas: ParcelaDoc[];
+  /** calendário oficial (PDF) de parcelas antigas sem quitação comprovada; fora de totais, cobrança, previsão e repasse */
+  parcelas_historicas: { n: number; vencimento: string; valor_referencia: number | null }[];
   anexos: AnexoDoc[];
   eventos: EventoDoc[];
   renovacao_de: { id: string; nosso_numero: number } | null;
@@ -689,6 +691,10 @@ export async function buscarFichaDocumento(sb: SupabaseClient, id: string): Prom
       const { data: ac } = await sb.from("apolice_documentos").select("coberturas").eq("nosso_numero", String(d.nosso_numero_corp)).eq("situacao", "certa").not("coberturas", "is", null).limit(1);
       const lista = ((ac ?? [])[0]?.coberturas ?? []) as { cobertura?: string; lmi?: number | string | null; verba?: number | string | null }[];
       return Array.isArray(lista) ? lista.filter((c) => c.cobertura).map((c) => ({ cobertura: String(c.cobertura), lmi: c.lmi == null ? null : Number(c.lmi), verba: c.verba == null ? null : Number(c.verba), fonte: "PDF do acervo · nível 1" })) : [];
+    })(),
+    parcelas_historicas: await (async () => {
+      const { data: ph } = await sb.from("erp_parcelas_historicas").select("n, vencimento, valor_referencia").eq("documento_id", id).order("vencimento");
+      return ((ph ?? []) as { n: number; vencimento: string; valor_referencia: number | string | null }[]).map((p) => ({ n: p.n, vencimento: p.vencimento, valor_referencia: p.valor_referencia === null ? null : Number(p.valor_referencia) }));
     })(),
     parcelas_endossos: await (async () => {
       const idsEnd = ((endossos ?? []) as { id: string }[]).map((e) => e.id);
