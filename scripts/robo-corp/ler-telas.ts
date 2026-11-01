@@ -59,7 +59,14 @@ export function lerOcrJsonl(): Map<string, LeituraDoc> {
   }
   console.log(`${GRAVAR ? "GRAVANDO" : "ENSAIO"}: ${docs.size} documentos, ${telas} telas lidas do OCR; com aviso ${comAviso} (cabeçalho ≠ documento ${nnErrado}); campos preenchidos ${camposLidos}`);
   console.log("campos por tela:", JSON.stringify(contagemCampos));
+  if (process.argv.includes("--avisos")) { let n = 0; for (const d of docs.values()) for (const l of Object.values(d.telas)) if (l.avisos.length && n++ < 25) console.log(`  aviso ${d.nn} ${l.tela}: ${l.avisos.join("; ")}`); }
   if (so) for (const d of docs.values()) for (const [t, l] of Object.entries(d.telas)) { const { cabecalho, ...resto } = l.campos as any; console.log(`${d.nn} ${t}: ${JSON.stringify(resto)} ${l.avisos.length ? "AVISOS " + l.avisos.join("; ") : ""}`); }
+  // Documento errado: a busca do robô às vezes devolve várias linhas (documentos associados) e ele abre a 1ª, que pode ser OUTRO documento. O cabeçalho da janela diz qual foi aberto.
+  // telas-doc-errado.json = { nn buscado: nn que a janela mostrou }; o envio dos anexos retém esses arquivos (não grava PDF no Nosso Nº errado).
+  const errados: Record<string, number> = {};
+  for (const d of docs.values()) { const vistos = Object.values(d.telas).map((l) => (l.campos.cabecalho as { nosso_numero: number | null } | undefined)?.nosso_numero).filter((n): n is number => n != null); const maisComum = vistos.sort((a, b) => vistos.filter((x) => x === b).length - vistos.filter((x) => x === a).length)[0]; if (maisComum != null && String(maisComum) !== d.nn && vistos.filter((x) => x === maisComum).length >= 3) errados[d.nn] = maisComum; }
+  if (!so) { const arqErr = path.join(PASTA, "telas-doc-errado.json"); const antes = fs.existsSync(arqErr) ? JSON.parse(fs.readFileSync(arqErr, "utf8")) : {}; fs.writeFileSync(arqErr, JSON.stringify({ ...antes, ...errados })); }
+  console.log(`documentos em que a janela aberta era OUTRO documento: ${Object.keys(errados).length} de ${docs.size}`);
   if (!GRAVAR) return;
   const sb = createServiceClient();
   const agora = new Date().toISOString();

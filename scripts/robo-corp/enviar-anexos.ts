@@ -42,7 +42,11 @@ async function main() {
   const sb = createServiceClient();
   const estado = lerJson<Record<string, Visita>>(ESTADO, {});
   const enviados = lerJson<Record<string, string>>(ENVIADOS, {});
-  const pendentes = Object.entries(estado).filter(([nn, v]) => v.lista && enviados[nn] !== v.quando);
+  // Retém os anexos de documentos em que a janela aberta pelo robô era OUTRO documento (cabeçalho da tela lido por ler-telas.ts): não grava PDF no Nosso Nº errado.
+  const docErrado = lerJson<Record<string, number>>(path.join(PASTA, "telas-doc-errado.json"), {});
+  const pendentes = Object.entries(estado).filter(([nn, v]) => v.lista && enviados[nn] !== v.quando && !docErrado[nn]);
+  const retidos = Object.entries(estado).filter(([nn, v]) => v.lista && enviados[nn] !== v.quando && docErrado[nn]).length;
+  if (retidos) log(`anexos RETIDOS (a janela aberta era outro documento): ${retidos}`);
   log(`documentos com anexos baixados e ainda não enviados: ${pendentes.length}`);
 
   // tipos (recortes) que o banco ainda não tem

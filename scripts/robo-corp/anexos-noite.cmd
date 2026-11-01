@@ -19,14 +19,16 @@ call npx.cmd tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/rob
 rem 2) visita o Corp e baixa os anexos
 call npx.cmd tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/robo-corp/anexos.ts --ate %ATE% >> %LOG% 2>&1
 
-rem 3) envia ao Workspace o que foi baixado (e apaga da pasta local o que nao e apolice)
-call npx.cmd tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/robo-corp/enviar-anexos.ts >> %LOG% 2>&1
-
-rem 4) telas do documento (fotos que o robo tira ao abrir cada documento): envia ao bucket privado corp-telas e liga ao ERP; OCR local e gratuito (Windows) le os campos;
-rem    o vinculador compara com o ERP (preenche so o vazio, lista divergencias) e so entao libera o disco das fotos ja enviadas e lidas
+rem 3) telas do documento (fotos que o robo tira ao abrir cada documento): envia ao bucket privado corp-telas e liga ao ERP; OCR local e gratuito (Windows) le os campos
+rem    e acusa os documentos em que a janela aberta era OUTRO documento (telas-doc-errado.json) - os anexos deles ficam retidos no passo 4
 call npx.cmd tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/robo-corp/enviar-telas.ts >> %LOG% 2>&1
 call npx.cmd tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/robo-corp/ocr-telas.ts >> %LOG% 2>&1
 call npx.cmd tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/robo-corp/ler-telas.ts --gravar >> %LOG% 2>&1
+
+rem 4) envia ao Workspace o que foi baixado (e apaga da pasta local o que nao e apolice)
+call npx.cmd tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/robo-corp/enviar-anexos.ts >> %LOG% 2>&1
+
+rem 5) o vinculador compara as telas lidas com o ERP (preenche so o vazio, lista divergencias); depois libera o disco das fotos ja enviadas e lidas
 call npx.cmd tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/robo-corp/vincular-telas.ts --gravar >> %LOG% 2>&1
 call npx.cmd tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/robo-corp/limpar-telas.ts --gravar >> %LOG% 2>&1
 

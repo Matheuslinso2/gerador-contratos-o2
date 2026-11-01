@@ -36,6 +36,9 @@ const texto = (P: P, r: Rect): string | null => { let best: string | null = null
 /** Primeira leitura VÁLIDA entre os passes (data/número que não passa na validação cai para o outro passe). */
 const primeiro = <T,>(P: P, r: Rect, conv: (s: string | null) => T | null): T | null => { for (const ps of P) { const v = conv(textoUm(ps, r)); if (v !== null && v !== undefined) return v; } return null; };
 
+/** Os DOIS passes de OCR leram o mesmo valor válido? (única proteção contra o erro típico de 1 dígito, ex. 8 lido como 6). */
+const concordam = <T,>(P: P, r: Rect, conv: (s: string | null) => T | null): boolean => { const vs = P.map((ps) => conv(textoUm(ps, r))).filter((v) => v !== null && v !== undefined); return vs.length >= 2 && vs.every((v) => v === vs[0]); };
+
 /** Passe com MAIS palavras na região (tabelas e texto de várias linhas: vale o passe que leu mais). */
 const cheio = (P: P, r: Rect): Palavra[] => P.map((ps) => ps.filter((p) => dentro(p, r))).sort((a, b) => b.length - a.length)[0] ?? [];
 
@@ -86,20 +89,27 @@ function lerDocumento(ps: P): Campos {
   /* seguradora/ramo: texto cinza (desabilitado) que o OCR não lê; o ERP já tem os dois */ const sc = (t: string | null) => { const m = t ? /^(\d+)\s+(.+)$/.exec(t) : null; return m && /[A-Za-zÀ-ú]{3}/.test(m[2]) ? { codigo: Number(m[1]), nome: m[2].trim() } : { codigo: null, nome: null }; };
   return {
     dt_emissao: primeiro(ps, [360, 238, 480, 257], data),
+    dt_emissao_2passes: concordam(ps, [360, 238, 480, 257], data),
     numero_apolice: texto(ps, [482, 238, 620, 257]),
     numero_endosso: texto(ps, [622, 238, 740, 257]),
     dt_proposta: primeiro(ps, [358, 285, 470, 303], data),
+    dt_proposta_2passes: concordam(ps, [358, 285, 470, 303], data),
     tipo_documento: texto(ps, [485, 285, 765, 303]),
     motivo_endosso: texto(ps, [360, 325, 765, 343]),
     apolice_endossada: texto(ps, [360, 376, 495, 395]),
     seguradora: sc(seg), ramo: sc(ramo), cliente: sc(cli),
     numero_proposta: texto(ps, [358, 577, 495, 596]),
+    numero_proposta_2passes: concordam(ps, [358, 577, 495, 596], (t) => (apenasDigitos(t).length >= 5 ? apenasDigitos(t) : null)),
     vigencia_inicio: primeiro(ps, [525, 577, 640, 596], data),
+    vigencia_inicio_2passes: concordam(ps, [525, 577, 640, 596], data),
     vigencia_fim: primeiro(ps, [662, 577, 775, 596], data),
+    vigencia_fim_2passes: concordam(ps, [662, 577, 775, 596], data),
     forma_pagamento: texto(ps, [797, 229, 975, 247]),
     qtde_parcelas: primeiro(ps, [905, 253, 975, 272], inteiro),
     prazo_1a_parcela: primeiro(ps, [1070, 224, 1138, 243], inteiro),
+    prazo_1a_parcela_2passes: concordam(ps, [1070, 224, 1138, 243], inteiro),
     dia_fixo: primeiro(ps, [1070, 258, 1138, 277], inteiro),
+    dia_fixo_2passes: concordam(ps, [1070, 258, 1138, 277], inteiro),
     valor_1a_parcela: primeiro(ps, [1000, 331, 1138, 350], dinheiro),
     premio_liquido: primeiro(ps, [855, 310, 960, 329], dinheiro),
     premio_adicional: primeiro(ps, [855, 342, 960, 361], dinheiro),
@@ -196,7 +206,8 @@ function lerAcompanhamento(ps: P): Campos {
   const arq = linhasDe(cheio(ps, [727, 538, 1138, 582]), 7).map((l) => l.texto).join("\n").trim();
   const assin = texto(ps, [268, 552, 440, 574]);
   return {
-    dt_emissao: primeiro(ps, [262, 250, 368, 269], data), numero_apolice: texto(ps, [381, 250, 517, 269]), numero_endosso: texto(ps, [531, 250, 667, 269]),
+    dt_emissao: primeiro(ps, [262, 250, 368, 269], data),
+    dt_emissao_2passes: concordam(ps, [262, 250, 368, 269], data), numero_apolice: texto(ps, [381, 250, 517, 269]), numero_endosso: texto(ps, [531, 250, 667, 269]),
     data_recebimento: primeiro(ps, [262, 339, 368, 358], data), data_entrega: primeiro(ps, [262, 435, 368, 454], data), forma_entrega: texto(ps, [391, 435, 667, 456]), entregue_para: texto(ps, [391, 483, 667, 504]),
     assinatura_proposta: assin, assinada: assin ? !/n[aã]o/i.test(assin) : null,
     observacoes: obs ? mascararSegredos(obs) : null, arquivamento: arq ? mascararSegredos(arq) : null,

@@ -16,6 +16,8 @@ const sb = createServiceClient();
 const em = <T,>(xs: T[], n = 150) => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
 const digs = (s: unknown) => String(s ?? "").replace(/\D/g, "").replace(/^0+/, "");
 const eq = (a: number | null | undefined, b: number | null | undefined, tol = 0.05) => a != null && b != null && Math.abs(Number(a) - Number(b)) <= tol;
+/** Mesma quantidade de dígitos e no máximo 1 diferente: erro típico do OCR (8 lido como 6), não divergência real. */
+const quase = (a: unknown, b: unknown) => { const x = String(a ?? "").replace(/\D/g, ""), y = String(b ?? "").replace(/\D/g, ""); if (x.length < 4 || x.length !== y.length) return false; let d = 0; for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) d++; return d <= 1; };
 const hoje = new Date().toISOString().slice(0, 10);
 
 async function todas<T>(tabela: string, cols: string, filtro?: (q: any) => any): Promise<T[]> {
@@ -65,7 +67,7 @@ type V = { nosso_numero_corp: number; documento_id: string; parcela_id: string |
     const T: Record<string, any> = info.telas;
     const cabOk = Object.values(T).every((c: any) => !c.cabecalho || c.cabecalho.nosso_numero == null || c.cabecalho.nosso_numero === nn);
     if (!cabOk) { conta("doc_ignorado_cabecalho_diferente"); continue; }
-    const reg = (tela: string, campo: string, acao: V["acao"], erp: unknown, lida: unknown, parcela_id: string | null = null) => { vinc.push({ nosso_numero_corp: nn, documento_id: doc.id, parcela_id, tela, campo, acao, valor_erp: erp == null ? null : String(erp), valor_tela: lida == null ? null : String(lida) }); conta(`${tela}.${acao}`); };
+    const reg = (tela: string, campo: string, acao: V["acao"], erp: unknown, lida: unknown, parcela_id: string | null = null) => { if (acao === "divergente" && quase(erp, lida)) { acao = "conferido"; lida = `${lida} (o OCR leu 1 dígito diferente)`; } vinc.push({ nosso_numero_corp: nn, documento_id: doc.id, parcela_id, tela, campo, acao, valor_erp: erp == null ? null : String(erp), valor_tela: lida == null ? null : String(lida) }); conta(`${tela}.${acao}`); };
     const pd = patchDoc.get(doc.id) ?? {}; patchDoc.set(doc.id, pd);
     const D = T.documento ?? {}; const A = T.acompanhamento ?? {};
 
@@ -81,24 +83,24 @@ type V = { nosso_numero_corp: number; documento_id: string; parcela_id: string |
       if (!erp) { reg(tela, campo, "preenchido", null, lida); return lida; }
       reg(tela, campo, erp === lida ? "conferido" : "divergente", erp, lida); return null;
     };
-    const emDocA = D.dt_emissao && A.dt_emissao ? (D.dt_emissao === A.dt_emissao ? D.dt_emissao : null) : (D.dt_emissao ?? A.dt_emissao ?? null); // duas leituras que discordam = não confia
+    const emDocA = D.dt_emissao && A.dt_emissao ? (D.dt_emissao === A.dt_emissao ? D.dt_emissao : null) : (D.dt_emissao_2passes ? D.dt_emissao : A.dt_emissao_2passes ? A.dt_emissao : null); // só vale com duas leituras independentes iguais (2 telas ou 2 passes)
     const dem = dataCampo("documento", "dt_emissao", emDocA, doc.dt_emissao, (x) => x <= hoje && x >= "2000-01-01" && (!(D.dt_proposta ?? doc.dt_proposta) || x >= (D.dt_proposta ?? doc.dt_proposta)));
     if (dem) { pd.dt_emissao = dem; pd.dt_emissao_fonte = "corp_tela"; pd.dt_emissao_nivel = 8; pd.dt_emissao_lida_em = new Date().toISOString(); }
-    const dpr = dataCampo("documento", "dt_proposta", D.dt_proposta, doc.dt_proposta, (x) => x <= hoje && x >= "2000-01-01"); if (dpr) pd.dt_proposta = dpr;
-    const vi = D.vigencia_inicio, vf = D.vigencia_fim, okVig = vi && vf && vf > vi && vf <= "2100-01-01";
+    const dpr = D.dt_proposta_2passes ? dataCampo("documento", "dt_proposta", D.dt_proposta, doc.dt_proposta, (x) => x <= hoje && x >= "2000-01-01") : null; if (dpr) pd.dt_proposta = dpr;
+    const vi = D.vigencia_inicio_2passes ? D.vigencia_inicio : null, vf = D.vigencia_fim_2passes ? D.vigencia_fim : null, okVig = vi && vf && vf > vi && vf <= "2100-01-01";
     if (okVig) {
       const a = dataCampo("documento", "vigencia_inicio", vi, doc.vigencia_inicio); if (a) pd.vigencia_inicio = a;
       const b = dataCampo("documento", "vigencia_fim", vf, doc.vigencia_fim); if (b) pd.vigencia_fim = b;
     }
     // ---- nº da proposta, forma de pagamento, parcelas, prazo, dia fixo ----
-    const np = digs(D.numero_proposta); if (np.length >= 5) { if (!doc.numero_proposta) { reg("documento", "numero_proposta", "preenchido", null, np); pd.numero_proposta = np; } else reg("documento", "numero_proposta", digs(doc.numero_proposta) === np ? "conferido" : "divergente", doc.numero_proposta, np); }
+    const np = digs(D.numero_proposta); if (np.length >= 5 && (doc.numero_proposta || D.numero_proposta_2passes)) { if (!doc.numero_proposta) { reg("documento", "numero_proposta", "preenchido", null, np); pd.numero_proposta = np; } else reg("documento", "numero_proposta", digs(doc.numero_proposta) === np ? "conferido" : "divergente", doc.numero_proposta, np); }
     const fp = formaDe(D.forma_pagamento);
     if (fp) { if (!doc.forma_pagamento) { reg("documento", "forma_pagamento", "preenchido", null, fp); pd.forma_pagamento = fp; } else reg("documento", "forma_pagamento", doc.forma_pagamento === fp ? "conferido" : "divergente", doc.forma_pagamento, fp); }
     const nTela = (T.parcelas?.parcelas ?? []).length;
     const inteiroCampo = (campo: string, lida: unknown, erp: unknown, ok: (n: number) => boolean) => { if (typeof lida !== "number" || !ok(lida)) return; if (erp == null) { reg("documento", campo, "preenchido", null, lida); pd[campo === "qtde_parcelas" ? "qtd_parcelas" : campo === "prazo_1a_parcela" ? "prazo_1a_dias" : "dia_fixo"] = lida; } else reg("documento", campo, Number(erp) === lida ? "conferido" : "divergente", erp, lida); };
     inteiroCampo("qtde_parcelas", nTela && D.qtde_parcelas === nTela ? D.qtde_parcelas : (D.qtde_parcelas && !nTela ? D.qtde_parcelas : null), doc.qtd_parcelas, (n) => n >= 1 && n <= 60); // preenche só se bate com as linhas da tela Parcelas
-    inteiroCampo("prazo_1a_parcela", D.prazo_1a_parcela, doc.prazo_1a_dias, (n) => n >= 0 && n <= 120);
-    inteiroCampo("dia_fixo", D.dia_fixo, doc.dia_fixo, (n) => n >= 0 && n <= 31);
+    inteiroCampo("prazo_1a_parcela", D.prazo_1a_parcela_2passes ? D.prazo_1a_parcela : null, doc.prazo_1a_dias, (n) => n >= 0 && n <= 120);
+    inteiroCampo("dia_fixo", D.dia_fixo_2passes ? D.dia_fixo : null, doc.dia_fixo, (n) => n >= 0 && n <= 31);
     // ---- prêmios: preenche vazio só se a soma fecha (líquido + adicional + custo + IOF − desconto = total) ----
     const liq = D.premio_liquido, adi = D.premio_adicional ?? 0, cus = D.custo ?? 0, iof = D.iof ?? 0, des = D.desconto ?? 0, tot = D.premio_total;
     const somaFecha = liq != null && tot != null && eq(liq + adi + cus + iof - des, tot, 0.06);
@@ -126,7 +128,7 @@ type V = { nosso_numero_corp: number; documento_id: string; parcela_id: string |
         else reg("parcelas", "vencimento", "divergente", e.vencimento, p.vencimento, e.id);
       }
       if (typeof p.valor === "number") { if (e.valor == null) { reg("parcelas", "valor", "preenchido", null, p.valor, e.id); patchParc.push({ id: e.id, patch: { valor: p.valor } }); } else reg("parcelas", "valor", eq(Number(e.valor), p.valor) ? "conferido" : "divergente", e.valor, p.valor, e.id); }
-      if (p.dt_quitacao) { if (!e.quitada_em) reg("parcelas", "quitada_em", "sugestao", null, p.dt_quitacao, e.id); else reg("parcelas", "quitada_em", e.quitada_em === p.dt_quitacao ? "conferido" : "divergente", e.quitada_em, p.dt_quitacao, e.id); }
+      // quitação: a data do Corp é a baixa lá dentro; no ERP a quitada_em vem do banco/fatura. São coisas diferentes: não se compara (fica só nos dados lidos).
     }
     if (nTela) for (const e of ep) if (!(T.parcelas.parcelas as any[]).some((p) => p.n === e.n)) reg("parcelas", `parcela_${e.n}`, "divergente", `${e.vencimento} ${e.valor}`, null, e.id);
 
@@ -150,7 +152,7 @@ type V = { nosso_numero_corp: number; documento_id: string; parcela_id: string |
     }
     // ---- repasses: o produtor lido deve bater com a imobiliária do documento ----
     for (const r of (T.repasses?.repasses ?? []) as any[]) {
-      if (!r.produtor || /segimob|o2 corretora/i.test(r.produtor)) continue;
+      if (!r.produtor || /segimob|o2 corretora|tombamento/i.test(r.produtor)) continue;
       const im = doc.imobiliaria_principal_id ? imobNome.get(doc.imobiliaria_principal_id) : null;
       if (!im) { reg("repasses", "produtor", "sugestao", null, r.produtor); continue; }
       const a = normNome(r.produtor), b = normNome(im);
@@ -159,13 +161,16 @@ type V = { nosso_numero_corp: number; documento_id: string; parcela_id: string |
     // ---- observações: pró-labore (só sugestão: a regra existente decide) ----
     if (T.observacoes?.tem_pro_labore) reg("observacoes", "pro_labore", "sugestao", null, "observação menciona pró-labore");
     // ---- anexos: a tela mostra mais anexos do que temos baixados ----
-    const q = T.anexos?.quantidade; if (typeof q === "number" && q > 0) { const tem = anexosN.get(nn) ?? 0; reg("anexos", "quantidade", q <= tem ? "conferido" : "divergente", tem, q); }
+    // anexos: a contagem da tela vs. corp_anexos só faz sentido depois que o robô enviar todos; fica nos dados lidos, sem vínculo.
     if (Object.keys(pd).length === 0) patchDoc.delete(doc.id);
   }
 
   console.log("registros:", JSON.stringify(cont));
   const porAcao: Record<string, number> = {}; for (const v of vinc) porAcao[v.acao] = (porAcao[v.acao] ?? 0) + 1;
   console.log(`vínculos: ${vinc.length} ${JSON.stringify(porAcao)} | documentos a atualizar ${patchDoc.size}, parcelas ${patchParc.length}, itens ${patchItem.length}, partes ${patchParte.length}`);
+  const porCampo: Record<string, Record<string, number>> = {}; for (const v of vinc) { const k = `${v.tela}.${v.campo}`; (porCampo[k] ??= {})[v.acao] = (porCampo[k][v.acao] ?? 0) + 1; }
+  for (const [k, o] of Object.entries(porCampo).sort()) console.log(`  ${k}: ${JSON.stringify(o)}`);
+  if (process.argv.includes("--amostra")) { const vistos: Record<string, number> = {}; for (const v of vinc) if (v.acao === "divergente" || v.acao === "preenchido") { const k = `${v.tela}.${v.campo}.${v.acao}`; if ((vistos[k] = (vistos[k] ?? 0) + 1) <= 3) console.log(`    ${v.nosso_numero_corp} ${k}: erp=${v.valor_erp} tela=${v.valor_tela}`); } }
   if (!GRAVAR) return;
 
   let erros = 0;
