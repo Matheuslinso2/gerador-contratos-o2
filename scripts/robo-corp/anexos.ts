@@ -26,9 +26,12 @@ import sharp from "sharp";
 import { chromium, type BrowserContext, type Page } from "playwright";
 import { createServiceClient } from "@/lib/supabase/service";
 import { TIPO_POR_ROTULO, deveBaixar, estaPulado, registrarErro, selecionarPendentes } from "./anexos-fila";
+import { capturarBuscaSemResultado, capturarTelasDoDocumento } from "./telas";
 import { agora, acharTodos, acharNaTela, definirPastaFotos, entrar, espera, esperarModelo, foto, lerConfig, log, RAIZ, VIEWPORT } from "./_corp";
 
 const args = process.argv.slice(2);
+/** Captura das telas do documento junto com a visita (Matheus 01/11); --sem-telas desliga. */
+const CAPTURAR_TELAS = !args.includes("--sem-telas");
 const arg = (n: string) => (args.includes(n) ? args[args.indexOf(n) + 1] : null);
 const PASTA = process.env.APOLICES_CORP || path.join(os.tmpdir(), "o2-apolices-corp");
 const PDFS = path.join(PASTA, "pdfs");
@@ -59,6 +62,8 @@ type Estado = Record<string, {
   lista?: LinhaAnexo[];
   /** linhas da aba Anexos que não foram baixadas (tipo fora de Apólice/Proposta/Endosso): ordem + recorte do rótulo */
   ignorados?: { ordem: number; rotulo: string }[];
+  /** telas do documento fotografadas nesta visita (telas.ts) e o tamanho total em bytes */
+  telas?: number; telas_bytes?: number;
   /** total de linhas que a aba Anexos tinha na visita */
   total?: number;
 }>;
@@ -419,10 +424,12 @@ async function rodada(
         // busca voltou vazia para 1.138 documentos seguidos — tela fora do lugar, não documento sumido).
         let achou = await abrirDocumento(page, item.nn);
         if (!achou) { await abrirConsultaDocumentos(page); achou = await abrirDocumento(page, item.nn); }
+        if (!achou && CAPTURAR_TELAS) await capturarBuscaSemResultado(page, item.nn);
         if (!achou) estado[item.nn] = { quando: new Date().toISOString(), versao: VERSAO_VISITA, resultado: "nao_achou" };
         else {
           const { apolices, outros, rotulos, lista, ignorados, total } = await baixarAnexos(page, item.nn);
           estado[item.nn] = { quando: new Date().toISOString(), versao: VERSAO_VISITA, resultado: apolices.length || outros.length ? "baixado" : total ? "sem_anexo_alvo" : "sem_anexo", arquivos: apolices, outros, rotulos, lista, ignorados, total };
+          if (CAPTURAR_TELAS) { const t = await capturarTelasDoDocumento(page, item.nn); estado[item.nn].telas = t.telas; estado[item.nn].telas_bytes = t.bytes; if (t.erro) log(`${item.nn}: captura de telas: ${t.erro}`); }
           await fecharDocumento(page);
         }
         erros = 0; progressoDaSessao++;
