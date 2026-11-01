@@ -175,8 +175,117 @@ function suhai(texto: string): ExtratoLido | null {
   return { leitor: "leitor Suhai (PDF)", linhas, total_bruto: b ? br(b[1]) : null, total_liquido: lq ? br(lq[1]) : null };
 }
 
+// Brasilcap portal novo (b2cap "Consultar Comissão"): Garantia Data da Venda Produto Reaplicação Valor Títulos Valor Comissões Situação
+function brasilcapNovo(texto: string): ExtratoLido | null {
+  if (!/Comiss[aã]o Bruta:/i.test(texto) || !/Garantia Data da Venda/i.test(texto)) return null;
+  const t = um(texto);
+  const linhas: LinhaExtrato[] = [];
+  for (const m of t.matchAll(/(\d{3,}) (\d{2}\/\d{2}\/\d{4}) (.+?) ([SN]) R\$ ?(-?[\d.]+,\d{2}) R\$ ?(-?[\d.]+,\d{2}) ([A-ZÇÃÉÍ]{3,})/g)) {
+    const l = linha(linhas.length + 1, { apolice: m[1], produto: m[3], premio: br(m[5]), valor_comissao: (m[7] === "ESTORNADA" ? -1 : 1) * br(m[6]),
+      tipo: m[7].toLowerCase(), parcela: 1 });
+    (l as any).extras = { garantia: m[1], data_venda: iso(m[2]), reaplicacao: m[4] === "S", situacao: m[7] };
+    linhas.push(l);
+  }
+  const b = /Comiss[aã]o Bruta: R\$ ?(-?[\d.]+,\d{2})/.exec(t);
+  return { leitor: "leitor Brasilcap portal novo (PDF)", linhas, total_bruto: b ? br(b[1]) : null, total_liquido: b ? br(b[1]) : null };
+}
+
+// Allianz modelo 2025 (colunas coladas no texto do PDF): ... Comissão Antecipada(S/N)Prêmio<apólice> <recibo> O2 CORRETORA ... <pct>%<mediador>
+function allianz2025(texto: string): ExtratoLido | null {
+  if (!/Allianz/i.test(texto) || !/\(Detalhamento\)/i.test(texto)) return null;
+  const t = um(texto);
+  const linhas: LinhaExtrato[] = [];
+  const re = /(\d{2}\/\d{2}\/\d{4}) (\S{12,}) (\d+)\/(\d+) (.+?) (\d{2,5} - .+?) (-?[\d.]+,\d{2}) ([SN]) ?(-?[\d.]+,\d{2})(\d{6,})(?: (\d{6}))? (\d{6,}) O2 CORRETORA DE SEGUROS LTDA (\d+(?:\.\d+)?)%(\d+)/g;
+  for (const m of t.matchAll(re)) {
+    const l = linha(linhas.length + 1, { apolice: m[10], endosso: m[11] ?? null, parcela: Number(m[3]), cliente: m[5], produto: m[6],
+      valor_comissao: br(m[7]), premio: br(m[9]), pct_comissao: Number(m[13]), tipo: m[8] === "S" ? "antecipada" : "comissao" });
+    (l as any).extras = { data_pagto: iso(m[1]), apolice_susep: m[2], parcelas_total: Number(m[4]), recibo: m[12], mediador: m[14] };
+    linhas.push(l);
+  }
+  const tot = /Total L[ií]quido: ?(-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+)/.exec(t);
+  return { leitor: "leitor Allianz 2025 (PDF)", linhas, total_bruto: tot ? Number(tot[1]) : null, total_liquido: tot ? Number(tot[6]) : null };
+}
+
+// Tokio modelo antigo "Extrato de Comissões" (sem R$ nas linhas, ramo quebrado em 2 linhas)
+function tokioComissoes(texto: string): ExtratoLido | null {
+  if (!/Tokio Marine/i.test(texto) || !/Extrato de Comiss[oõ]es/i.test(texto) || /Apolice \/ Bilhete Endosso Tipo Parc Pr/i.test(um(texto))) return null;
+  const t = um(texto);
+  const ini = t.search(/Comiss[aã]o \(%\) Comiss[aã]o \(R\$\)/);
+  if (ini < 0) return null;
+  const corpo = t.slice(ini).replace(/^Comiss[aã]o \(%\) Comiss[aã]o \(R\$\) ?/, "");
+  const re = /(\d{6,12}) ([A-ZÀ-Ú][A-ZÀ-Ú .\/-]*?) (\d{3,}) (\d+) ([A-ZÀ-Ú][A-ZÀ-Ú ]*?) (\d+) ?\/ ?(\d+) (-?[\d.]+,\d{2}) (\d+(?:,\d+)?) (-?[\d.]+,\d{2})/g;
+  const linhas: LinhaExtrato[] = [];
+  let fim = 0;
+  for (const m of corpo.matchAll(re)) {
+    const segurado = corpo.slice(fim, m.index).replace(/Pag \d+ de \d+/g, "").trim();
+    fim = (m.index ?? 0) + m[0].length;
+    const l = linha(linhas.length + 1, { cliente: segurado || null, produto: m[2].replace(/ /g, " ").trim(), apolice: m[3], endosso: m[4] === "0" ? null : m[4],
+      tipo: m[5].trim().toLowerCase(), parcela: Number(m[6]), premio: br(m[8]), pct_comissao: br(m[9]), valor_comissao: br(m[10]) });
+    (l as any).extras = { negocio: m[1], parcelas_total: Number(m[7]) };
+    linhas.push(l);
+  }
+  const b = /Total da Comiss[aã]o Bruta: R\$ ?(-?[\d.]+,\d{2})/.exec(t), lq = /Total Comiss[aã]o L[ií]quida R\$ ?(-?[\d.]+,\d{2})/.exec(t);
+  return { leitor: "leitor Tokio Extrato de Comissões (PDF)", linhas, total_bruto: b ? br(b[1]) : null, total_liquido: lq ? br(lq[1]) : null };
+}
+
+// Mapfre Capitalização — "EXTRATO DE COMISSÕES / Corretagens Pagas": Ficha/Proposta Parcela Titular Histórico Quitação Mensalidades % Débitos Créditos
+function mapfreCap(texto: string): ExtratoLido | null {
+  if (!/MAPFRE/i.test(texto) || !/Corretagens Pagas/i.test(texto)) return null;
+  const linhas: LinhaExtrato[] = [];
+  let total = 0, temTotal = false;
+  for (const bruta of texto.split(/\r?\n/)) {
+    const s = um(bruta);
+    const m = /^(\d{4,}) (\d+)\/(\d+) (.+?) (Pagamento|Estorno|Cancelamento|[A-ZÀ-Ú][a-zà-ú]+) (\d{2}\/\d{2}\/\d{4}) ([\d.]+,\d{2}) (\d+,\d{1,4}) ([\d.]+,\d{2}) ([\d.]+,\d{2})$/.exec(s);
+    if (m) {
+      const l = linha(linhas.length + 1, { proposta: m[1], apolice: m[1], parcela: Number(m[2]), cliente: m[4], tipo: m[5].toLowerCase(), premio: br(m[7]),
+        pct_comissao: br(m[8]), valor_comissao: br(m[10]) - br(m[9]) });
+      (l as any).extras = { parcelas_total: Number(m[3]), quitacao: iso(m[6]), debito: br(m[9]), credito: br(m[10]) };
+      linhas.push(l);
+      continue;
+    }
+    const t = /^TOTAL ([\d.]+,\d{2}) ([\d.]+,\d{2}) ([\d.]+,\d{2})$/.exec(s);
+    if (t) { total += br(t[3]) - br(t[2]); temTotal = true; }
+  }
+  return { leitor: "leitor Mapfre Capitalização (PDF)", linhas, total_bruto: temTotal ? Math.round(total * 100) / 100 : null, total_liquido: null };
+}
+
+// Porto Capitalização — "Movimentações": Ficha Valor da Proposta Titular Valor Bruto Data Status IR INSS ISS Valor Líquido
+function portoCap(texto: string): ExtratoLido | null {
+  if (!/PORTO SEGURO CAPITALIZA/i.test(texto) || !/Movimenta[cç][oõ]es/i.test(texto)) return null;
+  const t = um(texto);
+  const linhas: LinhaExtrato[] = [];
+  for (const m of t.matchAll(/(\d{6,}) R\$ ?([\d.]+,\d{2}) (.+?) R\$ ?(-?[\d.]+,\d{2}) (\d{2}\/\d{2}\/\d{4}) ([A-Z]+) R\$ ?([\d.]+,\d{2}) R\$ ?([\d.]+,\d{2}) R\$ ?([\d.]+,\d{2}) R\$ ?(-?[\d.]+,\d{2})/g)) {
+    const l = linha(linhas.length + 1, { proposta: m[1], apolice: m[1], parcela: 1, premio: br(m[2]), cliente: m[3], valor_comissao: br(m[4]), tipo: m[6].toLowerCase() });
+    (l as any).extras = { data_pagamento: iso(m[5]), ir: br(m[7]), inss: br(m[8]), iss: br(m[9]), liquido: br(m[10]) };
+    linhas.push(l);
+  }
+  const tot = /Totais \d+ R\$ ?(-?[\d.]+,\d{2}) R\$ ?([\d.]+,\d{2}) R\$ ?([\d.]+,\d{2}) R\$ ?([\d.]+,\d{2}) R\$ ?(-?[\d.]+,\d{2})/.exec(t)
+    ?? /Totais \d+ R\$ ?(-?[\d.]+,\d{2})/.exec(t);
+  return { leitor: "leitor Porto Capitalização (PDF)", linhas, total_bruto: tot ? br(tot[1]) : null, total_liquido: tot && tot[5] ? br(tot[5]) : null };
+}
+
+// HDI — "DETALHAMENTO DE COMISSÃO DE CORRETAGEM": Data Documento - parc/total Cliente Prêmio % Valor (+ recuperação de comissão)
+function hdi(texto: string): ExtratoLido | null {
+  if (!/DETALHAMENTO DE COMISS[AÃ]O DE CORRETAGEM/i.test(texto)) return null;
+  const t = um(texto);
+  const linhas: LinhaExtrato[] = [];
+  for (const m of t.matchAll(/(\d{2}\/\d{2}\/\d{4}) ([\d.]{15,}) - (\d+)\/(\d+) (.+?) (-?[\d.]+,\d{2}) (\d+,\d{2}) (-?[\d.]+,\d{2})(?= \d{2}\/\d{2}\/\d{4}| Total Bruto)/g)) {
+    const l = linha(linhas.length + 1, { apolice: m[2], parcela: Number(m[3]), cliente: m[5], premio: br(m[6]), pct_comissao: br(m[7]), valor_comissao: br(m[8]), tipo: "comissao" });
+    (l as any).extras = { data: iso(m[1]), parcelas_total: Number(m[4]) };
+    linhas.push(l);
+  }
+  for (const m of t.matchAll(/(\d{2}\/\d{2}\/\d{4}) ([\d.]{15,}) (.+?) - Recup\. Comissao.*? ABATIMENTO - ([\d.]+,\d{2})/g)) {
+    const l = linha(linhas.length + 1, { apolice: m[2], cliente: m[3], valor_comissao: -br(m[4]), tipo: "recuperacao_comissao" });
+    (l as any).extras = { data: iso(m[1]) };
+    linhas.push(l);
+  }
+  const b = /Total Bruto (-?[\d.]+,\d{2})/.exec(t);
+  return { leitor: "leitor HDI (PDF)", linhas, total_bruto: b ? br(b[1]) : null, total_liquido: null };
+}
+
 const LEITORES: Record<string, ((t: string) => ExtratoLido | null)[]> = {
-  BRAS: [brasilcap], TOKI: [tokioCorretor], ALLI: [allianz], ICAT: [icatu], TOO: [too], ALF: [alfa], ZURI: [zurich], SUHA: [suhai],
+  MAPF: [mapfreCap], PORT: [portoCap], HDI: [hdi],
+  BRAS: [brasilcap, brasilcapNovo], TOKI: [tokioCorretor, tokioComissoes], ALLI: [allianz, allianz2025], ICAT: [icatu], TOO: [too], ALF: [alfa], ZURI: [zurich], SUHA: [suhai],
 };
 
 export function lerExtratoPdfOutros(seguradora: string, texto: string): ExtratoLido | null {
