@@ -94,11 +94,11 @@ const ESTADO_LINHA: Record<string, { t: string; cor: string }> = {
 // outrasReceita: entradas que são receita mas não são comissão de seguro (rendimento, novas receitas);
 // outrasNaoReceita: entradas na conta que NÃO são receita (empréstimo, estorno/devolução, sem categoria)
 type PontoDia = { dia: number; regra: number; exper: number; recebido: number; outrasReceita: number; outrasNaoReceita: number };
-type OutraEntrada = { classe: string; eReceita: boolean; qtd: number; valor: number; previsao: number | null };
+type OutraEntrada = { classe: string; eReceita: boolean; naSoma: boolean; qtd: number; valor: number; previsao: number | null };
 const EMPRESA_NIBO: Record<string, string> = { corretora: "O2 Corretora", capitalizacao: "O2 Capitalização" };
 const ROTULO_ENTRADA: Record<string, string> = {
   rendimento: "Rendimento de aplicações", nova_receita: "Novas receitas", emprestimo: "Empréstimo (não é receita)",
-  estorno_devolucao: "Estorno e devolução (não é receita)", sem_categoria: "Sem categoria no Nibo (classificar)", outra: "Outra categoria",
+  estorno_devolucao: "Estorno e devolução (não é receita)", transferencia_entre_empresas: "Transferência entre as empresas (fora da soma)", sem_categoria: "Sem categoria no Nibo (classificar)", outra: "Outra categoria",
 };
 type LinhaTopo = { seg: string; nome: string; prevista: number; regra: number; extratos: number; baixadas: number; baixadasErp: number; proLabore: number; foraSeguro: number; nibo: number };
 const COLUNAS_CAIXA = "grid grid-cols-[minmax(150px,1.5fr)_64px_repeat(5,minmax(100px,1fr))_minmax(150px,1.2fr)] items-center gap-x-2";
@@ -295,8 +295,8 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
     const diasDoMes = new Date(Date.UTC(aTopo, mTopo, 0)).getUTCDate();
     for (const corr of CORRETORAS) {
       const pontos: PontoDia[] = Array.from({ length: diasDoMes }, (_, i) => ({ dia: i + 1, regra: 0, exper: 0, recebido: 0, outrasReceita: 0, outrasNaoReceita: 0 }));
-      for (const o of (outrasBrutas ?? []) as { empresa: string; dia: string; e_receita: boolean; valor: number | string }[]) {
-        if (EMPRESA_NIBO[o.empresa] === corr && o.dia.startsWith(mesTopo)) pontos[Number(o.dia.slice(8, 10)) - 1][o.e_receita ? "outrasReceita" : "outrasNaoReceita"] += Number(o.valor);
+      for (const o of (outrasBrutas ?? []) as { empresa: string; dia: string; e_receita: boolean; entra_na_soma: boolean; valor: number | string }[]) {
+        if (o.entra_na_soma && EMPRESA_NIBO[o.empresa] === corr && o.dia.startsWith(mesTopo)) pontos[Number(o.dia.slice(8, 10)) - 1][o.e_receita ? "outrasReceita" : "outrasNaoReceita"] += Number(o.valor);
       }
       for (const p of (previstoDiaBruto ?? []) as { corretora: string; dia: string; regra_liquido: number | string; experiencia_liquido: number | string }[]) {
         if (p.corretora === corr && p.dia.startsWith(mesTopo)) { const i = Number(p.dia.slice(8, 10)) - 1; pontos[i].regra += Number(p.regra_liquido); pontos[i].exper += Number(p.experiencia_liquido); }
@@ -309,14 +309,14 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
     // ---- Outras entradas na conta (não são comissão de seguro): valor do mês por tipo + previsão pela frequência dos meses anteriores ----
     // previsão = média mensal dos meses anteriores em que o tipo apareceu, só quando apareceu em 3 ou mais dos 4 meses anteriores
     {
-      const porEmpresa = new Map<string, Map<string, { eReceita: boolean; meses: Map<string, { qtd: number; valor: number }> }>>();
-      for (const o of (outrasBrutas ?? []) as { empresa: string; dia: string; classe: string; e_receita: boolean; qtd: number | string; valor: number | string }[]) {
+      const porEmpresa = new Map<string, Map<string, { eReceita: boolean; naSoma: boolean; meses: Map<string, { qtd: number; valor: number }> }>>();
+      for (const o of (outrasBrutas ?? []) as { empresa: string; dia: string; classe: string; e_receita: boolean; entra_na_soma: boolean; qtd: number | string; valor: number | string }[]) {
         const corr = EMPRESA_NIBO[o.empresa];
         if (!corr) continue;
         for (const alvo of [corr, "Consolidado"]) {
           const classes = porEmpresa.get(alvo) ?? new Map();
           porEmpresa.set(alvo, classes);
-          const c = classes.get(o.classe) ?? { eReceita: o.e_receita, meses: new Map() };
+          const c = classes.get(o.classe) ?? { eReceita: o.e_receita, naSoma: o.entra_na_soma, meses: new Map() };
           classes.set(o.classe, c);
           const m = c.meses.get(o.dia.slice(0, 7)) ?? { qtd: 0, valor: 0 };
           m.qtd += Number(o.qtd); m.valor += Number(o.valor);
@@ -330,9 +330,9 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
         for (const [classe, c] of classes) {
           const atual = c.meses.get(mesTopo);
           const ocorridos = anteriores.map((mm) => c.meses.get(mm)?.valor).filter((v): v is number => v !== undefined);
-          const previsao = ocorridos.length >= 3 ? Math.round((ocorridos.reduce((t, v) => t + v, 0) / ocorridos.length) * 100) / 100 : null;
+          const previsao = c.eReceita && ocorridos.length >= 3 ? Math.round((ocorridos.reduce((t, v) => t + v, 0) / ocorridos.length) * 100) / 100 : null;
           if (!atual && previsao === null) continue;
-          lista.push({ classe, eReceita: c.eReceita, qtd: atual?.qtd ?? 0, valor: Math.round((atual?.valor ?? 0) * 100) / 100, previsao });
+          lista.push({ classe, eReceita: c.eReceita, naSoma: c.naSoma, qtd: atual?.qtd ?? 0, valor: Math.round((atual?.valor ?? 0) * 100) / 100, previsao });
         }
         outrasTopo[alvo] = lista.sort((x, y) => Number(y.eReceita) - Number(x.eReceita) || y.valor - x.valor);
       }
@@ -1318,13 +1318,13 @@ const rotuloFaixa = (lo: number, hi: number) => (lo === 0 ? "até 1 mil" : `${lo
 // só quando o tipo apareceu em 3 ou mais dos 4 meses anteriores.
 function QuadroOutrasEntradas({ consolidado, porEmpresa }: { consolidado: OutraEntrada[]; porEmpresa: Record<string, OutraEntrada[]> }) {
   const totRec = consolidado.filter((o) => o.eReceita).reduce((t, o) => t + o.valor, 0);
-  const totNao = consolidado.filter((o) => !o.eReceita).reduce((t, o) => t + o.valor, 0);
+  const totNao = consolidado.filter((o) => !o.eReceita && o.naSoma).reduce((t, o) => t + o.valor, 0);
   const valorDe = (lista: OutraEntrada[] | undefined, classe: string) => lista?.find((o) => o.classe === classe);
   return (
     <div className="space-y-2 rounded-lg border border-gray-300 p-3">
       <h3 className="text-sm font-bold text-o2-navy">
         Outras entradas na conta · não são comissão de seguro
-        <InfoLegenda titulo="Outras entradas na conta">O que entrou na conta no mês fora da categoria Receita de seguros do Nibo. <b>Rendimento de aplicações</b> e <b>novas receitas</b> são receita (baixa de receita pelo banco). <b>Empréstimo</b>, <b>estorno e devolução</b> e <b>entrada sem categoria</b> entram na conta, mas não são receita: ficam separados para não distorcer a conferência dos extratos. A previsão é a média dos meses anteriores e só aparece quando o tipo se repetiu em 3 ou mais dos 4 meses anteriores.</InfoLegenda>
+        <InfoLegenda titulo="Outras entradas na conta">O que entrou na conta no mês fora da categoria Receita de seguros do Nibo. <b>Rendimento de aplicações</b> e <b>novas receitas</b> são receita (baixa de receita pelo banco). <b>Empréstimo</b>, <b>estorno e devolução</b> e <b>entrada sem categoria</b> entram na conta, mas não são receita: ficam separados para não distorcer a conferência dos extratos. A <b>transferência entre as duas empresas</b> (O2 Corretora ↔ O2 Capitalização) entra numa conta e sai da outra: aparece na lista, mas fica fora das somas e das barras. A previsão é a média dos meses anteriores e só aparece quando o tipo se repetiu em 3 ou mais dos 4 meses anteriores.</InfoLegenda>
       </h3>
       {consolidado.length === 0 ? <p className="text-xs text-gray-500">Nenhuma outra entrada no mês.</p> : (
         <div className="overflow-x-auto">
@@ -1344,7 +1344,7 @@ function QuadroOutrasEntradas({ consolidado, porEmpresa }: { consolidado: OutraE
               {consolidado.map((o) => (
                 <tr key={o.classe}>
                   <td className="px-2 py-1 font-medium">{ROTULO_ENTRADA[o.classe] ?? o.classe}</td>
-                  <td className="px-2 py-1">{o.eReceita ? <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700">receita</span> : <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-600">não é receita</span>}</td>
+                  <td className="px-2 py-1">{o.eReceita ? <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700">receita</span> : !o.naSoma ? <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">fora da soma</span> : <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-600">não é receita</span>}</td>
                   <td className="px-2 py-1 text-right">{brl(valorDe(porEmpresa["O2 Corretora"], o.classe)?.valor ?? 0)}</td>
                   <td className="px-2 py-1 text-right">{brl(valorDe(porEmpresa["O2 Capitalização"], o.classe)?.valor ?? 0)}</td>
                   <td className="px-2 py-1 text-right font-semibold">{brl(o.valor)}</td>
