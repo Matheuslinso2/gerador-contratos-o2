@@ -10,6 +10,8 @@ import { IconReport } from "@/components/icons";
 import { formatarData, formatarReais } from "@/lib/sinistros/regras";
 import { podeVerBaixas } from "@/lib/erp/acessoBaixas";
 import PainelResumoAba from "@/app/erp/PainelResumoAba";
+import NavegadorMes from "@/app/erp/NavegadorMes";
+import { periodoDoMes } from "@/lib/erp/periodo";
 
 export const dynamic = "force-dynamic";
 
@@ -114,7 +116,8 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
   // filtros padronizados do ERP: cada seção aplica os níveis que tem (seguradora, corretora, imobiliária, mês)
   const { data: segFiltro } = f.seguradora ? await supabase.from("erp_seguradoras").select("nome").eq("abreviacao", f.seguradora).maybeSingle() : { data: null };
   const segFatura = f.seguradora ? SEGURADORA_FATURA[f.seguradora] ?? "—" : null;
-  const mes = f.mes ? limitesMes(f.mes) : null;
+  const periodo = periodoDoMes(f.mes); // período padrão do ERP: mês corrente, navegação por mês e por ano
+  const mes = limitesMes(periodo.mes);
   const imobLike = f.imobiliaria ? `%${f.imobiliaria.replace(/[%_,()]/g, "")}%` : null;
 
   let qConf = supabase.from("erp_conferencia_corp_pronto").select("*").order("mes", { ascending: false });
@@ -146,7 +149,7 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
   let qAtraso = supabase.from("erp_baixa_corp_atraso_pronto").select("mes, corretora, seguradora, bruto, media_3m, situacao");
   if (f.seguradora) qAtraso = qAtraso.eq("seguradora", f.seguradora === "ALF" ? "ALFA" : f.seguradora);
   if (f.corretora) qAtraso = qAtraso.eq("corretora", f.corretora);
-  if (mes) qAtraso = qAtraso.eq("mes", mes.de);
+  qAtraso = qAtraso.lte("mes", mes.de); // do mês + herdados de meses anteriores (rotulados)
 
   // estornos de endosso (linha negativa do extrato × endosso do ERP): lista pronta refeita de hora em hora
   let qEstornos = supabase.from("erp_estornos_endosso_pronto").select("alerta, seguradora, codigo_o2, documento_id, apolice, endosso, cliente, valor, data_ref, gerado_em");
@@ -201,7 +204,8 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
   return (
     <>
       <main className="mx-auto w-full max-w-[1100px] flex-1 space-y-6 p-8">
-        <PainelResumoAba funcao="erp_resumo_conferencia" titulo="Conferência Corp × ERP" legendas={{"Documentos no Corp e no ERP por mês":"Quantos documentos cada sistema tem em cada mês (os últimos cinco meses até o mês atual). Quanto mais próximas as barras, melhor a conferência.","Diferença de documentos por seguradora (mês atual)":"Seguradoras em que o ERP tem mais ou menos documentos que o Corp no mês atual (as 8 maiores diferenças). Negativo = o ERP tem menos.","Diferença de comissão por seguradora (mês atual, R$)":"Diferença de comissão prevista entre o ERP e o Corp, por seguradora, no mês atual (as 8 maiores). Negativo = o ERP tem menos."}} />
+        <NavegadorMes caminho={secao === "faturas" ? "/erp/faturas/alertas" : "/erp/conferencia"} mes={f.mes} params={{ ...Object.fromEntries(Object.entries(sp).map(([k, v]) => [k, Array.isArray(v) ? v[0] : v])) }} />
+        <PainelResumoAba funcao="erp_resumo_conferencia" titulo="Conferência Corp × ERP" mes={periodo.mes} legendas={{"Documentos no Corp e no ERP por mês":"Quantos documentos cada sistema tem em cada mês (os cinco meses até o mês escolhido). Os meses anteriores ao escolhido aparecem marcados como herdados. Quanto mais próximas as barras, melhor a conferência.","Diferença de documentos por seguradora (do mês)":"Seguradoras em que o ERP tem mais ou menos documentos que o Corp no mês escolhido (as 8 maiores diferenças). Negativo = o ERP tem menos.","Diferença de comissão por seguradora (do mês, R$)":"Diferença de comissão prevista entre o ERP e o Corp, por seguradora, no mês escolhido (as 8 maiores). Negativo = o ERP tem menos.","Diferença de documentos herdada por seguradora":"Diferenças de documentos que ficaram dos quatro meses anteriores ao mês escolhido, por seguradora (as 8 maiores). Separadas das diferenças do mês."}} />
         <PageHeader
           icon={<IconReport />}
           titulo={secao === "faturas" ? "ERP O2 — Faturas" : "ERP O2 — Conferência da baixa de comissão"}
@@ -213,7 +217,7 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
         />
         <FiltrosErp
           caminho={secao === "faturas" ? "/erp/faturas/alertas" : "/erp/conferencia"}
-          campos={secao === "faturas" ? ["seguradora", "imobiliaria", "mes"] : ["seguradora", "corretora", "mes"]}
+          campos={secao === "faturas" ? ["seguradora", "imobiliaria"] : ["seguradora", "corretora"]}
           valores={f}
           resumo="Os filtros valem para todas as seções abaixo, em cada uma no nível que ela tem (ex.: imobiliária só nas seções de fatura; corretora nas de baixa e extratos)."
         />
@@ -353,7 +357,7 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
                   const doMes = atrasos.filter((a) => a.mes === m);
                   return (
                     <li key={m}>
-                      <b>{m.slice(5, 7)}/{m.slice(0, 4)}</b>: {doMes.length} {doMes.length === 1 ? "combinação" : "combinações"} — {doMes.map((a) => `${a.seguradora} ${a.corretora === "O2 Capitalização" ? "(Cap)" : ""} ${a.situacao === "sem_baixa" ? "sem baixa" : `baixa ${brl(a.bruto)} de ~${brl(a.media_3m)}`}`).join(" · ")}
+                      <b>{m.slice(5, 7)}/{m.slice(0, 4)}</b>{m < mes.de ? <span className="ml-1 text-[11px] font-normal text-red-600">(herdado de {m.slice(5, 7)}/{m.slice(0, 4)})</span> : null}: {doMes.length} {doMes.length === 1 ? "combinação" : "combinações"} — {doMes.map((a) => `${a.seguradora} ${a.corretora === "O2 Capitalização" ? "(Cap)" : ""} ${a.situacao === "sem_baixa" ? "sem baixa" : `baixa ${brl(a.bruto)} de ~${brl(a.media_3m)}`}`).join(" · ")}
                     </li>
                   );
                 })}

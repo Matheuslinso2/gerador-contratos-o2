@@ -504,7 +504,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
   return (
     <>
       <main className="mx-auto w-full max-w-[1500px] flex-1 space-y-6 p-6">
-        {<PainelResumoAba funcao="erp_resumo_baixas" titulo="Baixa de comissão" legendas={{"Linhas de extrato por estado (desde setembro)":"Situação de cada linha dos extratos pagos desde setembro: identificada, pendente de identificação, sem parcela e as demais.","Baixas do ERP por mês":"Baixas feitas pelo ERP em cada mês, separando as que seguiram a regra das que ficaram fora da regra.","Extratos por seguradora (desde setembro)":"Extratos pagos desde setembro, por seguradora, com a baixa aprovada ou ainda pendente."}} />}
+        {<PainelResumoAba funcao="erp_resumo_baixas" titulo="Baixa de comissão" mes={mesSel} legendas={{"Linhas de extrato por estado (do mês)":"Situação de cada linha dos extratos pagos no mês escolhido: identificada, pendente de identificação, sem parcela e as demais.","Pendentes herdadas por mês de origem":"Linhas de extrato de meses anteriores (desde setembro) que ainda estão pendentes de identificação, separadas por mês de origem. Não entram nos números do mês.","Baixas do ERP por mês":"Baixas feitas pelo ERP em cada mês (do mês escolhido e dos três anteriores, marcados como herdados), separando as que seguiram a regra das que ficaram fora da regra.","Extratos por seguradora":"Extratos pagos no mês escolhido, por seguradora, com a baixa aprovada ou pendente; os pendentes de meses anteriores aparecem à parte, como pendentes herdados."}} />}
         <PageHeader
           icon={<IconReport />}
           titulo={modo === "gestao" ? "ERP O2 — Gestão das baixas de comissão" : "ERP O2 — Conferência de baixa de comissão"}
@@ -527,9 +527,11 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
             <h2 className="text-sm font-bold uppercase tracking-wide text-o2-navy">Controle mensal de baixa de comissão <span className="ml-1 text-[10px] font-normal normal-case tracking-normal text-gray-400">(fonte: Corp e ERP O2)</span> <InfoLegenda titulo="Controle mensal de baixa de comissão">Mostra, mês a mês e por seguradora, de onde vem o dinheiro: o que deveria cair (pela regra de cada seguradora e pela experiência), o que os extratos dizem que ela pagou, o que já foi baixado no Corp e o que entrou na conta pelo Nibo. Os valores são líquidos do imposto retido, como entram na conta. As duas últimas colunas são diferenças; passam em vermelho quando a diferença é maior que R$ 6. Abre no mês atual e dá para navegar pelos meses.</InfoLegenda></h2>
             {!usaPeriodo ? (
               <div className="flex items-center gap-2 text-sm" aria-label="Mês">
+                <Link href={hrefTela({ mes: somaMes(mesSel, -12) })} className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-gray-700 hover:bg-gray-50" title="mesmo mês, ano anterior">«</Link>
                 <Link href={hrefTela({ mes: somaMes(mesSel, -1) })} className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-gray-700 hover:bg-gray-50" title="mês anterior">◀</Link>
                 <span className="min-w-[88px] text-center font-semibold text-o2-navy">{mesTexto(`${mesSel}-01`)}</span>
                 <Link href={hrefTela({ mes: somaMes(mesSel, 1) })} className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-gray-700 hover:bg-gray-50" title="próximo mês">▶</Link>
+                <Link href={hrefTela({ mes: somaMes(mesSel, 12) })} className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-gray-700 hover:bg-gray-50" title="mesmo mês, ano seguinte">»</Link>
                 {mesSel !== mesAtual && <Link href={hrefTela({ mes: undefined })} className="text-xs text-o2-navy underline">voltar ao mês atual</Link>}
               </div>
             ) : (

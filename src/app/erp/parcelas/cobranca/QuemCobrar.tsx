@@ -1,20 +1,22 @@
 import { createClient } from "@/lib/supabase/server";
 import InfoLegenda from "@/components/InfoLegenda";
+import { IDADE_RETRATO_ABERTO, IDADE_RETRATO_FECHADO, periodoDoMes } from "@/lib/erp/periodo";
 
 // "Quem cobrar" (Matheus 31/10): a cobrança é da IMOBILIÁRIA, não do segurado. Em geral a imobiliária cobra o inquilino no boleto do aluguel e paga o boleto do
 // seguro; na fatura é sempre ela quem paga. Mostra, por imobiliária, o contato dela, o que está em aberto e o histórico de cobranças por e-mail (caixa da Nathalie).
 type L = {
   imobiliaria_id: string | null; imobiliaria: string; email: string | null; email_faturas: string | null; email_repasses: string | null; telefone: string | null; quem_paga_boleto: string | null; nao_administrado: number;
+  parcelas_mes: number; parcelas_herdadas: number; maior_atraso_herdado: number | null;
   parcelas: number; valor: number | string; maior_atraso: number; via_fatura: number; em_risco: number; emails_cobranca: number; ultima_cobranca: string | null; meses_cobranca: number;
 };
 const reais = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 const data = (d: string | null) => (d ? d.split("-").reverse().join("/") : "—");
 const primeiro = (s: string | null) => (s ? s.split(";")[0].trim() : "");
 
-export default async function QuemCobrar() {
+export default async function QuemCobrar({ mes }: { mes?: string | null }) {
   const supabase = await createClient();
-  const hoje = new Date().toISOString().slice(0, 10);
-  const { data: dados } = await supabase.rpc("erp_retrato", { p_funcao: "erp_resumo_cobranca_imobs", p_de: hoje, p_ate: hoje });
+  const p = periodoDoMes(mes);
+  const { data: dados } = await supabase.rpc("erp_retrato", { p_funcao: "erp_resumo_cobranca_imobs", p_de: p.de, p_ate: p.ate, p_max_idade: p.fechado ? IDADE_RETRATO_FECHADO : IDADE_RETRATO_ABERTO });
   const linhas = ((dados ?? []) as L[]).map((l) => ({ ...l, valor: Number(l.valor) }));
   if (!linhas.length) return null;
   const totalParc = linhas.reduce((s, l) => s + l.parcelas, 0);
@@ -36,7 +38,7 @@ export default async function QuemCobrar() {
             <tr>
               <th className="py-1.5 pr-3">Imobiliária</th>
               <th className="py-1.5 pr-3">Contato da imobiliária</th>
-              <th className="py-1.5 pr-3 text-right">Parcelas</th>
+              <th className="py-1.5 pr-3 text-right">Parcelas (do mês · herdadas)</th>
               <th className="py-1.5 pr-3 text-right">Valor em aberto</th>
               <th className="py-1.5 pr-3 text-right">Maior atraso</th>
               <th className="py-1.5 pr-3 text-right">Por fatura</th>
@@ -68,7 +70,7 @@ export default async function QuemCobrar() {
                       </div>
                     )}
                   </td>
-                  <td className="py-1.5 pr-3 text-right">{l.parcelas}</td>
+                  <td className="py-1.5 pr-3 text-right">{l.parcelas_mes} · <span className="text-red-700" title="Em aberto de meses anteriores">{l.parcelas_herdadas}{l.maior_atraso_herdado ? ` (até ${l.maior_atraso_herdado} d)` : ""}</span></td>
                   <td className="py-1.5 pr-3 text-right">{reais(l.valor as number)}</td>
                   <td className="py-1.5 pr-3 text-right">{l.maior_atraso} d</td>
                   <td className="py-1.5 pr-3 text-right text-gray-600">{l.via_fatura || "—"}</td>

@@ -6,6 +6,8 @@ import FiltrosErp from "../FiltrosErp";
 import BotaoVerDocumento from "../BotaoVerDocumento";
 import InfoLegenda from "@/components/InfoLegenda";
 import PainelResumoAba from "@/app/erp/PainelResumoAba";
+import NavegadorMes from "@/app/erp/NavegadorMes";
+import { periodoDoMes } from "@/lib/erp/periodo";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Parcelas" };
@@ -34,15 +36,21 @@ type Linha = {
 export default async function ErpParcelasPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const f = lerFiltros(await searchParams);
   const supabase = await createClient();
-  let q = supabase.from("erp_vencimentos_pronto").select("*");
-  if (f.seguradora) q = q.eq("seguradora", f.seguradora);
-  if (f.imobiliaria) q = q.ilike("imobiliaria", `%${f.imobiliaria.replace(/[%_,()]/g, "")}%`);
-  if (f.mes) {
-    const m = limitesMes(f.mes);
-    q = q.gte("venc_seguradora", m.de).lte("venc_seguradora", m.ate);
-  }
-  const { data } = await q.order("venc_seguradora", { ascending: false }).order("imobiliaria").limit(3000);
+  // período padrão do ERP: mês corrente; "do mês" = cobrado no mês, "herdadas" = parcelas em conferência cobradas em meses anteriores
+  const periodo = periodoDoMes(f.mes);
+  const m = limitesMes(periodo.mes);
+  const base = () => {
+    let b = supabase.from("erp_vencimentos_pronto").select("*");
+    if (f.seguradora) b = b.eq("seguradora", f.seguradora);
+    if (f.imobiliaria) b = b.ilike("imobiliaria", `%${f.imobiliaria.replace(/[%_,()]/g, "")}%`);
+    return b;
+  };
+  const [{ data }, { data: herdBruta }] = await Promise.all([
+    base().gte("venc_seguradora", m.de).lte("venc_seguradora", m.ate).order("venc_seguradora", { ascending: false }).order("imobiliaria").limit(3000),
+    base().lt("venc_seguradora", m.de).order("venc_seguradora", { ascending: false }).order("imobiliaria").limit(500),
+  ]);
   const linhas = (data ?? []) as Linha[];
+  const herdadas = (herdBruta ?? []) as Linha[];
   const total = linhas.reduce((s, l) => s + Number(l.comissao_prevista ?? 0), 0);
   const porMes = new Map<string, { n: number; v: number }>();
   for (const l of linhas) {
@@ -51,9 +59,57 @@ export default async function ErpParcelasPage({ searchParams }: { searchParams: 
     porMes.set(k, { n: a.n + 1, v: a.v + Number(l.comissao_prevista ?? 0) });
   }
 
+  const tabela = (ls: Linha[]) => (
+        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+          <table className="w-full text-xs">
+            <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+              <tr>
+                <th className="px-3 py-2">Abrir</th>
+                <th className="px-3 py-2">Código O2 do documento</th>
+                <th className="px-3 py-2">Nosso nº do Corp</th>
+                <th className="px-3 py-2">Seg.</th>
+                <th className="px-3 py-2">Nº da apólice</th>
+                <th className="px-3 py-2">Imobiliária</th>
+                <th className="px-3 py-2">Parcela</th>
+                <th className="px-3 py-2">Vencimento no ERP</th>
+                <th className="px-3 py-2">Cobrado pela seguradora</th>
+                <th className="px-3 py-2">Diferença</th>
+                <th className="px-3 py-2 text-right">Comissão prevista</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {ls.slice(0, 500).map((l) => (
+                <tr key={l.parcela_id}>
+                  <td className="px-3 py-1"><BotaoVerDocumento id={l.documento_id} /></td>
+                  <td className="px-3 py-1">
+                    <Link href={`/erp/documentos/${l.documento_id}`} className="text-o2-navy hover:underline">
+                      {l.nosso_numero}
+                    </Link>
+                  </td>
+                  <td className="px-3 py-1">{l.nosso_numero_corp ?? "—"}</td>
+                  <td className="px-3 py-1">{l.seguradora}</td>
+                  <td className="px-3 py-1">{l.apolice}</td>
+                  <td className="px-3 py-1">{l.imobiliaria ?? "—"}</td>
+                  <td className="px-3 py-1">
+                    {l.parcela_n}
+                    {l.parcelas_total ? `/${l.parcelas_total}` : ""}
+                  </td>
+                  <td className="px-3 py-1">{formatarData(l.venc_corp)}</td>
+                  <td className="px-3 py-1 font-medium">{formatarData(l.venc_seguradora)}</td>
+                  <td className="px-3 py-1">{l.dif_meses > 0 ? `${l.dif_meses} mês(es) depois da fatura` : `${-l.dif_meses} mês(es) antes da fatura`}</td>
+                  <td className="px-3 py-1 text-right">{l.comissao_prevista === null ? "—" : formatarReais(Number(l.comissao_prevista))}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {ls.length > 500 && <p className="p-3 text-xs text-gray-500">Mostrando 500 de {ls.length}; use os filtros ou baixe o CSV para ver tudo.</p>}
+        </div>
+      );
+  
   return (
     <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-4 p-8">
-      <PainelResumoAba funcao="erp_resumo_parcelas" titulo="Parcelas" legendas={{"Parcelas por mês de vencimento, por situação":"Parcelas que vencem em cada mês (dois meses atrás até três meses à frente), separadas por situação: paga, a vencer, atenção ou urgente, risco de cancelamento e aguardando comissão.","Em risco de cancelamento por seguradora":"Seguradoras com mais parcelas em risco de cancelamento hoje (as 8 maiores).","Prova de pagamento das parcelas":"Parcelas com e sem prova de pagamento (linha de extrato, fatura ou baixa). Sem prova não se cobra a imobiliária."}} />
+      <NavegadorMes caminho="/erp/parcelas" mes={f.mes} params={{ seguradora: f.seguradora, imobiliaria: f.imobiliaria }} />
+      <PainelResumoAba funcao="erp_resumo_parcelas" titulo="Parcelas" mes={periodo.mes} legendas={{"Parcelas por mês de vencimento, por situação":"Parcelas que vencem em cada mês, do mês escolhido e dos três anteriores (marcados como herdados), separadas por situação: paga, a vencer, atenção ou urgente, risco de cancelamento e aguardando comissão.","Herdadas abertas por seguradora":"Parcelas de meses anteriores ao mês escolhido que continuam em aberto (urgentes, em atenção, em risco de cancelamento ou aguardando comissão), por seguradora (as 8 maiores).","Em risco de cancelamento por seguradora":"Parcelas em risco de cancelamento, do mês e herdadas, por seguradora (as 8 maiores). Só aparece onde a regra de cancelamento da seguradora está cadastrada.","Prova de pagamento das parcelas do mês":"Quantas das parcelas que vencem no mês escolhido têm prova de pagamento (linha de extrato ou comissão recebida) e quantas ainda não têm."}} />
       <div>
         <div className="flex gap-3 text-sm">
           <span className="border-b-2 border-o2-navy font-semibold text-o2-navy">Conferência dos vencimentos</span>
@@ -67,7 +123,7 @@ export default async function ErpParcelasPage({ searchParams }: { searchParams: 
       </div>
       <FiltrosErp
         caminho="/erp/parcelas"
-        campos={["seguradora", "imobiliaria", "mes"]}
+        campos={["seguradora", "imobiliaria"]}
         valores={f}
         resumo={
           <>
@@ -84,50 +140,9 @@ export default async function ErpParcelasPage({ searchParams }: { searchParams: 
         ))}
       </div>
       <p className="text-xs font-semibold uppercase tracking-wide text-o2-navy">Parcelas em conferência<InfoLegenda titulo="Parcelas em conferência">Cada linha é uma parcela. Vencimento no ERP é a data que o ERP tem para a parcela; Cobrado pela seguradora é o vencimento dessa mesma parcela na fatura da seguradora; Diferença diz quantos meses o vencimento do ERP está adiantado ou atrasado em relação à fatura. Comissão prevista é a comissão esperada daquela parcela. Parcela mostra o número da parcela e o total quando se sabe. Abrir leva ao documento no ERP.</InfoLegenda></p>
-      <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-        <table className="w-full text-xs">
-          <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
-            <tr>
-              <th className="px-3 py-2">Abrir</th>
-              <th className="px-3 py-2">Código O2 do documento</th>
-              <th className="px-3 py-2">Nosso nº do Corp</th>
-              <th className="px-3 py-2">Seg.</th>
-              <th className="px-3 py-2">Nº da apólice</th>
-              <th className="px-3 py-2">Imobiliária</th>
-              <th className="px-3 py-2">Parcela</th>
-              <th className="px-3 py-2">Vencimento no ERP</th>
-              <th className="px-3 py-2">Cobrado pela seguradora</th>
-              <th className="px-3 py-2">Diferença</th>
-              <th className="px-3 py-2 text-right">Comissão prevista</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {linhas.slice(0, 500).map((l) => (
-              <tr key={l.parcela_id}>
-                <td className="px-3 py-1"><BotaoVerDocumento id={l.documento_id} /></td>
-                <td className="px-3 py-1">
-                  <Link href={`/erp/documentos/${l.documento_id}`} className="text-o2-navy hover:underline">
-                    {l.nosso_numero}
-                  </Link>
-                </td>
-                <td className="px-3 py-1">{l.nosso_numero_corp ?? "—"}</td>
-                <td className="px-3 py-1">{l.seguradora}</td>
-                <td className="px-3 py-1">{l.apolice}</td>
-                <td className="px-3 py-1">{l.imobiliaria ?? "—"}</td>
-                <td className="px-3 py-1">
-                  {l.parcela_n}
-                  {l.parcelas_total ? `/${l.parcelas_total}` : ""}
-                </td>
-                <td className="px-3 py-1">{formatarData(l.venc_corp)}</td>
-                <td className="px-3 py-1 font-medium">{formatarData(l.venc_seguradora)}</td>
-                <td className="px-3 py-1">{l.dif_meses > 0 ? `${l.dif_meses} mês(es) depois da fatura` : `${-l.dif_meses} mês(es) antes da fatura`}</td>
-                <td className="px-3 py-1 text-right">{l.comissao_prevista === null ? "—" : formatarReais(Number(l.comissao_prevista))}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {linhas.length > 500 && <p className="p-3 text-xs text-gray-500">Mostrando 500 de {linhas.length}; use os filtros ou baixe o CSV para ver tudo.</p>}
-      </div>
+      {tabela(linhas)}
+      <p className="text-xs font-semibold uppercase tracking-wide text-o2-navy">Herdadas de meses anteriores<span className="ml-1 text-[10px] font-normal normal-case tracking-normal text-gray-400">(parcelas em conferência cobradas antes de {periodo.rotulo})</span></p>
+      {herdadas.length === 0 ? <p className="text-xs text-gray-500">Nenhuma parcela herdada em conferência.</p> : tabela(herdadas)}
     </main>
   );
 }
