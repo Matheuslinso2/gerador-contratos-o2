@@ -47,9 +47,10 @@ const REGRAS: Regra[] = [
   for (const [k, v] of Object.entries(res)) console.log(`${k}: e-mails ${v.emails} | sem nº no assunto ${v.semNumero} | ligados a 1 documento ${v.ligado} | ambíguos ${v.ambiguo} | sem documento no ERP ${v.semDoc}`);
   console.log(`total de evidências: ${evid.length} em ${new Set(evid.map((e) => e.documento_id)).size} documentos`);
   if (!GRAVAR) return;
-  for (let i = 0; i < evid.length; i += 200) {
-    const { error } = await sb.from("erp_emails_evidencia_emissao").upsert(evid.slice(i, i + 200), { onConflict: "documento_id,message_id" });
+  const unicas = [...new Map(evid.map((e) => [`${e.documento_id}|${e.message_id}`, e])).values()]; // mesmo e-mail pode casar duas vezes
+  for (let i = 0; i < unicas.length; i += 200) {
+    const { error } = await sb.from("erp_emails_evidencia_emissao").upsert(unicas.slice(i, i + 200), { onConflict: "documento_id,message_id" });
     if (error) throw new Error(error.message);
   }
-  console.log(`gravadas ${evid.length}`);
+  console.log(`gravadas ${unicas.length}`);
 })();
