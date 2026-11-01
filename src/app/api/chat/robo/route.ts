@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { chatVisivelPara } from "@/lib/chat/acesso";
 import { responderComoRobo, type TurnoChat } from "@/lib/chat/robo";
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const MAX_TURNOS = 10;
 const MAX_CARACTERES = 2000;

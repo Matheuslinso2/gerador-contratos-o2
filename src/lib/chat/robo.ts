@@ -8,6 +8,7 @@ import { FERRAMENTAS_GERAIS, executarFerramentaGeral } from "./roboGeral";
 import { FERRAMENTAS_BUSCA, executarFerramentaBusca } from "./roboBusca";
 import { FERRAMENTA_RELATORIO, executarFerramentaRelatorio } from "./roboRelatorio";
 import { FERRAMENTA_ARQUIVOS, executarFerramentaArquivos } from "./roboArquivos";
+import { FERRAMENTA_PRIMEIRA_COTACAO, executarFerramentaAnalises } from "./roboAnalises";
 import { FERRAMENTA_LOGICA, chamadaTemDadosPessoais, descreverChamada, textoTemDadosPessoais } from "./privacidadePdf";
 
 // Robô O2 do chat da equipe (Fase 2, 29/10/2026). Mesmo "cérebro" da IA do WhatsApp (painéis + tabelas do
@@ -15,7 +16,8 @@ import { FERRAMENTA_LOGICA, chamadaTemDadosPessoais, descreverChamada, textoTemD
 // Painel Comercial); os demais colaboradores recebem só ferramentas do ERP sem esses campos.
 
 const MAX_RODADAS = 8;
-const PRAZO_FERRAMENTAS_MS = 40_000;
+const PRAZO_FERRAMENTAS_MS = 45_000; // depois disso o robô para de consultar e responde
+const TEMPO_TOTAL_MS = 80_000; // teto de uma consulta (a rota roda até 120 s); sobra tempo para a resposta final
 const MODELO = "claude-sonnet-5-5";
 
 export type TurnoChat = { role: "user" | "assistant"; content: string };
@@ -65,6 +67,7 @@ MAPA DE FONTES — consulte TODAS as que a pergunta abrange; nunca responda com 
 - Apólice: sim/não — dado principal (nº e vigência)
 Se houver mais de um produto ou mais de um item, uma linha por item. Não repita o mesmo fato em duas linhas.
 - COMO LER O QUE ACHAR (glossário): card do Bitrix em etapa de sucesso ("Efetivado") = cotação efetivada, que VIROU PROPOSTA; documento do ERP com conceito "PROPOSTA em emissão" = existe proposta (é normal não ter nº de apólice nem vigência até a seguradora emitir; data = efetivadaEm); só é APÓLICE o que tiver conceito de apólice (vigente, vencida, cancelada). Linha de painel/planilha com status EFETIVADO = cotação efetivada; NÃO EFETIVADO = cotação encerrada sem virar proposta; EM ANDAMENTO = cotação em aberto. A cotação antiga não efetivada e a proposta nova da mesma pessoa são itens DIFERENTES: não os misture nem use um para negar o outro. O mês do pedido vale pela data da cotação (criação do card/linha) ou da efetivação (proposta): se a proposta foi efetivada neste mês, diga que SIM, existe proposta este mês.
+- PERGUNTAS DE "PRIMEIRA VEZ" (quantas/quais imobiliárias fizeram a primeira cotação em um período, imobiliárias que começaram a cotar): use analisar_primeira_cotacao (de, ate, produto opcional). NUNCA leia tabelas inteiras para isso: estoura o tempo. Diga o que a base cobre (o histórico começa em 2020 na Fiança e é bem mais recente nos outros produtos: "primeira" = primeira registrada) e que grupo de imobiliárias conta como uma.
 - QUANDO NÃO ENCONTRAR (pessoa, card, apólice, cotação): seja curto e honesto. Diga em 1 ou 2 linhas o que foi consultado (cadastro de pessoas, cards do Bitrix já guardados, apólices e propostas do ERP, painéis) e que a base é atualizada de hora em hora a partir do Bitrix e do Corp — por isso um card criado há minutos ou um documento ainda não digitado podem não aparecer. Nunca afirme "não existe em nenhum período"; diga "não encontrei na base". Se a busca trouxe nomes parecidos (mesmo primeiro nome e sobrenome diferente, ou grafia parecida), liste até 3 e pergunte se é algum deles. Use só *um asterisco* para negrito (nunca **dois**), sem listas longas.
 - Ao final de qualquer contagem diga de quais fontes/produtos/tipos ela veio e o que ficou de fora.
 - Para qualquer pergunta sobre uma imobiliária, comece por buscar_imobiliaria. Imobiliárias do mesmo grupo (ex.: Ramiro Sá) são somadas e você diz quais fichas entraram.
@@ -86,13 +89,14 @@ ESTILO
 // Conjunto de ferramentas e roteamento do robô: usados pela produção e pelos testes (mesmo código, mesmo comportamento).
 export function ferramentasDoRobo(verComissao: boolean): Anthropic.Tool[] {
   return verComissao
-    ? [...FERRAMENTAS_ERP, ...FERRAMENTAS_GERAIS, ...FERRAMENTAS_BUSCA, FERRAMENTA_RELATORIO, FERRAMENTA_ARQUIVOS, ...FERRAMENTAS]
+    ? [...FERRAMENTAS_ERP, ...FERRAMENTAS_GERAIS, ...FERRAMENTAS_BUSCA, FERRAMENTA_RELATORIO, FERRAMENTA_ARQUIVOS, FERRAMENTA_PRIMEIRA_COTACAO, ...FERRAMENTAS]
     : [
         ...FERRAMENTAS_ERP,
         ...FERRAMENTAS_GERAIS.filter((f) => f.name !== "consultar_painel_extra"),
         ...FERRAMENTAS_BUSCA,
         FERRAMENTA_RELATORIO,
         FERRAMENTA_ARQUIVOS,
+        FERRAMENTA_PRIMEIRA_COTACAO,
         ...FERRAMENTAS.filter((f) => f.name === "consultar_painel"), // sem comissão/repasse para quem não é admin
       ];
 }
@@ -104,6 +108,7 @@ export async function executarFerramentaDoRobo(nome: string, entrada: unknown, e
     (await executarFerramentaBusca(nome, entrada, verComissao)) ??
     (await executarFerramentaRelatorio(nome, entrada, email, verComissao)) ??
     (await executarFerramentaArquivos(nome, entrada, email)) ??
+    (await executarFerramentaAnalises(nome, entrada)) ??
     (verComissao || nome === "consultar_painel"
       ? await executarFerramenta(nome, entrada, { semFinanceiro: !verComissao })
       : "Ferramenta indisponível para o seu perfil.")
@@ -160,7 +165,10 @@ export async function responderComoRobo(email: string, historico: TurnoChat[]): 
         if (chamadaTemDadosPessoais(c.name, c.input)) pessoal = true;
         const d = descreverChamada(c.name, c.input);
         if (d && !fontes.includes(d) && fontes.length < 8) fontes.push(d);
-        return { type: "tool_result" as const, tool_use_id: c.id, content: await executarFerramentaDoRobo(c.name, c.input, email, verComissao) };
+        // Cada consulta tem prazo: o que demorar demais é cortado e o robô responde com o que já tem (antes a função inteira estourava 60 s e o chat dava erro).
+        const restante = Math.max(8_000, TEMPO_TOTAL_MS - (Date.now() - inicio));
+        const cortada = new Promise<string>((resolve) => setTimeout(() => resolve("A consulta demorou demais e foi interrompida. Use filtros menores (um produto, um mês, uma imobiliária) ou diga que não deu para calcular."), restante));
+        return { type: "tool_result" as const, tool_use_id: c.id, content: await Promise.race([executarFerramentaDoRobo(c.name, c.input, email, verComissao), cortada]) };
       })
     );
     mensagens.push({ role: "user", content: resultados });

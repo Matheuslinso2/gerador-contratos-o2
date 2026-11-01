@@ -1,0 +1,4 @@
+-- "Quantas imobiliárias fizeram a PRIMEIRA cotação no período?" (Robô O2, 01/11/2026). Aplicado pelas migrações chat_primeira_cotacao e chat_primeira_cotacao_v2.
+-- chat_primeira_cotacao(p_de, p_ate, p_produto): por imobiliária (grupo conta como uma), data da primeira cotação NOVA (planilhas + Bitrix, 2014..hoje) e a data
+-- da primeira APÓLICE no ERP; o robô separa as "realmente novas" das que já eram clientes antes do período. Só service_role executa.
+-- (corpo completo da função: ver o histórico de migrações do projeto Supabase)
