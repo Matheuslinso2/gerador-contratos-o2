@@ -47,6 +47,7 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
   const faixa = FAIXAS.find((x) => x.chave === um("faixa"))?.chave;
   const origem = um("origem") === "bitrix" || um("origem") === "corp" ? um("origem") : undefined;
   const atraso = um("atraso") === "1";
+  const todas = !f.mes && !atraso; // sem mês escolhido: TODAS as pendentes (a proposta fica na tela até virar apólice, qualquer que seja o mês da efetivação)
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -61,7 +62,7 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
   // escopo: pendentes efetivadas no mês escolhido, ou todo o atraso (meses anteriores ao escolhido)
   const base = () => {
     let q = supabase.from("erp_emissao_fila_pronta").select("*", { count: "exact" });
-    q = atraso ? q.lt("data_efetivacao", ini) : q.gte("data_efetivacao", ini).lt("data_efetivacao", fim);
+    if (!todas) q = atraso ? q.lt("data_efetivacao", ini) : q.gte("data_efetivacao", ini).lt("data_efetivacao", fim);
     if (f.seguradora) q = q.eq("seguradora", f.seguradora);
     if (f.produto) q = q.eq("produto", f.produto);
     if (f.tipo) q = q.eq("tipo", f.tipo);
@@ -82,7 +83,7 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
   };
   const contarFaixa = async (chave: (typeof FAIXAS)[number]["chave"]) => {
     let q = supabase.from("erp_emissao_fila_pronta").select("id", { count: "exact", head: true });
-    q = atraso ? q.lt("data_efetivacao", ini) : q.gte("data_efetivacao", ini).lt("data_efetivacao", fim);
+    if (!todas) q = atraso ? q.lt("data_efetivacao", ini) : q.gte("data_efetivacao", ini).lt("data_efetivacao", fim);
     if (f.seguradora) q = q.eq("seguradora", f.seguradora);
     if (f.produto) q = q.eq("produto", f.produto);
     if (f.tipo) q = q.eq("tipo", f.tipo);
@@ -142,7 +143,7 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
         tipos={TIPOS_DOCUMENTO}
         resumo={
           <>
-            {atraso ? `atraso de meses anteriores a ${rotuloMes}` : `efetivadas em ${rotuloMes}`} · {total.toLocaleString("pt-BR")} pendente(s)
+            {todas ? "todas as propostas pendentes de emissão (de qualquer mês)" : atraso ? `atraso de meses anteriores a ${rotuloMes}` : `efetivadas em ${rotuloMes}`} · {total.toLocaleString("pt-BR")} pendente(s)
             <InfoLegenda titulo="Lista de propostas pendentes">
               A lista abaixo mostra as propostas efetivadas ainda sem Nº da apólice (ou do endosso), da mais antiga para a mais nova. O mês do filtro é o mês da efetivação; com o atraso ligado, mostra as efetivadas em meses anteriores ao escolhido. Os demais filtros (produto, imobiliária, tipo, seguradora e busca) recortam a lista. Dias = hoje menos a data de efetivação. A data de efetivação vem do cartão concluído no Bitrix; sem cartão, da proposta do Corp (a fonte da data aparece embaixo dela). Atualizada a cada hora.
             </InfoLegenda>
