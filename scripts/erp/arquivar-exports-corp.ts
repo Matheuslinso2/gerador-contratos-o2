@@ -1,5 +1,5 @@
 // ERP O2 — ARQUIVO dos relatórios exportados do Corp (01/11/2026, regra do Matheus "registrar todo tipo de informação").
-// Cada linha da planilha vira 1 registro em erp_corp_export_linhas com TODAS as colunas em `dados` (fonte 'Corp export', nível 8).
+// Cada linha da planilha vira 1 registro em erp_corp_export_linhas com TODAS as colunas em `dados` (fonte corp_export, nível 8).
 // Textos livres (Observações etc.) passam por mascararSegredos (senha/login/usuário/token/pin → ***). PDF: uma linha de texto por
 // registro (dados.pagina, dados.texto), também mascarado. Lote para desfazer: delete from erp_corp_export_linhas where lote = '<lote>'.
 // uso: npx tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/erp/arquivar-exports-corp.ts <lote> <relatorio=arquivo> [...]
