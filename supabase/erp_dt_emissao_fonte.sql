@@ -1,0 +1,4 @@
+-- 01/11/2026 — data de emissão das apólices (erp_documentos.dt_emissao) passa a ser gravada com fonte e nível:
+--   dt_emissao_fonte: pdf_acervo (nível 1) > email_emissao (5) > corp_comissoes (8, comparação; vale até aparecer fonte melhor) | api | manual (domínio fonte_dt_emissao em erp_dominios)
+--   função erp_preencher_dt_emissao(): preenche SÓ onde está vazio, descarta datas fora de 2000..hoje+1; roda ao fim de cada carga (PDF lido, e-mail de emissão, importação do Corp).
+-- A definição aplicada está no banco (migração erp_dt_emissao_fonte_e_preenchimento).
