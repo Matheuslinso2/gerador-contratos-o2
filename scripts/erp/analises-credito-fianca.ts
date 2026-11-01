@@ -62,11 +62,36 @@ async function todas<T>(tabela: string, cols: string, filtro?: (q: any) => any):
     linhas.push({ message_id: e.message_id, email_id: e.id, seguradora: "TOKI", data_email: e.data, resultado, negocio, cotacao, pretendente_nome: nome, anexo_pdf: e.tem_anexo, origem_id: card?.id ?? null, card_item_id: card?.item_id ?? null,
       documento_id: card?.documento_id ?? null, imobiliaria_id: d?.imobiliaria_id ?? null, seguradora_id: d?.seguradora_id ?? null, ligacao, motivo_sem_vinculo: motivo, lote: LOTE });
   }
-  const ligados = linhas.filter((l) => l.origem_id);
+  // 2ª passada (Matheus 01/11: "qualquer dado de qualquer apólice de qualquer período"): o que não achou card liga ao DOCUMENTO de Fiança da Tokio no ERP pelo nome do
+  // pretendente (cliente ou parte do item), de qualquer época, só com 1 documento. O investigado é o vigente, mas o antigo também é guardado e ligado.
+  const docsTokio = await todas<any>("erp_documentos", "id,locatario_id,imobiliaria_principal_id,seguradora_id,seguradora:erp_seguradoras!inner(abreviacao),ramo:erp_ramos!inner(produto)", (q) => q.eq("ramo.produto", "fianca").eq("seguradora.abreviacao", "TOKI"));
+  const nomeDoc = new Map<string, Set<string>>(); const infoDoc = new Map(docsTokio.map((d) => [d.id, d]));
+  const addNome = (id: string, n: unknown) => { const k = normNome(String(n ?? "")); if (k.split(" ").length >= 2) (nomeDoc.get(k) ?? nomeDoc.set(k, new Set()).get(k)!).add(id); };
+  const locIds = [...new Set(docsTokio.map((d) => d.locatario_id).filter(Boolean))] as string[];
+  const locNome = new Map<string, string>();
+  for (let i = 0; i < locIds.length; i += 200) { const { data } = await sb.from("locatarios").select("id,nome").in("id", locIds.slice(i, i + 200)); for (const l of data ?? []) locNome.set(l.id, l.nome); }
+  for (const d of docsTokio) addNome(d.id, locNome.get(d.locatario_id));
+  const docIds = docsTokio.map((d) => d.id);
+  for (let i = 0; i < docIds.length; i += 150) {
+    const { data: its } = await sb.from("erp_documento_itens").select("id,documento_id").in("documento_id", docIds.slice(i, i + 150));
+    const itemDoc = new Map((its ?? []).map((x) => [x.id, x.documento_id]));
+    const itemIds = [...itemDoc.keys()];
+    for (let j = 0; j < itemIds.length; j += 150) { const { data: ps } = await sb.from("erp_item_partes").select("item_id,nome").in("item_id", itemIds.slice(j, j + 150)); for (const p of ps ?? []) addNome(itemDoc.get(p.item_id)!, p.nome); }
+  }
+  let porDocumento = 0;
+  for (const l of linhas) {
+    if (l.origem_id || !l.pretendente_nome) continue;
+    const c = [...(nomeDoc.get(normNome(l.pretendente_nome)) ?? [])];
+    if (c.length === 1) { const d = infoDoc.get(c[0]); l.documento_id = c[0]; l.imobiliaria_id = d?.imobiliaria_principal_id ?? null; l.seguradora_id = d?.seguradora_id ?? null; l.ligacao = "nome_documento"; l.motivo_sem_vinculo = null; porDocumento++; }
+    else if (c.length > 1) l.motivo_sem_vinculo = "o nome casa mais de um documento de Fiança da Tokio";
+    else if (!l.motivo_sem_vinculo) l.motivo_sem_vinculo = "nenhum card nem documento de Fiança da Tokio com esse nome";
+  }
+  console.log(`2ª passada: ligados ao documento pelo nome (sem card): ${porDocumento}`);
+  const ligados = linhas.filter((l) => l.origem_id || l.documento_id);
   console.log(`${GRAVAR ? "GRAVANDO" : "ENSAIO"} — análises de crédito Tokio: ${linhas.length} e-mails com resultado (${r.semResultado} sem resultado reconhecido); cards de Fiança lidos: ${cards.length}`);
   console.log(`por resultado: ${JSON.stringify(porResultado)}`);
   console.log(`ligados ao card: ${ligados.length} (pela cotação ${r.porCotacao}, pelo nome ${r.porNome}) | ambíguos ${r.ambiguo} | sem card ${r.semCard}`);
-  console.log(`cards de Fiança com pelo menos 1 análise: ${new Set(ligados.map((l) => l.card_item_id)).size}`);
+  console.log(`cards com análise: ${new Set(linhas.filter((l) => l.card_item_id).map((l) => l.card_item_id)).size} | documentos com análise: ${new Set(ligados.map((l) => l.documento_id).filter(Boolean)).size} | e-mails sem vínculo ${linhas.length - ligados.length}`);
   if (!GRAVAR) return;
   const unicas = [...new Map(linhas.map((l) => [l.message_id, l])).values()];
   for (let i = 0; i < unicas.length; i += 200) { const { error } = await sb.from("erp_fianca_analise_credito").upsert(unicas.slice(i, i + 200), { onConflict: "message_id" }); if (error) throw new Error(error.message); }
