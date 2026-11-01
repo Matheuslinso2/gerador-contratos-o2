@@ -27,7 +27,7 @@ const REGRAS: Regra[] = [
     const x = (res[r.codigo] = { emails: 0, semNumero: 0, ligado: 0, ambiguo: 0, semDoc: 0 });
     const emails: { message_id: string; assunto: string }[] = [];
     for (let de = 0; ; de += 1000) {
-      const { data, error } = await sb.from("erp_emails").select("message_id,assunto").ilike("de", `%@%${r.dominio}%`).range(de, de + 999);
+      const { data, error } = await sb.from("erp_emails").select("message_id,assunto").ilike("de", `%@%${r.dominio}%`).order("message_id").range(de, de + 999);
       if (error) throw new Error(error.message);
       emails.push(...((data ?? []) as any[]).filter((e) => r.assunto.test((e.assunto ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "")) || r.assunto.test(e.assunto ?? "")));
       if (!data || data.length < 1000) break;

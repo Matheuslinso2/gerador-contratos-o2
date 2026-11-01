@@ -29,7 +29,7 @@ const PADROES: Padrao[] = [
 async function todas<T>(tabela: string, cols: string, filtro?: (q: any) => any): Promise<T[]> {
   const out: T[] = [];
   for (let de = 0; ; de += 1000) {
-    let q: any = sb.from(tabela).select(cols).range(de, de + 999); if (filtro) q = filtro(q);
+    let q: any = sb.from(tabela).select(cols).order("id").range(de, de + 999); if (filtro) q = filtro(q); // order("id"): sem ordem estável as páginas repetiam/perdiam linhas
     const { data, error } = await q; if (error) throw new Error(`${tabela}: ${error.message}`);
     out.push(...(data ?? [])); if (!data || data.length < 1000) break;
   }
@@ -41,6 +41,8 @@ async function todas<T>(tabela: string, cols: string, filtro?: (q: any) => any):
   const nomesPend = pend.map((p) => ({ id: p.id, nome: normNome(String(p.cliente ?? "")), imobiliaria_id: p.imobiliaria_id, seg: String(p.seguradora ?? "") })).filter((p) => p.nome.split(" ").length >= 2);
   const { data: segs } = await sb.from("erp_seguradoras").select("id,abreviacao");
   const segIds = new Map<string, string[]>(); for (const s of segs ?? []) (segIds.get(s.abreviacao) ?? segIds.set(s.abreviacao, []).get(s.abreviacao)!).push(s.id);
+  // Alfa tem dois cadastros de seguradora (ALF com a carteira e ALFA com 10 documentos): olhar os dois
+  segIds.set("ALFA", [...new Set([...(segIds.get("ALFA") ?? []), ...(segIds.get("ALF") ?? [])])]);
 
   const linhas: any[] = []; const resumo: Record<string, Record<string, number>> = {};
   for (const p of PADROES) {
