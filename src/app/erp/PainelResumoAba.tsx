@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import InfoLegenda from "@/components/InfoLegenda";
+import { IDADE_RETRATO_ABERTO, IDADE_RETRATO_FECHADO, periodoDoMes } from "@/lib/erp/periodo";
 
 // Painel recolhido de KPIs e gráficos no topo de cada aba do ERP (Matheus 31/10): fica FECHADO e é o primeiro conteúdo da página;
 // o que já existia na aba vem depois. Lê só a função erp_resumo_<aba> pelo erp_retrato (cache de 15 min), nunca recalcula a cada abertura.
@@ -21,7 +22,7 @@ const COR: Record<string, string> = {
 const corDe = (serie: string) => COR[serie] ?? "#01192e";
 const fmt = (n: number) => n.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
 
-type Props = { funcao: string; titulo?: string; legendas?: Record<string, string> };
+type Props = { funcao: string; titulo?: string; legendas?: Record<string, string>; mes?: string | null };
 
 // Entra em streaming: a página abre na hora e o painel (cache de 15 min; o primeiro cálculo de Parcelas leva alguns segundos) aparece quando ficar pronto.
 export default function PainelResumoAba(props: Props) {
@@ -32,10 +33,16 @@ export default function PainelResumoAba(props: Props) {
   );
 }
 
-async function Conteudo({ funcao, titulo = "Resumo da aba", legendas = {} }: Props) {
+async function Conteudo({ funcao, titulo = "Resumo da aba", legendas = {}, mes }: Props) {
   const supabase = await createClient();
-  const hoje = new Date().toISOString().slice(0, 10);
-  const { data } = await supabase.rpc("erp_retrato", { p_funcao: funcao, p_de: hoje, p_ate: hoje });
+  // Período = mês escolhido na tela (padrão: mês corrente). Mês aberto recalcula a cada 15 min; mês fechado fica congelado no retrato.
+  const p = periodoDoMes(mes);
+  const { data } = await supabase.rpc("erp_retrato", {
+    p_funcao: funcao,
+    p_de: p.de,
+    p_ate: p.ate,
+    p_max_idade: p.fechado ? IDADE_RETRATO_FECHADO : IDADE_RETRATO_ABERTO,
+  });
   const linhas = ((data ?? []) as Linha[]).map((l) => ({ ...l, valor: Number(l.valor) }));
   if (!linhas.length) return null;
 
@@ -47,6 +54,7 @@ async function Conteudo({ funcao, titulo = "Resumo da aba", legendas = {} }: Pro
       <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-2.5 text-sm font-semibold text-o2-navy">
         <span className="inline-block transition group-open:rotate-90">▸</span>
         {titulo}: indicadores e gráficos
+        <span className="text-[11px] font-normal capitalize text-gray-500">· {p.rotulo}</span>
         <span className="text-[11px] font-normal text-gray-400">(clique para abrir ou recolher)</span>
         <InfoLegenda titulo={`${titulo}: indicadores e gráficos`}>
           Resumo dos números desta aba, recolhido por padrão. Os indicadores e os gráficos leem as mesmas tabelas prontas da tela e são atualizados a cada 15 minutos, sem recalcular a cada abertura. Abaixo dele vem o conteúdo normal da aba.

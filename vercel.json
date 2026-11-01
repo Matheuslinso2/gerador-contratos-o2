@@ -162,6 +162,10 @@
     {
       "path": "/api/cron/erp-cobranca-pronta",
       "schedule": "3-59/10 7-22 * * *"
+    },
+    {
+      "path": "/api/cron/erp-fechar-mes",
+      "schedule": "20 6 1 * *"
     }
   ]
 }
