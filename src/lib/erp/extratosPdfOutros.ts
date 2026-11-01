@@ -283,8 +283,44 @@ function hdi(texto: string): ExtratoLido | null {
   return { leitor: "leitor HDI (PDF)", linhas, total_bruto: b ? br(b[1]) : null, total_liquido: null };
 }
 
+
+// Sulamérica — print do Portal do Corretor ("Comissões e Demonstrativos"): a parte útil são os blocos de detalhe de cada comissão
+// (Nome / Apólice-Título / Tipo de documento / Produto / Valor Prêmio Total / Valor Remuneração / Parcela ...). A lista do topo vem truncada e é ignorada.
+function sulamerica(texto: string): ExtratoLido | null {
+  if (!/Portal do Corretor/i.test(texto) || !/Valor Remunera[cç][aã]o/i.test(texto) || !/sulamerica/i.test(texto)) return null;
+  const t = um(texto).replace(/\d{2}\/\d{2}\/\d{4}, \d{2}:\d{2} \S+ logada \| Portal do Corretor https:\/\/\S+ \d+\/\d+ ?/g, "");
+  const linhas: LinhaExtrato[] = [];
+  const blocos = t.split(/(?=Nome: [^:]{2,80}? Ap[oó]lice\/T[ií]tulo:)/).filter((b) => /Valor Remunera[cç][aã]o: R\$/.test(b));
+  const nExtrato = /N[ºo] do Extrato (\d+)/.exec(t)?.[1] ?? null;
+  const dEmissao = iso(/Data de Emiss[aã]o (\d{2}\/\d{2}\/\d{4})/.exec(t)?.[1] ?? "");
+  for (const b of blocos) {
+    const g = (re: RegExp) => re.exec(b)?.[1]?.trim() ?? null;
+    const valor = g(/Valor Remunera[cç][aã]o: R\$ ?(-?[\d.]+,\d{2})/);
+    const premio = g(/Valor Pr[eê]mio Total: R\$ ?(-?[\d.]+,\d{2})/);
+    const pct = g(/Remunera[cç][aã]o: (\d+(?:,\d+)?)%/);
+    if (!valor) continue;
+    const l = linha(linhas.length + 1, {
+      apolice: g(/Ap[oó]lice\/T[ií]tulo: (\S+)/), proposta: g(/Proposta: (\S+)/), endosso: g(/Documento: (\S+)/),
+      parcela: Number(g(/Parcela atual: (\d+)/) ?? 0) || null, cliente: g(/^Nome: (.+?) Ap[oó]lice\/T[ií]tulo:/),
+      premio: premio ? br(premio) : null, pct_comissao: pct ? br(pct) : null, valor_comissao: br(valor),
+      vigencia_inicio: iso(g(/In[ií]cio de Vig[eê]ncia: (\d{2}\/\d{2}\/\d{4})/) ?? ""), produto: g(/Produto: (.+?) (?:Proposta|Sucursal)/), tipo: "comissao",
+    });
+    (l as any).extras = {
+      tipo_documento: g(/Tipo de documento: (.+?) Produto:/), contrato: g(/Contrato\/Empresa: (.+?) Item\/Plano:/), tipo_remuneracao: g(/Tipo remunera[cç][aã]o: (\S+)/),
+      grupo_faturamento: g(/Grupo faturamento: (\S+)/), data_pagamento: iso(g(/Data pagamento: (\d{2}\/\d{2}\/\d{4})/) ?? ""), parcelas_total: Number(g(/Total de parcelas: (\d+)/) ?? 0) || null,
+      parcela_remuneracao: Number(g(/Parcela remunera[cç][aã]o: (\d+)/) ?? 0) || null, parcelas_remuneradas: Number(g(/Total de parc\. remuneradas: (\d+)/) ?? 0) || null,
+      situacao_portal: g(/Situa[cç][aã]o: (\w+)/), cia: g(/CIA: (\d+)/), ea: g(/EA: (\d+)/), ev: g(/EV: (\d+)/), uop: g(/UOP: (\d+)/), codigo_produtor: g(/C[oó]digo Produtor: (\d+)/),
+      numero_extrato: nExtrato, data_emissao: dEmissao,
+    };
+    linhas.push(l);
+  }
+  const tot = /Total de remunera[cç][aã]o R\$ ?(-?[\d.]+,\d{2})/.exec(t);
+  const liq = /Valor l[ií]quido R\$ ?(-?[\d.]+,\d{2})/.exec(t);
+  return { leitor: "leitor Sulamérica (PDF do portal)", linhas, total_bruto: tot ? br(tot[1]) : null, total_liquido: liq ? br(liq[1]) : null };
+}
+
 const LEITORES: Record<string, ((t: string) => ExtratoLido | null)[]> = {
-  MAPF: [mapfreCap], PORT: [portoCap], HDI: [hdi],
+  MAPF: [mapfreCap], PORT: [portoCap], HDI: [hdi], SULA: [sulamerica],
   BRAS: [brasilcap, brasilcapNovo], TOKI: [tokioCorretor, tokioComissoes], ALLI: [allianz, allianz2025], ICAT: [icatu], TOO: [too], ALF: [alfa], ZURI: [zurich], SUHA: [suhai],
 };
 

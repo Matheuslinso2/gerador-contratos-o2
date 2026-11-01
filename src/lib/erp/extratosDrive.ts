@@ -18,6 +18,7 @@ import { obterAutenticacaoGoogle } from "@/lib/googleAuth";
 import { abrirTextoPdfComSenha, candidatosSenhaO2 } from "@/lib/pdfComSenha";
 import { parseTokioPdf, parsePortoPdf } from "@/lib/erp/extratosPdf";
 import { parseYelumPdf } from "@/lib/erp/extratoYelum";
+import { lerExtratoPdfOutros } from "@/lib/erp/extratosPdfOutros";
 import { parsePottencial, parseToo, num, txt, dataBr, type LinhaExtrato } from "@/lib/erp/extratos";
 
 export const PASTA_EXTRATOS = process.env.ERP_EXTRATOS_DRIVE_PASTA || "11BDjbKy1Nj-A4mslt2onv3IzmhX8mYga";
@@ -278,10 +279,12 @@ export async function carregarExtratosDrive(sb: SupabaseClient, opts: { gravar: 
       } else if (tipo === "pdf" || tipo === "texto") {
         const texto = tipo === "pdf" ? (await abrirTextoPdfComSenha(buf, candidatosSenhaO2()))?.texto ?? null : buf.toString("utf8");
         if (!texto) throw new Error("PDF não abriu (senha desconhecida?)");
+        // arquivo sem data no nome (ex.: HDI "Extrato 150"): a data de pagamento está no próprio extrato (documento oficial)
+        if (!a.pagoEm) { const mp = /Data do Pagamento:?\s*(\d{2})\/(\d{2})\/(\d{4})/i.exec(texto); if (mp) a.pagoEm = `${mp[3]}-${mp[2]}-${mp[1]}`; }
         // Tokio e Porto: leitor fixo (exato, sem custo); a IA só para formato desconhecido.
-        const fixo = a.seguradora === "TOKI" ? parseTokioPdf(texto) : a.seguradora === "PORT" ? parsePortoPdf(texto) : a.seguradora === "YELU" ? parseYelumPdf(texto) : null;
+        const fixo = a.seguradora === "TOKI" ? parseTokioPdf(texto) : a.seguradora === "PORT" ? parsePortoPdf(texto) : a.seguradora === "YELU" ? parseYelumPdf(texto) : ["SULA", "HDI", "MAPF", "ICAT", "ALLI", "BRAS", "ALF", "ZURI", "SUHA", "TOO"].includes(a.seguradora) ? lerExtratoPdfOutros(a.seguradora, texto) : null;
         if (fixo) {
-          parsed = fixo; como = a.seguradora === "TOKI" ? "leitor Tokio (PDF)" : a.seguradora === "YELU" ? "leitor Yelum (PDF)" : "leitor Porto (PDF)";
+          parsed = fixo; como = a.seguradora === "TOKI" ? "leitor Tokio (PDF)" : a.seguradora === "YELU" ? "leitor Yelum (PDF)" : a.seguradora === "PORT" ? "leitor Porto (PDF)" : (fixo as { leitor?: string }).leitor ?? "leitor fixo (PDF)";
           if (!a.pagoEm && "pago_em" in fixo && typeof fixo.pago_em === "string") a.pagoEm = fixo.pago_em;
         } else {
           const ia = await lerTextoPelaIA(texto, seg.get(a.seguradora)?.nome ?? a.seguradora);
