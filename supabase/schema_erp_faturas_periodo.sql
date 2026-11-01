@@ -1,0 +1,6 @@
+-- ERP · Faturas · período padrão (01/11, migration erp_faturas_periodo_padrao; rótulos legíveis aplicados por ajuste da própria função).
+-- A aba Faturas abre na competência do mês corrente, com navegação por mês e ano (NavegadorMes). Faturas de competências anteriores ainda a enviar / parciais / aguardando arquivo
+-- (erp_fatura_envio_status com situacao_envio <> 'enviada') ficam numa tabela à parte, "Herdadas de meses anteriores". erp_resumo_faturas(p_de,p_ate) passou a calcular KPIs e gráficos
+-- pelo mês escolhido: faturas e itens da competência, enviadas, a enviar/parciais, herdadas sem envio completo, boleto diferente da soma (> R$ 1,00), itens por competência, situação do envio
+-- do mês e herdadas por competência. Os gráficos de alertas e de apólices fora da fatura continuam sendo retrato de "agora" (rotulados assim). Mês fechado congela pelo erp_retrato.
+-- Corpo completo da função: ver a migration aplicada em produção (erp_faturas_periodo_padrao).
