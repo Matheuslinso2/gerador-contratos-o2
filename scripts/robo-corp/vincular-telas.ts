@@ -17,7 +17,13 @@ const em = <T,>(xs: T[], n = 150) => Array.from({ length: Math.ceil(xs.length / 
 const digs = (s: unknown) => String(s ?? "").replace(/\D/g, "").replace(/^0+/, "");
 const eq = (a: number | null | undefined, b: number | null | undefined, tol = 0.05) => a != null && b != null && Math.abs(Number(a) - Number(b)) <= tol;
 /** Mesma quantidade de dígitos e no máximo 1 diferente: erro típico do OCR (8 lido como 6), não divergência real. */
-const quase = (a: unknown, b: unknown) => { const x = String(a ?? "").replace(/\D/g, ""), y = String(b ?? "").replace(/\D/g, ""); if (x.length < 4 || x.length !== y.length) return false; let d = 0; for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) d++; return d <= 1; };
+const quase = (a: unknown, b: unknown) => {
+  const x = String(a ?? "").replace(/\D/g, ""), y = String(b ?? "").replace(/\D/g, "");
+  if (x.length < 3 || y.length < 3) return false;
+  if (x.length === y.length) { let d = 0; for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) d++; return d <= 1; }
+  if (Math.abs(x.length - y.length) !== 1) return false;
+  const [c, l] = x.length < y.length ? [x, y] : [y, x]; let i = 0; for (const ch of l) if (ch === c[i]) i++; return i === c.length; // o OCR perdeu/ganhou 1 dígito
+};
 const hoje = new Date().toISOString().slice(0, 10);
 
 async function todas<T>(tabela: string, cols: string, filtro?: (q: any) => any): Promise<T[]> {
@@ -59,6 +65,7 @@ type V = { nosso_numero_corp: number; documento_id: string; parcela_id: string |
   for (const g of em([...porNn.keys()], 100)) { const { data } = await sb.from("corp_anexos").select("nosso_numero").in("nosso_numero", g.map(String)); for (const a of data ?? []) anexosN.set(Number(a.nosso_numero), (anexosN.get(Number(a.nosso_numero)) ?? 0) + 1); }
 
   const vinc: V[] = []; const patchDoc = new Map<string, Record<string, unknown>>(); const patchParc: { id: string; patch: Record<string, unknown> }[] = []; const patchItem: { id: string; patch: Record<string, unknown> }[] = []; const patchParte: { id: string; patch: Record<string, unknown> }[] = [];
+  const usados = new Map<string, number>(); // vários produtores/garantidos por documento: o campo ganha sufixo (_2, _3) para a chave ser única
   const cont: Record<string, number> = {};
   const conta = (k: string) => (cont[k] = (cont[k] ?? 0) + 1);
 
@@ -67,7 +74,7 @@ type V = { nosso_numero_corp: number; documento_id: string; parcela_id: string |
     const T: Record<string, any> = info.telas;
     const cabOk = Object.values(T).every((c: any) => !c.cabecalho || c.cabecalho.nosso_numero == null || c.cabecalho.nosso_numero === nn);
     if (!cabOk) { conta("doc_ignorado_cabecalho_diferente"); continue; }
-    const reg = (tela: string, campo: string, acao: V["acao"], erp: unknown, lida: unknown, parcela_id: string | null = null) => { if (acao === "divergente" && quase(erp, lida)) { acao = "conferido"; lida = `${lida} (o OCR leu 1 dígito diferente)`; } vinc.push({ nosso_numero_corp: nn, documento_id: doc.id, parcela_id, tela, campo, acao, valor_erp: erp == null ? null : String(erp), valor_tela: lida == null ? null : String(lida) }); conta(`${tela}.${acao}`); };
+    const reg = (tela: string, campo: string, acao: V["acao"], erp: unknown, lida: unknown, parcela_id: string | null = null) => { if (acao === "divergente" && quase(erp, lida)) { acao = "conferido"; lida = `${lida} (o OCR leu 1 dígito diferente)`; } { const k0 = `${nn}|${tela}|${campo}|${parcela_id ?? ""}`; const n0 = (usados.get(k0) ?? 0) + 1; usados.set(k0, n0); if (n0 > 1) campo = `${campo}_${n0}`; } vinc.push({ nosso_numero_corp: nn, documento_id: doc.id, parcela_id, tela, campo, acao, valor_erp: erp == null ? null : String(erp), valor_tela: lida == null ? null : String(lida) }); conta(`${tela}.${acao}`); };
     const pd = patchDoc.get(doc.id) ?? {}; patchDoc.set(doc.id, pd);
     const D = T.documento ?? {}; const A = T.acompanhamento ?? {};
 
@@ -111,10 +118,10 @@ type V = { nosso_numero_corp: number; documento_id: string; parcela_id: string |
     // ---- comissão: preenche % só se base × % ≈ valor ----
     const cb = D.comissao_base, cp = D.comissao_pct ?? T.comissoes?.pct_sobre_base, cv = T.comissoes?.valor_total ?? D.comissao_valor;
     const comFecha = cb != null && cp != null && cv != null && eq(cb * cp / 100, cv, 0.06);
-    if (typeof cp === "number") { if (doc.comissao_pct == null) { if (comFecha) { reg("comissoes", "comissao_pct", "preenchido", null, cp); pd.comissao_pct = cp; } } else reg("comissoes", "comissao_pct", eq(Number(doc.comissao_pct), cp, 0.01) ? "conferido" : "divergente", doc.comissao_pct, cp); }
+    if (typeof cp === "number" && cp >= 1) { if (doc.comissao_pct == null) { if (comFecha) { reg("comissoes", "comissao_pct", "preenchido", null, cp); pd.comissao_pct = cp; } } else reg("comissoes", "comissao_pct", eq(Number(doc.comissao_pct), cp, 0.01) ? "conferido" : "divergente", doc.comissao_pct, cp); }
     if (typeof cv === "number") { if (doc.comissao_valor == null) { if (comFecha) { reg("comissoes", "comissao_valor", "preenchido", null, cv); pd.comissao_valor = cv; } } else reg("comissoes", "comissao_valor", eq(Number(doc.comissao_valor), cv) ? "conferido" : "divergente", doc.comissao_valor, cv); }
     // ---- cliente (titular): confere o nome com o locatário ----
-    const nomeT = D.cliente?.nome; if (nomeT && doc.locatario_id && locNome.get(doc.locatario_id)) { const a = normNome(nomeT), b = normNome(locNome.get(doc.locatario_id)!); reg("documento", "cliente_nome", a === b || a.startsWith(b) || b.startsWith(a) ? "conferido" : "divergente", locNome.get(doc.locatario_id), nomeT); }
+    const nomeT = D.cliente?.nome; if (nomeT && doc.locatario_id && locNome.get(doc.locatario_id)) { const a = normNome(nomeT), b = normNome(locNome.get(doc.locatario_id)!); if (a === b || a.startsWith(b) || b.startsWith(a)) reg("documento", "cliente_nome", "conferido", locNome.get(doc.locatario_id), nomeT); }
 
     // ---- parcelas: confere vencimento/valor; vencimento provado (PDF/fatura) nunca é mexido; igual => marca origem 'tela_corp' só quando ainda sem origem ----
     const ep = parcelas.get(doc.id) ?? [];
@@ -134,10 +141,10 @@ type V = { nosso_numero_corp: number; documento_id: string; parcela_id: string |
 
     // ---- itens: endereço e contrato (preenche vazio) + CPF/CNPJ dos garantidos (só válido e com o nome batendo) ----
     const I = T.itens; const ei = (itens.get(doc.id) ?? [])[0];
-    if (I && ei) {
+    if (I && ei && I.cep) {
       const pi: Record<string, unknown> = {};
       for (const [campo, col, lida] of [["cep", "cep", I.cep], ["logradouro", "logradouro", I.logradouro], ["numero", "numero", I.numero], ["complemento", "complemento", I.complemento], ["bairro", "bairro", I.bairro], ["cidade", "cidade", I.cidade], ["uf", "uf", I.uf && /^[A-Z]{2}$/.test(String(I.uf)) ? I.uf : null], ["inicio_contrato", "contrato_inicio", I.inicio_contrato], ["final_contrato", "contrato_fim", I.final_contrato]] as const) {
-        if (lida == null || lida === "") continue; const erp = (ei as any)[col];
+        if (lida == null || lida === "" || /^(cep|logradouro|complemento|bairro|cidade|n[uú]mero)/i.test(String(lida)) || (typeof lida === "string" && !/[A-Za-z0-9]{3}/.test(lida))) continue; const erp = (ei as any)[col];
         if (erp == null || erp === "") { reg("itens", campo, "preenchido", null, lida); pi[col] = lida; }
         else { const a = normNome(String(erp)), b = normNome(String(lida)); reg("itens", campo, a === b || a.includes(b) || b.includes(a) ? "conferido" : "divergente", erp, lida); }
       }
@@ -152,11 +159,12 @@ type V = { nosso_numero_corp: number; documento_id: string; parcela_id: string |
     }
     // ---- repasses: o produtor lido deve bater com a imobiliária do documento ----
     for (const r of (T.repasses?.repasses ?? []) as any[]) {
-      if (!r.produtor || /segimob|o2 corretora|tombamento/i.test(r.produtor)) continue;
+      if (!r.produtor || /segimo|o2 corretora|tombamento/i.test(r.produtor)) continue;
       const im = doc.imobiliaria_principal_id ? imobNome.get(doc.imobiliaria_principal_id) : null;
       if (!im) { reg("repasses", "produtor", "sugestao", null, r.produtor); continue; }
       const a = normNome(r.produtor), b = normNome(im);
-      reg("repasses", "produtor", a === b || b.includes(a) || a.includes(b) ? "conferido" : "divergente", im, r.produtor);
+      const w1 = a.split(" ")[0], w2 = b.split(" ")[0]; // mesma 1ª palavra (ADJUVE ...) = mesmo grupo/apelido da imobiliária
+      reg("repasses", "produtor", a === b || b.includes(a) || a.includes(b) || (w1.length >= 4 && w1 === w2) ? "conferido" : "divergente", im, r.produtor);
     }
     // ---- observações: pró-labore (só sugestão: a regra existente decide) ----
     if (T.observacoes?.tem_pro_labore) reg("observacoes", "pro_labore", "sugestao", null, "observação menciona pró-labore");
