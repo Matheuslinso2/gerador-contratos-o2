@@ -49,6 +49,13 @@ const CAMPOS = {
   // passado). "Valor contratado" (campo novo de 27/10/2026) = o que foi
   // efetivamente contratado, em novos e renovações.
   premioTotal: "ufCrm12PremioTotal",
+  // Endereço/aluguel do imóvel (fluxo individual; códigos confirmados via crm.item.fields em 22/09/2026).
+  imovelLogradouro: "ufCrm12_1790085424526",
+  imovelNumero: "ufCrm12_1790085444491",
+  imovelComplemento: "ufCrm12_1790085448344",
+  imovelBairroCidade: "ufCrm12_1790085451655",
+  imovelCep: "ufCrm12_1790085456047",
+  imovelAluguel: "ufCrm12_1790085479280",
   valorContratado: "ufCrm12_1793041875676",
   // Achado real (2026-09-10): não existe campo "ufCrm12Comissao"/"ufCrm12Repasse"
   // nessa SPA -- o card só guarda o PERCENTUAL de cada um ("Comissão (%)" /
@@ -519,6 +526,18 @@ export async function lerFonteRamosElementaresBitrix(
 // (EFETIVADO / NÃO EFETIVADO) no mês em que o card chegou nele. Usado pela
 // Base Única (src/lib/baseUnica/bitrixProdutos.ts) para pôr as cotações de RE
 // na mesma linha do tempo das planilhas -- não muda nada no painel.
+function dadosDoImovel(item: BitrixItemRaw): CardNovoRamosElementares["imovel"] {
+  const rua = texto(item[CAMPOS.imovelLogradouro]);
+  const compl = [texto(item[CAMPOS.imovelNumero]), texto(item[CAMPOS.imovelComplemento])].filter(Boolean).join(" - ");
+  const aluguel = dinheiro(item[CAMPOS.imovelAluguel]);
+  return {
+    endereco: [rua, compl].filter(Boolean).join(", ") || null,
+    bairroCidade: texto(item[CAMPOS.imovelBairroCidade]) || null,
+    cep: texto(item[CAMPOS.imovelCep]).replace(/\D/g, "") || null,
+    aluguel: aluguel > 0 ? aluguel : null,
+  };
+}
+
 export type CardNovoRamosElementares = {
   id: number;
   competencia: string;
@@ -532,6 +551,8 @@ export type CardNovoRamosElementares = {
   premioTotal: number;
   comissao: number;
   criadoEm: string | null;
+  // Imóvel do card (só o fluxo individual preenche; o Imobiliário vem em planilha de itens).
+  imovel: { endereco: string | null; bairroCidade: string | null; cep: string | null; aluguel: number | null };
 };
 export async function listarNovosRamosElementares(): Promise<CardNovoRamosElementares[]> {
   const [itens, historico, definicoes] = await Promise.all([
@@ -573,6 +594,7 @@ export async function listarNovosRamosElementares(): Promise<CardNovoRamosElemen
       premioTotal,
       comissao: valorComissao(item, premioTotal),
       criadoEm: criadoEm ? diaBrasilia(criadoEm) : null,
+      imovel: dadosDoImovel(item),
     });
   }
   return cards;
@@ -635,6 +657,7 @@ export async function listarRenovacoesRamosElementares(): Promise<CardRenovacaoR
       premioTotal,
       comissao: valorComissao(item, premioTotal),
       criadoEm: criadoEm ? diaBrasilia(criadoEm) : null,
+      imovel: dadosDoImovel(item),
       numeroApolice: texto(item[CAMPOS.numeroApolice]),
       fimVigencia: fimVigencia ? fimVigencia.toISOString().slice(0, 10) : null,
     });

@@ -1,0 +1,6 @@
+-- Itens dos lotes de Ramos Elementares (01/11/2026). Migração producao_itens_lote_re.
+-- producao_itens: 1 linha por endereço das planilhas anexadas ao campo "Planilha de itens" (ufCrm12PlanilhaItens) dos cards da SPA 1046.
+--   Colunas estruturadas (nomes e CPF/CNPJ de locador/locatário, CEP, endereço, bairro, cidade, ocupação, atividade, aluguel, m²) + extras jsonb com TODAS as colunas da linha.
+--   Chave única: card + arquivo + aba + linha. RLS: só colaborador O2. Uso interno (dados pessoais): Robô responde só em texto.
+-- Arquivos originais (planilhas, PDFs, imagens): bucket privado lotes-re, caminho <card>/<arquivo>.<tipo>.
+-- Carga: node scripts/base-unica/importar-lotes-re.mjs --gravar (idempotente).

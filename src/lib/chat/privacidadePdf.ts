@@ -11,6 +11,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 // Tabelas cujas linhas são, por natureza, dados de pessoas (nomes, documentos, contatos de clientes).
 const TABELAS_PESSOAIS = new Set([
   "locatarios",
+  "producao_itens", // itens dos lotes de RE: nomes e CPF/CNPJ de locador e locatário
   "erp_item_partes",
   "erp_doc_partes_acervo",
   "apolice_partes",

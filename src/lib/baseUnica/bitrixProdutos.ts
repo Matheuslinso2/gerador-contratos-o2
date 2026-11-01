@@ -35,7 +35,24 @@ type Linha = {
   premio: number | null;
   comissao: number | null;
   extras: Record<string, unknown>;
+  aluguel?: number | null;
 };
+
+// Imóvel do card de RE (fluxo individual): endereço, CEP e "Bairro-Cidade" (texto livre; separa só quando vêm 2 partes claras).
+function extrasDoImovel(im: { endereco: string | null; bairroCidade: string | null; cep: string | null }): Record<string, unknown> {
+  const e: Record<string, unknown> = {};
+  if (im.endereco) e.endereco = im.endereco;
+  if (im.cep && im.cep.length === 8) e.cep = im.cep;
+  if (im.bairroCidade) {
+    e.bairro_cidade = im.bairroCidade;
+    const partes = im.bairroCidade.split(/\s+[-–/]\s+|\s*,\s*/).map((p) => p.trim()).filter(Boolean);
+    if (partes.length === 2) {
+      e.bairro = partes[0].toUpperCase();
+      e.cidade_endereco = partes[1].toUpperCase();
+    }
+  }
+  return e;
+}
 
 const ARQUIVOS: Record<ProdutoBitrix, { arquivo: string; nome: string }> = {
   capitalizacao: { arquivo: "bitrix:spa-1048", nome: "Bitrix — SPA Título de Capitalização" },
@@ -146,10 +163,12 @@ async function lerRamosElementares(): Promise<{ linhas: Linha[]; empresas: Map<s
       ramo_original: c.produto,
       premio: convertido ? valor(c.premioTotal) : null,
       comissao: convertido ? valor(c.comissao) : null,
+      aluguel: c.imovel.aluguel,
       extras: {
         data_conversao: convertido ? c.dataDesfecho : null,
         data_perda: perdido ? c.dataDesfecho : null,
         spa: 1046,
+        ...extrasDoImovel(c.imovel),
         ...(antesDoBitrix ? { sem_entrada: true } : {}),
       },
     };
