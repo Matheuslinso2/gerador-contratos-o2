@@ -1,0 +1,3 @@
+-- 01/11/2026 — captura das telas do documento no Corp (robô de anexos). Tabela erp_corp_telas_documento (aplicada): uma linha por (nosso_numero_corp, tela),
+-- status capturada|lida|falhou|nao_achou, dados jsonb (todos os campos lidos; observações com senha/login/token mascarados por src/lib/erp/mascararSegredos.ts),
+-- imagem_path/imagem_bytes, motivo, nível 8 (comparação, nunca âncora), lote para desfazer, RLS só colaborador O2.
