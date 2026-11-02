@@ -11,3 +11,8 @@
 
 -- 02/11 (2): painel soma só propostas efetivadas — com Nosso nº do Corp (ou origem api). Card do Bitrix sem nº do Corp ainda é proposta/cotação e fica fora.
 -- view erp_producao_base_v: Novos/Renovações exigem (nosso_numero_corp is not null or origem = 'api'); faturas e endossos não.
+
+-- 02/11 (3): regras do Power BI. View final: exclui fora_regra_pbi (linha que o PBI não conta na base corretora) e exige
+-- (nosso_numero_corp is not null or origem = 'api') em TODOS os tipos. Out/26 conferido com corp_retrato_producao:
+-- Novos corp_import 405 docs / R$ 1.466.201 (= PBI), Endossos+Cancelamentos prêmio -1.456 / com -621 (= PBI).
+-- Importação de out/26 refeita: select erp_importar_corp('2026-10-01','2026-11-01', false) (sem regerar parcelas).
