@@ -364,3 +364,27 @@ export async function lerAnexosPdf(caixa: string, messageId: string): Promise<An
   }
   return saida;
 }
+
+/** Anexos de uma mensagem (só leitura): PDFs baixados (≤ maxBytes cada) + quantos outros anexos (imagens, docs) existem. Usado pela fila de anexos dos e-mails. */
+export type AnexoBaixado = { idx: number; nome: string; mime: string; buffer: Buffer };
+export async function baixarAnexosDoEmail(caixa: string, messageId: string, maxBytes = 15 * 1024 * 1024): Promise<{ achou: boolean; pdfs: AnexoBaixado[]; outros: number; grandes: number }> {
+  const g = clienteDaCaixa(caixa);
+  let id: string | null = null;
+  const sintetico = /^gmail:[^:]+:(.+)$/.exec(messageId);
+  if (sintetico) id = sintetico[1];
+  else { const r = await comRetry(() => g.users.messages.list({ userId: "me", q: `rfc822msgid:${messageId.replace(/^<|>$/g, "")}`, maxResults: 1 })); id = r.data.messages?.[0]?.id ?? null; }
+  if (!id) return { achou: false, pdfs: [], outros: 0, grandes: 0 };
+  const m = await comRetry(() => g.users.messages.get({ userId: "me", id: id!, format: "full" }));
+  const partes: gmail_v1.Schema$MessagePart[] = [];
+  const percorrer = (p?: gmail_v1.Schema$MessagePart) => { if (!p) return; if (p.filename && p.body?.attachmentId) partes.push(p); (p.parts ?? []).forEach(percorrer); };
+  percorrer(m.data.payload);
+  const pdfs: AnexoBaixado[] = []; let outros = 0, grandes = 0, idx = 0;
+  for (const p of partes) {
+    const ehPdf = /pdf/i.test(p.mimeType ?? "") || /\.pdf$/i.test(p.filename ?? "");
+    if (!ehPdf) { outros++; continue; }
+    if ((p.body?.size ?? 0) > maxBytes) { grandes++; continue; }
+    const a = await comRetry(() => g.users.messages.attachments.get({ userId: "me", messageId: id!, id: p.body!.attachmentId! }));
+    if (a.data.data) pdfs.push({ idx: idx++, nome: p.filename!, mime: p.mimeType ?? "application/pdf", buffer: Buffer.from(a.data.data, "base64url") });
+  }
+  return { achou: true, pdfs, outros, grandes };
+}
