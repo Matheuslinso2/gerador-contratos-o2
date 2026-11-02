@@ -83,6 +83,18 @@ export async function sincronizarNibo(sb: SupabaseClient, o: { desde: string; pa
       );
       if (error) throw new Error(`erp_nibo_contas: ${error.message}`);
     }
+    // árvore de categorias do Nibo (só leitura): base do espelho do "Painel de acompanhamento"; um erro aqui não derruba a sincronização
+    type Categoria = { id?: string; categoryId?: string; name?: string; code?: string; type?: string; parentId?: string; parent?: { id?: string }; isArchived?: boolean };
+    let avisoCategorias: string | undefined; // aviso à parte: não conta como erro da rodada (não pode travar o histórico)
+    const { items: categorias } = await niboGet<Categoria>(token, "/categories", { $orderby: "name", $top: "500" }).catch((e) => { avisoCategorias = (e as Error).message; return { items: [] as Categoria[] }; });
+    const catsValidas = categorias.filter((c) => (c.id ?? c.categoryId) && c.name);
+    if (catsValidas.length) {
+      const { error } = await sb.from("erp_nibo_categorias").upsert(
+        catsValidas.map((c) => ({ empresa, id: (c.id ?? c.categoryId) as string, nome: c.name as string, codigo: c.code ?? null, tipo: c.type ?? null, pai_id: c.parentId ?? c.parent?.id ?? null, arquivada: !!c.isArchived, bruto: c, sincronizado_em: new Date().toISOString() }))
+      );
+      if (error) avisoCategorias = `erp_nibo_categorias: ${error.message}`;
+    }
+    if (avisoCategorias) console.log("erp-nibo-categorias", avisoCategorias.slice(0, 300));
     const r: { contas: number; recebimentos: number; pagamentos: number; erros: string[]; proxima?: { recebimento: number | null; pagamento: number | null } } = { contas: contas.length, recebimentos: 0, pagamentos: 0, erros };
     for (const [tipo, caminho] of [["recebimento", "/receipts"], ["pagamento", "/payments"]] as const) {
       // um erro numa rota não impede a outra nem a outra empresa
