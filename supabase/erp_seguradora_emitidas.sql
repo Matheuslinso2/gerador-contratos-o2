@@ -1,0 +1,4 @@
+-- Nota (02/11): migração aplicada no Supabase como "erp_seguradora_emitidas".
+-- Relatório oficial "Apólices Emitidas" da seguradora (portal) = nível 1. Tabela erp_seguradora_emitidas (linha completa em jsonb; chave seguradora+apólice+endosso+parcela; arquivo+sha256; vinculo_status; conferencia jsonb).
+-- Domínio fonte_dt_emissao ganhou portal_tokio; imobiliaria_registros_fonte.fonte ganhou portal_seguradora_parceiro; erp_emissao_sem_documento ganhou a coluna dados (jsonb).
+-- Carregador reutilizável: scripts/erp/carregar-emitidas-seguradora.ts <arquivos> [--seguradora TOKI] [--gravar]. Desfazer data de emissão: dt_emissao_anterior / dt_emissao_fonte_anterior na própria linha.
