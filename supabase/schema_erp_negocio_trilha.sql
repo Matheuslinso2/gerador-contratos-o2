@@ -271,3 +271,29 @@ select distinct on (v.documento_id) v.documento_id, v.numero_apolice, d.vigencia
   from erp_negocio_comparacao_planilha_apolice v join erp_documentos d on d.id = v.documento_id
  where v.tipo_aba = 'renovacao' and v.planilha_liquido > 0 and v.premio_liquido > 0
  order by v.documento_id, v.arquivo_id desc, v.linha_n desc;
+
+-- Renovações futuras: com base nas APÓLICES vigentes; a previsão replica as mesmas condições (prêmio e comissão atuais); controle pelo NÚMERO OFICIAL da apólice (decisão do Matheus, 02/11/2026).
+-- situacao_renovacao: renovada (apólice nova aponta para ela via documento_renovado_id) | em_tratativa (card de renovação ou linha de aba de renovação) | sem_tratativa.
+create or replace view erp_renovacao_controle with (security_invoker = true) as
+select d.numero_apolice, d.id documento_id, s.abreviacao seguradora, r.nome ramo, d.imobiliaria_principal_id imobiliaria_id, i.nome imobiliaria,
+       d.vigencia_inicio, d.vigencia_fim, to_char(d.vigencia_fim, 'YYYY-MM') mes_vencimento,
+       d.premio_liquido, d.premio_total, d.comissao_pct, d.comissao_valor,
+       n.numero_apolice apolice_nova, n.id documento_novo_id,
+       exists (select 1 from erp_negocio_elos e where e.documento_id = d.id and e.etapa = 'renovacao_de') tem_card_renovacao,
+       exists (select 1 from erp_negocio_elos e where e.etapa = 'renovacao' and e.evidencia->>'apolice' = d.numero_apolice) tem_linha_planilha_renovacao,
+       case when n.id is not null then 'renovada'
+            when exists (select 1 from erp_negocio_elos e where e.documento_id = d.id and e.etapa = 'renovacao_de')
+              or exists (select 1 from erp_negocio_elos e where e.etapa = 'renovacao' and e.evidencia->>'apolice' = d.numero_apolice) then 'em_tratativa'
+            else 'sem_tratativa' end situacao_renovacao
+  from erp_documentos d
+  join erp_seguradoras s on s.id = d.seguradora_id
+  left join erp_ramos r on r.id = d.ramo_id
+  left join imobiliarias i on i.id = d.imobiliaria_principal_id
+  left join lateral (select x.id, x.numero_apolice from erp_documentos x where x.documento_renovado_id = d.id and x.tipo = 'A' order by x.vigencia_inicio limit 1) n on true
+ where d.tipo = 'A' and d.situacao = 'vigente' and d.numero_apolice is not null and d.vigencia_fim >= current_date;
+
+create or replace view erp_renovacao_previsao_mensal with (security_invoker = true) as
+select mes_vencimento, count(*) apolices, round(sum(coalesce(premio_liquido, 0)), 2) premio_liquido_previsto, round(sum(coalesce(comissao_valor, 0)), 2) comissao_prevista,
+       count(*) filter (where situacao_renovacao = 'renovada') renovadas, count(*) filter (where situacao_renovacao = 'em_tratativa') em_tratativa, count(*) filter (where situacao_renovacao = 'sem_tratativa') sem_tratativa,
+       round(sum(coalesce(comissao_valor, 0)) filter (where situacao_renovacao = 'sem_tratativa'), 2) comissao_sem_tratativa
+  from erp_renovacao_controle group by 1;
