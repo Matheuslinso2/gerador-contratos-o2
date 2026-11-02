@@ -1,0 +1,9 @@
+-- Cubos de coberturas e sinistros do Robô O2 (02/11/2026). Migrações chat_cubo_coberturas_sinistros, chat_cubo_coberturas_sinistros_consultar, chat_cubo_consultar_excluir_produto.
+-- chat_cubo_coberturas (MV): coberturas dos itens das apólices do ERP (erp_item_coberturas) x produto x seguradora x imobiliária/grupo x bairro x cidade x faixa de aluguel x status x mês (início da vigência):
+--   itens, importância segurada, taxa, prêmio, franquia, aluguel. Só ~1.470 documentos (quase todos Fiança: aluguel, IPTU, condomínio, água).
+-- chat_cubo_sinistros (MV): cada sinistro do Corp (sinistros_corp, 3.467) ligado à apólice do ERP pelo nosso nº do Corp (91%) x produto x subtipo x situação x seguradora x cobertura x imobiliária x bairro x faixa de aluguel
+--   x mês da ocorrência x mês da apólice: avisado, indenizado, despesas, franquia. Bairro/aluguel vêm do item da apólice, de producao_enderecos ou do sinistro do Workspace (só ~9% dos sinistros de seguro têm bairro).
+--   'capitalizacao' no Corp = resgates (R$ 18 milhões): nunca entram na sinistralidade.
+-- chat_cubo_cob_consultar(jsonb) / chat_cubo_sin_consultar(jsonb): filtros e agrupamentos só por colunas permitidas. chat_cubo_consultar ganhou 'excluir_produto'.
+-- Sinistralidade (no código, roboAnalisesRisco.ts): indenizado do cubo de sinistros ÷ prêmio total das apólices (chat_cubo, fato apolice) da MESMA coorte (mesmo mês de início da apólice), mesmos filtros.
+-- chat_cubo_atualizar() refaz os três cubos; cron de hora em hora (/api/cron/chat-cubo). Só service_role executa.

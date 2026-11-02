@@ -9,6 +9,7 @@ import { FERRAMENTAS_BUSCA, executarFerramentaBusca } from "./roboBusca";
 import { FERRAMENTA_RELATORIO, executarFerramentaRelatorio } from "./roboRelatorio";
 import { FERRAMENTA_ARQUIVOS, executarFerramentaArquivos } from "./roboArquivos";
 import { FERRAMENTA_PRIMEIRA_COTACAO, FERRAMENTA_CUBO, executarFerramentaAnalises } from "./roboAnalises";
+import { FERRAMENTA_CUBO_COBERTURAS, FERRAMENTA_CUBO_SINISTROS, executarFerramentaRisco } from "./roboAnalisesRisco";
 import { FERRAMENTA_LEGISLACAO, executarFerramentaLegislacao } from "./roboLegislacao";
 import { FERRAMENTA_LOGICA, chamadaTemDadosPessoais, descreverChamada, textoTemDadosPessoais } from "./privacidadePdf";
 
@@ -56,6 +57,7 @@ MAPA DE FONTES — consulte TODAS as que a pergunta abrange; nunca responda com 
 - Capitalização: painel capitalizacao (titulos = cada título com titular). Auto: painel seguro_auto (fichas).
 - Propostas: ERP aba Em emissão (erp_emissao_fila_pronta). Apólices, endossos, faturas, parcelas, comissões, baixas, renovações do ERP (erp_renovacoes): tabelas erp_* e contar_documentos_erp.
 - Campanhas: campanhas, campanhas_envios, campanhas_metas, campanhas_producao. Painel Comercial: consultar_painel_extra painel_comercial. Sinistros: sinistros, sinistros_corp, painel sinistros.
+- CORRELAÇÕES de aluguel, prêmio, coberturas e indenizações: consultar_cubo (prêmio, ticket médio, comissão, aluguel, parcelas por produto/bairro/faixa de aluguel/imobiliária/seguradora/período), consultar_cubo_coberturas (importância segurada, taxa, franquia por cobertura; só ~1.470 apólices, quase todas Fiança) e consultar_cubo_sinistros (sinistros do Corp: avisado, indenizado, despesas; com sinistralidade=true calcula indenizado ÷ prêmio das apólices da mesma coorte). Para cruzar prêmio com indenização use consultar_cubo_sinistros com sinistralidade; não some manualmente. Capitalização no Corp são resgates (não entram em sinistralidade). Sempre cite a cobertura de dados (quantos têm bairro/aluguel/ligação com apólice) quando o recorte for parcial.
 - Itens dos lotes de Ramos Elementares (um endereço por linha: locador, locatário, CPF/CNPJ, CEP, endereço, bairro, cidade, ocupação, aluguel, m², mais todas as colunas da planilha em extras): tabela producao_itens, ligada ao card pelo bitrix_item_id (= origem_bitrix_id em producao_resolvida, fonte bitrix, produto re). Os arquivos originais do lote (planilha, PDF, imagem) estão em buscar_arquivos_documento. Contém dados pessoais: só texto.
 - Os dados são atualizados sozinhos: cards do Bitrix e lotes de hora em hora, o cubo de estatísticas de hora em hora, ERP de hora em hora. Planilhas antigas são histórico fixo. Se o usuário perguntar até quando os dados vão, use o 'cuboAtualizadoEm' ou a data mais recente que a consulta devolver.
 - Pessoa/cliente/inquilino/proprietário/CPF/e-mail/telefone: buscar_pessoa. Cotação em andamento pelo nome: buscar_nos_paineis.
@@ -94,7 +96,7 @@ ESTILO
 // Conjunto de ferramentas e roteamento do robô: usados pela produção e pelos testes (mesmo código, mesmo comportamento).
 export function ferramentasDoRobo(verComissao: boolean): Anthropic.Tool[] {
   return verComissao
-    ? [...FERRAMENTAS_ERP, ...FERRAMENTAS_GERAIS, ...FERRAMENTAS_BUSCA, FERRAMENTA_RELATORIO, FERRAMENTA_ARQUIVOS, FERRAMENTA_PRIMEIRA_COTACAO, FERRAMENTA_CUBO, FERRAMENTA_LEGISLACAO, ...FERRAMENTAS]
+    ? [...FERRAMENTAS_ERP, ...FERRAMENTAS_GERAIS, ...FERRAMENTAS_BUSCA, FERRAMENTA_RELATORIO, FERRAMENTA_ARQUIVOS, FERRAMENTA_PRIMEIRA_COTACAO, FERRAMENTA_CUBO, FERRAMENTA_CUBO_COBERTURAS, FERRAMENTA_CUBO_SINISTROS, FERRAMENTA_LEGISLACAO, ...FERRAMENTAS]
     : [
         ...FERRAMENTAS_ERP,
         ...FERRAMENTAS_GERAIS.filter((f) => f.name !== "consultar_painel_extra"),
@@ -103,6 +105,8 @@ export function ferramentasDoRobo(verComissao: boolean): Anthropic.Tool[] {
         FERRAMENTA_ARQUIVOS,
         FERRAMENTA_PRIMEIRA_COTACAO,
         FERRAMENTA_CUBO,
+        FERRAMENTA_CUBO_COBERTURAS,
+        FERRAMENTA_CUBO_SINISTROS,
         FERRAMENTA_LEGISLACAO,
         ...FERRAMENTAS.filter((f) => f.name === "consultar_painel"), // sem comissão/repasse para quem não é admin
       ];
@@ -138,6 +142,7 @@ export async function executarFerramentaDoRobo(nome: string, entrada: unknown, e
     (await executarFerramentaRelatorio(nome, entrada, email, verComissao)) ??
     (await executarFerramentaArquivos(nome, entrada, email)) ??
     (await executarFerramentaAnalises(nome, entrada, verComissao)) ??
+    (await executarFerramentaRisco(nome, entrada)) ??
     (await executarFerramentaLegislacao(nome, entrada)) ??
     (verComissao || nome === "consultar_painel"
       ? await executarFerramenta(nome, entrada, { semFinanceiro: !verComissao })

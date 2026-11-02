@@ -111,6 +111,14 @@ export function descreverChamada(nome: string, entrada: unknown): string | null 
     const agrup = Array.isArray(e.agrupar) && e.agrupar.length ? `, agrupado por ${lista(e.agrupar)}` : "";
     return `Cubo de estatísticas (${filtros}${periodo}${agrup})`;
   }
+  if (nome === "consultar_cubo_coberturas" || nome === "consultar_cubo_sinistros") {
+    const filtros = [e.produto, e.cobertura, e.seguradora, e.imobiliaria, e.bairro, e.subtipo].filter(Boolean).map(String).join(", ") || "todos os dados";
+    const periodo = e.mes_de || e.mes_ate ? `, ocorrência de ${String(e.mes_de ?? "…")} a ${String(e.mes_ate ?? "…")}` : "";
+    const coorte = e.mes_apolice_de || e.mes_apolice_ate ? `, apólices iniciadas de ${String(e.mes_apolice_de ?? "…")} a ${String(e.mes_apolice_ate ?? "…")}` : "";
+    const agrup = Array.isArray(e.agrupar) && e.agrupar.length ? `, agrupado por ${lista(e.agrupar)}` : "";
+    const nomeCubo = nome === "consultar_cubo_sinistros" ? (e.sinistralidade ? "Sinistralidade (indenizado ÷ prêmio das apólices da mesma coorte)" : "Sinistros do Corp") : "Coberturas das apólices do ERP";
+    return `${nomeCubo} (${filtros}${periodo}${coorte}${agrup})`;
+  }
   if (nome === "analisar_primeira_cotacao") return `Primeira cotação por imobiliária, de ${String(e.de)} a ${String(e.ate)}${e.produto ? `, produto ${String(e.produto)}` : ""}`;
   return null;
 }
