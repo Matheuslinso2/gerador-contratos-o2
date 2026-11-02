@@ -1,0 +1,8 @@
+-- ERP O2 — prova de emissão e níveis de confiança (Matheus, 03/11/2026). Migration aplicada: erp_prova_emissao_niveis.
+-- Glossário: PROPOSTA = instrumento que formaliza o interesse (Circ. SUSEP 347/07 e 642/21 art. 3º); ACEITAÇÃO = seguradora aprova a proposta (642/21 art. 5º);
+-- APÓLICE = documento que FORMALIZA a aceitação (CNSP 348/17); EMISSÃO em até 15 dias da aceitação (642/21 art. 13); INÍCIO DE VIGÊNCIA = coberturas garantidas (CNSP 344/16).
+-- Logo a proposta efetivada já é negócio: vale para faturamento, parcelas e vínculos, com nível. A tela Emissão fica só com proposta SEM prova nenhuma de emissão.
+--  * erp_documentos.prova_emissao_nivel: verificado (PDF da apólice ligado e conferido) | alta (parcela paga, comissão em extrato/recebida, e-mail da seguradora) | a_verificar (PDF anexado, não conferido) | nulo = sem prova.
+--  * erp_atualizar_prova_emissao() calcula o nível; erp_atualizar_emissao() a chama antes de refazer a fila; erp_emissao_fila exclui quem tem nível.
+--  * Lista de Apólices (src/lib/erp/documentos.ts buscarDocumentos) inclui situacao='proposta' com nível, mostrada como "Emitida · verificada / alta confiança / a verificar".
+-- Efeito em 03/11/2026: fila de Emissão 1.051 → 856 (195 documentos com prova).

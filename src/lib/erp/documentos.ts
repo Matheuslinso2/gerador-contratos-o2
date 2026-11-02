@@ -7,6 +7,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // erp_importar_corp; ver supabase/schema_erp_fase0_carga.sql).
 
 export type DocumentoLista = {
+  /** nível da prova de emissão quando o documento ainda é proposta mas já há prova de que a apólice emitiu: verificado | alta | a_verificar */
+  prova_emissao_nivel?: string | null;
   id: string;
   nosso_numero: number;
   nosso_numero_corp: number | null;
@@ -130,9 +132,10 @@ export const MODO_COBRANCA: Record<string, string> = {
 };
 
 const SELECT_LISTA =
-  "id, nosso_numero, nosso_numero_corp, tipo, tipo_corp, numero_apolice, vigencia_inicio, vigencia_fim, premio_liquido, premio_total, comissao_valor, situacao, canal_venda, imobiliaria_principal_id, modo_cobranca, documento_pai_id, seguradora:erp_seguradoras(abreviacao, nome), ramo:erp_ramos(abreviacao, nome, produto), cliente:locatarios!erp_documentos_locatario_id_fkey(nome), imobiliaria:imobiliarias!erp_documentos_imobiliaria_principal_id_fkey(nome)";
+  "prova_emissao_nivel, id, nosso_numero, nosso_numero_corp, tipo, tipo_corp, numero_apolice, vigencia_inicio, vigencia_fim, premio_liquido, premio_total, comissao_valor, situacao, canal_venda, imobiliaria_principal_id, modo_cobranca, documento_pai_id, seguradora:erp_seguradoras(abreviacao, nome), ramo:erp_ramos(abreviacao, nome, produto), cliente:locatarios!erp_documentos_locatario_id_fkey(nome), imobiliaria:imobiliarias!erp_documentos_imobiliaria_principal_id_fkey(nome)";
 
 type LinhaBruta = {
+  prova_emissao_nivel?: string | null;
   id: string;
   nosso_numero: number;
   nosso_numero_corp: number | null;
@@ -157,6 +160,7 @@ type LinhaBruta = {
 
 function mapear(r: LinhaBruta): DocumentoLista {
   return {
+    prova_emissao_nivel: r.prova_emissao_nivel ?? null,
     id: r.id,
     nosso_numero: r.nosso_numero,
     nosso_numero_corp: r.nosso_numero_corp,
@@ -273,7 +277,9 @@ export async function buscarDocumentos(sb: SupabaseClient, f: FiltrosBusca): Pro
   if (visao) {
     // só o que já é documento oficial: fora cotação, proposta (vive em Emissão até virar apólice) e o que não entra no ERP
     // fatura não passa por emissão (Matheus 29/10): documento tipo F nunca está "proposta"; some só cotação/duplicado/perdido/recusado
-    q = q.not("situacao", "in", visao === "faturas" ? "(cotacao,duplicado,perdido,recusado)" : "(cotacao,proposta,duplicado,perdido,recusado)");
+    // proposta COM PROVA de emissão (parcela paga, extrato, e-mail da seguradora, PDF) já vale aqui, com o nível visível (Matheus, 03/11/2026)
+    if (visao === "faturas") q = q.not("situacao", "in", "(cotacao,duplicado,perdido,recusado)");
+    else q = q.or("situacao.not.in.(cotacao,proposta,duplicado,perdido,recusado),and(situacao.eq.proposta,prova_emissao_nivel.not.is.null)");
     // com busca por nome/código vale o histórico todo; sem busca, a visão cruza período × tipo (como no Corp)
     if (!termo) {
       const tipos = visao === "faturas" ? ["F"] : visao === "endossos" ? ["C", "D", "I", "M", "R", "X"] : ["A"];
@@ -281,10 +287,10 @@ export async function buscarDocumentos(sb: SupabaseClient, f: FiltrosBusca): Pro
       if (visao === "vigentes") {
         if (f.de || f.ate) {
           // vigente em algum dia do período escolhido
-          q = q.in("situacao", ["vigente", "vencido"]);
+          q = q.or("situacao.in.(vigente,vencido),and(situacao.eq.proposta,prova_emissao_nivel.not.is.null)");
           if (f.ate) q = q.lte("vigencia_inicio", f.ate);
           if (f.de) q = q.gte("vigencia_fim", f.de);
-        } else q = q.eq("situacao", "vigente");
+        } else q = q.or("situacao.eq.vigente,and(situacao.eq.proposta,prova_emissao_nivel.not.is.null)");
       } else {
         if (f.de) q = q.gte("vigencia_inicio", f.de);
         if (f.ate) q = q.lte("vigencia_inicio", f.ate);

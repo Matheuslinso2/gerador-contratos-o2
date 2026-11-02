@@ -145,7 +145,7 @@ export default async function ListaDocumentos({
         <p className="flex items-center text-xs font-semibold uppercase tracking-wide text-o2-navy">
           Lista de documentos
           <InfoLegenda titulo="Lista de documentos">
-            Cada linha é um documento: apólice, endosso ou fatura, vindos do Corp e dos cards do Bitrix. Cotações e propostas não aparecem nestas visões (a proposta fica na tela Emissão até virar apólice). O filtro de visão decide o recorte: Apólices vigentes (vigentes hoje, ou em algum dia do período, se houver datas), Apólices com início de vigência no período, Faturas do período ou Endossos do período. Quando você busca por nome, CPF/CNPJ, código ou número, a busca olha o histórico todo. Titular do seguro: na Fiança é o proprietário (segurado e locador), com o inquilino em baixo; nos demais produtos é o segurado. Pr. líquido e Comissão são os valores gravados no documento. A lista mostra 50 por vez; use Mostrar mais.
+            Cada linha é um documento: apólice, endosso ou fatura, vindos do Corp e dos cards do Bitrix. Cotações e propostas sem prova de emissão não aparecem nestas visões (ficam na tela Emissão). A proposta que já tem prova de que a apólice emitiu (parcela paga, comissão em extrato, e-mail da seguradora ou PDF da apólice) aparece aqui como "Emitida", com o nível de confiança: verificada, alta confiança ou a verificar. O filtro de visão decide o recorte: Apólices vigentes (vigentes hoje, ou em algum dia do período, se houver datas), Apólices com início de vigência no período, Faturas do período ou Endossos do período. Quando você busca por nome, CPF/CNPJ, código ou número, a busca olha o histórico todo. Titular do seguro: na Fiança é o proprietário (segurado e locador), com o inquilino em baixo; nos demais produtos é o segurado. Pr. líquido e Comissão são os valores gravados no documento. A lista mostra 50 por vez; use Mostrar mais.
           </InfoLegenda>
         </p>
 
@@ -190,7 +190,13 @@ export default async function ListaDocumentos({
                         {d.vigencia_inicio || d.vigencia_fim ? `${formatarData(d.vigencia_inicio)} a ${formatarData(d.vigencia_fim)}` : "—"}
                       </td>
                       <td className="px-3 py-2">
-                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${COR_SITUACAO[d.situacao] ?? "bg-gray-100"}`}>{SITUACOES[d.situacao] ?? d.situacao}</span>
+                        {d.situacao === "proposta" && d.prova_emissao_nivel ? (
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${d.prova_emissao_nivel === "verificado" ? "bg-green-100 text-green-800" : d.prova_emissao_nivel === "alta" ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-600"}`} title="Apólice emitida: há prova, mas o documento oficial ainda não foi lido e conferido">
+                            Emitida · {d.prova_emissao_nivel === "verificado" ? "verificada" : d.prova_emissao_nivel === "alta" ? "alta confiança" : "a verificar"}
+                          </span>
+                        ) : (
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${COR_SITUACAO[d.situacao] ?? "bg-gray-100"}`}>{SITUACOES[d.situacao] ?? d.situacao}</span>
+                        )}
                       </td>
                       <td className="px-3 py-2 font-medium">
                         <Link href={`/erp/documentos/${d.id}`} className="text-o2-navy hover:underline">
