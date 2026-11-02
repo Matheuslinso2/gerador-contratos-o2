@@ -10,9 +10,12 @@ export async function GET(request: NextRequest) {
   if (!segredo) return NextResponse.json({ erro: "CRON_SECRET não configurada" }, { status: 500 });
   if (request.headers.get("authorization") !== `Bearer ${segredo}`) return NextResponse.json({ erro: "não autorizado" }, { status: 401 });
   try {
-    const { data, error } = await createServiceClient().rpc("chat_cubo_atualizar");
+    const sb = createServiceClient();
+    // Ligações sugeridas e-mail -> documento/cotação pelos dados das planilhas (CPF do locatário, nº da apólice); não impede o cubo se falhar.
+    const { data: ligacoes } = await sb.rpc("erp_emails_ligar_por_planilha");
+    const { data, error } = await sb.rpc("chat_cubo_atualizar");
     if (error) throw new Error(error.message);
-    return NextResponse.json({ ok: true, atualizadoEm: data });
+    return NextResponse.json({ ok: true, atualizadoEm: data, ligacoesEmail: ligacoes ?? null });
   } catch (e) {
     return NextResponse.json({ ok: false, erro: (e as Error).message }, { status: 500 });
   }

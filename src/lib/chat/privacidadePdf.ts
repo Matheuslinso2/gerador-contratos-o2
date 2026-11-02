@@ -19,6 +19,7 @@ const TABELAS_PESSOAIS = new Set([
   "erp_contato_cliente_log",
   "campanhas_grupos_contatos",
   "erp_emails",
+  "erp_email_ligacoes",
   "erp_origens", // título do card costuma trazer o nome do cliente
   "cotacoes_cache", // nome_pessoa
   "producao_erp", // cliente_nome / cliente_cpf_cnpj

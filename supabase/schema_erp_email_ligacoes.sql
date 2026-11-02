@@ -1,0 +1,4 @@
+-- Ligações sugeridas e-mail -> documento/cotação (02/11/2026). Migração erp_email_ligacoes_por_planilha.
+-- erp_email_ligacoes: não substitui erp_emails.documento_id (ligação confirmada); guarda o motivo (cpf_locatario | numero_apolice).
+-- erp_emails_ligar_por_planilha(): idempotente; CPF do locatário (cadastro unificado, que as planilhas alimentam) no assunto/trecho -> documentos e cotações
+--   do locatário; nº da apólice (6+ dígitos) -> documento. Chamada de hora em hora por /api/cron/chat-cubo. Resultado inicial: 8.096 e-mails ligados.
