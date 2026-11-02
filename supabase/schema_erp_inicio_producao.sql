@@ -22,3 +22,7 @@
 -- (mesma seguradora, prêmio líquido ±1, início de vigência ±3 dias). Importação refeita: erp_importar_corp('2026-10-01','2027-01-01', false)
 -- + parcelas/comissões estimadas só para documentos corp_import sem parcela (3.157 parcelas).
 -- Pendência: propostas sem início de vigência (100 novos em out/2026) não entram em nenhum mês.
+
+-- 03/11 (5): proposta do Bitrix sem Nosso nº do Corp só entra na produção COM PROVA de efetivação (Matheus: "se não tem a proposta, o arquivo,
+-- não tem como verificar, a não ser que a seguradora ou a Segimob avisem por e-mail"). Prova = anexo do documento, e-mail de evidência de emissão,
+-- PDF da proposta lido ou evidência em erp_proposta_acompanhamento. Sem prova = pendente, fora do painel.
