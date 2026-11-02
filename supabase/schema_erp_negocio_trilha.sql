@@ -381,3 +381,13 @@ create table if not exists public.erp_vinculo_pontuacao (
 -- Script: scripts/erp/vinculo-regressao.ts (ridge/lasso em TypeScript, validação cruzada por grupo, bootstrap). Resultado fica como CANDIDATO inativo em erp_vinculo_pesos_candidatos / erp_vinculo_modelo (versão REGLOG-0211).
 -- erp_vinculo_probabilidade(versao, tarefa, features jsonb) devolve a probabilidade. Aprendizado ativo: erp_vinculo_rotulos_gerar(...) + erp_vinculo_rotulo_responder(id, 1|0, quem); PDF: erp-o2/CONFERENCIA-RENOVACOES-APRENDIZADO-ATIVO.pdf.
 -- Tabelas: erp_vinculo_treino, erp_vinculo_pesos_candidatos, erp_vinculo_modelo, erp_vinculo_rotulos. Definições vigentes das funções: no banco (migrações "erp_vinculo_treino_renovacao", "erp_vinculo_probabilidade_e_sem_rotulo", "erp_vinculo_rotulos_aprendizado_ativo").
+
+-- ===== ENDEREÇO COMO EVIDÊNCIA (Matheus, 02/11/2026) =====
+-- Funções erp_cep8, erp_logradouro_norm, erp_endereco_partes, erp_endereco_comparar (sem IA; pg_trgm). Evidências cep_numero_igual / logradouro_numero_igual / bairro_cidade_igual / complemento_igual /
+-- endereco_diferente / conjunto_enderecos_jaccard cadastradas em erp_vinculo_pesos como CANDIDATAS (ativo=false, pontos 0).
+-- Endereço lido do PDF OFICIAL: erp_apolice_endereco_pdf (script scripts/erp/ler-endereco-apolice-pdfs.ts; alvos na view erp_endereco_alvos). Features no treino: erp_vinculo_treino.f_end via erp_vinculo_treino_enderecos_atualizar().
+-- Análise: scripts/ml/vinculo_regressao_endereco.py e vinculo_endereco_desempate.py. Pesos candidatos do desempate: erp_vinculo_pesos_candidatos (versao REGLOG-0211-END).
+create table if not exists public.erp_apolice_endereco_pdf (
+  documento_id uuid not null references erp_documentos(id) on delete cascade, ordem smallint not null, cep text not null, trecho text not null, numero_provavel text, lote text not null, lido_em timestamptz not null default now(),
+  primary key (documento_id, ordem));
+alter table public.erp_vinculo_treino add column if not exists f_end jsonb;
