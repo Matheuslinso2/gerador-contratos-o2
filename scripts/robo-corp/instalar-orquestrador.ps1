@@ -2,9 +2,12 @@
 # Cria a tarefa "Robo Corp Orquestrador" (liga com o Windows e todo dia 00:05; sem limite de execução; nunca duas instâncias; reinicia se cair) e DESABILITA
 # (não apaga) as tarefas antigas que usam o login do Corp: "Robo Corp", "Robo Corp Anexos", "Robo Corp Anexos FDS manha", "Robo Corp Anexos FDS tarde".
 # Desfazer: scripts\robo-corp\desfazer-orquestrador.ps1
+# Se qualquer passo falhar, PARA antes de desabilitar as tarefas antigas (02/11: o gatilho "ao ligar o Windows" exigia administrador, falhou, e as antigas foram desabilitadas sem o orquestrador existir).
+$ErrorActionPreference = "Stop"
 $raiz = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $acao = New-ScheduledTaskAction -Execute "cmd.exe" -Argument "/c cd /d `"$raiz`" && npx.cmd tsx scripts/robo-corp/orquestrador.ts" -WorkingDirectory $raiz
-$gatilhos = @((New-ScheduledTaskTrigger -AtStartup), (New-ScheduledTaskTrigger -Daily -At 00:05))
+# "ao entrar no Windows" (não exige administrador) + todo dia 00:05. O Windows entra sozinho no usuário após reiniciar (se não entrar, o gatilho das 00:05 e o vigia cobrem).
+$gatilhos = @((New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME), (New-ScheduledTaskTrigger -Daily -At 00:05))
 $conf = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -RestartCount 5 -RestartInterval (New-TimeSpan -Minutes 5) -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 Register-ScheduledTask -TaskName "Robo Corp Orquestrador" -Action $acao -Trigger $gatilhos -Settings $conf -Description "Um robô por vez no login do Corp, 24 h, pela grade scripts\robo-corp\grade-24h.json" -Force | Out-Null
 foreach ($n in "Robo Corp", "Robo Corp Anexos", "Robo Corp Anexos FDS manha", "Robo Corp Anexos FDS tarde") { Disable-ScheduledTask -TaskName $n -ErrorAction SilentlyContinue | Out-Null }
