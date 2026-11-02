@@ -49,7 +49,7 @@ const total = (s: Soma, m: Metrica) => GRUPOS.reduce((t, g) => t + s[g][m], 0);
 const pad = (n: number) => String(n).padStart(2, "0");
 const diasNoMes = (ano: number, mes: number) => new Date(Date.UTC(ano, mes, 0)).getUTCDate();
 
-export type ParamsProducao = { ano?: string; m?: string; aba?: string; sub?: string; seg?: string; prod?: string; imob?: string };
+export type ParamsProducao = { ano?: string; m?: string; aba?: string; sub?: string; seg?: string; prod?: string; imob?: string; ramo?: string; grp?: string };
 
 export default async function PainelProducao({ params, caminho = "/erp" }: { params: ParamsProducao; caminho?: string }) {
   const sb = await createClient();
@@ -64,16 +64,16 @@ export default async function PainelProducao({ params, caminho = "/erp" }: { par
   const seg = params.seg || null;
   const prod = params.prod && PRODUTOS[params.prod] ? params.prod : null;
   const imob = params.imob?.trim() || null;
+  const ramo = params.ramo || null;
+  const grp = params.grp?.trim() || null;
+  const filtros = { p_seguradora: seg, p_produto: prod, p_imobiliaria: imob, p_ramo: ramo, p_grupo: grp };
 
-  const [{ data: bruto }, { data: segs }, rk] = await Promise.all([
-    sb.rpc("erp_inicio_producao", { p_ano: ano, p_mes: mes, p_seguradora: seg, p_produto: prod, p_imobiliaria: imob }),
+  const [{ data: bruto }, { data: segs }, { data: ramos }, rk] = await Promise.all([
+    sb.rpc("erp_inicio_producao", { p_ano: ano, p_mes: mes, ...filtros }),
     sb.from("erp_seguradoras").select("abreviacao, nome").eq("ativa", true).order("nome"),
+    sb.from("erp_ramos").select("abreviacao, nome").order("abreviacao"),
     ranking
-      ? Promise.all(
-          (["imobiliaria", "seguradora"] as const).map((dim) =>
-            sb.rpc("erp_inicio_ranking", { p_ano: ano, p_mes: mes, p_dim: dim, p_seguradora: seg, p_produto: prod, p_imobiliaria: imob }),
-          ),
-        )
+      ? Promise.all((["seguradora", "ramo", "produtor"] as const).map((dim) => sb.rpc("erp_inicio_ranking", { p_ano: ano, p_mes: mes, p_dim: dim, ...filtros })))
       : Promise.resolve(null),
   ]);
   const dados = (bruto ?? { mensal: [], anual: [], diario: [], meta: [], meta_ok: false, gerado_em: "" }) as Retorno;
@@ -89,7 +89,7 @@ export default async function PainelProducao({ params, caminho = "/erp" }: { par
   // link que mantém os filtros e troca só o que foi pedido
   const href = (troca: Partial<ParamsProducao>) => {
     const p = new URLSearchParams();
-    const base: ParamsProducao = { ano: String(ano), m: anual ? "a" : String(mes), aba: aba.chave, sub: ranking ? "ranking" : undefined, seg: seg ?? undefined, prod: prod ?? undefined, imob: imob ?? undefined, ...troca };
+    const base: ParamsProducao = { ano: String(ano), m: anual ? "a" : String(mes), aba: aba.chave, sub: ranking ? "ranking" : undefined, seg: seg ?? undefined, prod: prod ?? undefined, imob: imob ?? undefined, ramo: ramo ?? undefined, grp: grp ?? undefined, ...troca };
     for (const [k, v] of Object.entries(base)) if (v) p.set(k, v);
     return `${caminho}?${p.toString()}`;
   };
@@ -163,7 +163,7 @@ export default async function PainelProducao({ params, caminho = "/erp" }: { par
   }
   const maxBarra = Math.max(1, ...barras.map((b) => Math.max(total(b.s, m) > 0 ? total(b.s, m) : 0, m === "com" && b.meta ? b.meta : 0)));
 
-  const filtrosAtivos = [seg && `seguradora ${seg}`, prod && PRODUTOS[prod], imob && `imobiliária “${imob}”`].filter(Boolean).join(" · ");
+  const filtrosAtivos = [seg && `seguradora ${seg}`, ramo && `ramo ${ramo}`, prod && PRODUTOS[prod], grp && `grupo “${grp}”`, imob && `imobiliária “${imob}”`].filter(Boolean).join(" · ");
 
   return (
     <section className="space-y-3" aria-label="Produção">
@@ -240,11 +240,24 @@ export default async function PainelProducao({ params, caminho = "/erp" }: { par
             </select>
           </label>
           <label className="flex flex-col gap-0.5 text-[10px] font-medium uppercase tracking-wide text-gray-500">
+            Ramo
+            <select name="ramo" defaultValue={ramo ?? ""} className="rounded border border-gray-300 px-2 py-1 text-xs normal-case text-gray-800">
+              <option value="">Todos</option>
+              {((ramos ?? []) as { abreviacao: string; nome: string }[]).map((r) => (
+                <option key={r.abreviacao} value={r.abreviacao}>{r.abreviacao} · {r.nome}</option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-0.5 text-[10px] font-medium uppercase tracking-wide text-gray-500">
+            Grupo de produtores
+            <input name="grp" defaultValue={grp ?? ""} placeholder="nome do grupo" className="w-40 rounded border border-gray-300 px-2 py-1 text-xs normal-case text-gray-800" />
+          </label>
+          <label className="flex flex-col gap-0.5 text-[10px] font-medium uppercase tracking-wide text-gray-500">
             Imobiliária
             <input name="imob" defaultValue={imob ?? ""} placeholder="nome ou parte" className="w-44 rounded border border-gray-300 px-2 py-1 text-xs normal-case text-gray-800" />
           </label>
           <button type="submit" className="rounded bg-[#01192e] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#00447E]">Filtrar</button>
-          {filtrosAtivos && <Link href={href({ seg: "", prod: "", imob: "" })} className="py-1.5 text-gray-500 hover:underline">Limpar</Link>}
+          {filtrosAtivos && <Link href={href({ seg: "", prod: "", imob: "", ramo: "", grp: "" })} className="py-1.5 text-gray-500 hover:underline">Limpar</Link>}
           {filtrosAtivos && <span className="py-1.5 text-gray-600">Filtrando: {filtrosAtivos}</span>}
         </form>
 
@@ -285,7 +298,7 @@ export default async function PainelProducao({ params, caminho = "/erp" }: { par
                 <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-gray-200">
                   <div className="h-full rounded-full bg-[#F8540D]" style={{ width: `${Math.min(100, (total(atual, "com") / metaPeriodo) * 100)}%` }} />
                 </div>
-                <p className="mt-1 text-[11px] text-gray-500">Meta lida do Corp (corp_meta_comissao), por mês e agrupamento; no ERP ela passa a ser editável. A meta vale para a comissão da corretora, sem filtro de seguradora ou imobiliária.</p>
+                <p className="mt-1 text-[11px] text-gray-500">Meta de comissão lida da planilha de metas já guardada (corp_meta_comissao: por mês e agrupamento Fiança, Incêndio, Capitalização, Condomínio e Auto). O painel do Corp está com as metas desligadas; esta meta vem de outra fonte e passa a ser editável no ERP. Só vale sem filtro de seguradora, ramo, grupo ou imobiliária.</p>
               </div>
             ) : null}
 
@@ -330,10 +343,15 @@ export default async function PainelProducao({ params, caminho = "/erp" }: { par
           </div>
         ) : (
           <div className="grid gap-4 p-4 lg:grid-cols-2">
-            {rk &&
-              (["imobiliaria", "seguradora"] as const).map((dim, i) => (
-                <TabelaRanking key={dim} titulo={dim === "imobiliaria" ? "Ranking por imobiliária" : "Ranking por seguradora"} linhas={(rk[i].data ?? []) as Rank[]} m={m} periodo={rotuloPeriodo} />
-              ))}
+            {rk && (
+              <>
+                <PizzaRanking titulo="Seguradoras" linhas={(rk[0].data ?? []) as Rank[]} m={m} periodo={rotuloPeriodo} />
+                <PizzaRanking titulo="Ramos" linhas={(rk[1].data ?? []) as Rank[]} m={m} periodo={rotuloPeriodo} />
+                <div className="lg:col-span-2">
+                  <BarrasProdutores linhas={(rk[2].data ?? []) as Rank[]} m={m} periodo={rotuloPeriodo} />
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -432,35 +450,80 @@ function Barras({ barras, m, max, destaque }: { barras: { rotulo: string; s: Som
   );
 }
 
-function TabelaRanking({ titulo, linhas, m, periodo }: { titulo: string; linhas: Rank[]; m: Metrica; periodo: string }) {
-  const por = new Map<string, Soma>();
-  for (const l of linhas) {
-    const s = por.get(l.nome) ?? vazio();
-    s[l.grupo].docs += num(l.docs);
-    s[l.grupo].base += num(l.base);
-    s[l.grupo].com += num(l.com);
-    por.set(l.nome, s);
-  }
-  const lista = [...por.entries()].map(([nome, s]) => ({ nome, s, t: total(s, m) })).sort((a, b) => b.t - a.t).slice(0, 15);
+const PALETA = ["#00447E", "#F8540D", "#2fa9a6", "#7a1f8c", "#f2a31b", "#2b7bde", "#AF2505", "#8d8683", "#01192e", "#7fe8d4"];
+
+// soma o valor da métrica por nome (os grupos Novos/Renovações/Faturas/Endossos entram juntos, como no total do painel)
+function agrupar(linhas: Rank[], m: Metrica) {
+  const por = new Map<string, number>();
+  for (const l of linhas) por.set(l.nome, (por.get(l.nome) ?? 0) + num(l[m]));
+  return [...por.entries()].map(([nome, v]) => ({ nome, v })).filter((x) => x.v > 0).sort((a, b) => b.v - a.v);
+}
+
+// Ranking do Corp: pizza de Seguradoras e de Ramos (% do total da métrica) e barras de Produtores.
+function PizzaRanking({ titulo, linhas, m, periodo }: { titulo: string; linhas: Rank[]; m: Metrica; periodo: string }) {
+  const todos = agrupar(linhas, m);
+  const topo = todos.slice(0, 8);
+  const resto = todos.slice(8).reduce((s, x) => s + x.v, 0);
+  const itens = resto > 0 ? [...topo, { nome: "Outros", v: resto }] : topo;
+  const t = itens.reduce((s, x) => s + x.v, 0);
+  const R = 62;
+  const C = 2 * Math.PI * R;
+  let acum = 0;
   return (
-    <div className="rounded-lg border border-gray-100">
-      <p className="border-b border-gray-100 px-3 py-2 text-sm font-semibold text-[#01192e]">{titulo} <span className="text-[11px] font-normal text-gray-500">· {periodo}</span></p>
-      <table className="w-full text-xs">
-        <thead className="text-left text-[10px] uppercase tracking-wide text-gray-500">
-          <tr><th className="px-3 py-1.5">#</th><th className="px-3 py-1.5">Nome</th>{GRUPOS.map((g) => <th key={g} className="px-2 py-1.5 text-right">{g}</th>)}<th className="px-3 py-1.5 text-right">Total</th></tr>
-        </thead>
-        <tbody className="divide-y divide-gray-50">
-          {lista.map((l, i) => (
-            <tr key={l.nome}>
-              <td className="px-3 py-1 text-gray-400">{i + 1}</td>
-              <td className="px-3 py-1 font-medium text-gray-800">{l.nome}</td>
-              {GRUPOS.map((g) => <td key={g} className="px-2 py-1 text-right text-gray-600">{valor(m, l.s[g][m])}</td>)}
-              <td className="px-3 py-1 text-right font-semibold text-gray-900">{valor(m, l.t)}</td>
-            </tr>
+    <div className="rounded-lg border border-gray-100 p-3">
+      <p className="text-sm font-semibold text-[#01192e]">{titulo} <span className="text-[11px] font-normal text-gray-500">· {periodo}</span></p>
+      {t === 0 ? (
+        <p className="py-8 text-center text-xs text-gray-500">Sem movimento no período.</p>
+      ) : (
+        <div className="mt-2 flex flex-wrap items-center justify-center gap-4">
+          <svg viewBox="0 0 160 160" className="h-40 w-40" role="img" aria-label={`Participação por ${titulo.toLowerCase()}`}>
+            <g transform="rotate(-90 80 80)">
+              {itens.map((x, i) => {
+                const parte = (x.v / t) * C;
+                const el = <circle key={x.nome} cx="80" cy="80" r={R} fill="none" stroke={PALETA[i % PALETA.length]} strokeWidth="30" strokeDasharray={`${parte} ${C - parte}`} strokeDashoffset={-acum}><title>{`${x.nome}: ${valor(m, x.v)}`}</title></circle>;
+                acum += parte;
+                return el;
+              })}
+            </g>
+            <text x="80" y="86" textAnchor="middle" fontSize="16" fill="#333">{curtoCentro(t, m)}</text>
+          </svg>
+          <ul className="space-y-1 text-xs text-gray-600">
+            {itens.map((x, i) => (
+              <li key={x.nome} className="flex items-center gap-1.5">
+                <i className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: PALETA[i % PALETA.length] }} />
+                <span className="w-24 truncate font-medium text-gray-800">{x.nome}</span>
+                <span className="w-12 text-right">{((x.v / t) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%</span>
+                <span className="text-gray-500">{valor(m, x.v)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BarrasProdutores({ linhas, m, periodo }: { linhas: Rank[]; m: Metrica; periodo: string }) {
+  const lista = agrupar(linhas, m).slice(0, 15);
+  const max = Math.max(1, ...lista.map((x) => x.v));
+  return (
+    <div className="rounded-lg border border-gray-100 p-3">
+      <p className="text-sm font-semibold text-[#01192e]">Maiores produtores <span className="text-[11px] font-normal text-gray-500">· {periodo}</span></p>
+      {!lista.length ? (
+        <p className="py-6 text-center text-xs text-gray-500">Sem movimento no período.</p>
+      ) : (
+        <ul className="mt-2 space-y-1.5">
+          {lista.map((x) => (
+            <li key={x.nome} className="flex items-center gap-2 text-xs">
+              <span className="w-64 truncate text-gray-700" title={x.nome}>{x.nome}</span>
+              <div className="h-3 flex-1 rounded-sm bg-gray-100">
+                <div className="h-full rounded-sm bg-[#00447E]" style={{ width: `${(x.v / max) * 100}%` }} />
+              </div>
+              <span className="w-28 text-right font-medium text-gray-800">{valor(m, x.v)}</span>
+            </li>
           ))}
-          {!lista.length && <tr><td colSpan={7} className="px-3 py-4 text-center text-gray-500">Sem movimento no período.</td></tr>}
-        </tbody>
-      </table>
+        </ul>
+      )}
     </div>
   );
 }

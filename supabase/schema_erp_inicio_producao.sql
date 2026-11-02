@@ -5,3 +5,6 @@
 -- por (Nosso nº, Nº endosso, Tipo, Pr. líquido, Vl. com.) antes de somar. Variação do painel = contra o MESMO mês/ano do ano anterior. Meta = corp_meta_comissao.
 -- Objetos (já aplicados no banco): view erp_producao_base_v; funções erp_inicio_producao(ano, mes, seguradora, produto, imobiliaria) e erp_inicio_ranking(...).
 -- Código da função: ver a migração erp_inicio_producao_painel_corp no Supabase (histórico de migrações).
+-- Ajuste (02/11, depois do mapa do painel do Corp feito pelo robô): filtros Seguradora, Ramo, Grupo de produtores (+ produto e imobiliária); Ranking = pizza de Seguradoras,
+-- pizza de Ramos e barras de Produtores; funções erp_inicio_producao(..., p_ramo, p_canal, p_grupo) e erp_inicio_ranking(p_dim: seguradora|ramo|produtor, ...).
+-- O Corp tem ainda Agente e Canal de Vendas (valores do Corp: FIANCA 2, IMOBILIÁRIO PRO LABORE): o ERP só guarda o canal de integração (Base Software, Superlógica, Segimob), então esses dois filtros ficam para depois.
