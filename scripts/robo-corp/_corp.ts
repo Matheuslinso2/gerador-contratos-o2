@@ -162,15 +162,15 @@ async function emularFoco(ctx: BrowserContext, p: Page) {
 // Vários robôs: a TELA DE LOGIN do Corp só aceita teclado de um robô por vez (os outros ficam com os campos vazios). Por isso a fase de login é sequencial:
 // um arquivo de trava (fase-login.lock) é segurado só durante o login (cerca de 1 min); depois cada robô trabalha em paralelo na sua própria janela.
 const FASE = path.join(os.homedir(), ".robo-corp", "fase-login.lock");
-async function pegarFaseLogin(): Promise<() => void> {
+export async function pegarFaseLogin(): Promise<() => void> {
   fs.mkdirSync(path.dirname(FASE), { recursive: true });
   const limite = Date.now() + 15 * 60_000; let avisou = false;
   for (;;) {
     try { fs.mkdirSync(FASE); fs.writeFileSync(path.join(FASE, "dono.json"), JSON.stringify({ pid: process.pid, login: LOGIN_ID, desde: Date.now() })); break; } catch { /* ocupada */ }
     try {
       const d = JSON.parse(fs.readFileSync(path.join(FASE, "dono.json"), "utf8")) as { pid: number; desde: number };
-      if (!vivo(d.pid) || Date.now() - d.desde > 5 * 60_000) { fs.rmSync(FASE, { recursive: true, force: true }); continue; }
-    } catch { try { if (Date.now() - fs.statSync(FASE).mtimeMs > 60_000) fs.rmSync(FASE, { recursive: true, force: true }); } catch { /* sumiu */ } }
+      if (!vivo(d.pid) || Date.now() - d.desde > 180_000) { log(`trava de login velha liberada (dono: ${(d as { login?: string }).login ?? "?"}, pid ${d.pid}, ${vivo(d.pid) ? "vivo há " + Math.round((Date.now() - d.desde) / 1000) + " s" : "morto"})`); fs.rmSync(FASE, { recursive: true, force: true }); continue; }
+    } catch { try { if (Date.now() - fs.statSync(FASE).mtimeMs > 30_000) fs.rmSync(FASE, { recursive: true, force: true }); } catch { /* sumiu */ } }
     if (Date.now() > limite) throw new Error("fila de login do Corp: esperei 15 min pela vez de digitar");
     if (!avisou) { log("esperando a vez de digitar o login (outro robô está entrando)…"); avisou = true; }
     await espera(2000 + Math.floor(Math.random() * 1500));
@@ -179,12 +179,25 @@ async function pegarFaseLogin(): Promise<() => void> {
 }
 export async function entrar(ctx: BrowserContext, cfg: ConfigCorp, robo = path.basename(process.argv[1] ?? "robo")): Promise<Page> {
   await pegarVezDoCorp(robo);
-  const soltar = await pegarFaseLogin();
-  try { return await entrarSemFila(ctx, cfg); } finally { soltar(); }
+  // até 3 tentativas; cada uma com limite de 150 s e trava de digitação própria. Falhou: fecha só as páginas DESTE login e recomeça (não mexe nos outros robôs)
+  for (let tent = 1; ; tent++) {
+    const soltar = await pegarFaseLogin();
+    log(`login [${LOGIN_ID}] tentativa ${tent}: tenho a vez de digitar`);
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      return await Promise.race([entrarSemFila(ctx, cfg), new Promise<Page>((_, rej) => { timer = setTimeout(() => rej(new Error("login passou de 150 s")), 150_000); })]);
+    } catch (e) {
+      log(`login [${LOGIN_ID}] tentativa ${tent} falhou: ${(e as Error).message}`);
+      if (/não aceitou o login|Acesso Negado/i.test((e as Error).message) || tent >= 3) throw e;
+      for (const p of ctx.pages()) await p.close().catch(() => {});
+    } finally { if (timer) clearTimeout(timer); soltar(); }
+  }
 }
 async function entrarSemFila(ctx: BrowserContext, cfg: ConfigCorp): Promise<Page> {
+  log(`login [${LOGIN_ID}]: 1/5 abrindo a tela de login`);
   const login = await ctx.newPage();
-  await login.goto(cfg.url, { waitUntil: "domcontentloaded" });
+  await login.goto(cfg.url, { waitUntil: "domcontentloaded", timeout: 45_000 });
+  log(`login [${LOGIN_ID}]: 2/5 digitando usuário e senha da corretora`);
   await login.fill('input[placeholder="Usuário"]', cfg.corretora.usuario);
   await login.fill('input[placeholder="Senha"]', cfg.corretora.senha);
   await login
@@ -192,6 +205,7 @@ async function entrarSemFila(ctx: BrowserContext, cfg: ConfigCorp): Promise<Page
     .click({ timeout: 10_000 })
     .catch(() => login.press('input[placeholder="Senha"]', "Enter"));
   await login.getByText("Clique para acessar").waitFor({ timeout: 30_000 });
+  log(`login [${LOGIN_ID}]: 3/5 abrindo o aplicativo do Corp`);
   const [app] = await Promise.all([
     ctx.waitForEvent("page", { timeout: 60_000 }).catch(() => null),
     login.getByText("O2", { exact: true }).first().click(),
@@ -199,7 +213,8 @@ async function entrarSemFila(ctx: BrowserContext, cfg: ConfigCorp): Promise<Page
   const page = app ?? login;
   await page.waitForLoadState("domcontentloaded");
   await page.bringToFront();
-  const rotulo = await esperarModelo(page, "login-usuario-rotulo", 120_000);
+  log(`login [${LOGIN_ID}]: 4/5 digitando o login da unidade`);
+  const rotulo = await esperarModelo(page, "login-usuario-rotulo", 90_000);
   await page.mouse.click(rotulo.x + 110, rotulo.y);
   await espera(1200);
   await page.keyboard.press("Control+a");
@@ -217,6 +232,7 @@ async function entrarSemFila(ctx: BrowserContext, cfg: ConfigCorp): Promise<Page
     await foto(page, "erro-login-unidade");
     throw new Error("o Corp não aceitou o login da unidade (confira config.json)");
   }
+  log(`login [${LOGIN_ID}]: 5/5 dentro do Corp`);
   await espera(8000);
   return page;
 }

@@ -79,7 +79,7 @@ if (process.argv.includes("--simular")) {
 // ------------------------------------------------------------ execução (um estado por login)
 type Estado = { w: Worker; filho: ChildProcess | null; nome: string; robo: Quem["robo"] | ""; desde: number; ultimaFalha: number; pausaAte: number; baixaSemTrabalhoAte: number };
 const est = new Map<string, Estado>(grade.workers.map((w) => [w.id, { w, filho: null, nome: "", robo: "", desde: 0, ultimaFalha: 0, pausaAte: 0, baixaSemTrabalhoAte: 0 }]));
-const jaFeitos = new Set<string>(); let posFeito = "";
+const recusas = new Map<string, number>(); const jaFeitos = new Set<string>(); let posFeito = "";
 
 function iniciar(e: Estado, q: Quem, ateMin: number) {
   const env = { ...process.env, CORP_VEZ_ESPERA_MIN: String(grade.esperaLoginMin), CORP_LOGIN: e.w.id === "principal" ? "" : e.w.id };
@@ -95,8 +95,9 @@ function iniciar(e: Estado, q: Quem, ateMin: number) {
     if (e.filho !== filho) return;
     const dur = Date.now() - e.desde;
     log(`[${e.w.id}] LIBEROU o Corp: ${e.nome} terminou (código ${c}) após ${Math.round(dur / 60000)} min`);
+    if (c === 0) recusas.set(e.w.id, 0);
     if (c === 3) { e.pausaAte = Date.now() + grade.semPermissaoPausaMin * 60_000; log(`[${e.w.id}] LOGIN SEM PERMISSÃO: o Matheus precisa copiar as permissões desse login. Pauso este login por ${grade.semPermissaoPausaMin} min.`); }
-    else if (c === 4) { e.pausaAte = Date.now() + grade.semPermissaoPausaMin * 60_000; log(`[${e.w.id}] LOGIN RECUSADO pelo Corp (nome/senha). Pauso este login por ${grade.semPermissaoPausaMin} min para não gerar bloqueio; avisar o Matheus.`); }
+    else if (c === 4) { recusas.set(e.w.id, (recusas.get(e.w.id) ?? 0) + 1); const n = recusas.get(e.w.id)!; if (n >= 3) { e.pausaAte = Date.now() + grade.semPermissaoPausaMin * 60_000; log(`[${e.w.id}] LOGIN RECUSADO ${n}x seguidas pelo Corp (nome/senha). Pauso este login por ${grade.semPermissaoPausaMin} min para não gerar bloqueio; avisar o Matheus.`); } else { e.ultimaFalha = Date.now(); log(`[${e.w.id}] login não entrou (${n}/3): tento de novo em ${grade.retentarMin} min (pode ser disputa da tela de login entre robôs)`); } }
     else if (c === 10 && e.robo === "baixa") { e.baixaSemTrabalhoAte = Date.now() + grade.baixaSemTrabalhoMin * 60_000; log(`[${e.w.id}] baixa sem o que baixar: ajuda nos documentos por ${grade.baixaSemTrabalhoMin} min`); }
     else if ((c !== 0 || dur < 2 * 60_000) && dur < 3 * 60_000) { e.ultimaFalha = Date.now(); log(`[${e.w.id}] saída rápida (${Math.round(dur / 1000)} s): espero ${grade.retentarMin} min antes de tentar de novo (ver o log do robô)`); }
     e.filho = null; e.robo = "";

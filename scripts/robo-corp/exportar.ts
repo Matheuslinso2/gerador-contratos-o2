@@ -15,7 +15,7 @@ import os from "node:os";
 import path from "node:path";
 import sharp from "sharp";
 import { chromium, type BrowserContext, type Page } from "playwright";
-import { pegarVezDoCorp } from "./_corp";
+import { pegarVezDoCorp, pegarFaseLogin } from "./_corp";
 
 type Relatorio = { id: string; tipo: "grade" | "clientes" | "sinistros" | "comissoes_recebidas" | "comissoes_pendentes"; de?: string; ate?: string; pasta: string };
 type Config = {
@@ -116,6 +116,10 @@ async function clicarModelo(page: Page, modelo: string, descricao: string) {
 // ------------------------------------------------------------ Corp
 async function entrar(ctx: BrowserContext, cfg: Config): Promise<Page> {
   await pegarVezDoCorp("exportar (Robo Corp 12h/20h)"); // um robô por vez no login único do Corp
+  const soltar = await pegarFaseLogin(); // a tela de login só aceita digitação de um robô por vez (os outros logins esperam a vez)
+  try { return await entrarSemFila(ctx, cfg); } finally { soltar(); }
+}
+async function entrarSemFila(ctx: BrowserContext, cfg: Config): Promise<Page> {
   const login = await ctx.newPage();
   await login.goto(cfg.url, { waitUntil: "domcontentloaded" });
   await login.fill('input[placeholder="Usuário"]', cfg.corretora.usuario);
@@ -430,7 +434,7 @@ async function main() {
   fs.mkdirSync(pastaFotos, { recursive: true });
   log(`fotos em ${pastaFotos}`);
 
-  const browser = await chromium.launch({ channel: "chrome", headless: false, args: ["--start-maximized"] });
+  const browser = await chromium.launch({ channel: "chrome", headless: false, args: ["--start-maximized", "--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding", "--disable-background-timer-throttling", "--disable-features=CalculateNativeWinOcclusion"] }); // vários robôs, cada um numa janela: sem isso o Chrome pausa a janela coberta por outra
   const ctx = await browser.newContext({ viewport: VIEWPORT, acceptDownloads: true, locale: "pt-BR" });
   try {
     const page = await entrar(ctx, cfg);
