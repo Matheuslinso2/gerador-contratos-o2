@@ -6,13 +6,17 @@
 //   npx tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/erp/email-anexos-ler.ts [--limite N] [--paralelo 3]            (fase 3)
 //   npx tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/erp/email-anexos-ler.ts --ligar [--gravar] [--limite N]       (fase 4; ensaio sem --gravar)
 process.loadEnvFile(".env.local");
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
 import { createServiceClient } from "@/lib/supabase/service";
 import { textoDoPdf } from "@/lib/erp/anexosEmail";
 import { extrair, VERSAO_LEITOR_EMAIL } from "@/lib/erp/emailAnexoConteudo";
 
 const arg = (n: string) => (process.argv.includes(`--${n}`) ? process.argv[process.argv.indexOf(`--${n}`) + 1] : undefined);
 const LIMITE = Number(arg("limite") ?? Infinity), PARALELO = Number(arg("paralelo") ?? 3);
-const LIGAR = process.argv.includes("--ligar"), GRAVAR = process.argv.includes("--gravar");
+const OCR = process.argv.includes("--ocr"), LIGAR = process.argv.includes("--ligar"), GRAVAR = process.argv.includes("--gravar");
 const sb = createServiceClient();
 const log = (m: string) => console.log(`${new Date().toLocaleTimeString("pt-BR")}  ${m}`);
 const em = <T,>(xs: T[], n = 100) => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
@@ -47,12 +51,42 @@ async function ler() {
   log(`fim da fase 3: ${JSON.stringify(cont)}`);
 }
 
+/** PDFs escaneados (texto_status ocr_pendente): OCR LOCAL e GRATUITO do Windows (scripts/erp/ocr-pdf-win.ps1), sem IA. Lido por OCR = ocr_lido (números podem ter dígito errado: só confirma com CPF + vigência). */
+async function ocr() {
+  const shas: string[] = [];
+  for (let de = 0; shas.length < LIMITE; de += 1000) {
+    const { data, error } = await sb.from("erp_email_anexos").select("sha256").eq("texto_status", "ocr_pendente").order("sha256").range(de, de + 999); if (error) throw new Error(error.message);
+    for (const r of data ?? []) if (!shas.includes(r.sha256)) shas.push(r.sha256);
+    if (!data || data.length < 1000) break;
+  }
+  const alvo = shas.slice(0, LIMITE); log(`OCR: ${alvo.length} PDFs escaneados`);
+  const dir = path.join(os.tmpdir(), "o2-email-ocr"); fs.mkdirSync(dir, { recursive: true });
+  const cont: Record<string, number> = {};
+  for (const grupo of em(alvo, 30)) {
+    const lista: string[] = [];
+    for (const sha of grupo) { const { data: blob } = await sb.storage.from("anexos-documentos").download(`${sha}.pdf`); if (!blob) continue; const f = path.join(dir, `${sha}.pdf`); fs.writeFileSync(f, Buffer.from(await blob.arrayBuffer())); lista.push(f); }
+    const arqLista = path.join(dir, "lista.txt"), saida = path.join(dir, "ocr.jsonl"); fs.writeFileSync(arqLista, lista.join("\n")); if (fs.existsSync(saida)) fs.unlinkSync(saida);
+    spawnSync("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", path.join(process.cwd(), "scripts", "erp", "ocr-pdf-win.ps1"), "-Lista", arqLista, "-Saida", saida, "-MaxPaginas", "4"], { stdio: "ignore" });
+    const textos = new Map<string, string>();
+    if (fs.existsSync(saida)) for (const l of fs.readFileSync(saida, "utf8").split("\n")) { if (!l.trim()) continue; const j = JSON.parse(l) as { arq: string; paginas?: { texto: string }[] }; const m = /([0-9a-f]{64})\.pdf/.exec(j.arq); if (m && j.paginas) textos.set(m[1], j.paginas.map((x) => x.texto).join(" ")); }
+    for (const sha of grupo) {
+      const t = textos.get(sha); let upd: Record<string, unknown>;
+      if (!t || t.trim().length < 80) upd = { texto_status: "sem_texto" };
+      else { const c = extrair(t); upd = { classe: c.classe, classe_fonte: "conteudo", texto_status: "ocr_lido", seguradora: c.seguradora, numeros: c.numeros, cpf_cnpj: c.cpf_cnpj, datas: c.datas, campos: { numero_apolice: c.numero_apolice, numero_proposta: c.numero_proposta, premio_total: c.premio_total, premio_liquido: c.premio_liquido, lido_por: "ocr_windows" } }; }
+      await sb.from("erp_email_anexos").update({ ...upd, lido_em: new Date().toISOString(), versao_leitor: VERSAO_LEITOR_EMAIL }).eq("sha256", sha).eq("texto_status", "ocr_pendente");
+      const k = String(upd.texto_status) + "/" + String(upd.classe ?? "-"); cont[k] = (cont[k] ?? 0) + 1;
+    }
+    for (const f of lista) fs.unlinkSync(f); // só os PDFs temporários desta pasta própria
+    log(`  ${Object.values(cont).reduce((a, b) => a + b, 0)}/${alvo.length} ${JSON.stringify(cont)}`);
+  }
+}
+
 const TIPO: Record<string, string> = { apolice: "apolice", proposta: "proposta", endosso: "endosso", certificado: "certificado", cotacao: "cotacao" };
 
 async function ligar() {
   const rows: any[] = [];
   for (let de = 0; rows.length < LIMITE; de += 1000) {
-    const { data, error } = await sb.from("erp_email_anexos").select("id,message_id,nome,bytes,sha256,classe,seguradora,numeros,cpf_cnpj,datas,campos,storage_path").eq("texto_status", "lido").in("classe", Object.keys(TIPO)).is("ligacao", null).order("id").range(de, de + 999);
+    const { data, error } = await sb.from("erp_email_anexos").select("id,message_id,nome,bytes,sha256,classe,seguradora,numeros,cpf_cnpj,datas,campos,storage_path").in("texto_status", ["lido", "ocr_lido"]).in("classe", Object.keys(TIPO)).is("ligacao", null).order("id").range(de, de + 999);
     if (error) throw new Error(error.message); rows.push(...(data ?? [])); if (!data || data.length < 1000) break;
   }
   const alvo = rows.slice(0, LIMITE);
@@ -106,4 +140,4 @@ async function ligar() {
   log(`fim da fase 4: ${JSON.stringify(cont)}`);
 }
 
-(LIGAR ? ligar() : ler()).catch((e) => { console.error("ERRO:", e.message ?? e); process.exit(1); });
+(OCR ? ocr() : LIGAR ? ligar() : ler()).catch((e) => { console.error("ERRO:", e.message ?? e); process.exit(1); });
