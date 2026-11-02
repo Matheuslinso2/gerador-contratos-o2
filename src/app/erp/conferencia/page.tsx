@@ -230,7 +230,7 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
         )}
         {secao === "faturas" && (<>
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Alertas de fatura <span className="ml-1 text-[10px] font-normal normal-case tracking-normal text-gray-400">(Tokio e Pottencial)</span><InfoLegenda titulo="Alertas de fatura">Lista as apólices novas de imobiliárias que pagam por fatura e que deveriam estar na fatura da imobiliária. Cruza as propostas efetivadas no ERP (que vêm do Corp) com as faturas já carregadas das seguradoras Tokio e Pottencial. Pela regra de corte (ainda uma hipótese até dez/2026), cada seguro novo tem uma fatura prevista. O alerta aparece quando a fatura carregada não contém o seguro, quando a seguradora não deu destino em mais de 10 dias, ou quando a fatura prevista já venceu e ainda não foi carregada. Os contadores coloridos mostram o total de cada tipo de alerta. A tabela mostra no máximo as 300 mais recentes e é refeita de hora em hora. O filtro de mês vale pela data da fatura prevista.</InfoLegenda></h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Alertas de fatura <span className="ml-1 text-xs font-normal normal-case tracking-normal text-gray-400">(Tokio e Pottencial)</span><InfoLegenda titulo="Alertas de fatura">Lista as apólices novas de imobiliárias que pagam por fatura e que deveriam estar na fatura da imobiliária. Cruza as propostas efetivadas no ERP (que vêm do Corp) com as faturas já carregadas das seguradoras Tokio e Pottencial. Pela regra de corte (ainda uma hipótese até dez/2026), cada seguro novo tem uma fatura prevista. O alerta aparece quando a fatura carregada não contém o seguro, quando a seguradora não deu destino em mais de 10 dias, ou quando a fatura prevista já venceu e ainda não foi carregada. Os contadores coloridos mostram o total de cada tipo de alerta. A tabela mostra no máximo as 300 mais recentes e é refeita de hora em hora. O filtro de mês vale pela data da fatura prevista.</InfoLegenda></h2>
           <p className="text-xs text-gray-500">
             Seguro novo de imobiliária com fatura: pela regra de corte (hipótese até dez/2026) ele tem uma fatura prevista. Alerta quando a fatura carregada não o contém, quando a seguradora não deu destino em 10 dias, ou quando a fatura prevista venceu e ainda não foi carregada no /faturas.
             {alertas[0]?.gerado_em ? ` Lista gerada ${formatarData(alertas[0].gerado_em)} (atualiza de hora em hora).` : ""}
@@ -243,7 +243,7 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
             ))}
           </div>
           {erroAlertas && <p className="text-xs text-red-700">Não consegui ler os alertas: {erroAlertas.message}</p>}
-          <p className="text-[11px] text-gray-500">
+          <p className="text-xs text-gray-500">
             Sem alerta: {contagemAlertas.ok ?? 0} na fatura · {contagemAlertas.aguardando_fatura ?? 0} aguardando a fatura prevista.{alertas.length === 300 ? " Lista abaixo limitada aos 300 mais recentes." : ""}
           </p>
           {alertas.length === 0 ? (
@@ -251,7 +251,7 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
           ) : (
             <div className="max-h-[420px] overflow-auto">
               <table className="w-full text-xs">
-                <thead className="sticky top-0 bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+                <thead className="sticky top-0 bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
                   <tr>
                     <th className="px-2 py-1">Alerta</th>
                     <th className="px-2 py-1">Código O2 do documento</th>
@@ -303,7 +303,7 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
           ) : (
             <div className="max-h-[360px] overflow-auto">
               <table className="w-full text-xs">
-                <thead className="sticky top-0 bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+                <thead className="sticky top-0 bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
                   <tr>
                     <th className="px-2 py-1">Código O2 do documento</th>
                     <th className="px-2 py-1">Nosso nº do Corp</th>
@@ -343,7 +343,7 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
         </>)}
         {secao === "baixa" && (<>
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Baixa de comissão <span className="ml-1 text-[10px] font-normal normal-case tracking-normal text-gray-400">(fonte: Corp · formato da planilha Controle Baixa)</span><InfoLegenda titulo="Baixa de comissão (Corp)">Mostra, mês a mês e por corretora e seguradora, a comissão que já foi dada como recebida no Corp (data de quitação), no formato da planilha de controle da baixa. Bruto vem do Corp; o líquido esperado é o bruto menos o imposto retido e menos o desconto da seguradora (hoje, o empréstimo da Porto). Pró-labore conferido é a parte que a seguradora paga direto à imobiliária, que não é divergência. Divergência é o que sobrou de diferença entre o percentual do documento e o recebido, apólice por apólice, e o número entre parênteses é a quantidade de linhas. Sem filtro de mês, aparecem o mês atual e os 3 anteriores. O Corp é exportado pelo robô às 12h e às 20h.</InfoLegenda></h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Baixa de comissão <span className="ml-1 text-xs font-normal normal-case tracking-normal text-gray-400">(fonte: Corp · formato da planilha Controle Baixa)</span><InfoLegenda titulo="Baixa de comissão (Corp)">Mostra, mês a mês e por corretora e seguradora, a comissão que já foi dada como recebida no Corp (data de quitação), no formato da planilha de controle da baixa. Bruto vem do Corp; o líquido esperado é o bruto menos o imposto retido e menos o desconto da seguradora (hoje, o empréstimo da Porto). Pró-labore conferido é a parte que a seguradora paga direto à imobiliária, que não é divergência. Divergência é o que sobrou de diferença entre o percentual do documento e o recebido, apólice por apólice, e o número entre parênteses é a quantidade de linhas. Sem filtro de mês, aparecem o mês atual e os 3 anteriores. O Corp é exportado pelo robô às 12h e às 20h.</InfoLegenda></h2>
           <p className="text-xs text-gray-500">
             Corp → Comissões → Recebidas, por data de quitação, exportado pelo robô do Corp (12h e 20h). O2 Capitalização = ramos 2FIA/2IMO/2POR, CAP2 e premiação (PREM).
             Líquido esperado = bruto − imposto retido − desconto da seguradora (empréstimo da Porto). Cada baixa é conferida apólice por apólice: % do documento − % recebido. Se a diferença bate com o pró-labore daquela imobiliária naquela seguradora, é “pró-labore conferido” (pago direto à imob, não é pendência); se não bate, é divergência.
@@ -358,7 +358,7 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
                   const doMes = atrasos.filter((a) => a.mes === m);
                   return (
                     <li key={m}>
-                      <b>{m.slice(5, 7)}/{m.slice(0, 4)}</b>{m < mes.de ? <span className="ml-1 text-[11px] font-normal text-red-600">(herdado de {m.slice(5, 7)}/{m.slice(0, 4)})</span> : null}: {doMes.length} {doMes.length === 1 ? "combinação" : "combinações"} — {doMes.map((a) => `${a.seguradora} ${a.corretora === "O2 Capitalização" ? "(Cap)" : ""} ${a.situacao === "sem_baixa" ? "sem baixa" : `baixa ${brl(a.bruto)} de ~${brl(a.media_3m)}`}`).join(" · ")}
+                      <b>{m.slice(5, 7)}/{m.slice(0, 4)}</b>{m < mes.de ? <span className="ml-1 text-xs font-normal text-red-600">(herdado de {m.slice(5, 7)}/{m.slice(0, 4)})</span> : null}: {doMes.length} {doMes.length === 1 ? "combinação" : "combinações"} — {doMes.map((a) => `${a.seguradora} ${a.corretora === "O2 Capitalização" ? "(Cap)" : ""} ${a.situacao === "sem_baixa" ? "sem baixa" : `baixa ${brl(a.bruto)} de ~${brl(a.media_3m)}`}`).join(" · ")}
                     </li>
                   );
                 })}
@@ -378,7 +378,7 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
                   </summary>
                   <div className="overflow-auto">
                     <table className="w-full text-xs">
-                      <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+                      <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
                         <tr>
                           <th className="px-2 py-1">Corretora</th>
                           <th className="px-2 py-1">Seguradora</th>
@@ -431,7 +431,7 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
               </summary>
               {g.linhas.length > 0 && (
                 <table className="w-full text-xs">
-                  <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+                  <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
                     <tr><th className="px-3 py-1">Seguradora</th><th className="px-3 py-1">Código O2 do documento</th><th className="px-3 py-1">Nº da apólice / do endosso</th><th className="px-3 py-1">Cliente</th><th className="px-3 py-1">Data</th><th className="px-3 py-1 text-right">Comissão</th></tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -457,7 +457,7 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
             </summary>
             {semMae.length > 0 && (
               <table className="w-full text-xs">
-                <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+                <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
                   <tr><th className="px-3 py-1">Endosso</th><th className="px-3 py-1">Tipo</th><th className="px-3 py-1">Seguradora</th><th className="px-3 py-1">Nº da apólice informado</th><th className="px-3 py-1">Cliente</th><th className="px-3 py-1">Início</th><th className="px-3 py-1 text-right">Prêmio</th></tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -498,7 +498,7 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
           ) : (
             <div className="max-h-[300px] overflow-auto">
               <table className="w-full text-xs">
-                <thead className="sticky top-0 bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+                <thead className="sticky top-0 bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
                   <tr>
                     <th className="px-2 py-1">Seguradora</th>
                     <th className="px-2 py-1">Corretora</th>
@@ -539,7 +539,7 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
         ) : (
           <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
             <table className="w-full text-xs">
-              <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+              <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
                 <tr>
                   <th className="px-3 py-2">Mês</th>
                   <th className="px-3 py-2">Ramo</th>

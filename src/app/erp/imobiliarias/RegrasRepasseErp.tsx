@@ -46,7 +46,7 @@ export default function RegrasRepasseErp({
         <p className="text-xs text-gray-500">Nenhuma regra ainda (a inferência usa documentos novos desde 2025; menos de 3 documentos = sem regra).</p>
       ) : (
         <table className="w-full text-xs">
-          <thead className="text-left text-[11px] uppercase tracking-wide text-gray-500">
+          <thead className="text-left text-xs uppercase tracking-wide text-gray-500">
             <tr>
               <th className="py-1 pr-3">Seguradora</th>
               <th className="py-1 pr-3">Ramo</th>
@@ -74,7 +74,7 @@ export default function RegrasRepasseErp({
           </tbody>
         </table>
       )}
-      <p className="text-[11px] text-gray-500">
+      <p className="text-xs text-gray-500">
         Retenção de imposto padrão: 18% (parâmetro global do ERP). Repasses fixos e premiação de campanha não sofrem retenção.
       </p>
     </section>

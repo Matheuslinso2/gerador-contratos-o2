@@ -176,7 +176,7 @@ export default async function PainelProducao({ params, caminho = "/erp" }: { par
             </Link>
           ))}
         </div>
-        <span className="pb-1 text-[11px] text-gray-500">
+        <span className="pb-1 text-xs text-gray-500">
           Início de vigência · documentos distintos · Corp e ERP juntos
           <InfoLegenda titulo="Como esta conta é feita">
             Mesma conta do painel do Corp (Gráficos de Análise e Metas, Produção Total), conferida contra ele em 02/11/2026: a data é o INÍCIO DE VIGÊNCIA; Novos, Renovações, Faturas e Endossos (inclui cancelamentos) vêm do tipo do documento; Prêmio Base é o prêmio líquido (base de comissão da corretora); Comissão é o valor da comissão; Qtde de Docs conta documentos distintos (pelo Nosso nº do Corp). O ERP anda independente: documentos que só existem no ERP (vindos dos cards do Bitrix) entram, e o que o Corp ainda não lançou também. Nas faturas de novembro/2026 o ERP bate com o Corp ao centavo. Em Novos e Renovações o Corp pode ter documentos que o ERP ainda não tem, e o ERP tem documentos que o Corp não tem: a diferença é esperada e será fechada com o vínculo das apólices.
@@ -221,7 +221,7 @@ export default async function PainelProducao({ params, caminho = "/erp" }: { par
           <input type="hidden" name="m" value={anual ? "a" : mes!} />
           <input type="hidden" name="aba" value={aba.chave} />
           {ranking && <input type="hidden" name="sub" value="ranking" />}
-          <label className="flex flex-col gap-0.5 text-[10px] font-medium uppercase tracking-wide text-gray-500">
+          <label className="flex flex-col gap-0.5 text-xs font-medium uppercase tracking-wide text-gray-500">
             Seguradora
             <select name="seg" defaultValue={seg ?? ""} className="rounded border border-gray-300 px-2 py-1 text-xs normal-case text-gray-800">
               <option value="">Todas</option>
@@ -230,7 +230,7 @@ export default async function PainelProducao({ params, caminho = "/erp" }: { par
               ))}
             </select>
           </label>
-          <label className="flex flex-col gap-0.5 text-[10px] font-medium uppercase tracking-wide text-gray-500">
+          <label className="flex flex-col gap-0.5 text-xs font-medium uppercase tracking-wide text-gray-500">
             Produto
             <select name="prod" defaultValue={prod ?? ""} className="rounded border border-gray-300 px-2 py-1 text-xs normal-case text-gray-800">
               <option value="">Todos</option>
@@ -239,7 +239,7 @@ export default async function PainelProducao({ params, caminho = "/erp" }: { par
               ))}
             </select>
           </label>
-          <label className="flex flex-col gap-0.5 text-[10px] font-medium uppercase tracking-wide text-gray-500">
+          <label className="flex flex-col gap-0.5 text-xs font-medium uppercase tracking-wide text-gray-500">
             Ramo
             <select name="ramo" defaultValue={ramo ?? ""} className="rounded border border-gray-300 px-2 py-1 text-xs normal-case text-gray-800">
               <option value="">Todos</option>
@@ -248,11 +248,11 @@ export default async function PainelProducao({ params, caminho = "/erp" }: { par
               ))}
             </select>
           </label>
-          <label className="flex flex-col gap-0.5 text-[10px] font-medium uppercase tracking-wide text-gray-500">
+          <label className="flex flex-col gap-0.5 text-xs font-medium uppercase tracking-wide text-gray-500">
             Grupo de produtores
             <input name="grp" defaultValue={grp ?? ""} placeholder="nome do grupo" className="w-40 rounded border border-gray-300 px-2 py-1 text-xs normal-case text-gray-800" />
           </label>
-          <label className="flex flex-col gap-0.5 text-[10px] font-medium uppercase tracking-wide text-gray-500">
+          <label className="flex flex-col gap-0.5 text-xs font-medium uppercase tracking-wide text-gray-500">
             Imobiliária
             <input name="imob" defaultValue={imob ?? ""} placeholder="nome ou parte" className="w-44 rounded border border-gray-300 px-2 py-1 text-xs normal-case text-gray-800" />
           </label>
@@ -273,12 +273,12 @@ export default async function PainelProducao({ params, caminho = "/erp" }: { par
                 const taxaPct = m === "com" && taxa ? ((g === "Total" ? total(atual, "com") : atual[g].com) / taxa) * 100 : null;
                 return (
                   <div key={g} className={`rounded-lg px-3 py-2 ${CARTAO[g]}`}>
-                    <div className="t flex items-baseline justify-between text-[11px] font-medium uppercase tracking-wide">
+                    <div className="t flex items-baseline justify-between text-xs font-medium uppercase tracking-wide">
                       <span>{g === "Total" ? "Produção total" : g}</span>
                       {g === "Total" && <span className="font-normal opacity-90">{rotuloPeriodo}</span>}
                     </div>
                     <div className="v my-1 text-center text-xl font-semibold">{valor(m, v)}</div>
-                    <div className="flex items-center justify-between text-[11px] opacity-95">
+                    <div className="flex items-center justify-between text-xs opacity-95">
                       <span>{taxaPct !== null ? `${taxaPct.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%` : ""}</span>
                       <span title={`mesmo ${anual ? "ano" : "mês"} do ano anterior: ${valor(m, vp)}`}>
                         {pct === null ? "—" : `${pct > 0 ? "▲" : pct < 0 ? "▼" : ""} ${Math.abs(pct).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`}
@@ -298,7 +298,7 @@ export default async function PainelProducao({ params, caminho = "/erp" }: { par
                 <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-gray-200">
                   <div className="h-full rounded-full bg-[#F8540D]" style={{ width: `${Math.min(100, (total(atual, "com") / metaPeriodo) * 100)}%` }} />
                 </div>
-                <p className="mt-1 text-[11px] text-gray-500">Meta de comissão lida da planilha de metas já guardada (corp_meta_comissao: por mês e agrupamento Fiança, Incêndio, Capitalização, Condomínio e Auto). O painel do Corp está com as metas desligadas; esta meta vem de outra fonte e passa a ser editável no ERP. Só vale sem filtro de seguradora, ramo, grupo ou imobiliária.</p>
+                <p className="mt-1 text-xs text-gray-500">Meta de comissão lida da planilha de metas já guardada (corp_meta_comissao: por mês e agrupamento Fiança, Incêndio, Capitalização, Condomínio e Auto). O painel do Corp está com as metas desligadas; esta meta vem de outra fonte e passa a ser editável no ERP. Só vale sem filtro de seguradora, ramo, grupo ou imobiliária.</p>
               </div>
             ) : null}
 
@@ -307,17 +307,17 @@ export default async function PainelProducao({ params, caminho = "/erp" }: { par
               <div className="flex items-center justify-center rounded-lg border border-gray-100 p-3">
                 <Rosca s={atual} m={m} />
                 <div className="ml-4 space-y-1 text-xs text-gray-600">
-                  <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">{aba.unidade}</p>
+                  <p className="text-xs font-medium uppercase tracking-wide text-gray-400">{aba.unidade}</p>
                   {GRUPOS.map((g) => (
-                    <p key={g} className="flex items-center gap-1.5"><i className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: COR[g] }} />{g}: <b className="text-gray-800">{valor(m, atual[g][m])}</b></p>
+                    <p key={g} className="flex items-center gap-1.5"><i className="inline-block h-2.5 w-2.5 rounded-lg" style={{ background: COR[g] }} />{g}: <b className="text-gray-800">{valor(m, atual[g][m])}</b></p>
                   ))}
                 </div>
               </div>
               {/* comparativo */}
               <div className="rounded-lg border border-gray-100 p-3">
                 <div className="flex items-baseline justify-between">
-                  <p className="text-sm font-semibold text-[#01192e]">Comparativo <span className="text-[11px] font-normal text-gray-500">{subtituloComp}</span></p>
-                  <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-gray-600">
+                  <p className="text-sm font-semibold text-[#01192e]">Comparativo <span className="text-xs font-normal text-gray-500">{subtituloComp}</span></p>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-600">
                     {series.map((s) => (
                       <span key={s.rotulo} className="inline-flex items-center gap-1"><i className="inline-block h-0.5 w-4" style={{ background: s.cor }} />{s.rotulo}</span>
                     ))}
@@ -330,10 +330,10 @@ export default async function PainelProducao({ params, caminho = "/erp" }: { par
             {/* demonstrativo */}
             <div className="rounded-lg border border-gray-100 p-3">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <p className="text-sm font-semibold text-[#01192e]">Demonstrativo <span className="text-[11px] font-normal text-gray-500">{anual ? "Últimos 10 Anos" : "Últimos 12 Meses"}</span></p>
-                <div className="flex gap-x-3 text-[10px] text-gray-600">
+                <p className="text-sm font-semibold text-[#01192e]">Demonstrativo <span className="text-xs font-normal text-gray-500">{anual ? "Últimos 10 Anos" : "Últimos 12 Meses"}</span></p>
+                <div className="flex gap-x-3 text-xs text-gray-600">
                   {[...GRUPOS].reverse().map((g) => (
-                    <span key={g} className="inline-flex items-center gap-1"><i className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: COR[g] }} />{g}</span>
+                    <span key={g} className="inline-flex items-center gap-1"><i className="inline-block h-2.5 w-2.5 rounded-lg" style={{ background: COR[g] }} />{g}</span>
                   ))}
                   {m === "com" && dados.meta_ok && !anual && <span className="inline-flex items-center gap-1"><i className="inline-block h-0.5 w-4 border-t-2 border-dashed border-[#F8540D]" />Meta</span>}
                 </div>
@@ -355,7 +355,7 @@ export default async function PainelProducao({ params, caminho = "/erp" }: { par
           </div>
         )}
       </div>
-      <p className="text-[11px] text-gray-500">
+      <p className="text-xs text-gray-500">
         Dados do ERP, atualizados na hora da consulta{dados.gerado_em ? ` (${new Date(dados.gerado_em).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })})` : ""}. Passe o mouse sobre a variação para ver o valor do mesmo período do ano anterior.
       </p>
     </section>
@@ -471,7 +471,7 @@ function PizzaRanking({ titulo, linhas, m, periodo }: { titulo: string; linhas: 
   let acum = 0;
   return (
     <div className="rounded-lg border border-gray-100 p-3">
-      <p className="text-sm font-semibold text-[#01192e]">{titulo} <span className="text-[11px] font-normal text-gray-500">· {periodo}</span></p>
+      <p className="text-sm font-semibold text-[#01192e]">{titulo} <span className="text-xs font-normal text-gray-500">· {periodo}</span></p>
       {t === 0 ? (
         <p className="py-8 text-center text-xs text-gray-500">Sem movimento no período.</p>
       ) : (
@@ -490,7 +490,7 @@ function PizzaRanking({ titulo, linhas, m, periodo }: { titulo: string; linhas: 
           <ul className="space-y-1 text-xs text-gray-600">
             {itens.map((x, i) => (
               <li key={x.nome} className="flex items-center gap-1.5">
-                <i className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: PALETA[i % PALETA.length] }} />
+                <i className="inline-block h-2.5 w-2.5 rounded-lg" style={{ background: PALETA[i % PALETA.length] }} />
                 <span className="w-24 truncate font-medium text-gray-800">{x.nome}</span>
                 <span className="w-12 text-right">{((x.v / t) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%</span>
                 <span className="text-gray-500">{valor(m, x.v)}</span>
@@ -508,7 +508,7 @@ function BarrasProdutores({ linhas, m, periodo }: { linhas: Rank[]; m: Metrica; 
   const max = Math.max(1, ...lista.map((x) => x.v));
   return (
     <div className="rounded-lg border border-gray-100 p-3">
-      <p className="text-sm font-semibold text-[#01192e]">Maiores produtores <span className="text-[11px] font-normal text-gray-500">· {periodo}</span></p>
+      <p className="text-sm font-semibold text-[#01192e]">Maiores produtores <span className="text-xs font-normal text-gray-500">· {periodo}</span></p>
       {!lista.length ? (
         <p className="py-6 text-center text-xs text-gray-500">Sem movimento no período.</p>
       ) : (
@@ -516,8 +516,8 @@ function BarrasProdutores({ linhas, m, periodo }: { linhas: Rank[]; m: Metrica; 
           {lista.map((x) => (
             <li key={x.nome} className="flex items-center gap-2 text-xs">
               <span className="w-64 truncate text-gray-700" title={x.nome}>{x.nome}</span>
-              <div className="h-3 flex-1 rounded-sm bg-gray-100">
-                <div className="h-full rounded-sm bg-[#00447E]" style={{ width: `${(x.v / max) * 100}%` }} />
+              <div className="h-3 flex-1 rounded-lg bg-gray-100">
+                <div className="h-full rounded-lg bg-[#00447E]" style={{ width: `${(x.v / max) * 100}%` }} />
               </div>
               <span className="w-28 text-right font-medium text-gray-800">{valor(m, x.v)}</span>
             </li>

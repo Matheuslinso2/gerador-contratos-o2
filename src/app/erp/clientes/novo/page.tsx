@@ -33,21 +33,21 @@ export default async function NovoClientePage({ searchParams }: { searchParams: 
       {erro && <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{erro.split(" | ").map((e) => <span key={e} className="block">{e}</span>)}</p>}
       <form action={criarCliente} className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
         <RascunhoAutomatico />
-        <label className="block text-[11px] font-medium uppercase tracking-wide text-gray-500">Nome completo ou razão social
+        <label className="block text-xs font-medium uppercase tracking-wide text-gray-500">Nome completo ou razão social
           <input name="nome" required className={input} />
         </label>
-        <label className="block text-[11px] font-medium uppercase tracking-wide text-gray-500">CPF ou CNPJ
+        <label className="block text-xs font-medium uppercase tracking-wide text-gray-500">CPF ou CNPJ
           <input name="documento" required inputMode="numeric" placeholder="somente números ou com pontuação" className={input} />
         </label>
         <div className="grid gap-3 md:grid-cols-2">
-          <label className="block text-[11px] font-medium uppercase tracking-wide text-gray-500">E-mail
+          <label className="block text-xs font-medium uppercase tracking-wide text-gray-500">E-mail
             <input name="email" type="email" className={input} />
           </label>
-          <label className="block text-[11px] font-medium uppercase tracking-wide text-gray-500">Telefone com DDD
+          <label className="block text-xs font-medium uppercase tracking-wide text-gray-500">Telefone com DDD
             <input name="telefone" inputMode="tel" className={input} />
           </label>
         </div>
-        <p className="text-[11px] text-gray-500">Informe ao menos um dos dois: e-mail ou telefone.</p>
+        <p className="text-xs text-gray-500">Informe ao menos um dos dois: e-mail ou telefone.</p>
         <button type="submit" className="rounded-full bg-o2-navy px-5 py-2 text-sm font-semibold text-white hover:opacity-90">Cadastrar cliente</button>
       </form>
     </PaginaErp>

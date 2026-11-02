@@ -257,7 +257,7 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
       </section>
 
       <section className="flex flex-wrap items-center gap-2 text-xs">
-        <span className="text-[11px] uppercase tracking-wide text-gray-500">Dias desde a efetivação:</span>
+        <span className="text-xs uppercase tracking-wide text-gray-500">Dias desde a efetivação:</span>
         <InfoLegenda titulo="Dias desde a efetivação">
           Divide as propostas pendentes do recorte atual (mês ou atraso) pelo tempo desde a efetivação: até 5 dias, 6 a 10, 11 a 15 e mais de 15. O número em cada botão respeita os filtros de produto, tipo, imobiliária, seguradora e origem. Clique para filtrar a lista; clique de novo para limpar.
         </InfoLegenda>
@@ -267,7 +267,7 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
           </Link>
         ))}
         <span className="mx-2 text-gray-300">|</span>
-        <span className="text-[11px] uppercase tracking-wide text-gray-500">Situação / motivo:</span>
+        <span className="text-xs uppercase tracking-wide text-gray-500">Situação / motivo:</span>
         <InfoLegenda titulo="Situação / motivo">
           Por que a proposta ainda não virou apólice, quando há PROVA (e-mail de controle da seguradora, parecer de crédito, cancelamento ou retransmissão). Sem prova aparece "sem informação": nunca é chute. A proposta continua nesta lista até emitir; o motivo só sinaliza para você decidir o que fazer.
         </InfoLegenda>
@@ -277,7 +277,7 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
           </Link>
         ))}
         <span className="mx-2 text-gray-300">|</span>
-        <span className="text-[11px] uppercase tracking-wide text-gray-500">Origem:</span>
+        <span className="text-xs uppercase tracking-wide text-gray-500">Origem:</span>
         <InfoLegenda titulo="Origem">
           Bitrix = proposta que veio de um cartão concluído no Bitrix. Corp = proposta que veio do cadastro do Corp. Todas = as duas na mesma lista.
         </InfoLegenda>
@@ -290,7 +290,7 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
 
       <section className="space-y-2 rounded-xl border border-gray-200 bg-white p-4">
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="text-[11px] uppercase tracking-wide text-gray-500">Situação de prazo:</span>
+          <span className="text-xs uppercase tracking-wide text-gray-500">Situação de prazo:</span>
           <InfoLegenda titulo="Situação de prazo">
             Compara os dias desde a efetivação com o que costuma levar para emitir na MESMA seguradora e produto (cadência real das apólices já emitidas: data de emissão do PDF, e-mail ou Corp menos a data de efetivação). No prazo = até a mediana; atenção = entre a mediana e o percentil 75; atrasada = entre o 75 e o 90; muito atrasada = acima do 90. Sem referência quando há menos de 10 apólices emitidas no grupo (e na seguradora inteira): nunca é chute. Nada sai da lista sozinho.
           </InfoLegenda>
@@ -303,7 +303,7 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
         {porSegPrazo.size > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
-              <thead className="text-left text-[11px] uppercase tracking-wide text-gray-500">
+              <thead className="text-left text-xs uppercase tracking-wide text-gray-500">
                 <tr><th className="px-2 py-1">Seguradora</th><th className="px-2 py-1 text-right">No prazo</th><th className="px-2 py-1 text-right">Atenção</th><th className="px-2 py-1 text-right">Atrasadas</th><th className="px-2 py-1 text-right">Muito atrasadas</th><th className="px-2 py-1 text-right">Sem referência</th></tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -321,7 +321,7 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
             </table>
           </div>
         )}
-        <details className="text-[11px] text-gray-600">
+        <details className="text-xs text-gray-600">
           <summary className="cursor-pointer font-medium text-o2-navy">De onde vem cada referência de prazo ({refsUsadas.size})</summary>
           <p className="mt-1">Dias entre a efetivação e a emissão das apólices já emitidas. Início = “card” (etapa SUCESSO do card no Bitrix) ou “proposta do Corp” (data da proposta). Usa-se a referência da mesma origem da data da proposta pendente. Só vale com n ≥ 10. Calculada em {refsUsadas.size ? formatarData([...refsUsadas.values()][0].calculada_em.slice(0, 10)) : "—"} e recalculada a cada hora junto com a fila.</p>
           <table className="mt-1 w-full">
@@ -351,7 +351,7 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
       ) : (
         <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
           <table className="w-full text-xs">
-            <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+            <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
               <tr>
                 <th className="px-3 py-2">Abrir</th>
                 <th className="px-3 py-2">Tipo de documento</th>
@@ -380,19 +380,19 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
                   <tr key={d.id} className="hover:bg-gray-50">
                     <td className="px-3 py-2"><BotaoVerDocumento id={d.id} /></td>
                     <td className="px-3 py-2">
-                      <span className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-semibold ${tipo.cor}`}>{tipo.nome}</span>
-                      {tipo.detalhe ? <span className="ml-1 text-[10px] text-gray-500">{tipo.detalhe}</span> : null}
-                      {d.tipo === "C" && d.tipo_corp === "END" && !idsComParcela.has(d.id) ? <span className="mt-0.5 block w-fit rounded bg-amber-100 px-1.5 text-[10px] font-medium text-amber-800">parcelas a informar</span> : null}
+                      <span className={`whitespace-nowrap rounded px-1.5 py-0.5 text-xs font-semibold ${tipo.cor}`}>{tipo.nome}</span>
+                      {tipo.detalhe ? <span className="ml-1 text-xs text-gray-500">{tipo.detalhe}</span> : null}
+                      {d.tipo === "C" && d.tipo_corp === "END" && !idsComParcela.has(d.id) ? <span className="mt-0.5 block w-fit rounded bg-amber-100 px-1.5 text-xs font-medium text-amber-800">parcelas a informar</span> : null}
                     </td>
                     <td className="px-3 py-2">
                       {(c?.titular ?? d.cliente) ? <span className="font-medium text-gray-900">{c?.titular ?? d.cliente}</span> : <span className="text-gray-400">titular não ligado</span>}
-                      {c?.inquilino && c.inquilino !== (c.titular ?? d.cliente) ? <span className="block text-[10px] text-gray-500">inquilino: {c.inquilino}</span> : null}
+                      {c?.inquilino && c.inquilino !== (c.titular ?? d.cliente) ? <span className="block text-xs text-gray-500">inquilino: {c.inquilino}</span> : null}
                     </td>
                     <td className="px-3 py-2">{c?.produto_nome ?? d.ramo ?? "—"}</td>
                     <td className="px-3 py-2">{c?.seguradora_nome ?? d.seguradora ?? "—"}</td>
                     <td className="whitespace-nowrap px-3 py-2">{c?.vigencia_inicio || c?.vigencia_fim ? `${formatarData(c?.vigencia_inicio ?? null)} a ${formatarData(c?.vigencia_fim ?? null)}` : formatarData(d.vigencia_inicio)}</td>
-                    <td className="px-3 py-2" title={`data vinda de: ${d.fonte_data}`}>{formatarData(d.data_efetivacao)}<span className="block text-[10px] text-gray-400">{d.fonte_data}</span>{herd ? <span className="block text-[10px] font-medium text-orange-700">herdada de {d.data_efetivacao.slice(5, 7)}/{d.data_efetivacao.slice(0, 4)}</span> : null}</td>
-                    <td className="px-3 py-2 text-right"><span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${corDias(dias)} ${dias > 60 ? "font-bold ring-2 ring-red-500" : ""}`} title={dias > 60 ? "Mais de 60 dias sem virar apólice" : undefined}>{dias}</span></td>
+                    <td className="px-3 py-2" title={`data vinda de: ${d.fonte_data}`}>{formatarData(d.data_efetivacao)}<span className="block text-xs text-gray-400">{d.fonte_data}</span>{herd ? <span className="block text-xs font-medium text-orange-700">herdada de {d.data_efetivacao.slice(5, 7)}/{d.data_efetivacao.slice(0, 4)}</span> : null}</td>
+                    <td className="px-3 py-2 text-right"><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${corDias(dias)} ${dias > 60 ? "font-bold ring-2 ring-red-500" : ""}`} title={dias > 60 ? "Mais de 60 dias sem virar apólice" : undefined}>{dias}</span></td>
                     {(() => {
                       const pz = prazoPorId.get(d.id);
                       const r = pz?.ref ?? null;
@@ -400,18 +400,18 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
                       return (
                         <>
                           <td className="whitespace-nowrap px-3 py-2" title={r ? `Referência: ${r.nivel === "seguradora_produto" ? `${r.seguradora} ${r.produto}` : `${r.seguradora} (todos os produtos)`}, início = ${r.fonte_inicio === "card" ? "card (SUCESSO)" : "proposta do Corp"}, n = ${r.n}, p90 ${r.p90_dias} d` : "Menos de 10 apólices emitidas com esta origem de data: sem referência"}>
-                            {r ? <>{r.mediana_dias} d<span className="text-gray-400"> mediana · {r.p75_dias} d p75</span><span className="block text-[10px] text-gray-400">{r.nivel === "seguradora" ? "da seguradora" : "do produto"} · {r.fonte_inicio === "card" ? "card" : "proposta Corp"} · n {r.n.toLocaleString("pt-BR")}</span></> : <span className="text-gray-400">—</span>}
+                            {r ? <>{r.mediana_dias} d<span className="text-gray-400"> mediana · {r.p75_dias} d p75</span><span className="block text-xs text-gray-400">{r.nivel === "seguradora" ? "da seguradora" : "do produto"} · {r.fonte_inicio === "card" ? "card" : "proposta Corp"} · n {r.n.toLocaleString("pt-BR")}</span></> : <span className="text-gray-400">—</span>}
                           </td>
-                          <td className="px-3 py-2"><span className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-medium ${PRAZOS[k].cor}`}>{PRAZOS[k].rotulo}</span></td>
+                          <td className="px-3 py-2"><span className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium ${PRAZOS[k].cor}`}>{PRAZOS[k].rotulo}</span></td>
                         </>
                       );
                     })()}
                     <td className="px-3 py-2 font-medium">
                       <Link href={`/erp/documentos/${d.id}`} className="text-o2-navy hover:underline">{d.nosso_numero}</Link>
-                      <span className="block text-[10px] font-normal text-gray-400">{d.nosso_numero_corp ? `Corp ${d.nosso_numero_corp}` : "ainda não existe no Corp"}</span>
+                      <span className="block text-xs font-normal text-gray-400">{d.nosso_numero_corp ? `Corp ${d.nosso_numero_corp}` : "ainda não existe no Corp"}</span>
                     </td>
                     <td className="px-3 py-2">
-                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${d.origem === "bitrix" ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-700"}`}>{d.origem === "bitrix" ? "Bitrix" : "Corp"}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${d.origem === "bitrix" ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-700"}`}>{d.origem === "bitrix" ? "Bitrix" : "Corp"}</span>
                     </td>
                     <td className="px-3 py-2">
                       {d.imobiliaria_id ? <Link href={`/admin/imobiliarias/${d.imobiliaria_id}`} className="hover:underline">{d.imobiliaria}</Link> : <span className="text-gray-400">{d.canal_venda ?? "—"}</span>}
@@ -422,9 +422,9 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
                         const ac = acompPorDoc.get(d.id); const mt = MOTIVOS[ac?.motivo ?? "sem_informacao"] ?? MOTIVOS.sem_informacao;
                         return (
                           <span title={ac?.evidencia_resumo ?? undefined}>
-                            <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${mt.cor}`}>{mt.rotulo}</span>
-                            {ac?.confianca === "provavel" && <span className="ml-1 text-[10px] text-orange-700">provável — confirmar</span>}
-                            {ac?.evidencia_resumo && ac.motivo !== "sem_informacao" && <span className="block text-[10px] text-gray-400">{ac.evidencia_resumo}{ac.data_evidencia ? ` · ${formatarData(ac.data_evidencia.slice(0, 10))}` : ""} · nível 5</span>}
+                            <span className={`rounded-full border px-2 py-0.5 text-xs font-medium ${mt.cor}`}>{mt.rotulo}</span>
+                            {ac?.confianca === "provavel" && <span className="ml-1 text-xs text-orange-700">provável — confirmar</span>}
+                            {ac?.evidencia_resumo && ac.motivo !== "sem_informacao" && <span className="block text-xs text-gray-400">{ac.evidencia_resumo}{ac.data_evidencia ? ` · ${formatarData(ac.data_evidencia.slice(0, 10))}` : ""} · nível 5</span>}
                           </span>
                         );
                       })()}
@@ -455,9 +455,9 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
 function Cartao({ titulo, valor, nota, cor = "text-o2-navy", realce = false, info }: { titulo: string; valor: number | undefined; nota?: string; cor?: string; realce?: boolean; info?: ReactNode }) {
   return (
     <div className={`rounded-xl border bg-white p-4 ${realce ? "border-o2-navy ring-1 ring-o2-navy" : "border-gray-200"}`}>
-      <div className="text-[11px] uppercase tracking-wide text-gray-500">{titulo}{info ? <InfoLegenda titulo={titulo}>{info}</InfoLegenda> : null}</div>
+      <div className="text-xs uppercase tracking-wide text-gray-500">{titulo}{info ? <InfoLegenda titulo={titulo}>{info}</InfoLegenda> : null}</div>
       <div className={`mt-1 text-2xl font-semibold ${cor}`}>{valor === undefined ? "—" : valor.toLocaleString("pt-BR")}</div>
-      {nota && <div className="mt-0.5 text-[11px] text-gray-500">{nota}</div>}
+      {nota && <div className="mt-0.5 text-xs text-gray-500">{nota}</div>}
     </div>
   );
 }

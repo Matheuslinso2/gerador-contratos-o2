@@ -33,9 +33,9 @@ export function CartaoErp({ children, className = "" }: { children: ReactNode; c
 export function KpiErp({ nome, valor, detalhe, negativo }: { nome: string; valor: ReactNode; detalhe?: ReactNode; negativo?: boolean }) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-3">
-      <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">{nome}</p>
+      <p className="text-xs font-medium uppercase tracking-wide text-gray-400">{nome}</p>
       <p className={`text-lg font-semibold ${negativo ? "text-red-600" : "text-o2-navy"}`}>{valor}</p>
-      {detalhe ? <p className="text-[11px] text-gray-500">{detalhe}</p> : null}
+      {detalhe ? <p className="text-xs text-gray-500">{detalhe}</p> : null}
     </div>
   );
 }

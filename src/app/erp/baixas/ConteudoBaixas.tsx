@@ -121,7 +121,7 @@ function Chips({ e }: { e: Pick<Extrato, "n_cheia" | "n_pro_labore" | "n_estorno
   return (
     <span className="flex flex-wrap gap-1">
       {itens.filter(([, n]) => Number(n) > 0).map(([k, n]) => (
-        <span key={k} className={`rounded-full px-2 py-0.5 text-[11px] ${CLASSE[k].cor}`}>{CLASSE[k].texto}: <b>{n}</b></span>
+        <span key={k} className={`rounded-full px-2 py-0.5 text-xs ${CLASSE[k].cor}`}>{CLASSE[k].texto}: <b>{n}</b></span>
       ))}
     </span>
   );
@@ -524,7 +524,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
           <>
         <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-sm font-bold uppercase tracking-wide text-o2-navy">Controle mensal de baixa de comissão <span className="ml-1 text-[10px] font-normal normal-case tracking-normal text-gray-400">(fonte: Corp e ERP O2)</span> <InfoLegenda titulo="Controle mensal de baixa de comissão">Mostra, mês a mês e por seguradora, de onde vem o dinheiro: o que deveria cair (pela regra de cada seguradora e pela experiência), o que os extratos dizem que ela pagou, o que já foi baixado no Corp e o que entrou na conta pelo Nibo. Os valores são líquidos do imposto retido, como entram na conta. As duas últimas colunas são diferenças; passam em vermelho quando a diferença é maior que R$ 6. Abre no mês atual e dá para navegar pelos meses.</InfoLegenda></h2>
+            <h2 className="text-sm font-bold uppercase tracking-wide text-o2-navy">Controle mensal de baixa de comissão <span className="ml-1 text-xs font-normal normal-case tracking-normal text-gray-400">(fonte: Corp e ERP O2)</span> <InfoLegenda titulo="Controle mensal de baixa de comissão">Mostra, mês a mês e por seguradora, de onde vem o dinheiro: o que deveria cair (pela regra de cada seguradora e pela experiência), o que os extratos dizem que ela pagou, o que já foi baixado no Corp e o que entrou na conta pelo Nibo. Os valores são líquidos do imposto retido, como entram na conta. As duas últimas colunas são diferenças; passam em vermelho quando a diferença é maior que R$ 6. Abre no mês atual e dá para navegar pelos meses.</InfoLegenda></h2>
             {!usaPeriodo ? (
               <div className="flex items-center gap-2 text-sm" aria-label="Mês">
                 <Link href={hrefTela({ mes: somaMes(mesSel, -12) })} className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-gray-700 hover:bg-gray-50" title="mesmo mês, ano anterior">«</Link>
@@ -544,7 +544,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
           </div>
           <TabelaControle titulo="Consolidado · O2 Corretora + O2 Capitalização (uma linha por seguradora)" info={<InfoLegenda titulo="Quadro consolidado">Junta as duas empresas numa visão só: para cada seguradora, soma o que foi previsto, o que os extratos dizem que foi pago, o que o Corp baixou, o que o ERP baixou e o que entrou no Nibo nas duas empresas. As diferenças são calculadas sobre essas somas. Líquido do imposto retido.</InfoLegenda>} linhas={consolidarQuadros(quadroTopo["O2 Corretora"] ?? [], quadroTopo["O2 Capitalização"] ?? [])} />
           <QuadroOutrasEntradas consolidado={outrasTopo["Consolidado"] ?? []} porEmpresa={{ "O2 Corretora": outrasTopo["O2 Corretora"] ?? [], "O2 Capitalização": outrasTopo["O2 Capitalização"] ?? [] }} />
-          <p className="text-[11px] leading-relaxed text-gray-500">
+          <p className="text-xs leading-relaxed text-gray-500">
             Valores líquidos do imposto retido, como entram na conta. <b>Prevista (regra)</b>: o que deveria cair no mês pela regra de cada seguradora (boleto, fatura ou nota fiscal + o prazo próprio dela), sem atraso nem inadimplência. <b>Prevista (experiência)</b>: vencimento da parcela + o prazo que a seguradora costuma levar, pelo histórico.
             <b> Extratos de comissão</b>: o que a seguradora pagou segundo os extratos lidos. <b>Baixadas</b>: o que já foi baixado no Corp no mês (data da quitação). <b>Nibo</b>: o que entrou na conta (receita de seguros).
             <b> Diferença extratos × baixadas</b> = Extratos − Baixadas: o que a seguradora pagou e ainda não foi baixado (negativo: baixado a mais). <b>Diferença extratos × Nibo</b> = Extratos − Nibo: o que a seguradora diz que pagou e não entrou na conta (negativo: entrou mais do que os extratos explicam). Até R$ {TOLERANCIA_CAIXA} é considerado igual.
@@ -552,7 +552,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
         </section>
 
         <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-o2-navy">Comportamento diário de comissões <span className="ml-1 text-[10px] font-normal normal-case tracking-normal text-gray-400">(previsão × recebido, por vencimento da parcela)</span> <InfoLegenda titulo="Comportamento diário de comissões">Para cada dia do mês, três barras: a comissão que deveria cair pela regra da seguradora (boleto, fatura ou nota fiscal mais o prazo próprio dela, sem atraso nem inadimplência), a que deveria cair pela experiência (vencimento da parcela mais o prazo que a seguradora costuma levar, pelo histórico) e o que realmente entrou na conta pelo Nibo. Fim de semana conta na segunda-feira. A escala é por faixas de valor. O quadro consolidado soma as duas empresas.</InfoLegenda></h2>
+          <h2 className="text-sm font-bold uppercase tracking-wide text-o2-navy">Comportamento diário de comissões <span className="ml-1 text-xs font-normal normal-case tracking-normal text-gray-400">(previsão × recebido, por vencimento da parcela)</span> <InfoLegenda titulo="Comportamento diário de comissões">Para cada dia do mês, três barras: a comissão que deveria cair pela regra da seguradora (boleto, fatura ou nota fiscal mais o prazo próprio dela, sem atraso nem inadimplência), a que deveria cair pela experiência (vencimento da parcela mais o prazo que a seguradora costuma levar, pelo histórico) e o que realmente entrou na conta pelo Nibo. Fim de semana conta na segunda-feira. A escala é por faixas de valor. O quadro consolidado soma as duas empresas.</InfoLegenda></h2>
           <GraficoDiario titulo="Consolidado · O2 Corretora + O2 Capitalização" pontos={consolidarDias(graficoTopo["O2 Corretora"] ?? [], graficoTopo["O2 Capitalização"] ?? [])} />
           <details className="rounded-lg border border-gray-200">
             <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-o2-navy">Ver o comportamento diário de cada empresa separadamente</summary>
@@ -561,7 +561,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
               <GraficoDiario titulo="o2 Capitalização e Seguros" pontos={graficoTopo["O2 Capitalização"] ?? []} />
             </div>
           </details>
-          <p className="text-[11px] leading-relaxed text-gray-500">
+          <p className="text-xs leading-relaxed text-gray-500">
             <b>Prevista (regra)</b>: comissão que deveria cair naquele dia pela regra da seguradora (boleto, fatura ou nota fiscal + o prazo próprio dela), sem atraso nem inadimplência. <b>Prevista (experiência)</b>: vencimento da parcela + o prazo que a seguradora costuma levar. Todas as seguradoras e produtos, líquido do imposto retido. <b>Recebido no dia</b>: o que entrou na conta naquele dia (Nibo, receita de seguros).
             O previsto marca o vencimento; as seguradoras costumam pagar alguns dias depois, por isso os picos não coincidem. A escala é por faixas de valor.
           </p>
@@ -613,7 +613,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
             <p className="text-xs text-gray-600">Toda linha de extrato é parcela até se provar o contrário. Enquanto não for identificada (ou confirmada como não-parcela), o valor conta como recebido, ainda sem parcela.</p>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
-                <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500"><tr><th className="px-2 py-1">Empresa</th><th className="px-2 py-1">Seguradora</th><th className="px-2 py-1 text-right">Linhas</th><th className="px-2 py-1 text-right">Valor</th><th className="px-2 py-1 text-right">Mais antiga (dias)</th></tr></thead>
+                <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500"><tr><th className="px-2 py-1">Empresa</th><th className="px-2 py-1">Seguradora</th><th className="px-2 py-1 text-right">Linhas</th><th className="px-2 py-1 text-right">Valor</th><th className="px-2 py-1 text-right">Mais antiga (dias)</th></tr></thead>
                 <tbody className="divide-y divide-gray-100">
                   {Object.entries(pendentesLinhas.reduce<Record<string, { corretora: string; seg: string; qtd: number; valor: number; idade: number }>>((acc, l) => {
                     const k = `${l.corretora}|${l.seguradora_abrev}`;
@@ -630,7 +630,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
               <summary className="cursor-pointer text-xs text-o2-navy underline">ver as {Math.min(pendentesLinhas.length, 40)} linhas mais antigas</summary>
               <div className="mt-2 max-h-[320px] overflow-auto">
                 <table className="w-full text-xs">
-                  <thead className="sticky top-0 bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500"><tr><th className="px-2 py-1">Crédito</th><th className="px-2 py-1">Empresa · seguradora</th><th className="px-2 py-1">Extrato</th><th className="px-2 py-1">Nº da apólice</th><th className="px-2 py-1 text-right">Valor</th><th className="px-2 py-1 text-right">Dias</th><th className="px-2 py-1">Candidato</th></tr></thead>
+                  <thead className="sticky top-0 bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500"><tr><th className="px-2 py-1">Crédito</th><th className="px-2 py-1">Empresa · seguradora</th><th className="px-2 py-1">Extrato</th><th className="px-2 py-1">Nº da apólice</th><th className="px-2 py-1 text-right">Valor</th><th className="px-2 py-1 text-right">Dias</th><th className="px-2 py-1">Candidato</th></tr></thead>
                   <tbody className="divide-y divide-gray-100">
                     {pendentesLinhas.slice(0, 40).map((l) => (
                       <tr key={l.linha_id}>
@@ -656,7 +656,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
             <p className="text-xs text-gray-600">Endosso que existe no extrato da seguradora e não está cadastrado na apólice: o estorno ou o endosso precisa ser lançado no ERP (e no Corp, enquanto ele existir) para não perder a baixa nem o repasse.</p>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
-                <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500"><tr><th className="px-2 py-1">Seguradora</th><th className="px-2 py-1">Empresa</th><th className="px-2 py-1">Nº da apólice</th><th className="px-2 py-1">Nº do endosso</th><th className="px-2 py-1">Cliente</th><th className="px-2 py-1">O que apareceu</th><th className="px-2 py-1 text-right">Comissão</th><th className="px-2 py-1">Extrato</th><th className="px-2 py-1">Situação</th></tr></thead>
+                <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500"><tr><th className="px-2 py-1">Seguradora</th><th className="px-2 py-1">Empresa</th><th className="px-2 py-1">Nº da apólice</th><th className="px-2 py-1">Nº do endosso</th><th className="px-2 py-1">Cliente</th><th className="px-2 py-1">O que apareceu</th><th className="px-2 py-1 text-right">Comissão</th><th className="px-2 py-1">Extrato</th><th className="px-2 py-1">Situação</th></tr></thead>
                 <tbody className="divide-y divide-gray-100">
                   {endossosPendentes.slice(0, 80).map((x, i) => (
                     <tr key={i}>
@@ -668,13 +668,13 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
                       <td className="px-2 py-1">{x.tipo_linha}</td>
                       <td className="px-2 py-1 text-right">{x.comissao == null ? "—" : brl(Number(x.comissao))}</td>
                       <td className="whitespace-nowrap px-2 py-1">{formatarData(x.ultima_data)}</td>
-                      <td className="px-2 py-1">{x.em_emissao ? <span className="mr-1 rounded bg-sky-100 px-1 text-[10px] text-sky-800" title="A apólice já tem um endosso pedido pela O2 aguardando emissão; falta ligar ao que apareceu no extrato">pedido da O2 em Emissão</span> : null}{x.situacao === "conferir" ? <span className="mr-1 rounded bg-amber-100 px-1 text-[10px] text-amber-800" title="O valor bate com um endosso cadastrado, mas o número do endosso é diferente: confira se é o mesmo">conferir: valor igual, número diferente</span> : null}{x.motivo}{x.qtd_endossos_erp > 0 ? <span className="ml-1 text-[10px] text-gray-500">({x.qtd_endossos_erp} endosso(s) cadastrado(s) na apólice)</span> : null}{x.no_corp ? <span className="ml-1 rounded bg-blue-100 px-1 text-[10px] text-blue-800">já está no Corp</span> : null}</td>
+                      <td className="px-2 py-1">{x.em_emissao ? <span className="mr-1 rounded bg-sky-100 px-1 text-xs text-sky-800" title="A apólice já tem um endosso pedido pela O2 aguardando emissão; falta ligar ao que apareceu no extrato">pedido da O2 em Emissão</span> : null}{x.situacao === "conferir" ? <span className="mr-1 rounded bg-amber-100 px-1 text-xs text-amber-800" title="O valor bate com um endosso cadastrado, mas o número do endosso é diferente: confira se é o mesmo">conferir: valor igual, número diferente</span> : null}{x.motivo}{x.qtd_endossos_erp > 0 ? <span className="ml-1 text-xs text-gray-500">({x.qtd_endossos_erp} endosso(s) cadastrado(s) na apólice)</span> : null}{x.no_corp ? <span className="ml-1 rounded bg-blue-100 px-1 text-xs text-blue-800">já está no Corp</span> : null}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            {endossosPendentes.length > 80 && <p className="text-[11px] text-gray-500">Mostrando 80 de {endossosPendentes.length}.</p>}
+            {endossosPendentes.length > 80 && <p className="text-xs text-gray-500">Mostrando 80 de {endossosPendentes.length}.</p>}
           </section>
         )}
 
@@ -693,7 +693,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
             ) : (
               <div className="max-h-[420px] overflow-auto">
                 <table className="w-full text-xs">
-                  <thead className="sticky top-0 bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+                  <thead className="sticky top-0 bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
                     <tr>
                       <th className="px-2 py-1">Extrato</th>
                       <th className="px-2 py-1">Classificação</th>
@@ -755,7 +755,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
           </p>
           <div className="overflow-x-auto">
             <div className="min-w-[980px] space-y-1">
-              <div className={`${COLUNAS_CAIXA} px-2 py-1 text-[11px] uppercase tracking-wide text-gray-500`}>
+              <div className={`${COLUNAS_CAIXA} px-2 py-1 text-xs uppercase tracking-wide text-gray-500`}>
                 <span>Seguradora</span><span>Extratos</span>
                 <span className="text-right">Pagou (extrato)</span><span className="text-right" title="Comissão que deveria cair no mês conforme a experiência de cada seguradora: vencimento da parcela + o prazo que ela costuma levar">Deveria cair (experiência)</span>
                 <span className="text-right">Recebemos (Nibo)</span><span className="text-right">Diferença</span><span className="text-right">A baixar</span><span>Situação</span>
@@ -776,7 +776,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
                     <summary className={`${COLUNAS_CAIXA} cursor-pointer list-none px-2 py-1.5 text-xs hover:bg-gray-50`}>
                       <span className="min-w-0">
                         <span className="block font-medium">{c.segNome}</span>
-                        {c.motivos[0] && c.sit.codigo !== "bate" && <span className="block truncate text-[11px] font-normal text-gray-500" title={c.motivos.join(" ")}>{c.motivos[0]}</span>}
+                        {c.motivos[0] && c.sit.codigo !== "bate" && <span className="block truncate text-xs font-normal text-gray-500" title={c.motivos.join(" ")}>{c.motivos[0]}</span>}
                       </span>
                       <span className="text-gray-600" title="extratos com baixa aprovada / extratos do mês">{c.m ? `${c.m.aprovados}/${c.m.extratos - c.m.so_total}` : "—"}</span>
                       <span className="text-right">{c.esperado != null ? brl(c.esperado) : "—"}</span>
@@ -785,19 +785,19 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
                       <span className={`text-right ${dif != null && Math.abs(dif) > TOLERANCIA_CAIXA ? "font-semibold text-red-700" : "text-gray-500"}`}>{dif != null ? brl(dif) : "—"}</span>
                       <span className="text-right">{c.m && !soTotal ? brl(c.m.valor_a_baixar) : "—"}</span>
                       <span className="flex items-center gap-1">
-                        <span className={`rounded-full px-2 py-0.5 text-[11px] ${c.sit.cor}`}>{c.sit.texto}</span>
+                        <span className={`rounded-full px-2 py-0.5 text-xs ${c.sit.cor}`}>{c.sit.texto}</span>
                         <span className="text-gray-400 group-open:rotate-90">▸</span>
                       </span>
                     </summary>
                     {c.motivos.length > 0 && (
                       <div className="border-t border-gray-100 bg-amber-50/50 px-3 py-2 text-xs">
-                        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Motivo provável <InfoLegenda titulo="Motivo provável">Hipóteses para a diferença deste mês, montadas a partir dos dados: desconto da seguradora, pró-labore pago direto à imobiliária, estornos, nota fiscal ainda não registrada, extrato sem banco, valores diferentes. São pistas para investigar, não conclusões.</InfoLegenda></h3>
+                        <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Motivo provável <InfoLegenda titulo="Motivo provável">Hipóteses para a diferença deste mês, montadas a partir dos dados: desconto da seguradora, pró-labore pago direto à imobiliária, estornos, nota fiscal ainda não registrada, extrato sem banco, valores diferentes. São pistas para investigar, não conclusões.</InfoLegenda></h3>
                         <ul className="mt-1 list-disc space-y-0.5 pl-4 text-gray-700">{c.motivos.map((t, i) => <li key={i}>{t}</li>)}</ul>
                       </div>
                     )}
                     {c.conf && (
                       <div className="space-y-1 border-t border-gray-100 px-3 py-2 text-xs">
-                        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Inadimplência avisada pela seguradora <InfoLegenda titulo="Inadimplência avisada pela seguradora">Parcelas que a própria seguradora avisou, por e-mail ou relatório, que o cliente não pagou. Parcela em aberto não gera comissão nem repasse até o cliente pagar. Passa a regularizada quando aparece depois em um extrato ou é baixada no Corp.</InfoLegenda></h3>
+                        <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Inadimplência avisada pela seguradora <InfoLegenda titulo="Inadimplência avisada pela seguradora">Parcelas que a própria seguradora avisou, por e-mail ou relatório, que o cliente não pagou. Parcela em aberto não gera comissão nem repasse até o cliente pagar. Passa a regularizada quando aparece depois em um extrato ou é baixada no Corp.</InfoLegenda></h3>
                         <p className="text-gray-700">
                           <b>{c.conf.abertas}</b> parcela(s) em aberto (<b>{brl(c.conf.valor)}</b> de prêmio) nos relatórios/e-mails de cobrança desta seguradora
                           {c.conf.regularizadas > 0 && <>; {c.conf.regularizadas} já regularizada(s) (apareceram depois em extrato)</>}.
@@ -806,7 +806,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
                         {c.conf.abertas > 0 && <Link href={`${hrefTela({ inad: c.seg, inadEmp: c.corretora, detalhe: "1" })}#conf-${c.seg}`} className="text-o2-navy underline">ver as parcelas avisadas</Link>}
                         {sp.inad === c.seg && (!sp.inadEmp || sp.inadEmp === c.corretora) && confLinhas.length > 0 && (
                           <div id={`conf-${c.seg}`} className="max-h-[320px] overflow-auto rounded border border-gray-200">
-                            <table className="w-full text-[11px]">
+                            <table className="w-full text-xs">
                               <thead className="sticky top-0 bg-gray-50 text-left uppercase tracking-wide text-gray-500">
                                 <tr><th className="px-2 py-1">Nosso nº do Corp</th><th className="px-2 py-1">Nº da apólice</th><th className="px-2 py-1">Cliente</th><th className="px-2 py-1">Parcela</th><th className="px-2 py-1">Vencimento</th><th className="px-2 py-1 text-right">Dias</th><th className="px-2 py-1 text-right">Prêmio</th><th className="px-2 py-1">Cancela em</th><th className="px-2 py-1">Situação</th></tr>
                               </thead>
@@ -832,7 +832,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
                     )}
                     {c.inad && (
                       <div className="space-y-1 border-t border-gray-100 px-3 py-2 text-xs">
-                        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Provável inadimplência <span className="ml-1 text-[10px] font-normal normal-case tracking-normal text-gray-400">(fonte: extrato)</span> <InfoLegenda titulo="Provável inadimplência">Parcelas cuja data prevista pela regra da seguradora já passou e que não aparecem em nenhum extrato nem foram baixadas. O cliente que paga em dia gera a comissão na data da regra; parcela não paga não cai depois. Mesmo com a comissão do esgotamento já recebida, a parcela continua esperada. Só conclui quando o extrato da seguradora está ligado às parcelas e confere com o banco.</InfoLegenda></h3>
+                        <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Provável inadimplência <span className="ml-1 text-xs font-normal normal-case tracking-normal text-gray-400">(fonte: extrato)</span> <InfoLegenda titulo="Provável inadimplência">Parcelas cuja data prevista pela regra da seguradora já passou e que não aparecem em nenhum extrato nem foram baixadas. O cliente que paga em dia gera a comissão na data da regra; parcela não paga não cai depois. Mesmo com a comissão do esgotamento já recebida, a parcela continua esperada. Só conclui quando o extrato da seguradora está ligado às parcelas e confere com o banco.</InfoLegenda></h3>
                         {c.inad.conclusivo ? (
                           <>
                             <p className="text-gray-700">
@@ -850,7 +850,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
                         {sp.inad === c.seg && (!sp.inadEmp || sp.inadEmp === c.corretora) && erroListaInad && <p className="text-red-700">Não consegui carregar a lista: {erroListaInad}</p>}
                         {c.inad.conclusivo && sp.inad === c.seg && (!sp.inadEmp || sp.inadEmp === c.corretora) && inadLinhas.length > 0 && (
                           <div id={`inad-${c.seg}`} className="max-h-[320px] overflow-auto rounded border border-gray-200">
-                            <table className="w-full text-[11px]">
+                            <table className="w-full text-xs">
                               <thead className="sticky top-0 bg-gray-50 text-left uppercase tracking-wide text-gray-500">
                                 <tr><th className="px-2 py-1">Nosso nº do Corp</th><th className="px-2 py-1">Nº da apólice</th><th className="px-2 py-1">Cliente</th><th className="px-2 py-1">Parcela</th><th className="px-2 py-1">Vencimento</th><th className="px-2 py-1 text-right">Dias</th><th className="px-2 py-1 text-right">Comissão</th></tr>
                               </thead>
@@ -874,7 +874,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
                     )}
                     <div className="grid gap-4 border-t border-gray-100 p-3 text-xs md:grid-cols-[minmax(220px,1fr)_2fr]">
                       <div className="space-y-1">
-                        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Do extrato <InfoLegenda titulo="Do extrato">Resumo dos extratos lidos desta seguradora no mês: valor bruto, imposto retido, desconto que a seguradora faz do que paga (como o empréstimo da Porto), líquido, quantos extratos já foram aprovados e se a soma das linhas fecha com o total. Em seguida, quanto deveria cair pela experiência e as parcelas que vencem no mês.</InfoLegenda></h3>
+                        <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Do extrato <InfoLegenda titulo="Do extrato">Resumo dos extratos lidos desta seguradora no mês: valor bruto, imposto retido, desconto que a seguradora faz do que paga (como o empréstimo da Porto), líquido, quantos extratos já foram aprovados e se a soma das linhas fecha com o total. Em seguida, quanto deveria cair pela experiência e as parcelas que vencem no mês.</InfoLegenda></h3>
                         {c.m ? (
                           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
                             <dt className="text-gray-500">Bruto</dt><dd className="text-right">{brl(c.m.bruto)}</dd>
@@ -894,20 +894,20 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
                           </dl>
                         )}
                         {c.previsto != null && ["TOKI", "YELU"].includes(c.seg) && (
-                          <p className="rounded bg-yellow-50 px-2 py-1 text-[11px] text-yellow-800">Nesta seguradora o previsto costuma ficar acima do caixa: parte da comissão vai direto à imobiliária (pró-labore) e ainda não está descontada do previsto.</p>
+                          <p className="rounded bg-yellow-50 px-2 py-1 text-xs text-yellow-800">Nesta seguradora o previsto costuma ficar acima do caixa: parte da comissão vai direto à imobiliária (pró-labore) e ainda não está descontada do previsto.</p>
                         )}
                         {c.m && <div className="pt-1"><Chips e={c.m} /></div>}
-                        {c.m && <p className="pt-1 text-[11px] text-gray-500">Os extratos e as linhas estão logo abaixo, em “Extratos desta seguradora no mês” ().</p>}
+                        {c.m && <p className="pt-1 text-xs text-gray-500">Os extratos e as linhas estão logo abaixo, em “Extratos desta seguradora no mês” ().</p>}
                       </div>
                       <div className="space-y-1">
-                        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                        <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                           Banco × extrato, dia a dia <InfoLegenda titulo="Banco × extrato, dia a dia">Compara, dia a dia, o que entrou no Nibo com o que os extratos desta seguradora pagaram. Fim de semana e feriado contam no próximo dia útil. Diferença de até R$ 6 é considerada igual. Os dias que batem ficam recolhidos.</InfoLegenda>{c.dias.length ? ` · ${c.dias.length - ruins.length} de ${c.dias.length} dia(s) batem` : ""}
                         </h3>
                         {ruins.length === 0 ? (
                           <p className="text-green-700">{c.dias.length ? "Todos os dias batem." : "Sem pagamentos no período."}</p>
                         ) : (
                           <table className="w-full">
-                            <thead className="text-left text-[11px] uppercase tracking-wide text-gray-500">
+                            <thead className="text-left text-xs uppercase tracking-wide text-gray-500">
                               <tr><th className="px-1 py-0.5">Dia</th><th className="px-1 py-0.5 text-right">Banco</th><th className="px-1 py-0.5 text-right">Extrato</th><th className="px-1 py-0.5 text-right">Diferença</th><th className="px-1 py-0.5">Leitura</th></tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
@@ -925,7 +925,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
                         )}
                         {c.dias.length > ruins.length && ruins.length > 0 && (
                           <details className="pt-1">
-                            <summary className="cursor-pointer text-[11px] text-o2-navy underline">ver também os {c.dias.length - ruins.length} dia(s) que batem</summary>
+                            <summary className="cursor-pointer text-xs text-o2-navy underline">ver também os {c.dias.length - ruins.length} dia(s) que batem</summary>
                             <table className="mt-1 w-full">
                               <tbody className="divide-y divide-gray-100">
                                 {c.dias.filter((d) => Math.abs(d.dif) <= TOLERANCIA_CAIXA).map((d) => (
@@ -981,7 +981,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
                           <PainelControleBloco seg={c.seg} corretora={c.corretora} mes={mesSel} ancora={`bloco-${c.chave.replace(/\W/g, "")}`} />
                         </Suspense>
                         <div className="space-y-2 border-t border-gray-100 p-3">
-                          <h4 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Extratos da seguradora no mês <InfoLegenda titulo="Extratos desta seguradora">Cada extrato lido da seguradora neste mês. Acima de cada um, uma faixa com a conferência do banco, as linhas sem parcela e a comparação entre o que o ERP baixou e o que o Corp baixou (trilha de teste). Abra as linhas para conferir parcela a parcela e aprove a baixa quando estiver certo.</InfoLegenda></h4>
+                          <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Extratos da seguradora no mês <InfoLegenda titulo="Extratos desta seguradora">Cada extrato lido da seguradora neste mês. Acima de cada um, uma faixa com a conferência do banco, as linhas sem parcela e a comparação entre o que o ERP baixou e o que o Corp baixou (trilha de teste). Abra as linhas para conferir parcela a parcela e aprove a baixa quando estiver certo.</InfoLegenda></h4>
                           {extratos.filter((e) => e.corretora === c.corretora && e.seg_abrev === c.seg).sort((a, b) => Number(Boolean(a.baixa_aprovada_em)) - Number(Boolean(b.baixa_aprovada_em))).map((e) => {
                             const { situacao: banco, dia: bancoDia } = bancoDoExtrato(c.dias, e.data_recebimento);
                             const auto = avaliarBaixaAutomatica(e, banco, Number(totaisPor.get(e.id)?.qtd_pendente ?? 0));
@@ -1017,7 +1017,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
-                <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+                <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
                   <tr>
                     <th className="px-2 py-1">Classificação</th>
                     <th className="px-2 py-1">Seg.</th>
@@ -1140,12 +1140,12 @@ function ExtratoCard({ e, linhas, aberto, base, tot, estados }: { e: Extrato; li
           </p>
         ) : (
           <>
-          {quandoBaixar(e) && <p className="rounded bg-yellow-50 px-2 py-1 text-[11px] text-yellow-800">{quandoBaixar(e)}</p>}
+          {quandoBaixar(e) && <p className="rounded bg-yellow-50 px-2 py-1 text-xs text-yellow-800">{quandoBaixar(e)}</p>}
           <form action={aprovarBaixa} className="flex items-center gap-3">
             <input type="hidden" name="extrato_id" value={e.id} />
             <button className="rounded-lg bg-o2-coral px-3 py-1.5 text-xs font-semibold text-white">Aprovar baixa</button>
-            {temPendente && <span className="text-[11px] font-medium text-red-700">{tot?.qtd_pendente} linha(s) pendente(s) de identificação ({brl(Number(tot?.soma_pendente_sem_parcela ?? 0))}).</span>}
-            <span className="text-[11px] text-gray-500">
+            {temPendente && <span className="text-xs font-medium text-red-700">{tot?.qtd_pendente} linha(s) pendente(s) de identificação ({brl(Number(tot?.soma_pendente_sem_parcela ?? 0))}).</span>}
+            <span className="text-xs text-gray-500">
               Grava {e.n_cheia + e.n_pro_labore} recebimento(s) ({brl(e.valor_a_baixar)}) no ERP e quita as parcelas; {e.n_estorno + e.n_divergente + e.n_nao_encontrada} linha(s) vão para “Para tratar”.
             </span>
           </form>
@@ -1154,7 +1154,7 @@ function ExtratoCard({ e, linhas, aberto, base, tot, estados }: { e: Extrato; li
         {aberto && (
         <div className="max-h-[360px] overflow-auto">
           <table className="w-full text-xs">
-            <thead className="sticky top-0 bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+            <thead className="sticky top-0 bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
               <tr>
                 <th className="px-2 py-1">#</th>
                 <th className="px-2 py-1">Classificação</th>
@@ -1175,7 +1175,7 @@ function ExtratoCard({ e, linhas, aberto, base, tot, estados }: { e: Extrato; li
                 <tr key={l.id}>
                   <td className="px-2 py-1 text-gray-400">{l.n}</td>
                   <td className="px-2 py-1"><span className={`rounded-full px-2 py-0.5 ${CLASSE[l.conferencia ?? ""]?.cor ?? "bg-gray-100"}`}>{CLASSE[l.conferencia ?? ""]?.texto ?? "—"}</span></td>
-                  <td className="px-2 py-1">{(() => { const st = estados?.get(l.id); if (!st) return <span className="text-gray-300">—</span>; const x = ESTADO_LINHA[st.estado]; return <><span className={`rounded-full px-2 py-0.5 text-[11px] ${x?.cor ?? "bg-gray-100"}`}>{x?.t ?? st.estado}</span>{st.estado === "pendente_identificacao" && st.idade_dias != null && <div className="text-[10px] text-gray-500">{st.idade_dias} dia(s){st.candidato_imobiliaria ? ` · talvez ${st.candidato_imobiliaria}` : ""}</div>}{st.estado === "nao_parcela_confirmada" && st.fora_tipo && <div className="text-[10px] text-gray-500">{st.fora_tipo}</div>}</>; })()}</td>
+                  <td className="px-2 py-1">{(() => { const st = estados?.get(l.id); if (!st) return <span className="text-gray-300">—</span>; const x = ESTADO_LINHA[st.estado]; return <><span className={`rounded-full px-2 py-0.5 text-xs ${x?.cor ?? "bg-gray-100"}`}>{x?.t ?? st.estado}</span>{st.estado === "pendente_identificacao" && st.idade_dias != null && <div className="text-xs text-gray-500">{st.idade_dias} dia(s){st.candidato_imobiliaria ? ` · talvez ${st.candidato_imobiliaria}` : ""}</div>}{st.estado === "nao_parcela_confirmada" && st.fora_tipo && <div className="text-xs text-gray-500">{st.fora_tipo}</div>}</>; })()}</td>
                   <td className="px-2 py-1">{l.documento_id ? <Link href={`/erp/documentos/${l.documento_id}`} className="text-o2-navy hover:underline">{l.documento?.nosso_numero_corp ?? "ver"}</Link> : "—"}</td>
                   <td className="px-2 py-1">{l.apolice}</td>
                   <td className="px-2 py-1">{l.parcela ?? "—"}</td>
@@ -1231,9 +1231,9 @@ const COR_ORIGEM = {
 } as const;
 
 function LegendaOrigem() {
-  const chip = (cls: string, txt: string) => <span className="flex items-center gap-1"><span className={`inline-block h-3 w-3 rounded-sm ring-1 ring-gray-300 ${cls}`} />{txt}</span>;
+  const chip = (cls: string, txt: string) => <span className="flex items-center gap-1"><span className={`inline-block h-3 w-3 rounded-lg ring-1 ring-gray-300 ${cls}`} />{txt}</span>;
   return (
-    <div className="flex flex-wrap items-center gap-3 px-3 py-1.5 text-[10px] text-gray-600">
+    <div className="flex flex-wrap items-center gap-3 px-3 py-1.5 text-xs text-gray-600">
       {chip("bg-sky-100", "ERP")}{chip("bg-amber-100", "Corp")}{chip("bg-emerald-200", "Previsão")}{chip("bg-gray-100", "Extrato / banco")}
     </div>
   );
@@ -1254,9 +1254,9 @@ function TabelaControle({ titulo, linhas, info }: { titulo: string; linhas: Linh
   );
   return (
     <div className="overflow-x-auto rounded-lg border border-gray-300">
-      <table className="w-full text-[11px]">
-        <caption className="text-left"><div className="bg-o2-navy px-3 py-2 text-sm font-bold text-white">{titulo} <span className="text-[10px] font-normal opacity-80">(valores em R$)</span> {info}</div><LegendaOrigem /></caption>
-        <thead className="bg-gray-100 text-[11px] uppercase tracking-wide text-gray-600">
+      <table className="w-full text-xs">
+        <caption className="text-left"><div className="bg-o2-navy px-3 py-2 text-sm font-bold text-white">{titulo} <span className="text-xs font-normal opacity-80">(valores em R$)</span> {info}</div><LegendaOrigem /></caption>
+        <thead className="bg-gray-100 text-xs uppercase tracking-wide text-gray-600">
           <tr>
             <th className="px-2 py-1.5 text-left font-semibold">Seguradora</th>
             <th className={`${th} ${COR_ORIGEM.regra.th}`} title="Comissão que deveria cair no mês pela REGRA da seguradora (boleto/fatura/nota fiscal + o prazo próprio dela), sem atraso nem inadimplência. Seguradora sem regra usa a experiência.">Prevista<br />(regra)</th>
@@ -1346,7 +1346,7 @@ function QuadroOutrasEntradas({ consolidado, porEmpresa }: { consolidado: OutraE
               {consolidado.map((o) => (
                 <tr key={o.classe}>
                   <td className="px-2 py-1 font-medium">{ROTULO_ENTRADA[o.classe] ?? o.classe}</td>
-                  <td className="px-2 py-1">{o.eReceita ? <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700">receita</span> : !o.naSoma ? <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">fora da soma</span> : <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-600">não é receita</span>}</td>
+                  <td className="px-2 py-1">{o.eReceita ? <span className="rounded bg-violet-100 px-1.5 py-0.5 text-xs font-semibold text-violet-700">receita</span> : !o.naSoma ? <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-700">fora da soma</span> : <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-semibold text-gray-600">não é receita</span>}</td>
                   <td className="px-2 py-1 text-right">{brl(valorDe(porEmpresa["O2 Corretora"], o.classe)?.valor ?? 0)}</td>
                   <td className="px-2 py-1 text-right">{brl(valorDe(porEmpresa["O2 Capitalização"], o.classe)?.valor ?? 0)}</td>
                   <td className="px-2 py-1 text-right font-semibold">{brl(o.valor)}</td>
@@ -1394,11 +1394,11 @@ function GraficoDiario({ titulo, pontos }: { titulo: string; pontos: PontoDia[] 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-bold text-o2-navy">{titulo} <InfoLegenda titulo="Gráfico diário">Três barras por dia: o que deveria cair pela regra da seguradora (sem atraso nem inadimplência), o que deveria cair pela experiência (vencimento mais o prazo que a seguradora costuma levar) e o que entrou na conta pelo Nibo. Valores líquidos do imposto retido; a escala é por faixas de valor e a tabela embaixo traz os números de cada dia.</InfoLegenda></h3>
         <div className="flex items-center gap-4 text-xs text-gray-600">
-          <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-emerald-700" /> Prevista (regra)</span>
-          <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-emerald-300" /> Prevista (experiência)</span>
-          <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-sky-500" /> Recebido no dia</span>
-          <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-violet-500" /> Outras receitas (fora do seguro)</span>
-          <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-gray-400" /> Entrou na conta, não é receita</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-lg bg-emerald-700" /> Prevista (regra)</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-lg bg-emerald-300" /> Prevista (experiência)</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-lg bg-sky-500" /> Recebido no dia</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-lg bg-violet-500" /> Outras receitas (fora do seguro)</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-lg bg-gray-400" /> Entrou na conta, não é receita</span>
         </div>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label={`Prevista pela regra, prevista pela experiência e recebida no dia — ${titulo}`}>
@@ -1448,7 +1448,7 @@ function GraficoDiario({ titulo, pontos }: { titulo: string; pontos: PontoDia[] 
         })}
       </svg>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1000px] text-[10px]">
+        <table className="w-full min-w-[1000px] text-xs">
           <thead className="text-gray-500">
             <tr>
               <th className="px-1 py-0.5 text-left font-semibold">Dia</th>
@@ -1492,9 +1492,9 @@ function GraficoDiario({ titulo, pontos }: { titulo: string; pontos: PontoDia[] 
 function Cartao({ rotulo, valor, sub, cor, info }: { rotulo: string; valor: number | string; sub: string; cor: string; info?: ReactNode }) {
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-3">
-      <div className="text-[10px] font-medium uppercase tracking-wide text-gray-500">{rotulo}{info ? <InfoLegenda titulo={rotulo}>{info}</InfoLegenda> : null}</div>
+      <div className="text-xs font-medium uppercase tracking-wide text-gray-500">{rotulo}{info ? <InfoLegenda titulo={rotulo}>{info}</InfoLegenda> : null}</div>
       <div className={`text-xl font-bold ${cor}`}>{valor}</div>
-      <div className="text-[11px] text-gray-500">{sub}</div>
+      <div className="text-xs text-gray-500">{sub}</div>
     </div>
   );
 }

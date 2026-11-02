@@ -63,7 +63,7 @@ export default async function ErpParcelasPage({ searchParams }: { searchParams: 
   const tabela = (ls: Linha[]) => (
         <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
           <table className="w-full text-xs">
-            <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+            <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
               <tr>
                 <th className="px-3 py-2">Abrir</th>
                 <th className="px-3 py-2">Código O2 do documento</th>
@@ -142,7 +142,7 @@ export default async function ErpParcelasPage({ searchParams }: { searchParams: 
       </div>
       <p className="text-xs font-semibold uppercase tracking-wide text-o2-navy">Parcelas em conferência<InfoLegenda titulo="Parcelas em conferência">Cada linha é uma parcela. Vencimento no ERP é a data que o ERP tem para a parcela; Cobrado pela seguradora é o vencimento dessa mesma parcela na fatura da seguradora; Diferença diz quantos meses o vencimento do ERP está adiantado ou atrasado em relação à fatura. Comissão prevista é a comissão esperada daquela parcela. Parcela mostra o número da parcela e o total quando se sabe. Abrir leva ao documento no ERP.</InfoLegenda></p>
       {tabela(linhas)}
-      <p className="text-xs font-semibold uppercase tracking-wide text-o2-navy">Herdadas de meses anteriores<span className="ml-1 text-[10px] font-normal normal-case tracking-normal text-gray-400">(parcelas em conferência cobradas antes de {periodo.rotulo})</span></p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-o2-navy">Herdadas de meses anteriores<span className="ml-1 text-xs font-normal normal-case tracking-normal text-gray-400">(parcelas em conferência cobradas antes de {periodo.rotulo})</span></p>
       {herdadas.length === 0 ? <p className="text-xs text-gray-500">Nenhuma parcela herdada em conferência.</p> : tabela(herdadas)}
     </PaginaErp>
   );

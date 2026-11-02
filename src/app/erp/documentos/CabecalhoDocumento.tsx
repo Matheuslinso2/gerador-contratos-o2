@@ -27,12 +27,12 @@ export type DadosCabecalho = {
 function Celula({ rotulo, valor, sub, className = "", info }: { rotulo: string; valor: React.ReactNode; sub?: React.ReactNode; className?: string; info?: React.ReactNode }) {
   return (
     <div className={`min-w-0 ${className}`}>
-      <div className="text-[10px] font-medium uppercase tracking-wide text-gray-500">
+      <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
         {rotulo}
         {info ? <InfoLegenda titulo={rotulo}>{info}</InfoLegenda> : null}
       </div>
       <div className="truncate text-sm font-semibold text-gray-900">{valor ?? <span className="font-normal text-gray-400">—</span>}</div>
-      {sub ? <div className="truncate text-[11px] text-gray-500">{sub}</div> : null}
+      {sub ? <div className="truncate text-xs text-gray-500">{sub}</div> : null}
     </div>
   );
 }
@@ -83,13 +83,13 @@ export default function CabecalhoDocumento({ c }: { c: DadosCabecalho }) {
         <div className="flex flex-wrap gap-x-6 gap-y-0.5 border-t border-gray-100 px-4 py-1.5 text-xs text-gray-600">
           {c.inquilino ? (
             <span>
-              <span className="text-[10px] uppercase tracking-wide text-gray-500">Inquilino </span>
+              <span className="text-xs uppercase tracking-wide text-gray-500">Inquilino </span>
               <span className="font-medium text-gray-800">{c.inquilino}</span>
             </span>
           ) : null}
           {c.imovel ? (
             <span>
-              <span className="text-[10px] uppercase tracking-wide text-gray-500">Imóvel </span>
+              <span className="text-xs uppercase tracking-wide text-gray-500">Imóvel </span>
               <span className="font-medium text-gray-800">{c.imovel}</span>
             </span>
           ) : null}

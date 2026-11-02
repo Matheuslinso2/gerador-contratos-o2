@@ -43,7 +43,7 @@ export default async function FiltrosErp({
   const algum = Object.values(valores).some(Boolean);
 
   const campo = (rotulo: string, filho: React.ReactNode) => (
-    <label className="flex flex-col gap-1 text-[11px] font-medium uppercase tracking-wide text-gray-500">
+    <label className="flex flex-col gap-1 text-xs font-medium uppercase tracking-wide text-gray-500">
       {rotulo}
       {filho}
     </label>

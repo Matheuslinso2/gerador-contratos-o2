@@ -170,7 +170,7 @@ export default async function ErpInicio({ searchParams }: { searchParams: Promis
             const ls = linhas[et.chave];
             const corpo = (
               <>
-                <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Etapa {i + 1}</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Etapa {i + 1}</p>
                 <p className="font-semibold text-o2-navy">{et.label}{et.externo ? " ↗" : ""}</p>
                 {ls ? (
                   <div className="mt-1 space-y-0.5">

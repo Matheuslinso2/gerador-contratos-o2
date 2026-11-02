@@ -134,7 +134,7 @@ export default async function ListaDocumentos({
                 <li key={c.id} className="flex flex-wrap items-center gap-3 py-1.5">
                   <Link href={`/erp/clientes/${c.id}`} className="font-medium text-o2-navy hover:underline">{codigoCliente(c.codigo_cliente)}</Link>
                   <span>{c.nome}</span>
-                  <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-[11px] font-semibold uppercase text-yellow-900">CLIENTE SEM DOCUMENTO VIGENTE</span>
+                  <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-semibold uppercase text-yellow-900">CLIENTE SEM DOCUMENTO VIGENTE</span>
                   <span className="text-gray-500">{c.documentos > 0 ? `${c.documentos} documento(s) no histórico` : "nenhum documento no histórico"}</span>
                 </li>
               ))}
@@ -154,7 +154,7 @@ export default async function ListaDocumentos({
         ) : (
           <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
             <table className="w-full text-xs">
-              <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+              <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
                 <tr>
                   <th className="px-3 py-2">Abrir</th>
                   <th className="px-3 py-2">Tipo de documento</th>
@@ -177,12 +177,12 @@ export default async function ListaDocumentos({
                     <tr key={d.id} className="hover:bg-gray-50">
                       <td className="px-3 py-2"><BotaoVerDocumento id={d.id} /></td>
                       <td className="px-3 py-2" title={`${d.tipo} · ${TIPOS_DOCUMENTO[d.tipo] ?? d.tipo}`}>
-                        <span className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-semibold ${t.cor}`}>{t.nome}</span>
-                        {t.detalhe ? <span className="ml-1 text-[10px] text-gray-500">{t.detalhe}</span> : null}
+                        <span className={`whitespace-nowrap rounded px-1.5 py-0.5 text-xs font-semibold ${t.cor}`}>{t.nome}</span>
+                        {t.detalhe ? <span className="ml-1 text-xs text-gray-500">{t.detalhe}</span> : null}
                       </td>
                       <td className="px-3 py-2">
                         {d.titular ? <span className="font-medium text-gray-900">{d.titular}</span> : <span className="text-gray-400">titular não ligado</span>}
-                        {d.inquilino && d.inquilino !== d.titular ? <span className="block text-[10px] text-gray-500">inquilino: {d.inquilino}</span> : null}
+                        {d.inquilino && d.inquilino !== d.titular ? <span className="block text-xs text-gray-500">inquilino: {d.inquilino}</span> : null}
                       </td>
                       <td className="px-3 py-2">{d.produto_nome ?? "—"}</td>
                       <td className="px-3 py-2">{d.seguradora_nome ?? "—"}</td>
@@ -190,13 +190,13 @@ export default async function ListaDocumentos({
                         {d.vigencia_inicio || d.vigencia_fim ? `${formatarData(d.vigencia_inicio)} a ${formatarData(d.vigencia_fim)}` : "—"}
                       </td>
                       <td className="px-3 py-2">
-                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${COR_SITUACAO[d.situacao] ?? "bg-gray-100"}`}>{SITUACOES[d.situacao] ?? d.situacao}</span>
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${COR_SITUACAO[d.situacao] ?? "bg-gray-100"}`}>{SITUACOES[d.situacao] ?? d.situacao}</span>
                       </td>
                       <td className="px-3 py-2 font-medium">
                         <Link href={`/erp/documentos/${d.id}`} className="text-o2-navy hover:underline">
                           {d.nosso_numero}
                         </Link>
-                        {d.nosso_numero_corp ? <span className="block text-[10px] font-normal text-gray-400">Corp {d.nosso_numero_corp}</span> : null}
+                        {d.nosso_numero_corp ? <span className="block text-xs font-normal text-gray-400">Corp {d.nosso_numero_corp}</span> : null}
                       </td>
                       <td className="px-3 py-2">{d.numero_apolice ?? <span className="text-gray-400">0</span>}</td>
                       <td className="px-3 py-2">

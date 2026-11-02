@@ -23,7 +23,7 @@ export default function NavegadorMes({ caminho, mes, params = {} }: { caminho: s
       {!p.ehMesAtual && (
         <Link href={href(p.mesAtual)} className="rounded-md bg-o2-navy px-3 py-1 text-sm font-medium text-white hover:bg-o2-indigo">Mês atual</Link>
       )}
-      <span className="ml-auto text-[11px] text-gray-500">
+      <span className="ml-auto text-xs text-gray-500">
         {p.ehMesAtual ? "Mês aberto: os números se atualizam durante o mês." : p.fechado ? "Mês fechado: números congelados no retrato do fechamento." : "Mês futuro."}
       </span>
     </nav>

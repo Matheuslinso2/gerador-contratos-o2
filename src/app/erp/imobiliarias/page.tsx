@@ -114,7 +114,7 @@ export default async function ErpImobiliarias({ searchParams }: { searchParams: 
       <p className="text-xs font-semibold uppercase tracking-wide text-o2-navy">Lista de imobiliárias<InfoLegenda titulo="Colunas da lista">Grupo: o grupo do cadastro único e o papel da ficha nele; se não tem grupo, aparece o grupo usado no Power BI. Cód. O2 / no Corp: o código da imobiliária na O2 e o código dela como produtor no Corp. Vigentes e Prêmio vigente: quantidade e soma do prêmio das apólices vigentes dela no ERP. Pend. emissão: propostas ainda não emitidas como apólice. Produtos: produtos dos documentos dela. Fatura em: seguradoras em que ela tem fatura. Pró-labore direto: seguradoras que pagam uma fatia direto à imobiliária, com os pontos ao lado da sigla. A lista vem ordenada pelo prêmio vigente e mostra 100 por vez.</InfoLegenda></p>
       <div className="overflow-auto rounded-xl border border-gray-200 bg-white">
         <table className="w-full text-xs">
-          <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+          <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
             <tr>
               <th className="px-3 py-2">Imobiliária</th>
               <th className="px-3 py-2">Grupo</th>
@@ -135,7 +135,7 @@ export default async function ErpImobiliarias({ searchParams }: { searchParams: 
                 <tr key={r.imobiliaria_id} className="hover:bg-gray-50">
                   <td className="px-3 py-1.5">
                     <Link href={`/erp/imobiliarias/${i.id}`} className="font-medium text-o2-navy hover:underline">{i.nome}</Link>
-                    <span className="block text-[11px] text-gray-400">{[i.cidade, i.uf].filter(Boolean).join(" / ") || "sem cidade"}{i.canal ? ` · canal ${i.canal.nome}` : ""}</span>
+                    <span className="block text-xs text-gray-400">{[i.cidade, i.uf].filter(Boolean).join(" / ") || "sem cidade"}{i.canal ? ` · canal ${i.canal.nome}` : ""}</span>
                   </td>
                   <td className="px-3 py-1.5 text-gray-600">
                     {i.grupo ? <>{i.grupo.nome}{i.papel_no_grupo ? <span className="text-gray-400"> · {i.papel_no_grupo}</span> : null}</> : i.centralizador_power_bi ? <span className="text-gray-400" title="centralizador no Power BI">{i.centralizador_power_bi}</span> : <span className="text-gray-300">—</span>}

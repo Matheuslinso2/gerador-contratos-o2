@@ -88,7 +88,7 @@ export default async function ErpClientesPage({ searchParams }: { searchParams: 
             Partes de propostas que ainda não estão no cadastro: sem CPF/CNPJ válido a pessoa não é criada sozinha. Complete o documento no card ou cadastre o cliente.
           </p>
           <table className="w-full text-xs">
-            <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+            <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
               <tr><th className="px-3 py-2">Documento</th><th className="px-3 py-2">Papel</th><th className="px-3 py-2">Nome</th><th className="px-3 py-2">CPF/CNPJ informado</th></tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -109,7 +109,7 @@ export default async function ErpClientesPage({ searchParams }: { searchParams: 
       ) : (
         <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
           <table className="w-full text-xs">
-            <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+            <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
               <tr><th className="px-3 py-2">Código do cliente</th><th className="px-3 py-2">Nome</th><th className="px-3 py-2">CPF/CNPJ</th><th className="px-3 py-2">E-mail</th><th className="px-3 py-2">Telefone</th><th className="px-3 py-2">Cadastro</th></tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -120,7 +120,7 @@ export default async function ErpClientesPage({ searchParams }: { searchParams: 
                   <td className="px-3 py-2">{c.cpf ? formatarDocumento(c.cpf) : <span className="text-red-600">falta</span>}</td>
                   <td className="px-3 py-2">{c.email ?? <span className="text-gray-300">—</span>}</td>
                   <td className="px-3 py-2">{c.telefone ?? <span className="text-gray-300">—</span>}</td>
-                  <td className="px-3 py-2">{c.cadastro_incompleto ? <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-[11px] font-medium text-yellow-800">incompleto</span> : <span className="text-green-700">ok</span>}</td>
+                  <td className="px-3 py-2">{c.cadastro_incompleto ? <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800">incompleto</span> : <span className="text-green-700">ok</span>}</td>
                 </tr>
               ))}
             </tbody>

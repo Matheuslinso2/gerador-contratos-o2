@@ -51,7 +51,7 @@ export default async function ErpRepasseImobiliariaPage({ params, searchParams }
       </div>
       <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
         <table className="w-full text-xs">
-          <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+          <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
             <tr>
               <th className="px-3 py-2">Abrir</th>
               <th className="px-3 py-2">Segurado <InfoLegenda titulo="Segurado">Cliente titular do seguro.</InfoLegenda></th>
@@ -121,7 +121,7 @@ export default async function ErpRepasseImobiliariaPage({ params, searchParams }
         </h2>
         <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
           <table className="w-full text-xs">
-            <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+            <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
               <tr>
                 <th className="px-3 py-2">Repasse de</th>
                 <th className="px-3 py-2 text-right">Parcelas</th>

@@ -32,11 +32,11 @@ export default function JanelaEmails({ codigoO2, emails, anexos }: { codigoO2: s
         <div className="max-h-[70vh] overflow-y-auto px-4 py-3">
           {anexos.length > 0 && (
             <div className="mb-4 rounded border border-gray-200 bg-gray-50 p-3">
-              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-500">PDFs guardados</div>
+              <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">PDFs guardados</div>
               <ul className="space-y-1 text-sm">
                 {anexos.map((a) => (
                   <li key={a.id} className="flex flex-wrap items-center gap-2">
-                    <span className="rounded bg-white px-1.5 py-0.5 text-[11px] uppercase text-gray-600 ring-1 ring-gray-200">{a.tipo}</span>
+                    <span className="rounded bg-white px-1.5 py-0.5 text-xs uppercase text-gray-600 ring-1 ring-gray-200">{a.tipo}</span>
                     {a.url ? <a href={a.url} target="_blank" rel="noreferrer" className="text-blue-700 underline">{a.nome}</a> : <span>{a.nome}</span>}
                     {a.situacao !== "confirmada" && <span className="text-xs text-amber-700">vínculo provável, conferir</span>}
                   </li>

@@ -6,7 +6,7 @@ export default function BotaoVerDocumento({ id }: { id: string | null | undefine
   return (
     <Link
       href={`/erp/documentos/${id}`}
-      className="inline-block whitespace-nowrap rounded-lg bg-o2-navy px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-o2-indigo"
+      className="inline-block whitespace-nowrap rounded-lg bg-o2-navy px-2.5 py-1 text-xs font-semibold text-white hover:bg-o2-indigo"
     >
       Ver documento
     </Link>

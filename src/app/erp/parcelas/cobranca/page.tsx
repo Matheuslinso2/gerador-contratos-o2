@@ -79,7 +79,7 @@ export default async function ParcelasCobrancaPage({ searchParams }: { searchPar
   const tabela = (ls: Linha[]) => (
         <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
           <table className="w-full text-xs">
-            <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+            <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
               <tr>
                 <th className="px-3 py-2">Abrir</th>
                 <th className="px-3 py-2">Status</th>
@@ -97,18 +97,18 @@ export default async function ParcelasCobrancaPage({ searchParams }: { searchPar
               {ls.map((l) => (
                 <tr key={l.parcela_id}>
                   <td className="px-3 py-1.5"><BotaoVerDocumento id={l.documento_id} /></td>
-                  <td className="px-3 py-1.5"><span className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-semibold ${STATUS[l.status]?.cor ?? "bg-gray-100"}`}>{STATUS[l.status]?.rotulo ?? l.status}</span></td>
-                  <td className="px-3 py-1.5">{l.seg}<span className="block text-[10px] text-gray-500">{l.produto ?? l.ramo ?? "—"}</span></td>
+                  <td className="px-3 py-1.5"><span className={`whitespace-nowrap rounded px-1.5 py-0.5 text-xs font-semibold ${STATUS[l.status]?.cor ?? "bg-gray-100"}`}>{STATUS[l.status]?.rotulo ?? l.status}</span></td>
+                  <td className="px-3 py-1.5">{l.seg}<span className="block text-xs text-gray-500">{l.produto ?? l.ramo ?? "—"}</span></td>
                   <td className="px-3 py-1.5">{l.cliente ?? "—"}</td>
                   <td className="px-3 py-1.5">{l.apolice ?? "—"}</td>
                   <td className="px-3 py-1.5">{l.parcela_texto ?? "—"}</td>
                   <td className="whitespace-nowrap px-3 py-1.5">
                     {formatarData(l.venc_parcela)}
-                    {l.via_fatura && <span className="block text-[10px] text-sky-700" title="Fatura unificada: a parcela só fica em aberto depois do vencimento do boleto da fatura">boleto da fatura</span>}
+                    {l.via_fatura && <span className="block text-xs text-sky-700" title="Fatura unificada: a parcela só fica em aberto depois do vencimento do boleto da fatura">boleto da fatura</span>}
                   </td>
                   <td className="px-3 py-1.5 text-right">{l.dias > 0 ? l.dias : `em ${-l.dias}`}</td>
                   <td className="px-3 py-1.5 text-right text-gray-500">{l.prazo_normal} / {l.limite} dias{l.dias_cancelamento ? ` · cancela em ${l.dias_cancelamento}` : ""}
-                    {l.cobertura_ate_max && <span className="block text-[10px] text-gray-500" title="Tabela de Prazo Curto: dias de cobertura contados do início da vigência, conforme a % do prêmio já paga; a primeira data usa a faixa de baixo da tabela e a segunda a de cima">pago {l.pct_pago}% · cobertura até {l.cobertura_ate_min === l.cobertura_ate_max ? formatarData(l.cobertura_ate_max) : `${formatarData(l.cobertura_ate_min)} a ${formatarData(l.cobertura_ate_max)}`}</span>}</td>
+                    {l.cobertura_ate_max && <span className="block text-xs text-gray-500" title="Tabela de Prazo Curto: dias de cobertura contados do início da vigência, conforme a % do prêmio já paga; a primeira data usa a faixa de baixo da tabela e a segunda a de cima">pago {l.pct_pago}% · cobertura até {l.cobertura_ate_min === l.cobertura_ate_max ? formatarData(l.cobertura_ate_max) : `${formatarData(l.cobertura_ate_min)} a ${formatarData(l.cobertura_ate_max)}`}</span>}</td>
                   <td className="px-3 py-1.5 text-right">{formatarReais(Number(l.valor))}</td>
                 </tr>
               ))}
@@ -155,7 +155,7 @@ export default async function ParcelasCobrancaPage({ searchParams }: { searchPar
       <p className="text-xs font-semibold uppercase tracking-wide text-o2-navy">Seguradora × status<InfoLegenda titulo="Seguradora × status">Matriz com a quantidade de parcelas e a comissão em cada status, por seguradora. Não mostra as pagas nem as a vencer. Os status, do mais grave ao mais leve: Risco de cancelamento (só onde a regra de cancelamento da seguradora está cadastrada); Em aberto, urgente; Em aberto, atenção; Vencida, dentro do prazo da seguradora (a comissão ainda pode chegar); Vence em até 5 dias. O prazo normal é a mediana e o limite é o percentil 90 do tempo que a seguradora levou para pagar a comissão, nos últimos 16 meses, por seguradora e ramo, com 2 dias de tolerância. Clicar em um número filtra a lista abaixo. O filtro de produto vale para a matriz também.</InfoLegenda></p>
       <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
         <table className="w-full text-xs">
-          <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+          <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
             <tr>
               <th className="px-3 py-2">Seguradora</th>
               {ordemStatus.map((k) => (<th key={k} className="px-3 py-2 text-right">{STATUS[k].rotulo}</th>))}
@@ -178,9 +178,9 @@ export default async function ParcelasCobrancaPage({ searchParams }: { searchPar
 
       <p className="text-xs font-semibold uppercase tracking-wide text-o2-navy">Parcelas do mês, mais urgentes primeiro<InfoLegenda titulo="Parcelas mais urgentes">Lista as 300 parcelas mais urgentes do filtro, da mais grave para a mais leve e, dentro do mesmo status, das mais atrasadas. Dias é o atraso desde o vencimento (ou em quantos dias vence). Prazo normal / limite são os dias que a seguradora costuma levar para pagar a comissão (mediana e percentil 90 dos últimos 16 meses, por seguradora e ramo, já com 2 dias de tolerância); quando existe regra de cancelamento, aparece em quantos dias a apólice cancela. A marca boleto da fatura indica fatura unificada: a parcela só fica em aberto depois do vencimento do boleto da fatura, não da data da parcela, e nelas o status não passa de urgente. Onde a Condição Geral manda usar a Tabela de Prazo Curto, aparece pago X% e cobertura até: é a cobertura em dias contados do início da vigência conforme a porcentagem do prêmio já paga, e o risco de cancelamento só é marcado quando a data da faixa de cima da tabela já passou (mais 2 dias) e nenhuma parcela posterior tem prova de pagamento. As regras de cancelamento seguem a Condição Geral de cada seguradora, e o padrão por produto vale para as que não têm documento cadastrado.</InfoLegenda></p>
       {tabela(linhas)}
-      <p className="text-xs font-semibold uppercase tracking-wide text-o2-navy">Herdadas de meses anteriores<span className="ml-1 text-[10px] font-normal normal-case tracking-normal text-gray-400">(em aberto antes de {periodo.rotulo}; os dias contam o atraso desde o vencimento)</span></p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-o2-navy">Herdadas de meses anteriores<span className="ml-1 text-xs font-normal normal-case tracking-normal text-gray-400">(em aberto antes de {periodo.rotulo}; os dias contam o atraso desde o vencimento)</span></p>
       {tabela(herdadas)}
-      <p className="text-[11px] text-gray-500">
+      <p className="text-xs text-gray-500">
         Mostra as 300 mais urgentes do filtro. "Prazo normal" e "limite" vêm do estudo dos últimos 16 meses de comissões recebidas (mediana e percentil 90 por seguradora e ramo).
         Apólices aglomeradas numa fatura unificada só ficam em aberto depois do vencimento do BOLETO da fatura (marcado "boleto da fatura"), não pelo vencimento da parcela; nelas o status não passa de "urgente" até a regra de cancelamento por fatura em atraso ser levantada.
         O prazo normal e o limite já incluem uma tolerância de 2 dias (1 por questões operacionais do banco e 1 para não cobrar o cliente no dia seguinte e ele já ter pago).

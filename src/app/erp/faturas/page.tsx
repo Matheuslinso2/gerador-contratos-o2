@@ -64,7 +64,7 @@ export default async function ErpFaturasPage({ searchParams }: { searchParams: P
       </div>
       <form method="get" action="/erp/faturas" className="flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 bg-white p-3">
         <input type="hidden" name="mes" value={periodo.mes} />
-        <label className="flex flex-col gap-1 text-[11px] font-medium uppercase tracking-wide text-gray-500">
+        <label className="flex flex-col gap-1 text-xs font-medium uppercase tracking-wide text-gray-500">
           Seguradora
           <select name="seguradora" defaultValue={f.seguradora ?? ""} className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm normal-case tracking-normal text-gray-800">
             <option value="">Todas</option>
@@ -75,7 +75,7 @@ export default async function ErpFaturasPage({ searchParams }: { searchParams: P
             <option value="YELU">Yelum</option>
           </select>
         </label>
-        <label className="flex flex-col gap-1 text-[11px] font-medium uppercase tracking-wide text-gray-500">
+        <label className="flex flex-col gap-1 text-xs font-medium uppercase tracking-wide text-gray-500">
           Imobiliária
           <input name="imobiliaria" defaultValue={f.imobiliaria ?? ""} placeholder="nome ou parte do nome" className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm normal-case tracking-normal text-gray-800" />
         </label>
@@ -98,7 +98,7 @@ export default async function ErpFaturasPage({ searchParams }: { searchParams: P
       </p>
       <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+          <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
             <tr>
               <th className="px-3 py-2">Imobiliária</th>
               <th className="px-3 py-2">Seguradora · fatura</th>
@@ -167,7 +167,7 @@ export default async function ErpFaturasPage({ searchParams }: { searchParams: P
             <InfoLegenda titulo="Faturas herdadas">Faturas de competências anteriores à escolhida que ainda não foram enviadas por completo à imobiliária. Ficam separadas da lista do mês para não se perderem. Clique na imobiliária para abrir a fatura.</InfoLegenda>
           </div>
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+            <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
               <tr>
                 <th className="px-3 py-2">Imobiliária</th>
                 <th className="px-3 py-2">Seguradora</th>

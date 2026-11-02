@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
 function Campo({ rotulo, valor, info }: { rotulo: string; valor: React.ReactNode; info?: React.ReactNode }) {
   return (
     <div>
-      <div className="text-[11px] uppercase tracking-wide text-gray-500">
+      <div className="text-xs uppercase tracking-wide text-gray-500">
         {rotulo}
         {info ? <InfoLegenda titulo={rotulo}>{info}</InfoLegenda> : null}
       </div>
@@ -168,7 +168,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
         </div>
 
         <div className="rounded-xl border border-o2-navy/20 bg-blue-50/40 px-4 py-2 text-sm">
-          <span className="text-[11px] uppercase tracking-wide text-gray-500">Cadeia da produção: </span>
+          <span className="text-xs uppercase tracking-wide text-gray-500">Cadeia da produção: </span>
           <span className={d.cadeia.canal ? "" : "text-gray-400"}>{d.cadeia.canal ?? "sem canal de gestão"}</span>
           <span className="text-gray-400"> → </span>
           <span className={d.cadeia.imobiliaria ? "" : "text-gray-400"}>
@@ -187,7 +187,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
         <EmailsDoDocumento documentoId={d.id} codigoO2={String(d.nosso_numero)} />
 
         <nav className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
-          <span className="text-[11px] uppercase tracking-wide text-gray-500">Anexos e vínculos:</span>
+          <span className="text-xs uppercase tracking-wide text-gray-500">Anexos e vínculos:</span>
           <InfoLegenda titulo="Anexos e vínculos">
             Atalhos que levam às seções mais abaixo desta página. Anexos: lista única dos arquivos deste documento, com a coluna Origem (aba Anexos do Corp ou acervo de apólices). Card do Bitrix: cards que deram origem ao documento. O número entre parênteses é a quantidade de itens em cada um.
           </InfoLegenda>
@@ -197,7 +197,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
 
         {d.partes_apolice.length > 0 && (
           <div className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm">
-            <div className="text-[11px] uppercase tracking-wide text-gray-500">
+            <div className="text-xs uppercase tracking-wide text-gray-500">
               Partes da apólice (lidas no PDF)
               <InfoLegenda titulo="Partes da apólice">
                 Pessoas lidas do PDF da apólice no acervo. Na Fiança: Segurado = locador = proprietário do imóvel; Garantido = locatário (inquilino). O CPF/CNPJ aparece quando foi lido no PDF. Em caso de diferença com outros cadastros, o documento oficial da seguradora prevalece.
@@ -206,7 +206,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
             <div className="mt-1 grid gap-x-6 gap-y-1 md:grid-cols-2">
               {d.partes_apolice.map((p, i) => (
                 <div key={`${p.papel}-${i}`}>
-                  <span className="text-[11px] uppercase tracking-wide text-gray-500">{p.papel === "segurado" ? "Segurado = locador = proprietário" : "Garantido = locatário"}: </span>
+                  <span className="text-xs uppercase tracking-wide text-gray-500">{p.papel === "segurado" ? "Segurado = locador = proprietário" : "Garantido = locatário"}: </span>
                   <span className="font-medium text-gray-800">{p.nome ?? "—"}</span>
                   {p.cpf ? <span className="text-gray-500"> · {p.cpf.length === 14 ? p.cpf.replace(/^(d{2})(d{3})(d{3})(d{4})(d{2})$/, "$1.$2.$3/$4-$5") : p.cpf.replace(/^(d{3})(d{3})(d{3})(d{2})$/, "$1.$2.$3-$4")}</span> : null}
                 </div>
@@ -224,7 +224,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
           </h2>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <div className="col-span-2 md:col-span-4">
-              <div className="text-[11px] uppercase tracking-wide text-gray-500">Imobiliária da produção</div>
+              <div className="text-xs uppercase tracking-wide text-gray-500">Imobiliária da produção</div>
               <div className="text-sm font-medium text-gray-800">
                 {d.imobiliaria_id ? (
                   <Link href={`/erp/imobiliarias/${d.imobiliaria_id}`} className="text-o2-navy hover:underline">
@@ -257,7 +257,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
           </div>
           {d.familia.length > 1 && (
             <div className="rounded-lg border border-gray-100 bg-gray-50 p-3 text-xs">
-              <div className="mb-1 text-[11px] uppercase tracking-wide text-gray-500">
+              <div className="mb-1 text-xs uppercase tracking-wide text-gray-500">
                 Família de renovações
                 <InfoLegenda titulo="Família de renovações">
                   A corrente de renovações do documento: as versões anteriores e as seguintes, como na coluna da esquerda do Controle de Documentos do Corp. O símbolo ▶ marca o documento que você está vendo; clique em outro para abri-lo. Cada linha mostra o Código O2 do documento, o Nosso nº do Corp, se é novo ou renovação, a situação, a vigência e o Nº da apólice.
@@ -319,7 +319,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
           )}
           {d.endossos.length > 0 && (
             <div className="rounded-lg border border-gray-100 bg-gray-50 p-3 text-xs">
-              <div className="mb-1 text-[11px] uppercase tracking-wide text-gray-500">
+              <div className="mb-1 text-xs uppercase tracking-wide text-gray-500">
                 Endossos desta apólice ({d.endossos.length}) · prêmio {formatarReais(d.endossos.reduce((s, e) => s + e.premio_liquido, 0))} · comissão{" "}
                 {formatarReais(d.endossos.reduce((s, e) => s + e.comissao_valor, 0))}
                 <InfoLegenda titulo="Endossos desta apólice">
@@ -383,7 +383,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
                     {it.coberturas.map((c) => `${c.nome} ${c.importancia_segurada === null ? "" : formatarReais(c.importancia_segurada)}`).join(" · ")}
                   </p>
                 )}
-                {it.observacoes && <p className="text-[11px] text-gray-500">{it.observacoes}</p>}
+                {it.observacoes && <p className="text-xs text-gray-500">{it.observacoes}</p>}
               </div>
             ))}
           </section>
@@ -397,7 +397,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
             </InfoLegenda>
           </h2>
           <table className="w-full text-xs">
-            <thead className="text-left text-[11px] uppercase tracking-wide text-gray-500">
+            <thead className="text-left text-xs uppercase tracking-wide text-gray-500">
               <tr>
                 <th className="py-1 pr-3">Produtor no Corp</th>
                 <th className="py-1 pr-3">Ficha (base única)</th>
@@ -415,7 +415,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
                   <tr key={p.id}>
                     <td className="py-1.5 pr-3">
                       {p.produtor_corp_nome ?? "—"} {p.produtor_corp_codigo ? <span className="text-gray-400">({p.produtor_corp_codigo})</span> : null}
-                      {p.principal && <span className="ml-1 rounded bg-o2-navy px-1 text-[10px] text-white">principal</span>}
+                      {p.principal && <span className="ml-1 rounded bg-o2-navy px-1 text-xs text-white">principal</span>}
                     </td>
                     <td className="py-1.5 pr-3">
                       {p.imobiliaria_id ? (
@@ -436,7 +436,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
               })}
             </tbody>
           </table>
-          <p className="text-[11px] text-gray-500">
+          <p className="text-xs text-gray-500">
             Repasse negociado = o que o Corp registrou neste documento. Esperado = regra padrão da ficha da imobiliária (inferida do histórico; editável na ficha).
             Diferença em laranja.
           </p>
@@ -450,7 +450,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
             </InfoLegenda>
           </h2>
             <table className="w-full text-xs">
-              <thead className="text-left text-[11px] uppercase tracking-wide text-gray-500">
+              <thead className="text-left text-xs uppercase tracking-wide text-gray-500">
                 <tr><th className="py-1 pr-3">Cobertura</th><th className="py-1 pr-3 text-right">Limite máximo (LMI)</th><th className="py-1 pr-3 text-right">Verba / prêmio</th><th className="py-1 pr-3">Fonte</th></tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -459,12 +459,12 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
                     <td className="py-1 pr-3">{c.cobertura}</td>
                     <td className="py-1 pr-3 text-right">{c.lmi === null ? "—" : formatarReais(c.lmi)}</td>
                     <td className="py-1 pr-3 text-right">{c.verba === null ? "—" : formatarReais(c.verba)}</td>
-                    <td className="py-1 pr-3 text-[11px] text-gray-500">{c.fonte ?? "PDF"}</td>
+                    <td className="py-1 pr-3 text-xs text-gray-500">{c.fonte ?? "PDF"}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            <p className="text-[11px] text-gray-500">Lidas do PDF da apólice (acervo). Documento oficial prevalece.</p>
+            <p className="text-xs text-gray-500">Lidas do PDF da apólice (acervo). Documento oficial prevalece.</p>
           </section>
         )}
 
@@ -507,7 +507,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
             <p className="text-xs text-gray-500">Sem parcelas carregadas (histórico anterior a 2024 entra só com os totais).</p>
           ) : (
             <table className="w-full text-xs">
-              <thead className="text-left text-[11px] uppercase tracking-wide text-gray-500">
+              <thead className="text-left text-xs uppercase tracking-wide text-gray-500">
                 <tr>
                   <th className="py-1 pr-3">Nº</th>
                   <th className="py-1 pr-3">Vencimento</th>
@@ -533,7 +533,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
                   <tr key={p.id}>
                     <td className="py-1 pr-3">
                       {p.n}
-                      {avisoPorParcela.has(p.n) && <span className="ml-1 rounded bg-red-100 px-1 text-[10px] font-medium text-red-800" title="Avisada como não paga pela seguradora">em aberto na seguradora</span>}
+                      {avisoPorParcela.has(p.n) && <span className="ml-1 rounded bg-red-100 px-1 text-xs font-medium text-red-800" title="Avisada como não paga pela seguradora">em aberto na seguradora</span>}
                     </td>
                     <td className="py-1 pr-3">{formatarData(p.vencimento)}</td>
                     <td className="py-1 pr-3 text-right">{formatarReais(p.valor)}</td>
@@ -566,24 +566,24 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
             </table>
           )}
           {d.parcelas_historicas.length > 0 && (
-            <p className="text-[11px] text-gray-500">Linhas apagadas = parcelas históricas do calendário oficial (PDF) sem quitação comprovada; o valor é só referência e elas não entram nos totais, na cobrança, na previsão de receita nem no repasse.</p>
+            <p className="text-xs text-gray-500">Linhas apagadas = parcelas históricas do calendário oficial (PDF) sem quitação comprovada; o valor é só referência e elas não entram nos totais, na cobrança, na previsão de receita nem no repasse.</p>
           )}
           {d.parcelas.length > 0 && (
-            <p className="text-[11px] text-gray-500">
+            <p className="text-xs text-gray-500">
               Repasse: prêmio líquido × % de repasse × % de participação, em parcelas iguais (também no esgotamento); o repasse fixo é pago uma única vez, na 1ª parcela.
               Pago no dia 15 do mês seguinte ao do recebimento da comissão, antes do desconto de 18% do relatório de repasse. Comissão no Corp = grade de comissões do Corp (baixa real).
             </p>
           )}
           {d.parcelas_endossos.length > 0 && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs">
-              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-amber-800">
+              <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-800">
                 Parcelas dos endossos desta apólice — cobradas em paralelo às da apólice
                 <InfoLegenda titulo="Parcelas dos endossos">
                   Parcelas dos endossos de cobrança ligados a esta apólice. São cobradas ao mesmo tempo que as parcelas da apólice, sem substituí-las. Valor negativo (em vermelho) é devolução ou restituição. Quitação mostra a data e o valor pagos, ou em aberto.
                 </InfoLegenda>
               </div>
               <table className="w-full">
-                <thead className="text-left text-[11px] uppercase tracking-wide text-gray-500">
+                <thead className="text-left text-xs uppercase tracking-wide text-gray-500">
                   <tr><th className="py-1 pr-3">Endosso</th><th className="py-1 pr-3">Parcela</th><th className="py-1 pr-3">Vencimento</th><th className="py-1 pr-3 text-right">Valor</th><th className="py-1 pr-3">Quitação</th></tr>
                 </thead>
                 <tbody className="divide-y divide-amber-100">
@@ -610,7 +610,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
             </p>
           )}
           {d.parcelas.some((p) => p.origem === "estimada_corp") && (
-            <p className="text-[11px] text-gray-500">
+            <p className="text-xs text-gray-500">
               Parcelas estimadas a partir do Corp (quantidade e prêmio total; vencimento = 30 dias + dia fixo da seguradora). A baixa real entra na Fase 2.
             </p>
           )}
@@ -628,7 +628,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
             </p>
           ) : (
             <table className="w-full text-xs">
-              <thead className="text-left text-[11px] uppercase tracking-wide text-gray-500">
+              <thead className="text-left text-xs uppercase tracking-wide text-gray-500">
                 <tr>
                   <th className="py-1">Arquivo</th>
                   <th className="py-1">Tipo</th>
@@ -671,7 +671,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
               </tbody>
             </table>
           )}
-          {anexosCorp.length > 0 && <p className="text-[11px] text-gray-400">Linhas da origem Corp: cópia da aba Anexos do Corp, trazida pelo robô em {formatarData(anexosCorp[0].vistoEm)}.</p>}
+          {anexosCorp.length > 0 && <p className="text-xs text-gray-400">Linhas da origem Corp: cópia da aba Anexos do Corp, trazida pelo robô em {formatarData(anexosCorp[0].vistoEm)}.</p>}
         </section>
 
         {d.origens.map((o) => (
@@ -714,7 +714,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
                 <div className="grid grid-cols-2 gap-3 rounded-lg bg-gray-50 p-3 text-xs md:grid-cols-4">
                   {datasChave.map(([r, v]) => (
                     <div key={r}>
-                      <div className="text-[11px] uppercase tracking-wide text-gray-500">{r}</div>
+                      <div className="text-xs uppercase tracking-wide text-gray-500">{r}</div>
                       <div className="font-medium text-gray-800">{v ? formatarData(v) : "—"}</div>
                     </div>
                   ))}
@@ -724,7 +724,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
                     Histórico do card — linha do tempo ({marcos.length} marcos: {o.historico_etapas.length} etapas, {o.comentarios.length} comentários, {d.eventos.length} eventos)
                   </summary>
                   <div className="space-y-2 border-t border-gray-100 p-3">
-                    {o.comentarios_capturados_em === null && <p className="text-[11px] text-gray-500">Comentários do card ainda não capturados (entram nas próximas rodadas).</p>}
+                    {o.comentarios_capturados_em === null && <p className="text-xs text-gray-500">Comentários do card ainda não capturados (entram nas próximas rodadas).</p>}
                     <ol className="relative max-h-96 space-y-2 overflow-y-auto border-l border-gray-200 pl-4">
                       {marcos.map((m, i) => (
                         <li key={i} className="relative">
@@ -734,7 +734,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
                         </li>
                       ))}
                     </ol>
-                    <a href={"data:text/plain;charset=utf-8," + encodeURIComponent("Histórico do card " + o.item_id + " · " + (o.titulo ?? "") + "\n\n" + exportar)} download={`historico-card-${o.item_id}.txt`} className="inline-block rounded border border-gray-300 px-2 py-1 text-[11px] hover:bg-gray-50">Baixar tudo (.txt)</a>
+                    <a href={"data:text/plain;charset=utf-8," + encodeURIComponent("Histórico do card " + o.item_id + " · " + (o.titulo ?? "") + "\n\n" + exportar)} download={`historico-card-${o.item_id}.txt`} className="inline-block rounded border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50">Baixar tudo (.txt)</a>
                   </div>
                 </details>
                 </>

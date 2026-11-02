@@ -21,7 +21,7 @@ const mesBr = (c: string) => `${c.slice(5, 7)}/${c.slice(0, 4)}`;
 function Tabela({ linhas }: { linhas: LinhaFatura[] }) {
   return (
     <table className="w-full text-xs">
-      <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+      <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
         <tr>
           <th className="px-3 py-1.5">Abrir</th>
           <th className="px-3 py-1.5">Nº da apólice</th>
@@ -125,7 +125,7 @@ export default async function ErpFaturaPage({ params, searchParams }: { params: 
             ["Comissão no extrato", comissaoTotal ? formatarReais(comissaoTotal) : "—", "Soma da comissão que o extrato da seguradora trouxe para as apólices e parcelas das linhas deste mês. Só entram as linhas ligadas a um documento do ERP; mostra “—” quando não há comissão no extrato."],
           ].map(([r, v, info]) => (
             <div key={r} className="rounded-xl border border-gray-200 bg-white p-3">
-              <div className="text-[11px] uppercase tracking-wide text-gray-500">
+              <div className="text-xs uppercase tracking-wide text-gray-500">
                 {r}
                 <InfoLegenda titulo={r}>{info}</InfoLegenda>
               </div>
@@ -170,7 +170,7 @@ export default async function ErpFaturaPage({ params, searchParams }: { params: 
         </summary>
         {saidas.length > 0 && (
           <table className="w-full text-xs">
-            <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+            <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
               <tr>
                 <th className="px-3 py-1.5">Nº da apólice</th>
                 <th className="px-3 py-1.5">Código O2 do documento</th>

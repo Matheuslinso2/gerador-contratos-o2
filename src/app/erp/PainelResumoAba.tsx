@@ -54,8 +54,8 @@ async function Conteudo({ funcao, titulo = "Resumo da aba", legendas = {}, mes }
       <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-2.5 text-sm font-semibold text-o2-navy">
         <span className="inline-block transition group-open:rotate-90">▸</span>
         {titulo}: indicadores e gráficos
-        <span className="text-[11px] font-normal capitalize text-gray-500">· {p.rotulo}</span>
-        <span className="text-[11px] font-normal text-gray-400">(clique para abrir ou recolher)</span>
+        <span className="text-xs font-normal capitalize text-gray-500">· {p.rotulo}</span>
+        <span className="text-xs font-normal text-gray-400">(clique para abrir ou recolher)</span>
         <InfoLegenda titulo={`${titulo}: indicadores e gráficos`}>
           Resumo dos números desta aba, recolhido por padrão. Os indicadores e os gráficos leem as mesmas tabelas prontas da tela e são atualizados a cada 15 minutos, sem recalcular a cada abertura. Abaixo dele vem o conteúdo normal da aba.
         </InfoLegenda>
@@ -65,7 +65,7 @@ async function Conteudo({ funcao, titulo = "Resumo da aba", legendas = {}, mes }
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             {kpis.map((k) => (
               <div key={k.bloco} className="rounded-lg border border-gray-200 px-3 py-2">
-                <div className="text-[11px] uppercase tracking-wide text-gray-500">{k.bloco.slice(4)}</div>
+                <div className="text-xs uppercase tracking-wide text-gray-500">{k.bloco.slice(4)}</div>
                 <div className="text-xl font-semibold text-o2-navy">{fmt(k.valor as number)}</div>
               </div>
             ))}
@@ -85,10 +85,10 @@ async function Conteudo({ funcao, titulo = "Resumo da aba", legendas = {}, mes }
                   {legendas[nome] && <InfoLegenda titulo={nome}>{legendas[nome]}</InfoLegenda>}
                 </div>
                 {series.length > 1 && (
-                  <div className="mb-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-gray-600">
+                  <div className="mb-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-600">
                     {series.map((s) => (
                       <span key={s} className="inline-flex items-center gap-1">
-                        <span className="inline-block h-2 w-2 rounded-sm" style={{ background: corDe(s) }} />
+                        <span className="inline-block h-2 w-2 rounded-lg" style={{ background: corDe(s) }} />
                         {s}
                       </span>
                     ))}
@@ -96,14 +96,14 @@ async function Conteudo({ funcao, titulo = "Resumo da aba", legendas = {}, mes }
                 )}
                 <div className="space-y-2">
                   {cats.map((c) => (
-                    <div key={c} className="text-[11px]">
+                    <div key={c} className="text-xs">
                       <div className="mb-0.5 text-gray-600">{c}</div>
                       {series.map((s) => {
                         const v = ls.find((l) => l.rotulo === c && l.serie === s);
                         if (!v) return null;
                         return (
                           <div key={s} className="flex items-center gap-2">
-                            <div className="h-2.5 rounded-sm" style={{ width: `${Math.max(2, (Math.abs(v.valor as number) / max) * 100)}%`, background: (v.valor as number) < 0 ? "#c0392b" : corDe(s), maxWidth: "calc(100% - 3rem)" }} />
+                            <div className="h-2.5 rounded-lg" style={{ width: `${Math.max(2, (Math.abs(v.valor as number) / max) * 100)}%`, background: (v.valor as number) < 0 ? "#c0392b" : corDe(s), maxWidth: "calc(100% - 3rem)" }} />
                             <span className="text-gray-700">{fmt(v.valor as number)}</span>
                           </div>
                         );

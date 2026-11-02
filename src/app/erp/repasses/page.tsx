@@ -133,7 +133,7 @@ async function TabelaRepasses({ mes, f }: { mes: string; f: ValoresFiltro }) {
     <>
       <form method="get" action="/erp/repasses" className="flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 bg-white p-3">
         <input type="hidden" name="mes" value={mes} />
-        <label className="flex flex-col gap-1 text-[11px] font-medium uppercase tracking-wide text-gray-500">
+        <label className="flex flex-col gap-1 text-xs font-medium uppercase tracking-wide text-gray-500">
           Imobiliária
           <input name="imobiliaria" defaultValue={f.imobiliaria ?? ""} placeholder="nome ou parte do nome" className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm normal-case tracking-normal text-gray-800" />
         </label>
@@ -154,7 +154,7 @@ async function TabelaRepasses({ mes, f }: { mes: string; f: ValoresFiltro }) {
       ) : (
         <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
           <table className="w-full text-xs">
-            <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+            <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
               <tr>
                 <th className="px-3 py-2">Imobiliária</th>
                 <th className="px-3 py-2 text-right">
@@ -193,13 +193,13 @@ async function TabelaRepasses({ mes, f }: { mes: string; f: ValoresFiltro }) {
                       <>
                         {l.erp_pend_mes_n > 0 && (
                           <span className="block">
-                            <b>{formatarReais(arredonda(l.pendMes))}</b> <span className="text-[11px] text-gray-500">do mês · {l.erp_pend_mes_n} parcela(s)</span>
+                            <b>{formatarReais(arredonda(l.pendMes))}</b> <span className="text-xs text-gray-500">do mês · {l.erp_pend_mes_n} parcela(s)</span>
                           </span>
                         )}
                         {l.erp_pend_herd_n > 0 && (
                           <span className="block text-amber-800">
                             <b>{formatarReais(arredonda(l.pendHerd))}</b>{" "}
-                            <span className="text-[11px]">
+                            <span className="text-xs">
                               herdado desde {l.herd_desde ? `${l.herd_desde.slice(5, 7)}/${l.herd_desde.slice(0, 4)}` : "—"} · {l.erp_pend_herd_n} parcela(s)
                             </span>
                           </span>

@@ -110,7 +110,7 @@ export default async function NiboPage({ searchParams }: { searchParams: Promise
           <CartaoErp className="overflow-x-auto">
             <table className="w-full min-w-[1000px] text-right text-[12px]">
               <thead>
-                <tr className="bg-gray-100 text-[11px] uppercase tracking-wide text-gray-600">
+                <tr className="bg-gray-100 text-xs uppercase tracking-wide text-gray-600">
                   <th className="px-3 py-2 text-left">Resultado</th>
                   {MESES.map((n, i) => (
                     <th key={n} className={`px-2 py-2 ${i + 1 === mSel ? "bg-o2-coral/15 text-o2-coral" : ""}`}>{n}</th>

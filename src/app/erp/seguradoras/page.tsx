@@ -123,7 +123,7 @@ export default async function ErpSeguradorasPage({ searchParams }: { searchParam
             Quem não está aqui usa a regra geral da seguradora (tabela abaixo).
           </p>
           <table className="w-full text-xs">
-            <thead className="text-left text-[11px] uppercase tracking-wide text-gray-500">
+            <thead className="text-left text-xs uppercase tracking-wide text-gray-500">
               <tr>
                 <th className="py-1 pr-3">Seguradora</th>
                 <th className="py-1 pr-3">Produto</th>
@@ -178,7 +178,7 @@ export default async function ErpSeguradorasPage({ searchParams }: { searchParam
           </table>
           <form action={salvarRegraProduto} className="flex flex-wrap items-end gap-2 border-t border-gray-100 pt-3">
             <RascunhoAutomatico chave="erp-regra-produto-nova" />
-            <label className="flex flex-col gap-1 text-[11px] text-gray-500">
+            <label className="flex flex-col gap-1 text-xs text-gray-500">
               Seguradora
               <select name="seguradora_id" className={inputClass} required defaultValue="">
                 <option value="" disabled>
@@ -191,7 +191,7 @@ export default async function ErpSeguradorasPage({ searchParams }: { searchParam
                 ))}
               </select>
             </label>
-            <label className="flex flex-col gap-1 text-[11px] text-gray-500">
+            <label className="flex flex-col gap-1 text-xs text-gray-500">
               Produto
               <select name="produto" className={inputClass} required defaultValue="">
                 <option value="" disabled>
@@ -204,22 +204,22 @@ export default async function ErpSeguradorasPage({ searchParams }: { searchParam
                 ))}
               </select>
             </label>
-            <label className="flex flex-col gap-1 text-[11px] text-gray-500">
+            <label className="flex flex-col gap-1 text-xs text-gray-500">
               Regra
               <select name="regra_comissao" className={inputClass} defaultValue="proporcional">
                 <option value="proporcional">Proporcional</option>
                 <option value="esgotamento">Esgotamento</option>
               </select>
             </label>
-            <label className="flex flex-col gap-1 text-[11px] text-gray-500">
+            <label className="flex flex-col gap-1 text-xs text-gray-500">
               Esgot. até (parc.)
               <input name="esgotamento_ate_parcelas" type="number" min={1} max={24} placeholder="sempre" className={`${inputClass} w-24`} />
             </label>
-            <label className="flex flex-col gap-1 text-[11px] text-gray-500">
+            <label className="flex flex-col gap-1 text-xs text-gray-500">
               Observação
               <input name="observacao" placeholder="ex.: conferido no extrato 03/08" className={`${inputClass} w-56`} />
             </label>
-            <label className="flex items-center gap-1 pb-1 text-[11px] text-gray-500">
+            <label className="flex items-center gap-1 pb-1 text-xs text-gray-500">
               <input name="confirmada" type="checkbox" /> confirmada
             </label>
             <button type="submit" className="rounded-lg bg-o2-navy px-3 py-1.5 text-xs font-medium text-white hover:bg-o2-indigo">
@@ -237,7 +237,7 @@ export default async function ErpSeguradorasPage({ searchParams }: { searchParam
 
         <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
           <table className="w-full text-xs">
-            <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+            <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
               <tr>
                 <th className="px-3 py-2">Seguradora</th>
                 <th className="px-3 py-2 text-right">Docs 2026</th>

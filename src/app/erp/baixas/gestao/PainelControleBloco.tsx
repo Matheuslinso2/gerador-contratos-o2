@@ -56,7 +56,7 @@ export default async function PainelControleBloco({ seg, corretora, mes, ancora,
   return (
     <div className="grid gap-3 border-t border-gray-100 p-3 text-xs lg:grid-cols-2">
       <div className="rounded-lg bg-gray-50 p-3">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Histórico da seguradora <span className="ml-1 text-[10px] font-normal normal-case tracking-normal text-gray-400">(últimos 6 meses · calculado)</span> <InfoLegenda titulo="Histórico desta seguradora">Olha os extratos dos últimos 6 meses desta seguradora nesta empresa: quantos foram lidos, quantos vieram sem nenhuma linha a tratar (estorno, diferente do previsto ou não encontrada), em quantos meses houve problema e quantos estornos e linhas de pró-labore pago direto apareceram. Embaixo ficam suas anotações sobre o padrão da seguradora.</InfoLegenda></h3>
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Histórico da seguradora <span className="ml-1 text-xs font-normal normal-case tracking-normal text-gray-400">(últimos 6 meses · calculado)</span> <InfoLegenda titulo="Histórico desta seguradora">Olha os extratos dos últimos 6 meses desta seguradora nesta empresa: quantos foram lidos, quantos vieram sem nenhuma linha a tratar (estorno, diferente do previsto ou não encontrada), em quantos meses houve problema e quantos estornos e linhas de pró-labore pago direto apareceram. Embaixo ficam suas anotações sobre o padrão da seguradora.</InfoLegenda></h3>
         {hist.length > 0 ? (
           <p className="mt-1 text-gray-700">
             {hist.length} extrato(s) lidos; <b>{limpos}</b> sem nenhuma linha a tratar ({Math.round((limpos / hist.length) * 100)}%).
@@ -67,7 +67,7 @@ export default async function PainelControleBloco({ seg, corretora, mes, ancora,
         ) : (
           <p className="mt-1 text-gray-500">Sem extratos lidos nos últimos 6 meses.</p>
         )}
-        <p className="mt-1 text-[11px] text-gray-500">Baixa automática: {ativa ? "ligada" : "desligada (modo teste: só mostra “seria baixado automaticamente”)"}.</p>
+        <p className="mt-1 text-xs text-gray-500">Baixa automática: {ativa ? "ligada" : "desligada (modo teste: só mostra “seria baixado automaticamente”)"}.</p>
         <ul className="mt-2 space-y-1">
           {notas.filter((n) => !n.extrato_id).slice(0, 4).map((n) => (
             <li key={n.id} className="rounded bg-white px-2 py-1 text-gray-700"><span className="text-gray-400">{formatarData(n.created_at.slice(0, 10))} · {n.por_email?.split("@")[0] ?? "—"}:</span> {n.texto}</li>
@@ -85,7 +85,7 @@ export default async function PainelControleBloco({ seg, corretora, mes, ancora,
       </div>
 
       <div className="rounded-lg bg-gray-50 p-3">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Saldo a cobrar da seguradora<InfoLegenda titulo="Saldo a cobrar">A tolerância de até R$ 6 por parcela deixa a baixa passar, mas a diferença que a seguradora ainda deve não pode se perder. Aqui você registra o valor e o motivo; ele fica em aberto até ser marcado como recebido ou perdoado. O total aparece no cartão no topo da tela.</InfoLegenda>{saldoTotal !== 0 ? ` · ${brl(saldoTotal)}` : ""}</h3>
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Saldo a cobrar da seguradora<InfoLegenda titulo="Saldo a cobrar">A tolerância de até R$ 6 por parcela deixa a baixa passar, mas a diferença que a seguradora ainda deve não pode se perder. Aqui você registra o valor e o motivo; ele fica em aberto até ser marcado como recebido ou perdoado. O total aparece no cartão no topo da tela.</InfoLegenda>{saldoTotal !== 0 ? ` · ${brl(saldoTotal)}` : ""}</h3>
         {saldos.length === 0 ? (
           <p className="mt-1 text-gray-500">Nada em aberto.</p>
         ) : (
@@ -97,7 +97,7 @@ export default async function PainelControleBloco({ seg, corretora, mes, ancora,
                   {(["recebido", "perdoado"] as const).map((sit) => (
                     <form key={sit} action={fecharSaldoCobrar}>
                       <input type="hidden" name="id" value={x.id} /><input type="hidden" name="situacao" value={sit} /><input type="hidden" name="mes" value={mes} /><input type="hidden" name="ancora" value={ancora} />
-                      <button className="rounded border border-gray-300 px-2 py-0.5 text-[11px] hover:bg-gray-50">{sit === "recebido" ? "recebido" : "perdoar"}</button>
+                      <button className="rounded border border-gray-300 px-2 py-0.5 text-xs hover:bg-gray-50">{sit === "recebido" ? "recebido" : "perdoar"}</button>
                     </form>
                   ))}
                 </span>

@@ -227,7 +227,7 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
       </div>
 
       {heranca.length > 0 && (
-        <section className="space-y-2 rounded-2xl border border-orange-200 bg-orange-50/60 p-4">
+        <section className="space-y-2 rounded-xl border border-orange-200 bg-orange-50/60 p-4">
           <h2 className="text-base font-semibold text-gray-900">
             Herdadas de meses anteriores
             <InfoLegenda titulo="Herdadas de meses anteriores">
@@ -245,7 +245,7 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
                 </summary>
                 <div className="overflow-x-auto border-t border-gray-100">
                   <table className="w-full text-xs">
-                    <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+                    <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
                       <tr><th className="px-3 py-2">Código O2 do documento</th><th className="px-3 py-2">Nº da apólice</th><th className="px-3 py-2">Cliente</th><th className="px-3 py-2">Imobiliária</th><th className="px-3 py-2">Seg.</th><th className="px-3 py-2">Venceu em</th><th className="px-3 py-2 text-right">Dias desde o vencimento</th><th className="px-3 py-2">Situação</th><th className="px-3 py-2">Card</th></tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -275,7 +275,7 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
       )}
 
       {lotesResumo.length > 0 && (
-        <section className="space-y-2 rounded-2xl border border-sky-200 bg-sky-50/60 p-4">
+        <section className="space-y-2 rounded-xl border border-sky-200 bg-sky-50/60 p-4">
           <h2 className="text-base font-semibold text-gray-900">
             Lotes de renovação × apólices anteriores
             <InfoLegenda titulo="Lotes de renovação × apólices anteriores">
@@ -285,7 +285,7 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
           <p className="text-xs text-gray-600">{lotesResumo.length} lote(s) em {per.rotulo} · {lotesResumo.reduce((s2, l) => s2 + Number(l.confirmados), 0)} apólice(s) anterior(es) confirmada(s) · {lotesResumo.reduce((s2, l) => s2 + Number(l.sugestoes), 0)} sugestão(ões).</p>
           <div className="overflow-x-auto rounded-xl border border-sky-100 bg-white">
             <table className="w-full text-xs">
-              <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+              <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
                 <tr><th className="px-3 py-2">Código O2 do lote</th><th className="px-3 py-2">Imobiliária</th><th className="px-3 py-2">Seg.</th><th className="px-3 py-2">Card</th><th className="px-3 py-2 text-right">Confirmadas</th><th className="px-3 py-2 text-right">Sugestões</th></tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -309,7 +309,7 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
       )}
 
       {abertasPorCard.size > 0 && (
-        <section className="space-y-2 rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
+        <section className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/60 p-4">
           <h2 className="text-base font-semibold text-gray-900">
             Em acompanhamento até o desfecho
             <InfoLegenda titulo="Em acompanhamento até o desfecho">
@@ -321,7 +321,7 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
           </p>
           <div className="overflow-x-auto rounded-xl border border-amber-100 bg-white">
             <table className="w-full text-xs">
-              <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+              <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
                 <tr><th className="px-3 py-2">Card no Bitrix</th><th className="px-3 py-2">Apólices</th><th className="px-3 py-2">Cliente</th><th className="px-3 py-2">Venceu em</th><th className="px-3 py-2">Situação</th></tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -363,7 +363,7 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
         const premio = lista.reduce((s, c) => s + c.premio, 0);
         const segCards = lista.filter((c) => c.segimob).length;
         return (
-          <section key={b.id} className="space-y-2 rounded-2xl border border-gray-200 bg-gray-50/60 p-4">
+          <section key={b.id} className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/60 p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-[280px] flex-1">
                 <h2 className="text-base font-semibold text-gray-900">
@@ -378,19 +378,19 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
                   {segCards > 0 && <> · {segCards} lote(s) Segimob</>}
                 </p>
                 <div className="mt-1 flex flex-wrap gap-1.5">
-                  {semImob > 0 && <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[11px] font-medium text-orange-800">{semImob} sem imobiliária{b.id === "re_demais" ? " (venda direta O2)" : ""}</span>}
-                  {semPremio > 0 && <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-medium text-red-700">{semPremio} sem prêmio</span>}
-                  {semNumero > 0 && <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-medium text-red-700">{semNumero} sem Nº da apólice</span>}
-                  {incompletos > 0 && <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-[11px] font-medium text-yellow-800">{incompletos} cliente(s) com cadastro incompleto</span>}
-                  {comCard > 0 && <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-medium text-green-800">{comCard} já com card no Bitrix</span>}
-                  {jaRenov > 0 && <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-blue-800">{jaRenov} já em andamento/renovada(s)</span>}
+                  {semImob > 0 && <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-800">{semImob} sem imobiliária{b.id === "re_demais" ? " (venda direta O2)" : ""}</span>}
+                  {semPremio > 0 && <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">{semPremio} sem prêmio</span>}
+                  {semNumero > 0 && <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">{semNumero} sem Nº da apólice</span>}
+                  {incompletos > 0 && <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800">{incompletos} cliente(s) com cadastro incompleto</span>}
+                  {comCard > 0 && <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">{comCard} já com card no Bitrix</span>}
+                  {jaRenov > 0 && <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">{jaRenov} já em andamento/renovada(s)</span>}
                 </div>
               </div>
               <div className="text-right">
                 <button type="button" disabled title="A criação no Bitrix ainda não está ligada. Nesta fase a tela só mostra a prévia." className="cursor-not-allowed rounded-lg bg-gray-300 px-4 py-2 text-sm font-semibold text-white">
                   Autorizar criação dos {cardsNovos} card(s) novo(s)
                 </button>
-                <p className="mt-1 max-w-[260px] text-[11px] text-gray-500">Autorização ainda não ligada ao Bitrix: nada é criado a partir desta tela.</p>
+                <p className="mt-1 max-w-[260px] text-xs text-gray-500">Autorização ainda não ligada ao Bitrix: nada é criado a partir desta tela.</p>
               </div>
             </div>
 
@@ -398,9 +398,9 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
               {lista.map((c) => (
                 <details key={c.chave} className="rounded-xl border border-gray-200 bg-white">
                   <summary className="flex cursor-pointer flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5 text-xs">
-                    <span className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${c.tipo === "lote" ? "bg-o2-navy text-white" : "bg-gray-100 text-gray-700"}`}>{c.tipo === "lote" ? "LOTE" : "INDIVIDUAL"}</span>
-                    {c.segimob && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[11px] font-semibold text-purple-800">SEGIMOB</span>}
-                    {!c.segimob && c.canais.filter((k) => k !== "SEGIMOB").map((k) => <span key={k} className="rounded bg-purple-50 px-1.5 py-0.5 text-[11px] font-medium text-purple-700">{k}</span>)}
+                    <span className={`rounded px-1.5 py-0.5 text-xs font-semibold ${c.tipo === "lote" ? "bg-o2-navy text-white" : "bg-gray-100 text-gray-700"}`}>{c.tipo === "lote" ? "LOTE" : "INDIVIDUAL"}</span>
+                    {c.segimob && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-xs font-semibold text-purple-800">SEGIMOB</span>}
+                    {!c.segimob && c.canais.filter((k) => k !== "SEGIMOB").map((k) => <span key={k} className="rounded bg-purple-50 px-1.5 py-0.5 text-xs font-medium text-purple-700">{k}</span>)}
                     <span className="min-w-[260px] flex-1 text-sm font-medium text-gray-900">{c.titulo}</span>
                     <span>{c.docs.length} item(ns)</span>
                     <span>vence {formatarData(c.fim)}</span>
@@ -409,7 +409,7 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
                   </summary>
                   <div className="overflow-x-auto border-t border-gray-100">
                     <table className="w-full text-xs">
-                      <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+                      <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
                         <tr>
                           <th className="px-3 py-2">Abrir</th>
                           <th className="px-3 py-2">Tipo de documento</th>
@@ -435,12 +435,12 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
                           return (
                           <tr key={d.documento_id} className="hover:bg-gray-50">
                             <td className="px-3 py-1.5"><BotaoVerDocumento id={d.documento_id} /></td>
-                            <td className="px-3 py-1.5"><span className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-semibold ${t.cor}`}>{t.nome}</span></td>
+                            <td className="px-3 py-1.5"><span className={`whitespace-nowrap rounded px-1.5 py-0.5 text-xs font-semibold ${t.cor}`}>{t.nome}</span></td>
                             <td className="px-3 py-1.5">
                               {titular ? <span className="font-medium text-gray-900">{titular}</span> : <span className="text-gray-400">titular não ligado</span>}
-                              {d.cliente_incompleto && <span className="ml-1 rounded bg-yellow-100 px-1 text-[10px] text-yellow-800">cadastro incompleto</span>}
+                              {d.cliente_incompleto && <span className="ml-1 rounded bg-yellow-100 px-1 text-xs text-yellow-800">cadastro incompleto</span>}
                               {k?.inquilino && k.inquilino !== titular ? (
-                                <span className="block text-[10px] text-gray-500">inquilino: {d.cliente_id ? <Link href={`/erp/clientes/${d.cliente_id}`} className="hover:underline">{k.inquilino}</Link> : k.inquilino}</span>
+                                <span className="block text-xs text-gray-500">inquilino: {d.cliente_id ? <Link href={`/erp/clientes/${d.cliente_id}`} className="hover:underline">{k.inquilino}</Link> : k.inquilino}</span>
                               ) : null}
                             </td>
                             <td className="px-3 py-1.5">{k?.produto_nome ?? d.ramo}</td>

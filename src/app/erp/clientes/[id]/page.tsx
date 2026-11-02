@@ -58,7 +58,7 @@ export default async function ErpClienteFichaPage({ params, searchParams }: { pa
       <div className="flex flex-wrap items-baseline gap-3">
         <h1 className="text-xl font-semibold text-o2-navy">{c.nome ?? "Cliente sem nome"}</h1>
         <span className="rounded bg-o2-navy px-2 py-0.5 text-xs font-semibold text-white">{codigoCliente(c.codigo_cliente)}</span>
-        {incompleto && <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-[11px] font-medium text-yellow-800">cadastro incompleto</span>}
+        {incompleto && <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800">cadastro incompleto</span>}
       </div>
       {aviso && AVISO[aviso] && <p className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">{AVISO[aviso]}</p>}
       {erro && <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{erro.split(" | ").map((e) => <span key={e} className="block">{e}</span>)}</p>}
@@ -82,34 +82,34 @@ export default async function ErpClienteFichaPage({ params, searchParams }: { pa
         <form action={atualizarCliente} className="space-y-3">
           <RascunhoAutomatico sufixo={c.id} />
           <input type="hidden" name="id" value={c.id} />
-          <label className="block text-[11px] font-medium uppercase tracking-wide text-gray-500">Nome completo ou razão social
+          <label className="block text-xs font-medium uppercase tracking-wide text-gray-500">Nome completo ou razão social
             <input name="nome" defaultValue={c.nome ?? ""} required className={input} />
           </label>
           <div className="grid gap-3 md:grid-cols-3">
             <div>
-              <div className="text-[11px] font-medium uppercase tracking-wide text-gray-500">CPF/CNPJ</div>
+              <div className="text-xs font-medium uppercase tracking-wide text-gray-500">CPF/CNPJ</div>
               {documentoValido ? <div className="mt-1 rounded-lg bg-gray-50 px-3 py-2 text-sm">{formatarDocumento(c.cpf)}</div> : (
                 <>
                   <input name="documento" defaultValue={c.cpf ?? ""} placeholder="falta: informe o CPF ou CNPJ" className={`${input} mt-1 border-red-300`} />
-                  <p className="mt-1 text-[11px] text-red-700">{c.cpf ? "CPF/CNPJ inválido no cadastro: corrija." : "Sem CPF/CNPJ: informe."}</p>
+                  <p className="mt-1 text-xs text-red-700">{c.cpf ? "CPF/CNPJ inválido no cadastro: corrija." : "Sem CPF/CNPJ: informe."}</p>
                 </>
               )}
             </div>
-            <label className="block text-[11px] font-medium uppercase tracking-wide text-gray-500">E-mail
+            <label className="block text-xs font-medium uppercase tracking-wide text-gray-500">E-mail
               <input name="email" type="email" defaultValue={c.email ?? ""} className={input} />
             </label>
-            <label className="block text-[11px] font-medium uppercase tracking-wide text-gray-500">Telefone com DDD
+            <label className="block text-xs font-medium uppercase tracking-wide text-gray-500">Telefone com DDD
               <input name="telefone" defaultValue={c.telefone ?? ""} className={input} />
             </label>
           </div>
-          <p className="text-[11px] text-gray-500">
+          <p className="text-xs text-gray-500">
             Origem do cadastro: {c.primeira_fonte ?? "—"} · criado em {formatarData(c.created_at)}
             {c.codigo_corp_cliente ? ` · código do cliente no Corp ${c.codigo_corp_cliente}` : ""}. O CPF/CNPJ é a chave do cadastro e não muda; e-mail e telefone antigos ficam guardados no histórico.
           </p>
           <button type="submit" className="rounded-full bg-o2-navy px-5 py-2 text-sm font-semibold text-white hover:opacity-90">Salvar</button>
         </form>
         {anteriores.length > 0 && (
-          <p className="text-[11px] text-gray-500">Contatos anteriores: {anteriores.map((a) => [a.email, a.telefone].filter(Boolean).join(" / ")).join(" · ")}</p>
+          <p className="text-xs text-gray-500">Contatos anteriores: {anteriores.map((a) => [a.email, a.telefone].filter(Boolean).join(" / ")).join(" · ")}</p>
         )}
       </section>
 
@@ -125,7 +125,7 @@ export default async function ErpClienteFichaPage({ params, searchParams }: { pa
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
-              <thead className="text-left text-[11px] uppercase tracking-wide text-gray-500">
+              <thead className="text-left text-xs uppercase tracking-wide text-gray-500">
                 <tr><th className="py-1 pr-3">Abrir</th><th className="py-1 pr-3">Tipo de documento</th><th className="py-1 pr-3">Titular do seguro</th><th className="py-1 pr-3">Produto</th><th className="py-1 pr-3">Seguradora</th><th className="py-1 pr-3">Vigência</th><th className="py-1 pr-3">Situação</th><th className="py-1 pr-3">Código O2 do documento</th><th className="py-1 pr-3">Nº da apólice</th><th className="py-1 pr-3">Imobiliária</th><th className="py-1 pr-3 text-right">Prêmio total</th></tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -135,10 +135,10 @@ export default async function ErpClienteFichaPage({ params, searchParams }: { pa
                   return (
                     <tr key={d.id} className="hover:bg-gray-50">
                       <td className="py-1.5 pr-3"><BotaoVerDocumento id={d.id} /></td>
-                      <td className="py-1.5 pr-3"><span className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-semibold ${t.cor}`}>{t.nome}</span></td>
+                      <td className="py-1.5 pr-3"><span className={`whitespace-nowrap rounded px-1.5 py-0.5 text-xs font-semibold ${t.cor}`}>{t.nome}</span></td>
                       <td className="py-1.5 pr-3">
                         {k?.titular ?? c.nome ? <span className="font-medium text-gray-900">{k?.titular ?? c.nome}</span> : "—"}
-                        {k?.inquilino && k.inquilino !== (k.titular ?? c.nome) ? <span className="block text-[10px] text-gray-500">inquilino: {k.inquilino}</span> : null}
+                        {k?.inquilino && k.inquilino !== (k.titular ?? c.nome) ? <span className="block text-xs text-gray-500">inquilino: {k.inquilino}</span> : null}
                       </td>
                       <td className="py-1.5 pr-3">{k?.produto_nome ?? d.ramo?.abreviacao ?? "—"}</td>
                       <td className="py-1.5 pr-3">{k?.seguradora_nome ?? d.seguradora?.abreviacao ?? "—"}</td>
@@ -163,7 +163,7 @@ export default async function ErpClienteFichaPage({ params, searchParams }: { pa
 function Info({ rotulo, valor, info }: { rotulo: string; valor: string; info?: React.ReactNode }) {
   return (
     <div>
-      <div className="text-[11px] uppercase tracking-wide text-gray-500">
+      <div className="text-xs uppercase tracking-wide text-gray-500">
         {rotulo}
         {info ? <InfoLegenda titulo={rotulo}>{info}</InfoLegenda> : null}
       </div>

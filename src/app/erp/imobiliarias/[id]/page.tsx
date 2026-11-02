@@ -23,7 +23,7 @@ const lista = (v: string[] | null | undefined) => (v && v.length ? v.join(", ") 
 function Campo({ rotulo, valor, info }: { rotulo: string; valor: React.ReactNode; info?: React.ReactNode }) {
   return (
     <div>
-      <div className="text-[11px] uppercase tracking-wide text-gray-500">{rotulo}{info}</div>
+      <div className="text-xs uppercase tracking-wide text-gray-500">{rotulo}{info}</div>
       <div className="text-sm text-gray-900">{valor ?? <span className="text-gray-300">—</span>}</div>
     </div>
   );
@@ -61,7 +61,7 @@ export default async function ErpImobiliaria({ params }: { params: Promise<{ id:
         <Link href="/erp/imobiliarias" className="text-sm text-gray-500 hover:text-o2-navy hover:underline">← Imobiliárias</Link>
         <div className="flex flex-wrap items-baseline gap-3">
           <h1 className="text-xl font-semibold text-o2-navy">{imob.nome}</h1>
-          {grupo && <span className="rounded-full bg-o2-navy px-2.5 py-0.5 text-[11px] font-medium text-white">grupo {grupo.nome}{imob.papel_no_grupo ? ` · ${imob.papel_no_grupo}` : ""}</span>}
+          {grupo && <span className="rounded-full bg-o2-navy px-2.5 py-0.5 text-xs font-medium text-white">grupo {grupo.nome}{imob.papel_no_grupo ? ` · ${imob.papel_no_grupo}` : ""}</span>}
         </div>
         <p className="text-sm text-gray-600">
           {resumo?.docs_total ?? 0} documentos no ERP ·{" "}
@@ -79,7 +79,7 @@ export default async function ErpImobiliaria({ params }: { params: Promise<{ id:
       </section>
 
       <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Cadastro <span className="ml-1 text-[10px] font-normal normal-case tracking-normal text-gray-400">(fonte: base única de imobiliárias · somente leitura)</span><InfoLegenda titulo="Cadastro">Dados do cadastro único de imobiliárias, o mesmo do Workspace e do Power BI. Aqui só se lê; para corrigir, use o link editar o cadastro no Workspace. Cód. O2 da imobiliária é o código dela na O2; Cód. da imobiliária no Corp é o código dela como produtor no Corp; Grupo no Power BI é o nome usado para juntar fichas no Power BI. Os e-mails de fatura e de repasse são os usados nesses envios, e a situação na Receita é a da última consulta registrada.</InfoLegenda></h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Cadastro <span className="ml-1 text-xs font-normal normal-case tracking-normal text-gray-400">(fonte: base única de imobiliárias · somente leitura)</span><InfoLegenda titulo="Cadastro">Dados do cadastro único de imobiliárias, o mesmo do Workspace e do Power BI. Aqui só se lê; para corrigir, use o link editar o cadastro no Workspace. Cód. O2 da imobiliária é o código dela na O2; Cód. da imobiliária no Corp é o código dela como produtor no Corp; Grupo no Power BI é o nome usado para juntar fichas no Power BI. Os e-mails de fatura e de repasse são os usados nesses envios, e a situação na Receita é a da última consulta registrada.</InfoLegenda></h2>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <Campo rotulo="CNPJ / CPF" valor={imob.cnpj ? `${formatarDocumento(imob.cnpj)}${imob.tipo_pessoa ? ` · ${imob.tipo_pessoa.toLowerCase()}` : ""}` : null} />
           <Campo rotulo="Cód. O2 da imobiliária (produtor)" valor={imob.codigo_o2 ?? null} />
@@ -95,7 +95,7 @@ export default async function ErpImobiliaria({ params }: { params: Promise<{ id:
           <Campo rotulo="E-mails de repasse" valor={lista(imob.email_repasses)} />
           <Campo rotulo="Situação na Receita" valor={imob.receita_situacao ? `${imob.receita_situacao}${imob.receita_consultada_em ? ` (consulta em ${imob.receita_consultada_em.slice(8, 10)}/${imob.receita_consultada_em.slice(5, 7)}/${imob.receita_consultada_em.slice(0, 4)})` : ""}` : null} />
         </div>
-        {!lista(imob.email_faturas) && faturaAtiva && <p className="text-[11px] text-orange-700">Tem fatura, mas nenhum e-mail de fatura cadastrado: o envio da fatura não tem para onde ir.</p>}
+        {!lista(imob.email_faturas) && faturaAtiva && <p className="text-xs text-orange-700">Tem fatura, mas nenhum e-mail de fatura cadastrado: o envio da fatura não tem para onde ir.</p>}
       </section>
 
       {grupo && (
@@ -122,7 +122,7 @@ export default async function ErpImobiliaria({ params }: { params: Promise<{ id:
           <p className="text-xs text-gray-500">Nenhuma apólice vigente.</p>
         ) : (
           <table className="w-full text-xs">
-            <thead className="text-left text-[11px] uppercase tracking-wide text-gray-500">
+            <thead className="text-left text-xs uppercase tracking-wide text-gray-500">
               <tr><th className="py-1 pr-3">Produto</th><th className="py-1 pr-3">Seguradora</th><th className="py-1 pr-3 text-right">Apólices</th><th className="py-1 pr-3 text-right">Prêmio</th><th className="py-1 pr-3 text-right">Comissão</th></tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -173,7 +173,7 @@ export default async function ErpImobiliaria({ params }: { params: Promise<{ id:
           <p className="text-xs text-gray-500">Nenhum.</p>
         ) : (
           <table className="w-full text-xs">
-            <thead className="text-left text-[11px] uppercase tracking-wide text-gray-500">
+            <thead className="text-left text-xs uppercase tracking-wide text-gray-500">
               <tr>
                 <th className="py-1 pr-3">Seguradora</th>
                 <th className="py-1 pr-3 text-right">Pontos</th>
@@ -194,7 +194,7 @@ export default async function ErpImobiliaria({ params }: { params: Promise<{ id:
           </table>
         )}
       </section>
-      {resumo?.calculado_em && <p className="text-[11px] text-gray-400">Resumo da produção atualizado a cada hora (última atualização {new Date(resumo.calculado_em).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })}).</p>}
+      {resumo?.calculado_em && <p className="text-xs text-gray-400">Resumo da produção atualizado a cada hora (última atualização {new Date(resumo.calculado_em).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })}).</p>}
     </PaginaErp>
   );
 }

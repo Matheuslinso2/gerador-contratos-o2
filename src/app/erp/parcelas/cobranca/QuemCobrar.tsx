@@ -29,12 +29,12 @@ export default async function QuemCobrar({ mes }: { mes?: string | null }) {
           A cobrança é feita à imobiliária, que em geral cobra o inquilino junto com o aluguel e paga o boleto do seguro; algumas deixam o boleto com o inquilino. Nas parcelas que vêm por fatura, quem paga é sempre a imobiliária. Cada linha reúne as parcelas em aberto (urgente, atenção ou risco de cancelamento) daquela imobiliária, com o contato dela (e-mail de faturas, e-mail de repasses, e-mail geral e telefone) e o histórico de cobranças enviadas por e-mail com assunto "em aberto", da caixa da Nathalie (quantidade, meses e última data). Não administrados: parcelas de imóveis em que a imobiliária só intermediou a locação (mostrou o imóvel e fechou o contrato) e não acompanha depois; nesses casos a cobrança vai ao inquilino ou ao proprietário, não à imobiliária. A linha "sem imobiliária ligada" reúne parcelas cujo documento ainda não tem imobiliária no ERP. Atualizado a cada 15 minutos.
         </InfoLegenda>
       </h2>
-      <p className="text-[11px] text-gray-500">
+      <p className="text-xs text-gray-500">
         {linhas.length} imobiliárias com parcela em aberto · {totalParc.toLocaleString("pt-BR")} parcelas · {reais(totalValor)} · as 80 maiores por quantidade de parcelas.
       </p>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
-          <thead className="text-left text-[11px] uppercase tracking-wide text-gray-500">
+          <thead className="text-left text-xs uppercase tracking-wide text-gray-500">
             <tr>
               <th className="py-1.5 pr-3">Imobiliária</th>
               <th className="py-1.5 pr-3">Contato da imobiliária</th>
@@ -56,13 +56,13 @@ export default async function QuemCobrar({ mes }: { mes?: string | null }) {
                 <tr key={l.imobiliaria_id ?? `sem-${i}`} className={sem ? "bg-amber-50/50" : undefined}>
                   <td className="py-1.5 pr-3 font-medium text-gray-900">
                     {l.imobiliaria}
-                    {l.quem_paga_boleto && <span className="mt-0.5 block text-[10px] font-normal text-gray-500">boleto do seguro: {l.quem_paga_boleto === "imobiliaria" ? "a imobiliária paga" : l.quem_paga_boleto === "inquilino" ? "fica com o inquilino" : "depende"}</span>}
+                    {l.quem_paga_boleto && <span className="mt-0.5 block text-xs font-normal text-gray-500">boleto do seguro: {l.quem_paga_boleto === "imobiliaria" ? "a imobiliária paga" : l.quem_paga_boleto === "inquilino" ? "fica com o inquilino" : "depende"}</span>}
                   </td>
                   <td className="py-1.5 pr-3 text-gray-700">
                     {sem ? (
                       <span className="text-gray-400">ligar à imobiliária do documento</span>
                     ) : semContato ? (
-                      <span className="rounded bg-red-50 px-1.5 py-0.5 text-[11px] text-red-700">sem contato cadastrado</span>
+                      <span className="rounded bg-red-50 px-1.5 py-0.5 text-xs text-red-700">sem contato cadastrado</span>
                     ) : (
                       <div className="space-y-0.5">
                         {email && <a href={`mailto:${email}`} className="block text-o2-navy underline">{email}{l.email_faturas ? " (faturas)" : l.email_repasses ? " (repasses)" : ""}</a>}

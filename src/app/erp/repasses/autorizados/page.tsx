@@ -77,7 +77,7 @@ export default async function ErpRepassesAutorizadosPage({ searchParams }: { sea
       <NavegadorMes caminho="/erp/repasses/autorizados" mes={f.mes} params={{ imobiliaria: f.imobiliaria }} />
       <form method="get" action="/erp/repasses/autorizados" className="flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 bg-white p-3">
         <input type="hidden" name="mes" value={mes} />
-        <label className="flex flex-col gap-1 text-[11px] font-medium uppercase tracking-wide text-gray-500">
+        <label className="flex flex-col gap-1 text-xs font-medium uppercase tracking-wide text-gray-500">
           Imobiliária
           <input name="imobiliaria" defaultValue={f.imobiliaria ?? ""} placeholder="nome ou parte do nome" className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm normal-case tracking-normal text-gray-800" />
         </label>
@@ -89,7 +89,7 @@ export default async function ErpRepassesAutorizadosPage({ searchParams }: { sea
       ) : (
         <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
           <table className="w-full text-xs">
-            <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+            <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
               <tr>
                 <th className="px-3 py-2">Imobiliária</th>
                 <th className="px-3 py-2">Autorizado em</th>
@@ -129,7 +129,7 @@ export default async function ErpRepassesAutorizadosPage({ searchParams }: { sea
                         <form action={cancelarAutorizacao}>
                           <input type="hidden" name="lote_id" value={l.id} />
                           <input type="hidden" name="mes" value={mes} />
-                          <button type="submit" className="text-[11px] text-gray-500 underline hover:text-red-700">
+                          <button type="submit" className="text-xs text-gray-500 underline hover:text-red-700">
                             cancelar autorização
                           </button>
                         </form>
@@ -161,7 +161,7 @@ export default async function ErpRepassesAutorizadosPage({ searchParams }: { sea
             Herdados de meses anteriores: autorizados e ainda aguardando o pagamento pelo Nibo ({herdados.length} · {formatarReais(arredonda(herdados.reduce((t, l) => t + Number(l.total_liquido), 0)))})
           </div>
           <table className="w-full text-xs">
-            <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+            <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
               <tr>
                 <th className="px-3 py-1.5">Imobiliária</th>
                 <th className="px-3 py-1.5">Herdado de</th>
