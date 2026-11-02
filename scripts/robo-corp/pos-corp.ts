@@ -115,6 +115,5 @@ async function relatorio(situacao: "ok" | "parcial" | "adiado" | "erro") {
   rodar("aplica no ERP o que está vazio e confere (propostas)", ["scripts/erp/ler-propostas-pdf.ts", "--aplicar"], 30);
   await rpc("erp_preencher_dt_emissao");
   await rpc("erp_atualizar_vencimentos");
-  await rpc("erp_cobranca_atualizar");
   await relatorio(passos.some((p) => !p.ok) ? "parcial" : "ok");
 })().catch(async (e) => { log("ERRO no pós-processamento: " + (e as Error).message); try { await relatorio("erro"); } catch { /* ok */ } process.exit(1); });
