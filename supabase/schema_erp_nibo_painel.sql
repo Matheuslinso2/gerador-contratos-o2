@@ -33,3 +33,7 @@ create policy erp_nibo_painel_estrutura_o2 on public.erp_nibo_painel_estrutura f
 -- erp_nibo_painel_indicadores(p_ano, p_empresa) -> ordem, indicador, rotulo, unidade, m01..m12, total, base_conceitual.
 -- Margem de contribuição e %, despesas (C) % da receita, ponto de equilíbrio (despesas ÷ margem %), folga sobre o ponto de equilíbrio, resultado operacional e %, movimento fora do painel,
 -- fluxo de caixa do mês e acumulado. O acumulado só é confiável com o histórico de jan–jun carregado. Migração "erp_nibo_painel_indicadores".
+
+-- 03/11/2026 (4): histórico de 2026 carregado (erp_nibo_historico_estado concluído; 141 categorias em erp_nibo_categorias — a API devolve lista plana: sem categoria-pai nem código, só in/out).
+-- Conferido contra o print da corretora jan–jun/2026 e totais do ano: receitas operacionais 2.144.706, custos −546.981, margem 1.597.724, despesas (C) −2.110.148 — IGUAIS depois de tirar
+-- "9.1 - AQUISIÇÃO DE EQUIPAMENTOS" do bloco C (era 1.898 a mais; no Nibo é investimento, fora das despesas operacionais): fica em FORA DO PAINEL.
