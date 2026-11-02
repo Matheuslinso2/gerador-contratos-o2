@@ -375,3 +375,9 @@ create table if not exists public.erp_vinculo_pontuacao (
 -- Contradição (CPF diferente, seguradora diferente, PDF cita OUTRO nº) = NÃO vincula: faixa 'conferir' + fila erp_vinculo_fila_conferencia (e-mails que citam o segurado; conversas de WhatsApp do Bitrix ainda fora do banco).
 -- erp_vinculo_pesos.tipo passou a aceitar 'prova' (prova_pdf_cita_vinculo, prova_parcela_paga_com_proposta) e limite_faixa 'conferir' (pdf_cita_outro_numero).
 -- Novo tipo retroativo: proposta_apolice (erp_vinculo_pontuar_retroativo). Definições vigentes no banco; migrações "erp_vinculo_provas_conclusivas" e "erp_vinculo_fila_conferencia".
+
+-- ===== CALIBRAÇÃO DOS PESOS POR REGRESSÃO LOGÍSTICA (02/11/2026) =====
+-- Treino: erp_vinculo_treino (lote TREINO-0211): renovação planilha -> sucessora; rótulo forte = PDF oficial (306 grupos), fraco = cadeia do Corp (2.707 grupos). Sem vazamento: a prova do PDF e renovado_id_no_erp NÃO entram como feature.
+-- Script: scripts/erp/vinculo-regressao.ts (ridge/lasso em TypeScript, validação cruzada por grupo, bootstrap). Resultado fica como CANDIDATO inativo em erp_vinculo_pesos_candidatos / erp_vinculo_modelo (versão REGLOG-0211).
+-- erp_vinculo_probabilidade(versao, tarefa, features jsonb) devolve a probabilidade. Aprendizado ativo: erp_vinculo_rotulos_gerar(...) + erp_vinculo_rotulo_responder(id, 1|0, quem); PDF: erp-o2/CONFERENCIA-RENOVACOES-APRENDIZADO-ATIVO.pdf.
+-- Tabelas: erp_vinculo_treino, erp_vinculo_pesos_candidatos, erp_vinculo_modelo, erp_vinculo_rotulos. Definições vigentes das funções: no banco (migrações "erp_vinculo_treino_renovacao", "erp_vinculo_probabilidade_e_sem_rotulo", "erp_vinculo_rotulos_aprendizado_ativo").
