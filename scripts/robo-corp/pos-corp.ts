@@ -106,6 +106,7 @@ async function relatorio(situacao: "ok" | "parcial" | "adiado" | "erro") {
   rodar("OCR local das telas", [...SEM, "scripts/robo-corp/ocr-telas.ts"], 120);
   rodar("lê as telas e grava os campos", [...SEM, "scripts/robo-corp/ler-telas.ts", "--gravar"]);
   rodar("envia os anexos baixados ao Workspace", [...SEM, "scripts/robo-corp/enviar-anexos.ts"], 120);
+  rodar("confere cada anexo novo com o documento (seguradora/nº/titular no PDF)", [...SEM, "scripts/robo-corp/conferir-anexos.ts", "--todos", "--gravar"], 120);
   rodar("vincula as telas ao ERP", [...SEM, "scripts/robo-corp/vincular-telas.ts", "--gravar"]);
   rodar("limpa as fotos já enviadas", [...SEM, "scripts/robo-corp/limpar-telas.ts", "--gravar"]);
   rodar("lê os PDFs de apólice novos (texto nativo)", ["scripts/erp/ler-apolices-vigentes-pdf.ts"], 120);
