@@ -37,3 +37,7 @@ create policy erp_nibo_painel_estrutura_o2 on public.erp_nibo_painel_estrutura f
 -- 03/11/2026 (4): histórico de 2026 carregado (erp_nibo_historico_estado concluído; 141 categorias em erp_nibo_categorias — a API devolve lista plana: sem categoria-pai nem código, só in/out).
 -- Conferido contra o print da corretora jan–jun/2026 e totais do ano: receitas operacionais 2.144.706, custos −546.981, margem 1.597.724, despesas (C) −2.110.148 — IGUAIS depois de tirar
 -- "9.1 - AQUISIÇÃO DE EQUIPAMENTOS" do bloco C (era 1.898 a mais; no Nibo é investimento, fora das despesas operacionais): fica em FORA DO PAINEL.
+
+-- 03/11/2026 (5): ESTUDO da carga tributária (Simples Nacional nas duas empresas) — erp-o2/ESTUDO-CARGA-TRIBUTARIA-O2-SIMPLES-NACIONAL.pdf.
+-- erp_simples_tabela (Anexos III e V, editável) e erp_simples_estimativa(p_empresa, p_ano): por mês, receita, RBT12, Fator R, anexo, alíquota efetiva, DAS esperado × DAS pago no mês seguinte (a partir do Nibo, caixa).
+-- É ESTIMATIVA; só confiável quando os 12 meses anteriores estiverem carregados (meses_de_dados_12m = 12 e folha completa). Migração "erp_simples_estimativa".
