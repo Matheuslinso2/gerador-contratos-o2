@@ -312,3 +312,15 @@ alter table public.erp_nao_renovadas enable row level security;
 create policy erp_nao_renovadas_o2 on public.erp_nao_renovadas for all to authenticated using (is_colaborador_o2()) with check (is_colaborador_o2());
 -- Funções erp_motivo_texto(), erp_norm_nome(), erp_data_iso() e erp_nao_renovadas_calcular(): a definição vigente está no banco
 -- (select pg_get_functiondef('erp_nao_renovadas_calcular'::regproc)); migração "erp_nao_renovadas_calcular_v2".
+
+-- ===== E-MAILS DE RENOVAÇÃO (Matheus, 02/11/2026: a equipe cobra a renovação e recebe os valores atualizados da locação por e-mail) =====
+-- erp_renovacao_emails: e-mail com "renova" no assunto ↔ APÓLICE, pelo nome do segurado/locatário no assunto/trecho + imobiliária + mês do vencimento (±1). Recalcular: select erp_renovacao_emails_calcular();
+-- Pistas do texto (erp_pista_renovacao): autoriza_renovar, nao_renovar, valor_atualizado. Depois de erp_nao_renovadas_calcular() rodar erp_nao_renovadas_aplicar_emails() (motivo vindo de e-mail = 'email_indicio').
+-- erp_negocio_emails_renovacao_ligar (lote EMAILREN-*) liga a conversa ao card de renovação da imobiliária/mês. erp_renovacao_controle ganhou: emails_renovacao, ultimo_email, email_sinal_nao_renovar, email_valor_atualizado.
+-- Definições vigentes: select pg_get_functiondef('<função>'::regproc) / pg_get_viewdef('<visão>'::regclass); migrações "erp_negocio_emails_renovacao_ligar", "erp_renovacao_emails_por_apolice", "erp_nao_renovadas_aplicar_emails", "erp_renovacao_controle_com_emails".
+create table if not exists public.erp_renovacao_emails (
+  documento_id uuid not null references erp_documentos(id) on delete cascade, message_id text not null, thread_id text, data timestamptz, de text, assunto text,
+  mes_renovacao date, pistas text[], trecho text, calculado_em timestamptz not null default now(), primary key (documento_id, message_id));
+create index if not exists erp_renovacao_emails_msg on public.erp_renovacao_emails (message_id);
+alter table public.erp_renovacao_emails enable row level security;
+create policy erp_renovacao_emails_o2 on public.erp_renovacao_emails for all to authenticated using (is_colaborador_o2()) with check (is_colaborador_o2());
