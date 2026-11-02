@@ -25,3 +25,6 @@ create policy erp_nibo_painel_estrutura_o2 on public.erp_nibo_painel_estrutura f
 -- 03/11/2026: p_empresa aceita 'corretora' | 'capitalizacao' | 'consolidado' (soma categoria a categoria, mesma árvore). Migração "erp_nibo_painel_consolidado".
 -- Conferido: consolidado = corretora + capitalizacao (ex.: receita de seguros set/2026 191.345 + 195.563 = 386.908; resultado A+B+C set −65.005 + 22.247 = −42.758).
 -- Atenção: transferência entre as duas empresas, se vier categorizada como receita/despesa, contaria em dobro no consolidado; hoje fica em FORA DO PAINEL (sem categoria).
+
+-- 03/11/2026 (2): códigos por empresa — corretora usa "5.1 - NOVAS RECEITAS", capitalização "2.1 - NOVAS RECEITAS" (linhas em erp_nibo_painel_estrutura com a coluna empresa). No consolidado aparecem as duas, cada uma com o seu código.
+-- Conferido contra o print da corretora (jul–out/2026): receita de seguros 208.060 / 222.324 / 191.345 / 176.843, novas receitas set 20 e out 36 — iguais. Migração "erp_nibo_painel_codigos_por_empresa".
