@@ -16,3 +16,9 @@
 -- (nosso_numero_corp is not null or origem = 'api') em TODOS os tipos. Out/26 conferido com corp_retrato_producao:
 -- Novos corp_import 405 docs / R$ 1.466.201 (= PBI), Endossos+Cancelamentos prêmio -1.456 / com -621 (= PBI).
 -- Importação de out/26 refeita: select erp_importar_corp('2026-10-01','2026-11-01', false) (sem regerar parcelas).
+
+-- 03/11 (4): ERP independente do Corp. A view erp_producao_base_v passa a contar também a proposta efetivada do Bitrix (origem='bitrix',
+-- situacao='proposta', NOVO/RENV) que ainda não tem Nosso nº do Corp, exceto se o mesmo negócio já estiver no Corp
+-- (mesma seguradora, prêmio líquido ±1, início de vigência ±3 dias). Importação refeita: erp_importar_corp('2026-10-01','2027-01-01', false)
+-- + parcelas/comissões estimadas só para documentos corp_import sem parcela (3.157 parcelas).
+-- Pendência: propostas sem início de vigência (100 novos em out/2026) não entram em nenhum mês.
