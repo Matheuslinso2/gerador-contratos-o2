@@ -11,3 +11,7 @@
 --   erp_quitada_portal_nao_paga | portal_cancelada_erp_quitada). Não altera data nem baixa: aviso para conferência.
 -- Carga: scripts/erp/carregar-portal-porto-cobranca.ts (parcelas | faturas | vencidas), ensaio por padrão, --gravar para gravar.
 -- 02/11: 1.258 parcelas (01/01/2026 a 31/01/2027, SUSEP CFU15J, todas as 42 SUSEPs consultadas), 1.161 ligadas; vencidas 101 linhas (77 ligadas).
+--   erp_portal_devolucoes (migration erp_portal_porto_devolucoes): aba Devoluções (crédito em conta; estorno no cartão sem itens em 02/11), sem dados bancários; erp_portal_vincular_devolucoes liga
+--   a imobiliária pelo CNPJ e o documento pelo Nº da apólice quando o portal traz o formato de apólice (os "99..." são Nº de documento do portal, ficam sem_apolice).
+--   02/11: 17 devoluções aguardando, R$ 4.832,63 (pagamento a maior, endosso de restituição, parcela cancelada).
+-- Faturas (erp_portal_faturas): 1.374 lidas em 02/11 (138 págs; 1.306 pagas, 48 canceladas, 9 vencidas, 11 a vencer). Carga pendente de arquivo: o Chrome bloqueou o 4º download.
