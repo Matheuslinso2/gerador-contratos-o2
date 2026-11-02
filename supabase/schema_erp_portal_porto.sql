@@ -1,0 +1,13 @@
+-- ERP · Portal da seguradora (Porto Corretor Online, tela Cobrança) · 02/11/2026. Fonte 'portal_seguradora', nível 1 do guia, SOMENTE LEITURA do portal.
+-- Migrations já aplicadas: erp_portal_porto_cobranca, erp_portal_porto_vincular, erp_portal_porto_vincular_variantes, erp_portal_porto_faturas, erp_portal_porto_comparacao.
+--   erp_portal_cargas      uma por arquivo/leitura (hash único, tela, filtros, lido_por, linhas); apagar a carga desfaz tudo (cascade).
+--   erp_portal_parcelas    Gestão de parcelas (SUSEP, segurado como exibido, CPF/CNPJ, produto, Nº do documento no portal, tipo, vencimento, parcela n de total, valor, meio de pagamento, status).
+--   erp_portal_vencidas    relatórios "Vencidas" baixados do portal (Aluguel/Fiança e RE): todos os campos, menos banco/agência/conta.
+--   erp_portal_faturas     aba Faturas (responsável financeiro = imobiliária pelo CNPJ ou pessoa pelo CPF, produto, valor, meio, vencimento, PRORROGADO, status).
+-- Chaves do ERP por linha: seguradora_id, documento_id, parcela_id, imobiliaria_id, locatario_id; vinculo_status (ligado|parcial|pendente) + vinculo_motivo (erp_dominios.motivo_vinculo_pendente).
+--   erp_porto_variantes(doc): formatos do Nº da apólice da Porto no ERP (último trecho sem zeros; ramo+86+trecho; ramo+trecho; ramo+espaço+trecho).
+--   erp_portal_vincular_parcelas / _vencidas / _faturas(carga): ligam só com 1 candidato certo (apólice tipo A); faturas ligam à imobiliária do banco único pelo CNPJ.
+--   erp_portal_fila: o que não ligou. erp_portal_parcelas_comparacao: portal × parcela do ERP (confere | valor_difere | sem_parcela_no_erp | portal_paga_erp_aberta |
+--   erp_quitada_portal_nao_paga | portal_cancelada_erp_quitada). Não altera data nem baixa: aviso para conferência.
+-- Carga: scripts/erp/carregar-portal-porto-cobranca.ts (parcelas | faturas | vencidas), ensaio por padrão, --gravar para gravar.
+-- 02/11: 1.258 parcelas (01/01/2026 a 31/01/2027, SUSEP CFU15J, todas as 42 SUSEPs consultadas), 1.161 ligadas; vencidas 101 linhas (77 ligadas).
