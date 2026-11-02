@@ -32,6 +32,7 @@ type Linha = {
   dif_meses: number;
   comissao_prevista: number | null;
   gerado_em: string;
+  venc_apolice?: string | null; // vencimento conforme a apólice (PDF lido); preenchido na tela
 };
 
 export default async function ErpParcelasPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
@@ -52,6 +53,15 @@ export default async function ErpParcelasPage({ searchParams }: { searchParams: 
   ]);
   const linhas = (data ?? []) as Linha[];
   const herdadas = (herdBruta ?? []) as Linha[];
+  // Vencimento CONFORME A APÓLICE (Matheus, 03/11/2026): data lida do PDF da apólice, por documento e número da parcela. Sem PDF lido fica em branco.
+  const idsDocs = [...new Set([...linhas.slice(0, 500), ...herdadas.slice(0, 500)].map((l) => l.documento_id))];
+  const vencApolice = new Map<string, string>();
+  for (let i = 0; i < idsDocs.length; i += 150) {
+    const { data: pdf } = await supabase.from("erp_apolice_parcelas_pdf").select("documento_id, n, vencimento_pdf").in("documento_id", idsDocs.slice(i, i + 150));
+    for (const p of pdf ?? []) if (p.vencimento_pdf) vencApolice.set(`${p.documento_id}:${p.n}`, p.vencimento_pdf as string);
+  }
+  for (const l of [...linhas, ...herdadas]) l.venc_apolice = vencApolice.get(`${l.documento_id}:${l.parcela_n}`) ?? null;
+  const mesesEntre = (de: string, ate: string) => (Number(ate.slice(0, 4)) - Number(de.slice(0, 4))) * 12 + (Number(ate.slice(5, 7)) - Number(de.slice(5, 7)));
   const total = linhas.reduce((s, l) => s + Number(l.comissao_prevista ?? 0), 0);
   const porMes = new Map<string, { n: number; v: number }>();
   for (const l of linhas) {
@@ -72,7 +82,7 @@ export default async function ErpParcelasPage({ searchParams }: { searchParams: 
                 <th className="px-3 py-2">Nº da apólice</th>
                 <th className="px-3 py-2">Imobiliária</th>
                 <th className="px-3 py-2">Parcela</th>
-                <th className="px-3 py-2">Vencimento estimado pelo Corp</th>
+                <th className="px-3 py-2">Vencimento conforme apólice</th>
                 <th className="px-3 py-2">Cobrado pela seguradora</th>
                 <th className="px-3 py-2">Diferença</th>
                 <th className="px-3 py-2 text-right">Comissão prevista</th>
@@ -95,9 +105,9 @@ export default async function ErpParcelasPage({ searchParams }: { searchParams: 
                     {l.parcela_n}
                     {l.parcelas_total ? `/${l.parcelas_total}` : ""}
                   </td>
-                  <td className="px-3 py-1">{formatarData(l.venc_corp)}</td>
+                  <td className="px-3 py-1">{l.venc_apolice ? formatarData(l.venc_apolice) : <span className="text-gray-400" title="A apólice desta parcela ainda não foi lida">apólice não lida</span>}</td>
                   <td className="px-3 py-1 font-medium">{formatarData(l.venc_seguradora)}</td>
-                  <td className="px-3 py-1">{l.dif_meses > 0 ? `${l.dif_meses} mês(es) depois da fatura` : `${-l.dif_meses} mês(es) antes da fatura`}</td>
+                  <td className="px-3 py-1">{l.venc_apolice ? (() => { const d = mesesEntre(l.venc_seguradora, l.venc_apolice); return d === 0 ? "mesmo mês da fatura" : d > 0 ? `${d} mês(es) depois da fatura` : `${-d} mês(es) antes da fatura`; })() : "—"}</td>
                   <td className="px-3 py-1 text-right">{l.comissao_prevista === null ? "—" : formatarReais(Number(l.comissao_prevista))}</td>
                 </tr>
               ))}
@@ -140,7 +150,7 @@ export default async function ErpParcelasPage({ searchParams }: { searchParams: 
           </span>
         ))}
       </div>
-      <p className="text-xs font-semibold uppercase tracking-wide text-o2-navy">Parcelas em conferência<InfoLegenda titulo="Parcelas em conferência">Cada linha é uma parcela. Vencimento no ERP é a data que o ERP tem para a parcela; Cobrado pela seguradora é o vencimento dessa mesma parcela na fatura da seguradora; Diferença diz quantos meses o vencimento do ERP está adiantado ou atrasado em relação à fatura. Comissão prevista é a comissão esperada daquela parcela. Parcela mostra o número da parcela e o total quando se sabe. Abrir leva ao documento no ERP.</InfoLegenda></p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-o2-navy">Parcelas em conferência<InfoLegenda titulo="Parcelas em conferência">Cada linha é uma parcela. Vencimento conforme apólice é a data da parcela no PDF da apólice (aparece quando a apólice já foi lida); Cobrado pela seguradora é o vencimento dessa mesma parcela na fatura da seguradora; Diferença diz quantos meses o vencimento da apólice está adiantado ou atrasado em relação à fatura. Comissão prevista é a comissão esperada daquela parcela. Parcela mostra o número da parcela e o total quando se sabe. Abrir leva ao documento no ERP.</InfoLegenda></p>
       {tabela(linhas)}
       <p className="text-xs font-semibold uppercase tracking-wide text-o2-navy">Herdadas de meses anteriores<span className="ml-1 text-xs font-normal normal-case tracking-normal text-gray-400">(parcelas em conferência cobradas antes de {periodo.rotulo})</span></p>
       {herdadas.length === 0 ? <p className="text-xs text-gray-500">Nenhuma parcela herdada em conferência.</p> : tabela(herdadas)}
