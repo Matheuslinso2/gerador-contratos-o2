@@ -42,9 +42,11 @@ function rodar(nome: string, args: string[], timeoutMin = 90): boolean {
 }
 const SEM = ["--require", "./scripts/base-unica/_sem-server-only.cjs"];
 
+let renovacao: Record<string, number> | null = null;
 async function rpc(nome: string) {
   const t0 = Date.now(); log(`passo: ${nome}`);
-  const { error } = await sb.rpc(nome);
+  const { data, error } = await sb.rpc(nome);
+  if (nome === "erp_aplicar_renovacao_telas" && Array.isArray(data) && data[0]) { renovacao = data[0] as Record<string, number>; log(`  ↳ renovações pela tela do Corp: ${JSON.stringify(renovacao)}`); }
   passos.push({ nome, ok: !error, codigo: error ? 1 : 0, seg: Math.round((Date.now() - t0) / 1000) });
   if (error) log(`  ↳ ${nome}: ${error.message.slice(0, 120)}`);
 }
@@ -77,6 +79,7 @@ async function relatorio(situacao: "ok" | "parcial" | "adiado" | "erro") {
     propostas_com_campos_aplicados: await n("erp_proposta_pdf_campos", (q) => q.gte("aplicado_em", desde)),
     divergencias_novas: (await n("erp_apolice_pdf_campos", (q) => q.gte("lido_em", desde).eq("situacao", "divergente"))) + (await n("erp_proposta_pdf_campos", (q) => q.gte("lido_em", desde).eq("situacao", "divergente"))),
     telas_novas: await n("erp_corp_telas_documento", (q) => q.gte("created_at", desde)),
+    renovacoes_pela_tela: renovacao,
     passos_com_erro: passos.filter((p) => !p.ok).map((p) => p.nome),
   };
   const soma = (o: Record<string, number>) => Object.values(o).reduce((a, b) => a + b, 0);
@@ -87,6 +90,7 @@ async function relatorio(situacao: "ok" | "parcial" | "adiado" | "erro") {
     `• PDFs de proposta lidos: ${soma(resumo.propostas_lidas)} ${JSON.stringify(resumo.propostas_lidas)}; documentos com campos preenchidos no ERP: ${resumo.propostas_com_campos_aplicados}`,
     `• Divergências novas (lista: erp_pdf_divergencias_pendentes): ${resumo.divergencias_novas}`,
     `• Telas de documento novas: ${resumo.telas_novas}`,
+    renovacao ? `• Renovações ligadas pela tela do Corp: ${renovacao.aplicadas} novas, ${renovacao.substituidas} no lugar da inferência, ${renovacao.ja_igual} já iguais, ${renovacao.divergencias} divergências (lista: erp_renovacao_divergencias)` : "• Renovações pela tela do Corp: não rodou",
     resumo.passos_com_erro.length ? `• Passos com erro: ${resumo.passos_com_erro.join("; ")}` : "• Nenhum passo com erro",
   ].join("\n");
   fs.writeFileSync(path.join(SAIDA, `relatorio-pos-${inicio.toISOString().slice(0, 16).replace(/[:T]/g, "-")}.txt`), texto + "\n");
@@ -113,6 +117,7 @@ async function relatorio(situacao: "ok" | "parcial" | "adiado" | "erro") {
   await ocrDosSemTexto();
   rodar("lê os PDFs de proposta novos", ["scripts/erp/ler-propostas-pdf.ts"], 120);
   rodar("aplica no ERP o que está vazio e confere (propostas)", ["scripts/erp/ler-propostas-pdf.ts", "--aplicar"], 30);
+  await rpc("erp_aplicar_renovacao_telas"); // ligação de renovação lida na tela do documento do Corp (nível 1) substitui a inferência
   await rpc("erp_preencher_dt_emissao");
   await rpc("erp_atualizar_vencimentos");
   await relatorio(passos.some((p) => !p.ok) ? "parcial" : "ok");

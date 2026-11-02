@@ -14,6 +14,7 @@ rem a fila do dia e montada uma vez, so pelo login principal (CORP_LOGIN vazio);
 if "%CORP_LOGIN%"=="" if not exist "%MARCA%" (
   call npx.cmd tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/robo-corp/anexos.ts --fila todos >> %LOG% 2>&1
   if not errorlevel 1 echo ok > "%MARCA%"
+  call npx.cmd tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/robo-corp/anexos.ts --fila renovacoes >> %LOG% 2>&1
 )
 call npx.cmd tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/robo-corp/anexos.ts --ate %ATE% >> %LOG% 2>&1
 set ERRO=%errorlevel%

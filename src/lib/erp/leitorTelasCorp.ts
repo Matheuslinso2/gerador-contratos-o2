@@ -4,7 +4,7 @@
 import { mascararSegredos } from "./mascararSegredos";
 
 export type Palavra = { t: string; x: number; y: number; w: number; h: number };
-export const VERSAO_LEITOR = 2;
+export const VERSAO_LEITOR = 3; // 3 (03/11/2026): + ligação de renovação (rótulo da apólice ligada, "Renovação da apólice com Nosso Nº N", coluna da thread)
 
 type Rect = [number, number, number, number]; // x0, y0, x1, y1 (tela original 1366x768)
 
@@ -84,7 +84,28 @@ export function cabecalho(ps: P): { nosso_numero: number | null; situacao: strin
   };
 }
 
+/** Texto "<Renovação|Fatura|Endosso> da apólice com Nosso Nº 85726" (2 linhas ao lado do Nº Apólice Renovada/Faturada/Endossada) → tipo da ligação e Nosso nº do documento ligado. */
+export function ligacaoDoTexto(t: string | null): { tipo: "renovacao" | "fatura" | "endosso" | null; nosso_numero: number | null } {
+  if (!t) return { tipo: null, nosso_numero: null };
+  const tipo = /renov/i.test(t) ? "renovacao" : /fatur/i.test(t) ? "fatura" : /endoss|cancel/i.test(t) ? "endosso" : null;
+  const m = /N\D{0,2}\s*([0-9OoIl]{3,7})\s*$/.exec(t.trim());
+  const n = m ? Number(m[1].replace(/[Oo]/g, "0").replace(/[Il]/g, "1")) : null;
+  return { tipo, nosso_numero: n && n > 0 ? n : null };
+}
+/** Coluna esquerda da tela (thread da apólice): Nosso nº de cada documento ligado, de cima para baixo (visível na janela; o Corp rola se a thread é longa). */
+function lerThread(P: P): number[] {
+  let melhor: number[] = [];
+  for (const ps of P) {
+    const nums = linhasDe(ps.filter((p) => dentro(p, [240, 198, 335, 598]))).map((l) => inteiro(l.texto)).filter((n): n is number => n !== null && n >= 1000 && n <= 9_999_999);
+    if (nums.length > melhor.length) melhor = nums;
+  }
+  return melhor;
+}
 function lerDocumento(ps: P): Campos {
+  const ligTexto = texto(ps, [548, 358, 795, 400]);
+  const lig = ligacaoDoTexto(ligTexto);
+  const rotuloLig = texto(ps, [358, 354, 505, 374]);
+  const thread = lerThread(ps);
   const seg = texto(ps, [360, 424, 765, 442]); const ramo = texto(ps, [360, 470, 765, 488]); const cli = texto(ps, [360, 515, 765, 534]);
   /* seguradora/ramo: texto cinza (desabilitado) que o OCR não lê; o ERP já tem os dois */ const sc = (t: string | null) => { const m = t ? /^(\d+)\s+(.+)$/.exec(t) : null; return m && /[A-Za-zÀ-ú]{3}/.test(m[2]) ? { codigo: Number(m[1]), nome: m[2].trim() } : { codigo: null, nome: null }; };
   return {
@@ -97,6 +118,14 @@ function lerDocumento(ps: P): Campos {
     tipo_documento: texto(ps, [485, 285, 765, 303]),
     motivo_endosso: texto(ps, [360, 325, 765, 343]),
     apolice_endossada: texto(ps, [360, 376, 495, 395]),
+    // ligação do documento (03/11/2026): o campo "Nº Apólice <Renovada|Faturada|Endossada>" e o texto ao lado são dados EXATOS do Corp (nível 1 para a cadeia de renovação)
+    rotulo_apolice_ligada: rotuloLig,
+    ligacao_tipo: lig.tipo ?? (rotuloLig && /renovad/i.test(rotuloLig) ? "renovacao" : null),
+    ligacao_texto: ligTexto,
+    nosso_numero_ligado: lig.nosso_numero,
+    nosso_numero_ligado_2passes: concordam(ps, [548, 358, 795, 400], (t) => ligacaoDoTexto(t).nosso_numero),
+    numero_apolice_renovada: (lig.tipo === "renovacao" || (rotuloLig && /renovad/i.test(rotuloLig))) ? texto(ps, [360, 376, 495, 395]) : null,
+    thread_nosso_numeros: thread,
     seguradora: sc(seg), ramo: sc(ramo), cliente: sc(cli),
     numero_proposta: texto(ps, [358, 577, 495, 596]),
     numero_proposta_2passes: concordam(ps, [358, 577, 495, 596], (t) => (apenasDigitos(t).length >= 5 ? apenasDigitos(t) : null)),
@@ -237,6 +266,12 @@ export function lerTela(tela: string, ps: P): Leitura {
     case "acompanhamento": campos = lerAcompanhamento(ps); break;
     case "anexos": campos = lerAnexos(ps); break;
     default: campos = {}; avisos.push(`tela desconhecida: ${tela}`);
+  }
+  if (tela === "documento" && Array.isArray((campos as { thread_nosso_numeros?: number[] }).thread_nosso_numeros)) {
+    const th = (campos as { thread_nosso_numeros: number[] }).thread_nosso_numeros;
+    const i = cab.nosso_numero !== null ? th.indexOf(cab.nosso_numero) : -1;
+    (campos as Campos).thread_posicao_documento = i >= 0 ? i : null; // marca qual é o documento aberto
+    (campos as Campos).thread_anterior_imediato = i > 0 ? th[i - 1] : null;
   }
   return { tela, campos: { cabecalho: cab, ...campos }, avisos };
 }

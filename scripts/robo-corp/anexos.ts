@@ -12,6 +12,9 @@
 //   --fila fianca-vigentes   (antiga) Fiança vigente sem PDF no acervo
 //   --fila fora-faturas      monta a fila de PRIORIDADE (prioridade.json): apólices "fora das últimas faturas" do ERP
 //                            (Expan/Tokio primeiro) — a rodada visita a prioridade antes da fila normal
+//   --fila renovacoes        PRIORIDADE ZERO (03/11/2026): RENV do Corp sem documento_renovado_id no ERP e sem foto da tela do documento
+//                            (início de vigência a partir de 01/08/2026 primeiro, depois o resto) — para ler "Nº Apólice Renovada", o texto
+//                            "Renovação da apólice com Nosso Nº N" e a thread da coluna esquerda
 //   --limite N               processa no máximo N documentos nesta rodada
 //   --ate HH:MM              para de pegar documento novo nesse horário (rodada da noite)
 //   --mapear NN              só fotografa cada passo com o Nosso Nº NN (calibração)
@@ -57,7 +60,8 @@ fs.mkdirSync(PDFS, { recursive: true });
 fs.mkdirSync(OUTROS, { recursive: true });
 fs.mkdirSync(ROTULOS, { recursive: true });
 
-type Item = { nn: string; produto: string; fim_vig: string };
+type Item = { nn: string; produto: string; fim_vig: string; forcar?: boolean };
+const PRIORIDADE_RENOVACOES = path.join(PASTA, "prioridade-renovacoes.json");
 /** por Nosso Nº: resultado da visita ao Corp */
 export type LinhaAnexo = { ordem: number; nome: string; rotulo: string; arquivo: string; apolice: boolean; bytes: number };
 type Estado = Record<string, {
@@ -120,6 +124,7 @@ function salvarEstado(estado: Estado, nn?: string) {
 // ------------------------------------------------------------ fila
 async function montarFila(qual: string) {
   if (qual === "fora-faturas") return montarPrioridadeForaFaturas();
+  if (qual === "renovacoes") return montarPrioridadeRenovacoes();
   if (qual === "todos") return montarFilaTodos();
   if (qual !== "fianca-vigentes") throw new Error(`fila desconhecida: ${qual}`);
   const sb = createServiceClient();
@@ -200,6 +205,41 @@ async function montarPrioridadeForaFaturas() {
   const fila: Item[] = nns.filter((nn) => !temPdf.has(nn)).map((nn) => ({ nn, produto: linhas.find((l) => String(l.nosso_numero_corp) === nn)?.produto ?? "?", fim_vig: "" }));
   fs.writeFileSync(PRIORIDADE, JSON.stringify(fila));
   log(`prioridade: ${fila.length} apólices fora das faturas sem PDF no acervo (de ${nns.length}) → ${PRIORIDADE}`);
+}
+
+// Fila de renovações (Matheus 03/11/2026): a ligação exata entre uma renovação (RENV) e o documento anterior está na tela do documento do Corp;
+// a cadeia inferida pelo ERP (cliente + produto + fim de vigência ±60 dias) falha. Visita primeiro as RENV a partir de 01/08/2026 sem ligação.
+async function montarPrioridadeRenovacoes() {
+  const sb = createServiceClient();
+  const itens: { nn: string; vi: string }[] = [];
+  for (let de = 0; ; de += 1000) {
+    const { data, error } = await sb.from("erp_documentos").select("nosso_numero_corp, vigencia_inicio").eq("origem", "corp_import").eq("tipo_corp", "RENV").is("documento_renovado_id", null).not("nosso_numero_corp", "is", null).order("vigencia_inicio", { ascending: false }).range(de, de + 999);
+    if (error) throw new Error(error.message);
+    for (const d of data ?? []) itens.push({ nn: String(d.nosso_numero_corp), vi: d.vigencia_inicio ?? "" });
+    if (!data || data.length < 1000) break;
+  }
+  // quem já tem foto da tela do documento no banco não precisa de visita: o próximo ler-telas lê a ligação da mesma foto
+  const comTela = new Set<string>();
+  for (let de = 0; ; de += 1000) {
+    const { data, error } = await sb.from("erp_corp_telas_documento").select("nosso_numero_corp").eq("tela", "documento").range(de, de + 999);
+    if (error) throw new Error(error.message);
+    for (const t of data ?? []) comTela.add(String(t.nosso_numero_corp));
+    if (!data || data.length < 1000) break;
+  }
+  // cadeia (03/11/2026): os documentos ANTERIORES citados por telas já lidas ("Renovação da apólice com Nosso Nº N") entram na fila para ter a própria tela fotografada e seguir o elo para trás
+  const anteriores: { nn: string; vi: string }[] = [];
+  for (let de = 0; ; de += 1000) {
+    const { data, error } = await sb.from("erp_corp_telas_documento").select("dados").eq("tela", "documento").eq("status", "lida").range(de, de + 999);
+    if (error) throw new Error(error.message);
+    for (const t of data ?? []) { const lig = (t.dados as { campos?: { nosso_numero_ligado?: number | null } } | null)?.campos?.nosso_numero_ligado; if (lig && !comTela.has(String(lig)) && !itens.some((i) => i.nn === String(lig)) && !anteriores.some((i) => i.nn === String(lig))) anteriores.push({ nn: String(lig), vi: "2026-08-01" }); }
+    if (!data || data.length < 1000) break;
+  }
+  itens.push(...anteriores);
+  const faltam = itens.filter((i) => !comTela.has(i.nn));
+  const recentes = faltam.filter((i) => i.vi >= "2026-08-01"), antigas = faltam.filter((i) => i.vi < "2026-08-01");
+  const fila: Item[] = [...recentes, ...antigas].map((i) => ({ nn: i.nn, produto: "RENV", fim_vig: "", forcar: true }));
+  fs.writeFileSync(PRIORIDADE_RENOVACOES, JSON.stringify(fila));
+  log(`renovações: ${itens.length} RENV sem ligação no ERP; ${itens.length - faltam.length} já têm foto da tela; ${recentes.length} recentes (desde 01/08/2026) + ${antigas.length} antigas na fila → ${PRIORIDADE_RENOVACOES}`);
 }
 
 // ------------------------------------------------------------ Corp
@@ -450,7 +490,7 @@ async function rodada(
     }
     // a prioridade (--fila fora-faturas) vem antes da fila normal; o mesmo Nosso Nº não entra duas vezes
     const estado0 = lerEstadoGeral();
-    const prioridade = lerJson<Item[]>(PRIORIDADE, []);
+    const prioridade = [...lerJson<Item[]>(PRIORIDADE_RENOVACOES, []), ...lerJson<Item[]>(PRIORIDADE, [])];
     const naPrioridade = new Set(prioridade.map((i) => i.nn));
     const fila = [...prioridade, ...lerJson<Item[]>(FILA, []).filter((i) => !naPrioridade.has(i.nn))];
     if (!fila.length) throw new Error("fila vazia: rode com --fila fianca-vigentes");
