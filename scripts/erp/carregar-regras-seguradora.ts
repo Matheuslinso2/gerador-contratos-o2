@@ -10,9 +10,9 @@ const arquivo = process.argv[2];
 const GRAVAR = process.argv.includes("--gravar");
 const sb = createServiceClient();
 
-type Manual = { seguradora: string; produto?: string | null; nome: string; tipo?: string | null; data_modificada?: string | null; tamanho?: number | string | null; drive_id?: string | null; link?: string | null };
+type Manual = { seguradora: string; produto?: string | null; nome?: string; nome_arquivo?: string; tipo?: string | null; data_modificada?: string | null; data_modificacao?: string | null; tamanho?: number | string | null; tamanho_bytes?: number | string | null; drive_id?: string | null; link?: string | null; leitura?: string | null; observacao?: string | null };
 type Regra = { seguradora: string; produto?: string | null; tema: string; regra: string; parametros?: Record<string, unknown> | null; manual?: string | null; pagina?: number | string | null; versao_data?: string | null; trecho?: string | null; drive_id?: string | null };
-const TEMAS = new Set(["fatura_mensal", "forma_pagamento", "primeira_parcela", "prazo_emissao", "vigencia", "comissao", "cancelamento_estorno", "renovacao", "sinistro", "endosso", "resgate_capitalizacao"]);
+const TEMAS = new Set(["fatura_mensal", "forma_pagamento", "primeira_parcela", "prazo_emissao", "vigencia", "comissao", "cancelamento_estorno", "renovacao", "sinistro", "endosso", "resgate_capitalizacao", "outros"]);
 const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().trim();
 
 (async () => {
@@ -30,7 +30,7 @@ const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCa
   if (!GRAVAR) return;
   const idPorDrive = new Map<string, string>();
   for (const m of j.manuais) {
-    const linha = { seguradora_id: seguradoraId(m.seguradora), seguradora_nome: m.seguradora, produto: m.produto ?? null, nome_arquivo: m.nome, tipo: m.tipo ?? null, data_modificacao: m.data_modificada ? m.data_modificada.slice(0, 10) : null, tamanho_bytes: m.tamanho ? Number(m.tamanho) : null, drive_id: m.drive_id ?? null, link: m.link ?? null, status_leitura: "lido", lido_por: "sessão Repasses ERP (Drive, somente leitura)" };
+    const linha = { seguradora_id: seguradoraId(m.seguradora), seguradora_nome: m.seguradora, produto: m.produto ?? null, nome_arquivo: m.nome ?? m.nome_arquivo ?? "(sem nome)", tipo: m.tipo ?? null, data_modificacao: (m.data_modificada ?? m.data_modificacao) ? String(m.data_modificada ?? m.data_modificacao).slice(0, 10) : null, tamanho_bytes: (m.tamanho ?? m.tamanho_bytes) ? Number(m.tamanho ?? m.tamanho_bytes) : null, drive_id: m.drive_id ?? null, link: m.link ?? null, status_leitura: /n[aã]o|sem/i.test(m.leitura ?? "") ? (/sem texto/i.test(m.leitura ?? "") ? "sem_texto" : "nao_aberto") : "lido", observacao: m.observacao ?? null, lido_por: "sessão Repasses ERP (Drive, somente leitura)" };
     const { data, error } = await sb.from("erp_manuais_seguradora").upsert(linha, { onConflict: "drive_id" }).select("id, drive_id").single();
     if (error) { console.log("erro manual", m.nome, error.message); continue; }
     if (data?.drive_id) idPorDrive.set(data.drive_id, data.id);
@@ -42,7 +42,7 @@ const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCa
   for (const r of j.regras.filter((x) => TEMAS.has(x.tema))) {
     const pagina = r.pagina === null || r.pagina === undefined ? null : Number(r.pagina) || null;
     const { data: ja } = await sb.from("erp_regras_seguradora").select("id").eq("seguradora_nome", r.seguradora).eq("tema", r.tema).eq("manual_nome", r.manual ?? "").eq("regra", r.regra).maybeSingle();
-    if (ja) { repetidas++; continue; }
+    if (ja) { repetidas++; const mid = r.drive_id ? idPorDrive.get(r.drive_id) : null; if (mid) await sb.from("erp_regras_seguradora").update({ manual_id: mid }).eq("id", ja.id).is("manual_id", null); continue; }
     const { error } = await sb.from("erp_regras_seguradora").insert({ seguradora_id: seguradoraId(r.seguradora), seguradora_nome: r.seguradora, produto: r.produto ?? null, tema: r.tema, regra: r.regra, parametros: r.parametros ?? {}, manual_id: r.drive_id ? idPorDrive.get(r.drive_id) ?? null : null, manual_nome: r.manual ?? null, pagina, versao_data: r.versao_data ?? null, trecho: r.trecho ?? null });
     if (error) console.log("erro regra", r.tema, error.message); else novas++;
   }
