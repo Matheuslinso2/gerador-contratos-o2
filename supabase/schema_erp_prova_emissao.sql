@@ -6,3 +6,5 @@
 --  * erp_atualizar_prova_emissao() calcula o nível; erp_atualizar_emissao() a chama antes de refazer a fila; erp_emissao_fila exclui quem tem nível.
 --  * Lista de Apólices (src/lib/erp/documentos.ts buscarDocumentos) inclui situacao='proposta' com nível, mostrada como "Emitida · verificada / alta confiança / a verificar".
 -- Efeito em 03/11/2026: fila de Emissão 1.051 → 856 (195 documentos com prova).
+-- 03/11 (2): migration erp_prova_emissao_acompanhamento — erp_atualizar_prova_emissao() também aceita como prova "alta" o acompanhamento da proposta
+-- (erp_proposta_acompanhamento) com motivo 'emitida%' e evidência de e-mail ou relatório da seguradora. Resultado: 114 verificado, 16 alta, 66 a verificar.
