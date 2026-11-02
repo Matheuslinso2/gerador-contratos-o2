@@ -123,6 +123,9 @@ function loginConfigurado(id: string): boolean {
 async function cicloDoLogin(e: Estado) {
   const a = agoraSP(); const util = ehUtil(a.dow);
   if (!e.filho && !loginConfigurado(e.w.id)) { if (Date.now() - (avisouSemConfig.get(e.w.id) ?? 0) > 3600_000) { avisouSemConfig.set(e.w.id, Date.now()); log(`[${e.w.id}] login ainda não configurado em config.json (logins.lista): aguardando o Matheus acrescentar; este login fica parado`); } return; }
+  // reserva do login para uso avulso (ex.: painel-corp.ts): enquanto reservar-<login>.flag existir (até 90 min) o orquestrador libera o login e não lança nada nele
+  const reserva = path.join(HOME, `reservar-${e.w.id}.flag`);
+  try { if (fs.existsSync(reserva)) { if (Date.now() - fs.statSync(reserva).mtimeMs > 90 * 60_000) fs.unlinkSync(reserva); else { if (e.filho && e.robo !== "fixo") await pedirPassagem(e); return; } } } catch { /* ok */ }
   if (Date.now() < e.pausaAte || Date.now() - e.ultimaFalha < grade.retentarMin * 60_000) return; // sem permissão / falha rápida: espera antes de tentar de novo
   const q = quemTem(e.w, a.minutos, util, a.data, jaFeitos);
   let efetivo: Quem = q;
