@@ -6,6 +6,7 @@ process.loadEnvFile(".env.local");
 import fs from "node:fs";
 import { createServiceClient } from "@/lib/supabase/service";
 import { abrirTextoPdfComSenha } from "@/lib/pdfComSenha";
+import { textoDoPdf } from "@/lib/erp/anexosEmail";
 
 const sb = createServiceClient();
 // --ocr-jsonl <arq>: texto lido por OCR LOCAL do Windows (scripts/erp/ocr-pdf-win.ps1) dos PDFs sem texto; chave = documento_id no nome do arquivo
@@ -16,12 +17,12 @@ const LOTE = "PDF-VIGENTES-" + new Date().toISOString().slice(0, 10);
 const LEITOR_VERSAO = "v2-2026-11-02";
 type P = { n: number; venc: string; valor?: number | null };
 const iso = (d: string) => d.split("/").reverse().join("-");
-const vlr = (s: string) => { const c = s.replace(/R\$\s?/, ""); return /,\d{2}$/.test(c) ? Number(c.replace(/\./g, "").replace(",", ".")) : Number(c); };
+const vlr = (s: string) => { const c = s.replace(/R\$\s?/, ""); return /,\d{2}$/.test(c) ? Number(c.replace(/\./g, "").replace(",", ".")) : Number(c.replace(/,/g, "")); }; // 1.234,56 (BR) ou 1,234.56 (Tokio Fiança)
 // layouts alternativos (v2): tenta o parser principal e, se não achar quadro, estes
 const ALT: Record<string, ((t: string) => P[])[]> = {
   TOKIO: [
     (t) => [...t.matchAll(/(?:Ap[oó]lice|Endosso) (\d{2}) ([\d.]+,\d{2}) (\d{2}\/\d{2}\/\d{4})/g)].map((m) => ({ n: +m[1], venc: iso(m[3]), valor: vlr(m[2]) })),
-    (t) => [...t.matchAll(/\b(\d{2}) (\d+\.\d{2}) (\d{2}\/\d{2}\/\d{4}) (?:Ficha|Boleto|D[eé]bito|Cart[aã]o|Fatura)/g)].map((m) => ({ n: +m[1], venc: iso(m[3]), valor: vlr(m[2]) })),
+    (t) => [...t.matchAll(/\b(\d{2}) (\d{1,3}(?:,\d{3})*\.\d{2}|\d+\.\d{2}) (\d{2}\/\d{2}\/\d{4}) (?:Ficha|Boleto|D[eé]bito|Cart[aã]o|Fatura)/g)].map((m) => ({ n: +m[1], venc: iso(m[3]), valor: vlr(m[2]) })),
   ],
   PORTO: [
     (t) => [...t.matchAll(/\b(\d{1,2}) R\$ ([\d.]+,\d{2}) (\d{2}\/\d{2}\/\d{4}) /g)].map((m) => ({ n: +m[1], venc: iso(m[3]), valor: vlr(m[2]) })),
@@ -75,7 +76,9 @@ async function carregarDocs(filtro: string | undefined, reler: boolean): Promise
   // padrão: só o que ainda não tem campos; --refazer: também tudo que não ficou 'lido' (sem_quadro, divergente, inválido, sem texto)
   const refazer = process.argv.includes("--refazer");
   // a leitura antiga de parcelas (erp_apolice_pdf_leitura 'lido') não guardou os demais campos: o que decide é existir (ou não) a linha em erp_apolice_pdf_campos
-  const pend = docs.filter((d) => (!filtro || d.abrev === filtro) && (!jaCampos.has(d.id) || (refazer && jaCampos.get(d.id) !== "lido")));
+  // --docs NN,NN (Nosso nº do Corp): relê esses documentos mesmo já lidos (leitor melhorado)
+  const forcar = process.argv.includes("--docs") ? new Set(process.argv[process.argv.indexOf("--docs") + 1].split(",").map(Number)) : null;
+  const pend = docs.filter((d) => forcar ? !!d.nosso_numero_corp && forcar.has(d.nosso_numero_corp) : (!filtro || d.abrev === filtro) && (!jaCampos.has(d.id) || (refazer && jaCampos.get(d.id) !== "lido")));
   const alvo = reler ? pend.filter((d) => lidos.get(d.id) === "sem_quadro" || !lidos.has(d.id)) : pend;
   // PDFs: ERP (tipo apolice) primeiro; senão Corp (rótulo Apólice/Certificado)
   const erpAx = new Map<string, string>();
@@ -112,25 +115,40 @@ async function main() {
     else {
       const { data } = await sb.storage.from(it.bucket).download(it.path);
       if (!data) { s.erro++; return; }
-      const r = await abrirTextoPdfComSenha(Buffer.from(await data.arrayBuffer()), []);
+      const buf = Buffer.from(await data.arrayBuffer());
+      const r = await abrirTextoPdfComSenha(buf, []);
       t = (r?.texto ?? "").replace(/\s+/g, " ");
+      if (t.length < 200) {
+        // PDF protegido (Tokio: senha = início do CPF do segurado): tenta com os CPFs das partes do documento
+        const cpfs: string[] = [];
+        if (doc.locatario_id) { const { data: l } = await sb.from("locatarios").select("cpf").eq("id", doc.locatario_id).maybeSingle(); if (l?.cpf) cpfs.push(String(l.cpf)); }
+        const { data: pa } = await sb.from("erp_doc_partes_acervo").select("locatario:locatarios(cpf)").eq("documento_id", doc.id);
+        for (const p of (pa ?? []) as unknown as { locatario: { cpf: string | null } | null }[]) if (p.locatario?.cpf) cpfs.push(p.locatario.cpf);
+        const r2 = await textoDoPdf(buf, [...new Set(cpfs.map((c) => c.replace(/\D/g, "")).filter((c) => c.length >= 11))]);
+        if (r2.t && r2.t.length > t.length) t = r2.t.replace(/\s+/g, " ");
+      }
     }
     const chave = MAPA_CHAVE[doc.abrev] ?? doc.abrev;
     const base = { documento_id: doc.id, seguradora_id: doc.seguradora_id, seguradora_chave: chave, fonte_pdf: `${it.origem}:${it.path}`, lote: LOTE, imobiliaria_id: doc.imobiliaria_principal_id, locatario_id: doc.locatario_id };
     if (t.length < 200) { s.sem_texto++; await sb.from("erp_apolice_pdf_campos").upsert({ ...base, situacao: "sem_texto", divergencias: ["PDF sem texto nativo (imagem)"] }); await sb.from("erp_apolice_pdf_leitura").upsert({ documento_id: doc.id, seguradora_chave: chave, situacao: "sem_texto", parcelas_lidas: 0 }); return; }
     const datas = [...new Set([...t.matchAll(/\b(\d{2})\/(\d{2})\/(\d{4})\b/g)].map((m) => `${m[3]}-${m[2]}-${m[1]}`))].filter((d) => +d.slice(0, 4) >= 2000 && +d.slice(0, 4) <= 2040).sort();
     const docs = [...new Set([...t.matchAll(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b|\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/g)].map((m) => dig(m[0])))];
-    const premioTotal = num(t.match(/Pr[eê]mio\s+Total[^\d]{0,40}([\d.]+,\d{2})/i)?.[1]); const premioLiq = num(t.match(/Pr[eê]mio\s+L[ií]quido[^\d]{0,40}([\d.]+,\d{2})/i)?.[1]); const iof = num(t.match(/\bIOF[^\d]{0,30}([\d.]+,\d{2})/i)?.[1]);
-    const forma = t.match(/\b(Cart[aã]o de Cr[eé]dito|D[eé]bito em Conta|Boleto(?: Banc[aá]rio)?|Fatura|Carn[eê]|Cart[aã]o)\b/i)?.[1] ?? null;
+    const premioTotal = num(t.match(/Pr[eê]mio\s+Total[^\d]{0,40}([\d.]+,\d{2})/i)?.[1]); const premioLiq = num(t.match(/Pr[eê]mio\s+L[ií]quido[^\d]{0,40}([\d.]+,\d{2})/i)?.[1]); const iof = num(t.match(/\bI\.?\s?O\.?\s?F\.?[^\d]{0,30}([\d.]+,\d{2})/i)?.[1]);
+    const formaTokio = /Cobran[çc]a:\s*Ficha/i.test(t) ? "Fatura" : null; // Tokio Fiança: "Cobrança: Ficha Faturada" = fatura mensal da imobiliária
+    const forma = formaTokio ?? t.match(/\b(Cart[aã]o de Cr[eé]dito|D[eé]bito em Conta|Boleto(?: Banc[aá]rio)?|Fatura|Carn[eê]|Cart[aã]o)\b/i)?.[1] ?? null;
     const apNum = doc.numero_apolice ? dig(doc.numero_apolice) : "";
     const confereAp = apNum.length >= 4 ? dig(t).includes(apNum) : null;
-    const confereVig = doc.vigencia_inicio ? datas.includes(doc.vigencia_inicio) : null; const avisos: string[] = []; if (confereVig && doc.vigencia_fim && !datas.includes(doc.vigencia_fim)) avisos.push("fim da vigência do documento não aparece no PDF");
+    // texto da vigência da apólice (Tokio): vale mais que a data mais antiga solta no PDF
+    const vigExpl = t.match(/Vig[eê]ncia:\s*a partir das 24 horas do dia (\d{2})\/(\d{2})\/(\d{4}) at[eé] [àa]s 24 horas do dia (\d{2})\/(\d{2})\/(\d{4})/i);
+    const vigIni = vigExpl ? `${vigExpl[3]}-${vigExpl[2]}-${vigExpl[1]}` : (datas[0] ?? null);
+    const vigFim = vigExpl ? `${vigExpl[6]}-${vigExpl[5]}-${vigExpl[4]}` : (datas.length ? datas[datas.length - 1] : null);
+    const confereVig = doc.vigencia_inicio ? (vigExpl ? vigIni === doc.vigencia_inicio : datas.includes(doc.vigencia_inicio)) : null; const avisos: string[] = []; if (confereVig && doc.vigencia_fim && !datas.includes(doc.vigencia_fim)) avisos.push("fim da vigência do documento não aparece no PDF");
     let confereDoc: boolean | null = null; let alvoDocs: string[] = [];
     { const { data: pa } = await sb.from("apolice_partes").select("locatarios:locatario_id(cpf)").eq("documento_id", doc.id); alvoDocs = (pa ?? []).map((p) => dig(String((p as unknown as { locatarios: { cpf: string | null } | null }).locatarios?.cpf ?? ""))).filter((x) => x.length >= 11); if (!alvoDocs.length && doc.locatario_id) { const { data: l } = await sb.from("locatarios").select("cpf").eq("id", doc.locatario_id).maybeSingle(); const c = dig(String(l?.cpf ?? "")); if (c.length >= 11) alvoDocs = [c]; } if (alvoDocs.length && docs.length) confereDoc = alvoDocs.some((c) => docs.includes(c)); }
     const div: string[] = [];
     if (confereAp === false) div.push("nº da apólice não aparece no PDF");
     // OCR erra datas e dígitos: a identidade vem do nº da apólice; vigência/CPF não localizados no OCR viram aviso, não divergência
-    if (confereVig === false) { if (OCR.has(doc.id) && confereAp) avisos.push("vigência do documento não localizada no texto do OCR"); else div.push("vigência do documento não aparece no PDF"); }
+    if (confereVig === false) { if (OCR.has(doc.id) && confereAp) avisos.push("vigência do documento não localizada no texto do OCR"); else div.push(vigExpl ? `vigência do documento (${doc.vigencia_inicio}) difere da do PDF (${vigIni} a ${vigFim})` : "vigência do documento não aparece no PDF"); }
     if (confereDoc === false) { if (confereAp && (confereVig || OCR.has(doc.id))) avisos.push("CPF/CNPJ do documento não localizado entre os do PDF (nº e vigência conferem)"); else div.push("CPF/CNPJ do documento não aparece no PDF"); }
     const parser = PARSERS[chave] as (typeof PARSERS)[string] | undefined;
     let bruto: P[] = parser ? parser(t) : [];
@@ -147,7 +165,7 @@ async function main() {
     let parcelas: unknown = seqOk ? ns.map((n) => ({ n, vencimento: porN.get(n), valor: valorN.get(n) ?? null })) : null;
     let formaFinal = forma;
     if (semDatas) { parcelas = Array.from({ length: semDatas.qtd }, (_, k) => ({ n: k + 1, vencimento: null, valor: semDatas.valor })); formaFinal = semDatas.forma; avisos.push("PDF sem datas de vencimento (pagamento por fatura mensal); vencimentos vêm das faturas"); }
-    await sb.from("erp_apolice_pdf_campos").upsert({ ...base, situacao, numero_apolice_pdf: confereAp ? doc.numero_apolice : null, vigencia_ini_pdf: datas[0] ?? null, vigencia_fim_pdf: datas.length ? datas[datas.length - 1] : null, datas_no_pdf: datas.slice(0, 40), cpf_cnpj_pdf: docs.slice(0, 10), premio_total_pdf: premioTotal, premio_liquido_pdf: premioLiq, iof_pdf: iof, forma_pagamento_pdf: formaFinal, qtd_parcelas_pdf: ns.length || semDatas?.qtd || null, parcelas, fonte: `PDF da apólice (${OCR.has(doc.id) ? "OCR local do Windows" : "texto nativo"}) · leitor ${LEITOR_VERSAO}`, confere_apolice: confereAp, confere_vigencia: confereVig, confere_documento: confereDoc, divergencias: div.length ? div : null, avisos: avisos.length ? avisos : null });
+    await sb.from("erp_apolice_pdf_campos").upsert({ ...base, situacao, numero_apolice_pdf: confereAp ? doc.numero_apolice : null, vigencia_ini_pdf: vigIni, vigencia_fim_pdf: vigFim, datas_no_pdf: datas.slice(0, 40), cpf_cnpj_pdf: docs.slice(0, 10), premio_total_pdf: premioTotal, premio_liquido_pdf: premioLiq, iof_pdf: iof, forma_pagamento_pdf: formaFinal, qtd_parcelas_pdf: ns.length || semDatas?.qtd || null, parcelas, fonte: `PDF da apólice (${OCR.has(doc.id) ? "OCR local do Windows" : "texto nativo"}) · leitor ${LEITOR_VERSAO}`, confere_apolice: confereAp, confere_vigencia: confereVig, confere_documento: confereDoc, divergencias: div.length ? div : null, avisos: avisos.length ? avisos : null });
     await sb.from("erp_apolice_pdf_leitura").upsert({ documento_id: doc.id, seguradora_chave: chave, situacao, parcelas_lidas: ns.length });
     if (situacao === "lido" && parcelas) await sb.from("erp_apolice_parcelas_pdf").upsert(ns.map((n) => ({ documento_id: doc.id, n, vencimento_pdf: porN.get(n)!, seguradora_chave: chave, anexo_path: it.path })));
   };

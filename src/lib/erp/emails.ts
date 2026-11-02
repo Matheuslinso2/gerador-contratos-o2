@@ -320,6 +320,23 @@ export async function indexarEmailsDeImobiliarias(
 
 export type AnexoPdf = { nome: string; buffer: Buffer };
 
+/** Links (href) do corpo do e-mail que casam com o host informado. SÓ LEITURA; usado para os e-mails da Tokio "Apólice Digital", que trazem links do portal em vez de anexo. */
+export async function lerLinksDoEmail(caixa: string, messageId: string, host: RegExp): Promise<string[]> {
+  const g = clienteDaCaixa(caixa);
+  let id: string | null = null;
+  const sintetico = /^gmail:[^:]+:(.+)$/.exec(messageId);
+  if (sintetico) id = sintetico[1];
+  else { const r = await comRetry(() => g.users.messages.list({ userId: "me", q: `rfc822msgid:${messageId.replace(/^<|>$/g, "")}`, maxResults: 1 })); id = r.data.messages?.[0]?.id ?? null; }
+  if (!id) return [];
+  const m = await comRetry(() => g.users.messages.get({ userId: "me", id: id!, format: "full" }));
+  const corpos: string[] = [];
+  const percorrer = (p?: gmail_v1.Schema$MessagePart) => { if (!p) return; if (/^text\/(html|plain)/i.test(p.mimeType ?? "") && p.body?.data) corpos.push(Buffer.from(p.body.data, "base64url").toString("utf8")); (p.parts ?? []).forEach(percorrer); };
+  percorrer(m.data.payload);
+  const urls = new Set<string>();
+  for (const c of corpos) for (const x of c.matchAll(/href=["']([^"']+)["']|(https:\/\/[^\s"'<>]+)/gi)) { const u = (x[1] ?? x[2] ?? "").replace(/&amp;/g, "&"); try { const U = new URL(u); if (U.protocol === "https:" && host.test(U.host)) urls.add(u); } catch { /* ignora */ } }
+  return [...urls];
+}
+
 /** Baixa (só leitura) os PDFs anexados a uma mensagem de uma caixa O2. Acha a mensagem pelo Message-ID. Máx. 15 MB por arquivo. */
 export async function lerAnexosPdf(caixa: string, messageId: string): Promise<AnexoPdf[]> {
   const g = clienteDaCaixa(caixa);
