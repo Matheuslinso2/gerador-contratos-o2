@@ -28,3 +28,8 @@ create policy erp_nibo_painel_estrutura_o2 on public.erp_nibo_painel_estrutura f
 
 -- 03/11/2026 (2): códigos por empresa — corretora usa "5.1 - NOVAS RECEITAS", capitalização "2.1 - NOVAS RECEITAS" (linhas em erp_nibo_painel_estrutura com a coluna empresa). No consolidado aparecem as duas, cada uma com o seu código.
 -- Conferido contra o print da corretora (jul–out/2026): receita de seguros 208.060 / 222.324 / 191.345 / 176.843, novas receitas set 20 e out 36 — iguais. Migração "erp_nibo_painel_codigos_por_empresa".
+
+-- 03/11/2026 (3): INDICADORES de apoio ao painel (o espelho do Nibo NÃO muda), a partir dos livros "Finanças Empresariais" (FAE) e "Gestão de Empresas" (CRCRJ):
+-- erp_nibo_painel_indicadores(p_ano, p_empresa) -> ordem, indicador, rotulo, unidade, m01..m12, total, base_conceitual.
+-- Margem de contribuição e %, despesas (C) % da receita, ponto de equilíbrio (despesas ÷ margem %), folga sobre o ponto de equilíbrio, resultado operacional e %, movimento fora do painel,
+-- fluxo de caixa do mês e acumulado. O acumulado só é confiável com o histórico de jan–jun carregado. Migração "erp_nibo_painel_indicadores".
