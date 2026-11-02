@@ -171,6 +171,10 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
   const herancaMap = new Map<string, Herdada[]>();
   for (const h of heranca) herancaMap.set(h.mes_origem, [...(herancaMap.get(h.mes_origem) ?? []), h]);
   const herancaMeses = [...herancaMap.entries()].sort((x, y) => y[0].localeCompare(x[0]));
+  // Lotes de renovação (proposta criada do card) × apólices anteriores, item a item (Matheus 03/11): confirmado = linha da planilha da equipe achada no ERP + imobiliária + seguradora + vigência
+  type LoteResumo = { documento_id: string; nosso_numero: number; origem_ref: string; imobiliaria: string | null; seguradora: string | null; mes: string; confirmados: number; sugestoes: number };
+  const { data: loteRaw } = await supabase.rpc("erp_renovacao_lotes_resumo", { p_de: per.de, p_ate: per.ate });
+  const lotesResumo = ((loteRaw ?? []) as LoteResumo[]).sort((a, b) => (a.imobiliaria ?? "").localeCompare(b.imobiliaria ?? ""));
   // mês do ciclo do robô de renovações: no dia 25 ele trata os vencimentos de M+2
   const hojeR = new Date();
   const cicloRobo = (() => { const t = hojeR.getUTCFullYear() * 12 + hojeR.getUTCMonth() + 2; return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, "0")}`; })();
@@ -266,6 +270,40 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
                 </div>
               </details>
             ))}
+          </div>
+        </section>
+      )}
+
+      {lotesResumo.length > 0 && (
+        <section className="space-y-2 rounded-2xl border border-sky-200 bg-sky-50/60 p-4">
+          <h2 className="text-base font-semibold text-gray-900">
+            Lotes de renovação × apólices anteriores
+            <InfoLegenda titulo="Lotes de renovação × apólices anteriores">
+              Cada lote é uma proposta de renovação criada de um card (imobiliária + seguradora). Os itens do lote são as apólices anteriores que foram trazidas para renovar. Confirmado: a apólice consta na planilha de renovação da equipe e o Nº da apólice, a seguradora e o fim de vigência batem com o ERP, e a imobiliária, a seguradora e o mês batem com o lote. Sugestão: só imobiliária, seguradora e mês batem; falta a linha na planilha.
+            </InfoLegenda>
+          </h2>
+          <p className="text-xs text-gray-600">{lotesResumo.length} lote(s) em {per.rotulo} · {lotesResumo.reduce((s2, l) => s2 + Number(l.confirmados), 0)} apólice(s) anterior(es) confirmada(s) · {lotesResumo.reduce((s2, l) => s2 + Number(l.sugestoes), 0)} sugestão(ões).</p>
+          <div className="overflow-x-auto rounded-xl border border-sky-100 bg-white">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+                <tr><th className="px-3 py-2">Código O2 do lote</th><th className="px-3 py-2">Imobiliária</th><th className="px-3 py-2">Seg.</th><th className="px-3 py-2">Card</th><th className="px-3 py-2 text-right">Confirmadas</th><th className="px-3 py-2 text-right">Sugestões</th></tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {lotesResumo.map((l) => {
+                  const [ent, cid] = l.origem_ref.split(":").map(Number);
+                  return (
+                    <tr key={l.documento_id} className="hover:bg-gray-50">
+                      <td className="px-3 py-1.5 font-medium"><Link href={`/erp/documentos/${l.documento_id}`} className="text-o2-navy hover:underline">{l.nosso_numero}</Link></td>
+                      <td className="px-3 py-1.5">{l.imobiliaria ?? "—"}</td>
+                      <td className="px-3 py-1.5">{l.seguradora ?? "—"}</td>
+                      <td className="px-3 py-1.5">{ent && cid ? <a href={urlCard(ent, cid)} target="_blank" rel="noreferrer" className="text-o2-navy hover:underline">#{cid}</a> : "—"}</td>
+                      <td className="px-3 py-1.5 text-right font-medium">{l.confirmados}</td>
+                      <td className="px-3 py-1.5 text-right text-gray-500">{l.sugestoes}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </section>
       )}
