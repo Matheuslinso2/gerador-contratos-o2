@@ -19,7 +19,7 @@ import { abrirTextoPdfComSenha, candidatosSenhaO2 } from "@/lib/pdfComSenha";
 import { parseTokioPdf, parsePortoPdf } from "@/lib/erp/extratosPdf";
 import { parseYelumPdf } from "@/lib/erp/extratoYelum";
 import { lerExtratoPdfOutros } from "@/lib/erp/extratosPdfOutros";
-import { parsePottencial, parseToo, num, txt, dataBr, type LinhaExtrato } from "@/lib/erp/extratos";
+import { parsePottencial, parseToo, num, txt, dataBr, corrigirAreaDaAba, type LinhaExtrato } from "@/lib/erp/extratos";
 
 export const PASTA_EXTRATOS = process.env.ERP_EXTRATOS_DRIVE_PASTA || "11BDjbKy1Nj-A4mslt2onv3IzmhX8mYga";
 const DESDE = (process.env.ERP_EXTRATOS_DESDE || "2026-08").replace("-", ""); // AAAAMM
@@ -156,7 +156,7 @@ function mapearCabecalho(linha: unknown[]): Map<keyof LinhaExtrato, number> | nu
 export function parsePlanilhaGenerica(buf: Buffer): { linhas: LinhaExtrato[]; total_bruto: number | null; total_liquido: number | null; cabecalho: string | null } {
   const wb = XLSX.read(buf, { type: "buffer" });
   for (const nomeAba of wb.SheetNames) {
-    const rows = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[nomeAba], { header: 1, raw: true, defval: null });
+    const rows = XLSX.utils.sheet_to_json<unknown[]>(corrigirAreaDaAba(wb.Sheets[nomeAba]), { header: 1, raw: true, defval: null });
     for (let h = 0; h < Math.min(rows.length, 40); h++) {
       const mapa = mapearCabecalho(rows[h] ?? []);
       if (!mapa) continue;

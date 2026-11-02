@@ -77,9 +77,18 @@ export const dataBr = (v: unknown): string | null => {
   return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
 };
 
+// Alguns demonstrativos (Pottencial, agosto/2026) vêm com a dimensão da aba declarada errada (A1:M5) mas com centenas de linhas:
+// sem este ajuste só o cabeçalho era lido e o detalhe todo sumia. Recalcula a área pelas células que realmente existem.
+export function corrigirAreaDaAba(ws: XLSX.WorkSheet): XLSX.WorkSheet {
+  let maxR = -1, maxC = -1;
+  for (const k of Object.keys(ws)) { if (k.startsWith("!")) continue; const c = XLSX.utils.decode_cell(k); if (c.r > maxR) maxR = c.r; if (c.c > maxC) maxC = c.c; }
+  if (maxR >= 0) { const atual = ws["!ref"] ? XLSX.utils.decode_range(ws["!ref"]) : null; if (!atual || atual.e.r < maxR || atual.e.c < maxC) ws["!ref"] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(maxR, atual?.e.r ?? 0), c: Math.max(maxC, atual?.e.c ?? 0) } }); }
+  return ws;
+}
+
 function linhasDaPlanilha(buf: Buffer): unknown[][] {
   const wb = XLSX.read(buf, { type: "buffer" });
-  const ws = wb.Sheets[wb.SheetNames[0]];
+  const ws = corrigirAreaDaAba(wb.Sheets[wb.SheetNames[0]]);
   return XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: true, defval: null });
 }
 
