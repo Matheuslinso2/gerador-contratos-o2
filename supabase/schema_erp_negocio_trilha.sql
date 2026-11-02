@@ -324,3 +324,30 @@ create table if not exists public.erp_renovacao_emails (
 create index if not exists erp_renovacao_emails_msg on public.erp_renovacao_emails (message_id);
 alter table public.erp_renovacao_emails enable row level security;
 create policy erp_renovacao_emails_o2 on public.erp_renovacao_emails for all to authenticated using (is_colaborador_o2()) with check (is_colaborador_o2());
+
+-- ===== RENOVAÇÕES DAS PLANILHAS (abas RN <mês>, RENOVAÇÃO/RENOVAÇÕES, BASE RN…): 1 linha por RENOVAÇÃO = apólice que VENCE + fim de vigência — 02/11/2026 =====
+-- Estado FINAL = versão mais recente arquivada (modificado_em do arquivo congelado); historico_status guarda o status de cada arquivo. Fonte nível 7. Recalcular: select erp_renovacao_planilha_calcular();
+-- depois: select erp_renovacao_planilha_sucessora_provavel(); select erp_nao_renovadas_aplicar_planilha_renovacao();
+-- Prêmio "2025" (anterior) é comparado com a apólice que VENCE; prêmio novo com a SUCESSORA (documento_renovado_id) — nunca com a mesma apólice. Valor 0 na planilha = ainda não preenchido.
+create or replace function public.erp_data_serial(t text) returns date language sql immutable as $$
+  select case when t ~ '^20[12]\d-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])' then left(t, 10)::date
+              when t ~ '^\d{5}(\.\d+)?$' and t::numeric between 40000 and 60000 then (date '1899-12-30' + floor(t::numeric)::int) end $$;
+create or replace function public.erp_pct_normal(n numeric) returns numeric language sql immutable as $$
+  select case when n is null then null when abs(n) <= 1 then round(n * 100, 4) else n end $$;
+create table if not exists public.erp_renovacao_planilha (
+  chave text primary key, aba text, apolice_digitos text not null, numero_apolice text, fim_vigencia date, mes_fim text,
+  documento_id uuid references erp_documentos(id) on delete set null, documento_sucessor_id uuid references erp_documentos(id) on delete set null,
+  status_final text, situacao text, operacao text, cotador text, efetivador text, data_envio_cotacao date, data_efetivacao date, prazo_comunicado_dias int, prazo_comunicado_data date,
+  segurado text, cpf text, imobiliaria text, seguradora text, ramo text, observacoes text,
+  premio_liq_anterior numeric, premio_total_anterior numeric, comissao_pct_anterior numeric, comissao_recebida_anterior numeric,
+  premio_liq_novo numeric, premio_total_novo numeric, comissao_pct_novo numeric, comissao_novo numeric, pct_repasse numeric,
+  arquivo_final text, linha_final int, modificado_final timestamptz, versoes int, historico_status jsonb,
+  cmp_anterior text, cmp_novo text, calculado_em timestamptz not null default now(),
+  documento_sucessor_provavel_id uuid references erp_documentos(id) on delete set null, sucessora_provavel_premio_bate boolean);
+create index if not exists erp_renovacao_planilha_doc on public.erp_renovacao_planilha (documento_id);
+create index if not exists erp_renovacao_planilha_mes on public.erp_renovacao_planilha (mes_fim, situacao);
+alter table public.erp_renovacao_planilha enable row level security;
+create policy erp_renovacao_planilha_o2 on public.erp_renovacao_planilha for all to authenticated using (is_colaborador_o2()) with check (is_colaborador_o2());
+-- Funções erp_renovacao_planilha_calcular(), erp_renovacao_planilha_sucessora_provavel(), erp_nao_renovadas_aplicar_planilha_renovacao() e a visão erp_renovacao_prevista_planilha
+-- (agora a partir de erp_renovacao_planilha): definição vigente no banco — pg_get_functiondef / pg_get_viewdef; migrações "erp_renovacao_planilha_estado_final",
+-- "erp_renovacao_planilha_alimenta_motivo_e_previsto", "erp_renovacao_planilha_sucessora_provavel".
