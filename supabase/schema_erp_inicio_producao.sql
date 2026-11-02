@@ -10,4 +10,4 @@
 -- O Corp tem ainda Agente e Canal de Vendas (valores do Corp: FIANCA 2, IMOBILIÁRIO PRO LABORE): o ERP só guarda o canal de integração (Base Software, Superlógica, Segimob), então esses dois filtros ficam para depois.
 
 -- 02/11 (2): painel soma só propostas efetivadas — com Nosso nº do Corp (ou origem api). Card do Bitrix sem nº do Corp ainda é proposta/cotação e fica fora.
--- view erp_producao_base_v: acrescentado "and (nosso_numero_corp is not null or origem = 'api')".
+-- view erp_producao_base_v: Novos/Renovações exigem (nosso_numero_corp is not null or origem = 'api'); faturas e endossos não.
