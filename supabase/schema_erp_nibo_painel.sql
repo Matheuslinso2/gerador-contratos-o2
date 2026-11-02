@@ -21,3 +21,7 @@ create policy erp_nibo_painel_estrutura_o2 on public.erp_nibo_painel_estrutura f
 
 -- erp_nibo_painel(p_ano int, p_empresa text) -> bloco, bloco_ordem, linha_tipo (categoria|subtotal|margem|margem_pct|resultado), ordem, rotulo, categoria_nome, m01..m12, total
 -- Definição vigente: select pg_get_functiondef('erp_nibo_painel'::regproc); migração "erp_nibo_painel_sql".
+
+-- 03/11/2026: p_empresa aceita 'corretora' | 'capitalizacao' | 'consolidado' (soma categoria a categoria, mesma árvore). Migração "erp_nibo_painel_consolidado".
+-- Conferido: consolidado = corretora + capitalizacao (ex.: receita de seguros set/2026 191.345 + 195.563 = 386.908; resultado A+B+C set −65.005 + 22.247 = −42.758).
+-- Atenção: transferência entre as duas empresas, se vier categorizada como receita/despesa, contaria em dobro no consolidado; hoje fica em FORA DO PAINEL (sem categoria).
