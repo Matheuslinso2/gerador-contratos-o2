@@ -261,7 +261,9 @@ function Visao360({
   const cotMes = new Map(kpis.funil_mensal_produto.map((x) => [x.competencia, x.produtos]));
   const ren = kpis.renovacoes_por_produto.filter((p) => p.entradas + p.conversoes + p.perdas > 0);
   const renMes = new Map(kpis.renovacoes_mensal_produto.map((x) => [x.competencia, x.produtos]));
-  const apoMes = new Map(kpis.mensal.map((x) => [x.competencia, x.produtos]));
+  // Produção Geral filtra pelo produtor do Corp (mesmo nome do espelho do SharePoint).
+  const nomesProdutor = [...new Set(produtoresCorp.map((p) => p.nome_corp).filter((x): x is string => !!x && !x.includes("|")))];
+  const linkGeral = nomesProdutor.length ? `/producao/geral?${new URLSearchParams({ mes: ate, produtor: nomesProdutor.join("|") }).toString()}` : null;
   const usoMes = new Map(visao.mensal.map((x) => [x.competencia, x]));
   const seriesProd = ORDEM.map((p) => ({ chave: p, rotulo: PRODUTOS[p].rotulo, cor: PRODUTOS[p].cor }));
   const unica = us.length === 1 ? us[0] : null;
@@ -497,12 +499,11 @@ function Visao360({
             </table>
           </div>
         )}
-        <Grafico titulo="Propostas efetivadas por mês">
-          <BarrasMensais
-            pontos={meses.map((m) => ({ mes: m, valores: Object.fromEntries(ORDEM.map((p) => [p, apoMes.get(m)?.[p]?.propostas ?? 0])) }))}
-            series={seriesProd}
-          />
-        </Grafico>
+        {linkGeral && (
+          <Link href={linkGeral} className="inline-block text-sm text-o2-blue underline">
+            Ver na aba Produção Geral, já filtrada nesta imobiliária (por produtor do Corp) →
+          </Link>
+        )}
       </Bloco>
 
       {/* Sinistros */}
@@ -522,9 +523,6 @@ function Visao360({
               .join(" · ")}
           </p>
         )}
-        <Grafico titulo="Sinistros avisados por mês">
-          <BarrasMensais pontos={meses.map((m) => ({ mes: m, valores: { s: usoMes.get(m)?.sinistros ?? 0 } }))} series={[{ chave: "s", rotulo: "Sinistros", cor: "#B42318" }]} />
-        </Grafico>
         {s.abertos.length > 0 && (
           <details className="rounded-xl border border-gray-200 bg-white p-3 text-sm">
             <summary className="cursor-pointer font-semibold text-o2-navy">Sinistros em andamento ({s.abertos.length})</summary>
