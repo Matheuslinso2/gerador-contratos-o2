@@ -351,3 +351,21 @@ create policy erp_renovacao_planilha_o2 on public.erp_renovacao_planilha for all
 -- Funções erp_renovacao_planilha_calcular(), erp_renovacao_planilha_sucessora_provavel(), erp_nao_renovadas_aplicar_planilha_renovacao() e a visão erp_renovacao_prevista_planilha
 -- (agora a partir de erp_renovacao_planilha): definição vigente no banco — pg_get_functiondef / pg_get_viewdef; migrações "erp_renovacao_planilha_estado_final",
 -- "erp_renovacao_planilha_alimenta_motivo_e_previsto", "erp_renovacao_planilha_sucessora_provavel".
+
+-- ===== MÉTRICA ÚNICA DE CONFIANÇA DOS VÍNCULOS (Matheus, 02/11/2026) =====
+-- Pesos por evidência (erp_vinculo_pesos), multiplicador por fonte (erp_vinculo_fontes) e regras/faixas (erp_vinculo_regras) EDITÁVEIS sem código.
+-- erp_vinculo_pontuar(evidencias jsonb) -> {pontos, faixa (vincula|provavel|sem_prova|vetado), fontes_independentes, vetos, usadas[], motivo_faixa}. Entrada: [{"e","fonte","par","corr"}].
+-- erp_vinculo_pontuacao registra, por vínculo, pontos + faixa + evidências (lote p/ desfazer; NUNCA altera o vínculo). erp_vinculo_pontuar_retroativo(tipo, lote) aplica aos vínculos existentes.
+-- Visões: erp_vinculo_distribuicao (faixa por tipo/lote) e erp_vinculo_limitrofes (vetos, 85–95, 65–75, pontos ok com fonte única).
+-- regra modo_multiplicador: 0 = fonte de quem apresenta a evidência (padrão da proposta); 1 = média das duas pontas; 2 = a melhor das duas pontas.
+create table if not exists public.erp_vinculo_pesos (
+  evidencia text primary key, tipo text not null check (tipo in ('evidencia', 'penalidade', 'veto')), pontos numeric not null default 0,
+  limite_faixa text check (limite_faixa in ('vetado', 'provavel')), rotulo text not null, ativo boolean not null default true, ordem int not null default 0);
+create table if not exists public.erp_vinculo_fontes (fonte text primary key, rotulo text not null, multiplicador numeric not null, ordem int not null default 0);
+create table if not exists public.erp_vinculo_regras (chave text primary key, valor numeric not null, rotulo text not null);
+create table if not exists public.erp_vinculo_pontuacao (
+  id bigint generated always as identity primary key, tipo_vinculo text not null, origem_ref text not null, destino_ref text not null,
+  pontos numeric not null, faixa text not null, fontes_independentes int, motivo_faixa text, evidencias jsonb not null, vetos jsonb,
+  ja_vinculado boolean, lote text not null, calculado_em timestamptz not null default now());
+-- Valores iniciais (peso/fonte/regra): ver as tabelas no banco (select * from erp_vinculo_pesos, erp_vinculo_fontes, erp_vinculo_regras);
+-- migrações "erp_vinculo_metrica_motor", "erp_vinculo_modo_multiplicador", "erp_vinculo_pontuar_retroativo" (+ _fix), "erp_vinculo_distribuicao_e_limitrofes".
