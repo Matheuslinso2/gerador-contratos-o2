@@ -7,6 +7,7 @@ import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../actions";
 import ErpNav from "./ErpNav";
 import { podeVerBaixas } from "@/lib/erp/acessoBaixas";
+import { podeVerNibo } from "@/lib/erp/acessoNibo";
 
 // ERP O2: aplicativo à parte do Workspace, do mesmo grupo (Matheus, 25/10/2026). Cabeçalho, menu e
 // tela inicial próprios; nenhuma tela do ERP aparece nos menus do Workspace (lá só há o botão "ERP O2").
@@ -68,7 +69,7 @@ export default async function ErpLayout({ children }: { children: React.ReactNod
         </div>
         <div className="border-t border-white/10">
           <div className="mx-auto max-w-[1200px] px-6">
-            <ErpNav mostrarBaixa={podeVerBaixas(user.email)} />
+            <ErpNav mostrarBaixa={podeVerBaixas(user.email)} mostrarNibo={podeVerNibo(user.email)} />
           </div>
         </div>
       </header>
