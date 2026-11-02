@@ -26,3 +26,7 @@
 -- 03/11 (5): proposta do Bitrix sem Nosso nº do Corp só entra na produção COM PROVA de efetivação (Matheus: "se não tem a proposta, o arquivo,
 -- não tem como verificar, a não ser que a seguradora ou a Segimob avisem por e-mail"). Prova = anexo do documento, e-mail de evidência de emissão,
 -- PDF da proposta lido ou evidência em erp_proposta_acompanhamento. Sem prova = pendente, fora do painel.
+
+-- 03/11 (6) VERSÃO FINAL: o total do painel volta a ser o do Power BI/Corp — só documento com Nosso nº do Corp (nosso_numero_corp is not null).
+-- Proposta do Bitrix e documento da API sem Corp inflavam: out/26 comissão ERP 632 mil x PBI 459 mil; set/26 694 mil x 548,6 mil (Matheus apontou).
+-- Depois da correção: out/26 463 mil x 459 mil; set/26 544 mil x 548,6 mil. As propostas efetivadas sem Corp devem aparecer à parte (a definir).
