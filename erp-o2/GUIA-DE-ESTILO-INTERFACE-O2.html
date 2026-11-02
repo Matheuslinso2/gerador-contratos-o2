@@ -1,0 +1,57 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Guia de estilo da interface O2</title>
+<style>
+@page{size:A4;margin:15mm}
+body{font-family:Poppins,"Segoe UI",Arial,sans-serif;color:#01192e;font-size:10.5px;line-height:1.5}
+h1{color:#00447E;font-size:21px;margin:0 0 2px}
+h2{color:#F8540D;font-size:14px;border-bottom:2px solid #F8540D;padding-bottom:3px;margin:18px 0 8px}
+.sub{color:#444440;font-size:10px;margin-bottom:10px}
+table{border-collapse:collapse;width:100%;margin:6px 0}
+th{background:#01192e;color:#fff;text-align:left;padding:5px 7px;font-size:10px}
+td{border-bottom:1px solid #d9d9d9;padding:5px 7px;vertical-align:top}
+.box{border-left:5px solid #00447E;background:#f4f7fb;padding:7px 10px;margin:8px 0}
+.warn{border-left-color:#AF2505;background:#fdf3f1}
+.ok{color:#1b7a3d;font-weight:600}.no{color:#AF2505;font-weight:600}
+ul{margin:4px 0 4px 16px;padding:0}li{margin:2px 0}
+.bar{display:inline-block;height:9px;background:#F8540D;vertical-align:middle;border-radius:2px}
+</style></head><body>
+<h1>Guia de estilo da interface O2</h1>
+<div class="sub">Versão de 03/11/2026 · vale para o ERP e para o Workspace · base: livros "UI Design Principles" (M. Filipiuk) e "Fundamentos de Webdesign" (IFB), aplicados ao que a O2 já usa</div>
+
+<div class="box">O que este guia faz: transforma os princípios dos dois livros em regras curtas para as telas da O2, mede como o ERP está hoje e propõe o que mudar. As regras são nossas; os livros são a referência.</div>
+
+<h2>1. As regras (o padrão da O2)</h2>
+<table>
+<tr><th style="width:20%">Tema</th><th>Regra para as telas da O2</th><th style="width:26%">De onde vem</th></tr>
+<tr><td><b>Grade e espaço</b></td><td>Largura de 1200 px; margem e espaçamento em múltiplos de 8 (8, 16, 24, 32). Blocos separados por 24 px. Formulários curtos em 720 px. É o que o componente <b>PaginaErp</b> já faz.</td><td>Grade de 12 colunas e escala de 8 pt (UI Principles, cap. Grid)</td></tr>
+<tr><td><b>Texto</b></td><td>Fonte Poppins. Conteúdo e campos em <b>14 px no mínimo</b>; 12 px só para legendas e cabeçalho de tabela; nunca 10 ou 11 px para dado que a pessoa precisa ler. Escala: 12 · 14 · 16 · 20 · 24. Título da tela em 20 px semibold.</td><td>Corpo de texto de 16 pt como base (Apple) e 17 (Google); legibilidade (Webdesign, un. 1)</td></tr>
+<tr><td><b>Cor</b></td><td>Navy #01192e para texto e cabeçalhos; azul #00447E para apoio; <b>laranja #F8540D só para a ação principal e para destaque</b>; vermelho #AF2505 só para alerta e valor negativo. Nunca preto puro. Cor nunca é o único sinal (acompanha texto ou ícone).</td><td>Cor e acessibilidade (UI Principles; Webdesign, acessibilidade)</td></tr>
+<tr><td><b>Botões</b></td><td><b>Um botão principal por tela</b> (preenchido); os demais em contorno ou texto. Altura de pelo menos 36 px no computador. Todo botão tem estado de passar o mouse e de desabilitado. O texto diz a ação ("Aplicar baixa", não "OK").</td><td>CTA se destaca; altura mínima 40; estados (UI Principles, cap. Buttons)</td></tr>
+<tr><td><b>Formulários</b></td><td>Rótulo sempre visível (nunca só o texto de exemplo dentro do campo). Campo simples: retângulo com borda. Só pedir o que é preciso. Erro dito ao lado do campo.</td><td>UI Principles, cap. Forms</td></tr>
+<tr><td><b>Cartões e tabelas</b></td><td>Cartão = fundo branco, borda cinza fina, cantos arredondados iguais. Clicável deve parecer clicável (muda ao passar o mouse). Tabela com linha de 36 px, cabeçalho fixo, número alinhado à direita.</td><td>Cartões devem parecer clicáveis e ser testados com texto longo (UI Principles, cap. Cards)</td></tr>
+<tr><td><b>Espaço em branco</b></td><td>Começar com folga e só tirar com motivo. Não preencher espaço vazio só porque "ficou vazio". Texto nunca encostado na borda.</td><td>UI Principles, cap. White space</td></tr>
+<tr><td><b>Navegação</b></td><td><b>No máximo 7 itens visíveis no menu</b> (ideal 5). O que passar disso vira grupo ou "Mais". Item da tela atual sempre marcado. Mesmo nome em todo lugar.</td><td>Navegação visível: até 5, no máximo 7 (UI Principles, cap. Navigation); usabilidade (Webdesign)</td></tr>
+</table>
+
+<h2>2. Como o ERP está hoje (medido no código)</h2>
+<table>
+<tr><th style="width:26%">Item</th><th>Medição</th><th style="width:16%">Situação</th></tr>
+<tr><td>Tamanhos de texto</td><td>Cerca de 660 usos de tamanho de letra. <b>245 usos em 10 e 11 px</b> (37%), 234 em 12 px (36%), 149 em 14 px (23%), 29 em tamanhos maiores. Ou seja, 73% do texto está em 12 px ou menos.</td><td class="no">Abaixo do piso</td></tr>
+<tr><td>Navegação principal</td><td>Menu com Início, 9 etapas (Emissão a Renovação), 3 cadastros e, para três pessoas, Nibo: <b>14 itens</b> na mesma linha, com rolagem horizontal.</td><td class="no">Passa de 7</td></tr>
+<tr><td>Cantos arredondados</td><td>Quatro estilos misturados: rounded-lg (94 usos), rounded-xl (84), pílula (73), rounded-sm (13) e rounded-2xl (4).</td><td class="no">Sem padrão</td></tr>
+<tr><td>Largura e espaçamento</td><td>18 telas já passaram a usar PaginaErp (1200 px, 32 px de margem, 24 px entre blocos). Baixas ainda tem lateral e largura própria.</td><td class="ok">Quase pronto</td></tr>
+<tr><td>Período e filtros</td><td>NavegadorMes (mês corrente) e pílulas de filtro já seguem um padrão. O painel de produção do Início tem navegador próprio com visão anual.</td><td class="ok">Quase pronto</td></tr>
+<tr><td>Cor</td><td>Navy, azul e laranja da marca; vermelho para negativo. Sem preto puro.</td><td class="ok">Conforme</td></tr>
+</table>
+
+<h2>3. O que proponho mudar (em ordem)</h2>
+<ol>
+<li><b>Piso de letra:</b> trocar os usos de 10 e 11 px por 12 px nas legendas e por 14 px no conteúdo. É a mudança que mais melhora a leitura e não mexe em dados.</li>
+<li><b>Menu em grupos:</b> reduzir a linha para 7 itens, agrupando por fase: <i>Entrada</i> (Emissão, Faturas), <i>Carteira</i> (Apólices, Parcelas, Renovação), <i>Dinheiro</i> (Baixa, Repasses, Nibo) e <i>Cadastros</i>; Sinistro continua levando ao Workspace. Os nomes e a ordem do processo não mudam.</li>
+<li><b>Um só canto:</b> cartões e quadros em rounded-xl, campos e botões em rounded-lg, pílulas só para filtro. Sai rounded-sm e rounded-2xl.</li>
+<li><b>Botão principal único:</b> revisar cada tela e deixar uma ação em destaque (laranja ou navy preenchido).</li>
+<li><b>Tabelas:</b> linha mais alta (36 px), cabeçalho fixo, números à direita, valores negativos em vermelho entre parênteses (já é assim no Nibo).</li>
+<li><b>Baixas e painel do Início:</b> encaixar no padrão quando as sessões deles terminarem a etapa atual.</li>
+</ol>
+
+<div class="box warn"><b>Limites:</b> os livros são de uso geral e escolar; as regras de número (14 px, 7 itens, 36 px) são recomendações, não normas. Nada disso muda dados, só o visual. A medição de texto conta os usos no código, não o que aparece em cada tela. Nenhuma mudança foi feita ainda: tudo acima depende do seu OK.</div>
+</body></html>
