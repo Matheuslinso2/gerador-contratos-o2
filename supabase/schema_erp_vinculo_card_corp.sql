@@ -1,0 +1,9 @@
+-- ERP O2 — vínculo card do Bitrix (proposta) × documento do Corp pela pontuação de evidências (Matheus, 03/11/2026).
+-- Migrations aplicadas: erp_vinculo_pontuar_card_corp(p_lote, p_de, p_ate) e erp_juntar_card_corp_par(card, corp, nivel, motivo).
+--  * erp_vinculo_pontuar_card_corp só REGISTRA a pontuação em erp_vinculo_pontuacao (tipo 'proposta_card_corp'); nunca altera o vínculo.
+--  * Com os pesos atuais (card do Bitrix 0,6 × Corp 0,4, mínimo 90 pontos) nenhum par chega a "vincula" (máximo 47): a calibração foi pensada para documento oficial.
+--  * Critério aprovado pelo Matheus para "alta confiança": mesma seguradora + prêmio líquido igual (±R$ 1) + vigência igual ou ≤ 7 dias +
+--    (cliente igual OU imobiliária igual) + candidato ÚNICO e ESCOLHA MÚTUA (o documento do Corp não é candidato melhor ou igual de outro card).
+--  * erp_juntar_card_corp_par junta o card ao documento do Corp (mesma lógica de erp_juntar_cards_corp): move origem, itens, e-mails, anexos e eventos,
+--    marca o card como 'duplicado' com observação do nível. Em 03/11/2026: lote CARDCORP-0311, 365 propostas no período, 272 com candidato;
+--    11 (cliente) + 44 (imobiliária) = 55 juntadas; 1 recusada (o documento do Corp já tinha origem do Bitrix). Sobram 553 propostas do Bitrix sem Corp.
