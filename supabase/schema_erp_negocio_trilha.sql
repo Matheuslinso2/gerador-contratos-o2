@@ -297,3 +297,18 @@ select mes_vencimento, count(*) apolices, round(sum(coalesce(premio_liquido, 0))
        count(*) filter (where situacao_renovacao = 'renovada') renovadas, count(*) filter (where situacao_renovacao = 'em_tratativa') em_tratativa, count(*) filter (where situacao_renovacao = 'sem_tratativa') sem_tratativa,
        round(sum(coalesce(comissao_valor, 0)) filter (where situacao_renovacao = 'sem_tratativa'), 2) comissao_sem_tratativa
   from erp_renovacao_controle group by 1;
+
+-- ===== NÃO RENOVADAS (histórico): perda e motivo — Matheus, 02/11/2026 =====
+-- Apólices vencidas/canceladas desde 2022 sem apólice nova apontando para elas (documento_renovado_id). Motivo por prioridade: texto das abas de CANCELAMENTO das planilhas
+-- (por nº da apólice sem zeros à esquerda, ou por nome do segurado/locatário + data da solicitação ±45 dias), sinistro aberto na apólice, cancelada no ERP sem motivo, sem informação.
+-- Recalcular: select erp_nao_renovadas_calcular();
+create table if not exists public.erp_nao_renovadas (
+  documento_id uuid primary key references erp_documentos(id) on delete cascade,
+  numero_apolice text, seguradora text, ramo text, imobiliaria_id uuid, vigencia_fim date, ano_fim int, situacao text,
+  premio_liquido numeric, premio_total numeric, comissao_valor numeric,
+  motivo text not null, motivo_fonte text not null, detalhe jsonb, calculado_em timestamptz not null default now());
+create index if not exists erp_nao_renovadas_ano on public.erp_nao_renovadas (ano_fim, motivo);
+alter table public.erp_nao_renovadas enable row level security;
+create policy erp_nao_renovadas_o2 on public.erp_nao_renovadas for all to authenticated using (is_colaborador_o2()) with check (is_colaborador_o2());
+-- Funções erp_motivo_texto(), erp_norm_nome(), erp_data_iso() e erp_nao_renovadas_calcular(): a definição vigente está no banco
+-- (select pg_get_functiondef('erp_nao_renovadas_calcular'::regproc)); migração "erp_nao_renovadas_calcular_v2".
