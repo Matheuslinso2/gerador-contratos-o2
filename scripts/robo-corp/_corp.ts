@@ -12,7 +12,11 @@ export type ConfigCorp = {
   url: string;
   corretora: { usuario: string; senha: string };
   unidade: { usuario: string; senha: string };
+  /** vários logins de robô (cada um = um robô independente). senha única compartilhada (opcional: cai em unidade.senha). Quem preenche é o Matheus; nenhum script lê a senha em voz alta nem a registra. */
+  logins?: { senha?: string; lista: { id: string; usuario: string }[] };
 };
+/** id do login deste processo: CORP_LOGIN (o orquestrador define); sem ele é o login principal ("unidade") */
+export const LOGIN_ID = process.env.CORP_LOGIN || "principal";
 
 export const RAIZ = path.resolve(process.cwd(), "scripts", "robo-corp");
 export const MODELOS = path.join(RAIZ, "modelos");
@@ -26,6 +30,11 @@ export const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export function lerConfig(): ConfigCorp {
   if (!fs.existsSync(CONFIG)) throw new Error(`config não encontrado: ${CONFIG}`);
   const c = JSON.parse(fs.readFileSync(CONFIG, "utf8")) as ConfigCorp;
+  if (LOGIN_ID !== "principal") {
+    const l = c.logins?.lista.find((x) => x.id === LOGIN_ID);
+    if (!l) throw new Error(`login "${LOGIN_ID}" não configurado em config.json (logins.lista): o Matheus precisa acrescentar`);
+    c.unidade = { usuario: l.usuario, senha: c.logins?.senha ?? c.unidade?.senha };
+  }
   for (const [k, v] of [["corretora", c.corretora], ["unidade", c.unidade]] as const)
     if (!v?.usuario || !v?.senha || v.senha === "PREENCHER") throw new Error(`config: preencha ${k}.usuario/senha`);
   return c;
@@ -99,7 +108,7 @@ export async function esperarModelo(page: Page, modelo: string, timeoutMs: numbe
 // outro. Antes de entrar, cada robô pega a "vez" (arquivo de trava com o número do processo); se outro robô vivo
 // estiver com ela, espera até `maxEsperaMin` e desiste com mensagem clara. A vez é devolvida quando o processo termina
 // (normal, erro ou Ctrl+C). Trava de processo morto ou com mais de 12 h é considerada abandonada.
-const TRAVA = path.join(os.homedir(), ".robo-corp", "login-em-uso.json");
+const TRAVA = path.join(os.homedir(), ".robo-corp", LOGIN_ID === "principal" ? "login-em-uso.json" : `login-em-uso-${LOGIN_ID}.json`); // uma trava por login: nunca dois robôs no mesmo login
 type Trava = { pid: number; robo: string; desde: string };
 const vivo = (pid: number) => {
   try {
@@ -121,12 +130,13 @@ function lerTrava(): Trava | null {
 let temVez = false;
 export async function pegarVezDoCorp(robo: string, maxEsperaMin = 60): Promise<void> {
   if (temVez) return;
-  const limite = Date.now() + maxEsperaMin * 60_000;
+  const espera_max = Number(process.env.CORP_VEZ_ESPERA_MIN ?? maxEsperaMin); // o orquestrador usa poucos minutos e tenta de novo depois
+  const limite = Date.now() + espera_max * 60_000;
   let avisou = false;
   for (;;) {
     const outro = lerTrava();
     if (!outro) break;
-    if (Date.now() > limite) throw new Error(`login do Corp ocupado pelo robô "${outro.robo}" desde ${outro.desde} (esperei ${maxEsperaMin} min)`);
+    if (Date.now() > limite) throw new Error(`login do Corp ocupado pelo robô "${outro.robo}" desde ${outro.desde} (esperei ${espera_max} min)`);
     if (!avisou) log(`login do Corp em uso pelo robô "${outro.robo}" (desde ${outro.desde}); esperando a vez…`);
     avisou = true;
     await espera(30_000);

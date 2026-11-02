@@ -9,6 +9,14 @@
     "usuario": "robo",
     "senha": "PREENCHER"
   },
+  "logins": {
+    "_leia": "Logins EXTRAS dos robos (um robo por login, em paralelo). A senha e UMA so para todos; o Matheus preenche. O login principal e o de \"unidade\" acima. Para acrescentar mais um robo: nova linha em lista + novo id em grade-24h.json (workers).",
+    "senha": "PREENCHER",
+    "lista": [
+      { "id": "R2", "usuario": "POWER BI O2 - R2" },
+      { "id": "R3", "usuario": "POWER BI O2 - R3" }
+    ]
+  },
   "pastaSaida": "C:\\Users\\O2-Grupo\\.robo-corp\\saida",
   "pastaSharepoint": null,
   "relatorios": [

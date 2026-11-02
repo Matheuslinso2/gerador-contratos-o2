@@ -1,0 +1,19 @@
+{
+  "fixos": [
+    { "nome": "robo-corp", "cmd": "robo-corp.cmd", "horas": ["12:00", "20:00"], "duracaoMin": 30, "dias": "todos" },
+    { "nome": "ciclo-comissoes", "cmd": "ciclo-comissoes.cmd", "horas": ["08:00", "10:00", "14:00", "16:00", "18:00"], "duracaoMin": 12, "dias": "uteis" }
+  ],
+  "workers": [
+    { "id": "principal", "fixos": true, "agenda": [ { "dias": "uteis", "de": "08:00", "ate": "19:00", "robo": "baixa" } ] },
+    { "id": "R2" },
+    { "id": "R3" }
+  ],
+  "baixaComando": null,
+  "docsComando": "anexos-corp-bloco.cmd",
+  "posProcessamento": { "cmd": "anexos-pos.cmd", "hora": "03:00" },
+  "folgaPassagemMin": 3,
+  "esperaLoginMin": 5,
+  "retentarMin": 10,
+  "semPermissaoPausaMin": 360,
+  "baixaSemTrabalhoMin": 10
+}

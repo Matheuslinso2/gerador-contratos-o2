@@ -28,9 +28,11 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { TIPO_POR_ROTULO, deveBaixar, estaPulado, registrarErro, selecionarPendentes } from "./anexos-fila";
 import { capturarBuscaSemResultado, capturarTelasDoDocumento } from "./telas";
 import { yDaLinhaDoDocumento } from "./linha-certa";
-import { agora, acharTodos, acharNaTela, definirPastaFotos, entrar, espera, esperarModelo, foto, lerConfig, log, RAIZ, VIEWPORT } from "./_corp";
+import { LOGIN_ID, agora, acharTodos, acharNaTela, definirPastaFotos, entrar, espera, esperarModelo, foto, lerConfig, log, RAIZ, VIEWPORT } from "./_corp";
 
 const args = process.argv.slice(2);
+// passagem de vez (orquestrador 24 h): o arquivo pausar-docs.flag pede para terminar o documento em andamento e liberar o login
+const pausaPedida = () => fs.existsSync(path.join(os.homedir(), ".robo-corp", LOGIN_ID === "principal" ? "pausar-docs.flag" : `pausar-docs-${LOGIN_ID}.flag`));
 /** Captura das telas do documento junto com a visita (Matheus 01/11); --sem-telas desliga. */
 const CAPTURAR_TELAS = !args.includes("--sem-telas");
 const arg = (n: string) => (args.includes(n) ? args[args.indexOf(n) + 1] : null);
@@ -45,6 +47,11 @@ const ROTULOS = path.join(PASTA, "rotulos");
 const VERSAO_VISITA = 3;
 const FILA = path.join(PASTA, "fila.json");
 const ESTADO = path.join(PASTA, "estado.json");
+// vários robôs ao mesmo tempo: cada login grava SÓ o seu arquivo de estado (estado-<login>.json) e lê o conjunto de todos; nenhuma escrita concorrente no mesmo arquivo.
+// (login principal sem outros robôs = comportamento antigo: estado.json). merge-estado.ts junta tudo em estado.json antes do envio ao Workspace.
+const ESTADO_PROPRIO = LOGIN_ID === "principal" ? ESTADO : path.join(PASTA, `estado-${LOGIN_ID}.json`);
+const CLAIMS = path.join(PASTA, "claims");
+const LOTE_FILA = 25; // lotes de 25 documentos da fila: cada robô reserva um lote por vez (reserva por arquivo, com validade)
 const PRIORIDADE = path.join(PASTA, "prioridade.json");
 fs.mkdirSync(PDFS, { recursive: true });
 fs.mkdirSync(OUTROS, { recursive: true });
@@ -79,7 +86,36 @@ function gravarPulados(estado: Estado) {
   fs.writeFileSync(PULADOS, JSON.stringify(lista, null, 1));
   return lista.length;
 }
-const lerJson = <T>(f: string, padrao: T): T => (fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, "utf8")) : padrao);
+const lerJson = <T>(f: string, padrao: T): T => { try { return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, "utf8")) : padrao; } catch { return padrao; } };
+/** estado de todos os robôs: estado.json + estado-<login>.json (o mais recente de cada documento vence) */
+function lerEstadoGeral(): Estado {
+  const geral: Estado = lerJson<Estado>(ESTADO, {});
+  for (const n of fs.readdirSync(PASTA).filter((x) => /^estado-.+\.json$/.test(x))) {
+    for (const [nn, e] of Object.entries(lerJson<Estado>(path.join(PASTA, n), {}))) if (!geral[nn] || String(e.quando) >= String(geral[nn].quando)) geral[nn] = e;
+  }
+  return geral;
+}
+/** reserva o lote (por arquivo, criação exclusiva). Reserva de processo morto ou com mais de 40 min é retomada. Devolve false se outro robô vivo estiver com o lote. */
+function reservarLote(n: number): boolean {
+  fs.mkdirSync(CLAIMS, { recursive: true });
+  const arq = path.join(CLAIMS, `lote-${n}.json`);
+  const meu = JSON.stringify({ login: LOGIN_ID, pid: process.pid, quando: Date.now() });
+  try { fs.writeFileSync(arq, meu, { flag: "wx" }); return true; } catch { /* já existe */ }
+  try {
+    const c = JSON.parse(fs.readFileSync(arq, "utf8")) as { login: string; pid: number; quando: number };
+    let vivo = true; try { process.kill(c.pid, 0); } catch (e) { vivo = (e as NodeJS.ErrnoException).code === "EPERM"; }
+    if (c.pid === process.pid || !vivo || Date.now() - c.quando > 40 * 60_000) { fs.writeFileSync(arq, meu); return true; } // meu próprio lote (sessão refeita), de processo morto ou vencido
+  } catch { /* arquivo sendo escrito por outro robô */ }
+  return false;
+}
+function liberarLote(n: number) { try { const arq = path.join(CLAIMS, `lote-${n}.json`); const c = JSON.parse(fs.readFileSync(arq, "utf8")) as { pid: number }; if (c.pid === process.pid) fs.unlinkSync(arq); } catch { /* já liberado */ } }
+/** grava só os documentos deste robô */
+const proprios: Estado = {};
+function salvarEstado(estado: Estado, nn?: string) {
+  if (LOGIN_ID === "principal") { fs.writeFileSync(ESTADO_PROPRIO, JSON.stringify(estado)); return; }
+  if (nn && estado[nn]) proprios[nn] = estado[nn];
+  fs.writeFileSync(ESTADO_PROPRIO, JSON.stringify({ ...lerJson<Estado>(ESTADO_PROPRIO, {}), ...proprios }));
+}
 
 // ------------------------------------------------------------ fila
 async function montarFila(qual: string) {
@@ -336,7 +372,7 @@ async function main() {
   const ate = arg("--ate");
   const pararEm = ate ? (() => { const [h, m] = ate.split(":").map(Number); const d = new Date(); d.setHours(h, m, 0, 0); if (d < new Date()) d.setDate(d.getDate() + 1); return d; })() : null;
 
-  definirPastaFotos(path.join(RAIZ, "saida", MAPEAR ? "mapa-anexos" : `anexos-${agora()}`));
+  definirPastaFotos(path.join(RAIZ, "saida", MAPEAR ? "mapa-anexos" : `anexos-${agora()}${LOGIN_ID === "principal" ? "" : "-" + LOGIN_ID}`));
   const cfg = lerConfig();
 
   // O Corp é instável: o login trava, a sessão cai, o navegador fecha ("Target page,
@@ -354,13 +390,13 @@ async function main() {
     } catch (e) {
       const msg = (e as Error).message ?? String(e);
       log(`sessão caiu: ${msg}`);
-      if (MAPEAR || (reinicio >= MAX_REINICIOS && progressoDaSessao === 0)) throw e;
+      if (MAPEAR || msg === "LOGIN_SEM_PERMISSAO" || (reinicio >= MAX_REINICIOS && progressoDaSessao === 0)) throw e;
     } finally {
       if (args.includes("--manter")) log("navegador mantido aberto (--manter)");
       else await browser.close().catch(() => {});
     }
     if (terminou || MAPEAR) return;
-    if (pararEm && new Date() >= pararEm) { log(`horário-limite ${ate}: parando`); return; }
+    if ((pararEm && new Date() >= pararEm) || pausaPedida()) { log(pausaPedida() ? "pausa pedida (pausar-docs.flag): liberando o login" : `horário-limite ${ate}: parando`); return; }
     // o limite de reinícios não é gasto por sessão que andou: só conta queda sem nenhum documento concluído
     if (progressoDaSessao > 0) reinicio = -1;
     const pausa = Math.max(60, Math.min(60 * (reinicio + 1), 300));
@@ -379,7 +415,11 @@ async function rodada(
   const { MAPEAR, limite, ate, pararEm } = o;
   {
     const page = await entrar(ctx, cfg);
-    await abrirConsultaDocumentos(page);
+    try { await abrirConsultaDocumentos(page); } catch (e) {
+      // login novo sem as permissões copiadas: não enxerga o menu de consulta. Não insiste: registra e avisa.
+      if (LOGIN_ID !== "principal") { log(`LOGIN SEM PERMISSÃO (${LOGIN_ID}): entrou, mas não achou a Consulta de Documentos (${(e as Error).message.slice(0, 80)}). Avisar o Matheus para copiar as permissões desse login.`); throw new Error("LOGIN_SEM_PERMISSAO"); }
+      throw e;
+    }
     if (MAPEAR) {
       await foto(page, "busca");
       await page.mouse.click(250, 94);
@@ -409,7 +449,7 @@ async function rodada(
       return true;
     }
     // a prioridade (--fila fora-faturas) vem antes da fila normal; o mesmo Nosso Nº não entra duas vezes
-    const estado0 = lerJson<Estado>(ESTADO, {});
+    const estado0 = lerEstadoGeral();
     const prioridade = lerJson<Item[]>(PRIORIDADE, []);
     const naPrioridade = new Set(prioridade.map((i) => i.nn));
     const fila = [...prioridade, ...lerJson<Item[]>(FILA, []).filter((i) => !naPrioridade.has(i.nn))];
@@ -419,8 +459,15 @@ async function rodada(
     const pendentes = selecionarPendentes(fila, estado, VERSAO_VISITA, falhouNesteProcesso);
     log(`fila: ${fila.length} | já visitados: ${fila.length - pendentes.length} | nesta rodada: até ${Math.min(limite, pendentes.length)} | pulados (revisar): ${gravarPulados(estado)}`);
     let feitos = 0, erros = 0, limiteHorario = false;
+    const idxFila = new Map(fila.map((i, k) => [i.nn, k] as const));
+    const recusados = new Set<number>();
+    let loteAtual = -1;
     for (const item of pendentes.slice(0, limite)) {
-      if (pararEm && new Date() >= pararEm) { log(`horário-limite ${ate}: parando`); limiteHorario = true; break; }
+      // vários robôs: cada um trabalha em lotes de 25 da fila reservados por arquivo (nenhum documento é visitado por dois robôs)
+      const lote = Math.floor((idxFila.get(item.nn) ?? 0) / LOTE_FILA);
+      if (recusados.has(lote)) continue;
+      if (lote !== loteAtual) { if (loteAtual >= 0) liberarLote(loteAtual); if (!reservarLote(lote)) { recusados.add(lote); continue; } loteAtual = lote; }
+      if ((pararEm && new Date() >= pararEm) || pausaPedida()) { log(pausaPedida() ? "pausa pedida (pausar-docs.flag): liberando o login" : `horário-limite ${ate}: parando`); limiteHorario = true; break; }
       const t0 = Date.now();
       try {
         // Não achou: reabre a Consulta e busca de novo antes de desistir (na noite de 25/10 a
@@ -446,16 +493,18 @@ async function rodada(
         // volta para um estado conhecido: fecha janelas e reabre a busca
         await page.keyboard.press("Escape").catch(() => {});
         await fecharDocumento(page).catch(() => {});
-        fs.writeFileSync(ESTADO, JSON.stringify(estado));
+        salvarEstado(estado, item.nn);
         // 5 erros seguidos = a tela saiu do lugar conhecido: refaz a sessão inteira (login do zero)
         if (++erros >= 5) { gravarPulados(estado); throw new Error("5 erros seguidos: refazendo o login do zero"); }
         await abrirConsultaDocumentos(page).catch(() => {});
       }
-      fs.writeFileSync(ESTADO, JSON.stringify(estado));
+      salvarEstado(estado, item.nn);
+      reservarLote(loteAtual); // renova a validade da reserva do lote
       feitos++;
       const e = estado[item.nn];
       log(`${item.nn}: ${e.resultado}${e.resultado === "baixado" ? ` (${e.arquivos?.length ?? 0} apólice, ${e.outros?.length ?? 0} outros)` : ""} em ${Math.round((Date.now() - t0) / 1000)} s`);
     }
+    if (loteAtual >= 0) liberarLote(loteAtual);
     const r: Record<string, number> = {};
     for (const v of Object.values(estado)) r[v.resultado] = (r[v.resultado] ?? 0) + 1;
     log(`rodada: ${feitos} documento(s) | acumulado: ${JSON.stringify(r)}`);
@@ -465,5 +514,5 @@ async function rodada(
 
 main().catch((e) => {
   console.error("ERRO:", e.message ?? e);
-  process.exit(1);
+  process.exit(e.message === "LOGIN_SEM_PERMISSAO" ? 3 : 1);
 });
