@@ -12,3 +12,5 @@
 --   x mês x produto x ramo x status x seguradora x imobiliária/grupo; imposto_estimado = comissão x taxa da baixa (ESTIMATIVA, nunca imposto pago). Só administradores.
 -- chat_cubo_impostos (MV): impostos realmente PAGOS (Nibo, tipo pagamento, categorias 3.1/7.1/1.3) por mês, empresa e tipo (DAS, ISS, IRPJ/CSLL, PIS/COFINS, sindical, parcelamento, folha). Só administradores.
 -- chat_cubo_fin_consultar / chat_cubo_imp_consultar; chat_cubo_atualizar refaz os cinco cubos (cron de hora em hora).
+-- 02/11/2026 (migração chat_cubo_financeiro_v2_das_rbt12): cubo financeiro ganhou 'empresa' (O2 Corretora | O2 Capitalização, pelo documento) e a coluna das_estimado (= comissão recebida x alíquota efetiva do Simples).
+-- chat_aliquota_simples_anexo3(rbt12) e a view chat_simples_mensal (receita, RBT12 dos 12 meses anteriores com janela completa, alíquota efetiva) reproduzem o cálculo validado em 26/10 (corretora 16,4-17,4%, Cap 14,6-15,6% em 2026).

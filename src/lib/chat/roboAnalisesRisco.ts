@@ -183,11 +183,12 @@ export async function consultarCuboSinistros(e: EntradaSin): Promise<string> {
 export const FERRAMENTA_CUBO_FINANCEIRO: Anthropic.Tool = {
   name: "consultar_cubo_financeiro",
   description:
-    "CUBO FINANCEIRO (só administradores; atualizado de hora em hora): comissão RECEBIDA (receita, baixas do ERP) e os REPASSES às imobiliárias, por mês, produto, ramo (IMOBILIARIO = incêndio imobiliário, 2 IMOBILIARIO), seguradora e imobiliária/grupo. Quatro fatos que NUNCA se somam entre si: receita (comissão recebida), repasse_erp (repasse gerado pelo ERP: bruto, retido e líquido; em 2026 está tudo 'pendente'), repasse_corp (controle do Corp: status pago = tem data de repasse; previsto = sem data) e repasse_pago_banco (o que o Nibo/banco pagou à imobiliária, SEM divisão por produto: ramo '(todos os produtos)'). Use para 'quanto foi repassado ao grupo X no ano', 'receita do incêndio imobiliário', 'repasse previsto x pago'. Repasse PAGO por produto: repasse_corp status pago; total pago à imobiliária: repasse_pago_banco; diga qual fonte usou e o que não existe por produto. A coluna imposto_estimado é só uma ESTIMATIVA (comissão x taxa da baixa do mês, ~2,5% a 2,7%) e NUNCA é imposto pago: para imposto pago use consultar_impostos_pagos.",
+    "CUBO FINANCEIRO (só administradores; atualizado de hora em hora): comissão RECEBIDA (receita, baixas do ERP) e os REPASSES às imobiliárias, por mês, produto, ramo (IMOBILIARIO = incêndio imobiliário, 2 IMOBILIARIO), seguradora e imobiliária/grupo. Quatro fatos que NUNCA se somam entre si: receita (comissão recebida), repasse_erp (repasse gerado pelo ERP: bruto, retido e líquido; em 2026 está tudo 'pendente'), repasse_corp (controle do Corp: status pago = tem data de repasse; previsto = sem data) e repasse_pago_banco (o que o Nibo/banco pagou à imobiliária, SEM divisão por produto: ramo '(todos os produtos)'). Use para 'quanto foi repassado ao grupo X no ano', 'receita do incêndio imobiliário', 'repasse previsto x pago'. Repasse PAGO por produto: repasse_corp status pago; total pago à imobiliária: repasse_pago_banco; diga qual fonte usou e o que não existe por produto. A coluna das_devido_estimado (só no fato receita) é o DAS que a receita GEROU, estimado pela alíquota efetiva do Simples Nacional (Anexo III) do mês de cada empresa, calculada sobre o RBT12 = soma da comissão recebida dos 12 meses anteriores (hoje cerca de 16,4% a 17,4% na O2 Corretora e 14,6% a 15,6% na O2 Capitalização). É imposto DEVIDO estimado, NUNCA imposto pago: o pago vem de consultar_impostos_pagos (muitas guias estão em aberto). Dimensão empresa = O2 Corretora | O2 Capitalização (empresa do documento).",
   input_schema: {
     type: "object",
     properties: {
-      agrupar: { type: "array", items: { type: "string", enum: ["fato", "mes", "trimestre", "semestre", "ano", "produto", "ramo", "status", "seguradora", "entidade_nome"] }, description: "Colunas para agrupar. Agrupe sempre por fato (e status) para não misturar fontes." },
+      agrupar: { type: "array", items: { type: "string", enum: ["fato", "mes", "trimestre", "semestre", "ano", "produto", "ramo", "status", "seguradora", "empresa", "entidade_nome"] }, description: "Colunas para agrupar. Agrupe sempre por fato (e status) para não misturar fontes." },
+      empresa: { type: "string", enum: ["O2 Corretora", "O2 Capitalização"], description: "Empresa (CNPJ) do documento." },
       fato: { type: "string", enum: ["receita", "repasse_erp", "repasse_corp", "repasse_pago_banco"] },
       produto: { type: "string", description: "fianca, incendio, capitalizacao, automovel, condominio, vida..." },
       ramo: { type: "string", description: "Parte do nome do ramo: IMOBILIARIO (incêndio imobiliário), RESIDENCIAL, EMPRESARIAL, FIANÇA, CAPITALIZAÇÃO..." },
@@ -201,7 +202,7 @@ export const FERRAMENTA_CUBO_FINANCEIRO: Anthropic.Tool = {
   },
 };
 
-type EntradaFin = { agrupar?: string[]; fato?: string; produto?: string; ramo?: string; status?: string; seguradora?: string; imobiliaria?: string; mes_de?: string; mes_ate?: string; limite?: number };
+type EntradaFin = { agrupar?: string[]; empresa?: string; fato?: string; produto?: string; ramo?: string; status?: string; seguradora?: string; imobiliaria?: string; mes_de?: string; mes_ate?: string; limite?: number };
 
 export async function consultarCuboFinanceiro(e: EntradaFin): Promise<string> {
   const p: Record<string, unknown> = { ...e, mes_de: mesParaData(e.mes_de), mes_ate: mesParaData(e.mes_ate) };
@@ -221,7 +222,8 @@ export async function consultarCuboFinanceiro(e: EntradaFin): Promise<string> {
     avisos: [
       "Quatro fatos que NÃO se somam: receita (comissão recebida), repasse_erp (gerado no ERP), repasse_corp (controle do Corp) e repasse_pago_banco (pago pelo Nibo/banco, sem produto). Nunca some fatos diferentes.",
       "Em 2026 o ERP ainda não registra repasse como 'pago' (tudo pendente): o repasse efetivamente pago está no banco (por imobiliária, sem produto) e no Corp (status 'pago' = com data de repasse). Diga qual fonte usou e o que ficou sem dado.",
-      "imposto_estimado é ESTIMATIVA pela taxa da baixa do mês, NÃO é imposto pago nem devido: muitas guias estão em aberto. Para imposto pago use consultar_impostos_pagos. valor_retido do repasse_erp é a retenção sobre o repasse, outra coisa.",
+      "das_devido_estimado = comissão recebida x alíquota efetiva do Simples (Anexo III) do mês da empresa, pelo RBT12 (soma dos 12 meses anteriores de comissão recebida). É o imposto que a receita gerou (devido, estimado), NÃO o pago: muitas guias estão em aberto; para o pago use consultar_impostos_pagos e compare. Só cobre o DAS: o ISS retido na fonte pelas seguradoras e o IR indevido retido são outra coisa. valor_retido do repasse_erp é a retenção sobre o repasse.",
+      "A alíquota efetiva é a mesma validada antes (Anexo III pelo RBT12); só existe para meses com 12 meses anteriores de baixa. Mês sem alíquota fica sem estimativa.",
       "Mês do repasse_erp = competência; do repasse_corp = data do repasse (ou previsão); da receita = data do recebimento; do banco = mês do pagamento.",
     ],
   });
@@ -231,7 +233,7 @@ export async function consultarCuboFinanceiro(e: EntradaFin): Promise<string> {
 export const FERRAMENTA_IMPOSTOS_PAGOS: Anthropic.Tool = {
   name: "consultar_impostos_pagos",
   description:
-    "IMPOSTOS REALMENTE PAGOS (só administradores; fonte: pagamentos lançados no Nibo, atualizado de hora em hora), por mês de pagamento, empresa (corretora | capitalizacao) e tipo: DAS (Simples Nacional), ISS, IRPJ/CSLL, PIS/COFINS, contribuição sindical, parcelamento tributário e folha (INSS/FGTS). Use para 'quanto de imposto foi pago', 'o DAS de tal mês foi pago?', 'impostos pagos no ano'. IMPORTANTE: imposto pago NÃO se calcula por taxa sobre a receita e NÃO se divide por produto: muitas guias (DAS) publicadas pela contabilidade (Onvio) estão em aberto, então mês sem pagamento de DAS aqui = guia não paga. Nunca estime imposto pago multiplicando comissão por percentual.",
+    "IMPOSTOS REALMENTE PAGOS (só administradores; fonte: pagamentos lançados no Nibo, atualizado de hora em hora), por mês de pagamento, empresa (corretora | capitalizacao) e tipo: DAS (Simples Nacional), ISS, IRPJ/CSLL, PIS/COFINS, contribuição sindical, parcelamento tributário e folha (INSS/FGTS). Use para 'quanto de imposto foi pago', 'o DAS de tal mês foi pago?', 'impostos pagos no ano'. IMPORTANTE: imposto PAGO não se calcula por taxa e não se divide por produto: muitas guias (DAS) publicadas pela contabilidade (Onvio) estão em aberto, então mês sem pagamento de DAS aqui = guia não paga. O imposto DEVIDO estimado sobre a receita de um produto/imobiliária está em consultar_cubo_financeiro (das_devido_estimado, alíquota efetiva do Simples pelo RBT12): apresente os dois lado a lado e nunca chame o estimado de pago.",
   input_schema: {
     type: "object",
     properties: {
