@@ -10,7 +10,7 @@
   ],
   "baixaComando": null,
   "docsComando": "anexos-corp-bloco.cmd",
-  "posProcessamento": { "cmd": "anexos-pos.cmd", "hora": "03:00" },
+  "posProcessamento": { "cmd": "anexos-pos.cmd", "horas": ["03:00", "09:00", "15:00", "21:00"] },
   "folgaPassagemMin": 3,
   "esperaLoginMin": 5,
   "retentarMin": 10,

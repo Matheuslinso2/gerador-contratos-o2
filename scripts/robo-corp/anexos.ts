@@ -381,7 +381,7 @@ async function main() {
   // O estado (estado.json) é gravado a cada documento, então a retomada é natural.
   const MAX_REINICIOS = 12;
   for (let reinicio = 0; ; reinicio++) {
-    const browser = await chromium.launch({ channel: "chrome", headless: false, args: ["--start-maximized"] });
+    const browser = await chromium.launch({ channel: "chrome", headless: false, args: ["--start-maximized", "--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding", "--disable-background-timer-throttling", "--disable-features=CalculateNativeWinOcclusion"] }); // vários robôs, cada um numa janela: sem isso o Chrome pausa a janela coberta por outra
     const ctx = await browser.newContext({ viewport: VIEWPORT, acceptDownloads: true, locale: "pt-BR" });
     let terminou = false;
     progressoDaSessao = 0;
@@ -390,7 +390,7 @@ async function main() {
     } catch (e) {
       const msg = (e as Error).message ?? String(e);
       log(`sessão caiu: ${msg}`);
-      if (MAPEAR || msg === "LOGIN_SEM_PERMISSAO" || (reinicio >= MAX_REINICIOS && progressoDaSessao === 0)) throw e;
+      if (MAPEAR || msg === "LOGIN_SEM_PERMISSAO" || (LOGIN_ID !== "principal" && /não aceitou o login/.test(msg)) || (reinicio >= MAX_REINICIOS && progressoDaSessao === 0)) throw e;
     } finally {
       if (args.includes("--manter")) log("navegador mantido aberto (--manter)");
       else await browser.close().catch(() => {});
@@ -514,5 +514,5 @@ async function rodada(
 
 main().catch((e) => {
   console.error("ERRO:", e.message ?? e);
-  process.exit(e.message === "LOGIN_SEM_PERMISSAO" ? 3 : 1);
+  process.exit(e.message === "LOGIN_SEM_PERMISSAO" ? 3 : /não aceitou o login/.test(String(e.message)) ? 4 : 1);
 });

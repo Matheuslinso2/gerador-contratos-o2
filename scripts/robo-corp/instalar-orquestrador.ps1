@@ -9,3 +9,10 @@ $conf = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -Mul
 Register-ScheduledTask -TaskName "Robo Corp Orquestrador" -Action $acao -Trigger $gatilhos -Settings $conf -Description "Um robô por vez no login do Corp, 24 h, pela grade scripts\robo-corp\grade-24h.json" -Force | Out-Null
 foreach ($n in "Robo Corp", "Robo Corp Anexos", "Robo Corp Anexos FDS manha", "Robo Corp Anexos FDS tarde") { Disable-ScheduledTask -TaskName $n -ErrorAction SilentlyContinue | Out-Null }
 "Orquestrador instalado. Tarefas antigas do Corp desabilitadas (para voltar: desfazer-orquestrador.ps1)."
+# Vigia (a cada 10 min): reinicia o orquestrador se parar/travar e avisa o Matheus por e-mail se os robôs ficarem 30 min sem andar. Log: saida\vigia.log
+$gv = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(2) -RepetitionInterval (New-TimeSpan -Minutes 10) -RepetitionDuration (New-TimeSpan -Days 3650)
+$av = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$PSScriptRoot\vigia-corp.ps1`"" -WorkingDirectory $raiz
+$cv = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 8) -MultipleInstances IgnoreNew -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+Register-ScheduledTask -TaskName "Robo Corp Vigia" -Action $av -Trigger $gv -Settings $cv -Description "Vigia do orquestrador do Corp (reinicia e avisa por e-mail)" -Force | Out-Null
+Start-ScheduledTask -TaskName "Robo Corp Orquestrador"
+"Vigia instalado (a cada 10 min) e orquestrador iniciado."

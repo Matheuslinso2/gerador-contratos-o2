@@ -20,4 +20,5 @@ set ERRO=%errorlevel%
 echo fim do bloco: %date% %time% (codigo %ERRO%) >> %LOG%
 rem codigo 3 = login sem permissao (o orquestrador avisa e pausa esse login); os demais erros nao derrubam o orquestrador
 if "%ERRO%"=="3" exit /b 3
+if "%ERRO%"=="4" exit /b 4
 exit /b 0

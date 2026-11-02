@@ -1,17 +1,9 @@
 @echo off
-rem Pos-processamento diario dos anexos do Corp (NAO usa o login do Corp; roda em paralelo aos robos, uma vez por dia):
-rem   telas -> bucket e OCR local do Windows; envio dos anexos ao Workspace; vinculador; limpeza das fotos ja enviadas.
+rem Pos-processamento dos robos do Corp (a cada 6 h, chamado pelo orquestrador; NAO usa o login do Corp).
+rem Tudo esta em pos-corp.ts: trava contra duas execucoes, confere memoria livre, telas/OCR/anexos/vinculador/limpeza,
+rem leitura dos PDFs novos (apolices, OCR local nos de imagem, propostas), aplicacao no ERP so do que esta vazio e confere,
+rem datas/vencimentos/tabelas prontas e relatorio curto (arquivo em saida\ + tabela erp_robo_corp_relatorio).
 cd /d "%~dp0..\.."
 if not exist scripts\robo-corp\saida mkdir scripts\robo-corp\saida
-set LOG=scripts\robo-corp\saida\anexos-pos.log
-echo ===== %date% %time% ===== >> %LOG%
-rem junta o estado de todos os logins em estado.json (os robos so gravam estado-<login>.json)
-call npx.cmd tsx scripts/robo-corp/merge-estado.ts >> %LOG% 2>&1
-call npx.cmd tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/robo-corp/enviar-telas.ts >> %LOG% 2>&1
-call npx.cmd tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/robo-corp/ocr-telas.ts >> %LOG% 2>&1
-call npx.cmd tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/robo-corp/ler-telas.ts --gravar >> %LOG% 2>&1
-call npx.cmd tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/robo-corp/enviar-anexos.ts >> %LOG% 2>&1
-call npx.cmd tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/robo-corp/vincular-telas.ts --gravar >> %LOG% 2>&1
-call npx.cmd tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/robo-corp/limpar-telas.ts --gravar >> %LOG% 2>&1
-echo fim: %date% %time% >> %LOG%
+call npx.cmd tsx scripts/robo-corp/pos-corp.ts %* >> scripts\robo-corp\saida\anexos-pos.log 2>&1
 exit /b 0

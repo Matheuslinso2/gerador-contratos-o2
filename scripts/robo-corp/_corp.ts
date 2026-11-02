@@ -13,7 +13,7 @@ export type ConfigCorp = {
   corretora: { usuario: string; senha: string };
   unidade: { usuario: string; senha: string };
   /** vários logins de robô (cada um = um robô independente). senha única compartilhada (opcional: cai em unidade.senha). Quem preenche é o Matheus; nenhum script lê a senha em voz alta nem a registra. */
-  logins?: { senha?: string; lista: { id: string; usuario: string }[] };
+  logins?: { senha?: string; lista: { id: string; usuario: string; senha?: string }[] };
 };
 /** id do login deste processo: CORP_LOGIN (o orquestrador define); sem ele é o login principal ("unidade") */
 export const LOGIN_ID = process.env.CORP_LOGIN || "principal";
@@ -33,7 +33,7 @@ export function lerConfig(): ConfigCorp {
   if (LOGIN_ID !== "principal") {
     const l = c.logins?.lista.find((x) => x.id === LOGIN_ID);
     if (!l) throw new Error(`login "${LOGIN_ID}" não configurado em config.json (logins.lista): o Matheus precisa acrescentar`);
-    c.unidade = { usuario: l.usuario, senha: c.logins?.senha ?? c.unidade?.senha };
+    c.unidade = { usuario: l.usuario, senha: l.senha ?? c.logins?.senha ?? c.unidade?.senha }; // senha do próprio login > senha compartilhada > senha do principal
   }
   for (const [k, v] of [["corretora", c.corretora], ["unidade", c.unidade]] as const)
     if (!v?.usuario || !v?.senha || v.senha === "PREENCHER") throw new Error(`config: preencha ${k}.usuario/senha`);
@@ -155,8 +155,34 @@ export async function pegarVezDoCorp(robo: string, maxEsperaMin = 60): Promise<v
 }
 
 // ------------------------------------------------------------ login
+/** Vários robôs, cada um na sua janela: o Corp só aceita teclado na janela "em foco". Com a emulação de foco (CDP) cada página se acha em foco e recebe as teclas do seu robô, mesmo coberta por outra janela. */
+async function emularFoco(ctx: BrowserContext, p: Page) {
+  try { const s = await ctx.newCDPSession(p); await s.send("Emulation.setFocusEmulationEnabled", { enabled: true }); } catch { /* navegador sem CDP: segue sem */ }
+}
+// Vários robôs: a TELA DE LOGIN do Corp só aceita teclado de um robô por vez (os outros ficam com os campos vazios). Por isso a fase de login é sequencial:
+// um arquivo de trava (fase-login.lock) é segurado só durante o login (cerca de 1 min); depois cada robô trabalha em paralelo na sua própria janela.
+const FASE = path.join(os.homedir(), ".robo-corp", "fase-login.lock");
+async function pegarFaseLogin(): Promise<() => void> {
+  fs.mkdirSync(path.dirname(FASE), { recursive: true });
+  const limite = Date.now() + 15 * 60_000; let avisou = false;
+  for (;;) {
+    try { fs.mkdirSync(FASE); fs.writeFileSync(path.join(FASE, "dono.json"), JSON.stringify({ pid: process.pid, login: LOGIN_ID, desde: Date.now() })); break; } catch { /* ocupada */ }
+    try {
+      const d = JSON.parse(fs.readFileSync(path.join(FASE, "dono.json"), "utf8")) as { pid: number; desde: number };
+      if (!vivo(d.pid) || Date.now() - d.desde > 5 * 60_000) { fs.rmSync(FASE, { recursive: true, force: true }); continue; }
+    } catch { try { if (Date.now() - fs.statSync(FASE).mtimeMs > 60_000) fs.rmSync(FASE, { recursive: true, force: true }); } catch { /* sumiu */ } }
+    if (Date.now() > limite) throw new Error("fila de login do Corp: esperei 15 min pela vez de digitar");
+    if (!avisou) { log("esperando a vez de digitar o login (outro robô está entrando)…"); avisou = true; }
+    await espera(2000 + Math.floor(Math.random() * 1500));
+  }
+  return () => { try { fs.rmSync(FASE, { recursive: true, force: true }); } catch { /* ok */ } };
+}
 export async function entrar(ctx: BrowserContext, cfg: ConfigCorp, robo = path.basename(process.argv[1] ?? "robo")): Promise<Page> {
   await pegarVezDoCorp(robo);
+  const soltar = await pegarFaseLogin();
+  try { return await entrarSemFila(ctx, cfg); } finally { soltar(); }
+}
+async function entrarSemFila(ctx: BrowserContext, cfg: ConfigCorp): Promise<Page> {
   const login = await ctx.newPage();
   await login.goto(cfg.url, { waitUntil: "domcontentloaded" });
   await login.fill('input[placeholder="Usuário"]', cfg.corretora.usuario);

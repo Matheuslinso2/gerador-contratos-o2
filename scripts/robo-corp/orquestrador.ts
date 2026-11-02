@@ -23,7 +23,7 @@ const cam = (c: string) => (path.isAbsolute(c) ? c : path.join(PASTA, c));
 type Fixo = { nome: string; cmd: string; horas: string[]; duracaoMin: number; dias: "todos" | "uteis" | "fds" };
 type Faixa = { dias: "todos" | "uteis" | "fds"; de: string; ate: string; robo: "docs" | "baixa" };
 type Worker = { id: string; fixos?: boolean; agenda?: Faixa[] };
-type Grade = { fixos: Fixo[]; workers: Worker[]; baixaComando: string | null; docsComando: string; posProcessamento: { cmd: string; hora: string }; folgaPassagemMin: number; esperaLoginMin: number; retentarMin: number; semPermissaoPausaMin: number; baixaSemTrabalhoMin: number };
+type Grade = { fixos: Fixo[]; workers: Worker[]; baixaComando: string | null; docsComando: string; posProcessamento: { cmd: string; horas: string[] }; folgaPassagemMin: number; esperaLoginMin: number; retentarMin: number; semPermissaoPausaMin: number; baixaSemTrabalhoMin: number };
 const grade: Grade = JSON.parse(fs.readFileSync(GRADE_ARQ, "utf8"));
 const min = (hhmm: string) => { const [h, m] = hhmm.split(":").map(Number); return h * 60 + m; };
 const agoraSP = (t = new Date()) => { const p = new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", weekday: "short", hour12: false }).formatToParts(t); const g = (k: string) => p.find((x) => x.type === k)!.value; return { data: `${g("year")}-${g("month")}-${g("day")}`, minutos: +g("hour") * 60 + +g("minute"), dow: g("weekday") }; };
@@ -96,6 +96,7 @@ function iniciar(e: Estado, q: Quem, ateMin: number) {
     const dur = Date.now() - e.desde;
     log(`[${e.w.id}] LIBEROU o Corp: ${e.nome} terminou (código ${c}) após ${Math.round(dur / 60000)} min`);
     if (c === 3) { e.pausaAte = Date.now() + grade.semPermissaoPausaMin * 60_000; log(`[${e.w.id}] LOGIN SEM PERMISSÃO: o Matheus precisa copiar as permissões desse login. Pauso este login por ${grade.semPermissaoPausaMin} min.`); }
+    else if (c === 4) { e.pausaAte = Date.now() + grade.semPermissaoPausaMin * 60_000; log(`[${e.w.id}] LOGIN RECUSADO pelo Corp (nome/senha). Pauso este login por ${grade.semPermissaoPausaMin} min para não gerar bloqueio; avisar o Matheus.`); }
     else if (c === 10 && e.robo === "baixa") { e.baixaSemTrabalhoAte = Date.now() + grade.baixaSemTrabalhoMin * 60_000; log(`[${e.w.id}] baixa sem o que baixar: ajuda nos documentos por ${grade.baixaSemTrabalhoMin} min`); }
     else if ((c !== 0 || dur < 2 * 60_000) && dur < 3 * 60_000) { e.ultimaFalha = Date.now(); log(`[${e.w.id}] saída rápida (${Math.round(dur / 1000)} s): espero ${grade.retentarMin} min antes de tentar de novo (ver o log do robô)`); }
     e.filho = null; e.robo = "";
@@ -137,8 +138,11 @@ async function cicloDoLogin(e: Estado) {
 
 async function ciclo() {
   const a = agoraSP();
-  // pós-processamento diário (merge do estado dos robôs, OCR das telas, envio, vinculador, limpeza): não usa o login do Corp, roda em paralelo, uma vez por dia
-  if (min(grade.posProcessamento.hora) <= a.minutos && posFeito !== a.data) { posFeito = a.data; log("pós-processamento diário dos anexos (sem login do Corp)"); spawn("cmd.exe", ["/c", cam(grade.posProcessamento.cmd)], { cwd: RAIZ, stdio: "ignore", windowsHide: true }); }
+  // batimento para o vigia (vigia-corp.ps1): prova de que o orquestrador está vivo e o que cada login está fazendo
+  try { fs.writeFileSync(path.join(HOME, "orquestrador-vivo.json"), JSON.stringify({ pid: process.pid, em: Date.now(), logins: [...est.values()].map((e) => ({ id: e.w.id, fazendo: e.filho ? e.nome : "", desde: e.desde, pausaAte: e.pausaAte })) })); } catch { /* disco */ }
+  // pós-processamento a cada 6 h (não usa o login do Corp, roda em paralelo; pos-corp.ts tem trava própria e confere a memória)
+  const slot = grade.posProcessamento.horas.filter((h) => min(h) <= a.minutos).pop();
+  if (slot && posFeito !== a.data + slot) { posFeito = a.data + slot; log("pós-processamento das " + slot + " (anexos e PDFs, sem login do Corp)"); spawn("cmd.exe", ["/c", cam(grade.posProcessamento.cmd)], { cwd: RAIZ, stdio: "ignore", windowsHide: true }); }
   await Promise.all([...est.values()].map((e) => cicloDoLogin(e).catch((err) => log(`[${e.w.id}] erro no ciclo: ${(err as Error).message}`))));
 }
 
