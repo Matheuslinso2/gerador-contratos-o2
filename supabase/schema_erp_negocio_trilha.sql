@@ -369,3 +369,9 @@ create table if not exists public.erp_vinculo_pontuacao (
   ja_vinculado boolean, lote text not null, calculado_em timestamptz not null default now());
 -- Valores iniciais (peso/fonte/regra): ver as tabelas no banco (select * from erp_vinculo_pesos, erp_vinculo_fontes, erp_vinculo_regras);
 -- migrações "erp_vinculo_metrica_motor", "erp_vinculo_modo_multiplicador", "erp_vinculo_pontuar_retroativo" (+ _fix), "erp_vinculo_distribuicao_e_limitrofes".
+
+-- ===== PROVAS CONCLUSIVAS (Matheus, 02/11/2026) =====
+-- (1) PDF oficial legível que CITA o vínculo vincula sozinho (tentar ler sempre); (2) uma parcela cobrada e PAGA + nº da proposta vincula sozinha.
+-- Contradição (CPF diferente, seguradora diferente, PDF cita OUTRO nº) = NÃO vincula: faixa 'conferir' + fila erp_vinculo_fila_conferencia (e-mails que citam o segurado; conversas de WhatsApp do Bitrix ainda fora do banco).
+-- erp_vinculo_pesos.tipo passou a aceitar 'prova' (prova_pdf_cita_vinculo, prova_parcela_paga_com_proposta) e limite_faixa 'conferir' (pdf_cita_outro_numero).
+-- Novo tipo retroativo: proposta_apolice (erp_vinculo_pontuar_retroativo). Definições vigentes no banco; migrações "erp_vinculo_provas_conclusivas" e "erp_vinculo_fila_conferencia".
