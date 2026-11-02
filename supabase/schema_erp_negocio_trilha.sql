@@ -262,3 +262,12 @@ select e.negocio_id, e.etapa, e.evidencia->>'tipo_aba' tipo_aba, e.confianca, e.
 
 -- Correção pontual de 02/11: prêmio da cotação de Fiança que divergia da apólice (erro de milhar/decimal da planilha) foi trocado pelo líquido da apólice;
 -- o valor lido fica em producao_unificada.extras->>'premio_planilha_original' (+ extras.premio_corrigido_por).
+
+-- Prêmio previsto da renovação segundo as abas de renovação das planilhas (1 linha por apólice: a última aba preenchida, líquido > 0).
+create or replace view erp_renovacao_prevista_planilha with (security_invoker = true) as
+select distinct on (v.documento_id) v.documento_id, v.numero_apolice, d.vigencia_fim, to_char(d.vigencia_fim, 'YYYY-MM') mes_vencimento, d.situacao,
+       v.premio_liquido premio_liquido_atual, v.planilha_liquido premio_liquido_previsto,
+       round(100.0 * (v.planilha_liquido / nullif(v.premio_liquido, 0) - 1), 1) reajuste_pct, v.aba, v.arquivo_id, v.linha_n
+  from erp_negocio_comparacao_planilha_apolice v join erp_documentos d on d.id = v.documento_id
+ where v.tipo_aba = 'renovacao' and v.planilha_liquido > 0 and v.premio_liquido > 0
+ order by v.documento_id, v.arquivo_id desc, v.linha_n desc;
