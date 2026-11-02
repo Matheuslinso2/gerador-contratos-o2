@@ -6,6 +6,7 @@ import FiltrosErp from "../FiltrosErp";
 import InfoLegenda from "@/components/InfoLegenda";
 import PainelResumoAba from "@/app/erp/PainelResumoAba";
 import NavegadorMes from "@/app/erp/NavegadorMes";
+import PaginaErp from "../PaginaErp";
 
 export const metadata = { title: "Imobiliárias" };
 export const dynamic = "force-dynamic";
@@ -84,7 +85,7 @@ export default async function ErpImobiliarias({ searchParams }: { searchParams: 
   const href = (v: string) => (v === "vigentes" ? "/erp/imobiliarias" : `/erp/imobiliarias?vista=${v}`);
 
   return (
-    <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-4 p-8">
+    <PaginaErp>
       <NavegadorMes caminho="/erp/imobiliarias" mes={f.mes} />
       <PainelResumoAba mes={f.mes} funcao="erp_resumo_imobiliarias" titulo="Imobiliárias" legendas={{"Documentos vigentes por imobiliária":"As 8 imobiliárias com mais documentos vigentes.","Prêmio vigente por imobiliária (R$)":"As 8 imobiliárias com maior prêmio vigente.","Imobiliárias por estado":"Imobiliárias cadastradas por estado (os 6 maiores)."}} />
       <div>
@@ -157,6 +158,6 @@ export default async function ErpImobiliarias({ searchParams }: { searchParams: 
           Mostrar mais
         </Link>
       )}
-    </main>
+    </PaginaErp>
   );
 }

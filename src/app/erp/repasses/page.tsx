@@ -9,6 +9,7 @@ import NavegadorMes from "../NavegadorMes";
 import InfoLegenda from "@/components/InfoLegenda";
 import { atualizarResumoRepasse, autorizarRepasse } from "./actions";
 import PainelResumoAba from "@/app/erp/PainelResumoAba";
+import PaginaErp from "../PaginaErp";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Repasses" };
@@ -50,7 +51,7 @@ export default async function ErpRepassesPage({ searchParams }: { searchParams: 
   const erro = typeof sp.erro === "string" ? sp.erro : undefined;
 
   return (
-    <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-4 p-8">
+    <PaginaErp>
       <NavegadorMes caminho="/erp/repasses" mes={f.mes} params={{ imobiliaria: f.imobiliaria }} />
       <PainelResumoAba mes={f.mes} funcao="erp_resumo_repasses" titulo="Repasses" legendas={{"Repasses do mês por situação":"Quantidade de repasses do mês escolhido em cada situação (pendente, autorizado, pago ou cancelado).","Valor líquido por competência (R$)":"Valor líquido dos repasses das últimas competências, até o mês escolhido. Não inclui os cancelados (quitados por pró-labore).","Pendente por imobiliária (R$)":"As 8 imobiliárias com maior valor líquido pendente de autorização. “Do mês” é o repasse da competência escolhida; “Herdado” é o que ficou pendente de meses anteriores."}} />
       <div>
@@ -79,7 +80,7 @@ export default async function ErpRepassesPage({ searchParams }: { searchParams: 
       <Suspense fallback={<div className="h-64 animate-pulse rounded-xl bg-white" aria-busy="true" />}>
         <TabelaRepasses mes={mes} f={f} />
       </Suspense>
-    </main>
+    </PaginaErp>
   );
 }
 

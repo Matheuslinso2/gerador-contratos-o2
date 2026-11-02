@@ -14,6 +14,7 @@ import InfoLegenda from "@/components/InfoLegenda";
 import PainelResumoAba from "@/app/erp/PainelResumoAba";
 import NavegadorMes from "../NavegadorMes";
 import { periodoDoMes } from "@/lib/erp/periodo";
+import PaginaErp from "../PaginaErp";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Renovação" };
@@ -185,7 +186,7 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
   for (const k of ["q", "seguradora", "produto", "imobiliaria"] as const) if (sp[k] && typeof sp[k] === "string") base.set(k, sp[k] as string);
 
   return (
-    <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-5 p-8">
+    <PaginaErp>
       <PainelResumoAba funcao="erp_resumo_renovacao" titulo="Renovação" mes={f.mes} legendas={{"Do mês: situação da renovação":"Apólices que vencem no mês escolhido, por situação da renovação: sem card, card criado, em cotação, renovado ou não renovado.","Do mês: por produto":"Apólices que vencem no mês, por produto.","Herdadas: mês de origem":"Apólices de meses anteriores (até 90 dias antes do mês escolhido) que venceram e ainda não têm desfecho, por mês em que venceram."}} />
       <PageHeader
         icon={<IconReport />}
@@ -432,6 +433,6 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
         Só entram apólices vigentes (propostas, que ainda não viraram apólice, não aparecem). Prêmio líquido conforme o Corp; a regra de prêmio total (líquido + IOF + adicional de fracionamento) vale na ficha do documento.
         Os títulos de Fiança, Capitalização e Automóvel seguem o padrão dos cards já existentes em cada funil e ainda precisam ser confirmados.
       </p>
-    </main>
+    </PaginaErp>
   );
 }

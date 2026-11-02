@@ -9,6 +9,7 @@ import { dadosDeCabecalhoPorId, SITUACOES, tipoDoCabecalho } from "@/lib/erp/doc
 import { codigoCliente, formatarDocumento, tipoDoDocumento } from "@/lib/erp/clientes";
 import { atualizarCliente } from "../actions";
 import BotaoVerDocumento from "../../BotaoVerDocumento";
+import PaginaErp from "../../PaginaErp";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Cliente" };
@@ -52,7 +53,7 @@ export default async function ErpClienteFichaPage({ params, searchParams }: { pa
   const anteriores = (Array.isArray(c.contatos_anteriores) ? c.contatos_anteriores : []) as { email: string | null; telefone: string | null; ate: string }[];
 
   return (
-    <main className="mx-auto w-full max-w-[1000px] flex-1 space-y-5 p-8">
+    <PaginaErp>
       <Link href="/erp/clientes" className="text-sm text-gray-500 hover:text-o2-navy hover:underline">← Clientes</Link>
       <div className="flex flex-wrap items-baseline gap-3">
         <h1 className="text-xl font-semibold text-o2-navy">{c.nome ?? "Cliente sem nome"}</h1>
@@ -155,7 +156,7 @@ export default async function ErpClienteFichaPage({ params, searchParams }: { pa
           </div>
         )}
       </section>
-    </main>
+    </PaginaErp>
   );
 }
 

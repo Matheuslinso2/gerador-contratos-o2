@@ -7,6 +7,7 @@ import NavegadorMes from "../NavegadorMes";
 import { periodoDoMes } from "@/lib/erp/periodo";
 import InfoLegenda from "@/components/InfoLegenda";
 import PainelResumoAba from "@/app/erp/PainelResumoAba";
+import PaginaErp from "../PaginaErp";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Faturas" };
@@ -46,7 +47,7 @@ export default async function ErpFaturasPage({ searchParams }: { searchParams: P
   const divergentes = faturas.filter((l) => l.valor_boleto !== null && Math.abs(Number(l.valor_boleto) - Number(l.valor_itens)) > TOLERANCIA_FATURA).length;
 
   return (
-    <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-4 p-8">
+    <PaginaErp>
       <NavegadorMes caminho="/erp/faturas" mes={f.mes} params={{ seguradora: f.seguradora, imobiliaria: f.imobiliaria }} />
       <PainelResumoAba mes={f.mes} funcao="erp_resumo_faturas" titulo="Faturas" legendas={{"Itens lidos por competência":"Quantidade de itens lidos nas faturas das seguradoras, por competência, até o mês escolhido (as 6 mais recentes).","Situação do envio no mês":"Quantas faturas da competência escolhida já foram enviadas à imobiliária, estão a enviar, parciais ou aguardando o arquivo.","Herdadas por competência e situação":"Faturas de competências anteriores que ainda não foram enviadas por completo: a enviar, parciais ou aguardando arquivo.","Alertas por tipo (agora)":"Alertas de fatura abertos hoje, por tipo. Não depende do mês escolhido.","Apólices fora da fatura por seguradora (agora)":"Apólices que deveriam estar numa fatura da seguradora e não aparecem em nenhuma carregada, por seguradora, hoje. Informativo, não depende do mês."}} />
       <div>
@@ -206,6 +207,6 @@ export default async function ErpFaturasPage({ searchParams }: { searchParams: P
           </table>
         </div>
       )}
-    </main>
+    </PaginaErp>
   );
 }

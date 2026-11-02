@@ -14,6 +14,7 @@ import BotaoVerDocumento from "../BotaoVerDocumento";
 import PainelResumoAba from "@/app/erp/PainelResumoAba";
 import NavegadorMes from "../NavegadorMes";
 import { periodoDoMes } from "@/lib/erp/periodo";
+import PaginaErp from "../PaginaErp";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Emissão" };
@@ -213,7 +214,7 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
   const rotuloMes = new Date(Date.UTC(a, m - 1, 1)).toLocaleDateString("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" });
 
   return (
-    <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-6 p-8">
+    <PaginaErp>
       <NavegadorMes caminho="/erp/emissao" mes={f.mes} params={{ ...f, origem, faixa, motivo, prazo: prazoSel } as Record<string, string | undefined>} />
       <PainelResumoAba mes={f.mes} funcao="erp_resumo_emissao" titulo="Emissão" legendas={{"Efetivadas, emitidas e pendentes por mês":"Para cada mês: quantas propostas foram efetivadas, quantas já viraram apólice (emitidas) e quantas ainda estão pendentes de emissão. Fonte: o mesmo quadro mensal da aba.","Pendentes por seguradora":"As seguradoras com mais propostas aguardando emissão agora (as 10 maiores).","Pendência por faixa de dias desde a efetivação":"Há quantos dias cada proposta pendente foi efetivada. As faixas mais longas são as que mais pedem atenção."}} />
       <PageHeader
@@ -447,7 +448,7 @@ export default async function ErpEmissaoPage({ searchParams }: { searchParams: P
         Efetivada = card concluído com sucesso no funil (data do card; sem card, a data da proposta do Corp). Emitida = tem nº de apólice ou de endosso (por enquanto o nº é a prova; a data de emissão e o anexo da apólice entram com os e-mails, faturas e boletos).
         Cotações em negociação ficam só no Workspace. Os números se atualizam a cada hora.
       </p>
-    </main>
+    </PaginaErp>
   );
 }
 

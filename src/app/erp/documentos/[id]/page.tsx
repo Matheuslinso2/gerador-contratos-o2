@@ -11,6 +11,7 @@ import RascunhoAutomatico from "@/components/RascunhoAutomatico";
 import InfoLegenda from "@/components/InfoLegenda";
 import { ligarEndossoApolice } from "./actions";
 import { buscarFichaDocumento, nomeTipoDocumento, SITUACOES, TIPOS_DOCUMENTO, TIPO_CORP, TIPO_CONTRATACAO, MODO_COBRANCA } from "@/lib/erp/documentos";
+import PaginaErp from "../../PaginaErp";
 
 export const dynamic = "force-dynamic";
 
@@ -158,7 +159,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
 
   return (
     <>
-      <main className="mx-auto w-full max-w-[1100px] flex-1 space-y-6 p-8">
+      <PaginaErp>
         <div className="space-y-2">
           <Link href="/erp/documentos" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-o2-navy hover:underline">
             ← Documentos
@@ -774,7 +775,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
             </ul>
           )}
         </section>
-      </main>
+      </PaginaErp>
     </>
   );
 }

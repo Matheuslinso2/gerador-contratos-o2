@@ -4,6 +4,7 @@ import { CADASTROS, ETAPAS } from "@/lib/erp/processo";
 import { podeVerBaixas } from "@/lib/erp/acessoBaixas";
 import InfoLegenda from "@/components/InfoLegenda";
 import PainelProducao from "@/app/erp/PainelProducao";
+import PaginaErp from "./PaginaErp";
 
 export const metadata = { title: { absolute: "ERP O2" } };
 export const dynamic = "force-dynamic";
@@ -126,7 +127,7 @@ export default async function ErpInicio({ searchParams }: { searchParams: Promis
   }
 
   return (
-    <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-6 p-8">
+    <PaginaErp>
       <PainelProducao params={{ ano: str(sp.ano), m: str(sp.m), aba: str(sp.aba), sub: str(sp.sub), seg: str(sp.seg), prod: str(sp.prod), imob: str(sp.imob) }} />
       <div>
         <h1 className="text-xl font-semibold text-o2-navy">ERP O2</h1>
@@ -213,6 +214,6 @@ export default async function ErpInicio({ searchParams }: { searchParams: Promis
           .
         </p>
       </section>
-    </main>
+    </PaginaErp>
   );
 }

@@ -6,6 +6,7 @@ import { lerFiltros } from "@/lib/erp/filtros";
 import { DESCONTO_PCT, linhasDoMes, mesAnterior, mesRepasse, rotuloMes, totais } from "@/lib/erp/repasse";
 import InfoLegenda from "@/components/InfoLegenda";
 import BotaoVerDocumento from "../../BotaoVerDocumento";
+import PaginaErp from "../../PaginaErp";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Repasse da imobiliária" };
@@ -32,7 +33,7 @@ export default async function ErpRepasseImobiliariaPage({ params, searchParams }
   const emails = Array.isArray(imob.email_repasses) ? (imob.email_repasses as string[]).join(", ") : "";
 
   return (
-    <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-4 p-8">
+    <PaginaErp>
       <div>
         <Link href={`/erp/repasses?mes=${mes}`} className="text-xs text-gray-500 hover:underline">
           ← Repasses de {rotuloMes(mes)}
@@ -149,6 +150,6 @@ export default async function ErpRepasseImobiliariaPage({ params, searchParams }
           </table>
         </div>
       </div>
-    </main>
+    </PaginaErp>
   );
 }

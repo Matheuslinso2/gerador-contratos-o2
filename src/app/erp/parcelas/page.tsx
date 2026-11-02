@@ -8,6 +8,7 @@ import InfoLegenda from "@/components/InfoLegenda";
 import PainelResumoAba from "@/app/erp/PainelResumoAba";
 import NavegadorMes from "@/app/erp/NavegadorMes";
 import { periodoDoMes } from "@/lib/erp/periodo";
+import PaginaErp from "../PaginaErp";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Parcelas" };
@@ -107,7 +108,7 @@ export default async function ErpParcelasPage({ searchParams }: { searchParams: 
       );
   
   return (
-    <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-4 p-8">
+    <PaginaErp>
       <NavegadorMes caminho="/erp/parcelas" mes={f.mes} params={{ seguradora: f.seguradora, imobiliaria: f.imobiliaria }} />
       <PainelResumoAba funcao="erp_resumo_parcelas" titulo="Parcelas" mes={periodo.mes} legendas={{"Parcelas por mês de vencimento, por situação":"Parcelas que vencem em cada mês, do mês escolhido e dos três anteriores (marcados como herdados), separadas por situação: paga, a vencer, atenção ou urgente, risco de cancelamento e aguardando comissão.","Herdadas abertas por seguradora":"Parcelas de meses anteriores ao mês escolhido que continuam em aberto (urgentes, em atenção, em risco de cancelamento ou aguardando comissão), por seguradora (as 8 maiores).","Em risco de cancelamento por seguradora":"Parcelas em risco de cancelamento, do mês e herdadas, por seguradora (as 8 maiores). Só aparece onde a regra de cancelamento da seguradora está cadastrada.","Prova de pagamento das parcelas do mês":"Quantas das parcelas que vencem no mês escolhido têm prova de pagamento (linha de extrato ou comissão recebida) e quantas ainda não têm."}} />
       <div>
@@ -143,6 +144,6 @@ export default async function ErpParcelasPage({ searchParams }: { searchParams: 
       {tabela(linhas)}
       <p className="text-xs font-semibold uppercase tracking-wide text-o2-navy">Herdadas de meses anteriores<span className="ml-1 text-[10px] font-normal normal-case tracking-normal text-gray-400">(parcelas em conferência cobradas antes de {periodo.rotulo})</span></p>
       {herdadas.length === 0 ? <p className="text-xs text-gray-500">Nenhuma parcela herdada em conferência.</p> : tabela(herdadas)}
-    </main>
+    </PaginaErp>
   );
 }

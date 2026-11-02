@@ -7,6 +7,7 @@ import RascunhoAutomatico from "@/components/RascunhoAutomatico";
 import { registrarMovimentacao } from "./actions";
 import BotaoVerDocumento from "../../BotaoVerDocumento";
 import InfoLegenda from "@/components/InfoLegenda";
+import PaginaErp from "../../PaginaErp";
 
 const MOTIVOS = ["Entrega de chaves", "Fim de contrato", "Cancelamento a pedido", "Sinistro", "Litígio", "Troca de administradora", "Renovação em outra fatura", "Erro da seguradora", "Outro"];
 
@@ -77,7 +78,7 @@ export default async function ErpFaturaPage({ params, searchParams }: { params: 
   const semExplicacao = saidas.filter((s) => !s.explicacao).length;
 
   return (
-    <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-5 p-8">
+    <PaginaErp>
       <div className="space-y-1">
         <Link href="/erp/faturas" className="text-sm text-gray-500 hover:text-o2-navy hover:underline">
           ← Faturas
@@ -235,6 +236,6 @@ export default async function ErpFaturaPage({ params, searchParams }: { params: 
         </summary>
         <Tabela linhas={linhas} />
       </details>
-    </main>
+    </PaginaErp>
   );
 }

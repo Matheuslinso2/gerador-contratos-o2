@@ -10,6 +10,7 @@ import { salvarRegraSeguradora, salvarRegraProduto } from "./actions";
 import InfoLegenda from "@/components/InfoLegenda";
 import PainelResumoAba from "@/app/erp/PainelResumoAba";
 import NavegadorMes from "@/app/erp/NavegadorMes";
+import PaginaErp from "../PaginaErp";
 
 export const dynamic = "force-dynamic";
 
@@ -96,7 +97,7 @@ export default async function ErpSeguradorasPage({ searchParams }: { searchParam
 
   return (
     <>
-      <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-6 p-8">
+      <PaginaErp>
         <NavegadorMes caminho="/erp/seguradoras" mes={mes} />
         <PainelResumoAba mes={mes} funcao="erp_resumo_seguradoras" titulo="Seguradoras" legendas={{"Apólices vigentes por seguradora":"As 10 seguradoras com mais apólices vigentes.","Prazo de pagamento da comissão (dias)":"Prazo, em dias, que cada seguradora tem para pagar a comissão, quando está cadastrado.","Seguradoras por formato de extrato":"Seguradoras ativas por formato do extrato de comissão que enviam."}} />
         <PageHeader
@@ -297,7 +298,7 @@ export default async function ErpSeguradorasPage({ searchParams }: { searchParam
             </tbody>
           </table>
         </div>
-      </main>
+      </PaginaErp>
     </>
   );
 }

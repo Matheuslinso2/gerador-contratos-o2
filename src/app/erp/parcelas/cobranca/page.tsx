@@ -9,6 +9,7 @@ import PainelResumoAba from "@/app/erp/PainelResumoAba";
 import QuemCobrar from "./QuemCobrar";
 import NavegadorMes from "@/app/erp/NavegadorMes";
 import { periodoDoMes } from "@/lib/erp/periodo";
+import PaginaErp from "../../PaginaErp";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Parcelas · cobrança" };
@@ -118,7 +119,7 @@ export default async function ParcelasCobrancaPage({ searchParams }: { searchPar
       );
   
   return (
-    <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-4 p-8">
+    <PaginaErp>
       <NavegadorMes caminho="/erp/parcelas/cobranca" mes={f.mes} params={{ seguradora: f.seguradora, produto: f.produto, situacao: f.situacao }} />
       <PainelResumoAba funcao="erp_resumo_parcelas" titulo="Parcelas" mes={periodo.mes} legendas={{"Parcelas por mês de vencimento, por situação":"Parcelas que vencem em cada mês, do mês escolhido e dos três anteriores (marcados como herdados), separadas por situação: paga, a vencer, atenção ou urgente, risco de cancelamento e aguardando comissão.","Herdadas abertas por seguradora":"Parcelas de meses anteriores ao mês escolhido que continuam em aberto (urgentes, em atenção, em risco de cancelamento ou aguardando comissão), por seguradora (as 8 maiores).","Em risco de cancelamento por seguradora":"Parcelas em risco de cancelamento, do mês e herdadas, por seguradora (as 8 maiores). Só aparece onde a regra de cancelamento da seguradora está cadastrada.","Prova de pagamento das parcelas do mês":"Quantas das parcelas que vencem no mês escolhido têm prova de pagamento (linha de extrato ou comissão recebida) e quantas ainda não têm."}} />
       <div>
@@ -186,6 +187,6 @@ export default async function ParcelasCobrancaPage({ searchParams }: { searchPar
         "Risco de cancelamento" aparece onde a regra da seguradora está cadastrada: 1ª parcela não paga em Alfa e Yelum (Incêndio), Suhai (Auto) e Tokio (Fiança); mais de 30 dias na Too (Fiança) e de 20 dias na Allianz (Residência).
         Onde a Condição Geral manda usar a Tabela de Prazo Curto (Auto de Porto, Allianz, Yelum, Suhai, Mapfre, Azul e HDI; Fiança da Tokio com vigência de até 12 parcelas), a tela mostra "pago X% · cobertura até" e marca risco de cancelamento só quando a data da faixa de CIMA da tabela já passou (mais 2 dias de tolerância) e nenhuma parcela posterior tem prova de pagamento. Os dias contam do início da vigência.
       </p>
-    </main>
+    </PaginaErp>
   );
 }

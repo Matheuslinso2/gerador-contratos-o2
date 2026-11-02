@@ -3,7 +3,9 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { podeVerNibo } from "@/lib/erp/acessoNibo";
-import { mesAtual } from "@/lib/erp/periodo";
+import { periodoDoMes } from "@/lib/erp/periodo";
+import PaginaErp, { CartaoErp, KpiErp, TituloErp } from "../PaginaErp";
+import NavegadorMes from "../NavegadorMes";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Nibo" };
@@ -48,12 +50,10 @@ export default async function NiboPage({ searchParams }: { searchParams: Promise
   const { data: { user } } = await supabase.auth.getUser();
   if (!podeVerNibo(user?.email)) redirect("/erp");
 
-  const atual = mesAtual(); // AAAA-MM
-  const anoAtual = Number(atual.slice(0, 4));
-  const mesDoAno = Number(atual.slice(5, 7));
+  const periodo = periodoDoMes(sp.mes);
+  const ano = Number(periodo.mes.slice(0, 4));
+  const mSel = Number(periodo.mes.slice(5, 7));
   const aba = ABAS.find((a) => a.chave === sp.aba)?.chave ?? "consolidado";
-  const ano = /^\d{4}$/.test(sp.ano ?? "") ? Number(sp.ano) : anoAtual;
-  const mSel = /^(0?[1-9]|1[0-2])$/.test(sp.m ?? "") ? Number(sp.m) : ano === anoAtual ? mesDoAno : 12;
 
   const sb = createServiceClient();
   const { data, error } = await sb.rpc("erp_nibo_painel", { p_ano: ano, p_empresa: aba });
@@ -61,13 +61,6 @@ export default async function NiboPage({ searchParams }: { searchParams: Promise
   const { data: sinc } = await sb.from("erp_nibo_lancamentos").select("sincronizado_em").order("sincronizado_em", { ascending: false }).limit(1);
   const ultimaSync = sinc?.[0]?.sincronizado_em ? new Date(sinc[0].sincronizado_em).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : null;
 
-  const href = (p: { aba?: string; ano?: number; m?: number }) => {
-    const q = new URLSearchParams();
-    q.set("aba", p.aba ?? aba);
-    q.set("ano", String(p.ano ?? ano));
-    q.set("m", String(p.m ?? mSel));
-    return `/erp/nibo?${q.toString()}`;
-  };
   const doMes = (t: Linha["linha_tipo"], bloco?: string) => linhas.find((l) => l.linha_tipo === t && (!bloco || l.bloco === bloco));
   const col = COLS[mSel - 1];
   const resumo = [
@@ -78,56 +71,43 @@ export default async function NiboPage({ searchParams }: { searchParams: Promise
     { nome: "Resultado (A+B+C)", l: doMes("resultado") },
   ];
   const abaAtiva = ABAS.find((a) => a.chave === aba)!;
+  const hrefAba = (chave: string) => {
+    const q = new URLSearchParams({ aba: chave });
+    if (sp.mes) q.set("mes", sp.mes);
+    return `/erp/nibo?${q.toString()}`;
+  };
 
   return (
-    <main className="mx-auto w-full max-w-[1200px] flex-1 px-6 py-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-o2-navy">Nibo · Painel de acompanhamento</h1>
-          <p className="text-xs text-gray-500">
-            Espelho do relatório do Nibo, visão Caixa, Realizado. Só leitura.{ultimaSync ? ` Última sincronização: ${ultimaSync}.` : ""}
-          </p>
-        </div>
-        <div className="flex items-center gap-3 text-sm">
-          <Link href={href({ ano: ano - 1 })} className="rounded-full border border-gray-300 px-3 py-1 hover:bg-white" aria-label="Ano anterior">‹</Link>
-          <span className="w-12 text-center text-base font-semibold text-o2-navy">{ano}</span>
-          <Link href={href({ ano: ano + 1 })} className="rounded-full border border-gray-300 px-3 py-1 hover:bg-white" aria-label="Próximo ano">›</Link>
-        </div>
-      </div>
+    <PaginaErp>
+      <TituloErp
+        titulo="Nibo · Painel de acompanhamento"
+        subtitulo={`Espelho do relatório do Nibo, visão Caixa, Realizado. Só leitura.${ultimaSync ? ` Última sincronização: ${ultimaSync}.` : ""}`}
+      />
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        {ABAS.map((a) => (
-          <Link key={a.chave} href={href({ aba: a.chave })} title={a.sub} className={`rounded-full border px-4 py-1.5 text-sm font-medium ${a.chave === aba ? "border-o2-navy bg-o2-navy text-white" : "border-gray-300 text-gray-700 hover:bg-white"}`}>
-            {a.rotulo}
-          </Link>
-        ))}
-      </div>
-      <p className="mt-1 text-xs text-gray-500">{abaAtiva.sub}</p>
+      <NavegadorMes caminho="/erp/nibo" mes={sp.mes} params={{ aba: aba === "consolidado" ? undefined : aba }} />
 
-      <div className="mt-4 flex flex-wrap gap-1.5 text-xs">
-        {MESES.map((nome, i) => (
-          <Link key={nome} href={href({ m: i + 1 })} className={`rounded-full border px-3 py-1 font-medium ${i + 1 === mSel ? "border-o2-coral bg-o2-coral text-white" : "border-gray-300 text-gray-700 hover:bg-white"}`}>
-            {nome}
-            {ano === anoAtual && i + 1 === mesDoAno ? " ·atual" : ""}
-          </Link>
-        ))}
+      <div>
+        <div className="flex flex-wrap gap-2">
+          {ABAS.map((a) => (
+            <Link key={a.chave} href={hrefAba(a.chave)} title={a.sub} className={`rounded-full border px-3 py-1 text-xs font-medium ${a.chave === aba ? "border-o2-navy bg-o2-navy text-white" : "border-gray-300 text-gray-700 hover:bg-white"}`}>
+              {a.rotulo}
+            </Link>
+          ))}
+        </div>
+        <p className="mt-1 text-xs text-gray-500">{abaAtiva.sub}</p>
       </div>
 
       {error ? (
-        <p className="mt-6 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">Não consegui ler o painel do Nibo: {error.message}</p>
+        <p className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">Não consegui ler o painel do Nibo: {error.message}</p>
       ) : (
         <>
-          <section className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-5">
+          <section className="grid grid-cols-2 gap-2 lg:grid-cols-5">
             {resumo.map((r) => (
-              <div key={r.nome} className="rounded-lg border border-gray-200 bg-white p-3">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">{r.nome}</p>
-                <p className={`text-lg font-semibold ${cor(r.l?.[col])}`}>{fmt(r.l?.[col])}</p>
-                <p className="text-[11px] text-gray-500">{MESES[mSel - 1]}/{ano} · no ano: {fmt(r.l?.total)}</p>
-              </div>
+              <KpiErp key={r.nome} nome={r.nome} valor={fmt(r.l?.[col])} negativo={Number(r.l?.[col] ?? 0) < -0.5} detalhe={`${MESES[mSel - 1]}/${ano} · no ano: ${fmt(r.l?.total)}`} />
             ))}
           </section>
 
-          <div className="mt-4 overflow-x-auto rounded-lg border border-gray-200 bg-white">
+          <CartaoErp className="overflow-x-auto">
             <table className="w-full min-w-[1000px] text-right text-[12px]">
               <thead>
                 <tr className="bg-gray-100 text-[11px] uppercase tracking-wide text-gray-600">
@@ -157,9 +137,9 @@ export default async function NiboPage({ searchParams }: { searchParams: Promise
                 ) : null}
               </tbody>
             </table>
-          </div>
+          </CartaoErp>
         </>
       )}
-    </main>
+    </PaginaErp>
   );
 }

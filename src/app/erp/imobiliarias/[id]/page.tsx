@@ -7,6 +7,7 @@ import { formatarDocumento } from "@/lib/erp/clientes";
 import { formatarReais } from "@/lib/sinistros/regras";
 import RegrasRepasseErp from "../RegrasRepasseErp";
 import InfoLegenda from "@/components/InfoLegenda";
+import PaginaErp from "../../PaginaErp";
 
 export const metadata = { title: "Imobiliária" };
 export const dynamic = "force-dynamic";
@@ -55,7 +56,7 @@ export default async function ErpImobiliaria({ params }: { params: Promise<{ id:
   const nomesProduto = await nomesProdutoDasFaturas(supabase, (faturas ?? []).map((f: { id: string }) => f.id));
 
   return (
-    <main className="mx-auto w-full max-w-[1000px] flex-1 space-y-6 p-8">
+    <PaginaErp>
       <div className="space-y-1">
         <Link href="/erp/imobiliarias" className="text-sm text-gray-500 hover:text-o2-navy hover:underline">← Imobiliárias</Link>
         <div className="flex flex-wrap items-baseline gap-3">
@@ -194,6 +195,6 @@ export default async function ErpImobiliaria({ params }: { params: Promise<{ id:
         )}
       </section>
       {resumo?.calculado_em && <p className="text-[11px] text-gray-400">Resumo da produção atualizado a cada hora (última atualização {new Date(resumo.calculado_em).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })}).</p>}
-    </main>
+    </PaginaErp>
   );
 }

@@ -5,6 +5,7 @@ import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import RascunhoAutomatico from "@/components/RascunhoAutomatico";
 import InfoLegenda from "@/components/InfoLegenda";
 import { criarCliente } from "../actions";
+import PaginaErp from "../../PaginaErp";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Novo cliente" };
@@ -18,7 +19,7 @@ export default async function NovoClientePage({ searchParams }: { searchParams: 
   if (!isAdmin(user?.email) && !isColaboradorO2(user?.email)) redirect("/");
 
   return (
-    <main className="mx-auto w-full max-w-[640px] flex-1 space-y-4 p-8">
+    <PaginaErp largura="formulario">
       <Link href="/erp/clientes" className="text-sm text-gray-500 hover:text-o2-navy hover:underline">← Clientes</Link>
       <h1 className="text-xl font-semibold text-o2-navy">
         Novo cliente
@@ -49,6 +50,6 @@ export default async function NovoClientePage({ searchParams }: { searchParams: 
         <p className="text-[11px] text-gray-500">Informe ao menos um dos dois: e-mail ou telefone.</p>
         <button type="submit" className="rounded-full bg-o2-navy px-5 py-2 text-sm font-semibold text-white hover:opacity-90">Cadastrar cliente</button>
       </form>
-    </main>
+    </PaginaErp>
   );
 }

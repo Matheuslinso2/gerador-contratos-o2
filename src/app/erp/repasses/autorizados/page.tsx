@@ -7,6 +7,7 @@ import { periodoDoMes } from "@/lib/erp/periodo";
 import NavegadorMes from "../../NavegadorMes";
 import InfoLegenda from "@/components/InfoLegenda";
 import { cancelarAutorizacao } from "../actions";
+import PaginaErp from "../../PaginaErp";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Repasses autorizados" };
@@ -58,7 +59,7 @@ export default async function ErpRepassesAutorizadosPage({ searchParams }: { sea
   const pagos = lotes.filter((l) => l.status !== "autorizado");
 
   return (
-    <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-4 p-8">
+    <PaginaErp>
       <div>
         <Link href={`/erp/repasses?mes=${mes}`} className="text-xs text-gray-500 hover:underline">
           ← Repasses
@@ -181,6 +182,6 @@ export default async function ErpRepassesAutorizadosPage({ searchParams }: { sea
           </table>
         </div>
       )}
-    </main>
+    </PaginaErp>
   );
 }

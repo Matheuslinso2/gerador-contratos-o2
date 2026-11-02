@@ -12,6 +12,7 @@ import { podeVerBaixas } from "@/lib/erp/acessoBaixas";
 import PainelResumoAba from "@/app/erp/PainelResumoAba";
 import NavegadorMes from "@/app/erp/NavegadorMes";
 import { periodoDoMes } from "@/lib/erp/periodo";
+import PaginaErp from "../PaginaErp";
 
 export const dynamic = "force-dynamic";
 
@@ -203,7 +204,7 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
 
   return (
     <>
-      <main className="mx-auto w-full max-w-[1100px] flex-1 space-y-6 p-8">
+      <PaginaErp>
         <NavegadorMes caminho={secao === "faturas" ? "/erp/faturas/alertas" : "/erp/conferencia"} mes={f.mes} params={{ ...Object.fromEntries(Object.entries(sp).map(([k, v]) => [k, Array.isArray(v) ? v[0] : v])) }} />
         <PainelResumoAba funcao="erp_resumo_conferencia" titulo="Conferência Corp × ERP" mes={periodo.mes} legendas={{"Documentos no Corp e no ERP por mês":"Quantos documentos cada sistema tem em cada mês (os cinco meses até o mês escolhido). Os meses anteriores ao escolhido aparecem marcados como herdados. Quanto mais próximas as barras, melhor a conferência.","Diferença de documentos por seguradora (do mês)":"Seguradoras em que o ERP tem mais ou menos documentos que o Corp no mês escolhido (as 8 maiores diferenças). Negativo = o ERP tem menos.","Diferença de comissão por seguradora (do mês, R$)":"Diferença de comissão prevista entre o ERP e o Corp, por seguradora, no mês escolhido (as 8 maiores). Negativo = o ERP tem menos.","Diferença de documentos herdada por seguradora":"Diferenças de documentos que ficaram dos quatro meses anteriores ao mês escolhido, por seguradora (as 8 maiores). Separadas das diferenças do mês."}} />
         <PageHeader
@@ -570,7 +571,7 @@ export default async function ErpConferenciaPage({ searchParams }: { searchParam
           </div>
         )}
         </>)}
-      </main>
+      </PaginaErp>
     </>
   );
 }
