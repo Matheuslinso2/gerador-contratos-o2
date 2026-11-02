@@ -16,7 +16,7 @@ import { extrair, VERSAO_LEITOR_EMAIL } from "@/lib/erp/emailAnexoConteudo";
 
 const arg = (n: string) => (process.argv.includes(`--${n}`) ? process.argv[process.argv.indexOf(`--${n}`) + 1] : undefined);
 const LIMITE = Number(arg("limite") ?? Infinity), PARALELO = Number(arg("paralelo") ?? 3);
-const OCR = process.argv.includes("--ocr"), LIGAR = process.argv.includes("--ligar"), GRAVAR = process.argv.includes("--gravar");
+const PROTEGIDOS = process.argv.includes("--protegidos"), OCR = process.argv.includes("--ocr"), LIGAR = process.argv.includes("--ligar"), GRAVAR = process.argv.includes("--gravar");
 const sb = createServiceClient();
 const log = (m: string) => console.log(`${new Date().toLocaleTimeString("pt-BR")}  ${m}`);
 const em = <T,>(xs: T[], n = 100) => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
@@ -49,6 +49,34 @@ async function ler() {
   };
   await Promise.all(Array.from({ length: PARALELO }, async () => { while (i < alvo.length) { try { await trabalhar(alvo[i++]); } catch (e) { cont.erro = (cont.erro ?? 0) + 1; console.log("erro:", (e as Error).message.slice(0, 100)); } } }));
   log(`fim da fase 3: ${JSON.stringify(cont)}`);
+}
+
+/** PDFs protegidos por senha (Tokio e Porto usam o início do CPF/CNPJ): tenta com os CPFs de documentos CANDIDATOS do e-mail (documento já ligado ao e-mail e documentos cujo nº aparece no assunto).
+ *  A senha só serve para abrir; quem liga é o conteúdo (fase 4). Abrir com o CPF de uma parte já é um indício a mais, guardado em campos.aberto_com_cpf_de. */
+async function protegidos() {
+  const shas: { sha: string; message_id: string }[] = [];
+  for (let de = 0; shas.length < LIMITE; de += 1000) {
+    const { data, error } = await sb.from("erp_email_anexos").select("sha256,message_id").eq("texto_status", "protegido").order("sha256").range(de, de + 999); if (error) throw new Error(error.message);
+    for (const r of data ?? []) if (!shas.some((x) => x.sha === r.sha256)) shas.push({ sha: r.sha256, message_id: r.message_id });
+    if (!data || data.length < 1000) break;
+  }
+  const alvo = shas.slice(0, LIMITE); log(`PROTEGIDOS: ${alvo.length} PDFs protegidos`);
+  const cont: Record<string, number> = {};
+  for (const { sha, message_id } of alvo) {
+    const { data: em1 } = await sb.from("erp_emails").select("assunto,documento_id").eq("message_id", message_id).maybeSingle();
+    const docIds = new Set<string>(); if (em1?.documento_id) docIds.add(em1.documento_id);
+    const nums = [...new Set([...(em1?.assunto ?? "").matchAll(/\d[\d.\-]{4,20}\d/g)].map((m) => dig(m[0]).replace(/^0+/, "")).filter((x) => x.length >= 5))];
+    if (nums.length) { const { data } = await sb.rpc("erp_docs_por_numeros", { nums }); for (const d of data ?? []) docIds.add(d.id); }
+    const cpfs = new Set<string>();
+    for (const id of docIds) { const { data: d } = await sb.from("erp_documentos").select("locatario_id").eq("id", id).maybeSingle(); if (d?.locatario_id) { const { data: l } = await sb.from("locatarios").select("cpf").eq("id", d.locatario_id).maybeSingle(); if (l?.cpf) cpfs.add(dig(l.cpf)); } const { data: pa } = await sb.from("erp_doc_partes_acervo").select("locatario:locatarios(cpf)").eq("documento_id", id); for (const p of (pa ?? []) as unknown as { locatario: { cpf: string | null } | null }[]) if (p.locatario?.cpf) cpfs.add(dig(p.locatario.cpf)); }
+    const { data: blob } = await sb.storage.from("anexos-documentos").download(`${sha}.pdf`); if (!blob) { cont.sem_arquivo = (cont.sem_arquivo ?? 0) + 1; continue; }
+    const r = await textoDoPdf(Buffer.from(await blob.arrayBuffer()), [...cpfs].filter((x) => x.length >= 11));
+    if (r.t === null || r.t.trim().length < 80) { cont.continua_protegido = (cont.continua_protegido ?? 0) + 1; continue; }
+    const c = extrair(r.t);
+    await sb.from("erp_email_anexos").update({ classe: c.classe, classe_fonte: "conteudo", texto_status: "lido", seguradora: c.seguradora, numeros: c.numeros, cpf_cnpj: c.cpf_cnpj, datas: c.datas, campos: { numero_apolice: c.numero_apolice, numero_proposta: c.numero_proposta, premio_total: c.premio_total, premio_liquido: c.premio_liquido, aberto_com_cpf_de: [...docIds] }, lido_em: new Date().toISOString(), versao_leitor: VERSAO_LEITOR_EMAIL }).eq("sha256", sha).eq("texto_status", "protegido");
+    cont.aberto = (cont.aberto ?? 0) + 1;
+  }
+  log(`fim dos protegidos: ${JSON.stringify(cont)}`);
 }
 
 /** PDFs escaneados (texto_status ocr_pendente): OCR LOCAL e GRATUITO do Windows (scripts/erp/ocr-pdf-win.ps1), sem IA. Lido por OCR = ocr_lido (números podem ter dígito errado: só confirma com CPF + vigência). */
@@ -140,4 +168,4 @@ async function ligar() {
   log(`fim da fase 4: ${JSON.stringify(cont)}`);
 }
 
-(OCR ? ocr() : LIGAR ? ligar() : ler()).catch((e) => { console.error("ERRO:", e.message ?? e); process.exit(1); });
+(PROTEGIDOS ? protegidos() : OCR ? ocr() : LIGAR ? ligar() : ler()).catch((e) => { console.error("ERRO:", e.message ?? e); process.exit(1); });

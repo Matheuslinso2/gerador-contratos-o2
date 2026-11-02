@@ -1,0 +1,3 @@
+-- Nota (03/11): migrações aplicadas no Supabase: erp_email_anexos (fila + anexos), erp_docs_por_numeros_texto (função), erp_docs_2026_pdf_v (cobertura 2026), erp_email_anexos_por_seguradora_v (painel por seguradora).
+-- erp_email_anexos_fila: fila ordenada por palavra-chave (só ordena). erp_email_anexos: PDF por sha256 no bucket anexos-documentos, classe pelo CONTEÚDO, campos lidos, ligação só com prova (confirmada/provavel/sugestao).
+-- Scripts: scripts/erp/email-anexos-baixar.ts (anexo direto), email-anexos-links.ts (link da própria seguradora: Tokio, Suhai), email-anexos-ler.ts (--ocr, --protegidos, --ligar), email-entrega-por-seguradora.ts (levantamento).
