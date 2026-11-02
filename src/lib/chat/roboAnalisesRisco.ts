@@ -179,10 +179,99 @@ export async function consultarCuboSinistros(e: EntradaSin): Promise<string> {
   });
 }
 
-export async function executarFerramentaRisco(nome: string, entrada: unknown): Promise<string | null> {
+// ------------------------------------------------------------------ FINANCEIRO: receita e repasse (só administradores)
+export const FERRAMENTA_CUBO_FINANCEIRO: Anthropic.Tool = {
+  name: "consultar_cubo_financeiro",
+  description:
+    "CUBO FINANCEIRO (só administradores; atualizado de hora em hora): comissão RECEBIDA (receita, baixas do ERP) e os REPASSES às imobiliárias, por mês, produto, ramo (IMOBILIARIO = incêndio imobiliário, 2 IMOBILIARIO), seguradora e imobiliária/grupo. Quatro fatos que NUNCA se somam entre si: receita (comissão recebida), repasse_erp (repasse gerado pelo ERP: bruto, retido e líquido; em 2026 está tudo 'pendente'), repasse_corp (controle do Corp: status pago = tem data de repasse; previsto = sem data) e repasse_pago_banco (o que o Nibo/banco pagou à imobiliária, SEM divisão por produto: ramo '(todos os produtos)'). Use para 'quanto foi repassado ao grupo X no ano', 'receita do incêndio imobiliário', 'repasse previsto x pago'. Repasse PAGO por produto: repasse_corp status pago; total pago à imobiliária: repasse_pago_banco; diga qual fonte usou e o que não existe por produto. A coluna imposto_estimado é só uma ESTIMATIVA (comissão x taxa da baixa do mês, ~2,5% a 2,7%) e NUNCA é imposto pago: para imposto pago use consultar_impostos_pagos.",
+  input_schema: {
+    type: "object",
+    properties: {
+      agrupar: { type: "array", items: { type: "string", enum: ["fato", "mes", "trimestre", "semestre", "ano", "produto", "ramo", "status", "seguradora", "entidade_nome"] }, description: "Colunas para agrupar. Agrupe sempre por fato (e status) para não misturar fontes." },
+      fato: { type: "string", enum: ["receita", "repasse_erp", "repasse_corp", "repasse_pago_banco"] },
+      produto: { type: "string", description: "fianca, incendio, capitalizacao, automovel, condominio, vida..." },
+      ramo: { type: "string", description: "Parte do nome do ramo: IMOBILIARIO (incêndio imobiliário), RESIDENCIAL, EMPRESARIAL, FIANÇA, CAPITALIZAÇÃO..." },
+      status: { type: "string", description: "recebida | pendente | pago | previsto | cancelado" },
+      seguradora: { type: "string" },
+      imobiliaria: { type: "string", description: "Nome da imobiliária ou grupo (todas as fichas do grupo)." },
+      mes_de: { type: "string", description: "AAAA-MM." },
+      mes_ate: { type: "string", description: "AAAA-MM." },
+      limite: { type: "integer" },
+    },
+  },
+};
+
+type EntradaFin = { agrupar?: string[]; fato?: string; produto?: string; ramo?: string; status?: string; seguradora?: string; imobiliaria?: string; mes_de?: string; mes_ate?: string; limite?: number };
+
+export async function consultarCuboFinanceiro(e: EntradaFin): Promise<string> {
+  const p: Record<string, unknown> = { ...e, mes_de: mesParaData(e.mes_de), mes_ate: mesParaData(e.mes_ate) };
+  if ((e.mes_de && !p.mes_de) || (e.mes_ate && !p.mes_ate)) return JSON.stringify({ erro: "Use meses no formato AAAA-MM." });
+  if (e.produto) p.produto = e.produto.toLowerCase() === "re" ? "incendio" : e.produto.toLowerCase();
+  const falha = await resolverEntidades(e.imobiliaria, p);
+  if (falha) return falha;
+  delete p.imobiliaria;
+  const { data, error } = await createServiceClient().rpc("chat_cubo_fin_consultar", { p });
+  if (error) return `Erro: ${error.message}`;
+  const r = data as { linhas: Linha[]; total: Record<string, number>; atualizadoEm: string | null };
+  return compacto({
+    filtros: { ...e, imobiliaria: p.imobiliariaConsiderada ?? e.imobiliaria },
+    total: r.total,
+    linhas: r.linhas ?? [],
+    cuboAtualizadoEm: r.atualizadoEm,
+    avisos: [
+      "Quatro fatos que NÃO se somam: receita (comissão recebida), repasse_erp (gerado no ERP), repasse_corp (controle do Corp) e repasse_pago_banco (pago pelo Nibo/banco, sem produto). Nunca some fatos diferentes.",
+      "Em 2026 o ERP ainda não registra repasse como 'pago' (tudo pendente): o repasse efetivamente pago está no banco (por imobiliária, sem produto) e no Corp (status 'pago' = com data de repasse). Diga qual fonte usou e o que ficou sem dado.",
+      "imposto_estimado é ESTIMATIVA pela taxa da baixa do mês, NÃO é imposto pago nem devido: muitas guias estão em aberto. Para imposto pago use consultar_impostos_pagos. valor_retido do repasse_erp é a retenção sobre o repasse, outra coisa.",
+      "Mês do repasse_erp = competência; do repasse_corp = data do repasse (ou previsão); da receita = data do recebimento; do banco = mês do pagamento.",
+    ],
+  });
+}
+
+// ------------------------------------------------------------------ IMPOSTOS PAGOS (Nibo) — só administradores
+export const FERRAMENTA_IMPOSTOS_PAGOS: Anthropic.Tool = {
+  name: "consultar_impostos_pagos",
+  description:
+    "IMPOSTOS REALMENTE PAGOS (só administradores; fonte: pagamentos lançados no Nibo, atualizado de hora em hora), por mês de pagamento, empresa (corretora | capitalizacao) e tipo: DAS (Simples Nacional), ISS, IRPJ/CSLL, PIS/COFINS, contribuição sindical, parcelamento tributário e folha (INSS/FGTS). Use para 'quanto de imposto foi pago', 'o DAS de tal mês foi pago?', 'impostos pagos no ano'. IMPORTANTE: imposto pago NÃO se calcula por taxa sobre a receita e NÃO se divide por produto: muitas guias (DAS) publicadas pela contabilidade (Onvio) estão em aberto, então mês sem pagamento de DAS aqui = guia não paga. Nunca estime imposto pago multiplicando comissão por percentual.",
+  input_schema: {
+    type: "object",
+    properties: {
+      agrupar: { type: "array", items: { type: "string", enum: ["mes", "trimestre", "semestre", "ano", "empresa", "tipo_imposto", "categoria"] }, description: "Colunas para agrupar. Para ver meses sem pagamento de DAS agrupe por mes e tipo_imposto." },
+      empresa: { type: "string", enum: ["corretora", "capitalizacao"] },
+      tipo_imposto: { type: "string", description: "DAS (Simples Nacional) | ISS | IRPJ/CSLL | PIS/COFINS | contribuição sindical | parcelamento tributário | folha (INSS/FGTS)" },
+      mes_de: { type: "string", description: "AAAA-MM." },
+      mes_ate: { type: "string", description: "AAAA-MM." },
+    },
+  },
+};
+
+type EntradaImp = { agrupar?: string[]; empresa?: string; tipo_imposto?: string; mes_de?: string; mes_ate?: string };
+
+export async function consultarImpostosPagos(e: EntradaImp): Promise<string> {
+  const p: Record<string, unknown> = { ...e, mes_de: mesParaData(e.mes_de), mes_ate: mesParaData(e.mes_ate) };
+  if ((e.mes_de && !p.mes_de) || (e.mes_ate && !p.mes_ate)) return JSON.stringify({ erro: "Use meses no formato AAAA-MM." });
+  const { data, error } = await createServiceClient().rpc("chat_cubo_imp_consultar", { p });
+  if (error) return `Erro: ${error.message}`;
+  const r = data as { linhas: Linha[]; total: Record<string, number>; atualizadoEm: string | null };
+  return compacto({
+    filtros: e,
+    total: r.total,
+    linhas: r.linhas ?? [],
+    cuboAtualizadoEm: r.atualizadoEm,
+    avisos: [
+      "Só aparece o que foi PAGO e lançado no Nibo (data do pagamento). Guia publicada pela contabilidade (Onvio) e não paga não aparece: mês sem DAS pago = guia em aberto, e não 'imposto zero'.",
+      "Não dá para atribuir imposto pago a produto ou imobiliária (o DAS incide sobre o faturamento da empresa). O valor de cada guia emitida pela Onvio está nos PDFs das guias, que ainda não estão na base: diga que o valor devido por mês não está disponível.",
+      "Pagamentos atrasados entram no mês em que foram pagos, não no da competência (ex.: DAS de dezembro/2025 pago em abril e junho/2026).",
+    ],
+  });
+}
+
+export async function executarFerramentaRisco(nome: string, entrada: unknown, verComissao = false): Promise<string | null> {
   try {
     if (nome === FERRAMENTA_CUBO_COBERTURAS.name) return await consultarCuboCoberturas(entrada as EntradaCob);
     if (nome === FERRAMENTA_CUBO_SINISTROS.name) return await consultarCuboSinistros(entrada as EntradaSin);
+    const negado = "Dados financeiros (receita, imposto e repasse) não estão liberados para este perfil.";
+    if (nome === FERRAMENTA_CUBO_FINANCEIRO.name) return verComissao ? await consultarCuboFinanceiro(entrada as EntradaFin) : negado;
+    if (nome === FERRAMENTA_IMPOSTOS_PAGOS.name) return verComissao ? await consultarImpostosPagos(entrada as EntradaImp) : negado;
   } catch (err) {
     return `Erro no cubo: ${err instanceof Error ? err.message : String(err)}`;
   }

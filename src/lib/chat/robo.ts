@@ -9,7 +9,7 @@ import { FERRAMENTAS_BUSCA, executarFerramentaBusca } from "./roboBusca";
 import { FERRAMENTA_RELATORIO, executarFerramentaRelatorio } from "./roboRelatorio";
 import { FERRAMENTA_ARQUIVOS, executarFerramentaArquivos } from "./roboArquivos";
 import { FERRAMENTA_PRIMEIRA_COTACAO, FERRAMENTA_CUBO, executarFerramentaAnalises } from "./roboAnalises";
-import { FERRAMENTA_CUBO_COBERTURAS, FERRAMENTA_CUBO_SINISTROS, executarFerramentaRisco } from "./roboAnalisesRisco";
+import { FERRAMENTA_CUBO_COBERTURAS, FERRAMENTA_CUBO_SINISTROS, FERRAMENTA_CUBO_FINANCEIRO, FERRAMENTA_IMPOSTOS_PAGOS, executarFerramentaRisco } from "./roboAnalisesRisco";
 import { FERRAMENTA_LEGISLACAO, FERRAMENTA_CONCEITOS, executarFerramentaLegislacao, executarFerramentaConceitos } from "./roboLegislacao";
 import { FERRAMENTA_LOGICA, chamadaTemDadosPessoais, descreverChamada, textoTemDadosPessoais } from "./privacidadePdf";
 
@@ -58,6 +58,7 @@ MAPA DE FONTES — consulte TODAS as que a pergunta abrange; nunca responda com 
 - Propostas: ERP aba Em emissão (erp_emissao_fila_pronta). Apólices, endossos, faturas, parcelas, comissões, baixas, renovações do ERP (erp_renovacoes): tabelas erp_* e contar_documentos_erp.
 - Campanhas: campanhas, campanhas_envios, campanhas_metas, campanhas_producao. Painel Comercial: consultar_painel_extra painel_comercial. Sinistros: sinistros, sinistros_corp, painel sinistros.
 - CORRELAÇÕES de aluguel, prêmio, coberturas e indenizações: consultar_cubo (prêmio, ticket médio, comissão, aluguel, parcelas por produto/bairro/faixa de aluguel/imobiliária/seguradora/período), consultar_cubo_coberturas (importância segurada, taxa, franquia por cobertura; só ~1.470 apólices, quase todas Fiança) e consultar_cubo_sinistros (sinistros do Corp: avisado, indenizado, despesas; com sinistralidade=true calcula indenizado ÷ prêmio das apólices da mesma coorte). Para cruzar prêmio com indenização use consultar_cubo_sinistros com sinistralidade; não some manualmente. Capitalização no Corp são resgates (não entram em sinistralidade). Sempre cite a cobertura de dados (quantos têm bairro/aluguel/ligação com apólice) quando o recorte for parcial.
+- REPASSE, RECEITA E IMPOSTO (só admin): consultar_cubo_financeiro (comissão recebida e repasses por produto/ramo/imobiliária; 'incêndio imobiliário' = ramo IMOBILIARIO) e consultar_impostos_pagos (imposto REALMENTE pago, do Nibo). Regras fixas: (1) imposto pago nunca se calcula por taxa sobre a receita nem se divide por produto: muitas guias DAS publicadas pela contabilidade (Onvio) estão em aberto; mês sem DAS pago no Nibo = guia não paga. (2) Repasse 'pago' por produto vem do Corp (status pago); o ERP ainda tem tudo 'pendente' e o banco/Nibo paga por imobiliária sem produto. Em pergunta que mistura repasse pago e imposto, responda cada parte com a sua fonte, mostre o que existe e diga com clareza o que NÃO dá para apurar (ex.: imposto por produto, valor devido das guias).
 - Itens dos lotes de Ramos Elementares (um endereço por linha: locador, locatário, CPF/CNPJ, CEP, endereço, bairro, cidade, ocupação, aluguel, m², mais todas as colunas da planilha em extras): tabela producao_itens, ligada ao card pelo bitrix_item_id (= origem_bitrix_id em producao_resolvida, fonte bitrix, produto re). Os arquivos originais do lote (planilha, PDF, imagem) estão em buscar_arquivos_documento. Contém dados pessoais: só texto.
 - Os dados são atualizados sozinhos: cards do Bitrix e lotes de hora em hora, o cubo de estatísticas de hora em hora, ERP de hora em hora. Planilhas antigas são histórico fixo. Se o usuário perguntar até quando os dados vão, use o 'cuboAtualizadoEm' ou a data mais recente que a consulta devolver.
 - Pessoa/cliente/inquilino/proprietário/CPF/e-mail/telefone: buscar_pessoa. Cotação em andamento pelo nome: buscar_nos_paineis.
@@ -97,7 +98,7 @@ ESTILO
 // Conjunto de ferramentas e roteamento do robô: usados pela produção e pelos testes (mesmo código, mesmo comportamento).
 export function ferramentasDoRobo(verComissao: boolean): Anthropic.Tool[] {
   return verComissao
-    ? [...FERRAMENTAS_ERP, ...FERRAMENTAS_GERAIS, ...FERRAMENTAS_BUSCA, FERRAMENTA_RELATORIO, FERRAMENTA_ARQUIVOS, FERRAMENTA_PRIMEIRA_COTACAO, FERRAMENTA_CUBO, FERRAMENTA_CUBO_COBERTURAS, FERRAMENTA_CUBO_SINISTROS, FERRAMENTA_LEGISLACAO, FERRAMENTA_CONCEITOS, ...FERRAMENTAS]
+    ? [...FERRAMENTAS_ERP, ...FERRAMENTAS_GERAIS, ...FERRAMENTAS_BUSCA, FERRAMENTA_RELATORIO, FERRAMENTA_ARQUIVOS, FERRAMENTA_PRIMEIRA_COTACAO, FERRAMENTA_CUBO, FERRAMENTA_CUBO_COBERTURAS, FERRAMENTA_CUBO_SINISTROS, FERRAMENTA_CUBO_FINANCEIRO, FERRAMENTA_IMPOSTOS_PAGOS, FERRAMENTA_LEGISLACAO, FERRAMENTA_CONCEITOS, ...FERRAMENTAS]
     : [
         ...FERRAMENTAS_ERP,
         ...FERRAMENTAS_GERAIS.filter((f) => f.name !== "consultar_painel_extra"),
@@ -143,7 +144,7 @@ export async function executarFerramentaDoRobo(nome: string, entrada: unknown, e
     (await executarFerramentaRelatorio(nome, entrada, email, verComissao)) ??
     (await executarFerramentaArquivos(nome, entrada, email)) ??
     (await executarFerramentaAnalises(nome, entrada, verComissao)) ??
-    (await executarFerramentaRisco(nome, entrada)) ??
+    (await executarFerramentaRisco(nome, entrada, verComissao)) ??
     (await executarFerramentaLegislacao(nome, entrada)) ??
     (await executarFerramentaConceitos(nome, entrada)) ??
     (verComissao || nome === "consultar_painel"
@@ -215,14 +216,36 @@ export async function responderComoRobo(email: string, historico: TurnoChat[]): 
   }
 
   if (resposta?.stop_reason === "refusal") return { texto: "Não consigo responder essa pergunta por aqui.", pdfPermitido: false, dadosPessoais: false, logica: null, fontes: [] };
-  const texto = restaurarLinksAssinados(
-    (resposta?.content ?? [])
+  const textoDe = (r: Anthropic.Message | null) =>
+    (r?.content ?? [])
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
       .map((b) => b.text)
       .join("\n")
-      .trim(),
-    linksAssinados
-  );
+      .trim();
+  let bruto = textoDe(resposta);
+  // Resposta final vazia (cortada por tamanho ou só com chamada de ferramenta): pede UMA resposta com o que já foi consultado, em vez de desistir.
+  if (!bruto && mensagens.length > 1) {
+    try {
+      const pedido: Anthropic.TextBlockParam = { type: "text", text: "Responda agora, em português e em poucas linhas, com o que você já consultou. Diga com clareza o que NÃO foi possível apurar e por quê. Não faça novas consultas." };
+      const ultima = mensagens[mensagens.length - 1];
+      const historicoFinal: Anthropic.MessageParam[] =
+        ultima.role === "user" && Array.isArray(ultima.content)
+          ? [...mensagens.slice(0, -1), { role: "user", content: [...ultima.content, pedido] }]
+          : [...mensagens, { role: "user", content: [pedido] }];
+      const final = await anthropic.messages.create({
+        model: MODELO,
+        max_tokens: 1500,
+        system: [{ type: "text", text: systemPrompt(verComissao), cache_control: { type: "ephemeral" } }],
+        tools: ferramentas,
+        tool_choice: { type: "none" },
+        messages: historicoFinal,
+      });
+      bruto = textoDe(final);
+    } catch {
+      // sem segunda chance: cai na mensagem padrão abaixo
+    }
+  }
+  const texto = restaurarLinksAssinados(bruto, linksAssinados);
   if (!texto) return { texto: "Não consegui montar uma resposta agora. Tente de novo em instantes.", pdfPermitido: false, dadosPessoais: false, logica: null, fontes: [] };
   // Sem nenhuma consulta de dados (conversa) ou com dado pessoal/documento no texto: sem PDF.
   const dadosPessoais = pessoal || textoTemDadosPessoais(texto);

@@ -119,6 +119,12 @@ export function descreverChamada(nome: string, entrada: unknown): string | null 
     const nomeCubo = nome === "consultar_cubo_sinistros" ? (e.sinistralidade ? "Sinistralidade (indenizado ÷ prêmio das apólices da mesma coorte)" : "Sinistros do Corp") : "Coberturas das apólices do ERP";
     return `${nomeCubo} (${filtros}${periodo}${coorte}${agrup})`;
   }
+  if (nome === "consultar_cubo_financeiro" || nome === "consultar_impostos_pagos") {
+    const filtros = [e.fato, e.produto, e.ramo, e.status, e.seguradora, e.imobiliaria, e.empresa, e.tipo_imposto].filter(Boolean).map(String).join(", ") || "todos os dados";
+    const periodo = e.mes_de || e.mes_ate ? `, de ${String(e.mes_de ?? "…")} a ${String(e.mes_ate ?? "…")}` : "";
+    const agrup = Array.isArray(e.agrupar) && e.agrupar.length ? `, agrupado por ${lista(e.agrupar)}` : "";
+    return `${nome === "consultar_impostos_pagos" ? "Impostos pagos (Nibo)" : "Receita e repasses (cubo financeiro)"} (${filtros}${periodo}${agrup})`;
+  }
   if (nome === "analisar_primeira_cotacao") return `Primeira cotação por imobiliária, de ${String(e.de)} a ${String(e.ate)}${e.produto ? `, produto ${String(e.produto)}` : ""}`;
   return null;
 }

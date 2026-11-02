@@ -7,3 +7,8 @@
 -- chat_cubo_cob_consultar(jsonb) / chat_cubo_sin_consultar(jsonb): filtros e agrupamentos só por colunas permitidas. chat_cubo_consultar ganhou 'excluir_produto'.
 -- Sinistralidade (no código, roboAnalisesRisco.ts): indenizado do cubo de sinistros ÷ prêmio total das apólices (chat_cubo, fato apolice) da MESMA coorte (mesmo mês de início da apólice), mesmos filtros.
 -- chat_cubo_atualizar() refaz os três cubos; cron de hora em hora (/api/cron/chat-cubo). Só service_role executa.
+-- 02/11/2026 (migrações chat_cubo_financeiro, chat_cubo_impostos_pagos):
+-- chat_cubo_financeiro (MV): fatos receita (erp_comissao_recebimentos), repasse_erp (erp_repasses), repasse_corp (erp_repasse_corp_controle; pago = dt_repasse preenchida) e repasse_pago_banco (erp_nibo_repasse_mensal, sem produto)
+--   x mês x produto x ramo x status x seguradora x imobiliária/grupo; imposto_estimado = comissão x taxa da baixa (ESTIMATIVA, nunca imposto pago). Só administradores.
+-- chat_cubo_impostos (MV): impostos realmente PAGOS (Nibo, tipo pagamento, categorias 3.1/7.1/1.3) por mês, empresa e tipo (DAS, ISS, IRPJ/CSLL, PIS/COFINS, sindical, parcelamento, folha). Só administradores.
+-- chat_cubo_fin_consultar / chat_cubo_imp_consultar; chat_cubo_atualizar refaz os cinco cubos (cron de hora em hora).
