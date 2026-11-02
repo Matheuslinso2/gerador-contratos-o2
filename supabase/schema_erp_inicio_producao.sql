@@ -1,0 +1,7 @@
+-- Painel de produção da aba Início do ERP, no critério do painel do Corp (Consultas > Gráficos de Análise e Metas > Produção Total). 02/11/2026.
+-- Calibragem (grade_prods do Corp, sem linhas repetidas por produtor): DATA = início de vigência; Novos=NOVO, Renovações=RENV, Faturas=FAT, Endossos=END+CANC;
+-- Prêmio Base = prêmio líquido; Comissão = valor da comissão; Qtde de Docs = documentos distintos (Nosso nº do Corp). Novembro/2026 bate ao centavo
+-- (99 docs, 29.473,85, 10.571,83); out/set/ago batem em nº de docs. A grade do Corp repete a mesma linha uma vez por produtor (ex.: imobiliária + SEGIMOB): deduplicar
+-- por (Nosso nº, Nº endosso, Tipo, Pr. líquido, Vl. com.) antes de somar. Variação do painel = contra o MESMO mês/ano do ano anterior. Meta = corp_meta_comissao.
+-- Objetos (já aplicados no banco): view erp_producao_base_v; funções erp_inicio_producao(ano, mes, seguradora, produto, imobiliaria) e erp_inicio_ranking(...).
+-- Código da função: ver a migração erp_inicio_producao_painel_corp no Supabase (histórico de migrações).

@@ -3,8 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { CADASTROS, ETAPAS } from "@/lib/erp/processo";
 import { podeVerBaixas } from "@/lib/erp/acessoBaixas";
 import InfoLegenda from "@/components/InfoLegenda";
-import PainelResumoAba from "@/app/erp/PainelResumoAba";
-import NavegadorMes from "@/app/erp/NavegadorMes";
+import PainelProducao from "@/app/erp/PainelProducao";
 
 export const metadata = { title: { absolute: "ERP O2" } };
 export const dynamic = "force-dynamic";
@@ -47,7 +46,9 @@ export default async function ErpInicio({ searchParams }: { searchParams: Promis
   const sp = await searchParams;
   const hoje = new Date();
   const atual = new Date(Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth(), 1));
-  const pedido = typeof sp.mes === "string" && /^\d{4}-\d{2}$/.test(sp.mes) ? sp.mes : null;
+  const str = (v: string | string[] | undefined) => (typeof v === "string" ? v : undefined);
+  const pedidoPainel = /^\d{4}$/.test(str(sp.ano) ?? "") && /^(?:[1-9]|1[0-2])$/.test(str(sp.m) ?? "") ? `${str(sp.ano)}-${String(str(sp.m)).padStart(2, "0")}` : null;
+  const pedido = pedidoPainel ?? (typeof sp.mes === "string" && /^\d{4}-\d{2}$/.test(sp.mes) ? sp.mes : null);
   const mes = pedido ?? dia(atual).slice(0, 7);
   const ini = `${mes}-01`;
   const meses = [0, 1, 2].map((k) => dia(new Date(Date.UTC(atual.getUTCFullYear(), atual.getUTCMonth() - k, 1))).slice(0, 7));
@@ -126,8 +127,7 @@ export default async function ErpInicio({ searchParams }: { searchParams: Promis
 
   return (
     <main className="mx-auto w-full max-w-[1200px] flex-1 space-y-6 p-8">
-      <NavegadorMes caminho="/erp" mes={pedido} />
-      <PainelResumoAba mes={pedido} funcao="erp_resumo_inicio" titulo="Início" legendas={{"Apólices e faturas por situação":"Quantas apólices e faturas existem em cada situação: vigente, vencida, cancelada, proposta e as demais.","Novos documentos por mês (início da vigência)":"Documentos que começam a vigorar em cada mês, dos últimos seis meses.","Documentos vigentes por seguradora":"As seguradoras com mais apólices e faturas vigentes (as 8 maiores)."}} />
+      <PainelProducao params={{ ano: str(sp.ano), m: str(sp.m), aba: str(sp.aba), sub: str(sp.sub), seg: str(sp.seg), prod: str(sp.prod), imob: str(sp.imob) }} />
       <div>
         <h1 className="text-xl font-semibold text-o2-navy">ERP O2</h1>
         <p className="text-sm text-gray-600">Sistema de gestão da O2 Seguros, separado do Workspace. Até dezembro/2026 roda ao lado do Corp; a partir de 2027 substitui o Corp.</p>
