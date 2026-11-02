@@ -47,3 +47,4 @@ scripts/robo-seguradoras/saida/
 
 # Base de conhecimento da Susep (126 MB; fica só na máquina e no Drive, não no repositório)
 /erp-o2/conhecimento-susep/
+/erp-o2/conhecimento-legislacao/
