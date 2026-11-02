@@ -41,10 +41,14 @@ async function anexosDoCorp(nossoNumero: string) {
   const sb = createServiceClient();
   const { data } = await sb
     .from("corp_anexos")
-    .select("ordem, nome, bytes, storage_path, visto_em, corp_anexos_tipos(tipo, imagem_path)")
+    .select("id, ordem, nome, bytes, storage_path, visto_em, corp_anexos_tipos(tipo, imagem_path)")
     .eq("nosso_numero", nossoNumero)
     .order("ordem");
-  const linhas = (data ?? []) as unknown as { ordem: number; nome: string; bytes: number | null; storage_path: string; visto_em: string; corp_anexos_tipos: { tipo: string | null; imagem_path: string } | null }[];
+  const todas = (data ?? []) as unknown as { id: string; ordem: number; nome: string; bytes: number | null; storage_path: string; visto_em: string; corp_anexos_tipos: { tipo: string | null; imagem_path: string } | null }[];
+  // anexo que a conferência do PDF marcou como de OUTRO documento (seguradora diferente: robô abria a linha errada da busca) não aparece aqui; a lista está em corp_anexos_conferencia
+  const { data: conf } = todas.length ? await sb.from("corp_anexos_conferencia").select("anexo_id").eq("resultado", "seguradora_diferente").in("anexo_id", todas.map((l) => l.id)) : { data: [] as { anexo_id: string }[] };
+  const errados = new Set((conf ?? []).map((x) => x.anexo_id));
+  const linhas = todas.filter((l) => !errados.has(l.id));
   if (!linhas.length) return [];
   const caminhos = [...new Set([...linhas.map((l) => l.storage_path), ...linhas.filter((l) => !l.corp_anexos_tipos?.tipo && l.corp_anexos_tipos).map((l) => l.corp_anexos_tipos!.imagem_path)])];
   const { data: assinados } = await sb.storage.from("corp-anexos").createSignedUrls(caminhos, 600);

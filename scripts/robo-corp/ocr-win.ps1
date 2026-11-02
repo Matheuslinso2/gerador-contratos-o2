@@ -19,7 +19,7 @@ $w = New-Object IO.StreamWriter($Saida, $true, [Text.UTF8Encoding]::new($false))
 foreach ($arq in [IO.File]::ReadLines($Lista)) {
   if (-not $arq -or $ja.ContainsKey(($arq -replace '\\', '/'))) { continue }
   try {
-    $f = Aguardar ([Windows.Storage.StorageFile]::GetFileFromPathAsync($arq)) ([Windows.Storage.StorageFile])
+    $f = Aguardar ([Windows.Storage.StorageFile]::GetFileFromPathAsync(($arq -replace '/', '\'))) ([Windows.Storage.StorageFile])
     $s = Aguardar ($f.OpenAsync([Windows.Storage.FileAccessMode]::Read)) ([Windows.Storage.Streams.IRandomAccessStream])
     $d = Aguardar ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($s)) ([Windows.Graphics.Imaging.BitmapDecoder])
     if ($Escala -ne 1) {

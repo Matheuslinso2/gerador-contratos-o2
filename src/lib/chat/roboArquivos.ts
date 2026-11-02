@@ -138,7 +138,7 @@ export async function buscarArquivosDocumento(e: Entrada, email: string): Promis
   const nossos = documentos.map((d) => d.nosso_numero_corp).filter((v): v is number => v != null).map(String);
   const [{ data: anexos }, { data: anexosCorp }] = await Promise.all([
     sb.from("erp_documento_anexos").select("documento_id, tipo, nome_arquivo, storage_path, sha256, tamanho, situacao").in("documento_id", docIds).not("storage_path", "is", null),
-    nossos.length ? sb.from("corp_anexos").select("nosso_numero, nome, storage_path, sha256, bytes, apolice").in("nosso_numero", nossos) : Promise.resolve({ data: [] as { nosso_numero: string; nome: string; storage_path: string; sha256: string | null; bytes: number | null; apolice: boolean }[] }),
+    nossos.length ? sb.from("corp_anexos").select("id, nosso_numero, nome, storage_path, sha256, bytes, apolice").in("nosso_numero", nossos) : Promise.resolve({ data: [] as { nosso_numero: string; nome: string; storage_path: string; sha256: string | null; bytes: number | null; apolice: boolean }[] }),
   ]);
   const querAnexo = (t: string | null) => {
     if (tipoPedido === "todos") return true;
@@ -153,7 +153,12 @@ export async function buscarArquivosDocumento(e: Entrada, email: string): Promis
     arqs.push({ documentoId: a.documento_id as string, rotulo: ROTULO_ANEXO[a.tipo as string] ?? "Documento", nome: (a.nome_arquivo as string) || "arquivo.pdf", bucket: "anexos-documentos", caminho: a.storage_path as string, bytes: (a.tamanho as number) ?? null, sha: (a.sha256 as string) ?? null });
   }
   const docPorNosso = new Map(documentos.filter((d) => d.nosso_numero_corp != null).map((d) => [String(d.nosso_numero_corp), d.id as string]));
+  // anexo que a conferência do PDF marcou como de OUTRO documento (seguradora diferente: bug antigo do robô, caso 84846) não é oferecido
+  const idsCorp = (anexosCorp ?? []).map((c) => (c as { id: string }).id);
+  const errados = new Set<string>();
+  if (idsCorp.length) { const { data: conf } = await sb.from("corp_anexos_conferencia").select("anexo_id").eq("resultado", "seguradora_diferente").in("anexo_id", idsCorp); for (const x of conf ?? []) errados.add(x.anexo_id as string); }
   for (const c of anexosCorp ?? []) {
+    if (errados.has((c as { id: string }).id)) continue;
     if (tipoPedido === "apolice" && !c.apolice) continue;
     if (tipoPedido !== "apolice" && tipoPedido !== "todos") continue; // no Corp só a apólice tem rótulo confiável
     arqs.push({ documentoId: docPorNosso.get(String(c.nosso_numero)) ?? "", rotulo: c.apolice ? "Apólice (Corp)" : "Anexo do Corp", nome: (c.nome as string) || "arquivo.pdf", bucket: "corp-anexos", caminho: c.storage_path as string, bytes: (c.bytes as number) ?? null, sha: (c.sha256 as string) ?? null });
