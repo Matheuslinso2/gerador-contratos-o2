@@ -1,0 +1,8 @@
+-- ERP · Regras das seguradoras (manuais do Drive, fonte F13, nível 4 do guia: regra/manual, nunca prova de data ou valor) · 02/11/2026.
+-- Migrations já aplicadas: erp_regras_seguradora, erp_previsao_fatura_regra_porto.
+--   erp_manuais_seguradora   manuais lidos (seguradora, produto, arquivo, tipo, data, tamanho, drive_id único, link, status_leitura lido|sem_texto|nao_aberto).
+--   erp_regras_seguradora    uma regra por linha: seguradora, produto, tema (erp_dominios.tema_regra_seguradora), regra curta, parametros jsonb, manual, página, versão/data, trecho literal,
+--                            status_confirmacao (erp_dominios.status_confirmacao_regra: nao_testada|confirmada|parcial|nao_confirmada), taxa_acerto, amostra, teste, motivo, manual_antigo.
+--   erp_previsao_fatura_regra  PREVISÃO por regra (nível 4) do mês da 1ª fatura da Porto: guarda a previsão ao lado do vencimento real e se bate; nunca altera erp_parcelas.
+--                            erp_atualizar_previsao_fatura_porto() recalcula (Fiança dia 10: faturamento dia 1º; Imobiliário/RE dia 15: faturamento dia 25 do mês anterior).
+-- Carga: scripts/erp/carregar-regras-seguradora.ts <json> [--gravar]. 02/11: Porto (Manual Porto Aluguel nov/2020) 11 regras + 2 parâmetros calibrados; acerto 95,2% (Imobiliário/RE, 1.000) e 91,1% (Fiança, 685).
