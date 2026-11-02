@@ -29,7 +29,7 @@ export const FERRAMENTA_ARQUIVOS: Anthropic.Tool = {
       imobiliaria: { type: "string", description: "Nome da imobiliária ou grupo (todas as fichas)." },
       produto: { type: "string", description: "fianca, incendio, capitalizacao, automovel, vida, condominio, rc, saude, portateis, outros." },
       seguradora: { type: "string" },
-      tipo_documento: { type: "string", enum: ["apolice", "proposta", "endosso", "cotacao", "todos", "card"], description: "Padrão: apolice (inclui certificado de capitalização). card = foto do card do Bitrix." },
+      tipo_documento: { type: "string", enum: ["apolice", "proposta", "endosso", "cotacao", "todos", "card", "lote"], description: "Padrão: apolice (inclui certificado de capitalização). card = foto do card do Bitrix. lote = planilha/PDF original da lista de itens (lote) anexada ao card de Ramos Elementares; informe numero_card." },
       numero_card: { type: "string", description: "Nº do card no Bitrix (para tipo_documento card)." },
       situacao: { type: "string", description: "Situação do documento/card: recusado, perdido, cotacao, proposta, vigente, vencido, cancelado." },
       somente_vigentes: { type: "boolean", description: "Só documentos vigentes." },
@@ -44,7 +44,7 @@ type Entrada = {
   imobiliaria?: string;
   produto?: string;
   seguradora?: string;
-  tipo_documento?: "apolice" | "proposta" | "endosso" | "cotacao" | "todos" | "card";
+  tipo_documento?: "apolice" | "proposta" | "endosso" | "cotacao" | "todos" | "card" | "lote";
   numero_card?: string;
   situacao?: string;
   somente_vigentes?: boolean;
@@ -57,6 +57,18 @@ const dataBr = (d: string | null) => (d ? d.split("-").reverse().join("/") : "�
 export async function buscarArquivosDocumento(e: Entrada, email: string): Promise<string> {
   const sb = createServiceClient();
   const tipoPedido = e.tipo_documento ?? "apolice";
+  if (tipoPedido === "lote") {
+    const card = (e.numero_card ?? "").replace(/\D/g, "");
+    if (!card) return JSON.stringify({ erro: "Para o arquivo do lote, informe o nº do card do Bitrix (numero_card)." });
+    const { data: arquivos } = await sb.storage.from("lotes-re").list(card, { limit: 50 });
+    const links = [];
+    for (const f of arquivos ?? []) {
+      const { data: ass } = await sb.storage.from("lotes-re").createSignedUrl(`${card}/${f.name}`, VALIDADE_SEG, { download: `lote-card-${card}-${f.name}` });
+      if (ass?.signedUrl) links.push({ arquivo: f.name, link: ass.signedUrl });
+    }
+    await registrar(email, e, links.length, links.map((l) => ({ arquivo: l.arquivo })));
+    return JSON.stringify(links.length ? { cardBitrix: card, validadeDoLinkMinutos: VALIDADE_SEG / 60, arquivos: links } : { encontrou: false, observacao: "Esse card não tem arquivo de lote guardado." });
+  }
   if (tipoPedido === "card" || e.numero_card) return await buscarFotosDeCards(e, email);
   if (!e.numero_apolice && !e.cpf_cnpj && !e.nome && !e.imobiliaria) return JSON.stringify({ erro: "Informe nº da apólice, CPF/CNPJ, nome do cliente ou imobiliária." });
 

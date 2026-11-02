@@ -160,6 +160,10 @@
       "schedule": "58 * * * *"
     },
     {
+      "path": "/api/cron/base-unica-lotes-re",
+      "schedule": "54 * * * *"
+    },
+    {
       "path": "/api/cron/chat-cubo",
       "schedule": "59 * * * *"
     },
