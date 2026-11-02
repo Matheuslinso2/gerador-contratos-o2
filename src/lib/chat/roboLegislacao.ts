@@ -82,6 +82,11 @@ async function resolverNormas(sb: ReturnType<typeof createServiceClient>, norma:
   return achadas.slice(0, 8).map((r) => ({ id: r.id as string, titulo: r.titulo as string }));
 }
 
+async function idsPorTipo(sb: ReturnType<typeof createServiceClient>, livros: boolean): Promise<string[]> {
+  const { data } = await sb.from("legislacao_normas").select("id, tipo").limit(3000);
+  return (data ?? []).filter((x) => (x.tipo === "Livro") === livros).map((x) => x.id as string);
+}
+
 const cortar = (s: string | null | undefined, n: number) => (s && s.length > n ? s.slice(0, n) + "…" : (s ?? null));
 
 export async function executarFerramentaLegislacao(nome: string, entrada: unknown): Promise<string | null> {
@@ -126,7 +131,7 @@ export async function executarFerramentaLegislacao(nome: string, entrada: unknow
   if (!consulta) return JSON.stringify({ encontrou: false, observacao: "Informe a 'pergunta' (assunto) ou 'norma' + 'artigo'." });
   type Achado = { titulo: string; rotulo: string; texto: string; situacao: string | null; url: string | null; relevancia: number };
   const buscar = async (q: string) => {
-    const { data, error } = await sb.rpc("legislacao_buscar", { p_consulta: q, p_normas: normasAlvo?.length ? normasAlvo.map((n) => n.id) : null, p_limite: limite });
+    const { data, error } = await sb.rpc("legislacao_buscar", { p_consulta: q, p_normas: normasAlvo?.length ? normasAlvo.map((n) => n.id) : await idsPorTipo(sb, false), p_limite: limite });
     return { achados: (data ?? []) as Achado[], erro: error?.message ?? null };
   };
   // Primeiro exige todas as palavras no mesmo trecho; se nada vier, tenta "qualquer uma" (assuntos que a lei trata em artigos separados).
@@ -147,5 +152,38 @@ export async function executarFerramentaLegislacao(nome: string, entrada: unknow
     aviso: AVISO,
     normas_consideradas: normasAlvo?.map((n) => n.titulo) ?? "todas",
     trechos: r.map((x) => ({ norma: x.titulo, rotulo: x.rotulo, texto: cortar(x.texto, 2000), situacao: cortar(x.situacao, 280), link_oficial: x.url })),
+  });
+}
+
+// Vocabulário e conceitos de seguro (03/11/2026, pedido do Matheus): livro "Seguros e Economia" (Contador, ENS, 2023) guardado no banco.
+export const FERRAMENTA_CONCEITOS: Anthropic.Tool = {
+  name: "consultar_conceitos_seguro",
+  description:
+    "Consulta o livro de referência 'Seguros e Economia: princípios e aplicações' (Contador, ENS, 2023) guardado no banco, para explicar VOCABULÁRIO e CONCEITOS de seguro: risco, prêmio, sinistralidade, seleção adversa, risco moral, informação assimétrica, utilidade esperada, resseguro, reservas técnicas, carteira, fraude, regulação, história do mercado, e também LÓGICA do seguro e MELHORES PRÁTICAS de gestão de carteira (diversificação, mutualismo, reservas, resseguro, desempenho e planejamento). " +
+    "Use para conferir conceitos, a lógica do seguro e boas práticas de gestão de carteira, e quando perguntarem 'o que é / como funciona' um conceito. Serve de referência mesmo quando nada se aplica direto à O2. Não use para lei (use consultar_legislacao) nem para dados da O2.",
+  input_schema: { type: "object", properties: { pergunta: { type: "string", description: "Conceito ou termo em palavras-chave (ex.: 'seleção adversa', 'sinistralidade', 'reserva técnica')." }, limite: { type: "number", description: "Quantos trechos devolver (padrão 4, máximo 8)." } }, required: ["pergunta"] },
+};
+
+export async function executarFerramentaConceitos(nome: string, entrada: unknown): Promise<string | null> {
+  if (nome !== "consultar_conceitos_seguro") return null;
+  const e = (entrada ?? {}) as { pergunta?: string; limite?: number };
+  const consulta = semAcento(e.pergunta ?? "");
+  if (!consulta) return JSON.stringify({ encontrou: false, observacao: "Informe a 'pergunta' (conceito ou termo)." });
+  const sb = createServiceClient();
+  const limite = Math.max(1, Math.min(Number(e.limite) || 4, 8));
+  const ids = await idsPorTipo(sb, true);
+  const buscar = async (q: string) => sb.rpc("legislacao_buscar", { p_consulta: q, p_normas: ids, p_limite: limite });
+  let { data, error } = await buscar(consulta);
+  if (!error && !(data ?? []).length) {
+    const palavras = [...new Set(consulta.split(/[^a-z0-9]+/).filter((p) => p.length > 3))];
+    if (palavras.length > 1) ({ data, error } = await buscar(palavras.join(" or ")));
+  }
+  if (error) return JSON.stringify({ encontrou: false, erro: error.message });
+  const r = (data ?? []) as { titulo: string; rotulo: string; texto: string }[];
+  if (!r.length) return JSON.stringify({ encontrou: false, observacao: "O livro guardado não trata disso com essas palavras. Tente sinônimos." });
+  return JSON.stringify({
+    encontrou: true,
+    aviso: "Trechos de livro acadêmico (Contador, ENS, 2023), para explicar conceitos e vocabulário; não são norma nem parecer. Cite o capítulo e a página. Para o que a lei diz, use consultar_legislacao.",
+    trechos: r.map((x) => ({ fonte: x.titulo, rotulo: x.rotulo, texto: cortar(x.texto, 2400) })),
   });
 }

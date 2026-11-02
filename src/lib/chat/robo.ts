@@ -10,7 +10,7 @@ import { FERRAMENTA_RELATORIO, executarFerramentaRelatorio } from "./roboRelator
 import { FERRAMENTA_ARQUIVOS, executarFerramentaArquivos } from "./roboArquivos";
 import { FERRAMENTA_PRIMEIRA_COTACAO, FERRAMENTA_CUBO, executarFerramentaAnalises } from "./roboAnalises";
 import { FERRAMENTA_CUBO_COBERTURAS, FERRAMENTA_CUBO_SINISTROS, executarFerramentaRisco } from "./roboAnalisesRisco";
-import { FERRAMENTA_LEGISLACAO, executarFerramentaLegislacao } from "./roboLegislacao";
+import { FERRAMENTA_LEGISLACAO, FERRAMENTA_CONCEITOS, executarFerramentaLegislacao, executarFerramentaConceitos } from "./roboLegislacao";
 import { FERRAMENTA_LOGICA, chamadaTemDadosPessoais, descreverChamada, textoTemDadosPessoais } from "./privacidadePdf";
 
 // Robô O2 do chat da equipe (Fase 2, 29/10/2026). Mesmo "cérebro" da IA do WhatsApp (painéis + tabelas do
@@ -76,6 +76,7 @@ Se houver mais de um produto ou mais de um item, uma linha por item. Não repita
 - PERGUNTAS DE "PRIMEIRA VEZ" (quantas/quais imobiliárias fizeram a primeira cotação em um período, imobiliárias que começaram a cotar): use analisar_primeira_cotacao (de, ate, produto opcional). NUNCA leia tabelas inteiras para isso: estoura o tempo. Diga o que a base cobre (o histórico começa em 2020 na Fiança e é bem mais recente nos outros produtos: "primeira" = primeira registrada) e que grupo de imobiliárias conta como uma.
 - QUANDO NÃO ENCONTRAR (pessoa, card, apólice, cotação): seja curto e honesto. Diga em 1 ou 2 linhas o que foi consultado (cadastro de pessoas, cards do Bitrix já guardados, apólices e propostas do ERP, painéis) e que a base é atualizada de hora em hora a partir do Bitrix e do Corp — por isso um card criado há minutos ou um documento ainda não digitado podem não aparecer. Nunca afirme "não existe em nenhum período"; diga "não encontrei na base". Se a busca trouxe nomes parecidos (mesmo primeiro nome e sobrenome diferente, ou grafia parecida), liste até 3 e pergunte se é algum deles. Use só *um asterisco* para negrito (nunca **dois**), sem listas longas.
 - LEGISLAÇÃO (02/11): perguntas sobre o que a LEI ou a SUSEP diz (Lei do Inquilinato 8.245, garantias locatícias, despejo, Código Civil, Lei 15.040/2024 Marco Legal dos Seguros, prazos do segurador, devolução de prêmio, prescrição, comissão do corretor, fiança locatícia, CNSP/SUSEP, CPC, Juizados, súmulas do STJ) são respondidas com consultar_legislacao, que lê textos oficiais guardados no banco (Planalto, SUSEP, STJ). Responda SOMENTE com o que ela devolver: cite sempre a norma e o artigo ("Lei 15.040, art. 86"), diga a situação (vigente, alterada ou revogada) e passe o link oficial; nunca cite artigo de memória. Lembre que NÃO é parecer jurídico e que a Lei 15.040/2024 já vale desde dez/2025 e revogou os arts. 757 a 802 do Código Civil (para contrato antigo, recomende o jurídico). Se não achar, diga "não encontrei na legislação guardada". Dados da O2 (apólices, parcelas) continuam vindo do ERP, não da lei.
+- VOCABULÁRIO E CONCEITOS DE SEGURO (03/11): "o que é / como funciona" um conceito (seleção adversa, risco moral, sinistralidade, resseguro, reservas, fraude, utilidade esperada) e também lógica do seguro e boas práticas de gestão de carteira → consultar_conceitos_seguro, que lê o livro Seguros e Economia (Contador, ENS, 2023). Cite capítulo e página e deixe claro que é referência acadêmica, não norma.
 - Ao final de qualquer contagem diga de quais fontes/produtos/tipos ela veio e o que ficou de fora.
 - Para qualquer pergunta sobre uma imobiliária, comece por buscar_imobiliaria. Imobiliárias do mesmo grupo (ex.: Ramiro Sá) são somadas e você diz quais fichas entraram.
 - Pergunta de VALOR de uma imobiliária num mês (comissão efetivada, prêmio, efetivados, cotações) sem citar produto: NÃO responda com um painel só. Consulte TODOS os painéis com consultar_painel na competência — seguro_fianca (parte topImobiliarias), ramos_elementares (partes novos e renovacoes, porImobiliaria), capitalizacao (parte titulos), seguro_auto — procurando a imobiliária por TODOS os nomes das fichas do grupo (use buscar_imobiliaria antes; no painel o nome pode vir diferente, ex.: "Ramiro Sá Imóveis"; procure por um pedaço do nome). Responda com o *total somado* e a quebra por produto, e diga os produtos em que ela não tem registro naquele mês ("sem registro"). Se citarem um produto, responda só dele.
@@ -96,7 +97,7 @@ ESTILO
 // Conjunto de ferramentas e roteamento do robô: usados pela produção e pelos testes (mesmo código, mesmo comportamento).
 export function ferramentasDoRobo(verComissao: boolean): Anthropic.Tool[] {
   return verComissao
-    ? [...FERRAMENTAS_ERP, ...FERRAMENTAS_GERAIS, ...FERRAMENTAS_BUSCA, FERRAMENTA_RELATORIO, FERRAMENTA_ARQUIVOS, FERRAMENTA_PRIMEIRA_COTACAO, FERRAMENTA_CUBO, FERRAMENTA_CUBO_COBERTURAS, FERRAMENTA_CUBO_SINISTROS, FERRAMENTA_LEGISLACAO, ...FERRAMENTAS]
+    ? [...FERRAMENTAS_ERP, ...FERRAMENTAS_GERAIS, ...FERRAMENTAS_BUSCA, FERRAMENTA_RELATORIO, FERRAMENTA_ARQUIVOS, FERRAMENTA_PRIMEIRA_COTACAO, FERRAMENTA_CUBO, FERRAMENTA_CUBO_COBERTURAS, FERRAMENTA_CUBO_SINISTROS, FERRAMENTA_LEGISLACAO, FERRAMENTA_CONCEITOS, ...FERRAMENTAS]
     : [
         ...FERRAMENTAS_ERP,
         ...FERRAMENTAS_GERAIS.filter((f) => f.name !== "consultar_painel_extra"),
@@ -107,7 +108,7 @@ export function ferramentasDoRobo(verComissao: boolean): Anthropic.Tool[] {
         FERRAMENTA_CUBO,
         FERRAMENTA_CUBO_COBERTURAS,
         FERRAMENTA_CUBO_SINISTROS,
-        FERRAMENTA_LEGISLACAO,
+        FERRAMENTA_LEGISLACAO, FERRAMENTA_CONCEITOS,
         ...FERRAMENTAS.filter((f) => f.name === "consultar_painel"), // sem comissão/repasse para quem não é admin
       ];
 }
@@ -144,6 +145,7 @@ export async function executarFerramentaDoRobo(nome: string, entrada: unknown, e
     (await executarFerramentaAnalises(nome, entrada, verComissao)) ??
     (await executarFerramentaRisco(nome, entrada)) ??
     (await executarFerramentaLegislacao(nome, entrada)) ??
+    (await executarFerramentaConceitos(nome, entrada)) ??
     (verComissao || nome === "consultar_painel"
       ? await executarFerramenta(nome, entrada, { semFinanceiro: !verComissao })
       : "Ferramenta indisponível para o seu perfil.")
