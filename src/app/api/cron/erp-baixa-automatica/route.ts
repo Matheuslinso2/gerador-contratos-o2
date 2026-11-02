@@ -16,9 +16,17 @@ export async function GET(request: NextRequest) {
     const linhas = (data ?? []) as { r_seguradora: string; r_resultado: string }[];
     // renova os retratos das consultas pesadas da tela de Baixas (previsões, inadimplência, endossos) usados nos últimos 2 dias
     const { data: retratos } = await createServiceClient().rpc("erp_retrato_renovar");
+    // a cada 6 horas (00, 06, 12, 18 UTC) recalcula a verificação de campos (cruzamento de todas as fontes) das apólices vigentes de Fiança;
+    // outros ramos entram quando o Matheus aprovar o piloto
+    let verificacao: unknown = null;
+    if (new Date().getUTCHours() % 6 === 0) {
+      const { data: v, error: ev } = await createServiceClient().rpc("erp_verificacao_calcular", { p_ramo: "%FIAN%", p_situacao: "vigente", p_limite: 5000 });
+      verificacao = ev ? { erro: ev.message } : v;
+      console.log("erp-verificacao", JSON.stringify(verificacao));
+    }
     const naoAplicadas = linhas.filter((l) => l.r_resultado.startsWith("não aplicada"));
     console.log("erp-baixa-automatica", JSON.stringify({ extratos: linhas.length, naoAplicadas: naoAplicadas.length, retratos }));
-    return NextResponse.json({ ok: true, extratos: linhas.length, naoAplicadas: naoAplicadas.length, retratos });
+    return NextResponse.json({ ok: true, extratos: linhas.length, naoAplicadas: naoAplicadas.length, retratos, ...(verificacao ? { verificacao } : {}) });
   } catch (e) {
     return NextResponse.json({ ok: false, erro: (e as Error).message }, { status: 500 });
   }
