@@ -60,3 +60,8 @@ create policy erp_nibo_painel_estrutura_o2 on public.erp_nibo_painel_estrutura f
 -- Regime de CAIXA (não é competência). Histórico do Nibo carregado desde 2021-11-01; competência vem preenchida (cap. 100%, corretora ~88%) para uma futura visão por competência.
 -- Dado suspeito no Nibo (não corrigido, só leitura): recebimento Mapfre R$ 24,04 com data 7201-10-30 (competência 2019-10-30) — fica fora de qualquer ano.
 -- Conferência DRE O2-2026.xlsx x painel (jan–jul/2026): tudo bate exceto R$ 160.000 de junho (Pix Porto Seguro 09/06 lançado como receita de seguros na DRE; no Nibo é Obtenção de empréstimo) e deslocamentos de mês em 3.1 e 7.1.
+
+-- 03/11/2026 (10): SEGURANÇA — dados financeiros da O2 (Nibo, painel, DFC, Simples, indicadores) são SÓ de colaborador O2 (imobiliárias veem apenas a própria carteira: parcelas, inadimplência, proposta, apólice, sinistro).
+-- As funções erp_nibo_painel (2 e 3 args), erp_nibo_analise, erp_nibo_dfc, erp_nibo_financiamento_contrapartes, erp_nibo_painel_indicadores, erp_nibo_lanc_g e erp_simples_estimativa eram security definer e executáveis por qualquer login.
+-- Passaram a security invoker (RLS is_colaborador_o2() das tabelas vale): login que não é da O2 recebe vazio (testado com usuário simulado). Migração "erp_nibo_funcoes_somente_colaborador_o2".
+-- Regra para funções novas sobre dado financeiro O2: security invoker, nunca definer sem checar is_colaborador_o2(). Pendente (não é meu): erp_nibo_repasse_conferir() ainda é security definer.
