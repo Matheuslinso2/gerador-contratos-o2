@@ -65,3 +65,6 @@ create policy erp_nibo_painel_estrutura_o2 on public.erp_nibo_painel_estrutura f
 -- As funções erp_nibo_painel (2 e 3 args), erp_nibo_analise, erp_nibo_dfc, erp_nibo_financiamento_contrapartes, erp_nibo_painel_indicadores, erp_nibo_lanc_g e erp_simples_estimativa eram security definer e executáveis por qualquer login.
 -- Passaram a security invoker (RLS is_colaborador_o2() das tabelas vale): login que não é da O2 recebe vazio (testado com usuário simulado). Migração "erp_nibo_funcoes_somente_colaborador_o2".
 -- Regra para funções novas sobre dado financeiro O2: security invoker, nunca definer sem checar is_colaborador_o2(). Pendente (não é meu): erp_nibo_repasse_conferir() ainda é security definer.
+
+-- 03/11/2026 (11): só Matheus, Nathalie e William veem o Nibo (podeVerNibo, checado no servidor em /erp/nibo). No banco, as 8 funções financeiras (painel 2/3 args, analise, indicadores, dfc, financiamento_contrapartes, lanc_g, simples_estimativa)
+-- tiveram EXECUTE revogado de public/anon/authenticated e liberado só para service_role: nem outro colaborador O2 as chama direto pela API. Telas novas devem ler com createServiceClient() DEPOIS de checar podeVerNibo. Migração "erp_nibo_funcoes_so_servidor".
