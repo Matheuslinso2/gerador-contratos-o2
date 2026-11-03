@@ -1,13 +1,25 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { metricaInfo, type ConfigDesempenho, type DesempenhoCampanha, type Farol, type LinhaDesempenho } from "./desempenho";
+import { metricaInfo, rotuloProdutoBase, type ConfigDesempenho, type DadosStatus, type DesempenhoCampanha, type Farol, type LinhaDesempenho } from "./desempenho";
 
 // Panorama da campanha (30/10/2026): o quadro de acompanhamento de UMA
 // imobiliária (ou grupo) dentro da campanha -- meta, realizado, quanto falta,
 // prazo e a evolução das parciais já enviadas. Cada "Enviar parciais" grava uma
 // VERSÃO (campanhas_panoramas) com os números exatamente como foram mostrados;
 // a imagem do e-mail e o histórico saem dessas versões, nunca de um recálculo.
+//
+// 03/11/2026: período INDIVIDUAL de cada participante; percentual pode passar de
+// 100% (Meta 1 = base de 100%); oportunidades (cotações APROVADAS ainda não
+// contratadas) ficam SEPARADAS da produção; "dados indisponíveis" nunca vira zero.
 
 export type PontoHistorico = { versao: number; data: string; realizado: number };
+
+export type OportunidadePanorama = {
+  pretendente: string | null;
+  produto: string; // "Seguro Fiança" | "Capitalização"
+  aprovadaEm: string | null; // YYYY-MM-DD, só quando a fonte tem
+  entrada: string; // YYYY-MM-DD (entrada da cotação)
+  diasAguardando: number | null; // desde a aprovação, quando há data
+};
 
 export type DadosPanorama = {
   campanha: string;
@@ -15,16 +27,22 @@ export type DadosPanorama = {
   metrica: string;
   moeda: boolean;
   unidade: string; // "contratações", "cotações"... (vazio quando é valor em R$)
-  inicio: string;
-  fim: string;
-  posicaoEm: string; // YYYY-MM-DD
+  inicio: string; // início INDIVIDUAL
+  fim: string; // encerramento INDIVIDUAL
+  periodoIndividual: boolean;
+  posicaoEm: string; // YYYY-MM-DD (dia da parcial)
+  apuradoAte: string; // menor entre a parcial e o encerramento
   versao: number;
-  meta: number | null;
+  meta: number | null; // Meta 1 = base de 100%
   realizado: number;
-  faltam: number | null;
-  percentual: number | null;
-  diasRestantes: number;
-  emAndamento: number;
+  faltam: number | null; // 0 quando a meta foi atingida/superada
+  percentual: number | null; // pode passar de 100
+  diasRestantes: number; // nunca negativo
+  encerrada: boolean;
+  dadosStatus: DadosStatus;
+  oportunidades: OportunidadePanorama[]; // aprovadas e ainda não contratadas
+  emAnalise: number; // cotações em análise (não aprovadas)
+  oportunidadesDesde: string; // entradas a partir desta data
   farol: Farol;
   premiacao: string | null;
   historico: PontoHistorico[]; // parciais anteriores já enviadas (mais antiga primeiro)
@@ -33,6 +51,10 @@ export type DadosPanorama = {
 const UNIDADE: Record<string, string> = { contratacoes: "contratações", cotacoes: "cotações", premio: "", comissao: "" };
 
 export const dataBr = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
+
+function diasEntre(de: string, ate: string): number {
+  return Math.round((Date.parse(`${ate}T12:00:00Z`) - Date.parse(`${de}T12:00:00Z`)) / 86_400_000);
+}
 
 export function formatarValor(n: number, moeda: boolean): string {
   return moeda ? n.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }) : n.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
@@ -47,22 +69,39 @@ export function dadosDoPanorama(
 ): DadosPanorama {
   const info = metricaInfo(config.metrica);
   const meta = linha.meta ?? null;
+  const hoje = desempenho.hoje;
+  const novas = linha.oportunidades.filter((o) => o.tipo === "novo");
+  const aprovadas = novas.filter((o) => o.status === "Aprovado");
   return {
     campanha: config.nome,
     participante: linha.nome.replace(/ \(grupo\)$/, ""),
     metrica: info.rotulo,
     moeda: info.moeda,
     unidade: UNIDADE[config.metrica] ?? "",
-    inicio: config.inicio,
-    fim: config.fim,
-    posicaoEm: desempenho.hoje,
+    inicio: linha.inicio,
+    fim: linha.fim,
+    periodoIndividual: linha.periodoIndividual,
+    posicaoEm: hoje,
+    apuradoAte: hoje < linha.fim ? hoje : linha.fim,
     versao,
     meta,
     realizado: linha.realizado,
-    faltam: linha.faltam,
+    faltam: meta === null ? null : Math.max(0, meta - linha.realizado),
     percentual: meta && meta > 0 ? (linha.realizado / meta) * 100 : null,
-    diasRestantes: desempenho.diasRestantes,
-    emAndamento: linha.funil.emAndamento,
+    diasRestantes: Math.max(0, linha.diasRestantes),
+    encerrada: hoje > linha.fim,
+    dadosStatus: linha.dadosStatus,
+    oportunidades: aprovadas
+      .map((o) => ({
+        pretendente: o.pretendente,
+        produto: rotuloProdutoBase(o.produto),
+        aprovadaEm: o.aprovadaEm ?? null,
+        entrada: o.entrada,
+        diasAguardando: o.aprovadaEm ? Math.max(0, diasEntre(o.aprovadaEm, hoje)) : null,
+      }))
+      .sort((a, b) => (b.diasAguardando ?? -1) - (a.diasAguardando ?? -1) || a.entrada.localeCompare(b.entrada)),
+    emAnalise: novas.length - aprovadas.length,
+    oportunidadesDesde: linha.abertosDesde,
     farol: linha.farol,
     premiacao: config.premiacao_descricao,
     historico,
@@ -90,11 +129,14 @@ export function enderecoDaImagem(token: string): string {
   return `${base.replace(/\/$/, "")}/api/campanhas/panorama/${token}`;
 }
 
-/** Resumo em texto dos mesmos números (vai abaixo da imagem, para quem bloqueia imagens). */
+/** Resumo em texto dos mesmos números da imagem (vai abaixo dela, para quem bloqueia imagens). */
 export function resumoEmTexto(d: DadosPanorama): string {
   const u = d.moeda || !d.unidade ? "" : ` ${d.unidade}`;
+  if (d.dadosStatus !== "ok") return "Produção indisponível no momento: estamos conferindo o vínculo dos seus dados.";
   const partes = [`Meta: ${d.meta ? formatarValor(d.meta, d.moeda) + u : "ainda não definida"}`, `Realizado: ${formatarValor(d.realizado, d.moeda)}${u}`];
-  if (d.faltam !== null && d.faltam > 0) partes.push(`Faltam: ${formatarValor(d.faltam, d.moeda)}${u}`);
-  if (d.diasRestantes > 0) partes.push(`${d.diasRestantes} dias até ${dataBr(d.fim)}`);
+  if (d.percentual !== null) partes.push(`${Math.round(d.percentual)}% da meta`);
+  if (d.faltam !== null) partes.push(d.faltam > 0 ? `Faltam: ${formatarValor(d.faltam, d.moeda)}${u}` : "Meta atingida");
+  partes.push(d.encerrada ? `Campanha encerrada em ${dataBr(d.fim)}` : `${d.diasRestantes} dias até ${dataBr(d.fim)}`);
+  if (d.oportunidades.length) partes.push(`${d.oportunidades.length} cotação(ões) aprovada(s) aguardando contratação`);
   return partes.join(" · ");
 }

@@ -55,3 +55,8 @@ $function$;
 -- Mesmas permissões da versão anterior (postgres, authenticated, service_role).
 revoke all on function public.campanha_programa_funil(uuid[], text[], date) from public, anon;
 grant execute on function public.campanha_programa_funil(uuid[], text[], date) to authenticated, service_role;
+
+-- 03/11/2026: período INDIVIDUAL por participante (Adjuve/Expan/Silvério 01/10-30/11, Chez a partir de 13/10).
+alter table public.campanhas_metas add column if not exists periodo_inicio date;
+alter table public.campanhas_metas add column if not exists periodo_fim date;
+alter table public.campanhas_metas add column if not exists periodo_origem text;

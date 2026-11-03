@@ -52,7 +52,12 @@ function emojiDaImagem(img: HTMLImageElement): string | null {
   return /\p{Extended_Pictographic}|\p{Regional_Indicator}/u.test(candidato) ? candidato : null;
 }
 
-export function EditorCorpo({ name, corpoInicialHtml }: { name: string; corpoInicialHtml?: string }) {
+// Azul secundário da marca (Manual de Marca O2): cor de fonte e de botão (03/11/2026).
+const O2_AZUL = "#00447E";
+
+export type TokenDoEditor = { rotulo: string; valor: string; dica?: string };
+
+export function EditorCorpo({ name, corpoInicialHtml, tokens }: { name: string; corpoInicialHtml?: string; tokens?: TokenDoEditor[] }) {
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const ultimaSelecaoRef = useRef<Range | null>(null);
@@ -232,6 +237,7 @@ export function EditorCorpo({ name, corpoInicialHtml }: { name: string; corpoIni
     link.href = href;
     link.textContent = texto;
     link.contentEditable = "false";
+    link.setAttribute("data-botao", "1");
     link.style.cssText = `display:inline-block;background:${O2_LARANJA};color:#ffffff;font-family:${FONTE};font-weight:700;font-size:14px;text-decoration:none;padding:12px 28px;border-radius:999px;margin:8px 0;`;
 
     const range = ultimaSelecaoRef.current;
@@ -246,6 +252,51 @@ export function EditorCorpo({ name, corpoInicialHtml }: { name: string; corpoIni
       ultimaSelecaoRef.current = range.cloneRange();
     } else {
       editor.appendChild(link);
+    }
+    sincronizar();
+  }
+
+  // Editar um botão já inserido (03/11/2026): clicar nele abre texto, link e cor.
+  // Antes só dava para apagar e inserir de novo.
+  function aoClicarNoEditor(e: React.MouseEvent<HTMLDivElement>) {
+    const alvo = (e.target as HTMLElement).closest("a");
+    const editor = editorRef.current;
+    if (!alvo || !editor || !editor.contains(alvo) || alvo.getAttribute("contenteditable") !== "false") return;
+    e.preventDefault();
+    const texto = window.prompt("Texto do botão:", alvo.textContent ?? "")?.trim();
+    if (!texto) return;
+    const href = window.prompt("Link do botão (https://..., mailto: ou wa.me):", alvo.getAttribute("href") ?? "")?.trim();
+    if (!href) return;
+    const atual = (alvo.style.background || alvo.style.backgroundColor || "").toLowerCase();
+    const cor = window.prompt("Cor do botão: laranja ou azul", atual.includes("0, 68, 126") || atual.includes("00447e") ? "azul" : "laranja")?.trim().toLowerCase();
+    alvo.textContent = texto;
+    alvo.setAttribute("href", href);
+    alvo.setAttribute("data-botao", "1");
+    if (cor) alvo.style.background = cor.startsWith("a") ? O2_AZUL : O2_LARANJA;
+    sincronizar();
+  }
+
+  // Marcador genérico (ex.: {{panorama}}): atômico, mesmo princípio do apelido.
+  function inserirTokenNoEditor(valor: string) {
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.focus();
+    const marcador = document.createElement("span");
+    marcador.className = "merge-token";
+    marcador.contentEditable = "false";
+    marcador.textContent = valor;
+    const range = ultimaSelecaoRef.current;
+    if (range && editor.contains(range.startContainer)) {
+      range.deleteContents();
+      range.insertNode(marcador);
+      range.setStartAfter(marcador);
+      range.collapse(true);
+      const selecao = window.getSelection();
+      selecao?.removeAllRanges();
+      selecao?.addRange(range);
+      ultimaSelecaoRef.current = range.cloneRange();
+    } else {
+      editor.appendChild(marcador);
     }
     sincronizar();
   }
@@ -361,6 +412,7 @@ export function EditorCorpo({ name, corpoInicialHtml }: { name: string; corpoIni
         {[
           { nome: "Padrão", cor: O2_CINZA_ESCURO },
           { nome: "Laranja O2", cor: O2_LARANJA },
+          { nome: "Azul O2 (da marca)", cor: O2_AZUL },
           { nome: "Azul-marinho O2", cor: O2_NAVY },
           { nome: "Cinza", cor: O2_CINZA_MEDIO },
         ].map(({ nome, cor }) => (
@@ -420,6 +472,21 @@ export function EditorCorpo({ name, corpoInicialHtml }: { name: string; corpoIni
         >
           Inserir apelido
         </button>
+        {(tokens ?? []).map((tk) => (
+          <button
+            key={tk.valor}
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              capturarSelecaoAtual();
+            }}
+            onClick={() => inserirTokenNoEditor(tk.valor)}
+            className={botaoClass}
+            title={tk.dica}
+          >
+            {tk.rotulo}
+          </button>
+        ))}
       </div>
       {erroImagem && <p className="border border-t-0 border-red-200 bg-red-50 px-3 py-1.5 text-xs text-red-700">{erroImagem}</p>}
       <div
@@ -430,10 +497,11 @@ export function EditorCorpo({ name, corpoInicialHtml }: { name: string; corpoIni
         onInput={sincronizar}
         onBlur={sincronizar}
         onPaste={aoColar}
-        className="min-h-[180px] rounded-b-lg border border-gray-300 px-3 py-2 text-sm focus:border-o2-coral focus:outline-none [&_img]:max-w-full [&_img]:rounded-lg [&_.merge-apelido]:rounded [&_.merge-apelido]:bg-orange-100 [&_.merge-apelido]:px-1 [&_.merge-apelido]:font-medium [&_.merge-apelido]:text-o2-coral"
+        onClick={aoClicarNoEditor}
+        className="min-h-[180px] rounded-b-lg border border-gray-300 px-3 py-2 text-sm focus:border-o2-coral focus:outline-none [&_img]:max-w-full [&_img]:rounded-lg [&_.merge-apelido]:rounded [&_.merge-apelido]:bg-orange-100 [&_.merge-apelido]:px-1 [&_.merge-apelido]:font-medium [&_.merge-apelido]:text-o2-coral [&_.merge-token]:rounded [&_.merge-token]:bg-blue-100 [&_.merge-token]:px-1 [&_.merge-token]:font-medium [&_.merge-token]:text-blue-800"
       />
       <p className="mt-1 text-xs text-gray-400">
-        Escreva normalmente, dá pra colar texto formatado, deixar em negrito/sublinhado, mudar a cor da fonte e inserir imagem.
+        Escreva normalmente, dá pra colar texto formatado, deixar em negrito/sublinhado, mudar a cor da fonte (inclusive o azul da marca), inserir imagem e botões. Clique num botão para editar o texto, o link e a cor.
       </p>
       <input type="hidden" name={name} value={corpoHtmlValue} readOnly />
     </div>

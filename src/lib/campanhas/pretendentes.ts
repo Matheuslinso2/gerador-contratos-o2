@@ -74,3 +74,31 @@ export async function resolverPretendentes(db: SupabaseClient, oportunidades: Op
     delete o.ref;
   }
 }
+
+// Data em que a cotação foi APROVADA (03/11/2026), quando a fonte guarda: só a
+// Fiança do Bitrix (producao_unificada.extras.data_aprovacao). Capitalização e as
+// planilhas não têm essa data: ficam null ("não disponível"), nunca estimadas.
+// Rodar ANTES de resolverPretendentes (que descarta `ref`).
+export async function resolverAprovacoes(db: SupabaseClient, oportunidades: Oportunidade[]): Promise<void> {
+  const ids = [...new Set(oportunidades.filter((o) => o.produto === "fianca" && o.ref?.fonte === "bitrix" && o.ref.bitrixId).map((o) => o.ref!.bitrixId!))];
+  const datas = new Map<string, string>();
+  for (let i = 0; i < ids.length; i += 200) {
+    try {
+      const { data } = await db
+        .from("producao_unificada")
+        .select("origem_bitrix_id, extras")
+        .eq("fonte", "bitrix")
+        .eq("produto", "fianca")
+        .in("origem_bitrix_id", ids.slice(i, i + 200));
+      for (const r of (data ?? []) as { origem_bitrix_id: string; extras: { data_aprovacao?: string | null } | null }[]) {
+        const d = String(r.extras?.data_aprovacao ?? "").slice(0, 10);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(d)) datas.set(r.origem_bitrix_id, d);
+      }
+    } catch {
+      // sem a data: segue "não disponível"
+    }
+  }
+  for (const o of oportunidades) {
+    o.aprovadaEm = o.produto === "fianca" && o.ref?.bitrixId ? (datas.get(o.ref.bitrixId) ?? null) : null;
+  }
+}

@@ -16,6 +16,9 @@ type LinhaMeta = {
   observacao: string | null;
   responsavel_email: string | null;
   gestor_conta_email: string | null;
+  periodo_inicio: string | null;
+  periodo_fim: string | null;
+  periodo_origem: string | null;
 };
 
 export type GrupoNaCampanha = { grupoId: string; nome: string; unidades: number; modo: "grupo" | "filial" };
@@ -26,7 +29,7 @@ export async function participantesDaCampanha(
   idsImobiliarias: string[]
 ): Promise<{ participantes: ParticipanteRow[]; grupos: GrupoNaCampanha[] }> {
   const [{ data: metasData }, imobsData] = await Promise.all([
-    db.from("campanhas_metas").select("id, imobiliaria_id, grupo_id, meta, custo_premiacao, observacao, responsavel_email, gestor_conta_email").eq("campanha_id", campanhaId),
+    db.from("campanhas_metas").select("id, imobiliaria_id, grupo_id, meta, custo_premiacao, observacao, responsavel_email, gestor_conta_email, periodo_inicio, periodo_fim, periodo_origem").eq("campanha_id", campanhaId),
     buscarEmLotes<{ id: string; grupo_id: string | null }>(idsImobiliarias, (lote) => db.from("imobiliarias").select("id, grupo_id").in("id", lote)),
   ]);
   const metas = (metasData ?? []) as LinhaMeta[];
@@ -40,6 +43,9 @@ export async function participantesDaCampanha(
     observacao: m?.observacao ?? null,
     responsavel_email: m?.responsavel_email ?? null,
     gestor_conta_email: m?.gestor_conta_email ?? null,
+    periodo_inicio: m?.periodo_inicio ?? null,
+    periodo_fim: m?.periodo_fim ?? null,
+    periodo_origem: m?.periodo_origem ?? null,
   });
 
   const participantes: ParticipanteRow[] = [];

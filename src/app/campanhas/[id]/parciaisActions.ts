@@ -10,7 +10,7 @@ import { gerarPreviaParciais } from "@/lib/campanhas/previaParciais";
 import { produtosDaCampanha } from "@/lib/campanhas/produtos";
 import { limparNomeRemetente, nomeExibidoRemetente } from "@/lib/campanhas/remetente";
 import { enderecoDaImagem, dataBr, formatarValor, type DadosPanorama } from "@/lib/campanhas/panoramaCampanha";
-import { montarEmailParcial, TEXTO_PADRAO_PARCIAL } from "@/lib/campanhas/parcialCampanha";
+import { montarEmailParcial, TEXTO_PADRAO_PARCIAL_HTML } from "@/lib/campanhas/parcialCampanha";
 import { dispararCampanha } from "@/lib/campanhas/dispararCampanha";
 import { ENDERECO_REMETENTE_CAMPANHAS, montarHtmlCampanha, type CampanhaRow } from "@/lib/campanhas/processarLote";
 import { linkDescadastro } from "@/lib/campanhas/unsubscribeToken";
@@ -55,8 +55,17 @@ async function carregarLote(campanhaId: string, loteId: string, formData: FormDa
   const { data } = await db.from("campanhas_panoramas").select("id, participante_id, imobiliaria_ids, nome, versao, token, dados").eq("campanha_id", campanhaId).eq("lote_id", loteId).eq("status", "previa");
   const excluidos = new Set(formData.getAll("excluir").map(String));
   const linhas = ((data ?? []) as PanoramaRow[]).filter((l) => !excluidos.has(l.id)).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
-  const texto = String(formData.get("texto") ?? "").trim() || TEXTO_PADRAO_PARCIAL;
+  const texto = String(formData.get("texto") ?? "").trim() || TEXTO_PADRAO_PARCIAL_HTML;
   return { db, linhas, texto };
+}
+
+// Salva o texto editado e volta para a revisão, onde cada imobiliária mostra o e-mail
+// como será recebido (03/11/2026). Não envia nada.
+export async function atualizarPreviaParciais(campanhaId: string, loteId: string, formData: FormData) {
+  await exigirEquipe();
+  const texto = String(formData.get("texto") ?? "").trim() || TEXTO_PADRAO_PARCIAL_HTML;
+  await createServiceClient().from("campanhas_panoramas").update({ texto }).eq("campanha_id", campanhaId).eq("lote_id", loteId).eq("status", "previa");
+  irParaParciais(campanhaId, loteId, "ok", "Texto salvo. As prévias abaixo já mostram cada e-mail como será recebido. Nada foi enviado.");
 }
 
 // Teste: o e-mail da primeira imobiliária da lista, para quem está logado.

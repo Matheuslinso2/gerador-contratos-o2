@@ -6,6 +6,7 @@ import { participantesDaCampanha } from "./metasCampanha";
 import { imobiliariasDaCampanha } from "./imobiliariasDaCampanha";
 import { produtosDaCampanha } from "./produtos";
 import { dadosDoPanorama, historicoPorParticipante } from "./panoramaCampanha";
+import { resolverAprovacoes, resolverPretendentes } from "./pretendentes";
 
 // Gera a PRÉVIA das parciais de uma campanha (30/10/2026): uma versão do
 // panorama por imobiliária (ou grupo) COM meta, com os números de agora, gravada
@@ -33,8 +34,18 @@ export async function gerarPreviaParciais(
     premiacao_descricao: (campanha.premiacao_descricao as string | null) ?? null,
     custo_premiacao_geral: Number(campanha.custo_premiacao_geral) || 0,
   };
-  const desempenho = await montarDesempenhoCampanha(db, config, comMeta);
+  // Falha de consulta NUNCA vira zero: se qualquer leitura falhar, a prévia não é gerada.
+  let desempenho;
+  try {
+    desempenho = await montarDesempenhoCampanha(db, config, comMeta);
+  } catch (e) {
+    return { ok: false, erro: `Falha ao consultar a produção (${e instanceof Error ? e.message : "erro desconhecido"}). Nada foi gerado: tente de novo em instantes.` };
+  }
   const historico = await historicoPorParticipante(db, campanha.id);
+  // Oportunidades = cotações APROVADAS ainda não contratadas: data de aprovação e nome do pretendente.
+  const aprovadas = desempenho.linhas.flatMap((l) => l.oportunidades.filter((o) => o.tipo === "novo" && o.status === "Aprovado"));
+  await resolverAprovacoes(db, aprovadas);
+  await resolverPretendentes(db, aprovadas);
 
   const gruposIds = comMeta.filter((p) => p.grupo_id).map((p) => p.grupo_id as string);
   const membros = new Map<string, string[]>();

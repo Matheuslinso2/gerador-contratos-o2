@@ -101,6 +101,10 @@ export type ParticipanteRow = {
   // Gestor da conta (27/10/2026): pessoa da O2 que cuida da conta, distinta
   // do responsável pela imobiliária na campanha. Fica na linha de meta.
   gestor_conta_email: string | null;
+  // Período INDIVIDUAL do participante (03/11/2026); vazio = vale o da campanha.
+  periodo_inicio?: string | null;
+  periodo_fim?: string | null;
+  periodo_origem?: string | null;
 };
 
 export type Farol = "nao_iniciada" | "sem_meta" | "atingida" | "no_ritmo" | "atencao" | "em_risco" | "nao_atingida";
@@ -140,6 +144,8 @@ export type Oportunidade = {
   valor: number | null; // prêmio cotado (ou valor do título, na Capitalização)
   link: string | null; // card no Bitrix
   tipo: "novo" | "renovacao";
+  // Data em que a cotação foi aprovada, quando a fonte tem (Fiança do Bitrix). null = não disponível.
+  aprovadaEm?: string | null;
   pretendente: string | null; // preenchido depois, em pretendentes.ts (título do card / locatário)
   // De onde buscar o nome do pretendente; descartado depois de resolver.
   ref?: { fonte: string | null; bitrixId: string | null; locatarioId: string | null };
@@ -158,6 +164,10 @@ function linkBitrix(produto: string, fonte: string | null, id: string | null): s
   if (fonte !== "bitrix" || !id || !entidade) return null;
   return `https://o2seguros.bitrix24.com.br/crm/type/${entidade}/details/${id}/`;
 }
+// Confiança do número de produção: "ok" = há vínculo com a fonte (zero é zero de verdade);
+// "sem_vinculo" = nenhuma ficha encontrada; "sem_vinculo_producao" = ficha sem vínculo
+// confirmado com Bitrix/planilhas (zero NÃO é confiável).
+export type DadosStatus = "ok" | "sem_vinculo" | "sem_vinculo_producao";
 export type NumerosCorp = { documentos: number; premio: number; comissao: number; repasse: number };
 
 export type LinhaDesempenho = {
@@ -190,6 +200,16 @@ export type LinhaDesempenho = {
   alertas: Alerta[];
   oportunidades: Oportunidade[];
   ultimaCotacao: string | null;
+  // Período de apuração DESTE participante (individual ou o da campanha).
+  inicio: string;
+  fim: string;
+  periodoIndividual: boolean;
+  periodoOrigem: string | null;
+  diasTotais: number;
+  diasDecorridos: number;
+  diasRestantes: number;
+  abertosDesde: string; // oportunidades consideradas: entradas a partir desta data
+  dadosStatus: DadosStatus;
 };
 
 export type DesempenhoCampanha = {
@@ -456,8 +476,6 @@ export async function montarDesempenhoCampanha(
   const diasTotais = diasEntre(programa.inicio, programa.fim) + 1;
   const diasDecorridos = Math.max(0, Math.min(diasTotais, diasEntre(programa.inicio, fimEfetivo) + 1));
   const diasRestantes = Math.max(0, diasEntre(hoje, programa.fim));
-  const baseDesde = somarMeses(programa.inicio, -MESES_BASE);
-  const baseAte = somarMeses(programa.inicio, 0);
   const diaAnterior = (d: string) => new Date(Date.parse(`${d}T12:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
   // Meta mensal = meta total ÷ meses do período (decisão do Matheus,
   // 27/10/2026). Mês de referência = mês de hoje, ou do último dia da
@@ -465,6 +483,14 @@ export async function montarDesempenhoCampanha(
   const mesesDoPeriodo = Math.max(1, Math.round(diasTotais / 30.4375));
   const primeiroDiaDoMes = `${fimEfetivo.slice(0, 7)}-01`;
   const janelaMes = { de: primeiroDiaDoMes > programa.inicio ? primeiroDiaDoMes : programa.inicio, ate: fimEfetivo };
+
+  // Período INDIVIDUAL (03/11/2026): cada participante pode ter início/fim próprios
+  // (ex.: Adjuve, Expan e Silvério 01/10-30/11; Chez a partir de 13/10). Sem período
+  // próprio vale o da campanha. Início/fim nunca saem do cadastro por suposição.
+  const periodoDe = (p: ParticipanteRow) => ({ inicio: p.periodo_inicio || programa.inicio, fim: p.periodo_fim || programa.fim });
+  const menorInicio = participantes.reduce((m, p) => { const i = periodoDe(p).inicio; return i < m ? i : m; }, programa.inicio);
+  const maiorFim = participantes.reduce((m, p) => { const f = periodoDe(p).fim; return f > m ? f : m; }, programa.fim);
+  const baseDesde = somarMeses(menorInicio, -MESES_BASE);
 
   // Unidades de cada participante (imobiliária ou todas as do grupo).
   const idsImob = participantes.filter((p) => p.imobiliaria_id).map((p) => p.imobiliaria_id!);
@@ -489,15 +515,26 @@ export async function montarDesempenhoCampanha(
   const produtos = programa.produtos.filter((p) => PRODUTOS_BASE.some((x) => x.valor === p));
   const todosIds = imobs.map((i) => i.id);
 
-  // Funil (planilhas + Bitrix) desde o início da base de comparação.
+  // Funil (planilhas + Bitrix) desde o início da base de comparação. Falha de
+  // consulta PROPAGA o erro (nunca vira zero): quem chama mostra "dados indisponíveis".
   const linhasFunil =
     todosIds.length && produtos.length
       ? await lerTodasPaginas<LinhaFunil>((de, ate) =>
           db.rpc("campanha_programa_funil", { p_imobs: todosIds, p_produtos: produtos, p_desde: baseDesde }).range(de, ate)
         )
       : [];
-  const oportunidadesPorImob = new Map<string, Oportunidade[]>();
-  const doPeriodo = numerosPorImobiliaria(linhasFunil, programa.inicio, fimEfetivo, somarMeses(programa.inicio, -2), oportunidadesPorImob);
+
+  // Vínculo com a FONTE DE PRODUÇÃO (Bitrix/planilhas): ficha sem nenhum vínculo
+  // confirmado não tem como mostrar produção -- é "sem vínculo", não "zero".
+  const FONTES_PRODUCAO = ["bitrix_empresa", "bitrix_cap_texto", "planilha_fianca", "planilha_cap"];
+  const comVinculoProducao = new Set<string>();
+  if (todosIds.length) {
+    const regs = await buscarEmLotes<{ imobiliaria_id: string | null }>(todosIds, (lote) =>
+      db.from("imobiliaria_registros_fonte").select("imobiliaria_id").eq("situacao", "confirmado").in("fonte", FONTES_PRODUCAO).in("imobiliaria_id", lote)
+    );
+    for (const r of regs) if (r.imobiliaria_id) comVinculoProducao.add(r.imobiliaria_id);
+  }
+
   const ultimaEntradaPorImob = new Map<string, string>();
   for (const l of linhasFunil) {
     // "Sem cotação nova" olha só negócios novos (renovação tem funil próprio).
@@ -505,12 +542,46 @@ export async function montarDesempenhoCampanha(
     const atual = ultimaEntradaPorImob.get(l.imobiliaria_id);
     if (!atual || l.data_recebimento > atual) ultimaEntradaPorImob.set(l.imobiliaria_id, l.data_recebimento);
   }
-  const daBase = numerosPorImobiliaria(linhasFunil, baseDesde, diaAnterior(baseAte), baseDesde);
-  const doMes = numerosPorImobiliaria(linhasFunil, janelaMes.de, janelaMes.ate, somarMeses(janelaMes.de, -2));
 
-  // Corp: documentos novos (não cancelados) no período, por código de produtor.
-  // Uma ficha pode ter mais de um produtor no Corp (ex.: Dreher 327 + 356) —
-  // conta todos os códigos ligados a ela, não só o principal (22/10/2026).
+  // Números do funil por período (cada período distinto é calculado uma vez).
+  const porPeriodo = new Map<string, ReturnType<typeof contextoDoPeriodo>>();
+  function contextoDoPeriodo(inicio: string, fim: string) {
+    const fimEf = hoje < fim ? hoje : fim;
+    const totais = diasEntre(inicio, fim) + 1;
+    const decorridos = Math.max(0, Math.min(totais, diasEntre(inicio, fimEf) + 1));
+    const restantes = Math.max(0, diasEntre(hoje, fim));
+    const meses = Math.max(1, Math.round(totais / 30.4375));
+    const pDia = `${fimEf.slice(0, 7)}-01`;
+    const janela = { de: pDia > inicio ? pDia : inicio, ate: fimEf };
+    const oportunidades = new Map<string, Oportunidade[]>();
+    return {
+      inicio,
+      fim,
+      fimEfetivo: fimEf,
+      diasTotais: totais,
+      diasDecorridos: decorridos,
+      diasRestantes: restantes,
+      mesesDoPeriodo: meses,
+      abertosDesde: somarMeses(inicio, -2),
+      oportunidades,
+      doPeriodo: numerosPorImobiliaria(linhasFunil, inicio, fimEf, somarMeses(inicio, -2), oportunidades),
+      daBase: numerosPorImobiliaria(linhasFunil, somarMeses(inicio, -MESES_BASE), diaAnterior(inicio), somarMeses(inicio, -MESES_BASE)),
+      doMes: numerosPorImobiliaria(linhasFunil, janela.de, janela.ate, somarMeses(janela.de, -2)),
+    };
+  }
+  const contexto = (inicio: string, fim: string) => {
+    const chave = `${inicio}|${fim}`;
+    let c = porPeriodo.get(chave);
+    if (!c) {
+      c = contextoDoPeriodo(inicio, fim);
+      porPeriodo.set(chave, c);
+    }
+    return c;
+  };
+
+  // Corp: documentos novos (não cancelados) no período de cada participante, por
+  // código de produtor. Uma ficha pode ter mais de um produtor no Corp (ex.:
+  // Dreher 327 + 356) — conta todos os códigos ligados a ela (22/10/2026).
   const codigosCorpPorImob = await buscarCodigosCorp(db, todosIds);
   const codigosDaUnidade = (u: Imob): number[] => {
     const lista = (codigosCorpPorImob.get(u.id) ?? []).map((c) => Number(c.codigo));
@@ -518,33 +589,29 @@ export async function montarDesempenhoCampanha(
     return lista.filter((n) => Number.isFinite(n) && n > 0);
   };
   const codigos = [...new Set(imobs.flatMap(codigosDaUnidade))];
-  type LinhaCorp = { codigo_produtor: number; ramo: string; tipo: string; cancelado: string; pr_liquido: number | null; vl_com: number | null; vl_com_prod: number | null };
+  type LinhaCorp = { codigo_produtor: number; ramo: string; tipo: string; cancelado: string; pr_liquido: number | null; vl_com: number | null; vl_com_prod: number | null; dt_proposta: string };
+  const fimMaxEfetivo = hoje < maiorFim ? hoje : maiorFim;
   const linhasCorp =
-    codigos.length && diasDecorridos > 0
+    codigos.length && menorInicio <= fimMaxEfetivo
       ? await lerTodasPaginas<LinhaCorp>((de, ate) =>
           db
             .from("corp_producao_produtor")
-            .select("codigo_produtor, ramo, tipo, cancelado, pr_liquido, vl_com, vl_com_prod")
+            .select("codigo_produtor, ramo, tipo, cancelado, pr_liquido, vl_com, vl_com_prod, dt_proposta")
             .in("codigo_produtor", codigos)
-            .gte("dt_proposta", programa.inicio)
-            .lte("dt_proposta", fimEfetivo)
+            .gte("dt_proposta", menorInicio)
+            .lte("dt_proposta", fimMaxEfetivo)
             .range(de, ate)
         )
       : [];
-  const corpPorCodigo = new Map<number, NumerosCorp>();
-  for (const l of linhasCorp) {
-    if (l.tipo !== "NOVO" || l.cancelado !== "F") continue;
+  const corpNovos = linhasCorp.filter((l) => {
+    if (l.tipo !== "NOVO" || l.cancelado !== "F") return false;
     const produto = PRODUTO_POR_RAMO_CORP[l.ramo];
-    if (!produto || !produtos.includes(produto)) continue;
-    const n = corpPorCodigo.get(l.codigo_produtor) ?? { ...ZERO_CORP };
-    n.documentos++;
-    n.premio += Number(l.pr_liquido) || 0;
-    n.comissao += Number(l.vl_com) || 0;
-    n.repasse += Number(l.vl_com_prod) || 0;
-    corpPorCodigo.set(l.codigo_produtor, n);
-  }
+    return !!produto && produtos.includes(produto);
+  });
 
   const linhas: LinhaDesempenho[] = participantes.map((p) => {
+    const per = periodoDe(p);
+    const ctx = contexto(per.inicio, per.fim);
     const unidades = unidadesDe(p);
     let funil = zeroFunil();
     let base = zeroFunil();
@@ -553,19 +620,19 @@ export async function montarDesempenhoCampanha(
     const codigosVistos = new Set<number>();
     const avisos: string[] = [];
     for (const u of unidades) {
-      funil = somarFunil(funil, doPeriodo.get(u.id));
-      base = somarFunil(base, daBase.get(u.id));
-      funilMes = somarFunil(funilMes, doMes.get(u.id));
+      funil = somarFunil(funil, ctx.doPeriodo.get(u.id));
+      base = somarFunil(base, ctx.daBase.get(u.id));
+      funilMes = somarFunil(funilMes, ctx.doMes.get(u.id));
       const codsUnidade = codigosDaUnidade(u);
       for (const cod of codsUnidade) {
         if (!codigosVistos.has(cod)) {
           codigosVistos.add(cod);
-          const c = corpPorCodigo.get(cod);
-          if (c) {
-            corp.documentos += c.documentos;
-            corp.premio += c.premio;
-            corp.comissao += c.comissao;
-            corp.repasse += c.repasse;
+          for (const c of corpNovos) {
+            if (c.codigo_produtor !== cod || c.dt_proposta < ctx.inicio || c.dt_proposta > ctx.fimEfetivo) continue;
+            corp.documentos++;
+            corp.premio += Number(c.pr_liquido) || 0;
+            corp.comissao += Number(c.vl_com) || 0;
+            corp.repasse += Number(c.vl_com_prod) || 0;
           }
         }
       }
@@ -574,8 +641,11 @@ export async function montarDesempenhoCampanha(
       }
     }
     if (!unidades.length) avisos.push("Nenhuma imobiliária encontrada para este participante.");
+    const vinculoProducao = unidades.some((u) => comVinculoProducao.has(u.id));
+    const dadosStatus: DadosStatus = !unidades.length ? "sem_vinculo" : !vinculoProducao ? "sem_vinculo_producao" : "ok";
+    if (dadosStatus === "sem_vinculo_producao") avisos.push("Nenhuma ficha deste participante tem vínculo confirmado com a fonte de produção (Bitrix/planilhas): o zero não é confiável.");
     const oportunidades = unidades
-      .flatMap((u) => oportunidadesPorImob.get(u.id) ?? [])
+      .flatMap((u) => ctx.oportunidades.get(u.id) ?? [])
       .sort((a, b) => (a.status === b.status ? b.dias - a.dias : a.status === "Aprovado" ? -1 : 1));
     const ultimaCotacao =
       unidades
@@ -586,9 +656,9 @@ export async function montarDesempenhoCampanha(
     const realizado = valorDaMetrica(funil, programa.metrica);
     const realizadoMes = valorDaMetrica(funilMes, programa.metrica);
     const meta = p.meta === null || p.meta === undefined ? null : Number(p.meta);
-    const projecao = diasDecorridos > 0 ? (realizado / diasDecorridos) * diasTotais : null;
+    const projecao = ctx.diasDecorridos > 0 ? (realizado / ctx.diasDecorridos) * ctx.diasTotais : null;
     const faltam = meta !== null ? Math.max(0, meta - realizado) : null;
-    const semanas = diasRestantes / 7;
+    const semanas = ctx.diasRestantes / 7;
     const ritmoSemana = faltam !== null && faltam > 0 && semanas > 0 ? faltam / semanas : null;
     const nome = p.grupo_id
       ? `${grupos.get(p.grupo_id) ?? "Grupo"} (grupo)`
@@ -611,13 +681,13 @@ export async function montarDesempenhoCampanha(
       realizado,
       realizadoMes,
       cotacoesMes: funilMes.cotacoes,
-      metaMensal: meta !== null && meta > 0 ? meta / mesesDoPeriodo : null,
+      metaMensal: meta !== null && meta > 0 ? meta / ctx.mesesDoPeriodo : null,
       base: valorDaMetrica(base, programa.metrica) / MESES_BASE,
       percentual: meta && meta > 0 ? (realizado / meta) * 100 : null,
       faltam,
       projecao,
       ritmoSemana,
-      farol: farolDe(meta, realizado, projecao, diasDecorridos, diasRestantes),
+      farol: farolDe(meta, realizado, projecao, ctx.diasDecorridos, ctx.diasRestantes),
       funil,
       corp,
       resultado: corp.comissao - corp.repasse - (Number(p.custo_premiacao) || 0),
@@ -628,12 +698,21 @@ export async function montarDesempenhoCampanha(
         oportunidades: oportunidades.filter((o) => o.tipo === "novo"),
         realizado,
         base: valorDaMetrica(base, programa.metrica) / MESES_BASE,
-        diasDecorridos,
-        programaEmAndamento: diasDecorridos > 0 && diasRestantes > 0,
+        diasDecorridos: ctx.diasDecorridos,
+        programaEmAndamento: ctx.diasDecorridos > 0 && ctx.diasRestantes > 0,
         moeda: metricaInfo(programa.metrica).moeda,
       }),
       oportunidades,
       ultimaCotacao,
+      inicio: ctx.inicio,
+      fim: ctx.fim,
+      periodoIndividual: ctx.inicio !== programa.inicio || ctx.fim !== programa.fim,
+      periodoOrigem: p.periodo_origem ?? null,
+      diasTotais: ctx.diasTotais,
+      diasDecorridos: ctx.diasDecorridos,
+      diasRestantes: ctx.diasRestantes,
+      abertosDesde: ctx.abertosDesde,
+      dadosStatus,
     };
   });
 
