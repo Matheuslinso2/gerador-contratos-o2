@@ -16,3 +16,6 @@
 -- 03/11/2026 (hierarquia de acesso): funções SECURITY DEFINER de manutenção do ERP sem checagem interna (≈40, ex.: erp_juntar_card_corp_par,
 -- erp_vinculo_*, erp_negocio_*, erp_baixa_erp_processar) tiveram EXECUTE revogado de public/anon/authenticated (ficam postgres + service_role).
 -- erp_parcela_data_suspeita ganhou RLS (política só para is_colaborador_o2()). Funções novas desse tipo: revogar EXECUTE logo na criação.
+
+-- 03/11/2026: todas as views erp_*/corp_*/nibo* passaram a security_invoker=true e perderam o acesso de anon
+-- (antes 19 liam como dono, furando RLS, e estavam abertas a visitante). Views novas: criar já com security_invoker.
