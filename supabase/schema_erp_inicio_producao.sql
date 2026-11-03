@@ -40,3 +40,8 @@
 --    card duplicado de um documento do Corp fica 'duplicado' (fora da conta).
 --  * Painel: pílulas "Com propostas" (padrão) / "Só Corp / Power BI" (?prop=corp) e aviso amarelo com o que vem de proposta no período.
 --  Comissão por mês, só Corp / com propostas: ago 564k/581k, set 544k/682k, out 463k/628k, nov 10,6k/51k.
+
+-- 03/11 (8): migration erp_producao_propostas_sem_duplicar. Ou é proposta ou é apólice (Matheus): o mesmo seguro não pode contar duas vezes.
+--  * erp_producao_propostas_v ganhou conta 'proposta' (limpa: sem nenhum candidato no Corp) ou 'duvida' (existe documento do Corp da mesma seguradora e tipo, início ±30 dias, ainda sem card ligado,
+--    com mesma imobiliária, mesmo cliente ou prêmio líquido dentro de 15%). erp_producao_total_v = corp + 'proposta'; 'duvida' fica FORA do total até o vínculo (erp_producao_duvida_v).
+--  * erp_inicio_producao devolve duvida_mensal. Comissão: ago corp 564k + 13k prop (47k em dúvida); set 544k + 49k (186k em dúvida); out 463k + 76k (181k em dúvida); nov 10,6k + 6k (34k em dúvida).
