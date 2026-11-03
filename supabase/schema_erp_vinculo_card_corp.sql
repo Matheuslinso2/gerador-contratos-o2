@@ -24,3 +24,7 @@
 -- documento_id, casamento, fonte, nivel, lido_em; RLS só is_colaborador_o2). 1ª carga: portal da Pottencial (conta O2 Capitalização, 60 dias, 161 apólices).
 -- Casamento: vigência exata + prêmio (líquido ou ×1,0738) + CPF do cliente. 48 cards Bitrix juntados ao documento do Corp (nº da apólice igual) e
 -- 62 documentos receberam nº de apólice/proposta do portal. Sobraram 51 sem casamento (31 sem CPF confere, 19 sem documento no ERP, 1 duplicada Corp x Corp).
+
+-- 03/11/2026: 16 cards de LOTE de renovação (Bitrix, RENV, ramo imobiliário, set/out) cujo prêmio é igual (±3%) à soma dos documentos de renovação
+-- do Corp da mesma imobiliária+seguradora+mês foram marcados situacao='duplicado' (já contados nos documentos; não é negócio faltando).
+-- Lotes parecidos (até 25%) e muito diferentes (ex.: Adjuve Porto, Humberto Canale Tokio, Roberto R C Filho Porto) ficam em dúvida para conferir no portal da seguradora.
