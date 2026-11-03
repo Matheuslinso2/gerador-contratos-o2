@@ -7,3 +7,8 @@
 --  * erp_juntar_card_corp_par junta o card ao documento do Corp (mesma lógica de erp_juntar_cards_corp): move origem, itens, e-mails, anexos e eventos,
 --    marca o card como 'duplicado' com observação do nível. Em 03/11/2026: lote CARDCORP-0311, 365 propostas no período, 272 com candidato;
 --    11 (cliente) + 44 (imobiliária) = 55 juntadas; 1 recusada (o documento do Corp já tinha origem do Bitrix). Sobram 553 propostas do Bitrix sem Corp.
+
+-- 03/11/2026: erp_juntar_card_corp_par passa a mover só anexos cujo sha256 ainda não existe no documento do Corp
+-- (evita erro 23505 em erp_documento_anexos_doc_sha_idx) e apaga os repetidos do card.
+-- Critério da ligação em massa: seguradora + vigência + prêmio iguais E cliente/imobiliária iguais, sem CPF diferente,
+-- escolha mútua e única. Primeira rodada: 1 par juntado (card 6732c826 -> doc 3c003561).
