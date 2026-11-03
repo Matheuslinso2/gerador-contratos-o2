@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { signOut } from "../actions";
@@ -35,8 +35,10 @@ export default async function ErpLayout({ children }: { children: React.ReactNod
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect("/login?next=/erp");
-  if (!isAdmin(user.email) && !isColaboradorO2(user.email)) redirect("/");
+  // O ERP não pode ser revelado a ninguém de fora da O2 (Matheus, 03/11/2026): sem login vai para o login comum, sem
+  // citar o ERP; quem está logado mas não é da O2 recebe "página não encontrada".
+  if (!user) redirect("/login");
+  if (!isAdmin(user.email) && !isColaboradorO2(user.email)) notFound();
 
   return (
     <div className="flex min-h-screen flex-1 flex-col bg-o2-gray">
