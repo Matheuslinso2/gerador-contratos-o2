@@ -12,3 +12,7 @@
 -- (evita erro 23505 em erp_documento_anexos_doc_sha_idx) e apaga os repetidos do card.
 -- Critério da ligação em massa: seguradora + vigência + prêmio iguais E cliente/imobiliária iguais, sem CPF diferente,
 -- escolha mútua e única. Primeira rodada: 1 par juntado (card 6732c826 -> doc 3c003561).
+
+-- 03/11/2026 (hierarquia de acesso): funções SECURITY DEFINER de manutenção do ERP sem checagem interna (≈40, ex.: erp_juntar_card_corp_par,
+-- erp_vinculo_*, erp_negocio_*, erp_baixa_erp_processar) tiveram EXECUTE revogado de public/anon/authenticated (ficam postgres + service_role).
+-- erp_parcela_data_suspeita ganhou RLS (política só para is_colaborador_o2()). Funções novas desse tipo: revogar EXECUTE logo na criação.
