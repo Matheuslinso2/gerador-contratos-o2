@@ -15,3 +15,6 @@
 --   a imobiliária pelo CNPJ e o documento pelo Nº da apólice quando o portal traz o formato de apólice (os "99..." são Nº de documento do portal, ficam sem_apolice).
 --   02/11: 17 devoluções aguardando, R$ 4.832,63 (pagamento a maior, endosso de restituição, parcela cancelada).
 -- Faturas (erp_portal_faturas): 1.374 lidas em 02/11 (138 págs; 1.306 pagas, 48 canceladas, 9 vencidas, 11 a vencer). Carga pendente de arquivo: o Chrome bloqueou o 4º download.
+-- ACESSO (03/11, migration erp_acesso_somente_o2_repasse_portal): só colaborador/admin da O2. Views erp_portal_fila e erp_portal_parcelas_comparacao agora security_invoker (respeitam o RLS de quem consulta);
+--   anon sem acesso às tabelas/views/funções de repasse, portal, regras e previsão; as funções security definer de vincular/atualizar/conferir/aplicar passaram a recusar usuário logado que não seja colaborador
+--   (chamadas sem usuário, como cron e service role, seguem). Ações do servidor de /erp/repasses já checam o e-mail no servidor; cron exige CRON_SECRET.
