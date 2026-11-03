@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { isMatheus } from "@/lib/admin";
+import { podeVerUsoDiario } from "@/lib/admin";
 import { signOut } from "../../actions";
 import AppHeader from "@/components/AppHeader";
 import BackLink from "@/components/BackLink";
@@ -33,7 +33,7 @@ export default async function AdminAcessosPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!isMatheus(user?.email)) redirect("/");
+  if (!podeVerUsoDiario(user?.email)) redirect("/");
 
   const LIMITE_DIAS = 30;
   const { data: acessos } = await supabase

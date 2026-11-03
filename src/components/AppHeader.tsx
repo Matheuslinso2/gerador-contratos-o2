@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { isAdmin, isColaboradorO2, isEquipe, isMatheus } from "@/lib/admin";
+import { isAdmin, isColaboradorO2, isEquipe, isMatheus, podeVerUsoDiario } from "@/lib/admin";
 import { PRODUTOS_LANDING_PAGE } from "@/lib/produtosLandingPage";
 import NavLink from "./NavLink";
 import NavDropdown from "./NavDropdown";
@@ -113,7 +113,7 @@ export default function AppHeader({
                     ]
                   : []),
                 ...(isMatheus(userEmail) ? [{ href: "/gestao-emails", label: "Gestão de E-mails" }] : []),
-                ...(isMatheus(userEmail) ? [{ href: "/admin/acessos", label: "Uso diário do Workspace" }] : []),
+                ...(podeVerUsoDiario(userEmail) ? [{ href: "/admin/acessos", label: "Uso diário do Workspace" }] : []),
                 ...(isEquipe(userEmail) ? [{ href: "/admin/relatorio-diario", label: "Relatório diário (WhatsApp)" }] : []),
                 ...(isMatheus(userEmail) ? [{ href: "/admin/whatsapp", label: "WhatsApp — contatos" }] : []),
                 ...(isMatheus(userEmail) ? [{ href: "/admin/usuarios", label: "Logins do Workspace (admin)" }] : []),

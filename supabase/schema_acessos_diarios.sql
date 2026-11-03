@@ -89,3 +89,10 @@ begin
 end;
 $$;
 grant execute on function registrar_uso_cliente(text, integer, integer) to authenticated;
+
+-- 03/11/2026: a Vanessa também lê os acessos de todos (Configurações › Uso diário do Workspace).
+-- Espelha podeVerUsoDiario() em src/lib/admin.ts. Os demais continuam vendo só a própria linha.
+drop policy if exists "so o matheus le os acessos" on workspace_acessos_diarios;
+create policy "matheus e vanessa leem os acessos" on workspace_acessos_diarios
+  for select
+  using ((auth.jwt() ->> 'email') in ('matheus@o2seguros.com.br', 'vanessa@o2seguros.com.br'));

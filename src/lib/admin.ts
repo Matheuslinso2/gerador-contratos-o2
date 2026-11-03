@@ -16,6 +16,13 @@ export function isMatheus(email: string | null | undefined) {
   return !!email && email === EMAIL_MATHEUS;
 }
 
+// Quem vê o uso diário do Workspace (Configurações › Uso diário): Matheus e Vanessa (autorizada em
+// 03/11/2026). Espelha a política de leitura de workspace_acessos_diarios no banco.
+const VE_USO_DIARIO = [EMAIL_MATHEUS, "vanessa@o2seguros.com.br"];
+export function podeVerUsoDiario(email: string | null | undefined) {
+  return !!email && VE_USO_DIARIO.includes(email.toLowerCase());
+}
+
 // Colaborador da O2: login @o2seguros.com.br que não é o admin. Usa as
 // ferramentas (Gerar Contrato/Auditor) sem precisar de cadastro de
 // imobiliária parceira, e tem acesso de leitura aos dados de todas as
