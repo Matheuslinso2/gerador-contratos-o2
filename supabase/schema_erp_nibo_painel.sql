@@ -41,3 +41,7 @@ create policy erp_nibo_painel_estrutura_o2 on public.erp_nibo_painel_estrutura f
 -- 03/11/2026 (5): ESTUDO da carga tributária (Simples Nacional nas duas empresas) — erp-o2/ESTUDO-CARGA-TRIBUTARIA-O2-SIMPLES-NACIONAL.pdf.
 -- erp_simples_tabela (Anexos III e V, editável) e erp_simples_estimativa(p_empresa, p_ano): por mês, receita, RBT12, Fator R, anexo, alíquota efetiva, DAS esperado × DAS pago no mês seguinte (a partir do Nibo, caixa).
 -- É ESTIMATIVA; só confiável quando os 12 meses anteriores estiverem carregados (meses_de_dados_12m = 12 e folha completa). Migração "erp_simples_estimativa".
+
+-- 03/11/2026 (6): FLUXO DE CAIXA em 3 atividades (artigo de DFC + Finanças p.48): erp_nibo_dfc(p_ano, p_empresa) -> operacional / investimento / financiamento / estornos / transferências, com variação do mês e acumulada.
+-- erp_nibo_financiamento_contrapartes(p_ano, p_empresa): empréstimos, aportes e "estorno e devolução" por contraparte (Porto Seguro, entre as empresas O2, sócios, bancos, outros). Migrações "erp_nibo_dfc" e "erp_nibo_financiamento_contrapartes".
+-- Achado jan–out/2026: corretora com caixa operacional −590 mil coberto por Porto (+313 mil líquido), sócios (+141 mil), capitalização (+162 mil); no consolidado o grupo queima ~427 mil e os recursos vêm da Porto (+313 mil) e dos sócios (+145 mil).
