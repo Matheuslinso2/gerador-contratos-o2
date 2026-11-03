@@ -51,3 +51,6 @@ create policy erp_nibo_painel_estrutura_o2 on public.erp_nibo_painel_estrutura f
 -- erp_nibo_lanc_g(p_gerencial) aplica as regras; erp_nibo_painel(ano, empresa) = ESPELHO do Nibo (não muda); erp_nibo_painel(ano, empresa, true) = gerencial.
 -- erp_nibo_dfc, erp_nibo_painel_indicadores, erp_nibo_financiamento_contrapartes e erp_simples_estimativa passam a usar a visão gerencial. Migração "erp_nibo_reclassificacao_gerencial".
 -- Efeito jan–out/2026 (corretora): receita operacional 2.155.008 -> 2.310.141; caixa operacional −590 mil -> −435 mil; no consolidado −427 mil -> −272 mil.
+
+-- 03/11/2026 (8): CONSOLIDADO GERENCIAL elimina as movimentações entre a corretora e a capitalização (empréstimo, estorno/devolução, aporte com contraparte O2 CORRETORA / O2 CAPITALIZ…). Migração "erp_nibo_consolidado_elimina_entre_empresas".
+-- Conferência jan–out/2026: a capitalização pagou 280.068 (ofertamento 209.068 + pagamento 71.000) e a corretora recebeu 280.068 — IGUAL; a corretora pagou 118.442 (117.591 + 851) e a capitalização recebeu 115.234 — diferença de R$ 3.208 a conciliar.
