@@ -45,3 +45,9 @@ create policy erp_nibo_painel_estrutura_o2 on public.erp_nibo_painel_estrutura f
 -- 03/11/2026 (6): FLUXO DE CAIXA em 3 atividades (artigo de DFC + Finanças p.48): erp_nibo_dfc(p_ano, p_empresa) -> operacional / investimento / financiamento / estornos / transferências, com variação do mês e acumulada.
 -- erp_nibo_financiamento_contrapartes(p_ano, p_empresa): empréstimos, aportes e "estorno e devolução" por contraparte (Porto Seguro, entre as empresas O2, sócios, bancos, outros). Migrações "erp_nibo_dfc" e "erp_nibo_financiamento_contrapartes".
 -- Achado jan–out/2026: corretora com caixa operacional −590 mil coberto por Porto (+313 mil líquido), sócios (+141 mil), capitalização (+162 mil); no consolidado o grupo queima ~427 mil e os recursos vêm da Porto (+313 mil) e dos sócios (+145 mil).
+
+-- 03/11/2026 (7): RECLASSIFICAÇÃO GERENCIAL (Matheus): as 16 entradas Pix de William de Jesus e Fabricio Esteves na corretora ("Estorno e devolução" no Nibo, R$ 155.133) são RECEITA DE SEGUROS
+-- (a Brasilcap paga a comissão por cartão de benefícios — Alelo — e o valor é transferido para a conta oficial quando necessário). Regras editáveis em erp_nibo_regras_reclass.
+-- erp_nibo_lanc_g(p_gerencial) aplica as regras; erp_nibo_painel(ano, empresa) = ESPELHO do Nibo (não muda); erp_nibo_painel(ano, empresa, true) = gerencial.
+-- erp_nibo_dfc, erp_nibo_painel_indicadores, erp_nibo_financiamento_contrapartes e erp_simples_estimativa passam a usar a visão gerencial. Migração "erp_nibo_reclassificacao_gerencial".
+-- Efeito jan–out/2026 (corretora): receita operacional 2.155.008 -> 2.310.141; caixa operacional −590 mil -> −435 mil; no consolidado −427 mil -> −272 mil.
