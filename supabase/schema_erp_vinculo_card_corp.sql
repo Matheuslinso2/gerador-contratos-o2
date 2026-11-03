@@ -19,3 +19,8 @@
 
 -- 03/11/2026: todas as views erp_*/corp_*/nibo* passaram a security_invoker=true e perderam o acesso de anon
 -- (antes 19 liam como dono, furando RLS, e estavam abertas a visitante). Views novas: criar já com security_invoker.
+
+-- 03/11/2026: erp_portal_seguradora_leitura (seguradora, conta, numero_proposta único; numero_apolice, cpf_cnpj_cliente, vigencia_inicio, premio,
+-- documento_id, casamento, fonte, nivel, lido_em; RLS só is_colaborador_o2). 1ª carga: portal da Pottencial (conta O2 Capitalização, 60 dias, 161 apólices).
+-- Casamento: vigência exata + prêmio (líquido ou ×1,0738) + CPF do cliente. 48 cards Bitrix juntados ao documento do Corp (nº da apólice igual) e
+-- 62 documentos receberam nº de apólice/proposta do portal. Sobraram 51 sem casamento (31 sem CPF confere, 19 sem documento no ERP, 1 duplicada Corp x Corp).
