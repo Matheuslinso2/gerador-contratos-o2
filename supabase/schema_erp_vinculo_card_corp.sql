@@ -28,3 +28,6 @@
 -- 03/11/2026: 16 cards de LOTE de renovação (Bitrix, RENV, ramo imobiliário, set/out) cujo prêmio é igual (±3%) à soma dos documentos de renovação
 -- do Corp da mesma imobiliária+seguradora+mês foram marcados situacao='duplicado' (já contados nos documentos; não é negócio faltando).
 -- Lotes parecidos (até 25%) e muito diferentes (ex.: Adjuve Porto, Humberto Canale Tokio, Roberto R C Filho Porto) ficam em dúvida para conferir no portal da seguradora.
+
+-- 03/11/2026 (Matheus): parcela em fatura é controlada na aba Faturas. erp_cobranca_resumo e erp_resumo_parcelas passam a ignorar via_fatura=true
+-- (5.799 parcelas na tabela pronta, 375 das 2.745 em aberto) e /erp/parcelas/cobranca filtra via_fatura=false.

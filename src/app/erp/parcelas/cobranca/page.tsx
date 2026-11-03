@@ -44,7 +44,8 @@ export default async function ParcelasCobrancaPage({ searchParams }: { searchPar
   // período padrão do ERP: mês corrente; "do mês" = parcelas que vencem no mês; "herdadas" = em aberto de meses anteriores, separadas e com os dias de atraso
   const periodo = periodoDoMes(f.mes);
   const base = () => {
-    let b = supabase.from("erp_parcelas_cobranca_pronta").select("*");
+    // o controle de fatura é na aba Faturas (Matheus, 03/11/2026): aqui só a parcela que NÃO está em fatura
+    let b = supabase.from("erp_parcelas_cobranca_pronta").select("*").eq("via_fatura", false);
     if (seg) b = b.eq("seg", seg);
     if (f.produto) b = b.eq("produto", f.produto);
     if (f.situacao && STATUS[f.situacao]) b = b.eq("status", f.situacao);
@@ -182,7 +183,7 @@ export default async function ParcelasCobrancaPage({ searchParams }: { searchPar
       {tabela(herdadas)}
       <p className="text-xs text-gray-500">
         Mostra as 300 mais urgentes do filtro. "Prazo normal" e "limite" vêm do estudo dos últimos 16 meses de comissões recebidas (mediana e percentil 90 por seguradora e ramo).
-        Apólices aglomeradas numa fatura unificada só ficam em aberto depois do vencimento do BOLETO da fatura (marcado "boleto da fatura"), não pelo vencimento da parcela; nelas o status não passa de "urgente" até a regra de cancelamento por fatura em atraso ser levantada.
+        Parcelas que estão numa fatura unificada NÃO aparecem aqui: o controle da fatura (e a cobrança do boleto) é feito na aba Faturas. Esta tela mostra só a parcela que não está em fatura.
         O prazo normal e o limite já incluem uma tolerância de 2 dias (1 por questões operacionais do banco e 1 para não cobrar o cliente no dia seguinte e ele já ter pago).
         "Risco de cancelamento" aparece onde a regra da seguradora está cadastrada: 1ª parcela não paga em Alfa e Yelum (Incêndio), Suhai (Auto) e Tokio (Fiança); mais de 30 dias na Too (Fiança) e de 20 dias na Allianz (Residência).
         Onde a Condição Geral manda usar a Tabela de Prazo Curto (Auto de Porto, Allianz, Yelum, Suhai, Mapfre, Azul e HDI; Fiança da Tokio com vigência de até 12 parcelas), a tela mostra "pago X% · cobertura até" e marca risco de cancelamento só quando a data da faixa de CIMA da tabela já passou (mais 2 dias de tolerância) e nenhuma parcela posterior tem prova de pagamento. Os dias contam do início da vigência.
