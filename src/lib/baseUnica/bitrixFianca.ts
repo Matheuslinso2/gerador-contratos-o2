@@ -158,6 +158,40 @@ export async function gravarBitrixFianca(supabase: SupabaseClient, dados: Awaite
     gravados.push(...(data ?? []));
     if (!data || data.length < 1000) break;
   }
+  // Ofertas de cada seguradora no card (inclusive de cotações perdidas/recusadas):
+  // dado estatístico de preço (Matheus, 03/11/2026). 1 linha por cotação × seguradora.
+  const idPorCard = new Map(gravados.map((g) => [g.origem_bitrix_id, g.id]));
+  const ofertas = linhas.flatMap((l) => {
+    const producaoId = idPorCard.get(String(l.id));
+    if (!producaoId) return [];
+    return Object.entries(l.seguradoras).flatMap(([nome, s]) => {
+      const status = Object.fromEntries(Object.entries(s.status).filter(([, v]) => v));
+      const valor = num(s.valor);
+      const parcelas = num(s.parcelas);
+      if (valor === null && !Object.keys(status).length) return [];
+      const escolhida = !!l.seguradoraEscolhida && (nome.includes(l.seguradoraEscolhida) || l.seguradoraEscolhida.includes(nome.split(" ")[0]));
+      return [
+        {
+          producao_id: producaoId,
+          origem_bitrix_id: String(l.id),
+          seguradora: nome,
+          status,
+          valor_parcela: valor,
+          parcelas,
+          premio_total_cotado: valor !== null && parcelas !== null ? Math.round(valor * parcelas * 100) / 100 : null,
+          comissao_pct: num(s.comissaoPct),
+          pct_aluguel: num(s.pctAluguel),
+          pct_locacao: num(s.pctLocacao),
+          escolhida,
+          atualizado_em: new Date().toISOString(),
+        },
+      ];
+    });
+  });
+  for (let i = 0; i < ofertas.length; i += 500) {
+    const { error } = await supabase.from("producao_cotacao_ofertas").upsert(ofertas.slice(i, i + 500), { onConflict: "producao_id,seguradora" });
+    if (error) throw new Error("producao_cotacao_ofertas: " + error.message);
+  }
   const sobras = gravados.filter((g) => !atuais.has(g.origem_bitrix_id)).map((g) => g.id);
   for (let i = 0; i < sobras.length; i += 200) {
     const { error } = await supabase.from("producao_unificada").delete().in("id", sobras.slice(i, i + 200));
