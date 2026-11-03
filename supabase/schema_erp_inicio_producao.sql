@@ -30,3 +30,13 @@
 -- 03/11 (6) VERSÃO FINAL: o total do painel volta a ser o do Power BI/Corp — só documento com Nosso nº do Corp (nosso_numero_corp is not null).
 -- Proposta do Bitrix e documento da API sem Corp inflavam: out/26 comissão ERP 632 mil x PBI 459 mil; set/26 694 mil x 548,6 mil (Matheus apontou).
 -- Depois da correção: out/26 463 mil x 459 mil; set/26 544 mil x 548,6 mil. As propostas efetivadas sem Corp devem aparecer à parte (a definir).
+
+-- 03/11 (7): proposta efetivada já conta no faturamento do Início, UMA vez só (Matheus). Migration erp_producao_com_propostas.
+--  * erp_producao_base_v (conta='corp'): só documentos com Nosso nº do Corp (igual ao Power BI). erp_producao_propostas_v (conta='proposta'): card do Bitrix em 'proposta'
+--    ou documento da API, sem Nosso nº, sem equivalente no Corp (mesma seguradora, prêmio líquido ±1, início ±3 dias). erp_producao_total_v = união.
+--  * erp_inicio_producao(..., p_propostas boolean default true) e erp_inicio_ranking(..., p_propostas default true) leem erp_producao_total_v; p_propostas=false = só Corp/Power BI.
+--    O retorno ganhou propostas_mensal (docs/base/com por mês) e com_propostas.
+--  * Cada documento é uma linha de erp_documentos: quando o Corp cadastrar, o MESMO documento ganha o Nosso nº e passa de conta 'proposta' para 'corp' (sem somar duas vezes);
+--    card duplicado de um documento do Corp fica 'duplicado' (fora da conta).
+--  * Painel: pílulas "Com propostas" (padrão) / "Só Corp / Power BI" (?prop=corp) e aviso amarelo com o que vem de proposta no período.
+--  Comissão por mês, só Corp / com propostas: ago 564k/581k, set 544k/682k, out 463k/628k, nov 10,6k/51k.

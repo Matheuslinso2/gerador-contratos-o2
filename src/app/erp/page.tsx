@@ -128,7 +128,7 @@ export default async function ErpInicio({ searchParams }: { searchParams: Promis
 
   return (
     <PaginaErp>
-      <PainelProducao params={{ ano: str(sp.ano), m: str(sp.m), aba: str(sp.aba), sub: str(sp.sub), seg: str(sp.seg), prod: str(sp.prod), imob: str(sp.imob) }} />
+      <PainelProducao params={{ ano: str(sp.ano), m: str(sp.m), aba: str(sp.aba), sub: str(sp.sub), seg: str(sp.seg), prod: str(sp.prod), imob: str(sp.imob), prop: str(sp.prop) }} />
       <div>
         <h1 className="text-xl font-semibold text-o2-navy">ERP O2</h1>
         <p className="text-sm text-gray-600">Sistema de gestão da O2 Seguros, separado do Workspace. Até dezembro/2026 roda ao lado do Corp; a partir de 2027 substitui o Corp.</p>

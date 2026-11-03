@@ -25,7 +25,7 @@ const MESES_ABREV = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "se
 
 type Linha = { mes?: string; ano?: number; grupo: Grupo; docs: number; base: number; com: number };
 type Dia = { d: string; docs: number; base: number; com: number };
-type Retorno = { mensal: Linha[]; anual: Linha[]; diario: Dia[]; meta: { mes: string; com: number }[]; meta_ok: boolean; gerado_em: string };
+type Retorno = { mensal: Linha[]; anual: Linha[]; diario: Dia[]; meta: { mes: string; com: number }[]; propostas_mensal?: { mes: string; docs: number; base: number; com: number }[]; com_propostas?: boolean; meta_ok: boolean; gerado_em: string };
 type Soma = Record<Grupo, { docs: number; base: number; com: number }>;
 type Rank = { nome: string; grupo: Grupo; docs: number; base: number; com: number };
 
@@ -49,7 +49,7 @@ const total = (s: Soma, m: Metrica) => GRUPOS.reduce((t, g) => t + s[g][m], 0);
 const pad = (n: number) => String(n).padStart(2, "0");
 const diasNoMes = (ano: number, mes: number) => new Date(Date.UTC(ano, mes, 0)).getUTCDate();
 
-export type ParamsProducao = { ano?: string; m?: string; aba?: string; sub?: string; seg?: string; prod?: string; imob?: string; ramo?: string; grp?: string };
+export type ParamsProducao = { ano?: string; m?: string; aba?: string; sub?: string; seg?: string; prod?: string; imob?: string; ramo?: string; grp?: string; prop?: string };
 
 export default async function PainelProducao({ params, caminho = "/erp" }: { params: ParamsProducao; caminho?: string }) {
   const sb = await createClient();
@@ -66,7 +66,9 @@ export default async function PainelProducao({ params, caminho = "/erp" }: { par
   const imob = params.imob?.trim() || null;
   const ramo = params.ramo || null;
   const grp = params.grp?.trim() || null;
-  const filtros = { p_seguradora: seg, p_produto: prod, p_imobiliaria: imob, p_ramo: ramo, p_grupo: grp };
+  // Proposta efetivada (card do Bitrix/API ainda sem Nosso nº do Corp) já conta, uma vez só (Matheus, 03/11/2026); ?prop=corp volta a só o que o Corp/Power BI conta.
+  const comProp = params.prop !== "corp";
+  const filtros = { p_seguradora: seg, p_produto: prod, p_imobiliaria: imob, p_ramo: ramo, p_grupo: grp, p_propostas: comProp };
 
   const [{ data: bruto }, { data: segs }, { data: ramos }, rk] = await Promise.all([
     sb.rpc("erp_inicio_producao", { p_ano: ano, p_mes: mes, ...filtros }),
@@ -89,7 +91,7 @@ export default async function PainelProducao({ params, caminho = "/erp" }: { par
   // link que mantém os filtros e troca só o que foi pedido
   const href = (troca: Partial<ParamsProducao>) => {
     const p = new URLSearchParams();
-    const base: ParamsProducao = { ano: String(ano), m: anual ? "a" : String(mes), aba: aba.chave, sub: ranking ? "ranking" : undefined, seg: seg ?? undefined, prod: prod ?? undefined, imob: imob ?? undefined, ramo: ramo ?? undefined, grp: grp ?? undefined, ...troca };
+    const base: ParamsProducao = { ano: String(ano), m: anual ? "a" : String(mes), aba: aba.chave, sub: ranking ? "ranking" : undefined, seg: seg ?? undefined, prod: prod ?? undefined, imob: imob ?? undefined, ramo: ramo ?? undefined, grp: grp ?? undefined, prop: comProp ? undefined : "corp", ...troca };
     for (const [k, v] of Object.entries(base)) if (v) p.set(k, v);
     return `${caminho}?${p.toString()}`;
   };
@@ -163,6 +165,8 @@ export default async function PainelProducao({ params, caminho = "/erp" }: { par
   }
   const maxBarra = Math.max(1, ...barras.map((b) => Math.max(total(b.s, m) > 0 ? total(b.s, m) : 0, m === "com" && b.meta ? b.meta : 0)));
 
+  // quanto do período vem de proposta efetivada ainda sem Corp (já dentro do total quando comProp)
+  const propsPeriodo = (dados.propostas_mensal ?? []).filter((x) => (anual ? x.mes.startsWith(String(ano)) : x.mes === `${ano}-${pad(mes!)}`)).reduce((s, x) => ({ docs: s.docs + num(x.docs), base: s.base + num(x.base), com: s.com + num(x.com) }), { docs: 0, base: 0, com: 0 });
   const filtrosAtivos = [seg && `seguradora ${seg}`, ramo && `ramo ${ramo}`, prod && PRODUTOS[prod], grp && `grupo “${grp}”`, imob && `imobiliária “${imob}”`].filter(Boolean).join(" · ");
 
   return (
@@ -213,7 +217,17 @@ export default async function PainelProducao({ params, caminho = "/erp" }: { par
         <div className="flex gap-1 border-b border-gray-200 bg-gray-50 px-3 pt-2 text-sm">
           <Link href={href({ sub: undefined })} className={`rounded-t px-4 py-1.5 ${!ranking ? "bg-white font-semibold text-[#00447E]" : "text-gray-600 hover:text-[#00447E]"}`}>Produção Total</Link>
           <Link href={href({ sub: "ranking" })} className={`rounded-t px-4 py-1.5 ${ranking ? "bg-white font-semibold text-[#00447E]" : "text-gray-600 hover:text-[#00447E]"}`}>Ranking</Link>
+          <span className="ml-auto flex items-center gap-1 pb-1 text-xs">
+            <span className="text-gray-500">Conta:</span>
+            <Link href={href({ prop: undefined })} className={`rounded-full border px-3 py-1 font-medium ${comProp ? "border-[#00447E] bg-[#00447E] text-white" : "border-gray-300 text-gray-700 hover:bg-white"}`} title="Corp/Power BI mais as propostas efetivadas ainda sem Corp, cada documento uma vez só">Com propostas</Link>
+            <Link href={href({ prop: "corp" })} className={`rounded-full border px-3 py-1 font-medium ${!comProp ? "border-[#00447E] bg-[#00447E] text-white" : "border-gray-300 text-gray-700 hover:bg-white"}`} title="Só documentos com Nosso nº do Corp, como o Power BI">Só Corp / Power BI</Link>
+          </span>
         </div>
+        {comProp && propsPeriodo.docs > 0 ? (
+          <p className="border-b border-gray-100 bg-amber-50 px-4 py-1.5 text-xs text-amber-900">
+            {rotuloPeriodo}: inclui <b>{inteiro(propsPeriodo.docs)}</b> proposta(s) efetivada(s) ainda sem Nosso nº do Corp (prêmio base R$ {dec(propsPeriodo.base)} · comissão R$ {dec(propsPeriodo.com)}). Cada documento conta uma vez: quando o Corp cadastrar, ele troca de proposta para apólice sem somar de novo. “Só Corp / Power BI” mostra o número sem elas.
+          </p>
+        ) : null}
 
         {/* filtros */}
         <form method="get" action={caminho} className="flex flex-wrap items-end gap-3 border-b border-gray-100 px-4 py-2 text-xs">
@@ -221,6 +235,7 @@ export default async function PainelProducao({ params, caminho = "/erp" }: { par
           <input type="hidden" name="m" value={anual ? "a" : mes!} />
           <input type="hidden" name="aba" value={aba.chave} />
           {ranking && <input type="hidden" name="sub" value="ranking" />}
+          {!comProp && <input type="hidden" name="prop" value="corp" />}
           <label className="flex flex-col gap-0.5 text-xs font-medium uppercase tracking-wide text-gray-500">
             Seguradora
             <select name="seg" defaultValue={seg ?? ""} className="rounded border border-gray-300 px-2 py-1 text-xs normal-case text-gray-800">
