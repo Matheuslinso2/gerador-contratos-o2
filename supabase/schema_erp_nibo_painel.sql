@@ -54,3 +54,9 @@ create policy erp_nibo_painel_estrutura_o2 on public.erp_nibo_painel_estrutura f
 
 -- 03/11/2026 (8): CONSOLIDADO GERENCIAL elimina as movimentações entre a corretora e a capitalização (empréstimo, estorno/devolução, aporte com contraparte O2 CORRETORA / O2 CAPITALIZ…). Migração "erp_nibo_consolidado_elimina_entre_empresas".
 -- Conferência jan–out/2026: a capitalização pagou 280.068 (ofertamento 209.068 + pagamento 71.000) e a corretora recebeu 280.068 — IGUAL; a corretora pagou 118.442 (117.591 + 851) e a capitalização recebeu 115.234 — diferença de R$ 3.208 a conciliar.
+
+-- 03/11/2026 (9): ANÁLISE VERTICAL E HORIZONTAL (Finanças Empresariais / Gestão de Empresas): erp_nibo_analise(p_ano, p_empresa, p_gerencial default true) -> bloco, bloco_ordem, linha_tipo, ordem, rotulo, mes, valor,
+-- pct_receita (vertical: linha ÷ TOTAL A do mês), var_mes_anterior_pct e var_ano_anterior_pct (horizontal; sobre o valor com sinal: positivo = melhorou, vale para receita e para custo). Migração "erp_nibo_analise_vertical_horizontal".
+-- Regime de CAIXA (não é competência). Histórico do Nibo carregado desde 2021-11-01; competência vem preenchida (cap. 100%, corretora ~88%) para uma futura visão por competência.
+-- Dado suspeito no Nibo (não corrigido, só leitura): recebimento Mapfre R$ 24,04 com data 7201-10-30 (competência 2019-10-30) — fica fora de qualquer ano.
+-- Conferência DRE O2-2026.xlsx x painel (jan–jul/2026): tudo bate exceto R$ 160.000 de junho (Pix Porto Seguro 09/06 lançado como receita de seguros na DRE; no Nibo é Obtenção de empréstimo) e deslocamentos de mês em 3.1 e 7.1.
