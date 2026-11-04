@@ -1,0 +1,12 @@
+-- Código do negócio (thread) — aplicado no Supabase em 04/11/2026 (migrations erp_negocio_codigo_serie_dv, erp_negocio_codigo_automatico).
+-- Decisão do Matheus (04/11): código em série com formato fixo e dígito verificador; renovação = código NOVO ligado ao anterior.
+--
+-- Formato: NEG-NNNNNN-D  (6+ dígitos em série + dígito verificador módulo 11, pesos 2..9 da direita p/ esquerda, resto 0/1 → 0)
+--   erp_codigo_dv(text), erp_codigo_negocio_formatar(bigint), erp_codigo_negocio_valido(text); sequência erp_negocio_codigo_seq.
+-- erp_negocio: + codigo (único, check de validade), codigo_seq, documento_id (1 negócio = 1 apólice = 1 ciclo de vigência),
+--   negocio_anterior_id (renovação → negócio do ciclo anterior, vindo de erp_documentos.documento_renovado_id), codigo_em.
+-- Numeração inicial: 87.178 apólices em ordem de início de vigência (NEG-000001-9 … NEG-087178-8); 32.066 renovações ligadas.
+-- Gatilho erp_negocio_garantir_trg (erp_documentos): apólice nova ganha negócio + código na hora; mudança de documento_renovado_id
+--   atualiza negocio_anterior_id. Cotação e duplicado não recebem código (código só existe depois de entrar no ERP; regra 28/10).
+-- View erp_documento_negocio: código de qualquer documento (endosso e demais herdam da apólice-mãe via documento_pai_id),
+--   com código do ciclo anterior e da renovação. Fatura não tem código próprio de negócio (agrupa várias apólices).
