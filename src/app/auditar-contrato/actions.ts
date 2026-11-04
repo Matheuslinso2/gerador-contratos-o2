@@ -250,12 +250,16 @@ async function montarDocumentosEBiblioteca(supabase: SupabaseServerClient, formD
 
   const { data: produtosSeguro } = await supabase
     .from("produtos")
-    .select("nome, clausula_base, seguradoras(nome)")
+    .select("id, nome, clausula_base, seguradoras(nome)")
     .not("seguradora_id", "is", null);
 
+  // Coberturas adicionais opcionais (Danos ao Imóvel, Pintura...) também vão para o Auditor: antes só a cláusula-base chegava, e o texto
+  // dessas coberturas nunca era conferido (caso Patricia de Souza Barros × Marcio Zen, 04/11/2026).
+  const { data: coberturasAdicionais } = await supabase.from("coberturas_adicionais").select("produto_id, nome, texto");
   const bibliotecaClausulas = (produtosSeguro ?? []).map((p) => {
     const seguradora = Array.isArray(p.seguradoras) ? p.seguradoras[0] : p.seguradoras;
-    return { seguradora: seguradora?.nome ?? "", produto: p.nome, clausulaBase: p.clausula_base };
+    const coberturas = (coberturasAdicionais ?? []).filter((c) => c.produto_id === p.id).map((c) => ({ nome: c.nome as string, texto: c.texto as string }));
+    return { seguradora: seguradora?.nome ?? "", produto: p.nome, clausulaBase: p.clausula_base, coberturas };
   });
 
   return { documentos, nomeArquivo, textosContrato, bibliotecaClausulas };

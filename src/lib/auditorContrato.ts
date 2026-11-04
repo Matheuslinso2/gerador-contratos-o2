@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { conferirPalavraPorPalavra } from "@/lib/conferenciaPalavras";
 
 export type StatusChecklist = "ok" | "atencao" | "problema" | "nao_avaliado";
 
@@ -36,6 +37,8 @@ export type ClausulaReferencia = {
   seguradora: string;
   produto: string;
   clausulaBase: string;
+  // Coberturas adicionais opcionais do produto (ex: Danos ao Imóvel, Pintura): texto oficial de cada uma, conferido palavra por palavra.
+  coberturas?: { nome: string; texto: string }[];
 };
 
 export type FonteDocumento =
@@ -95,7 +98,7 @@ Você precisa preencher TODOS OS 10 CAMPOS de status/resumo abaixo, um de cada v
 
    CONFIRA O INÍCIO DA CLÁUSULA PALAVRA POR PALAVRA, SEMPRE: a primeira frase do texto oficial da biblioteca é o ENQUADRAMENTO JURÍDICO da garantia (qual modalidade é e em qual inciso do art. 37 da Lei 8.245/91 se apoia) — não basta o nome da seguradora, o segurado, o link das condições gerais e o restante do texto baterem. Localize no contrato a cláusula equivalente e compare a abertura dela com a abertura do texto oficial, termo a termo: (a) a MODALIDADE nomeada (ex: "seguro fiança locatícia" / "título de capitalização"); (b) o INCISO do art. 37 citado — seguro-fiança é o inciso III, título de capitalização é o inciso IV; o inciso I é caução e o inciso II é FIANÇA PESSOAL (fiador); (c) qualquer base legal extra que não esteja no texto oficial. Achado real (caso do Matheus, contrato Pottencial): o texto oficial começa "As Partes anuem com a emissão de seguro fiança locatícia ... nos termos do art. 37, III", mas o contrato trazia "A garantia é prestada na modalidade FIANÇA, na forma do art. 37, II da Lei nº 8.245/1991 e dos arts. 818 e seguintes do Código Civil, a ser contratado ... junto à Pottencial Seguradora S.A." — o resto da cláusula estava idêntico e o auditor aprovou como "presente e completa", o que foi um ERRO. Aquela abertura é a de uma VERSÃO DESATUALIZADA do modelo da Pottencial (título antigo "Seguro Pottencial Aluguel"), à qual também faltava a anuência com a indicação do corretor de seguros ("declaram ter negociado e anuído com a indicação do corretor de seguros"), que a versão atual exige. É o padrão típico de imobiliária que atualizou o corpo da cláusula mas manteve o parágrafo de abertura do modelo antigo — por isso, trate a biblioteca como a ÚNICA versão válida: se um trecho do contrato diverge dela (termo trocado, frase ausente, título/nome de produto antigo), chame isso explicitamente de "versão desatualizada/divergente da cláusula oficial" no resumo, nunca de "presente e completa", mesmo que o restante seja idêntico. Frases do texto oficial que tratam de anuência das partes (ex: indicação do corretor, coberturas contratadas) são essenciais: ausência delas é "problema". "Modalidade FIANÇA", "art. 37, II" ou "arts. 818 e seguintes do Código Civil" dentro de uma cláusula de seguro-fiança/capitalização descrevem fiança pessoal (fiador), não seguro — o contrato fica juridicamente incoerente sobre qual garantia foi prestada. Qualquer divergência no início da cláusula (modalidade trocada, inciso errado, base legal de fiança pessoal) é "problema": cite no resumo o trecho de abertura do contrato E o trecho de abertura do texto oficial, lado a lado, e inclua em pontos_criticos. Este é um GATILHO CRÍTICO do checklist, igual à dupla garantia — nunca escreva "presente e completa" sem ter feito essa comparação da abertura.
 
-   CONFERÊNCIA PARÁGRAFO POR PARÁGRAFO (OBRIGATÓRIA quando houver texto oficial na biblioteca para a seguradora/produto identificado): divida o texto oficial daquele produto em parágrafos (cada bloco separado por linha em branco; cada cláusula especial/condicional conta como um) e, para CADA UM, procure o equivalente no contrato e preencha um item em paragrafos_texto_oficial: assunto (ex: "Abertura / art. 37, III", "Negativação em Serasa/SPC", "Sub-rogação da seguradora", "Solidariedade e procuração entre locatários", "Cláusula especial Pintura Interna"), situacao ("presente" = mesmo conteúdo essencial; "divergente" = existe mas com termo/conteúdo diferente; "ausente" = não está no contrato; "nao_se_aplica" = parágrafo condicional cuja condição não se aplica, ou não dá pra confirmar — siga as regras de cláusulas condicionais abaixo) e uma observação curta. Não junte vários parágrafos num item só e não pule nenhum. Achado real (contrato Porto Seguro, Wetson × Paulo Roberto Rosa, 26/10/2026): o parágrafo de SUB-ROGAÇÃO do texto oficial ("As Partes convencionam que a Seguradora sub-rogar-se-á automaticamente no(s) direito(s) do(s) LOCADOR(es)...") não estava no contrato e o auditor escreveu que a cláusula "corresponde ao texto oficial" — ERRO: um parágrafo inteiro faltando nunca é "corresponde". O sistema confere essa lista sozinho e aponta todo parágrafo "ausente"; mesmo assim, cite no resumo deste pilar os parágrafos ausentes ou divergentes pelo assunto.
+   CONFERÊNCIA PARÁGRAFO POR PARÁGRAFO (OBRIGATÓRIA quando houver texto oficial na biblioteca para a seguradora/produto identificado): divida o texto oficial daquele produto em parágrafos (cada bloco separado por linha em branco; cada cláusula especial/condicional conta como um) e, para CADA UM, procure o equivalente no contrato e preencha um item em paragrafos_texto_oficial: assunto (ex: "Abertura / art. 37, III", "Negativação em Serasa/SPC", "Sub-rogação da seguradora", "Solidariedade e procuração entre locatários", "Cláusula especial Pintura Interna"), situacao ("presente" = TODAS as frases, valores, prazos, limites e condições do parágrafo oficial estão no contrato (faltar uma frase, uma palavra de condição ou um valor, mesmo curto, é "divergente" — cite na observação o trecho que falta); "divergente" = existe mas com termo/conteúdo diferente; "ausente" = não está no contrato; "nao_se_aplica" = parágrafo condicional cuja condição não se aplica, ou não dá pra confirmar — siga as regras de cláusulas condicionais abaixo) e uma observação curta. Não junte vários parágrafos num item só e não pule nenhum. Achado real (contrato Porto Seguro, Wetson × Paulo Roberto Rosa, 26/10/2026): o parágrafo de SUB-ROGAÇÃO do texto oficial ("As Partes convencionam que a Seguradora sub-rogar-se-á automaticamente no(s) direito(s) do(s) LOCADOR(es)...") não estava no contrato e o auditor escreveu que a cláusula "corresponde ao texto oficial" — ERRO: um parágrafo inteiro faltando nunca é "corresponde". O sistema confere essa lista sozinho e aponta todo parágrafo "ausente"; mesmo assim, cite no resumo deste pilar os parágrafos ausentes ou divergentes pelo assunto.
 
    CLÁUSULAS DA IMOBILIÁRIA QUE CONTRADIZEM O TEXTO OFICIAL: além de conferir se o texto oficial está no contrato, leia TODAS as demais cláusulas/subcláusulas que tratam da garantia, redigidas pela própria imobiliária (vigência, prorrogação, sinistro, sub-rogação, negativação, coberturas), e compare cada uma com o que o texto oficial diz sobre o mesmo assunto. Não basta o texto oficial estar presente: se outra cláusula do mesmo contrato disser algo incompatível com ele, o contrato fica contraditório e o locador pode achar que tem uma cobertura que a apólice não dá. Achados reais (mesmo contrato Pottencial acima), todos passaram batido:
       · Vigência/prorrogação: o texto oficial diz que o seguro vale pelo período da apólice e que a prorrogação da locação exige comunicação à seguradora para reanálise do risco; o contrato trazia, em outras subcláusulas, "a garantia vale por toda a locação, inclusive nas prorrogações" e "a fiança perdura até a devolução das chaves, estendendo-se automaticamente à prorrogação (art. 39)" — contradição direta, "problema".
@@ -116,6 +119,7 @@ Você precisa preencher TODOS OS 10 CAMPOS de status/resumo abaixo, um de cada v
       c) se a condição se aplica mas a cláusula correspondente NÃO aparece no contrato (ou aparece incompleta), isso é "problema" — o contrato foi cortado/truncado antes de incluir todas as cláusulas obrigatórias daquela contratação — e deve virar um item em pontos_criticos citando a cláusula pelo nome/número;
       d) se não há como confirmar se a condição se aplica (ex: sem cotação anexada, ou cotação/e-mail vago demais pra saber quais coberturas foram contratadas), não presuma nem a favor nem contra — use "atencao" e diga no resumo quais cláusulas condicionais existem na biblioteca mas não deu pra confirmar se se aplicam.
       e) ATENÇÃO À REDAÇÃO deste caso (d) — é a fonte nº 1 de confusão pra quem lê o relatório: quando a cláusula JÁ APARECE no texto do contrato e a única dúvida é se a COBERTURA foi comercialmente contratada (não se a cláusula existe), deixe isso cristalino e nunca escreva de um jeito que soe como "a cláusula não foi incluída no contrato" — ela FOI incluída, só a confirmação da contratação é que ficou em aberto. Use sempre esta fórmula: "Cláusula de [nome] está presente no contrato; não foi possível confirmar pela cotação/e-mail se essa cobertura foi efetivamente contratada.". Reserve verbos como "ausente", "não incorporada" ou "não incluída" exclusivamente para quando a cláusula realmente não aparece no texto do contrato (caso (c) acima).
+      f) QUANDO A CLÁUSULA CONDICIONAL APARECE NO CONTRATO, COMPARE O TEXTO DELA COM A BIBLIOTECA FRASE A FRASE, SEMPRE — mesmo sem cotação anexada. A dúvida sobre a contratação nunca dispensa a conferência do texto: use situacao "presente" ou "divergente" conforme o TEXTO e registre a incerteza da contratação à parte, na observação. "nao_se_aplica" fica reservado para condicional que NÃO aparece no contrato. Achado real (Pottencial, Patricia de Souza Barros × Marcio Zen, 04/11/2026): a cobertura Danos ao Imóvel estava no contrato com "limites e condições do seguro" onde o oficial diz "limites e condições contratuais do seguro", e foi marcada como não aplicável sem comparar — um erro.
 
    NUNCA ATRIBUA UMA CLÁUSULA DO CONTRATO A UMA SEGURADORA DIFERENTE DA IDENTIFICADA SÓ POR PARECER COM O TEXTO DE OUTRA SEGURADORA NA BIBLIOTECA. Achado real (caso do Matheus, contrato Porto Seguro, 30/09/2026): o auditor apontou que a Cláusula Especial de Pintura Interna do contrato "era da Tokio Marine, não da Porto Seguro, misturada ao contrato" — só que o PRÓPRIO TEXTO da cláusula, no contrato, dizia explicitamente "o Segurado poderá comunicar o Sinistro à Porto Seguro", nomeando a seguradora certa; a Tokio nem tinha sido contratada nesse caso. Isso foi um ERRO GRAVE: a biblioteca traz o texto de VÁRIAS seguradoras juntas (pra você conseguir comparar qualquer produto), e cláusulas do mesmo assunto (ex: "Pintura Interna") costumam ter redação muito parecida entre seguradoras diferentes, porque seguem o mesmo modelo de ramos elementares da SUSEP — parecido NÃO significa que veio de outra seguradora. Compare a cláusula do contrato SEMPRE contra a entrada da biblioteca da MESMA seguradora já identificada neste contrato (tipo_garantia/seguradora), nunca contra a entrada de uma seguradora diferente. Só escreva que uma cláusula "não é da seguradora X" ou "pertence à seguradora Y" se o PRÓPRIO TEXTO da cláusula, dentro do contrato, nomear explicitamente uma seguradora diferente da identificada (ex: citar "Tokio Marine Seguradora S.A." por extenso) — nunca baseado só em semelhança de fraseado/estrutura com a biblioteca. Se o texto da cláusula já nomeia corretamente a seguradora do contrato, trate como cláusula legítima dela, mesmo que o fraseado lembre o de outra seguradora na biblioteca.
 
@@ -299,7 +303,7 @@ export async function auditarContrato(
 
   const blocoBiblioteca = bibliotecaClausulas.length
     ? `BIBLIOTECA DE CLÁUSULAS DE REFERÊNCIA DA O2 (texto oficial de cada seguradora/produto — use para conferir o enquadramento da cláusula de garantia do contrato quando ela for baseada em seguro ou título de capitalização):\n\n${bibliotecaClausulas
-        .map((c) => `— ${c.seguradora} — ${c.produto} —\n${c.clausulaBase}`)
+        .map((c) => `— ${c.seguradora} — ${c.produto} —\n${c.clausulaBase}${c.coberturas?.length ? `\n\nCOBERTURAS ADICIONAIS OPCIONAIS DESTE PRODUTO (cláusulas condicionais — quando constarem no contrato, o texto deve ser IDÊNTICO ao oficial; compare frase a frase, palavra faltando conta como divergente):\n${c.coberturas.map((x) => `· ${x.nome}: ${x.texto}`).join("\n\n")}` : ""}`)
         .join("\n\n")}\n\n---\n\n`
     : "";
 
@@ -365,7 +369,8 @@ export async function auditarContrato(
     Object.keys(chamada.input as object).join(", ")
   );
 
-  return aplicarConferenciaParagrafos(aplicarConferenciaPrazo(chamada.input as RelatorioAuditoria));
+  const textoContrato = contratos.flatMap((d) => (d.fonte.tipo === "texto" ? [d.fonte.texto] : [])).join("\n\n");
+  return aplicarConferenciaPalavras(aplicarConferenciaParagrafos(aplicarConferenciaPrazo(chamada.input as RelatorioAuditoria)), bibliotecaClausulas, textoContrato);
 }
 
 // Parágrafo do texto oficial da seguradora AUSENTE no contrato (26/10/2026):
@@ -402,6 +407,49 @@ export function aplicarConferenciaParagrafos(relatorio: RelatorioAuditoria): Rel
     clausulas_seguradora_resumo: `${relatorio.clausulas_seguradora_resumo} ${extras.join(" ")}`,
     pontos_criticos: criticos,
     status_geral: semSubrogacao ? "REPROVADO" : relatorio.status_geral === "APROVADO" ? "APROVADO_RESSALVAS" : relatorio.status_geral,
+  };
+}
+
+// Conferência palavra por palavra (04/11/2026, ver conferenciaPalavras.ts): roda em CÓDIGO sobre o texto oficial da seguradora
+// identificada (cláusula-base + coberturas adicionais) e aponta palavra faltando/diferente que a IA deixou passar. Só quando o
+// contrato chegou como TEXTO (PDF escaneado/imagem não dá para comparar palavra a palavra).
+export function aplicarConferenciaPalavras(relatorio: RelatorioAuditoria, biblioteca: ClausulaReferencia[], textoContrato: string): RelatorioAuditoria {
+  if (!textoContrato.trim() || !biblioteca.length) return relatorio;
+  const norm = (t: string) => t.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const alvo = norm(`${relatorio.tipo_garantia_identificada ?? ""} ${relatorio.clausulas_seguradora_resumo ?? ""}`);
+  const produtos = biblioteca.filter((c) => {
+    const primeira = norm(c.seguradora).split(/\s+/)[0];
+    return primeira.length > 2 && alvo.includes(primeira);
+  });
+  if (!produtos.length) return relatorio;
+  // A seguradora tem vários produtos (ex: Tradicional e Taxa Fixa): vale o que melhor casa com o contrato (menos palavras faltando).
+  let achados: ReturnType<typeof conferirPalavraPorPalavra> = [];
+  let menorFalta = Infinity;
+  for (const c of produtos) {
+    const textos = [c.clausulaBase, ...(c.coberturas ?? []).map((x) => x.texto)];
+    const blocos = textos.flatMap((t) => String(t ?? "").split(/\n\s*\n/)).filter((b) => b.trim());
+    const r = conferirPalavraPorPalavra(blocos, textoContrato);
+    const falta = r.reduce((s, x) => s + x.totalPalavrasFaltando, 0);
+    if (falta < menorFalta) {
+      menorFalta = falta;
+      achados = r;
+    }
+  }
+  if (!achados.length) return relatorio;
+  const detalhe = achados.map((x) => `"${x.bloco.slice(0, 50)}…": ${x.faltas.slice(0, 4).join(" | ")}`).join("; ");
+  const alerta = `Conferência palavra por palavra: ${achados.length} trecho(s) do texto oficial da seguradora com palavra(s) faltando ou diferente(s) no contrato (entre [colchetes] o que falta) — ${detalhe}.`;
+  const grave = achados.some((x) => x.totalPalavrasFaltando >= 15); // uma ou mais frases inteiras faltando
+  const status = relatorio.clausulas_seguradora_status;
+  return {
+    ...relatorio,
+    clausulas_seguradora_status: grave ? "problema" : status === "ok" || status === "nao_avaliado" ? "atencao" : status,
+    clausulas_seguradora_resumo: `${relatorio.clausulas_seguradora_resumo} ${alerta}`,
+    pontos_criticos: [...(relatorio.pontos_criticos ?? []), alerta],
+    paragrafos_texto_oficial: [
+      ...(relatorio.paragrafos_texto_oficial ?? []),
+      ...achados.map((x): ParagrafoOficial => ({ assunto: `Conferência palavra por palavra — ${x.bloco.slice(0, 60)}`, situacao: "divergente", observacao: `Falta/difere: ${x.faltas.join(" | ")}` })),
+    ],
+    status_geral: relatorio.status_geral === "APROVADO" ? "APROVADO_RESSALVAS" : relatorio.status_geral,
   };
 }
 
