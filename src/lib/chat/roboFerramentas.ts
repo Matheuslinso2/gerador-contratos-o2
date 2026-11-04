@@ -39,7 +39,8 @@ function quaseIgual(a: string, b: string) {
   if (Math.abs(a.length - b.length) > 1) return false;
   let i = 0;
   while (i < a.length && i < b.length && a[i] === b[i]) i++;
-  if (a.length === b.length) return a.slice(i + 1) === b.slice(i + 1) || a.slice(i) === b.slice(i);
+  // mesma extensão: uma letra trocada ("canele") ou duas letras vizinhas trocadas de lugar ("wlaker" por "walker")
+  if (a.length === b.length) return a.slice(i + 1) === b.slice(i + 1) || a.slice(i) === b.slice(i) || (a[i] === b[i + 1] && a[i + 1] === b[i] && a.slice(i + 2) === b.slice(i + 2));
   const [curta, longa] = a.length < b.length ? [a, b] : [b, a];
   return curta.slice(i) === longa.slice(i + 1);
 }

@@ -274,8 +274,72 @@ export async function consultarImpostosPagos(e: EntradaImp): Promise<string> {
   });
 }
 
+// ------------------------------------------------------------------ ESTUDO COMPLETO DE UMA IMOBILIÁRIA (uma chamada só)
+export const FERRAMENTA_ESTUDO_IMOBILIARIA: Anthropic.Tool = {
+  name: "estudo_imobiliaria",
+  description:
+    "ESTUDO COMPLETO / RAIO-X de UMA imobiliária ou grupo em UMA chamada: cotações por produto e ano (convertidas, perdidas, em análise), apólices vigentes por produto e seguradora (quantidade, prêmio, comissão), apólices emitidas por ano, propostas em emissão, aluguel por faixa e bairros da Fiança, e sinistros com indenização e sinistralidade. Use SEMPRE que pedirem 'estudo completo', 'raio-x', 'panorama', 'como está a imobiliária X', 'perfil da imobiliária' em vez de fazer várias consultas soltas (isso estoura o tempo). Depois responda com um resumo em poucas linhas, destacando o que mais importa (evolução, concentração em produto/seguradora, taxa de conversão, sinistralidade) e o que não há dado. Para ficha de visita (preço do seguro, região, potencial) chame também ficha_visita.",
+  input_schema: { type: "object", properties: { imobiliaria: { type: "string", description: "Nome da imobiliária ou grupo (a ferramenta soma todas as fichas do grupo)." } }, required: ["imobiliaria"] },
+};
+
+async function cuboParaEstudo(sb: ReturnType<typeof createServiceClient>, p: Record<string, unknown>): Promise<Linha[]> {
+  const { data, error } = await sb.rpc("chat_cubo_consultar", { p: { limite: 300, ...p } });
+  if (error) throw new Error(error.message);
+  return ((data as { linhas?: Linha[] })?.linhas ?? []) as Linha[];
+}
+
+export async function estudoImobiliaria(e: { imobiliaria?: string }): Promise<string> {
+  if (!e.imobiliaria) return JSON.stringify({ erro: "Informe o nome da imobiliária." });
+  const base: Record<string, unknown> = {};
+  const falha = await resolverEntidades(e.imobiliaria, base);
+  if (falha) return falha;
+  const ids = base.entidade_ids;
+  const sb = createServiceClient();
+  const desde = (ano: number) => `${ano}-01-01`;
+  const ano0 = new Date().getFullYear();
+  const [cotacoes, vigentes, emitidas, propostas, faixas, bairros, sin] = await Promise.all([
+    cuboParaEstudo(sb, { fato: "cotacao", entidade_ids: ids, agrupar: ["produto", "ano", "status"], mes_de: desde(ano0 - 2) }),
+    cuboParaEstudo(sb, { fato: "apolice", status: "vigente", entidade_ids: ids, agrupar: ["produto", "seguradora"] }),
+    cuboParaEstudo(sb, { fato: "apolice", entidade_ids: ids, agrupar: ["produto", "ano"], mes_de: desde(ano0 - 3) }),
+    cuboParaEstudo(sb, { fato: "proposta", entidade_ids: ids, agrupar: ["produto"] }),
+    cuboParaEstudo(sb, { fato: "cotacao", produto: "fianca", entidade_ids: ids, agrupar: ["faixa_aluguel"], mes_de: desde(ano0 - 1) }),
+    cuboParaEstudo(sb, { fato: "cotacao", produto: "fianca", entidade_ids: ids, agrupar: ["bairro"], mes_de: desde(ano0 - 1), limite: 8 }),
+    consultarCuboSinistros({ imobiliaria: e.imobiliaria, agrupar: ["produto"], sinistralidade: true, limite: 20 }).then((s) => JSON.parse(s) as Record<string, unknown>).catch(() => null),
+  ]);
+  const n = (v: unknown) => Number(v ?? 0);
+  // cotações: por produto e ano, soma por status
+  const porProdAno = new Map<string, { produto: string; ano: number; total: number; convertidas: number; perdidas: number; emAnalise: number }>();
+  for (const l of cotacoes) {
+    const k = `${l.produto}|${l.ano}`;
+    const o = porProdAno.get(k) ?? { produto: String(l.produto), ano: n(l.ano), total: 0, convertidas: 0, perdidas: 0, emAnalise: 0 };
+    const q = n(l.qtd);
+    o.total += q;
+    const st = String(l.status ?? "");
+    if (/convert|aprov/i.test(st)) o.convertidas += q; else if (/perd|recus/i.test(st)) o.perdidas += q; else o.emAnalise += q;
+    porProdAno.set(k, o);
+  }
+  const cotacoesPorAno = [...porProdAno.values()].sort((a, b) => a.produto.localeCompare(b.produto) || a.ano - b.ano).map((o) => ({ ...o, taxaConversaoPercentual: o.total ? Math.round((o.convertidas / o.total) * 1000) / 10 : null }));
+  const enxuto = (ls: Linha[], campos: string[]) => ls.map((l) => Object.fromEntries(campos.filter((c) => l[c] !== undefined && l[c] !== null).map((c) => [c, l[c]])));
+  return compacto({
+    imobiliaria: base.imobiliariaConsiderada ?? e.imobiliaria,
+    cotacoesPorProdutoEAno: cotacoesPorAno,
+    apolicesVigentes: enxuto(vigentes, ["produto", "seguradora", "qtd", "premio_total", "comissao"]),
+    apolicesEmitidasPorAno: enxuto(emitidas, ["produto", "ano", "qtd", "premio_total", "comissao"]),
+    propostasEmEmissao: enxuto(propostas, ["produto", "qtd", "premio_total"]),
+    fiancaCotacoesPorFaixaDeAluguel: enxuto(faixas, ["faixa_aluguel", "qtd", "aluguel_medio"]),
+    fiancaBairrosMaisCotados: enxuto(bairros, ["bairro", "qtd", "aluguel_medio"]),
+    sinistros: sin ? { total: sin.total, porProduto: sin.linhas, cobertura: sin.cobertura } : "sem dado de sinistro para esta imobiliária",
+    avisos: [
+      "Estudo montado de uma vez a partir dos cubos prontos (atualizados de hora em hora). Cotações dos últimos 3 anos, apólices emitidas dos últimos 4, aluguel e bairros da Fiança dos últimos 2.",
+      "Não some cotação com proposta nem com apólice: são conceitos diferentes. Cite o que ficou sem dado (aluguel só na Fiança; bairro só em parte; sinistralidade só com prêmio das apólices no ERP).",
+      "Comissão e repasse das apólices podem ser citados à equipe; receita realizada, Nibo, imposto e margem são do financeiro e não estão neste estudo.",
+    ],
+  });
+}
+
 export async function executarFerramentaRisco(nome: string, entrada: unknown, verFinanceiro = false): Promise<string | null> {
   try {
+    if (nome === FERRAMENTA_ESTUDO_IMOBILIARIA.name) return await estudoImobiliaria(entrada as { imobiliaria?: string });
     if (nome === FERRAMENTA_CUBO_COBERTURAS.name) return await consultarCuboCoberturas(entrada as EntradaCob);
     if (nome === FERRAMENTA_CUBO_SINISTROS.name) return await consultarCuboSinistros(entrada as EntradaSin);
     const negado = "Imposto, DAS, Nibo e receita realizada são do financeiro da O2 (Matheus, William, Nathalie e Vanessa) e não estão liberados para este perfil.";

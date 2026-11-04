@@ -9,7 +9,7 @@ import { FERRAMENTAS_BUSCA, executarFerramentaBusca } from "./roboBusca";
 import { FERRAMENTA_RELATORIO, executarFerramentaRelatorio } from "./roboRelatorio";
 import { FERRAMENTA_ARQUIVOS, executarFerramentaArquivos } from "./roboArquivos";
 import { FERRAMENTA_PRIMEIRA_COTACAO, FERRAMENTA_CUBO, executarFerramentaAnalises } from "./roboAnalises";
-import { FERRAMENTA_CUBO_COBERTURAS, FERRAMENTA_CUBO_SINISTROS, FERRAMENTA_CUBO_FINANCEIRO, FERRAMENTA_IMPOSTOS_PAGOS, executarFerramentaRisco } from "./roboAnalisesRisco";
+import { FERRAMENTA_CUBO_COBERTURAS, FERRAMENTA_CUBO_SINISTROS, FERRAMENTA_CUBO_FINANCEIRO, FERRAMENTA_IMPOSTOS_PAGOS, FERRAMENTA_ESTUDO_IMOBILIARIA, executarFerramentaRisco } from "./roboAnalisesRisco";
 import { FERRAMENTA_LEGISLACAO, FERRAMENTA_CONCEITOS, executarFerramentaLegislacao, executarFerramentaConceitos } from "./roboLegislacao";
 import { FERRAMENTA_FICHA_VISITA, executarFerramentaFichaVisita } from "./roboFichaVisita";
 import { FERRAMENTA_LOGICA, chamadaTemDadosPessoais, descreverChamada, textoTemDadosPessoais } from "./privacidadePdf";
@@ -91,7 +91,8 @@ Se houver mais de um produto ou mais de um item, uma linha por item. Não repita
 - LEGISLAÇÃO (02/11): perguntas sobre o que a LEI ou a SUSEP diz (Lei do Inquilinato 8.245, garantias locatícias, despejo, Código Civil, Lei 15.040/2024 Marco Legal dos Seguros, prazos do segurador, devolução de prêmio, prescrição, comissão do corretor, fiança locatícia, CNSP/SUSEP, CPC, Juizados, súmulas do STJ) são respondidas com consultar_legislacao, que lê textos oficiais guardados no banco (Planalto, SUSEP, STJ). Responda SOMENTE com o que ela devolver: cite sempre a norma e o artigo ("Lei 15.040, art. 86"), diga a situação (vigente, alterada ou revogada) e passe o link oficial; nunca cite artigo de memória. Lembre que NÃO é parecer jurídico e que a Lei 15.040/2024 já vale desde dez/2025 e revogou os arts. 757 a 802 do Código Civil (para contrato antigo, recomende o jurídico). Se não achar, diga "não encontrei na legislação guardada". Dados da O2 (apólices, parcelas) continuam vindo do ERP, não da lei.
 - VOCABULÁRIO E CONCEITOS DE SEGURO (03/11): "o que é / como funciona" um conceito (seleção adversa, risco moral, sinistralidade, resseguro, reservas, fraude, utilidade esperada) e também lógica do seguro e boas práticas de gestão de carteira → consultar_conceitos_seguro, que lê o livro Seguros e Economia (Contador, ENS, 2023). Cite capítulo e página e deixe claro que é referência acadêmica, não norma.
 - Ao final de qualquer contagem diga de quais fontes/produtos/tipos ela veio e o que ficou de fora.
-- Para qualquer pergunta sobre uma imobiliária, comece por buscar_imobiliaria. Imobiliárias do mesmo grupo (ex.: Ramiro Sá) são somadas e você diz quais fichas entraram.
+- ESTUDO COMPLETO / RAIO-X / PANORAMA / PERFIL de uma imobiliária ou grupo: chame estudo_imobiliaria (UMA chamada, traz cotações por produto e ano, apólices vigentes, emitidas, propostas, aluguel, bairros e sinistros) e responda com um resumo curto. NUNCA tente montar esse estudo com dezenas de consultas soltas: estoura o tempo e a resposta falha. Se o nome parecer ter grafia diferente, a busca já é aproximada: diga como entendeu.
+- Para qualquer outra pergunta sobre uma imobiliária, comece por buscar_imobiliaria. Imobiliárias do mesmo grupo (ex.: Ramiro Sá) são somadas e você diz quais fichas entraram.
 - Pergunta de VALOR de uma imobiliária num mês (comissão efetivada, prêmio, efetivados, cotações) sem citar produto: NÃO responda com um painel só. Consulte TODOS os painéis com consultar_painel na competência — seguro_fianca (parte topImobiliarias), ramos_elementares (partes novos e renovacoes, porImobiliaria), capitalizacao (parte titulos), seguro_auto — procurando a imobiliária por TODOS os nomes das fichas do grupo (use buscar_imobiliaria antes; no painel o nome pode vir diferente, ex.: "Ramiro Sá Imóveis"; procure por um pedaço do nome). Responda com o *total somado* e a quebra por produto, e diga os produtos em que ela não tem registro naquele mês ("sem registro"). Se citarem um produto, responda só dele.
 - Perguntas sobre o que está vigente: use contar_documentos_erp com situacao ["vigente"] e agrupar_por "tipo", e responda separado, no formato "*582 apólices* e *8 endossos* vigentes". Apólices = tipo A (mesma regra da tela ERP > Apólices > Vigentes); endossos = tipos C, D, I, M, R, X somados; faturas = tipo F (só cite se houver). O total da ficha da imobiliária no ERP soma tudo isso junto, por isso é maior que o número de apólices.
 - Quando o dado puder estar defasado (ex.: resumoAtualizadoEm, produção do Corp importada manualmente), diga de quando é.
@@ -118,7 +119,7 @@ export function ferramentasDoRobo(verComissao: boolean, verFinanceiro = verComis
 
 function listaDeFerramentas(verComissao: boolean): Anthropic.Tool[] {
   return verComissao
-    ? [...FERRAMENTAS_ERP, ...FERRAMENTAS_GERAIS, ...FERRAMENTAS_BUSCA, FERRAMENTA_RELATORIO, FERRAMENTA_ARQUIVOS, FERRAMENTA_PRIMEIRA_COTACAO, FERRAMENTA_CUBO, FERRAMENTA_CUBO_COBERTURAS, FERRAMENTA_CUBO_SINISTROS, FERRAMENTA_CUBO_FINANCEIRO, FERRAMENTA_IMPOSTOS_PAGOS, FERRAMENTA_LEGISLACAO, FERRAMENTA_CONCEITOS, FERRAMENTA_FICHA_VISITA, ...FERRAMENTAS]
+    ? [...FERRAMENTAS_ERP, ...FERRAMENTAS_GERAIS, ...FERRAMENTAS_BUSCA, FERRAMENTA_RELATORIO, FERRAMENTA_ARQUIVOS, FERRAMENTA_PRIMEIRA_COTACAO, FERRAMENTA_CUBO, FERRAMENTA_CUBO_COBERTURAS, FERRAMENTA_CUBO_SINISTROS, FERRAMENTA_CUBO_FINANCEIRO, FERRAMENTA_IMPOSTOS_PAGOS, FERRAMENTA_ESTUDO_IMOBILIARIA, FERRAMENTA_LEGISLACAO, FERRAMENTA_CONCEITOS, FERRAMENTA_FICHA_VISITA, ...FERRAMENTAS]
     : [
         ...FERRAMENTAS_ERP,
         ...FERRAMENTAS_GERAIS.filter((f) => f.name !== "consultar_painel_extra"),
@@ -129,6 +130,7 @@ function listaDeFerramentas(verComissao: boolean): Anthropic.Tool[] {
         FERRAMENTA_CUBO,
         FERRAMENTA_CUBO_COBERTURAS,
         FERRAMENTA_CUBO_SINISTROS,
+        FERRAMENTA_ESTUDO_IMOBILIARIA,
         FERRAMENTA_LEGISLACAO, FERRAMENTA_CONCEITOS,
         ...FERRAMENTAS.filter((f) => f.name === "consultar_painel"), // lista reduzida (defesa: hoje toda a equipe @o2 tem comissão e repasse das apólices)
       ];
