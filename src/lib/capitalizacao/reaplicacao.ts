@@ -35,8 +35,29 @@ export type KpisReaplicacao = {
   vigenciaOutrosMeses: { total: number; renovadas: number };
 };
 
+// Quadros "Geral do mês (novos + herança)" e "Herança" (mesmo padrão da Capitalização nova,
+// pedido do Matheus em 04/11/2026): reaplicações lançadas em meses anteriores e ainda sem
+// Renovado/Não renovou seguem como herança até o fechamento. Novos = criados no mês; herança =
+// criados antes e ainda abertos no começo do mês (concluídos neste mês ou depois, ou abertos).
+export type KpisGrupoReaplicacao = {
+  cards: number;
+  renovadas: number; // chegaram em Renovado no mês
+  naoRenovaram: number; // chegaram em Não renovou no mês
+  emAndamento: number; // sem desfecho até o fim do mês
+  taxaRenovacao: number | null;
+  valorRenovado: number;
+  comissaoRenovada: number;
+  valorTitulos: number; // valor de todos os cards do grupo, em qualquer situação
+  comissaoPotencial: number; // comissão de todos os cards do grupo com comissão preenchida
+  imobiliarias: number; // distintas com cards
+};
+export type KpisPorOrigemReaplicacao = { novos: KpisGrupoReaplicacao; heranca: KpisGrupoReaplicacao; geral: KpisGrupoReaplicacao };
+
 export type PainelReaplicacao = {
   competencia: string;
+  // Retratos antigos não têm: a tela cai nos indicadores simples (kpis).
+  porOrigem?: KpisPorOrigemReaplicacao;
+  porOrigemAnterior?: KpisPorOrigemReaplicacao;
   kpis: KpisReaplicacao;
   kpisAnterior: KpisReaplicacao & { competencia: string };
   funil: { statusId: string; nome: string; semantica: "P" | "S" | "F"; quantidadeAtual: number }[];
@@ -153,6 +174,29 @@ function kpis(cards: CardReaplicacao[], competencia: string): KpisReaplicacao {
   };
 }
 
+function kpisGrupo(grupo: CardReaplicacao[], competencia: string): KpisGrupoReaplicacao {
+  const renovadas = grupo.filter((c) => noMes(c, competencia) && c.semantica === "S");
+  const naoRenovaram = grupo.filter((c) => noMes(c, competencia) && c.semantica === "F").length;
+  return {
+    cards: grupo.length,
+    renovadas: renovadas.length,
+    naoRenovaram,
+    emAndamento: grupo.filter((c) => !c.concluidoEm || mesDe(c.concluidoEm) > competencia).length,
+    taxaRenovacao: renovadas.length + naoRenovaram > 0 ? renovadas.length / (renovadas.length + naoRenovaram) : null,
+    valorRenovado: renovadas.reduce((s, c) => s + c.valorTitulo, 0),
+    comissaoRenovada: renovadas.reduce((s, c) => s + c.comissao, 0),
+    valorTitulos: grupo.reduce((s, c) => s + c.valorTitulo, 0),
+    comissaoPotencial: grupo.reduce((s, c) => s + c.comissao, 0),
+    imobiliarias: new Set(grupo.filter((c) => c.imobiliaria !== "—").map((c) => semAcentos(c.imobiliaria))).size,
+  };
+}
+
+function kpisPorOrigem(cards: CardReaplicacao[], competencia: string): KpisPorOrigemReaplicacao {
+  const novos = cards.filter((c) => mesDe(c.criadoEm) === competencia);
+  const heranca = cards.filter((c) => mesDe(c.criadoEm) < competencia && (!c.concluidoEm || mesDe(c.concluidoEm) >= competencia));
+  return { novos: kpisGrupo(novos, competencia), heranca: kpisGrupo(heranca, competencia), geral: kpisGrupo([...novos, ...heranca], competencia) };
+}
+
 function linhas(
   cards: CardReaplicacao[],
   competencia: string,
@@ -203,6 +247,8 @@ export function montarReaplicacao(itensSpa: BitrixItemRaw[], competencia: string
   const doFluxo = recorte(cards, competencia);
   return {
     competencia,
+    porOrigem: kpisPorOrigem(cards, competencia),
+    porOrigemAnterior: kpisPorOrigem(cards, mesAnteriorDe(competencia)),
     kpis: kpis(cards, competencia),
     kpisAnterior: { competencia: mesAnteriorDe(competencia), ...kpis(cards, mesAnteriorDe(competencia)) },
     funil: ETAPAS_REAPLICACAO.map((e) => ({ ...e, quantidadeAtual: contagemPorEtapa.get(e.statusId) ?? 0 })),

@@ -36,7 +36,7 @@ type ComparativoProps = {
 // Linha de variação vs o mês anterior completo. Mês anterior zerado mostra
 // só a diferença (sem %, pra não aparecer "+∞%"); taxa de conversão vem em
 // pontos percentuais.
-function Comparativo({ atual, anterior, tipo, inverso, mesAnterior }: ComparativoProps) {
+export function Comparativo({ atual, anterior, tipo, inverso, mesAnterior }: ComparativoProps) {
   if (atual === null || anterior === null) {
     return <div className={styles.kpiSub}>— vs {mesAnterior}</div>;
   }
@@ -63,7 +63,7 @@ function Comparativo({ atual, anterior, tipo, inverso, mesAnterior }: Comparativ
   );
 }
 
-function Kpi({
+export function Kpi({
   label,
   value,
   sub,

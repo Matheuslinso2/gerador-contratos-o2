@@ -1,6 +1,7 @@
 import styles from "./painel-capitalizacao.module.css";
-import type { PainelReaplicacao } from "@/lib/capitalizacao/reaplicacao";
+import type { KpisGrupoReaplicacao, PainelReaplicacao } from "@/lib/capitalizacao/reaplicacao";
 import type { LinhaStatusCapUnificada } from "@/lib/capitalizacao/statusUnificado";
+import { Comparativo, Kpi } from "./PainelCapitalizacao";
 import StatusCardsTabela, { type LinhaStatus, type RotulosStatus } from "./StatusCardsTabela";
 import TitulosTabela from "./TitulosTabela";
 import ExportarQuadro from "@/components/ExportarQuadro";
@@ -27,20 +28,98 @@ const ROTULOS_REAPLICACAO: RotulosStatus = {
   legendaFechadas: "Reaplicações concluídas (Renovado) no mês — quantidade · % sobre os cards",
 };
 
-function Kpi({ label, value, sub, tone }: { label: string; value: string; sub: string; tone?: "positive" | "negative" | "warning" | "info" }) {
+type LinhaOrigem = {
+  rotulo: string;
+  valor: string;
+  sub: string;
+  div: string | null;
+  tone?: "positive" | "negative" | "warning" | "info";
+  c: React.ReactNode;
+  excel: number | string;
+  excelAnt: number | string;
+};
+
+// Quadros "Geral do mês (novos + herança)" e "Herança" da aba Reaplicação (pedido do Matheus,
+// 04/11/2026; mesmo padrão da Capitalização nova). No geral, cada indicador mostra de onde vem:
+// novos + herança.
+function QuadroOrigemReap({
+  id,
+  titulo,
+  legenda,
+  nota,
+  arquivo,
+  k,
+  ant,
+  partes,
+  mesAnterior,
+  vigencia,
+}: {
+  id: string;
+  titulo: string;
+  legenda: React.ReactNode;
+  nota: string;
+  arquivo: string;
+  k: KpisGrupoReaplicacao;
+  ant?: KpisGrupoReaplicacao;
+  partes?: { novos: KpisGrupoReaplicacao; heranca: KpisGrupoReaplicacao };
+  mesAnterior: string;
+  vigencia?: { total: number; renovadas: number; outros: number; outrosRenovadas: number };
+}) {
+  const comp = (atual: number | null, anterior: number | null | undefined, tipo: "numero" | "moeda" | "pct", inverso?: boolean) =>
+    ant && anterior !== undefined ? <Comparativo atual={atual} anterior={anterior} tipo={tipo} inverso={inverso} mesAnterior={mesAnterior} /> : null;
+  const divisao = (campo: keyof KpisGrupoReaplicacao, moeda = false) => {
+    if (!partes) return null;
+    const f = (v: number | null) => (moeda ? brl(v ?? 0) : n(v ?? 0));
+    return `${f(partes.novos[campo])} novos + ${f(partes.heranca[campo])} herança`;
+  };
+  const linhas: LinhaOrigem[] = [
+    { rotulo: "Cards", valor: n(k.cards), sub: "reaplicações do grupo", div: divisao("cards"), c: comp(k.cards, ant?.cards, "numero"), excel: k.cards, excelAnt: ant?.cards ?? "" },
+    { rotulo: "Renovadas", valor: n(k.renovadas), sub: "chegaram em Renovado no mês", div: divisao("renovadas"), tone: "positive", c: comp(k.renovadas, ant?.renovadas, "numero"), excel: k.renovadas, excelAnt: ant?.renovadas ?? "" },
+    { rotulo: "Não renovaram", valor: n(k.naoRenovaram), sub: "chegaram em Não renovou no mês", div: divisao("naoRenovaram"), tone: k.naoRenovaram > 0 ? "negative" : undefined, c: comp(k.naoRenovaram, ant?.naoRenovaram, "numero", true), excel: k.naoRenovaram, excelAnt: ant?.naoRenovaram ?? "" },
+    { rotulo: "Em andamento", valor: n(k.emAndamento), sub: "ainda sem Renovado ou Não renovou", div: divisao("emAndamento"), tone: "warning", c: comp(k.emAndamento, ant?.emAndamento, "numero"), excel: k.emAndamento, excelAnt: ant?.emAndamento ?? "" },
+    { rotulo: "Taxa de renovação", valor: pct(k.taxaRenovacao), sub: "renovadas ÷ (renovadas + não renovaram)", div: null, c: comp(k.taxaRenovacao, ant?.taxaRenovacao, "pct"), excel: pct(k.taxaRenovacao), excelAnt: ant ? pct(ant.taxaRenovacao) : "" },
+    { rotulo: "Valor renovado", valor: brl(k.valorRenovado), sub: "valor atualizado do título quando houver", div: divisao("valorRenovado", true), c: comp(k.valorRenovado, ant?.valorRenovado, "moeda"), excel: k.valorRenovado, excelAnt: ant?.valorRenovado ?? "" },
+    { rotulo: "Comissão renovada", valor: brl(k.comissaoRenovada), sub: "dos cards renovados no mês", div: divisao("comissaoRenovada", true), tone: "positive", c: comp(k.comissaoRenovada, ant?.comissaoRenovada, "moeda"), excel: k.comissaoRenovada, excelAnt: ant?.comissaoRenovada ?? "" },
+    { rotulo: "Valor dos títulos", valor: brl(k.valorTitulos), sub: "de todos os cards, em qualquer situação", div: divisao("valorTitulos", true), tone: "info", c: comp(k.valorTitulos, ant?.valorTitulos, "moeda"), excel: k.valorTitulos, excelAnt: ant?.valorTitulos ?? "" },
+    { rotulo: "Comissão potencial", valor: brl(k.comissaoPotencial), sub: "todos os cards (comissão preenchida)", div: divisao("comissaoPotencial", true), tone: "info", c: comp(k.comissaoPotencial, ant?.comissaoPotencial, "moeda"), excel: k.comissaoPotencial, excelAnt: ant?.comissaoPotencial ?? "" },
+  ];
   return (
-    <div className={styles.kpi}>
-      <div className={styles.kpiLabel}>{label}</div>
-      <div className={`${styles.kpiValue} ${styles.num} ${tone ? styles[tone] : ""}`}>{value}</div>
-      <div className={styles.kpiSub}>{sub}</div>
-    </div>
+    <section id={id} className={styles.section}>
+      <div className={styles.sectionHead}>
+        <h2>
+          {titulo}
+          <InfoLegenda titulo={titulo}>{legenda}</InfoLegenda>
+        </h2>
+        <ExportarQuadro
+          quadroId={`${id}-kpis`}
+          corFundo="#f7f8fa"
+          nomeArquivo={arquivo}
+          dadosExcel={linhas.map((l) => ({ indicador: l.rotulo, valor: l.excel, ...(partes ? { novos_mais_heranca: l.div ?? "" } : {}), mes_anterior: l.excelAnt }))}
+          nomeAbaExcel={titulo.slice(0, 31)}
+        />
+      </div>
+      <p style={{ fontSize: 11.5, color: "var(--ink-muted, #5b6b7c)", margin: "0 0 8px" }}>
+        {nota}
+        {vigencia && (
+          <>
+            {" "}
+            Vigência neste mês: {n(vigencia.total)} ({n(vigencia.renovadas)} renovadas); com vigência em outros meses (negociação antecipada): {n(vigencia.outros)} ({n(vigencia.outrosRenovadas)} renovadas).
+          </>
+        )}
+      </p>
+      <div id={`${id}-kpis`} className={styles.kpis}>
+        {linhas.map((l) => (
+          <Kpi key={l.rotulo} label={l.rotulo} value={l.valor} sub={l.div ?? l.sub} tone={l.tone} comparativo={l.c} />
+        ))}
+      </div>
+    </section>
   );
 }
 
 // Aba "Reaplicação" do painel de Capitalização (funil Reaplicações, categoria 38). Competência =
 // mês da vigência do título; o fluxo do mês é fatiado em vigência neste mês x outros meses.
 export default function PainelReaplicacaoView({ painel, imobiliarias }: { painel: PainelReaplicacao; imobiliarias?: LinhaStatusCapUnificada[] }) {
-  const { kpis, kpisAnterior, funil, statusSeguradoras, titulos } = painel;
+  const { kpis, kpisAnterior, funil, statusSeguradoras, titulos, porOrigem: po, porOrigemAnterior: poAnt } = painel;
   const linhasImob: LinhaStatus[] = imobiliarias ?? painel.statusImobiliarias;
   const mesAnterior = rotuloMes(kpisAnterior.competencia);
   const maior = Math.max(1, ...funil.map((e) => e.quantidadeAtual));
@@ -61,32 +140,67 @@ export default function PainelReaplicacaoView({ painel, imobiliarias }: { painel
 
   return (
     <>
-      <section id="quadro-reap-resumo" className={styles.section}>
-        <div className={styles.sectionHead}>
-          <h2>
-            Reaplicações do mês
-            <InfoLegenda titulo="Reaplicações do mês">
-              Funil Reaplicações da Capitalização: cada card é um título que vence e precisa ser reaplicado. Cards = criados no mês mais os herdados ainda em aberto. Renovadas = chegaram em Renovado no mês; Não renovaram = chegaram em Não renovou no mês; taxa = renovadas ÷ (renovadas + não renovaram). Valor = valor atualizado do título, quando preenchido, senão o valor do título. Competência = mês da vigência: a linha de vigência separa o que vence neste mês do que vence em outros meses (negociação antecipada).
-            </InfoLegenda>
-          </h2>
-          <div className={styles.note}>competência = mês da vigência do título</div>
-        </div>
-        <div className={styles.kpis}>
-          <Kpi label="Entradas no mês" value={n(kpis.entradas)} sub={`cards criados · ${n(kpisAnterior.entradas)} em ${mesAnterior}`} tone="info" />
-          <Kpi label="Renovadas" value={n(kpis.renovadas)} sub={`${n(kpisAnterior.renovadas)} em ${mesAnterior}`} tone="positive" />
-          <Kpi label="Não renovaram" value={n(kpis.naoRenovaram)} sub={`${n(kpisAnterior.naoRenovaram)} em ${mesAnterior}`} tone={kpis.naoRenovaram > 0 ? "negative" : undefined} />
-          <Kpi label="Taxa de renovação" value={pct(kpis.taxaRenovacao)} sub="renovadas ÷ (renovadas + não renovaram)" />
-          <Kpi label="Em andamento" value={n(kpis.emAndamento)} sub="ainda sem Renovado ou Não renovou" tone="warning" />
-          <Kpi label="Valor renovado" value={brl(kpis.valorRenovado)} sub="valor atualizado do título quando houver" />
-          <Kpi label="Comissão renovada" value={brl(kpis.comissaoRenovada)} sub="dos cards renovados no mês" tone="positive" />
-          <Kpi
-            label="Vigência neste mês"
-            value={n(kpis.vigenciaNoMes.total)}
-            sub={`${n(kpis.vigenciaNoMes.renovadas)} renovadas · ${n(kpis.vigenciaOutrosMeses.total)} com vigência em outros meses (${n(kpis.vigenciaOutrosMeses.renovadas)} renovadas)`}
-            tone="info"
+      {po ? (
+        <>
+          <QuadroOrigemReap
+            id="quadro-reap-geral"
+            titulo="Geral do mês (novos + herança)"
+            arquivo={arquivo("geral")}
+            k={po.geral}
+            ant={poAnt?.geral}
+            partes={po}
+            mesAnterior={mesAnterior}
+            vigencia={{ total: kpis.vigenciaNoMes.total, renovadas: kpis.vigenciaNoMes.renovadas, outros: kpis.vigenciaOutrosMeses.total, outrosRenovadas: kpis.vigenciaOutrosMeses.renovadas }}
+            nota={`Tudo o que foi trabalhado no mês: as ${n(po.novos.cards)} reaplicações criadas no mês mais as ${n(po.heranca.cards)} criadas antes que ainda estavam em aberto no começo do mês. Cada indicador soma os dois e mostra a divisão.`}
+            legenda={
+              <>
+                Funil Reaplicações da Capitalização: cada card é um título que vence e precisa ser reaplicado. Soma dos cards NOVOS (criados no mês) com a HERANÇA (criados em meses anteriores e ainda sem Renovado nem Não renovou no começo do mês — seguem como herança até o fechamento). Cards: {n(po.novos.cards)} novos + {n(po.heranca.cards)} herança = {n(po.geral.cards)}. Renovadas: chegaram em Renovado no mês — {n(po.novos.renovadas)} + {n(po.heranca.renovadas)} = {n(po.geral.renovadas)}. Não renovaram: chegaram em Não renovou no mês — {n(po.novos.naoRenovaram)} + {n(po.heranca.naoRenovaram)} = {n(po.geral.naoRenovaram)}. Em andamento: sem desfecho até o fim do mês — {n(po.novos.emAndamento)} + {n(po.heranca.emAndamento)} = {n(po.geral.emAndamento)}. Taxa = renovadas ÷ (renovadas + não renovaram). Valor = valor atualizado do título, quando preenchido, senão o valor do título. Valor dos títulos e comissão potencial somam todos os cards do grupo, em qualquer situação. As setas comparam com o mês anterior completo. Competência = mês da vigência: a nota separa o que vence neste mês do que vence em outros meses.
+              </>
+            }
           />
-        </div>
-      </section>
+          <QuadroOrigemReap
+            id="quadro-reap-heranca"
+            titulo="Herança (cards de meses anteriores)"
+            arquivo={arquivo("heranca")}
+            k={po.heranca}
+            ant={poAnt?.heranca}
+            mesAnterior={mesAnterior}
+            nota="Só as reaplicações criadas em meses anteriores que ainda estavam em aberto no começo do mês: o que delas foi renovado, não renovou ou continua em andamento neste mês."
+            legenda={
+              <>
+                Mesmos indicadores do quadro geral, só da herança: reaplicações criadas antes deste mês e ainda sem Renovado nem Não renovou no começo dele ({n(po.heranca.cards)} cards). Renovadas ({n(po.heranca.renovadas)}) e não renovaram ({n(po.heranca.naoRenovaram)}) contam pelo mês em que o card chegou à etapa; em andamento ({n(po.heranca.emAndamento)}) são os que seguem sem desfecho e continuam como herança no mês seguinte. As setas comparam com a herança do mês anterior.
+              </>
+            }
+          />
+        </>
+      ) : (
+        <section id="quadro-reap-resumo" className={styles.section}>
+          <div className={styles.sectionHead}>
+            <h2>
+              Reaplicações do mês
+              <InfoLegenda titulo="Reaplicações do mês">
+                Funil Reaplicações da Capitalização: cada card é um título que vence e precisa ser reaplicado. Cards = criados no mês mais os herdados ainda em aberto. Renovadas = chegaram em Renovado no mês; Não renovaram = chegaram em Não renovou no mês; taxa = renovadas ÷ (renovadas + não renovaram). Valor = valor atualizado do título, quando preenchido, senão o valor do título. Competência = mês da vigência: a linha de vigência separa o que vence neste mês do que vence em outros meses (negociação antecipada).
+              </InfoLegenda>
+            </h2>
+            <div className={styles.note}>competência = mês da vigência do título</div>
+          </div>
+          <div className={styles.kpis}>
+            <Kpi label="Entradas no mês" value={n(kpis.entradas)} sub={`cards criados · ${n(kpisAnterior.entradas)} em ${mesAnterior}`} tone="info" />
+            <Kpi label="Renovadas" value={n(kpis.renovadas)} sub={`${n(kpisAnterior.renovadas)} em ${mesAnterior}`} tone="positive" />
+            <Kpi label="Não renovaram" value={n(kpis.naoRenovaram)} sub={`${n(kpisAnterior.naoRenovaram)} em ${mesAnterior}`} tone={kpis.naoRenovaram > 0 ? "negative" : undefined} />
+            <Kpi label="Taxa de renovação" value={pct(kpis.taxaRenovacao)} sub="renovadas ÷ (renovadas + não renovaram)" />
+            <Kpi label="Em andamento" value={n(kpis.emAndamento)} sub="ainda sem Renovado ou Não renovou" tone="warning" />
+            <Kpi label="Valor renovado" value={brl(kpis.valorRenovado)} sub="valor atualizado do título quando houver" />
+            <Kpi label="Comissão renovada" value={brl(kpis.comissaoRenovada)} sub="dos cards renovados no mês" tone="positive" />
+            <Kpi
+              label="Vigência neste mês"
+              value={n(kpis.vigenciaNoMes.total)}
+              sub={`${n(kpis.vigenciaNoMes.renovadas)} renovadas · ${n(kpis.vigenciaOutrosMeses.total)} com vigência em outros meses (${n(kpis.vigenciaOutrosMeses.renovadas)} renovadas)`}
+              tone="info"
+            />
+          </div>
+        </section>
+      )}
 
       <section id="quadro-reap-funil" className={styles.section}>
         <div className={styles.sectionHead}>
