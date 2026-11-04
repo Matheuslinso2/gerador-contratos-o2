@@ -2,7 +2,8 @@
 // (Consultas → Gerenciador de Relatórios → Comissões → Recebidas / Pendentes) e casa com documentos e parcelas.
 // uso: npx tsx --require ./scripts/base-unica/_sem-server-only.cjs scripts/erp/carregar-comissoes-corp.ts <pasta> [--gravar]
 //   <pasta> com comissoes_recebidas_AAAA.xlsx (baixa por data de quitação, um arquivo por ano) e comissoes_pendentes.xlsx.
-// Recebidas: substitui as linhas do mesmo ano (o Corp ainda mexe em baixas do ano). Pendentes: substitui tudo (retrato).
+// Recebidas e Pendentes: SINCRONIZA por diferença (04/11/2026) — só apaga o que saiu do arquivo e só insere o que é novo. Antes apagava o ano inteiro e reinseria
+// (43.883 linhas a cada 2 h); o ON DELETE CASCADE apagava também as baixas (erp_comissao_recebimentos) e a auditoria gravava ~400 mil linhas por dia.
 // Arquivo que não mudou (mesmo md5 da última carga) é pulado.
 process.loadEnvFile(".env.local");
 import fs from "node:fs";
@@ -57,6 +58,39 @@ function lerLinhas(arq: string, situacao: "recebida" | "pendente") {
   return saida;
 }
 
+// ---- sincronização por diferença ----
+const COLS = ["situacao", "ramo", "seg_abrev", "data", "nosso_numero_corp", "cliente", "cpf_cnpj", "tipo", "apolice", "endosso", "parcela_n", "parcelas_total", "parcela_texto", "venc_parcela", "dt_proposta", "inicio_vig", "fim_vig", "dt_emissao", "tipo_documento", "produtor", "agente", "pct_part", "base_com", "valor", "pct_estim", "pct_rec", "pct_com_doc", "pr_liquido", "canal", "prod_indireto", "cancelado", "obs"] as const;
+const norm = (v: unknown): string => {
+  if (v === null || v === undefined || v === "") return "";
+  if (typeof v === "number") return Number.isFinite(v) ? v.toFixed(2) : "";
+  const txt = String(v).trim();
+  // numeric do banco chega como texto ("12.50"): normaliza para 2 casas; datas (AAAA-MM-DD) e textos ficam como estão
+  if (/^-?\d+\.\d+$/.test(txt)) return Number(txt).toFixed(2);
+  return txt;
+};
+const chaveDe = (l: Record<string, unknown>) => COLS.map((c) => norm(l[c])).join("|");
+
+/** Troca só o que mudou: apaga as linhas do banco que não estão mais no arquivo e insere as que são novas (linhas iguais ficam intactas, com documento/parcela/baixa já ligados). */
+async function sincronizar(sb: ReturnType<typeof createServiceClient>, situacao: "recebida" | "pendente", ano: string | null, linhas: Record<string, unknown>[], ensaio = false) {
+  const existentes = new Map<string, string[]>();
+  let total = 0;
+  for (let de = 0; ; de += 1000) {
+    let q = sb.from("erp_corp_comissoes").select(["id", ...COLS].join(",")).eq("situacao", situacao).order("id").range(de, de + 999);
+    if (ano) q = q.gte("data", `${ano}-01-01`).lte("data", `${ano}-12-31`);
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+    for (const x of (data ?? []) as unknown as Record<string, unknown>[]) { const k = chaveDe(x); const a = existentes.get(k) ?? []; a.push(String(x.id)); existentes.set(k, a); total++; }
+    if (!data || data.length < 1000) break;
+  }
+  const novas: Record<string, unknown>[] = [];
+  for (const l of linhas) { const a = existentes.get(chaveDe(l)); if (a && a.length) a.pop(); else novas.push(l); }
+  const apagar = [...existentes.values()].flat();
+  if (ensaio) { console.log(`  ENSAIO da diferença (${situacao}${ano ? " " + ano : ""}): banco ${total} · arquivo ${linhas.length} · iguais ${linhas.length - novas.length} · apagaria ${apagar.length} · inseriria ${novas.length} (nada foi gravado)`); return; }
+  for (let i = 0; i < apagar.length; i += 500) { const { error } = await sb.from("erp_corp_comissoes").delete().in("id", apagar.slice(i, i + 500)); if (error) throw new Error(error.message); }
+  for (let i = 0; i < novas.length; i += 1000) { const { error } = await sb.from("erp_corp_comissoes").insert(novas.slice(i, i + 1000)); if (error) throw new Error(`lote ${i}: ${error.message}`); }
+  console.log(`  sincronizado (${situacao}${ano ? " " + ano : ""}): banco ${total} · arquivo ${linhas.length} · iguais ${linhas.length - novas.length} · apagadas ${apagar.length} · novas ${novas.length}`);
+}
+
 // casamento em lotes (cada chamada cabe no tempo da API do banco)
 async function casarEmLotes(sb: ReturnType<typeof createServiceClient>) {
   // conferir: cada baixa vira cheia / pró-labore pago direto (diferença = pró-labore da imob × seguradora) / divergente
@@ -77,6 +111,9 @@ async function casarEmLotes(sb: ReturnType<typeof createServiceClient>) {
   console.log("conferência ERP × Power BI (tela):", r3.error ? r3.error.message : r3.data);
   const r2 = await sb.rpc("erp_atualizar_baixa_corp_mensal");
   console.log("baixa mensal (tela de conferência):", r2.error ? r2.error.message : r2.data);
+  // parcela avisada como inadimplente pela seguradora que o Corp acabou de baixar (comissão recebida) = o cliente pagou: regulariza o aviso
+  const r4 = await sb.rpc("erp_cruzar_inadimplencia");
+  console.log("inadimplência avisada pelas seguradoras (ligar/regularizar):", r4.error ? r4.error.message : JSON.stringify(r4.data));
 }
 
 async function main() {
@@ -94,20 +131,9 @@ async function main() {
     const linhas = lerLinhas(arq, pendente ? "pendente" : "recebida");
     const soma = linhas.reduce((s, l) => s + (l.valor ?? 0), 0);
     console.log(`${f}: ${linhas.length} linhas, soma ${soma.toFixed(2)}`);
-    if (!gravar) continue;
-    // apaga o que este arquivo substitui
-    if (pendente) {
-      const { error } = await sb.from("erp_corp_comissoes").delete().eq("situacao", "pendente");
-      if (error) throw new Error(error.message);
-    } else {
-      const ano = f.match(/(\d{4})/)![1];
-      const { error } = await sb.from("erp_corp_comissoes").delete().eq("situacao", "recebida").gte("data", `${ano}-01-01`).lte("data", `${ano}-12-31`);
-      if (error) throw new Error(error.message);
-    }
-    for (let i = 0; i < linhas.length; i += 1000) {
-      const { error } = await sb.from("erp_corp_comissoes").insert(linhas.slice(i, i + 1000));
-      if (error) throw new Error(`${f} lote ${i}: ${error.message}`);
-    }
+    if (!gravar) { if (process.argv.includes("--diff")) await sincronizar(sb, pendente ? "pendente" : "recebida", pendente ? null : f.match(/(\d{4})/)![1], linhas, true); continue; }
+    // sincroniza por diferença (não apaga nem reinsere o que não mudou)
+    await sincronizar(sb, pendente ? "pendente" : "recebida", pendente ? null : f.match(/(\d{4})/)![1], linhas);
     estado[f] = md5;
     mudou = true;
   }
