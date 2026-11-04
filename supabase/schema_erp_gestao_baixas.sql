@@ -85,3 +85,9 @@
 -- 02/11/2026 — (d) erp_negocio_emails_ligar (lote EMAIL-*: e-mails com documento entram na trilha do negócio); (e) view erp_negocio_comparacao_cotacao_apolice (prêmio da cotação da planilha × apólice ligada).
 -- 02/11/2026 — tabelas de ARQUIVO erp_planilha_abas / erp_planilha_linhas (todas as abas e colunas das planilhas congeladas, lote PLAN-0211; script scripts/erp/arquivar-planilhas-cotacao.mjs).
 -- erp_negocio_planilha_por_apolice_ligar = linha arquivada com APÓLICE ↔ apólice do ERP pelo número, conferida pelo CPF (lote PLANAPO-*; ref = 'arquivo|aba|linha').
+-- 04/11 (Matheus: 'quero que a baixa seja automática, principalmente quando temos vínculos confirmados'): erp_baixa_erp_processar_base ganhou a regra
+--   'vinculo_confirmado' = linha 'divergente' com parcela identificada E extrato com entrou_banco_em → baixada pelo valor recebido, diferença no motivo
+--   (pago X% × documento Y%) para conferir; erp_baixa_automatica_aplicar/_rodar/_ensaio aceitam conferencia 'divergente'; a rodada também fecha extrato que já passa
+--   no portão; aplicar só aprova o extrato quando não sobra linha identificada (não estorno) sem recebimento (corrige fechamento indevido do extrato Bradesco de set/26).
+--   1ª rodada: ALLI 5, ICAT 8, SUHA 10, ZURI 8 extratos fechados; 44 linhas baixadas (29 Zurich, 11 Suhai).
+-- 04/11 erp_extratos_duplicado_de: erp_extratos_seguradora.duplicado_de_id liga as cópias 'IGNORADO 28/10' (Drive) ao extrato original (portal/e-mail). Atenção: a marca IGNORADO pode estar no MEIO da observação.
