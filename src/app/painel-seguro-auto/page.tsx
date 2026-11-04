@@ -9,6 +9,7 @@ import { pediuAtualizacao, retratoRecente } from "@/lib/retratoPaineis";
 
 import { competenciaAtual, competenciaValida, montarPainelSeguroAuto, type PainelSeguroAuto as PainelSeguroAutoData } from "@/lib/seguroAuto/painel";
 import PainelSeguroAuto from "./PainelSeguroAuto";
+import RoboDoPainelGate from "@/components/chat/RoboDoPainelGate";
 import SeletorCompetencia from "./SeletorCompetencia";
 import AtualizarAgora from "./AtualizarAgora";
 import styles from "./painel-seguro-auto.module.css";
@@ -124,6 +125,10 @@ export default async function PainelSeguroAutoPage({
               <br />
               {dados && <>Atualizado em {new Date(dados.atualizadoEm).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</>}
             </div>
+          </div>
+
+          <div style={{ margin: "0 0 18px" }}>
+            <RoboDoPainelGate painelId="auto" competencia={competencia} />
           </div>
 
           {erro && (

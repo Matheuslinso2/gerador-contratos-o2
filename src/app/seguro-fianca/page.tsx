@@ -5,6 +5,7 @@ import { signOut } from "../actions";
 import AppHeader from "@/components/AppHeader";
 import PageHeader from "@/components/PageHeader";
 import { IconShield } from "@/components/icons";
+import RoboDoPainelGate from "@/components/chat/RoboDoPainelGate";
 import SeletorCompetencia from "./SeletorCompetencia";
 import AtualizarAgora from "./AtualizarAgora";
 import InfoLegenda from "@/components/InfoLegenda";
@@ -962,6 +963,10 @@ export default async function SeguroFiancaPage({
                 <>Nenhum card registrado nesta competência</>
               )}
             </div>
+          </div>
+
+          <div style={{ margin: "0 0 18px" }}>
+            <RoboDoPainelGate painelId="fianca" competencia={competencia} />
           </div>
 
           {erro && (

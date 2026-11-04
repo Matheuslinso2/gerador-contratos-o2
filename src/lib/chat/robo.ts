@@ -12,6 +12,7 @@ import { FERRAMENTA_PRIMEIRA_COTACAO, FERRAMENTA_CUBO, executarFerramentaAnalise
 import { FERRAMENTA_CUBO_COBERTURAS, FERRAMENTA_CUBO_SINISTROS, FERRAMENTA_CUBO_FINANCEIRO, FERRAMENTA_IMPOSTOS_PAGOS, FERRAMENTA_ESTUDO_IMOBILIARIA, executarFerramentaRisco } from "./roboAnalisesRisco";
 import { FERRAMENTA_LEGISLACAO, FERRAMENTA_CONCEITOS, executarFerramentaLegislacao, executarFerramentaConceitos } from "./roboLegislacao";
 import { FERRAMENTA_FICHA_VISITA, executarFerramentaFichaVisita } from "./roboFichaVisita";
+import { PAINEIS_ROBO, type ContextoPainel } from "./paineis";
 import { FERRAMENTA_LOGICA, chamadaTemDadosPessoais, descreverChamada, textoTemDadosPessoais } from "./privacidadePdf";
 
 // Robô O2 do chat da equipe (Fase 2, 29/10/2026). Mesmo "cérebro" da IA do WhatsApp (painéis + tabelas do
@@ -25,7 +26,7 @@ const MODELO = "claude-sonnet-5-5";
 
 export type TurnoChat = { role: "user" | "assistant"; content: string };
 
-export function systemPrompt(verComissao: boolean, verFinanceiro = verComissao) {
+function promptBase(verComissao: boolean, verFinanceiro = verComissao) {
   return `Você é o Robô O2, o assistente do chat interno da equipe da O2 Seguros (corretora de seguros imobiliários do Rio de Janeiro). Responde perguntas dos colegas sobre os dados que existem no Workspace e no ERP O2.
 
 CONCEITOS DA O2 — NUNCA MISTURAR (cotação é cotação, proposta é proposta, apólice é apólice)
@@ -111,6 +112,27 @@ ESTILO
 - Hoje é ${new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "full" }).format(new Date())}.`;
 }
 
+// Robô dentro de um painel (04/11/2026): mesmas regras, mesmos níveis de acesso e mesmas ferramentas do chat da
+// equipe; só acrescenta o FOCO no painel que a pessoa está olhando e na competência (mês) da tela.
+function blocoDoPainel(ctx: ContextoPainel): string {
+  const p = PAINEIS_ROBO[ctx.id];
+  const [ano, mes] = ctx.competencia.split("-");
+  return `
+
+FOCO NESTE PAINEL (pedido do Matheus, 04/11/2026)
+- Você está embutido no painel "${p.nome}" do Workspace, na competência ${mes}/${ano} (${ctx.competencia}). A pessoa está olhando esta tela agora: "este painel", "este mês", "aqui" e perguntas sem outro recorte falam DELE.
+- O painel mede: ${p.oQueMede}
+- Comece SEMPRE por consultar_painel com painel="${p.painel}" e competencia="${ctx.competencia}" (para uma parte grande use "caminho" e "filtrar_texto"). O número do painel é o oficial: é o que a pessoa vê na tela; cite-o como "neste painel".${p.produto ? ` Só vá a producao_resolvida (produto "${p.produto}") ou ao ERP quando a pergunta pedir algo que o painel não mostra (cotação de uma pessoa, histórico de meses, apólice emitida).` : ""}
+- COTAÇÃO ESPECÍFICA (a equipe pode consultar TODO nível de informação de uma cotação, 04/11/2026): quando a pergunta for sobre uma cotação/card/cliente deste painel, traga tudo o que existir, cada coisa da sua fonte, e diga o que não achou: (1) dados do card, etapa, responsável e histórico de etapas e comentários: foto do card (buscar_arquivos_documento, tipo_documento "card") e o painel; (2) ÚLTIMO CONTATO: Ramos tem ultimoContato/diasSemContato em negociacoes; para os demais use o e-mail mais recente do card em bitrix_email_mensagens (item_id = nº do card, entity_type_id do produto) e o contato mais recente em erp_emails; (3) E-MAILS: bitrix_email_mensagens (trocados pelo card), erp_emails e erp_email_ligacoes (ligações SUGERIDAS por CPF ou nº de apólice, nunca chame de vínculo confirmado): remetente, destinatários, assunto, trecho e data (o corpo completo do e-mail não está disponível); (4) ARQUIVOS: buscar_arquivos_documento (lote, card, proposta, apólice, endosso) com link de download; (5) ITENS do lote de Ramos: producao_itens; (6) pessoa: buscar_pessoa. Dados pessoais só em texto.
+- Mês diferente do da tela: use a competência pedida em consultar_painel e diga que é outro mês.
+- Pergunta de outro produto ou assunto: responda normalmente (você tem as mesmas funções do chat), mas avise em uma linha que saiu deste painel.
+- Resposta curta, com o número-chave em negrito e uma frase de leitura (o que chama atenção). Sem repetir a tela inteira.`;
+}
+
+export function systemPrompt(verComissao: boolean, verFinanceiro = verComissao, painel?: ContextoPainel | null) {
+  return promptBase(verComissao, verFinanceiro) + (painel ? blocoDoPainel(painel) : "");
+}
+
 // Conjunto de ferramentas e roteamento do robô: usados pela produção e pelos testes (mesmo código, mesmo comportamento).
 export function ferramentasDoRobo(verComissao: boolean, verFinanceiro = verComissao): Anthropic.Tool[] {
   const lista = listaDeFerramentas(verComissao);
@@ -190,7 +212,7 @@ export type RespostaRobo = {
   fontes: string[];
 };
 
-export async function responderComoRobo(email: string, historico: TurnoChat[]): Promise<RespostaRobo> {
+export async function responderComoRobo(email: string, historico: TurnoChat[], painel?: ContextoPainel | null): Promise<RespostaRobo> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY não configurada");
   // verComissao = percentuais e valores das comissões e repasses das APÓLICES (nível 1, toda a equipe @o2); verFinanceiro = conta/Nibo/baixas/receita/imposto/margem
@@ -214,7 +236,7 @@ export async function responderComoRobo(email: string, historico: TurnoChat[]): 
     resposta = await anthropic.messages.create({
       model: MODELO,
       max_tokens: 2000,
-      system: [{ type: "text", text: systemPrompt(verComissao, verFinanceiro), cache_control: { type: "ephemeral" } }],
+      system: [{ type: "text", text: systemPrompt(verComissao, verFinanceiro, painel), cache_control: { type: "ephemeral" } }],
       tools: ferramentas,
       tool_choice: semFerramentas ? { type: "none" } : { type: "auto" },
       messages: mensagens,
@@ -264,7 +286,7 @@ export async function responderComoRobo(email: string, historico: TurnoChat[]): 
       const final = await anthropic.messages.create({
         model: MODELO,
         max_tokens: 1500,
-        system: [{ type: "text", text: systemPrompt(verComissao, verFinanceiro), cache_control: { type: "ephemeral" } }],
+        system: [{ type: "text", text: systemPrompt(verComissao, verFinanceiro, painel), cache_control: { type: "ephemeral" } }],
         tools: ferramentas,
         tool_choice: { type: "none" },
         messages: historicoFinal,

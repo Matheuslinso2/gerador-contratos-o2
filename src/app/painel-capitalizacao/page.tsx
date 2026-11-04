@@ -8,6 +8,7 @@ import { signOut } from "../actions";
 import { pediuAtualizacao, retratoRecente } from "@/lib/retratoPaineis";
 import AtualizarAgora from "@/components/AtualizarAgora";
 import { competenciaAtual, competenciaValida, montarPainelCapitalizacao, type PainelCapitalizacao as PainelCapitalizacaoData } from "@/lib/capitalizacao/painel";
+import RoboDoPainelGate from "@/components/chat/RoboDoPainelGate";
 import PainelCapitalizacao from "./PainelCapitalizacao";
 import { unificarStatusImobiliariasCap } from "@/lib/capitalizacao/statusUnificado";
 import AbasCapitalizacao from "./AbasCapitalizacao";
@@ -145,6 +146,10 @@ export default async function PainelCapitalizacaoPage({
               </div>
               {dados && <>Atualizado em {new Date(dados.atualizadoEm).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</>}
             </div>
+          </div>
+
+          <div style={{ margin: "0 0 18px" }}>
+            <RoboDoPainelGate painelId="capitalizacao" competencia={competencia} />
           </div>
 
           {erro && (

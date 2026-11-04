@@ -17,6 +17,7 @@ import InfoLegenda from "@/components/InfoLegenda";
 import AtualizarAgora from "@/components/AtualizarAgora";
 import { IconFlame } from "@/components/icons";
 import ImobiliariasRamosTabela from "./ImobiliariasRamosTabela";
+import RoboDoPainel from "@/components/chat/RoboDoPainel";
 import type { ImobiliariaUnificada } from "@/lib/ramos-elementares/imobiliariasUnificadas";
 
 // Itens (endereços) de uma população: cotados e contratados, com o aviso de
@@ -1957,6 +1958,9 @@ export default function PainelRamosElementares({
         </div>
       </div>
 
+      <div style={{ margin: "0 0 14px" }}>
+        <RoboDoPainel painelId="ramos" competencia={competencia} />
+      </div>
       <div
         className={`${styles.estadoFonte} ${origem === "snapshot" || origem === "indisponivel" ? styles.estadoFonteAlerta : ""}`}
       >

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { chatVisivelPara } from "@/lib/chat/acesso";
 import { roboLiberadoPara } from "@/lib/chat/niveisAcesso";
 import { responderComoRobo, type TurnoChat } from "@/lib/chat/robo";
+import { contextoPainelValido } from "@/lib/chat/paineis";
 
 export const maxDuration = 120;
 
@@ -18,7 +19,9 @@ export async function POST(req: Request) {
   // Robô O2 só para e-mail @o2seguros.com.br (níveis em lib/chat/niveisAcesso.ts); o chat entre pessoas segue com o gate do balão.
   if (!user?.email || !chatVisivelPara(user.email) || !roboLiberadoPara(user.email)) return NextResponse.json({ erro: "sem acesso" }, { status: 403 });
 
-  const corpo = (await req.json().catch(() => null)) as { mensagens?: TurnoChat[] } | null;
+  const corpo = (await req.json().catch(() => null)) as { mensagens?: TurnoChat[]; painel?: unknown } | null;
+  // Campo do robô dentro de um painel: só aceita painéis e competências conhecidos.
+  const painel = corpo?.painel ? contextoPainelValido(corpo.painel) : null;
   const turnos = (corpo?.mensagens ?? [])
     .filter((t) => (t.role === "user" || t.role === "assistant") && typeof t.content === "string" && t.content.trim())
     .slice(-MAX_TURNOS)
@@ -28,7 +31,7 @@ export async function POST(req: Request) {
   if (!turnos.length || turnos[turnos.length - 1].role !== "user") return NextResponse.json({ erro: "mensagem vazia" }, { status: 400 });
 
   try {
-    const r = await responderComoRobo(user.email, turnos);
+    const r = await responderComoRobo(user.email, turnos, painel);
     return NextResponse.json({ resposta: r.texto, pdfPermitido: r.pdfPermitido, dadosPessoais: r.dadosPessoais, logica: r.logica, fontes: r.fontes });
   } catch (e) {
     console.error("[chat/robo]", e);

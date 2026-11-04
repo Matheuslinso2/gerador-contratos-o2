@@ -67,6 +67,8 @@ const TABELAS_DESCRICAO: Record<string, string> = {
   imobiliaria_contatos: "Contatos feitos com imobiliárias (canal, data, quem fez).",
   campanhas_grupos_contatos: "Contatos dos grupos de campanha (nome, cpf_cnpj, e-mail).",
   producao_itens: "Itens (um endereço por linha) das planilhas de lote anexadas aos cards de Ramos Elementares: locador, locatário, CPF/CNPJ, CEP, endereço, bairro, cidade, ocupação, atividade, aluguel, m² e extras (todas as colunas da planilha). Ligue ao card por bitrix_item_id (= origem_bitrix_id em producao_resolvida).",
+  bitrix_email_mensagens: "E-mails trocados PELO CARD (aba E-mail no card do Bitrix): entity_type_id (1042 Fiança, 1046 Ramos Elementares, 1048 Capitalização, 1050 Automóvel), item_id (= nº do card), direcao (enviado | recebido), remetente, assunto, assunto_base (assunto sem Re:/Enc:), criado_em. Sem o corpo. Serve para o último contato e o histórico de e-mail de uma cotação.",
+  bitrix_email_destinatarios: "Para e Cc usados na conversa de e-mail de cada card (entity_type_id, item_id, para, cc, origem, atualizado_em).",
   erp_email_ligacoes: "Ligações SUGERIDAS e-mail -> documento do ERP ou cotação (tipo documento|cotacao, alvo_id, motivo cpf_locatario|numero_apolice). São sugestões, não vínculos confirmados; ligue a erp_emails por email_id.",
   erp_clientes_mesclados: "Clientes mesclados (duplicidades unidas).",
   erp_contato_cliente_log: "Registro de contatos feitos com clientes.",

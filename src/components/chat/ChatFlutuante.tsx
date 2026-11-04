@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
+import { ComLinks } from "./textoRobo";
 
 type Colega = { email: string; nome: string | null };
 type Mensagem = {
@@ -17,38 +18,6 @@ type Part = { conversa_id: string; email: string; lido_ate: string };
 
 // O Robô O2 aparece como mais um contato; a conversa com ele fica só na tela (não grava no banco).
 const ROBO: Colega = { email: "robo@o2.interno", nome: "Robô O2" };
-
-// *negrito* e **negrito** do texto do robô viram negrito de verdade (antes apareciam os asteriscos soltos).
-function Negrito({ texto }: { texto: string }) {
-  return (
-    <>
-      {texto.split(/(\*\*[^*\n]+\*\*|\*[^*\n]+\*)/g).map((p, i) => {
-        const m = /^\*{1,2}([^*\n]+)\*{1,2}$/.exec(p);
-        return m ? <strong key={i}>{m[1]}</strong> : p;
-      })}
-    </>
-  );
-}
-
-// Transforma links (https://...) do texto em links clicáveis; o do relatório PDF do robô vira um botão.
-function ComLinks({ texto, escuro }: { texto: string; escuro: boolean }) {
-  return (
-    <>
-      {texto.split(/(\[[^\]]+\]\(https?:\/\/[^)\s]+\)|https?:\/\/\S+)/g).map((parte, i) => {
-        const md = /^\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)$/.exec(parte);
-        const url = md ? md[2] : /^https?:\/\//.test(parte) ? parte : null;
-        if (!url) return <Negrito key={i} texto={parte} />;
-        // [texto](url) vira link com o texto (arquivos de apólice/card); URL solta do storage é o relatório em PDF
-        const rotulo = md ? `📎 ${md[1]}` : url.includes("/storage/") ? "📄 Abrir o relatório (PDF)" : "abrir link";
-        return (
-          <a key={i} href={url} target="_blank" rel="noopener noreferrer" className={`font-semibold underline ${escuro ? "text-white" : "text-o2-blue"}`}>
-            {rotulo}
-          </a>
-        );
-      })}
-    </>
-  );
-}
 
 function nomeDe(c: { email: string; nome?: string | null }) {
   if (c.nome) return c.nome;

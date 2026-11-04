@@ -81,7 +81,7 @@ const PAINEIS: Record<string, { tabela: string; descricao: string }> = {
   },
   capitalizacao: {
     tabela: "capitalizacao_snapshots",
-    descricao: "kpis (total, emitidos, perdidos, emAndamento, taxaConversao, valorTotalEmitido, comissaoEfetivada, comissaoPotencial, cardsComAlerta, numeroImobiliarias, ticketMedioPremio), funil, cardsAlerta, titulos (titular, imobiliaria, etapa, valor, comissao), porDia",
+    descricao: "kpis (total, emitidos, perdidos, emAndamento, taxaConversao, valorTotalEmitido, comissaoEfetivada, comissaoPotencial, cardsComAlerta, numeroImobiliarias, ticketMedioPremio), funil, cardsAlerta, titulos (titular, imobiliaria, etapa, valor, comissao), porDia, porOrigem (novos/heranca/geral), statusImobiliarias e statusSeguradoras (por linha: solicitacoes, emAndamento, naoPagas, fechadas, premioSolicitado, premioFechado, comissaoFechada, solicitacoesMesAnterior; prêmio = valor do título), reaplicacao (aba Reaplicação: kpis com entradas, renovadas, naoRenovaram, emAndamento, taxaRenovacao, valorRenovado, comissaoRenovada, vigenciaNoMes, vigenciaOutrosMeses; funil, statusImobiliarias, statusSeguradoras, titulos)",
   },
   seguro_auto: {
     tabela: "seguro_auto_snapshots",
