@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { isEquipe } from "@/lib/admin";
 import { buscarImobiliariaDoUsuario } from "@/lib/imobiliariaDoUsuario";
 import { destinoSeguro } from "../actions";
+import { registrarInteressado } from "@/lib/interessadosAcesso";
 
 // Volta do "Entrar com Google" (login/actions.ts). Fica dentro de /login pra
 // ser rota pública no proxy.ts sem precisar de exceção nova.
@@ -35,7 +36,9 @@ export async function GET(request: NextRequest) {
   if (criadaAgora && soGoogle) {
     await createServiceClient().auth.admin.deleteUser(user.id);
   }
+  // Depois de apagar a conta recém-criada pelo Google (senão o e-mail contaria como já existente).
+  if (user.email) await registrarInteressado({ email: user.email, origem: "login" });
   return voltar(
-    `erro=${encodeURIComponent("Não encontramos cadastro com este e-mail do Google. Crie sua conta em \"Criar conta\" ou entre com o e-mail cadastrado.")}`
+    `erro=${encodeURIComponent("Não encontramos cadastro com este e-mail do Google. O acesso é por convite da O2: use o e-mail que recebeu o convite ou fale com nossa equipe.")}`
   );
 }

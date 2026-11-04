@@ -16,8 +16,8 @@ export default async function SignupPage({
         <Image src="/marca-o2/o2-logo-oficial.png" alt="O2 Seguros" width={140} height={77} priority />
       </div>
       <div className="text-center">
-        <h1 className="text-xl font-semibold text-o2-navy">Pedir acesso</h1>
-        <p className="mt-1 text-sm text-gray-600">O acesso ao Workspace é liberado pela O2. Envie os dados abaixo: se aprovado, você recebe um convite no e-mail informado para criar sua senha.</p>
+        <h1 className="text-xl font-semibold text-o2-navy">Acesso por convite</h1>
+        <p className="mt-1 text-sm text-gray-600">O Workspace é liberado pela O2 depois que nosso comercial conhece a imobiliária. Deixe seu contato que a gente retorna e envia o convite.</p>
       </div>
 
       {erro && (
@@ -36,7 +36,7 @@ export default async function SignupPage({
         />
 
         <div className="border-t border-gray-100 pt-3">
-          <p className="mb-2 text-xs text-gray-500">Dados da imobiliária/administradora</p>
+          <p className="mb-2 text-xs text-gray-500">Contato da imobiliária/administradora</p>
           <div className="space-y-3">
             <label htmlFor="nome_imobiliaria" className="sr-only">Nome da imobiliária</label>
             <input
@@ -44,24 +44,6 @@ export default async function SignupPage({
               name="nome_imobiliaria"
               type="text"
               placeholder="Nome da imobiliária"
-              required
-              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
-            />
-            <label htmlFor="cnpj_cpf" className="sr-only">CPF ou CNPJ</label>
-            <input
-              id="cnpj_cpf"
-              name="cnpj_cpf"
-              type="text"
-              placeholder="CPF ou CNPJ"
-              required
-              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
-            />
-            <label htmlFor="endereco" className="sr-only">Endereço</label>
-            <input
-              id="endereco"
-              name="endereco"
-              type="text"
-              placeholder="Endereço"
               required
               className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
             />
@@ -74,25 +56,17 @@ export default async function SignupPage({
               required
               className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
             />
+            <label htmlFor="telefone" className="sr-only">Telefone/WhatsApp</label>
+            <input id="telefone" name="telefone" type="tel" placeholder="Telefone / WhatsApp (opcional)" className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none" />
           </div>
         </div>
 
-        <label className="flex items-start gap-2 text-sm text-gray-600">
-          <input type="checkbox" name="aceite_termos" required className="mt-0.5" />
-          <span>
-            Li e aceito os{" "}
-            <Link href="/termos" target="_blank" className="font-medium text-o2-navy underline">
-              Termos de Uso e a Política de Privacidade
-            </Link>
-            , incluindo o tratamento de dados de locadores e locatários conforme a LGPD.
-          </span>
-        </label>
 
         <SubmitButton
           textoCarregando="Enviando…"
           className="w-full rounded-full bg-o2-coral px-4 py-2.5 font-medium text-white transition hover:opacity-90"
         >
-          Enviar pedido de acesso
+          Quero ser contatado
         </SubmitButton>
       </form>
 

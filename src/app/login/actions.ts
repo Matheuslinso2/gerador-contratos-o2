@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { traduzirErroAuth } from "@/lib/authErrors";
 import { origem } from "@/lib/origem";
+import { registrarInteressado } from "@/lib/interessadosAcesso";
 
 // Para onde voltar depois do login: só a tela de autorização do conector de
 // leitura (OAuth) é aceita, para ninguém usar o login como redirecionador.
@@ -20,7 +21,11 @@ export async function signIn(formData: FormData) {
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) {
-    redirect(`/login?erro=${encodeURIComponent(traduzirErroAuth(error.message))}`);
+    // Acesso só por convite: e-mail sem conta que tenta entrar vira aviso ao comercial (resposta ao usuário continua neutra).
+    if (error.message === "Invalid login credentials") await registrarInteressado({ email, origem: "login" });
+    const base = traduzirErroAuth(error.message);
+    const aviso = error.message === "Invalid login credentials" ? `${base} O acesso ao Workspace é por convite da O2: se você ainda não tem acesso, nossa equipe comercial é avisada e entra em contato.` : base;
+    redirect(`/login?erro=${encodeURIComponent(aviso)}`);
   }
   redirect(await destinoSeguro(formData.get("next")));
 }
@@ -54,6 +59,7 @@ export async function enviarCodigo(formData: FormData) {
   // shouldCreateUser: false -- código só para quem já tem conta. Mesma
   // resposta exista ou não o e-mail, pra não confirmar contas a quem testa.
   await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
+  await registrarInteressado({ email, origem: "login" });
 
   // E-mail fica num cookie curto (não na URL) até a pessoa digitar o código.
   const loja = await cookies();

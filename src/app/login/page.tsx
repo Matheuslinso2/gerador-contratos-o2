@@ -83,9 +83,9 @@ export default async function LoginPage({
       </Link>
 
       <p className="text-center text-sm text-gray-600">
-        Ainda não tem conta?{" "}
+        O acesso é por convite da O2. Ainda não tem acesso?{" "}
         <Link href="/signup" className="font-medium text-o2-navy underline">
-          Criar conta
+          Fale com a gente
         </Link>
       </p>
     </main>

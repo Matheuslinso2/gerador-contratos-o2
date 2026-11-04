@@ -10,7 +10,7 @@ import { apenasDigitos } from "@/lib/pdfComSenha";
 import { type ImobiliariaAdminRow } from "./ImobiliariaCard";
 import MesclarDuplicidade, { type ImobiliariaDuplicadaLinha } from "./MesclarDuplicidade";
 import ListaImobiliarias from "./ListaImobiliarias";
-import { autorizarImobiliaria, aprovarPedidoAcesso, recusarPedidoAcesso } from "./actions";
+import { autorizarImobiliaria, atenderPedidoAcesso, recusarPedidoAcesso } from "./actions";
 import NomesSemImobiliaria from "./NomesSemImobiliaria";
 import { buscarNomesSemImobiliaria, volumePorFicha } from "@/lib/baseUnica/revisao";
 
@@ -49,7 +49,7 @@ export default async function AdminImobiliariasPage({
       supabase.from("faturas_esperadas").select("imobiliaria_id"),
       supabase.from("imobiliaria_membros").select("imobiliaria_id"),
     ]);
-  const { data: pedidosAcesso } = await supabase.from("imobiliaria_pedidos_acesso").select("id, nome, cnpj, endereco, responsavel, email, criado_em").eq("status", "pendente").order("criado_em");
+  const { data: pedidosAcesso } = await supabase.from("imobiliaria_pedidos_acesso").select("id, nome, responsavel, telefone, email, origem, criado_em").eq("status", "pendente").order("criado_em");
   const [volumes, semImobiliaria] = await Promise.all([volumePorFicha(supabase), buscarNomesSemImobiliaria(supabase)]);
 
   const contratosPorId = contarPorImobiliaria(contratosData);
@@ -118,19 +118,20 @@ export default async function AdminImobiliariasPage({
 
         {(pedidosAcesso ?? []).length > 0 && (
           <section className="space-y-3">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Pedidos de acesso ({(pedidosAcesso ?? []).length})</h2>
-            <p className="text-xs text-gray-500">Imobiliárias que pediram acesso em /signup. Aprovar liga o pedido à ficha pelo CNPJ (ou cria a ficha) e envia o convite para o e-mail informado.</p>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Interessados sem acesso ({(pedidosAcesso ?? []).length})</h2>
+            <p className="text-xs text-gray-500">Quem tentou entrar sem ter acesso ou deixou contato em /signup. O comercial atende, levanta os dados, cadastra a ficha e envia o convite pela ficha (Convite de acesso). Depois, marque como atendido.</p>
             <div className="space-y-2">
               {(pedidosAcesso ?? []).map((pd) => (
                 <div key={pd.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-o2-coral/40 bg-o2-coral/5 p-4">
                   <div className="min-w-0 text-sm">
-                    <p className="font-medium text-o2-navy">{pd.nome}</p>
-                    <p className="text-xs text-gray-600">CNPJ/CPF {pd.cnpj} · {pd.responsavel} · {pd.email}</p>
-                    <p className="text-xs text-gray-500">{pd.endereco} · pedido em {new Date(pd.criado_em).toLocaleDateString("pt-BR")}</p>
+                    <p className="font-medium text-o2-navy">{pd.nome || pd.email}</p>
+                    <p className="text-xs text-gray-600">{[pd.nome ? pd.email : null, pd.responsavel, pd.telefone].filter(Boolean).join(" · ")}</p>
+                    <p className="text-xs text-gray-500">{pd.origem === "login" ? "tentou entrar no login" : "deixou contato em /signup"} · {new Date(pd.criado_em).toLocaleDateString("pt-BR")}</p>
                   </div>
-                  <div className="flex gap-2">
-                    <form action={aprovarPedidoAcesso}><input type="hidden" name="pedido_id" value={pd.id} /><button type="submit" className="rounded-full bg-o2-coral px-4 py-1.5 text-sm font-medium text-white hover:opacity-90">Aprovar e enviar convite</button></form>
-                    <form action={recusarPedidoAcesso}><input type="hidden" name="pedido_id" value={pd.id} /><button type="submit" className="rounded-full border border-gray-300 px-4 py-1.5 text-sm text-gray-600 hover:bg-gray-100">Recusar</button></form>
+                  <div className="flex flex-wrap gap-2">
+                    <Link href="/admin/imobiliarias/novo" className="rounded-full bg-o2-coral px-4 py-1.5 text-sm font-medium text-white hover:opacity-90">Cadastrar ficha</Link>
+                    <form action={atenderPedidoAcesso}><input type="hidden" name="pedido_id" value={pd.id} /><button type="submit" className="rounded-full border border-o2-navy px-4 py-1.5 text-sm text-o2-navy hover:bg-o2-navy hover:text-white">Marcar como atendido</button></form>
+                    <form action={recusarPedidoAcesso}><input type="hidden" name="pedido_id" value={pd.id} /><button type="submit" className="rounded-full border border-gray-300 px-4 py-1.5 text-sm text-gray-600 hover:bg-gray-100">Descartar</button></form>
                   </div>
                 </div>
               ))}

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isEquipe } from "@/lib/admin";
-import { validarCnpjOuCpf, apenasDigitos } from "@/lib/validacoesBr";
+import { validarCnpjOuCpf } from "@/lib/validacoesBr";
 import { origem } from "@/lib/origem";
 import { criarEEnviarConvite, DIAS_VALIDADE_CONVITE } from "@/lib/convites";
 import { prepararTextoBase } from "@/lib/limparTextoBase";
@@ -406,49 +406,20 @@ export async function enviarConviteImobiliariaAdmin(formData: FormData) {
   redirect(`/admin/imobiliarias/${imobiliariaId}?sucesso=${encodeURIComponent(`Convite enviado para ${email.toLowerCase()}. Vale por ${DIAS_VALIDADE_CONVITE} dias.`)}`);
 }
 
-export async function aprovarPedidoAcesso(formData: FormData) {
+// Interessado já atendido pelo comercial (ficha cadastrada e convite enviado pela ficha).
+export async function atenderPedidoAcesso(formData: FormData) {
   const supabase = await exigirAdmin();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   const pedidoId = String(formData.get("pedido_id") ?? "");
-  const { data: pedido } = await supabase.from("imobiliaria_pedidos_acesso").select("*").eq("id", pedidoId).maybeSingle();
-  if (!pedido || pedido.status !== "pendente") redirect(`/admin/imobiliarias?erro=${encodeURIComponent("Pedido não encontrado ou já avaliado.")}`);
-
-  // Base única: liga à ficha que já existe pelo CNPJ (dígitos); só cria ficha nova se não houver nenhuma.
-  const cnpjDigitos = apenasDigitos(pedido.cnpj);
-  const { data: todas } = await supabase.from("imobiliarias").select("id, user_id, cnpj");
-  let imobiliariaId = (todas ?? []).find((i) => apenasDigitos(i.cnpj ?? "") === cnpjDigitos)?.id as string | undefined;
-  if (!imobiliariaId) {
-    const { data: nova, error } = await supabase
-      .from("imobiliarias")
-      .insert({
-        nome: pedido.nome,
-        cnpj: pedido.cnpj,
-        endereco: pedido.endereco,
-        responsavel: pedido.responsavel,
-        autorizado: true,
-        texto_base_contrato: "",
-        indice_reajuste: "",
-        percentual_multa_atraso: 0,
-        percentual_juros_mora: 0,
-        percentual_honorarios_advocaticios: 0,
-        cadastro_incompleto: true,
-      })
-      .select("id")
-      .single();
-    if (error || !nova) redirect(`/admin/imobiliarias?erro=${encodeURIComponent(error?.message ?? "Não foi possível criar a ficha.")}`);
-    imobiliariaId = nova.id;
-  }
-
-  const r = await criarEEnviarConvite({ imobiliariaId: imobiliariaId!, email: pedido.email, enviadoPor: user?.email ?? "", origem: await origem() });
-  if (!r.ok) redirect(`/admin/imobiliarias?erro=${encodeURIComponent(r.erro)}`);
   await supabase
     .from("imobiliaria_pedidos_acesso")
-    .update({ status: "aprovado", imobiliaria_id: imobiliariaId, avaliado_por: user?.email, avaliado_em: new Date().toISOString() })
-    .eq("id", pedidoId);
+    .update({ status: "aprovado", avaliado_por: user?.email, avaliado_em: new Date().toISOString() })
+    .eq("id", pedidoId)
+    .eq("status", "pendente");
   revalidatePath("/admin/imobiliarias");
-  redirect(`/admin/imobiliarias?sucesso=${encodeURIComponent(`Pedido aprovado: convite enviado para ${pedido.email}.`)}`);
+  redirect(`/admin/imobiliarias?sucesso=${encodeURIComponent("Marcado como atendido.")}`);
 }
 
 export async function recusarPedidoAcesso(formData: FormData) {
@@ -463,5 +434,5 @@ export async function recusarPedidoAcesso(formData: FormData) {
     .eq("id", pedidoId)
     .eq("status", "pendente");
   revalidatePath("/admin/imobiliarias");
-  redirect(`/admin/imobiliarias?sucesso=${encodeURIComponent("Pedido recusado.")}`);
+  redirect(`/admin/imobiliarias?sucesso=${encodeURIComponent("Interessado descartado.")}`);
 }
