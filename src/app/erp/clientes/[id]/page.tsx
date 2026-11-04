@@ -32,7 +32,8 @@ export default async function ErpClienteFichaPage({ params, searchParams }: { pa
 
   const [{ data: kpiBruto }, { data: proprios }, { data: comoSegurado }] = await Promise.all([
     supabase.rpc("erp_cliente_kpis", { p_pessoa: id }),
-    supabase.from("erp_documentos").select("id").eq("locatario_id", id).neq("situacao", "duplicado").limit(300),
+    // ERP mostra da proposta efetivada em diante (Matheus 04/11): cotação/recusado/perdido ficam no workspace e no Bitrix
+    supabase.from("erp_documentos").select("id").eq("locatario_id", id).not("situacao", "in", "(cotacao,recusado,perdido,duplicado)").limit(300),
     supabase.from("erp_doc_partes_acervo").select("documento_id").eq("locatario_id", id).limit(300),
   ]);
   const ids = [...new Set([...(proprios ?? []).map((d: { id: string }) => d.id), ...(comoSegurado ?? []).map((d: { documento_id: string }) => d.documento_id)])];
@@ -41,7 +42,7 @@ export default async function ErpClienteFichaPage({ params, searchParams }: { pa
         .from("erp_documentos")
         .select("id, nosso_numero, tipo, tipo_corp, situacao, numero_apolice, vigencia_inicio, premio_total, seguradora:erp_seguradoras(abreviacao), ramo:erp_ramos(abreviacao), imobiliaria:imobiliarias!erp_documentos_imobiliaria_principal_id_fkey(nome)")
         .in("id", ids.slice(0, 200))
-        .neq("situacao", "duplicado")
+        .not("situacao", "in", "(cotacao,recusado,perdido,duplicado)")
         .order("vigencia_inicio", { ascending: false, nullsFirst: false })
     : { data: [] };
   const docs = (docsBrutos ?? []) as unknown as Doc[];

@@ -60,7 +60,8 @@ export default async function ErpInicio({ searchParams }: { searchParams: Promis
   const [{ data: atrasos }, { data: alertas }, { count: revisao }, { count: estornos }, { count: vencDiv }, { data: kRow }, { data: eRow }, { count: p5 }, { count: p10 }, { count: p15 }] = await Promise.all([
     supabase.from("erp_baixa_corp_atraso_pronto").select("mes, seguradora, situacao"),
     supabase.rpc("erp_contar_alertas_fatura"),
-    supabase.from("erp_documentos").select("id", { count: "exact", head: true }).eq("revisao_pendente", true),
+    // ERP mostra da proposta efetivada em diante (Matheus 04/11): cotação/recusado/perdido ficam no workspace e no Bitrix
+    supabase.from("erp_documentos").select("id", { count: "exact", head: true }).eq("revisao_pendente", true).not("situacao", "in", "(cotacao,recusado,perdido,duplicado)"),
     supabase.from("erp_estornos_endosso_pronto").select("alerta", { count: "exact", head: true }),
     supabase.from("erp_vencimentos_pronto").select("parcela_id", { count: "exact", head: true }),
     supabase.from("erp_inicio_kpis_pronta").select("dados, calculado_em").eq("mes", ini).maybeSingle(),
