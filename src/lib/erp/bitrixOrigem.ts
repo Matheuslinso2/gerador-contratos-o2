@@ -463,7 +463,8 @@ export async function sincronizarSpa(sb: SupabaseClient, cfg: ConfigSpa, o: Opco
       const comissaoPct = x.comissaoPct ?? 0;
       // Matheus 28/10: card perdido/recusado fica só no workspace; não cria documento novo no ERP (os que já existem ficam como histórico escondido)
       // ...mas a FOTO do card é guardada em bitrix_cards_arquivo (Matheus 01/11): card que some do funil não pode levar a informação junto.
-      if (!docId && (sit.situacao === "perdido" || sit.situacao === "recusado")) {
+      // Matheus 04/11: cotação de Fiança (análise em várias seguradoras) também não é documento — entra no ERP só ao ser efetivada
+      if (!docId && (sit.situacao === "perdido" || sit.situacao === "recusado" || (cfg.entityTypeId === 1042 && sit.situacao === "cotacao"))) {
         if (o.gravar) {
           const eventosArq = (eventosPorCard.get(id) ?? []).sort((a, b) => a.CREATED_TIME.localeCompare(b.CREATED_TIME)).map((e) => ({ quando: e.CREATED_TIME, categoria: e.CATEGORY_ID, etapa: etapas.get(e.STAGE_ID)?.nome ?? e.STAGE_ID, semantica: e.STAGE_SEMANTIC_ID }));
           const { data: jaTem } = await sb.from("bitrix_cards_arquivo").select("comentarios_capturados_em").eq("entity_type_id", cfg.entityTypeId).eq("item_id", id).maybeSingle();
