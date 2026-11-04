@@ -21,7 +21,7 @@ while True:
     off += 1000
 
 m = pd.read_pickle('analise-precos/margem.pkl')
-for c in ['premio_liquido', 'comissao', 'repasse']: m[c] = m[c].astype(float)
+for c in ['premio_liquido', 'comissao', 'repasse', 'pro_labore']: m[c] = m[c].astype(float)
 m['margem'] = m.comissao - m.repasse
 
 def res(g):
@@ -77,18 +77,18 @@ def P(t, s=B): el.append(Paragraph(t, s))
 
 tot = res(r)
 P('Margem por apólice vendida (Etapa 2)', S['Title'])
-P(f"<b>Margem = comissão da apólice − repasse previsto à imobiliária.</b> Base: apólices (não endossos) vigentes ou vencidas do ERP, pelo início de vigência, 2025 e 2026 até outubro. São {n(tot.apolices)} apólices, comissão de R$ {n(tot.comissao)}, repasse de R$ {n(tot.repasse)} e margem de <b>R$ {n(tot.margem)}</b> ({n(tot.margem_pct_com, 1)}% da comissão).")
+P(f"<b>Margem = comissão da apólice − repasse previsto à imobiliária, já incluindo o pró-labore</b> (que é repasse negociado com a imobiliária; só muda o caminho do dinheiro). Base: apólices (não endossos) vigentes ou vencidas do ERP, pelo início de vigência, 2025 e 2026 até outubro. São {n(tot.apolices)} apólices, comissão de R$ {n(tot.comissao)}, repasse de R$ {n(tot.repasse)} e margem de <b>R$ {n(tot.margem)}</b> ({n(tot.margem_pct_com, 1)}% da comissão).")
 P('O que descobri', H)
 f = por_prod.loc['Fiança']; i = por_prod.loc['Incêndio imobiliário']; c = por_prod.loc['Capitalização']
 for t in [
     f"<b>Fiança dá a maior margem por apólice:</b> R$ {n(f.margem_apolice)} em média ({n(f.apolices)} apólices, margem total R$ {n(f.margem)}). A comissão é {n(f.com_pct_premio, 1)}% do prêmio e o repasse leva {n(f.repasse_pct_com, 1)}% dela.",
     f"<b>Incêndio imobiliário dá o maior volume, mas por apólice é pequeno:</b> R$ {n(i.margem_apolice)} cada, em {n(i.apolices)} apólices, margem total R$ {n(i.margem)}. É a maior fonte de margem total junto com a Fiança.",
     f"<b>Capitalização:</b> R$ {n(c.margem_apolice)} por título; a comissão é só {n(c.com_pct_premio, 1)}% do valor, mas o valor é alto. Repasse de {n(c.repasse_pct_com, 1)}% da comissão.",
-    "<b>Entre seguradoras de Fiança</b> (tabela na seção 3): a Tokio rende a maior margem por apólice (R$ 2.475, prêmios maiores); Pottencial e Porto ficam perto de R$ 1.100 a 1.300. O repasse varia de 8,7% (Tokio) a 14,3% (Porto) da comissão.",
+    "<b>Entre seguradoras de Fiança</b> (tabela na seção 3): a Tokio rende a maior margem por apólice (R$ 2.326, prêmios maiores); Too R$ 1.426, Porto R$ 1.280 e Pottencial R$ 1.138. O repasse (com pró-labore) varia de 9,5% (Pottencial) a 14,3% (Porto) da comissão.",
     f"<b>O repasse caiu ao longo dos anos:</b> {n(por_ano.loc[2020].repasse_pct_com, 0)}% da comissão em 2020 contra {n(por_ano.loc[2025].repasse_pct_com, 0)}% em 2025. Pode ser mudança de acordos, mas também falta de registro do repasse previsto nos anos antigos; vale conferir antes de usar a série histórica.",
 ]: P('• ' + t)
 P('Limites (leia antes de usar)', H)
-P('1) É margem de <b>comissão</b>, não lucro: não desconta custos da operação, impostos nem pró-labore. 2) O repasse é o <b>previsto</b> nas regras do ERP, não o efetivamente pago. 3) Apólices canceladas ficam de fora (cerca de 1/3 dos documentos desde 2020). 4) Uma apólice com mais de um produtor soma todos os repasses. 5) Vínculo com a imobiliária pelo cadastro único (imobiliaria_principal); 595 das 21.070 apólices de 2025-2026 não têm imobiliária (clientes diretos).')
+P(f'1) É margem de <b>comissão</b>, não lucro: não desconta custos da operação nem impostos. 2) O repasse é o <b>previsto</b> nas regras do ERP, não o efetivamente pago. O pró-labore entra como % do prêmio líquido, lido do extrato Segimob ou da regra confirmada da imobiliária com a seguradora (R$ {n(r.pro_labore.sum())} em 2025-2026); {n(r.sem_pct_pro_labore.sum())} apólices têm pró-labore indicado mas sem % lido e ficaram com valor zero, o que pode superestimar a margem delas. 3) Apólices canceladas ficam de fora (cerca de 1/3 dos documentos desde 2020). 4) Uma apólice com mais de um produtor soma todos os repasses. 5) Vínculo com a imobiliária pelo cadastro único (imobiliaria_principal); 595 das 21.070 apólices de 2025-2026 não têm imobiliária (clientes diretos).')
 el.append(PageBreak())
 P('1. Por produto (2025-2026)', H)
 el.append(Image('analise-precos/img/margem_prod.png', 15 * cm, 6.4 * cm))
