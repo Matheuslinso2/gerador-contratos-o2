@@ -18,7 +18,7 @@ const DIAS_BUSCA = 25;
 type Candidato = { mensagem: MensagemGmail & { anexos: AnexoGmail[] }; anexo: AnexoGmail };
 
 const REGEX_CONTRATO = /contrat|loca[cç][aã]o|aditiv/i;
-const REGEX_NAO_CONTRATO = /certificad|assinaturas|rescis|ficha|panorama|carta|comprov|boleto|ap[oó]lice|vistoria|laudo|cpf|identidade|rg\b|holerite|contracheque/i;
+const REGEX_NAO_CONTRATO = /presta[cç][aã]o.{0,12}servi[cç]|procura[cç][aã]o|certificad|assinaturas|rescis|ficha|panorama|carta|comprov|boleto|ap[oó]lice|vistoria|laudo|cpf|identidade|rg\b|holerite|contracheque/i;
 const REGEX_CERTIFICADO = /certificad.*assinatur|assinaturas?.*(certificad|_bg_sheet)|_bg_sheet/i;
 const REGEX_COTACAO = /cartaresposta|cota[cç][aã]o|proposta/i;
 
@@ -73,9 +73,8 @@ export async function localizarDocumentosDoCard(card: { titulo: string; endereco
   const msgContrato = contratos[0].mensagem;
   const doContrato = contratos.filter((c) => c.mensagem.id === msgContrato.id);
   const doCertificado = certificados.find((c) => c.mensagem.id === msgContrato.id) ?? certificados[0];
-  const daCotacao = cotacoes[0];
   if (!doCertificado) avisos.push("Certificado de assinatura eletrônica não encontrado no e-mail.");
-  if (!daCotacao) avisos.push("Cotação/proposta da seguradora não encontrada no e-mail.");
+  if (!cotacoes.length) avisos.push("Cotação/proposta da seguradora não encontrada no e-mail.");
 
   const documentos: DocumentoAuditoria[] = [];
   const arquivos: DocumentosLocalizados["arquivos"] = [];
@@ -86,7 +85,13 @@ export async function localizarDocumentosDoCard(card: { titulo: string; endereco
   };
   for (const c of doContrato.slice(0, 3)) await adicionar("contrato", c);
   if (doCertificado) await adicionar("certificado", doCertificado);
-  if (daCotacao) await adicionar("cotacao", daCotacao);
+  // Cotação: a carta cujo nome cita a seguradora do contrato (ex: CartaResposta_Pottencial_...); sem coincidência, até 2 mais recentes
+  // (o Auditor sabe ignorar cartas/recusas de OUTRA seguradora).
+  const textoContrato = documentos.filter((d) => d.tipo === "contrato" && d.fonte.tipo === "texto").map((d) => (d.fonte as { texto: string }).texto).join(" ").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const seguradoras = ["pottencial", "porto", "tokio", "allianz", "yelum", "liberty", "sulamerica", "junto"];
+  const doContratoSeg = seguradoras.filter((s) => textoContrato.includes(s));
+  const casadas = cotacoes.filter((c) => doContratoSeg.some((s) => c.anexo.nome.toLowerCase().includes(s)));
+  for (const c of (casadas.length ? casadas : cotacoes).slice(0, 2)) await adicionar("cotacao", c);
   return { documentos, arquivos, avisos };
 }
 

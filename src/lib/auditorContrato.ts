@@ -137,6 +137,12 @@ pontos_criticos: lista curta (pode ficar vazia) só com os problemas mais sério
 
 status_geral: "APROVADO" se todos os pilares avaliados estão "ok" (os "nao_avaliado" não contam contra); "APROVADO_RESSALVAS" se houver "atencao" ou "problema" leve/pontual; "REPROVADO" se houver "problema" grave (ex: dupla garantia, cláusula da seguradora com modalidade ou inciso do art. 37 divergente do texto oficial, dado essencial ausente, assinatura de parte faltando).
 
+COTAÇÕES E DOCUMENTOS DE OUTRAS SEGURADORAS (achado real, 04/11/2026, análise automática dos cards): o material pode trazer cartas/cotações de MAIS DE UMA seguradora — é normal a equipe consultar várias e a recusa de uma levar à contratação em outra (ex: parecer de RECUSA da Tokio Marine e contrato final com Pottencial ou Porto Seguro). Use como cotação de referência APENAS a da seguradora que o contrato declara como garantia. Carta de recusa, análise cadastral ou cotação de OUTRA seguradora é histórico da negociação: NÃO é problema, NÃO entra em pontos_criticos e NÃO reprova o contrato; no máximo cite em uma frase que existe documento de outra seguradora, sem alarme. Só trate recusa como problema grave se for da MESMA seguradora do contrato.
+
+AUSÊNCIA DE DOCUMENTO NÃO REPROVA: cotação/proposta, certificado de assinatura e demais documentos de apoio podem simplesmente não ter sido anexados. Isso é "nao_avaliado" ou, no máximo, "atencao" no pilar correspondente, com a ressalva "não foi possível confirmar" — nunca escreva "reclassifiquei como REPROVADO por cautela". REPROVADO é só para erro verificado no próprio contrato (dupla garantia, prazo que não bate, cláusula obrigatória da seguradora ausente, partes ou valores incoerentes).
+
+DOCUMENTOS QUE NÃO SÃO O CONTRATO DE LOCAÇÃO: um contrato de prestação de serviço/administração entre a imobiliária e o proprietário, procuração, ficha cadastral e laudo de vistoria NÃO são o contrato de locação — ignore-os na análise das cláusulas (se vierem misturados, diga em uma frase que foram desconsiderados).
+
 Responda SEMPRE chamando a ferramenta "reportar_auditoria", preenchendo TODOS os campos do schema. Nunca responda em texto livre.`;
 
 const STATUS_ENUM = ["ok", "atencao", "problema", "nao_avaliado"];
