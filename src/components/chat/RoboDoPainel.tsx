@@ -211,6 +211,8 @@ export default function RoboDoPainel({ painelId, competencia }: { painelId: stri
   const [ehMatheus, setEhMatheus] = useState(false);
   const [codigo, setCodigo] = useState("");
   const [aviso, setAviso] = useState<string | null>(null);
+  // Regra do Matheus (04/11/2026): o Robô do painel já nasce RECOLHIDO (dropdown); abre só quando a pessoa quiser. As perguntas e respostas ficam guardadas na tela enquanto recolhido.
+  const [aberto, setAberto] = useState(false);
   const entrada = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -291,6 +293,21 @@ export default function RoboDoPainel({ painelId, competencia }: { painelId: stri
 
   return (
     <section data-robo-painel data-export-ignore="true" className="print:hidden rounded-2xl border border-o2-navy/15 bg-white p-4 text-o2-navy shadow-sm" aria-label={`Pergunte ao Robô O2 sobre ${painel.nome}`}>
+      <button
+        type="button"
+        onClick={() => setAberto((v) => !v)}
+        aria-expanded={aberto}
+        aria-controls={`robo-corpo-${painelId}`}
+        className="flex w-full items-center justify-between gap-2 text-left text-sm font-semibold"
+      >
+        <span>
+          Robô O2 · pergunte sobre {painel.nome}
+          {!aberto && trocas.length > 0 && <span className="ml-2 rounded-full bg-o2-navy/10 px-2 py-0.5 text-[11px] font-medium">{trocas.length} {trocas.length === 1 ? "pergunta" : "perguntas"}</span>}
+          {!aberto && pensando && <span className="ml-2 text-[11px] font-medium text-gray-500">consultando…</span>}
+        </span>
+        <span aria-hidden="true">{aberto ? "▴" : "▾"}</span>
+      </button>
+      <div id={`robo-corpo-${painelId}`} hidden={!aberto} className="mt-3">
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -298,7 +315,7 @@ export default function RoboDoPainel({ painelId, competencia }: { painelId: stri
         }}
         className="flex flex-wrap items-center gap-2"
       >
-        <label htmlFor={`robo-${painelId}`} className="text-sm font-semibold">
+        <label htmlFor={`robo-${painelId}`} className="sr-only">
           Pergunte ao Robô O2 sobre {painel.nome}
         </label>
         <input
@@ -391,6 +408,7 @@ export default function RoboDoPainel({ painelId, competencia }: { painelId: stri
       )}
 
       <ListaCardsSolicitados trocas={trocas} painelId={painelId} competencia={competencia} />
+      </div>
     </section>
   );
 }
