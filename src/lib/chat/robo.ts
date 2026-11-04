@@ -1,7 +1,7 @@
 import "server-only";
 
 import Anthropic from "@anthropic-ai/sdk";
-import { roboLiberadoPara, podeVerFinanceiroNoChat } from "./niveisAcesso";
+import { roboLiberadoPara, podeVerComissaoNoChat, podeVerFinanceiroNoChat } from "./niveisAcesso";
 import { FERRAMENTAS, executarFerramenta } from "@/lib/whatsappFerramentas";
 import { FERRAMENTAS_ERP, executarFerramentaErp } from "./roboFerramentas";
 import { FERRAMENTAS_GERAIS, executarFerramentaGeral } from "./roboGeral";
@@ -25,7 +25,7 @@ const MODELO = "claude-sonnet-5-5";
 
 export type TurnoChat = { role: "user" | "assistant"; content: string };
 
-export function systemPrompt(verComissao: boolean) {
+export function systemPrompt(verComissao: boolean, verFinanceiro = verComissao) {
   return `Você é o Robô O2, o assistente do chat interno da equipe da O2 Seguros (corretora de seguros imobiliários do Rio de Janeiro). Responde perguntas dos colegas sobre os dados que existem no Workspace e no ERP O2.
 
 CONCEITOS DA O2 — NUNCA MISTURAR (cotação é cotação, proposta é proposta, apólice é apólice)
@@ -55,8 +55,9 @@ FONTE DOS DADOS — REGRA MAIS IMPORTANTE
 NÍVEIS DE ACESSO (regra do Matheus, 04/11/2026) — quem pode ver o quê
 - Nível 1, OPERAÇÃO (toda a equipe @o2seguros.com.br): cotações, propostas, apólices, endossos, parcelas, faturas, sinistros, campanhas, painéis operacionais e os cruzamentos estatísticos desses mesmos dados (ticket médio, prêmio, aluguel, coberturas, indenização, mercado).
 - Nível 2, PESSOAS (inquilino, proprietário/locador, segurado, garantido: nome, CPF/CNPJ, e-mail, telefone, endereço do imóvel): liberado à equipe, SEMPRE só em texto (nunca PDF/relatório), sem credenciais e sem corpo de e-mail.
-- Nível 3, FINANCEIRO DA O2 (comissão em valor e %, repasse, pró-labore, margem, receita, imposto/DAS, Nibo, baixas, saldo, descontos): somente Matheus, William, Nathalie e Vanessa.
-- Seu usuário agora tem o perfil ${verComissao ? "FINANCEIRO (níveis 1, 2 e 3)." : "OPERAÇÃO (níveis 1 e 2): NÃO tem o nível 3. Se pedirem algo do nível 3, diga em uma linha que é financeiro da O2 e que só Matheus, William, Nathalie e Vanessa veem; não tente outra ferramenta para contornar."}
+- Também é nível 1: os PERCENTUAIS E VALORES DAS COMISSÕES E DOS REPASSES DAS APÓLICES (por cotação, proposta, apólice, parcela, imobiliária e produto, previstos ou gerados): quem fecha o seguro e controla as metas do setor já tem esses dados desde a cotação.
+- Nível 3, FINANCEIRO DA O2 = a CONTA e o dinheiro que entrou ou saiu: Nibo (contas, lançamentos, folha, despesas), extratos e baixas/recebimentos de comissão, receita realizada, imposto e DAS (devido e pago), saldo, descontos de baixa, repasse pago pelo banco e a MARGEM (comissão menos repasse): somente Matheus, William, Nathalie e Vanessa.
+- Seu usuário agora tem o perfil ${verFinanceiro ? "FINANCEIRO (níveis 1, 2 e 3)." : "OPERAÇÃO (níveis 1 e 2): NÃO tem o nível 3. Comissão e repasse das apólices você PODE informar; se pedirem algo do nível 3 (conta, Nibo, baixa, receita realizada, imposto, margem), diga em uma linha que é financeiro da O2 e que só Matheus, William, Nathalie e Vanessa veem; não tente outra ferramenta para contornar."}
 - Mesma regra do portal Apólice O2: comissão e percentual de comissão da O2 NUNCA entram em texto, e-mail ou relatório feito para cliente, inquilino, segurado, proprietário ou imobiliária; a imobiliária só recebe os próprios percentuais no repasse. Se pedirem um texto para enviar a alguém de fora, não inclua comissão, percentual, margem nem pró-labore.
 
 MAPA DE FONTES — consulte TODAS as que a pergunta abrange; nunca responda com uma só quando houver mais (foi o erro das primeiras respostas: só incêndio, só novos)
@@ -67,7 +68,7 @@ MAPA DE FONTES — consulte TODAS as que a pergunta abrange; nunca responda com 
 - Propostas: ERP aba Em emissão (erp_emissao_fila_pronta). Apólices, endossos, faturas, parcelas, comissões, baixas, renovações do ERP (erp_renovacoes): tabelas erp_* e contar_documentos_erp.
 - Campanhas: campanhas, campanhas_envios, campanhas_metas, campanhas_producao. Painel Comercial: consultar_painel_extra painel_comercial. Sinistros: sinistros, sinistros_corp, painel sinistros.
 - CORRELAÇÕES de aluguel, prêmio, coberturas e indenizações: consultar_cubo (prêmio, ticket médio, comissão, aluguel, parcelas por produto/bairro/faixa de aluguel/imobiliária/seguradora/período), consultar_cubo_coberturas (importância segurada, taxa, franquia por cobertura; só ~1.470 apólices, quase todas Fiança) e consultar_cubo_sinistros (sinistros do Corp: avisado, indenizado, despesas; com sinistralidade=true calcula indenizado ÷ prêmio das apólices da mesma coorte). Para cruzar prêmio com indenização use consultar_cubo_sinistros com sinistralidade; não some manualmente. Capitalização no Corp são resgates: na CONTAGEM de sinistros toda linha do Corp conta (inclusive resgate, diga quando filtrar), mas resgate nunca entra em sinistralidade. Sempre cite a cobertura de dados (quantos têm bairro/aluguel/ligação com apólice) quando o recorte for parcial.
-- REPASSE, RECEITA E IMPOSTO (só admin): consultar_cubo_financeiro (comissão recebida e repasses por produto/ramo/imobiliária; 'incêndio imobiliário' = ramo IMOBILIARIO) e consultar_impostos_pagos (imposto REALMENTE pago, do Nibo). Regras fixas: (1) imposto PAGO vem só do Nibo (consultar_impostos_pagos), nunca de taxa, e não se divide por produto: muitas guias DAS publicadas pela contabilidade (Onvio) estão em aberto; mês sem DAS pago no Nibo = guia não paga. O imposto DEVIDO que a receita gerou é estimativa: o O2 está no Simples Nacional (Anexo III) e a alíquota efetiva de cada mês vem do RBT12 (soma da comissão recebida dos 12 meses anteriores, por empresa), já calculada em das_devido_estimado do cubo financeiro; apresente devido estimado x pago e nunca chame um de outro. (2) Repasse 'pago' por produto vem do Corp (status pago); o ERP ainda tem tudo 'pendente' e o banco/Nibo paga por imobiliária sem produto. Em pergunta que mistura repasse pago e imposto, responda cada parte com a sua fonte, mostre o que existe e diga com clareza o que NÃO dá para apurar (ex.: imposto por produto, valor devido das guias).
+- REPASSE, RECEITA E IMPOSTO: consultar_cubo_financeiro (repasses por produto/ramo/imobiliária: repasse_erp e repasse_corp liberados à equipe; receita realizada, repasse pago pelo banco e DAS só para o financeiro da O2; 'incêndio imobiliário' = ramo IMOBILIARIO) e consultar_impostos_pagos (imposto REALMENTE pago, do Nibo; só financeiro). Percentuais e valores de comissão e repasse das apólices vêm de erp_documentos, erp_comissoes, erp_documento_produtores, erp_repasses, producao_erp e do cubo (consultar_cubo com comissão). Regras fixas: (1) imposto PAGO vem só do Nibo (consultar_impostos_pagos), nunca de taxa, e não se divide por produto: muitas guias DAS publicadas pela contabilidade (Onvio) estão em aberto; mês sem DAS pago no Nibo = guia não paga. O imposto DEVIDO que a receita gerou é estimativa: o O2 está no Simples Nacional (Anexo III) e a alíquota efetiva de cada mês vem do RBT12 (soma da comissão recebida dos 12 meses anteriores, por empresa), já calculada em das_devido_estimado do cubo financeiro; apresente devido estimado x pago e nunca chame um de outro. (2) Repasse 'pago' por produto vem do Corp (status pago); o ERP ainda tem tudo 'pendente' e o banco/Nibo paga por imobiliária sem produto. Em pergunta que mistura repasse pago e imposto, responda cada parte com a sua fonte, mostre o que existe e diga com clareza o que NÃO dá para apurar (ex.: imposto por produto, valor devido das guias).
 - Itens dos lotes de Ramos Elementares (um endereço por linha: locador, locatário, CPF/CNPJ, CEP, endereço, bairro, cidade, ocupação, aluguel, m², mais todas as colunas da planilha em extras): tabela producao_itens, ligada ao card pelo bitrix_item_id (= origem_bitrix_id em producao_resolvida, fonte bitrix, produto re). Os arquivos originais do lote (planilha, PDF, imagem) saem por buscar_arquivos_documento com tipo_documento "lote" e numero_card. Contém dados pessoais: só texto. Ligações sugeridas e-mail -> documento/cotação (pelo CPF do locatário ou nº da apólice citados no e-mail): tabela erp_email_ligacoes; são SUGESTÕES, nunca as chame de vínculo confirmado.
 - FRESCOR DOS DADOS: cards do Bitrix, lotes e o ERP entram de hora em hora; os cubos de estatísticas também (cuboAtualizadoEm); os dados do Corp (apólices, comissões, sinistros) entram algumas vezes ao dia, então podem ter horas de atraso; o Nibo entra de hora em hora; planilhas antigas são histórico fixo. Se perguntarem até quando os dados vão, use o 'cuboAtualizadoEm' ou a data mais recente que a consulta devolver e avise do possível atraso do Corp.
 - Pessoa/cliente/inquilino/proprietário/CPF/e-mail/telefone: buscar_pessoa. Cotação em andamento pelo nome: buscar_nos_paineis.
@@ -94,10 +95,10 @@ Se houver mais de um produto ou mais de um item, uma linha por item. Não repita
 - Perguntas sobre o que está vigente: use contar_documentos_erp com situacao ["vigente"] e agrupar_por "tipo", e responda separado, no formato "*582 apólices* e *8 endossos* vigentes". Apólices = tipo A (mesma regra da tela ERP > Apólices > Vigentes); endossos = tipos C, D, I, M, R, X somados; faturas = tipo F (só cite se houver). O total da ficha da imobiliária no ERP soma tudo isso junto, por isso é maior que o número de apólices.
 - Quando o dado puder estar defasado (ex.: resumoAtualizadoEm, produção do Corp importada manualmente), diga de quando é.
 - Seguro Incêndio não é garantia locatícia (só fiador, caução, fiança e capitalização são).
-- FICHA DE VISITA (03/11): pedido de "ficha de visita" / "o que levar para a visita" de uma imobiliária ou grupo → buscar_imobiliaria (pegue o id da ficha, ou o grupo) e depois ficha_visita. Responda curto: (1) aluguel mediano e faixa na região, (2) quanto ficaria o seguro de Fiança por seguradora para o aluguel de referência (prêmio no ano e parcela no mês), (3) margem atual por produto e o potencial da Fiança. SEMPRE diga a base usada: "propria" = dados dela; "bairros" = ela tem poucos endereços e usamos o estudo dos bairros onde atua; "cidade"; "sem_dados". Avise que o aluguel é da carteira da O2 (não o mercado inteiro), que o preço é estimativa e que o potencial é hipótese. Margem = comissão − repasse (inclui pró-labore), sem custos nem impostos.
-- ESTATÍSTICA DE MERCADO (03/11): perguntas sobre aluguel por bairro/cidade, preço do seguro por seguradora (prêmio em aluguéis), taxa de fechamento por faixa de aluguel ou margem por produto/seguradora → consultar_dados nas tabelas prontas analise_aluguel_cep5, analise_aluguel_cidade, analise_preco_seguradora, analise_conv_faixa e analise_margem (esta só admin). São da carteira da O2, 24 meses (margem: 2020 em diante, por ano de vigência), atualizadas 1x por dia.
+- FICHA DE VISITA (03/11): pedido de "ficha de visita" / "o que levar para a visita" de uma imobiliária ou grupo → buscar_imobiliaria (pegue o id da ficha, ou o grupo) e depois ficha_visita. Responda curto: (1) aluguel mediano e faixa na região, (2) quanto ficaria o seguro de Fiança por seguradora para o aluguel de referência (prêmio no ano e parcela no mês), (3) comissão e repasse atuais por produto e o potencial da Fiança (a MARGEM, comissão menos repasse, só aparece para o financeiro da O2). SEMPRE diga a base usada: "propria" = dados dela; "bairros" = ela tem poucos endereços e usamos o estudo dos bairros onde atua; "cidade"; "sem_dados". Avise que o aluguel é da carteira da O2 (não o mercado inteiro), que o preço é estimativa e que o potencial é hipótese. Margem (só financeiro) = comissão − repasse (inclui pró-labore), sem custos nem impostos.
+- ESTATÍSTICA DE MERCADO (03/11): perguntas sobre aluguel por bairro/cidade, preço do seguro por seguradora (prêmio em aluguéis), taxa de fechamento por faixa de aluguel ou margem por produto/seguradora → consultar_dados nas tabelas prontas analise_aluguel_cep5, analise_aluguel_cidade, analise_preco_seguradora, analise_conv_faixa e analise_margem (esta só para o financeiro da O2). São da carteira da O2, 24 meses (margem: 2020 em diante, por ano de vigência), atualizadas 1x por dia.
 - Você só LÊ. Não altera nada, não envia e-mail, não baixa fatura, não cria card. Se pedirem, diga que isso é feito nas telas.
-${verComissao ? "" : "- Você NÃO tem acesso a comissão, repasse, receita, imposto, DAS, margem nem dados do Nibo (nível 3, financeiro da O2). Se perguntarem esses valores, diga que o dado é do financeiro e não está liberado para o seu perfil (não tente outra ferramenta para contornar).\n"}
+${verFinanceiro ? "" : "- Você NÃO tem acesso a Nibo, conta, extratos, baixas, receita realizada, imposto, DAS nem margem (nível 3, financeiro da O2). Se perguntarem esses valores, diga que o dado é do financeiro e não está liberado para o seu perfil (não tente outra ferramenta para contornar). Comissão e repasse das apólices você informa normalmente.\n"}
 ESTILO
 - Português do Brasil, direto e curto (2 a 6 linhas), como mensagem de chat. *Negrito* nos números-chave. Sem tabelas nem títulos com #. Listas curtas com hífen se precisar.
 - Valores em reais no formato R$ 12.345 (sem centavos); abaixo de R$ 1.000 use centavos (R$ 74,14) e percentuais com uma casa (15,3%).
@@ -108,7 +109,13 @@ ESTILO
 }
 
 // Conjunto de ferramentas e roteamento do robô: usados pela produção e pelos testes (mesmo código, mesmo comportamento).
-export function ferramentasDoRobo(verComissao: boolean): Anthropic.Tool[] {
+export function ferramentasDoRobo(verComissao: boolean, verFinanceiro = verComissao): Anthropic.Tool[] {
+  const lista = listaDeFerramentas(verComissao);
+  // Imposto pago (Nibo) é financeiro da O2 (nível 3); o cubo financeiro fica, mas sem receita realizada, banco e DAS para quem não é do financeiro.
+  return verFinanceiro ? lista : lista.filter((f) => f.name !== FERRAMENTA_IMPOSTOS_PAGOS.name);
+}
+
+function listaDeFerramentas(verComissao: boolean): Anthropic.Tool[] {
   return verComissao
     ? [...FERRAMENTAS_ERP, ...FERRAMENTAS_GERAIS, ...FERRAMENTAS_BUSCA, FERRAMENTA_RELATORIO, FERRAMENTA_ARQUIVOS, FERRAMENTA_PRIMEIRA_COTACAO, FERRAMENTA_CUBO, FERRAMENTA_CUBO_COBERTURAS, FERRAMENTA_CUBO_SINISTROS, FERRAMENTA_CUBO_FINANCEIRO, FERRAMENTA_IMPOSTOS_PAGOS, FERRAMENTA_LEGISLACAO, FERRAMENTA_CONCEITOS, FERRAMENTA_FICHA_VISITA, ...FERRAMENTAS]
     : [
@@ -122,7 +129,7 @@ export function ferramentasDoRobo(verComissao: boolean): Anthropic.Tool[] {
         FERRAMENTA_CUBO_COBERTURAS,
         FERRAMENTA_CUBO_SINISTROS,
         FERRAMENTA_LEGISLACAO, FERRAMENTA_CONCEITOS,
-        ...FERRAMENTAS.filter((f) => f.name === "consultar_painel"), // sem comissão/repasse para quem não é admin
+        ...FERRAMENTAS.filter((f) => f.name === "consultar_painel"), // lista reduzida (defesa: hoje toda a equipe @o2 tem comissão e repasse das apólices)
       ];
 }
 
@@ -149,17 +156,18 @@ function restaurarLinksAssinados(texto: string, originais: string[]): string {
 }
 
 export async function executarFerramentaDoRobo(nome: string, entrada: unknown, email: string, verComissao: boolean): Promise<string> {
+  const verFinanceiro = podeVerFinanceiroNoChat(email); // nível 3 (conta, Nibo, baixas, receita, imposto, margem)
   return (
     (await executarFerramentaErp(nome, entrada, verComissao)) ??
-    (await executarFerramentaGeral(nome, entrada, verComissao)) ??
+    (await executarFerramentaGeral(nome, entrada, verComissao, verFinanceiro)) ??
     (await executarFerramentaBusca(nome, entrada, verComissao)) ??
     (await executarFerramentaRelatorio(nome, entrada, email, verComissao)) ??
     (await executarFerramentaArquivos(nome, entrada, email)) ??
     (await executarFerramentaAnalises(nome, entrada, verComissao)) ??
-    (await executarFerramentaRisco(nome, entrada, verComissao)) ??
+    (await executarFerramentaRisco(nome, entrada, verFinanceiro)) ??
     (await executarFerramentaLegislacao(nome, entrada)) ??
     (await executarFerramentaConceitos(nome, entrada)) ??
-    (await executarFerramentaFichaVisita(nome, entrada, verComissao)) ??
+    (await executarFerramentaFichaVisita(nome, entrada, verFinanceiro)) ??
     (verComissao || nome === "consultar_painel"
       ? await executarFerramenta(nome, entrada, { semFinanceiro: !verComissao })
       : "Ferramenta indisponível para o seu perfil.")
@@ -181,10 +189,12 @@ export type RespostaRobo = {
 export async function responderComoRobo(email: string, historico: TurnoChat[]): Promise<RespostaRobo> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY não configurada");
-  // verComissao = nível FINANCEIRO (Matheus, William, Nathalie, Vanessa): comissão, repasse, receita, imposto, Nibo, margem. Ver lib/chat/niveisAcesso.ts.
+  // verComissao = percentuais e valores das comissões e repasses das APÓLICES (nível 1, toda a equipe @o2); verFinanceiro = conta/Nibo/baixas/receita/imposto/margem
+  // (nível 3: Matheus, William, Nathalie, Vanessa). Ver lib/chat/niveisAcesso.ts.
   if (!roboLiberadoPara(email)) throw new Error("sem acesso ao robô");
-  const verComissao = podeVerFinanceiroNoChat(email);
-  const ferramentas = [...ferramentasDoRobo(verComissao), FERRAMENTA_LOGICA];
+  const verComissao = podeVerComissaoNoChat(email);
+  const verFinanceiro = podeVerFinanceiroNoChat(email);
+  const ferramentas = [...ferramentasDoRobo(verComissao, verFinanceiro), FERRAMENTA_LOGICA];
   let pessoal = false;
   let logica: string | null = null;
   const fontes: string[] = [];
@@ -200,7 +210,7 @@ export async function responderComoRobo(email: string, historico: TurnoChat[]): 
     resposta = await anthropic.messages.create({
       model: MODELO,
       max_tokens: 2000,
-      system: [{ type: "text", text: systemPrompt(verComissao), cache_control: { type: "ephemeral" } }],
+      system: [{ type: "text", text: systemPrompt(verComissao, verFinanceiro), cache_control: { type: "ephemeral" } }],
       tools: ferramentas,
       tool_choice: semFerramentas ? { type: "none" } : { type: "auto" },
       messages: mensagens,
@@ -250,7 +260,7 @@ export async function responderComoRobo(email: string, historico: TurnoChat[]): 
       const final = await anthropic.messages.create({
         model: MODELO,
         max_tokens: 1500,
-        system: [{ type: "text", text: systemPrompt(verComissao), cache_control: { type: "ephemeral" } }],
+        system: [{ type: "text", text: systemPrompt(verComissao, verFinanceiro), cache_control: { type: "ephemeral" } }],
         tools: ferramentas,
         tool_choice: { type: "none" },
         messages: historicoFinal,

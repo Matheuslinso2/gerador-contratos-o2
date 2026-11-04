@@ -179,11 +179,11 @@ export async function consultarCuboSinistros(e: EntradaSin): Promise<string> {
   });
 }
 
-// ------------------------------------------------------------------ FINANCEIRO: receita e repasse (só administradores)
+// ------------------------------------------------------------------ FINANCEIRO: repasses (equipe) e receita realizada/banco/DAS (só financeiro da O2)
 export const FERRAMENTA_CUBO_FINANCEIRO: Anthropic.Tool = {
   name: "consultar_cubo_financeiro",
   description:
-    "CUBO FINANCEIRO (só administradores; atualizado de hora em hora): comissão RECEBIDA (receita, baixas do ERP) e os REPASSES às imobiliárias, por mês, produto, ramo (IMOBILIARIO = incêndio imobiliário, 2 IMOBILIARIO), seguradora e imobiliária/grupo. Quatro fatos que NUNCA se somam entre si: receita (comissão recebida), repasse_erp (repasse gerado pelo ERP: bruto, retido e líquido; em 2026 está tudo 'pendente'), repasse_corp (controle do Corp: status pago = tem data de repasse; previsto = sem data) e repasse_pago_banco (o que o Nibo/banco pagou à imobiliária, SEM divisão por produto: ramo '(todos os produtos)'). Use para 'quanto foi repassado ao grupo X no ano', 'receita do incêndio imobiliário', 'repasse previsto x pago'. Repasse PAGO por produto: repasse_corp status pago; total pago à imobiliária: repasse_pago_banco; diga qual fonte usou e o que não existe por produto. A coluna das_devido_estimado (só no fato receita) é o DAS que a receita GEROU, estimado pela alíquota efetiva do Simples Nacional (Anexo III) do mês de cada empresa, calculada sobre o RBT12 = soma da comissão recebida dos 12 meses anteriores (hoje cerca de 16,4% a 17,4% na O2 Corretora e 14,6% a 15,6% na O2 Capitalização). É imposto DEVIDO estimado, NUNCA imposto pago: o pago vem de consultar_impostos_pagos (muitas guias estão em aberto). Dimensão empresa = O2 Corretora | O2 Capitalização (empresa do documento).",
+    "CUBO FINANCEIRO (atualizado de hora em hora): REPASSES às imobiliárias (repasse_erp e repasse_corp: liberados a toda a equipe) e, só para o financeiro da O2 (Matheus, William, Nathalie e Vanessa), a comissão RECEBIDA (receita, baixas do ERP), o repasse pago pelo banco e o DAS devido, tudo por mês, produto, ramo (IMOBILIARIO = incêndio imobiliário, 2 IMOBILIARIO), seguradora e imobiliária/grupo. Quatro fatos que NUNCA se somam entre si: receita (comissão recebida), repasse_erp (repasse gerado pelo ERP: bruto, retido e líquido; em 2026 está tudo 'pendente'), repasse_corp (controle do Corp: status pago = tem data de repasse; previsto = sem data) e repasse_pago_banco (o que o Nibo/banco pagou à imobiliária, SEM divisão por produto: ramo '(todos os produtos)'). Use para 'quanto foi repassado ao grupo X no ano', 'receita do incêndio imobiliário', 'repasse previsto x pago'. Repasse PAGO por produto: repasse_corp status pago; total pago à imobiliária: repasse_pago_banco; diga qual fonte usou e o que não existe por produto. A coluna das_devido_estimado (só no fato receita) é o DAS que a receita GEROU, estimado pela alíquota efetiva do Simples Nacional (Anexo III) do mês de cada empresa, calculada sobre o RBT12 = soma da comissão recebida dos 12 meses anteriores (hoje cerca de 16,4% a 17,4% na O2 Corretora e 14,6% a 15,6% na O2 Capitalização). É imposto DEVIDO estimado, NUNCA imposto pago: o pago vem de consultar_impostos_pagos (muitas guias estão em aberto). Dimensão empresa = O2 Corretora | O2 Capitalização (empresa do documento).",
   input_schema: {
     type: "object",
     properties: {
@@ -204,8 +204,15 @@ export const FERRAMENTA_CUBO_FINANCEIRO: Anthropic.Tool = {
 
 type EntradaFin = { agrupar?: string[]; empresa?: string; fato?: string; produto?: string; ramo?: string; status?: string; seguradora?: string; imobiliaria?: string; mes_de?: string; mes_ate?: string; limite?: number };
 
-export async function consultarCuboFinanceiro(e: EntradaFin): Promise<string> {
+// Nível 1 (toda a equipe): repasses das apólices (repasse_erp e repasse_corp). Nível 3 (financeiro): também receita realizada, repasse pago pelo banco (Nibo) e DAS devido.
+const FATOS_DO_FINANCEIRO = ["receita", "repasse_pago_banco"];
+
+export async function consultarCuboFinanceiro(e: EntradaFin, verFinanceiro: boolean): Promise<string> {
+  if (!verFinanceiro && e.fato && FATOS_DO_FINANCEIRO.includes(e.fato)) {
+    return JSON.stringify({ erro: "Receita realizada e repasse pago pelo banco (Nibo) são do financeiro da O2 (Matheus, William, Nathalie e Vanessa). Os repasses das apólices (repasse_erp e repasse_corp) estão liberados." });
+  }
   const p: Record<string, unknown> = { ...e, mes_de: mesParaData(e.mes_de), mes_ate: mesParaData(e.mes_ate) };
+  if (!verFinanceiro) p.excluir_fatos = FATOS_DO_FINANCEIRO;
   if ((e.mes_de && !p.mes_de) || (e.mes_ate && !p.mes_ate)) return JSON.stringify({ erro: "Use meses no formato AAAA-MM." });
   if (e.produto) p.produto = e.produto.toLowerCase() === "re" ? "incendio" : e.produto.toLowerCase();
   const falha = await resolverEntidades(e.imobiliaria, p);
@@ -229,11 +236,11 @@ export async function consultarCuboFinanceiro(e: EntradaFin): Promise<string> {
   });
 }
 
-// ------------------------------------------------------------------ IMPOSTOS PAGOS (Nibo) — só administradores
+// ------------------------------------------------------------------ IMPOSTOS PAGOS (Nibo) — só financeiro da O2
 export const FERRAMENTA_IMPOSTOS_PAGOS: Anthropic.Tool = {
   name: "consultar_impostos_pagos",
   description:
-    "IMPOSTOS REALMENTE PAGOS (só administradores; fonte: pagamentos lançados no Nibo, atualizado de hora em hora), por mês de pagamento, empresa (corretora | capitalizacao) e tipo: DAS (Simples Nacional), ISS, IRPJ/CSLL, PIS/COFINS, contribuição sindical, parcelamento tributário e folha (INSS/FGTS). Use para 'quanto de imposto foi pago', 'o DAS de tal mês foi pago?', 'impostos pagos no ano'. IMPORTANTE: imposto PAGO não se calcula por taxa e não se divide por produto: muitas guias (DAS) publicadas pela contabilidade (Onvio) estão em aberto, então mês sem pagamento de DAS aqui = guia não paga. O imposto DEVIDO estimado sobre a receita de um produto/imobiliária está em consultar_cubo_financeiro (das_devido_estimado, alíquota efetiva do Simples pelo RBT12): apresente os dois lado a lado e nunca chame o estimado de pago.",
+    "IMPOSTOS REALMENTE PAGOS (só financeiro da O2: Matheus, William, Nathalie e Vanessa; fonte: pagamentos lançados no Nibo, atualizado de hora em hora), por mês de pagamento, empresa (corretora | capitalizacao) e tipo: DAS (Simples Nacional), ISS, IRPJ/CSLL, PIS/COFINS, contribuição sindical, parcelamento tributário e folha (INSS/FGTS). Use para 'quanto de imposto foi pago', 'o DAS de tal mês foi pago?', 'impostos pagos no ano'. IMPORTANTE: imposto PAGO não se calcula por taxa e não se divide por produto: muitas guias (DAS) publicadas pela contabilidade (Onvio) estão em aberto, então mês sem pagamento de DAS aqui = guia não paga. O imposto DEVIDO estimado sobre a receita de um produto/imobiliária está em consultar_cubo_financeiro (das_devido_estimado, alíquota efetiva do Simples pelo RBT12): apresente os dois lado a lado e nunca chame o estimado de pago.",
   input_schema: {
     type: "object",
     properties: {
@@ -267,13 +274,13 @@ export async function consultarImpostosPagos(e: EntradaImp): Promise<string> {
   });
 }
 
-export async function executarFerramentaRisco(nome: string, entrada: unknown, verComissao = false): Promise<string | null> {
+export async function executarFerramentaRisco(nome: string, entrada: unknown, verFinanceiro = false): Promise<string | null> {
   try {
     if (nome === FERRAMENTA_CUBO_COBERTURAS.name) return await consultarCuboCoberturas(entrada as EntradaCob);
     if (nome === FERRAMENTA_CUBO_SINISTROS.name) return await consultarCuboSinistros(entrada as EntradaSin);
-    const negado = "Dados financeiros (receita, imposto e repasse) não estão liberados para este perfil.";
-    if (nome === FERRAMENTA_CUBO_FINANCEIRO.name) return verComissao ? await consultarCuboFinanceiro(entrada as EntradaFin) : negado;
-    if (nome === FERRAMENTA_IMPOSTOS_PAGOS.name) return verComissao ? await consultarImpostosPagos(entrada as EntradaImp) : negado;
+    const negado = "Imposto, DAS, Nibo e receita realizada são do financeiro da O2 (Matheus, William, Nathalie e Vanessa) e não estão liberados para este perfil.";
+    if (nome === FERRAMENTA_CUBO_FINANCEIRO.name) return await consultarCuboFinanceiro(entrada as EntradaFin, verFinanceiro);
+    if (nome === FERRAMENTA_IMPOSTOS_PAGOS.name) return verFinanceiro ? await consultarImpostosPagos(entrada as EntradaImp) : negado;
   } catch (err) {
     return `Erro no cubo: ${err instanceof Error ? err.message : String(err)}`;
   }

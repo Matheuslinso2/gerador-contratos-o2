@@ -14,3 +14,5 @@
 -- chat_cubo_fin_consultar / chat_cubo_imp_consultar; chat_cubo_atualizar refaz os cinco cubos (cron de hora em hora).
 -- 02/11/2026 (migração chat_cubo_financeiro_v2_das_rbt12): cubo financeiro ganhou 'empresa' (O2 Corretora | O2 Capitalização, pelo documento) e a coluna das_estimado (= comissão recebida x alíquota efetiva do Simples).
 -- chat_aliquota_simples_anexo3(rbt12) e a view chat_simples_mensal (receita, RBT12 dos 12 meses anteriores com janela completa, alíquota efetiva) reproduzem o cálculo validado em 26/10 (corretora 16,4-17,4%, Cap 14,6-15,6% em 2026).
+-- 04/11/2026 (migração chat_cubo_fin_consultar_excluir_fatos): chat_cubo_fin_consultar aceita 'excluir_fatos' (jsonb). Para quem não é do financeiro da O2 o robô exclui
+--   receita (comissão recebida na conta) e repasse_pago_banco (Nibo); o repasse das apólices (repasse_erp, repasse_corp) fica liberado à equipe. Ver src/lib/chat/niveisAcesso.ts.

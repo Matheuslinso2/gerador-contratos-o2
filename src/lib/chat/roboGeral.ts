@@ -149,9 +149,14 @@ const COLUNA_SENSIVEL = /senha|password|token|secret|api_?key|corpo|html|observa
 const JSON_PERMITIDO = new Set(["erp_origens.dados_legiveis", "producao_itens.extras"]);
 const COLUNA_PERMITIDA_APESAR = new Set(["imobiliaria_texto"]);
 const TIPOS_BLOQUEADOS = new Set(["jsonb", "json", "bytea"]);
-// Quem não é admin não vê comissão, repasse, saldo, imposto, desconto, premiação.
-const COLUNA_FINANCEIRA = /comiss|repasse|premiacao|pro_?labore|saldo|imposto|desconto/i;
-const TABELA_FINANCEIRA = /^(erp_(repasse|baixa|comissao|comissoes|corp_comissoes|nibo|extrato|saldo|previsao|imposto|desconto|descontos|estorno|gestao)|repasses|producao_(?!unificada|resolvida|itens)|corp_|campanhas_producao|campanhas_metas|faturas|erp_fatura|analise_margem)/i;
+// DOIS níveis (regra do Matheus, 04/11/2026; ver lib/chat/niveisAcesso.ts):
+// - COMISSÃO E REPASSE DAS APÓLICES (percentuais e valores): nível 1, toda a equipe @o2. Só some se verComissao for falso (defesa; hoje todo @o2 tem).
+// - FINANCEIRO DA O2 = conta e dinheiro que entrou/saiu: Nibo, extratos, baixas e recebimentos de comissão, previsão de receita, saldo, imposto, desconto de baixa,
+//   estorno, gestão das baixas e margem. Só Matheus, William, Nathalie e Vanessa (verFinanceiro).
+const COLUNA_COMISSAO = /comiss|repasse|premiacao|pro_?labore/i;
+const TABELA_COMISSAO = /^(erp_(repasse|comissao_regras|comissoes|corp_comissoes|fatura)|repasses|producao_(?!unificada|resolvida|itens)|corp_|campanhas_producao|campanhas_metas|faturas)/i;
+const COLUNA_FINANCEIRA = /saldo|imposto|desconto/i;
+const TABELA_FINANCEIRA = /^(erp_(baixa|comissao_recebimentos|nibo|extrato|saldo|previsao|imposto|desconto|descontos|estorno|gestao)|analise_margem)/i;
 
 let cacheColunas: { em: number; mapa: Map<string, { coluna: string; tipo: string }[]> } | null = null;
 
@@ -175,17 +180,19 @@ async function colunasDoBanco() {
   return mapa;
 }
 
-async function tabelasPermitidas(verComissao: boolean): Promise<Record<string, ConfigTabela>> {
+async function tabelasPermitidas(verComissao: boolean, verFinanceiro: boolean): Promise<Record<string, ConfigTabela>> {
   const mapa = await colunasDoBanco();
   const saida: Record<string, ConfigTabela> = {};
   for (const [nome, descricao] of Object.entries(TABELAS_DESCRICAO)) {
     const cols = mapa.get(nome);
     if (!cols) continue;
-    if (!verComissao && TABELA_FINANCEIRA.test(nome)) continue;
+    if (!verComissao && TABELA_COMISSAO.test(nome)) continue;
+    if (!verFinanceiro && TABELA_FINANCEIRA.test(nome)) continue;
     const colunas = cols
       .filter((c) => !TIPOS_BLOQUEADOS.has(c.tipo) || JSON_PERMITIDO.has(`${nome}.${c.coluna}`))
       .filter((c) => COLUNA_PERMITIDA_APESAR.has(c.coluna) || !COLUNA_SENSIVEL.test(c.coluna))
-      .filter((c) => verComissao || !COLUNA_FINANCEIRA.test(c.coluna))
+      .filter((c) => verComissao || !COLUNA_COMISSAO.test(c.coluna))
+      .filter((c) => verFinanceiro || !COLUNA_FINANCEIRA.test(c.coluna))
       .map((c) => c.coluna);
     if (colunas.length) saida[nome] = { descricao, colunas };
   }
@@ -301,18 +308,18 @@ async function consultarPainelExtra(e: { painel: string; competencia?: string; c
   return `Painel desconhecido. Use: ${Object.keys(PAINEIS_EXTRA).join(", ")}`;
 }
 
-export async function executarFerramentaGeral(nome: string, entrada: unknown, verComissao: boolean): Promise<string | null> {
+export async function executarFerramentaGeral(nome: string, entrada: unknown, verComissao: boolean, verFinanceiro = verComissao): Promise<string | null> {
   try {
     if (nome === "descrever_tabelas") {
-      const tabelas = await tabelasPermitidas(verComissao);
+      const tabelas = await tabelasPermitidas(verComissao, verFinanceiro);
       const alvo = (entrada as { tabela?: string }).tabela;
       if (alvo) return tabelas[alvo] ? JSON.stringify({ tabela: alvo, ...tabelas[alvo] }) : `Tabela não disponível. Use: ${Object.keys(tabelas).join(", ")}`;
       // Sem colunas (a lista inteira estouraria o limite); peça uma tabela para ver as colunas.
       return JSON.stringify(Object.entries(tabelas).map(([t, c]) => ({ tabela: t, descricao: c.descricao })));
     }
-    if (nome === "consultar_dados") return await consultarTabela(entrada as EntradaTabela, await tabelasPermitidas(verComissao));
+    if (nome === "consultar_dados") return await consultarTabela(entrada as EntradaTabela, await tabelasPermitidas(verComissao, verFinanceiro));
     if (nome === "consultar_painel_extra") {
-      if (!verComissao) return "Painéis completos só estão liberados para administradores.";
+      if (!verComissao) return "Painéis completos não estão liberados para o seu perfil.";
       return await consultarPainelExtra(entrada as Parameters<typeof consultarPainelExtra>[0]);
     }
     return null;
