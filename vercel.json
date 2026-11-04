@@ -141,7 +141,7 @@
     },
     {
       "path": "/api/cron/erp-extratos-drive",
-      "schedule": "40 * * * *"
+      "schedule": "18 * * * *"
     },
     {
       "path": "/api/cron/erp-nibo",
@@ -149,11 +149,11 @@
     },
     {
       "path": "/api/cron/erp-inadimplencia",
-      "schedule": "45 * * * *"
+      "schedule": "5 * * * *"
     },
     {
       "path": "/api/cron/erp-faturas",
-      "schedule": "50 * * * *"
+      "schedule": "10 * * * *"
     },
     {
       "path": "/api/cron/erp-baixa-automatica",
@@ -165,7 +165,7 @@
     },
     {
       "path": "/api/cron/base-unica-lotes-re",
-      "schedule": "54 * * * *"
+      "schedule": "2 * * * *"
     },
     {
       "path": "/api/cron/sinistros-ponte-corp",
@@ -173,7 +173,7 @@
     },
     {
       "path": "/api/cron/chat-cubo",
-      "schedule": "59 * * * *"
+      "schedule": "13 * * * *"
     },
     {
       "path": "/api/cron/erp-cobranca-pronta",
