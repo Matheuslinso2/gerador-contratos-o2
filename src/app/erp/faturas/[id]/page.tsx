@@ -69,7 +69,7 @@ export default async function ErpFaturaPage({ params, searchParams }: { params: 
   const supabase = await createClient();
   const d = await fichaFatura(supabase, id, mesParam);
   if (!d) redirect("/erp/faturas");
-  const { fatura, meses, mes, anterior, linhas, entradas, saidas } = d;
+  const { fatura, meses, mes, anterior, linhas, entradas, saidas, quitadasVigentes } = d;
   const imob = (fatura.imobiliaria as unknown as { nome: string } | null)?.nome ?? "—";
   const idx = mes ? meses.findIndex((m) => m.id === mes.id) : -1;
   const dif = mes && mes.valor_boleto !== null ? mes.valor_boleto - mes.valor_itens : null;
@@ -220,6 +220,45 @@ export default async function ErpFaturaPage({ params, searchParams }: { params: 
                       </form>
                     )}
                   </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </details>
+
+      <details className="rounded-xl border border-gray-200 bg-white">
+        <summary className="cursor-pointer px-4 py-2 text-sm font-semibold text-o2-navy">
+          Quitadas e ainda vigentes ({quitadasVigentes.length})
+          <InfoLegenda titulo="Quitadas e ainda vigentes">
+            Documentos que já passaram por esta fatura, estão quitados (última parcela já cobrada na fatura ou todas as parcelas com baixa no ERP) e não geram mais cobrança neste mês, mas continuam vigentes depois do fim do mês (sem cancelamento). Documento que saiu da fatura sem estar quitado aparece em Saídas. Servem para acompanhar a carteira até a renovação. Última cobrança: o último mês em que o documento apareceu na fatura e a parcela cobrada. Parcelas pagas: parcelas do documento com baixa no ERP sobre o total de parcelas. Fim da vigência: quando o documento precisa estar renovado. Ordenado pelo fim da vigência mais próximo.
+          </InfoLegenda>
+        </summary>
+        {quitadasVigentes.length > 0 && (
+          <table className="w-full text-xs">
+            <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+              <tr>
+                <th className="px-3 py-1.5">Abrir</th>
+                <th className="px-3 py-1.5">Nº da apólice</th>
+                <th className="px-3 py-1.5">Código O2 do documento</th>
+                <th className="px-3 py-1.5">Cliente</th>
+                <th className="px-3 py-1.5">Última cobrança</th>
+                <th className="px-3 py-1.5">Parcelas pagas</th>
+                <th className="px-3 py-1.5">Fim da vigência</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {quitadasVigentes.map((q) => (
+                <tr key={q.documento_id}>
+                  <td className="px-3 py-1"><BotaoVerDocumento id={q.documento_id} /></td>
+                  <td className="px-3 py-1">{q.apolice}</td>
+                  <td className="px-3 py-1">
+                    <Link href={`/erp/documentos/${q.documento_id}`} className="text-o2-navy hover:underline">{q.codigo_o2}</Link>
+                  </td>
+                  <td className="px-3 py-1">{q.cliente ?? "—"}</td>
+                  <td className="px-3 py-1">{mesBr(q.ultima_competencia)}{q.ultima_parcela ? <span className="text-gray-400"> · parcela {q.ultima_parcela}</span> : null}</td>
+                  <td className="px-3 py-1">{q.parcelas_total ? `${q.parcelas_pagas}/${q.parcelas_total}` : "—"}</td>
+                  <td className="px-3 py-1">{q.vigencia_fim ? formatarData(q.vigencia_fim) : "—"}</td>
                 </tr>
               ))}
             </tbody>

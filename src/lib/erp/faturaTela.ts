@@ -23,6 +23,11 @@ export type LinhaFatura = {
   comissao_extrato: number | null;
 };
 export type Saida = { apolice: string; documento_id: string | null; codigo_o2: number | null; cliente: string | null; valor_anterior: number; explicacao: string | null; registrado?: { motivo: string; observacao: string | null; referencia: string | null; usuario_email: string | null; criado_em: string } };
+/** Documento que já passou por esta fatura, não gera mais cobrança no mês, mas segue vigente (Matheus 04/11: ajuda a transitar para a renovação). */
+export type QuitadaVigente = {
+  documento_id: string; apolice: string; codigo_o2: number | null; cliente: string | null; vigencia_fim: string | null;
+  ultima_competencia: string; ultima_parcela: string | null; parcelas_pagas: number; parcelas_total: number;
+};
 export type MesFatura = { arquivos?: string[] | null; numero_fatura?: string | null; id: string; competencia: string; vencimento: string | null; valor_boleto: number | null; valor_itens: number; qtd_itens: number };
 
 /** Nome do produto de cada fatura (o código do ramo vem da seguradora e não diz nada ao usuário): vem dos documentos ligados às linhas. */
@@ -66,7 +71,7 @@ export async function fichaFatura(sb: SupabaseClient, faturaId: string, competen
   if (!fatura) return null;
   const { data: mesesBrutos } = await sb.from("erp_fatura_meses").select("id, competencia, vencimento, valor_boleto, valor_itens, qtd_itens, arquivos").eq("fatura_id", faturaId).order("competencia");
   const meses = ((mesesBrutos ?? []) as MesFatura[]).map((m) => ({ ...m, valor_boleto: m.valor_boleto === null ? null : Number(m.valor_boleto), valor_itens: Number(m.valor_itens) }));
-  if (!meses.length) return { fatura, meses, mes: null, anterior: null, linhas: [], entradas: [], saidas: [] };
+  if (!meses.length) return { fatura, meses, mes: null, anterior: null, linhas: [], entradas: [], saidas: [], quitadasVigentes: [] as QuitadaVigente[] };
   const idx = competencia ? Math.max(0, meses.findIndex((m) => m.competencia === competencia)) : meses.length - 1;
   const mes = meses[idx];
   const anterior = idx > 0 ? meses[idx - 1] : null;
@@ -147,7 +152,49 @@ export async function fichaFatura(sb: SupabaseClient, faturaId: string, competen
   const ramo_nome = [...contagem.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
   const nums = await numerosDasFaturas(sb, (mes.arquivos ?? []) as string[]);
   const numero_fatura = [...new Set((mes.arquivos ?? []).map((a) => nums.get(a)).filter(Boolean))].join(", ") || null;
-  return { fatura: { ...fatura, ramo_nome }, meses, mes: { ...mes, numero_fatura }, anterior, linhas, entradas, saidas };
+
+  // quitadas e ainda vigentes: passaram por esta fatura em meses anteriores, não estão neste mês e a vigência
+  // vai além do fim deste mês (sem cancelamento) — base para a transição à renovação
+  const quitadasVigentes: QuitadaVigente[] = [];
+  const mesesAntes = meses.slice(0, idx);
+  if (mesesAntes.length) {
+    const fimDoMes = new Date(Date.UTC(+mes.competencia.slice(0, 4), +mes.competencia.slice(5, 7), 0)).toISOString().slice(0, 10);
+    const competenciaDe = new Map(mesesAntes.map((m) => [m.id, m.competencia]));
+    const { data: passados } = await sb.from("erp_fatura_itens").select("apolice, parcela_n, parcelas_total, documento_id, fatura_mes_id").in("fatura_mes_id", mesesAntes.map((m) => m.id)).not("documento_id", "is", null);
+    const docsAtuais = new Set(atual.map((l) => l.documento_id).filter(Boolean));
+    const ultimo = new Map<string, { apolice: string; competencia: string; parcela: string | null; ultimaCobrada: boolean }>();
+    for (const p of (passados ?? []) as { apolice: string; parcela_n: number | null; parcelas_total: number | null; documento_id: string; fatura_mes_id: string }[]) {
+      if (docsAtuais.has(p.documento_id)) continue;
+      const c = competenciaDe.get(p.fatura_mes_id) ?? "";
+      const u = ultimo.get(p.documento_id);
+      if (!u || c > u.competencia) ultimo.set(p.documento_id, { apolice: p.apolice, competencia: c, parcela: p.parcela_n ? `${p.parcela_n}${p.parcelas_total ? `/${p.parcelas_total}` : ""}` : null, ultimaCobrada: !!(p.parcela_n && p.parcelas_total && p.parcela_n >= p.parcelas_total) });
+    }
+    const ids = [...ultimo.keys()];
+    for (let i = 0; i < ids.length; i += 150) {
+      const lote = ids.slice(i, i + 150);
+      const [{ data: docsV }, { data: parcs }, { data: canc }] = await Promise.all([
+        sb.from("erp_documentos").select("id, nosso_numero, situacao, vigencia_fim, cliente:locatarios!erp_documentos_locatario_id_fkey(nome)").in("id", lote),
+        sb.from("erp_parcelas").select("documento_id, quitada_em").in("documento_id", lote),
+        sb.from("erp_documentos").select("documento_pai_id").in("documento_pai_id", lote).in("tipo", ["X", "I"]),
+      ]);
+      const cancelado = new Set(((canc ?? []) as { documento_pai_id: string }[]).map((c) => c.documento_pai_id));
+      const pagas = new Map<string, [number, number]>();
+      for (const p of (parcs ?? []) as { documento_id: string; quitada_em: string | null }[]) {
+        const t = pagas.get(p.documento_id) ?? [0, 0];
+        pagas.set(p.documento_id, [t[0] + (p.quitada_em ? 1 : 0), t[1] + 1]);
+      }
+      for (const d of (docsV ?? []) as unknown as { id: string; nosso_numero: number; situacao: string; vigencia_fim: string | null; cliente: { nome: string } | null }[]) {
+        if (d.situacao === "cancelado" || d.situacao === "duplicado" || cancelado.has(d.id) || !d.vigencia_fim || d.vigencia_fim <= fimDoMes) continue;
+        const u = ultimo.get(d.id)!;
+        const [pg, tot] = pagas.get(d.id) ?? [0, 0];
+        // quitada = última parcela já cobrada na fatura ou todas as parcelas com baixa no ERP; saída sem quitação fica em Saídas
+        if (!u.ultimaCobrada && !(tot > 0 && pg === tot)) continue;
+        quitadasVigentes.push({ documento_id: d.id, apolice: u.apolice, codigo_o2: d.nosso_numero ?? null, cliente: d.cliente?.nome ?? null, vigencia_fim: d.vigencia_fim, ultima_competencia: u.competencia, ultima_parcela: u.parcela, parcelas_pagas: pg, parcelas_total: tot });
+      }
+    }
+    quitadasVigentes.sort((a, b) => (a.vigencia_fim ?? "").localeCompare(b.vigencia_fim ?? ""));
+  }
+  return { fatura: { ...fatura, ramo_nome }, meses, mes: { ...mes, numero_fatura }, anterior, linhas, entradas, saidas, quitadasVigentes };
 }
 
 /** Lista de faturas com o último mês (para a etapa Faturas). */
