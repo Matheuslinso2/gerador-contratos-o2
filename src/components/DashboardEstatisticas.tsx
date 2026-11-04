@@ -862,7 +862,7 @@ async function PrecoOutro({ produto }: { produto: ProdutoEstat }) {
     <>
       <Aviso>
         <b>Atenção:</b> o preço só é conhecido para cotações que <b>fecharam</b> (a perdida não guarda prêmio). Janela de 24 meses; seguradoras com menos de 10 fechadas ficam de fora.
-        {ehRe && " Na planilha de Incêndio muitas cotações trazem só “Segimob” como seguradora (a seguradora efetiva não foi informada); elas aparecem separadas, sem presumir qual é."}
+        {ehRe && " Na planilha de Incêndio muitas cotações trazem só “Segimob” (a plataforma de cálculo, que não é seguradora) no lugar da seguradora; elas entram como “Não informada”, sem presumir qual é."}
       </Aviso>
       {precos.length === 0 ? (
         <Aviso>Sem fechadas com prêmio suficiente neste produto.</Aviso>

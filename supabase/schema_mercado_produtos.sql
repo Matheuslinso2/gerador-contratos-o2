@@ -7,11 +7,12 @@
 --    automovel = sem base (amostra pequena).
 --  * preço = só cotações CONVERTIDAS (a perdida não guarda prêmio); janela de 24 meses.
 --  * seguradora normalizada por analise_seg_norm (Tokio, Porto, Yelum, Allianz, Brasilcap,
---    Icatu, Suhai; "Segimob (seguradora não informada)" separado; o resto vira "Outras").
+--    Icatu, Suhai; "Segimob" NÃO é seguradora (é a plataforma de cálculo) e entra como "Não informada").
 -- Acesso: só colaborador O2.
 create or replace function analise_seg_norm(s text) returns text language sql immutable as $$
   select case
     when s is null or btrim(s) = '' then 'Não informada'
+    when upper(s) like 'SEGIMOB%' then 'Não informada'   -- Segimob é plataforma de cálculo, NÃO seguradora (Matheus, 04/11/2026)
     when upper(s) like '%TOKIO%' then 'Tokio'
     when upper(s) like 'PORTO%' then 'Porto'
     when upper(s) like '%YEL%' then 'Yelum'
@@ -19,7 +20,6 @@ create or replace function analise_seg_norm(s text) returns text language sql im
     when upper(s) like 'BRASILCAP%' then 'Brasilcap'
     when upper(s) like 'ICATU%' then 'Icatu'
     when upper(s) like 'SUHAI%' then 'Suhai'
-    when upper(s) like 'SEGIMOB%' then 'Segimob (seguradora não informada)'
     when upper(s) ~ 'M[ÚU]LTIPLAS|COTAR EM' then 'Várias seguradoras'
     else 'Outras'
   end $$;
