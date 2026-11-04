@@ -80,7 +80,7 @@ export async function consultarCuboCoberturas(e: EntradaCob): Promise<string> {
 export const FERRAMENTA_CUBO_SINISTROS: Anthropic.Tool = {
   name: "consultar_cubo_sinistros",
   description:
-    "ESTATÍSTICAS DE SINISTROS e INDENIZAÇÕES (cubo pronto, atualizado de hora em hora; fonte: sinistros do Corp ligados à apólice do ERP): quantidade, valor avisado, valor indenizado, indenização média e despesas, cruzando produto, subtipo, situação, seguradora, cobertura, imobiliária/grupo, bairro, cidade, faixa de aluguel, mês de ocorrência e mês de início da apólice. Com sinistralidade=true calcula também o PRÊMIO das apólices da mesma coorte e a SINISTRALIDADE (indenizado ÷ prêmio total), podendo agrupar por produto, seguradora, imobiliária, bairro, cidade, faixa de aluguel e ano/mês da apólice. Use para 'quanto foi indenizado na Fiança por seguradora', 'sinistralidade da imobiliária X', 'indenização média por faixa de aluguel', 'sinistros por cobertura'. IMPORTANTE: 'capitalizacao' no Corp são RESGATES, não sinistro de risco: nunca entram na sinistralidade; mostre à parte se o usuário pedir. Só ~9% dos sinistros de seguro têm bairro; o retorno traz 'cobertura' para avisar.",
+    "ESTATÍSTICAS DE SINISTROS e INDENIZAÇÕES (cubo pronto, atualizado de hora em hora; fonte: sinistros do Corp ligados à apólice do ERP; o Corp é transitório e, por ora, o único registro completo de sinistros): quantidade, valor avisado, valor indenizado, indenização média e despesas, cruzando produto, subtipo, situação, seguradora, cobertura, imobiliária/grupo, bairro, cidade, faixa de aluguel, mês de ocorrência e mês de início da apólice. Com sinistralidade=true calcula também o PRÊMIO das apólices da mesma coorte e a SINISTRALIDADE (indenizado ÷ prêmio total), podendo agrupar por produto, seguradora, imobiliária, bairro, cidade, faixa de aluguel e ano/mês da apólice. Use para 'quanto foi indenizado na Fiança por seguradora', 'sinistralidade da imobiliária X', 'indenização média por faixa de aluguel', 'sinistros por cobertura'. IMPORTANTE: 'capitalizacao' no Corp são RESGATES, não sinistro de risco: nunca entram na sinistralidade; mostre à parte se o usuário pedir. Só ~9% dos sinistros de seguro têm bairro; o retorno traz 'cobertura' para avisar.",
   input_schema: {
     type: "object",
     properties: {
@@ -135,7 +135,7 @@ export async function consultarCuboSinistros(e: EntradaSin): Promise<string> {
   const r = data as { linhas: Linha[]; total: Record<string, number>; atualizadoEm: string | null };
   const t = r.total ?? {};
   const aviso: string[] = [
-    "Fonte: sinistros do Corp ligados à apólice do ERP pelo nosso nº do Corp (cerca de 91% ligam). Valor indenizado = o que o Corp registra como pago; valor avisado = o que foi pedido no aviso.",
+    "O Corp será desligado: por ora é o único registro completo de sinistros; quando o ERP tiver os sinistros, ele passa a ser a fonte. Fonte atual: sinistros do Corp ligados à apólice do ERP pelo nosso nº do Corp (cerca de 91% ligam). Valor indenizado = o que o Corp registra como pago; valor avisado = o que foi pedido no aviso.",
     "'capitalizacao' no Corp são resgates de título, não sinistro de risco.",
   ];
   let linhas = r.linhas ?? [];
@@ -227,10 +227,10 @@ export async function consultarCuboFinanceiro(e: EntradaFin, verFinanceiro: bool
     linhas: r.linhas ?? [],
     cuboAtualizadoEm: r.atualizadoEm,
     avisos: [
-      "Quatro fatos que NÃO se somam: receita (comissão recebida), repasse_erp (gerado no ERP), repasse_corp (controle do Corp) e repasse_pago_banco (pago pelo Nibo/banco, sem produto). Nunca some fatos diferentes.",
-      "Em 2026 o ERP ainda não registra repasse como 'pago' (tudo pendente): o repasse efetivamente pago está no banco (por imobiliária, sem produto) e no Corp (status 'pago' = com data de repasse). Diga qual fonte usou e o que ficou sem dado.",
+      "Quatro fatos que NÃO se somam: receita (comissão recebida), repasse_erp (gerado no ERP: FONTE OFICIAL), repasse_corp (controle do Corp: apoio transitório, o Corp será desligado) e repasse_pago_banco (pago pelo Nibo/banco, sem produto). Nunca some fatos diferentes.",
+      "Em 2026 o ERP ainda não registra repasse como 'pago' (tudo pendente): o repasse efetivamente pago está no banco (por imobiliária, sem produto, só para o financeiro) e, como apoio transitório, no Corp (status 'pago' = com data de repasse; o Corp será desligado e o ERP é a fonte oficial). Diga qual fonte usou (rotule 'Corp' quando for dele) e o que ficou sem dado.",
       "das_devido_estimado = comissão recebida x alíquota efetiva do Simples (Anexo III) do mês da empresa, pelo RBT12 (soma dos 12 meses anteriores de comissão recebida). É o imposto que a receita gerou (devido, estimado), NÃO o pago: muitas guias estão em aberto; para o pago use consultar_impostos_pagos e compare. Só cobre o DAS: o ISS retido na fonte pelas seguradoras e o IR indevido retido são outra coisa. valor_retido do repasse_erp é a retenção sobre o repasse.",
-      "A alíquota efetiva é a mesma validada antes (Anexo III pelo RBT12); só existe para meses com 12 meses anteriores de baixa. Mês sem alíquota fica sem estimativa.",
+      "O RBT12 usa a comissão recebida registrada no ERP desde fev/2026 e, só para os meses anteriores (em que o ERP ainda não tem registro completo), o histórico do Corp: é uma série de transição, que vira 100% ERP quando o ERP completar 12 meses próprios (fev/2027). A alíquota só existe para meses com 12 meses anteriores; mês sem alíquota fica sem estimativa.",
       "Mês do repasse_erp = competência; do repasse_corp = data do repasse (ou previsão); da receita = data do recebimento; do banco = mês do pagamento.",
     ],
   });

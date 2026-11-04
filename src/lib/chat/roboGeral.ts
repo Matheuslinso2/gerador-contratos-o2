@@ -20,7 +20,7 @@ const TABELAS_DESCRICAO: Record<string, string> = {
   erp_comissoes: "Comissão por documento/parcela prevista e recebida.",
   erp_comissao_recebimentos: "Recebimentos de comissão (baixas).",
   erp_comissao_regras: "Regras de comissão por seguradora/produto.",
-  erp_corp_comissoes: "Comissões lidas do Corp (previsto x recebido) por parcela.",
+  erp_corp_comissoes: "CORP, apoio transitório: comissões lidas do Corp (previsto x recebido) por parcela.",
   erp_extratos_seguradora: "Extratos de pagamento das seguradoras (cabeçalho).",
   erp_extrato_linhas: "Linhas dos extratos das seguradoras (cada comissão paga).",
   erp_baixa_erp: "Baixas de comissão feitas no ERP.",
@@ -104,16 +104,16 @@ const TABELAS_DESCRICAO: Record<string, string> = {
   // --- Produção / Corp
   producao_resolvida: "COTAÇÕES (e histórico de produção) por imobiliária, já ligadas ao banco único (view de producao_unificada com imobiliaria_id, grupo_id e imobiliaria_exibicao). É onde estão os CARDS DO BITRIX copiados (fonte='bitrix', atualizados de hora em hora) e as planilhas antigas (fonte='planilha') e o Corp (fonte='corp', apólices efetivadas). produto: fianca, re (ramos elementares: incêndio/imobiliário, residencial etc.), capitalizacao, automovel. status_padrao: 'Em análise' = cotação EM ABERTO; 'Aprovado' (Fiança) = cotação aprovada ainda não efetivada (também aberta); 'Convertido' = cotação efetivada; 'Perdido' e 'Recusado' = encerradas sem negócio; 'Efetivado' (corp) = apólice. Para cotações em aberto de uma imobiliária: filtre imobiliaria_id (in, com todos os ids do grupo de buscar_imobiliaria) e status_padrao, agrupando por produto e fonte.",
   producao_unificada: "Linha única de produção por origem (cotações de planilhas e Bitrix, apólices do Corp) com produto, status padrão, prêmio e comissão. imobiliaria_texto = nome da imobiliária na fonte.",
-  producao_erp: "Produção do Corp (apólices/endossos emitidos) com prêmio e comissão.",
-  producao_resumo_mensal: "Produção do Corp somada por ramo e mês.",
-  producao_resumo_seguradora: "Produção do Corp somada por seguradora.",
-  producao_resumo_produtor: "Produção do Corp somada por produtor.",
+  producao_erp: "CORP, apoio transitório (a fonte é o ERP): produção do Corp (apólices/endossos emitidos) com prêmio e comissão.",
+  producao_resumo_mensal: "CORP, apoio transitório: produção do Corp somada por ramo e mês.",
+  producao_resumo_seguradora: "CORP, apoio transitório: produção do Corp somada por seguradora.",
+  producao_resumo_produtor: "CORP, apoio transitório: produção do Corp somada por produtor.",
   producao_resumo_bairro: "Produção por bairro.",
-  corp_meta_comissao: "Metas de comissão do Corp.",
-  corp_producao_corretora: "Produção do Corp por corretora (view).",
-  corp_producao_produtor: "Produção do Corp por produtor (view).",
-  corp_retrato_producao_dim: "Retrato de produção do Corp por mês e dimensões (view).",
-  corp_retrato_sinistros_dim: "Retrato de sinistros do Corp (view).",
+  corp_meta_comissao: "CORP, apoio transitório: metas de comissão do Corp.",
+  corp_producao_corretora: "CORP, apoio transitório: produção do Corp por corretora (view).",
+  corp_producao_produtor: "CORP, apoio transitório: produção do Corp por produtor (view).",
+  corp_retrato_producao_dim: "CORP, apoio transitório: retrato de produção do Corp por mês e dimensões (view).",
+  corp_retrato_sinistros_dim: "CORP, apoio transitório: retrato de sinistros do Corp (view).",
   cotacoes_cache: "Cotações lidas das planilhas (Ramos Elementares): imobiliária, prêmio, status.",
   // --- Faturas / repasses (Workspace)
   faturas: "Faturas recebidas das seguradoras para repassar às imobiliárias.",
@@ -123,7 +123,7 @@ const TABELAS_DESCRICAO: Record<string, string> = {
   repasses_envios: "Envios de comprovantes de repasse.",
   // --- Sinistros
   sinistros: "Sinistros abertos pelas imobiliárias/equipe (etapa, desfecho, valores avisados).",
-  sinistros_corp: "Sinistros importados do Corp (todo sinistro conta, inclusive resgate de capitalização).",
+  sinistros_corp: "CORP, apoio transitório (só use se o ERP/Workspace não tiver): sinistros importados do Corp (todo sinistro conta, inclusive resgate de capitalização).",
   sinistro_historico: "Histórico de cada sinistro.",
   sinistro_debitos: "Débitos do sinistro.",
   sinistro_indenizacoes: "Indenizações do sinistro.",
@@ -203,7 +203,7 @@ const PAINEIS_EXTRA: Record<string, string> = {
   painel_comercial: "Painel Comercial v5 (funis Ativação de Novos Clientes e Sucesso do Cliente, metas das campanhas, por responsável). Último retrato; com 'competencia' (YYYY-MM) devolve o mês fechado.",
   sinistros: "KPIs de sinistros (retrato atual do módulo Sinistros).",
   endosso_fianca: "Painel de Endossos de Fiança, por competência (YYYY-MM).",
-  corp: "Painéis prontos do Corp (produção/sinistros). Sem 'chave' lista as chaves disponíveis.",
+  corp: "CORP, apoio transitório: painéis prontos do Corp (produção/sinistros). Sem 'chave' lista as chaves disponíveis.",
 };
 
 export const FERRAMENTAS_GERAIS: Anthropic.Tool[] = [

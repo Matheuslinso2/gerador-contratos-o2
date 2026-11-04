@@ -16,3 +16,6 @@
 -- chat_aliquota_simples_anexo3(rbt12) e a view chat_simples_mensal (receita, RBT12 dos 12 meses anteriores com janela completa, alíquota efetiva) reproduzem o cálculo validado em 26/10 (corretora 16,4-17,4%, Cap 14,6-15,6% em 2026).
 -- 04/11/2026 (migração chat_cubo_fin_consultar_excluir_fatos): chat_cubo_fin_consultar aceita 'excluir_fatos' (jsonb). Para quem não é do financeiro da O2 o robô exclui
 --   receita (comissão recebida na conta) e repasse_pago_banco (Nibo); o repasse das apólices (repasse_erp, repasse_corp) fica liberado à equipe. Ver src/lib/chat/niveisAcesso.ts.
+-- 04/11/2026 (migração chat_simples_mensal_erp_primeiro): chat_simples_mensal passa a usar a comissão recebida do ERP (erp_comissao_recebimentos) desde fev/2026 e o histórico do Corp
+--   (erp_baixa_corp_mensal_pronto) só para os meses anteriores, sem o mês corrente; coluna origem_rbt12. Vira 100% ERP quando a janela de 12 meses ficar toda depois de fev/2026.
+--   Regra: o ERP é a fonte; o Corp será desligado e só apoia a transição (ver memória regra-robo-erp-fonte-corp-transitorio-0411).
