@@ -11,6 +11,7 @@ import { FERRAMENTA_ARQUIVOS, executarFerramentaArquivos } from "./roboArquivos"
 import { FERRAMENTA_PRIMEIRA_COTACAO, FERRAMENTA_CUBO, executarFerramentaAnalises } from "./roboAnalises";
 import { FERRAMENTA_CUBO_COBERTURAS, FERRAMENTA_CUBO_SINISTROS, FERRAMENTA_CUBO_FINANCEIRO, FERRAMENTA_IMPOSTOS_PAGOS, executarFerramentaRisco } from "./roboAnalisesRisco";
 import { FERRAMENTA_LEGISLACAO, FERRAMENTA_CONCEITOS, executarFerramentaLegislacao, executarFerramentaConceitos } from "./roboLegislacao";
+import { FERRAMENTA_FICHA_VISITA, executarFerramentaFichaVisita } from "./roboFichaVisita";
 import { FERRAMENTA_LOGICA, chamadaTemDadosPessoais, descreverChamada, textoTemDadosPessoais } from "./privacidadePdf";
 
 // Robô O2 do chat da equipe (Fase 2, 29/10/2026). Mesmo "cérebro" da IA do WhatsApp (painéis + tabelas do
@@ -84,6 +85,8 @@ Se houver mais de um produto ou mais de um item, uma linha por item. Não repita
 - Perguntas sobre o que está vigente: use contar_documentos_erp com situacao ["vigente"] e agrupar_por "tipo", e responda separado, no formato "*582 apólices* e *8 endossos* vigentes". Apólices = tipo A (mesma regra da tela ERP > Apólices > Vigentes); endossos = tipos C, D, I, M, R, X somados; faturas = tipo F (só cite se houver). O total da ficha da imobiliária no ERP soma tudo isso junto, por isso é maior que o número de apólices.
 - Quando o dado puder estar defasado (ex.: resumoAtualizadoEm, produção do Corp importada manualmente), diga de quando é.
 - Seguro Incêndio não é garantia locatícia (só fiador, caução, fiança e capitalização são).
+- FICHA DE VISITA (03/11): pedido de "ficha de visita" / "o que levar para a visita" de uma imobiliária ou grupo → buscar_imobiliaria (pegue o id da ficha, ou o grupo) e depois ficha_visita. Responda curto: (1) aluguel mediano e faixa na região, (2) quanto ficaria o seguro de Fiança por seguradora para o aluguel de referência (prêmio no ano e parcela no mês), (3) margem atual por produto e o potencial da Fiança. SEMPRE diga a base usada: "propria" = dados dela; "bairros" = ela tem poucos endereços e usamos o estudo dos bairros onde atua; "cidade"; "sem_dados". Avise que o aluguel é da carteira da O2 (não o mercado inteiro), que o preço é estimativa e que o potencial é hipótese. Margem = comissão − repasse (inclui pró-labore), sem custos nem impostos.
+- ESTATÍSTICA DE MERCADO (03/11): perguntas sobre aluguel por bairro/cidade, preço do seguro por seguradora (prêmio em aluguéis), taxa de fechamento por faixa de aluguel ou margem por produto/seguradora → consultar_dados nas tabelas prontas analise_aluguel_cep5, analise_aluguel_cidade, analise_preco_seguradora, analise_conv_faixa e analise_margem (esta só admin). São da carteira da O2, 24 meses (margem: 2020 em diante, por ano de vigência), atualizadas 1x por dia.
 - Você só LÊ. Não altera nada, não envia e-mail, não baixa fatura, não cria card. Se pedirem, diga que isso é feito nas telas.
 ${verComissao ? "" : "- Você NÃO tem acesso a comissão nem repasse. Se perguntarem valores de comissão ou repasse, diga que esse dado não está liberado para o seu perfil.\n"}
 ESTILO
@@ -98,7 +101,7 @@ ESTILO
 // Conjunto de ferramentas e roteamento do robô: usados pela produção e pelos testes (mesmo código, mesmo comportamento).
 export function ferramentasDoRobo(verComissao: boolean): Anthropic.Tool[] {
   return verComissao
-    ? [...FERRAMENTAS_ERP, ...FERRAMENTAS_GERAIS, ...FERRAMENTAS_BUSCA, FERRAMENTA_RELATORIO, FERRAMENTA_ARQUIVOS, FERRAMENTA_PRIMEIRA_COTACAO, FERRAMENTA_CUBO, FERRAMENTA_CUBO_COBERTURAS, FERRAMENTA_CUBO_SINISTROS, FERRAMENTA_CUBO_FINANCEIRO, FERRAMENTA_IMPOSTOS_PAGOS, FERRAMENTA_LEGISLACAO, FERRAMENTA_CONCEITOS, ...FERRAMENTAS]
+    ? [...FERRAMENTAS_ERP, ...FERRAMENTAS_GERAIS, ...FERRAMENTAS_BUSCA, FERRAMENTA_RELATORIO, FERRAMENTA_ARQUIVOS, FERRAMENTA_PRIMEIRA_COTACAO, FERRAMENTA_CUBO, FERRAMENTA_CUBO_COBERTURAS, FERRAMENTA_CUBO_SINISTROS, FERRAMENTA_CUBO_FINANCEIRO, FERRAMENTA_IMPOSTOS_PAGOS, FERRAMENTA_LEGISLACAO, FERRAMENTA_CONCEITOS, FERRAMENTA_FICHA_VISITA, ...FERRAMENTAS]
     : [
         ...FERRAMENTAS_ERP,
         ...FERRAMENTAS_GERAIS.filter((f) => f.name !== "consultar_painel_extra"),
@@ -147,6 +150,7 @@ export async function executarFerramentaDoRobo(nome: string, entrada: unknown, e
     (await executarFerramentaRisco(nome, entrada, verComissao)) ??
     (await executarFerramentaLegislacao(nome, entrada)) ??
     (await executarFerramentaConceitos(nome, entrada)) ??
+    (await executarFerramentaFichaVisita(nome, entrada, verComissao)) ??
     (verComissao || nome === "consultar_painel"
       ? await executarFerramenta(nome, entrada, { semFinanceiro: !verComissao })
       : "Ferramenta indisponível para o seu perfil.")

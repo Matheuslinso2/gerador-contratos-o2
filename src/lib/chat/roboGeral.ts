@@ -68,6 +68,13 @@ const TABELAS_DESCRICAO: Record<string, string> = {
   campanhas_grupos_contatos: "Contatos dos grupos de campanha (nome, cpf_cnpj, e-mail).",
   erp_clientes_mesclados: "Clientes mesclados (duplicidades unidas).",
   erp_contato_cliente_log: "Registro de contatos feitos com clientes.",
+  // --- Estatística de mercado (carteira O2; tabelas prontas, 1x por dia)
+  analise_aluguel_cep5: "Aluguel de Fiança (contratação nova, 24 meses) por região (CEP de 5 dígitos): cidade, uf, bairro, n cotações, p25, mediana, p75. Carteira da O2, não o mercado inteiro.",
+  analise_aluguel_cidade: "Aluguel de Fiança (24 meses) por cidade: n, p25, mediana, p75. Carteira da O2.",
+  analise_preco_seguradora: "Preço praticado por seguradora na Fiança: prêmio anual em número de aluguéis (premio_alugueis_mediana, p25, p75) das apólices fechadas de 2024 em diante. Parcela mensal = prêmio / 12.",
+  analise_conv_faixa: "Taxa de fechamento das cotações de Fiança (contratação nova, 24 meses) por faixa de aluguel: decididas e conv (%).",
+  analise_visita_imob: "Resumo por imobiliária (tipo i) ou grupo (tipo g; chave = id): cotações em 24 meses, aluguel p25/mediana/p75, conversão esperada, base (propria/bairros/sem_dados). Prefira a ferramenta ficha_visita.",
+  analise_margem: "Margem por apólice: por imobiliária, ano de vigência, produto e seguradora: apolices, premio_liquido, comissao, repasse (inclui pró-labore), pro_labore, pro_labore_inferido. Margem = comissao - repasse. Só apólices vigentes/vencidas; é margem de comissão, não lucro.",
   // --- Imobiliárias (banco único)
   imobiliarias: "Ficha única das imobiliárias (banco unificado). grupo_id liga ao grupo.",
   imobiliaria_grupos: "Grupos de imobiliárias (ex.: Ramiro Sá).",
@@ -135,7 +142,7 @@ const COLUNA_PERMITIDA_APESAR = new Set(["imobiliaria_texto"]);
 const TIPOS_BLOQUEADOS = new Set(["jsonb", "json", "bytea"]);
 // Quem não é admin não vê comissão, repasse, saldo, imposto, desconto, premiação.
 const COLUNA_FINANCEIRA = /comiss|repasse|premiacao|pro_?labore|saldo|imposto|desconto/i;
-const TABELA_FINANCEIRA = /^(erp_(repasse|baixa|comissao|comissoes|corp_comissoes|nibo|extrato|saldo|previsao|imposto|desconto|descontos|estorno|gestao)|repasses|producao_(?!unificada|resolvida)|corp_|campanhas_producao|campanhas_metas|faturas|erp_fatura)/i;
+const TABELA_FINANCEIRA = /^(erp_(repasse|baixa|comissao|comissoes|corp_comissoes|nibo|extrato|saldo|previsao|imposto|desconto|descontos|estorno|gestao)|repasses|producao_(?!unificada|resolvida)|corp_|campanhas_producao|campanhas_metas|faturas|erp_fatura|analise_margem)/i;
 
 let cacheColunas: { em: number; mapa: Map<string, { coluna: string; tipo: string }[]> } | null = null;
 
