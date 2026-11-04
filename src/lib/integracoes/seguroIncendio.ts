@@ -47,6 +47,8 @@ const FIELD = {
   imovelBairroCidade: "ufCrm12_1790085451655",
   imovelCep: "ufCrm12_1790085456047",
   imovelAluguel: "ufCrm12_1790085479280",
+  // URL de origem da ficha (campo "Novo campo" do tipo url, confirmado via crm.item.fields em 04/11/2026).
+  origemUrl: "ufCrm12SeguroOrigemUrl",
 } as const;
 
 export type ModalidadeIncendio = "Residencial" | "Empresarial" | "Imobiliario";
@@ -148,6 +150,8 @@ export type SeguroIncendioPayload = {
   qtdEnderecos: string;
   anexoPlanilha: string; // caminho no bucket seguro-incendio-anexos, "" se não enviado
   anexoPlanilhaNome: string;
+  // Preenchido quando a ficha vem de uma CAMPANHA (ex: Black O2, 04/11/2026): vira a Fonte do card + texto de origem.
+  campanha?: { nome: string; url?: string; detalhe?: string };
 };
 
 const BUCKET_ANEXOS = "seguro-incendio-anexos";
@@ -300,6 +304,7 @@ function montarObservacoes(p: SeguroIncendioPayload): string {
       .join("\n");
   }
   return [
+    p.campanha ? `Origem: Campanha ${p.campanha.nome}${p.campanha.detalhe ? ` — ${p.campanha.detalhe}` : ""}` : "",
     `E-mail: ${p.email}`,
     `Quem solicitou: ${p.solicitante}`,
     p.solicitante === "Proprietário" ? `Cotação para fins de locação a terceiros: ${p.finsLocacao}` : "",
@@ -370,6 +375,15 @@ export async function criarCardSeguroIncendio(payload: SeguroIncendioPayload, su
   if (payload.modalidade === "Imobiliario") set(fields, FIELD.cotadorOrigem, payload.nomeImobiliaria);
   else if (payload.administradoPorImobiliaria === "Sim") set(fields, FIELD.cotadorOrigem, payload.nomeImobiliaria);
   set(fields, FIELD.observacoes, montarObservacoes(payload));
+  if (payload.campanha) {
+    // Fonte (sourceId): usa a fonte com o nome da campanha se existir no Bitrix; senão "Site O2 Seguros" (WEB). O texto da campanha
+    // vai sempre em "Informações da fonte" e a página no campo de URL de origem.
+    const fontes = await bitrix<{ result: Array<{ STATUS_ID: string; NAME: string }> }>("crm.status.list", { filter: { ENTITY_ID: "SOURCE" } });
+    const fonte = fontes.result.find((s) => normalizar(s.NAME) === normalizar(payload.campanha!.nome) || normalizar(s.NAME) === normalizar(`Campanha ${payload.campanha!.nome}`));
+    fields.sourceId = fonte?.STATUS_ID ?? "WEB";
+    fields.sourceDescription = `Campanha ${payload.campanha.nome}${payload.campanha.detalhe ? ` — ${payload.campanha.detalhe}` : ""}`;
+    set(fields, FIELD.origemUrl, payload.campanha.url);
+  }
 
   if (payload.modalidade === "Imobiliario") {
     set(fields, FIELD.qtdEnderecos, payload.qtdEnderecos ? Number(payload.qtdEnderecos) : undefined);
@@ -492,15 +506,16 @@ export function montarEmailSeguroIncendio(p: SeguroIncendioPayload, resultado: R
   const corpoHtml = secoesHtml + botaoPill(linkCard, resultado.created ? "Ver card no Bitrix →" : "Ver card existente no Bitrix →");
 
   const html = envolverEmailO2({
-    badge: `Seguro Incêndio — ${p.modalidade}`,
+    badge: p.campanha ? `Campanha ${p.campanha.nome}` : `Seguro Incêndio — ${p.modalidade}`,
     titulo: "Nova ficha preenchida! 🔥",
     introducao: resultado.created
       ? `${nomePrincipal} acabou de preencher a ficha de Seguro Incêndio pela Plataforma O2. Confira tudo o que foi informado abaixo:`
       : `${nomePrincipal} preencheu a ficha de novo — o protocolo já existia, então o card no Bitrix não foi duplicado.`,
     corpoHtml,
     protocolo: p.responseId,
-    origem: "/seguro-incendio",
+    origem: p.campanha ? p.campanha.nome : "/seguro-incendio",
   });
 
-  return { assunto: `Nova cotação Seguro Incêndio (${p.modalidade}) — ${nomePrincipal}`, html };
+  const assunto = p.campanha ? `Campanha ${p.campanha.nome}: nova cotação Seguro Incêndio — ${nomePrincipal}` : `Nova cotação Seguro Incêndio (${p.modalidade}) — ${nomePrincipal}`;
+  return { assunto, html };
 }

@@ -38,6 +38,8 @@ const ROTAS_PUBLICAS = [
   // (o2seguros.com.br), sem cookie de usuário. Valida um token secreto
   // próprio (mesmo padrão dos outros webhooks acima).
   "/api/integracoes/wordpress-leads",
+  // Campanha Black O2 (página o2seguros.com.br/black-o2): cria o card de Seguro Incêndio. Mesmo token secreto do wordpress-leads.
+  "/api/integracoes/wordpress-black-o2",
   // Formulário público de Capitalização — preenchido por imobiliárias,
   // corretores e proprietários que não têm (nem precisam ter) conta na
   // Plataforma O2.
