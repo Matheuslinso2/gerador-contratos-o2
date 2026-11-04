@@ -124,10 +124,17 @@ export async function fichaFatura(sb: SupabaseClient, faturaId: string, competen
   // endosso precisam dizer (decisão do Matheus 26/10)
   const saidasBrutas = anterior ? ant.filter((l) => !noAtual.has(l.apolice)) : [];
   const idsSaida = [...new Set(saidasBrutas.map((l) => l.documento_id).filter(Boolean))] as string[];
+  // regra do Matheus (04/11): documento só sai da fatura quitado (última parcela), com sinistro ou com endosso de cancelamento
   const cancelados = new Set<string>();
+  const comSinistro = new Set<string>();
   if (idsSaida.length) {
-    const { data } = await sb.from("erp_documentos").select("documento_pai_id").in("documento_pai_id", idsSaida).in("tipo", ["X", "I"]);
+    const [{ data }, { data: s1 }, { data: s2 }] = await Promise.all([
+      sb.from("erp_documentos").select("documento_pai_id").in("documento_pai_id", idsSaida).in("tipo", ["X", "I"]),
+      sb.from("sinistros").select("documento_id").in("documento_id", idsSaida),
+      sb.from("sinistros_corp").select("documento_id").in("documento_id", idsSaida),
+    ]);
     for (const e of (data ?? []) as { documento_pai_id: string }[]) cancelados.add(e.documento_pai_id);
+    for (const s of [...(s1 ?? []), ...(s2 ?? [])] as { documento_id: string }[]) comSinistro.add(s.documento_id);
   }
   // motivos registrados pela equipe para este mês (tratativa por e-mail, card de renovação, endosso)
   const { data: movs } = await sb.from("erp_fatura_movimentacoes").select("apolice, motivo, observacao, referencia, usuario_email, criado_em").eq("fatura_id", faturaId).eq("competencia", mes.competencia).eq("movimento", "saida");
@@ -141,6 +148,7 @@ export async function fichaFatura(sb: SupabaseClient, faturaId: string, competen
     if (l.parcela_n && l.parcelas_total && l.parcela_n >= l.parcelas_total) explicacao = "última parcela cobrada no mês anterior";
     else if (l.documento_id && cancelados.has(l.documento_id)) explicacao = "endosso de cancelamento";
     else if (l.doc?.situacao === "cancelado") explicacao = "apólice cancelada";
+    else if (l.documento_id && comSinistro.has(l.documento_id)) explicacao = "sinistro";
     else if (l.doc?.vigencia_fim && mes.vencimento && l.doc.vigencia_fim < mes.vencimento) explicacao = "vigência encerrada";
     else if (l.doc?.modo_cobranca && !["fatura", "nao_informado", "individual"].includes(l.doc.modo_cobranca)) explicacao = `passou para ${l.doc.modo_cobranca}`;
     const reg = registrados.get(l.apolice);

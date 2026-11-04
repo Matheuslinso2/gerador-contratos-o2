@@ -163,9 +163,9 @@ export default async function ErpFaturaPage({ params, searchParams }: { params: 
 
       <details open={saidas.length > 0} className="rounded-xl border border-gray-200 bg-white">
         <summary className="cursor-pointer px-4 py-2 text-sm font-semibold text-o2-navy">
-          Saídas ({saidas.length}){semExplicacao ? <span className="ml-2 text-xs font-normal text-amber-700">{semExplicacao} sem explicação: a tratativa por e-mail da imobiliária, o card de renovação ou o endosso precisam dizer o motivo</span> : null}
+          Saídas ({saidas.length}){semExplicacao ? <span className="ml-2 text-xs font-normal text-amber-700">{semExplicacao} saíram com parcela em aberto sem sinistro nem endosso de cancelamento: investigar e registrar o motivo</span> : null}
           <InfoLegenda titulo="Saídas">
-            Apólices que estavam na fatura do mês anterior e não estão neste mês. O ERP explica sozinho quando sabe o motivo: última parcela cobrada, endosso de cancelamento, apólice cancelada, vigência encerrada ou mudança para outra forma de pagamento. Quando não sabe, a saída fica “sem explicação” e a equipe registra o motivo (por exemplo, entrega de chaves ou fim de contrato) e a referência (assunto do e-mail ou número do card). Valor no mês anterior: o que a apólice pagava na fatura anterior.
+            Apólices que estavam na fatura do mês anterior e não estão neste mês. Regra: um documento só sai da fatura quitado (última parcela cobrada), com sinistro ou com endosso de cancelamento. O ERP explica sozinho quando acha um desses motivos (e também vigência encerrada, apólice cancelada ou mudança para outra forma de pagamento). Fora disso, a saída é pendência: saiu com parcela em aberto sem sinistro nem cancelamento; a equipe investiga e registra o motivo e a referência (assunto do e-mail ou número do card). Valor no mês anterior: o que a apólice pagava na fatura anterior.
           </InfoLegenda>
         </summary>
         {saidas.length > 0 && (
@@ -210,7 +210,7 @@ export default async function ErpFaturaPage({ params, searchParams }: { params: 
                         <input type="hidden" name="apolice" value={s.apolice} />
                         <input type="hidden" name="documento_id" value={s.documento_id ?? ""} />
                         <select name="motivo" required defaultValue="" className="rounded border border-amber-300 px-1 py-0.5">
-                          <option value="" disabled>sem explicação — motivo…</option>
+                          <option value="" disabled>parcela em aberto — motivo…</option>
                           {MOTIVOS.map((m) => (
                             <option key={m}>{m}</option>
                           ))}
