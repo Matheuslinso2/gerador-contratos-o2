@@ -389,7 +389,11 @@ export async function auditarContrato(
 // Sub-rogação da seguradora ausente REPROVA sempre (decisão do Matheus, 26/10/2026).
 export function aplicarConferenciaParagrafos(relatorio: RelatorioAuditoria): RelatorioAuditoria {
   const lista = relatorio.paragrafos_texto_oficial ?? [];
-  const ausentes = lista.filter((p) => p.situacao === "ausente");
+  // Cláusula OPCIONAL/condicional (cobertura adicional, locatário solidário...) que não aparece no contrato só é falha se a cobertura/condição
+  // foi contratada -- o que o Auditor, sem cotação confirmando, não sabe. Ausência dela NÃO vira "problema" (achado nos cards do Fiança, 04/11/2026:
+  // Pintura Externa não contratada reprovava o contrato). Obrigatórias ausentes (ex: sub-rogação) continuam problema.
+  const ehOpcional = (p: ParagrafoOficial) => /condicional|opcional|cobertura adicional|pintura|danos ao im[oó]vel|danos aos m[oó]veis|multa rescis|locat[aá]rio solid[aá]rio|lucros cessantes/i.test(`${p.assunto} ${p.observacao ?? ""}`);
+  const ausentes = lista.filter((p) => p.situacao === "ausente" && !ehOpcional(p));
   const divergentes = lista.filter((p) => p.situacao === "divergente");
   if (!ausentes.length && !divergentes.length) return relatorio;
   const nomes = (ps: ParagrafoOficial[]) => ps.map((p) => p.assunto).join("; ");
