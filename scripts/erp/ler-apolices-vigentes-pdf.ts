@@ -57,6 +57,33 @@ const PARSERS: Record<string, (t: string) => P[]> = {
 const num = (s?: string) => (s ? Number(s.replace(/\./g, "").replace(",", ".")) : null);
 const dig = (s: string) => s.replace(/\D/g, "");
 
+// Apólice anterior: cada seguradora escreve de um jeito (Pottencial "Nº DA APÓLICE RENOVADA", Allianz "Nº Apólice anterior:"); o resto cai no padrão genérico.
+function extrairCamposExtras(t: string): { anterior: string | null; tipo: string | null; proposta: string | null; pares: Record<string, string> } {
+  const ant = /N[ºo°]?\s*(?:DA\s*)?AP[ÓO]LICE\s+RENOVADA\s*:?\s*([0-9A-Z][0-9A-Z.\/-]{5,40})/i.exec(t)?.[1]
+    ?? /N[ºo°]?\s*Ap[óo]lice\s+anterior\s*:?\s*([0-9A-Z][0-9A-Z.\/ -]{5,40}?)(?=\s+[A-ZÀ-Ú]{3,}|\s{2,}|$)/i.exec(t)?.[1]
+    ?? /Ap[óo]lice\s+(?:anterior|renovada|substitu[ií]da)\s*:?\s*([0-9A-Z][0-9A-Z.\/-]{5,40})/i.exec(t)?.[1] ?? null;
+  const tipo = /TIPO\s+DE\s+SEGURO\s*:?\s*(Renova[çc][ãa]o|Novo|Seguro Novo|Endosso)/i.exec(t)?.[1] ?? null;
+  const proposta = /N[ºo°]?\s*DA\s+PROPOSTA\s*:?\s*(\d{4,})/i.exec(t)?.[1] ?? null;
+  const pares: Record<string, string> = {};
+  for (const m of t.matchAll(/([A-ZÀ-Ú][A-Za-zÀ-ú0-9 ./ºª()-]{2,40}?):\s*([^:]{1,80}?)(?=\s+[A-ZÀ-Ú][A-Za-zÀ-ú0-9 ./ºª()-]{2,40}?:|\s{2,}|$)/g)) {
+    const k = m[1].trim(); if (k.length >= 3 && !(k in pares) && Object.keys(pares).length < 150) pares[k] = m[2].trim().slice(0, 80);
+  }
+  return { anterior: ant ? ant.replace(/\s+/g, " ").trim() : null, tipo, proposta, pares };
+}
+const alnum = (s: string) => s.toUpperCase().replace(/[^0-9A-Z]/g, "");
+// Liga a renovação pelo número escrito no PDF (prova documental, nível 1). Compara por igualdade ou por final do número (o PDF traz prefixo de filial/ramo).
+async function ligarAnteriorPeloPdf(docId: string, extra: { anterior: string | null }, avisos: string[]) {
+  if (!extra.anterior) { await sb.from("erp_documentos").update({ renovacao_lida_em: new Date().toISOString() }).eq("id", docId).is("renovacao_lida_em", null); return; }
+  const a = alnum(extra.anterior); if (a.length < 7) return;
+  const final = a.slice(-9);
+  const { data: cand } = await sb.from("erp_documentos").select("id,numero_apolice").eq("tipo", "A").neq("id", docId).neq("situacao", "duplicado").ilike("numero_apolice", `%${final.slice(-6)}%`).limit(40);
+  const achados = (cand ?? []).filter((c) => { const n = alnum(String(c.numero_apolice ?? "")); return n.length >= 7 && (n === a || a.endsWith(n) || n.endsWith(a)); });
+  if (achados.length !== 1) { avisos.push(achados.length ? `apólice anterior ${extra.anterior} casa com ${achados.length} documentos` : `apólice anterior ${extra.anterior} não encontrada no ERP`); await sb.from("erp_apolice_pdf_campos").update({ avisos }).eq("documento_id", docId); return; }
+  const { data: atual } = await sb.from("erp_documentos").select("documento_renovado_id").eq("id", docId).maybeSingle();
+  if (atual?.documento_renovado_id && atual.documento_renovado_id !== achados[0].id) { avisos.push(`PDF cita a anterior ${extra.anterior}, mas o ERP liga a outro documento`); await sb.from("erp_apolice_pdf_campos").update({ avisos }).eq("documento_id", docId); return; }
+  await sb.from("erp_documentos").update({ documento_renovado_id: achados[0].id, renovacao_fonte: "apolice_pdf", renovacao_nivel: 1, renovacao_lida_em: new Date().toISOString() }).eq("id", docId);
+}
+
 type Doc = { id: string; numero_apolice: string | null; vigencia_inicio: string | null; vigencia_fim: string | null; nosso_numero_corp: number | null; seguradora_id: string; abrev: string; imobiliaria_principal_id: string | null; locatario_id: string | null };
 
 async function carregarDocs(filtro: string | undefined, reler: boolean): Promise<{ doc: Doc; origem: "erp" | "corp"; bucket: string; path: string }[]> {
@@ -81,7 +108,9 @@ async function carregarDocs(filtro: string | undefined, reler: boolean): Promise
   // a leitura antiga de parcelas (erp_apolice_pdf_leitura 'lido') não guardou os demais campos: o que decide é existir (ou não) a linha em erp_apolice_pdf_campos
   // --docs NN,NN (Nosso nº do Corp): relê esses documentos mesmo já lidos (leitor melhorado)
   const forcar = process.argv.includes("--docs") ? new Set(process.argv[process.argv.indexOf("--docs") + 1].split(",").map(Number)) : null;
-  const pend = docs.filter((d) => forcar ? !!d.nosso_numero_corp && forcar.has(d.nosso_numero_corp) : (!filtro || d.abrev === filtro) && (!jaCampos.has(d.id) || (refazer && jaCampos.get(d.id) !== "lido")));
+  // --desde AAAA-MM-DD (03/11/2026, Matheus: ler 100% do documento, inclusive a apólice anterior): relê as apólices com início de vigência a partir da data, mesmo já lidas
+  const desde = process.argv.includes("--desde") ? process.argv[process.argv.indexOf("--desde") + 1] : null;
+  const pend = docs.filter((d) => desde ? !!d.vigencia_inicio && d.vigencia_inicio >= desde : forcar ? !!d.nosso_numero_corp && forcar.has(d.nosso_numero_corp) : (!filtro || d.abrev === filtro) && (!jaCampos.has(d.id) || (refazer && jaCampos.get(d.id) !== "lido")));
   const alvo = reler ? pend.filter((d) => lidos.get(d.id) === "sem_quadro" || !lidos.has(d.id)) : pend;
   // PDFs: ERP (tipo apolice) primeiro; senão Corp (rótulo Apólice/Certificado)
   const erpAx = new Map<string, string>();
@@ -114,7 +143,10 @@ async function main() {
   const trabalhar = async (it: (typeof lista)[number]) => {
     const { doc } = it; const s = (stat[doc.abrev] ??= { lido: 0, divergente: 0, sem_texto: 0, sem_quadro: 0, invalido: 0, erro: 0 });
     let t: string;
-    if (OCR.has(doc.id)) t = OCR.get(doc.id)!.replace(/\s+/g, " ");
+    // texto já extraído antes (Matheus 04/11/2026: ler o PDF uma vez só): reaproveita, sem baixar de novo
+    const { data: guardado } = await sb.from("erp_apolice_pdf_texto").select("texto").eq("documento_id", doc.id).eq("fonte_pdf", `${it.origem}:${it.path}`).maybeSingle();
+    if (guardado?.texto) t = guardado.texto;
+    else if (OCR.has(doc.id)) t = OCR.get(doc.id)!.replace(/\s+/g, " ");
     else {
       const { data } = await sb.storage.from(it.bucket).download(it.path);
       if (!data) { s.erro++; return; }
@@ -132,6 +164,7 @@ async function main() {
       }
     }
     const chave = MAPA_CHAVE[doc.abrev] ?? doc.abrev;
+    if (!guardado?.texto && t.length >= 200) await sb.from("erp_apolice_pdf_texto").upsert({ documento_id: doc.id, seguradora_chave: chave, texto: t, metodo: OCR.has(doc.id) ? "ocr_windows" : "texto_nativo", fonte_pdf: `${it.origem}:${it.path}`, tipo_anexo: "apolice", leitor_versao: LEITOR_VERSAO }, { onConflict: "documento_id,fonte_pdf" });
     const base = { documento_id: doc.id, seguradora_id: doc.seguradora_id, seguradora_chave: chave, fonte_pdf: `${it.origem}:${it.path}`, lote: LOTE, imobiliaria_id: doc.imobiliaria_principal_id, locatario_id: doc.locatario_id };
     if (t.length < 200) { s.sem_texto++; await sb.from("erp_apolice_pdf_campos").upsert({ ...base, situacao: "sem_texto", divergencias: ["PDF sem texto nativo (imagem)"] }); await sb.from("erp_apolice_pdf_leitura").upsert({ documento_id: doc.id, seguradora_chave: chave, situacao: "sem_texto", parcelas_lidas: 0 }); return; }
     const datas = [...new Set([...t.matchAll(/\b(\d{2})\/(\d{2})\/(\d{4})\b/g)].map((m) => `${m[3]}-${m[2]}-${m[1]}`))].filter((d) => +d.slice(0, 4) >= 2000 && +d.slice(0, 4) <= 2040).sort();
@@ -169,6 +202,10 @@ async function main() {
     let formaFinal = forma;
     if (semDatas) { parcelas = Array.from({ length: semDatas.qtd }, (_, k) => ({ n: k + 1, vencimento: null, valor: semDatas.valor })); formaFinal = semDatas.forma; avisos.push("PDF sem datas de vencimento (pagamento por fatura mensal); vencimentos vêm das faturas"); }
     await sb.from("erp_apolice_pdf_campos").upsert({ ...base, situacao, numero_apolice_pdf: confereAp ? doc.numero_apolice : null, vigencia_ini_pdf: vigIni, vigencia_fim_pdf: vigFim, datas_no_pdf: datas.slice(0, 40), cpf_cnpj_pdf: docs.slice(0, 10), premio_total_pdf: premioTotal, premio_liquido_pdf: premioLiq, iof_pdf: iof, forma_pagamento_pdf: formaFinal, qtd_parcelas_pdf: ns.length || semDatas?.qtd || null, parcelas, fonte: `PDF da apólice (${OCR.has(doc.id) ? "OCR local do Windows" : "texto nativo"}) · leitor ${LEITOR_VERSAO}`, confere_apolice: confereAp, confere_vigencia: confereVig, confere_documento: confereDoc, divergencias: div.length ? div : null, avisos: avisos.length ? avisos : null });
+    // campos de renovação e demais pares rótulo:valor, lidos uma vez só (sem texto bruto)
+    const extra = extrairCamposExtras(t);
+    await sb.from("erp_apolice_pdf_campos").update({ apolice_anterior_pdf: extra.anterior, tipo_seguro_pdf: extra.tipo, proposta_pdf: extra.proposta, campos_pdf: extra.pares }).eq("documento_id", doc.id);
+    await ligarAnteriorPeloPdf(doc.id, extra, avisos);
     await sb.from("erp_apolice_pdf_leitura").upsert({ documento_id: doc.id, seguradora_chave: chave, situacao, parcelas_lidas: ns.length });
     if (situacao === "lido" && parcelas) await sb.from("erp_apolice_parcelas_pdf").upsert(ns.map((n) => ({ documento_id: doc.id, n, vencimento_pdf: porN.get(n)!, seguradora_chave: chave, anexo_path: it.path })));
   };
