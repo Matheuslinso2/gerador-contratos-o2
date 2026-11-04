@@ -101,6 +101,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ a
         </svg>
       ),
     },
+    // Sinistros ainda não é divulgado para as imobiliárias (04/11/2026): só a equipe O2 vê o cartão.
+    ...(isAdmin(user.email) || isColaboradorO2(user.email)
+      ? [
     {
       href: "/sinistros",
       titulo: "Sinistros",
@@ -119,6 +122,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ a
         </svg>
       ),
     },
+        ]
+      : []),
     {
       href: "/multa-rescisoria",
       titulo: "Multa rescisória",

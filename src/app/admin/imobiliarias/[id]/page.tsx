@@ -305,6 +305,19 @@ export default async function AdminImobiliariaDetalhePage({
             <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">
               Contrato-base <span className="font-normal normal-case text-gray-400">— usado em Gerar Contrato</span>
             </h2>
+            <div>
+              <label className={labelClass}>Logo da imobiliária (imagem)</label>
+              {imobiliaria.logo_url && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={imobiliaria.logo_url} alt="Logo atual" className="mb-2 h-12 w-auto rounded border border-gray-200 bg-white p-1" />
+              )}
+              <input form="form-imobiliaria" name="logo" type="file" accept="image/*" className={inputClass} />
+            </div>
+            <div>
+              <label className={labelClass}>Enviar o contrato-base em Word ou PDF (opcional — extrai o texto e preenche o campo abaixo)</label>
+              <input form="form-imobiliaria" name="contrato_arquivo" type="file" accept=".docx,.pdf" className={inputClass} />
+              <p className="mt-1 text-xs text-gray-500">Aceita .docx ou .pdf com texto selecionável. Se enviar um arquivo, ele substitui o texto da caixa abaixo ao salvar.</p>
+            </div>
             <textarea form="form-imobiliaria"
               name="texto_base_contrato"
               rows={6}

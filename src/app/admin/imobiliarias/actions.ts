@@ -6,6 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 import { isEquipe } from "@/lib/admin";
 import { validarCnpjOuCpf } from "@/lib/validacoesBr";
 import { prepararTextoBase } from "@/lib/limparTextoBase";
+import { extrairTextoDocx } from "@/lib/extrairTextoDocx";
+import { extrairTextoPdf } from "@/lib/extrairTextoPdf";
 
 async function exigirAdmin() {
   const supabase = await createClient();
@@ -36,6 +38,24 @@ export async function atualizarImobiliariaAdmin(formData: FormData) {
   const { data: atual } = await supabase.from("imobiliarias").select("texto_base_contrato").eq("id", id).maybeSingle();
 
   let texto_base_contrato = String(formData.get("texto_base_contrato") ?? "").trim();
+  // Envio do contrato-base em Word/PDF pela equipe (mesmo fluxo de /imobiliaria): o texto extraído substitui o digitado.
+  const contratoArquivo = formData.get("contrato_arquivo") as File | null;
+  if (contratoArquivo && contratoArquivo.size > 0) {
+    const nomeArquivo = contratoArquivo.name.toLowerCase();
+    const ehPdf = nomeArquivo.endsWith(".pdf");
+    if (!ehPdf && !nomeArquivo.endsWith(".docx")) {
+      redirect(`${voltarPara}?erro=${encodeURIComponent("O arquivo do contrato precisa estar em Word (.docx) ou PDF (.pdf).")}`);
+    }
+    const buffer = Buffer.from(await contratoArquivo.arrayBuffer());
+    try {
+      texto_base_contrato = ehPdf ? await extrairTextoPdf(buffer) : await extrairTextoDocx(buffer);
+    } catch {
+      redirect(`${voltarPara}?erro=${encodeURIComponent(`Não foi possível ler o arquivo "${contratoArquivo.name}" — ele pode estar corrompido ou num formato inesperado.`)}`);
+    }
+    if (!texto_base_contrato.trim()) {
+      redirect(`${voltarPara}?erro=${encodeURIComponent(`O arquivo "${contratoArquivo.name}" não tem texto selecionável (PDF escaneado?). Envie em Word (.docx) ou um PDF com texto.`)}`);
+    }
+  }
   let garantiaPosicao: number | null | undefined;
   if (texto_base_contrato !== atual?.texto_base_contrato) {
     try {
@@ -46,6 +66,18 @@ export async function atualizarImobiliariaAdmin(formData: FormData) {
       // Preparo automático falhou -- segue com o texto como veio, melhor
       // salvar do que travar por causa disso.
     }
+  }
+
+  // Logo enviada pela equipe (mesmo bucket e padrão de /imobiliaria).
+  let logo_url: string | null = null;
+  const logo = formData.get("logo") as File | null;
+  if (logo && logo.size > 0) {
+    if (!logo.type.startsWith("image/")) redirect(`${voltarPara}?erro=${encodeURIComponent("A logo precisa ser uma imagem (PNG, JPG, etc.).")}`);
+    const ext = logo.name.split(".").pop() || "png";
+    const path = `admin-${id}-${crypto.randomUUID()}.${ext}`;
+    const { error: uploadError } = await supabase.storage.from("logos").upload(path, logo, { contentType: logo.type });
+    if (uploadError) redirect(`${voltarPara}?erro=${encodeURIComponent(uploadError.message)}`);
+    logo_url = supabase.storage.from("logos").getPublicUrl(path).data.publicUrl;
   }
 
   const dados: Record<string, unknown> = {
@@ -77,6 +109,7 @@ export async function atualizarImobiliariaAdmin(formData: FormData) {
     classificacao_crm: String(formData.get("classificacao_crm") ?? "").trim() || null,
     responsavel_crm: String(formData.get("responsavel_crm") ?? "").trim() || null,
   };
+  if (logo_url) dados.logo_url = logo_url;
   if (garantiaPosicao !== undefined) dados.garantia_posicao_apos_clausula = garantiaPosicao;
 
   const { error } = await supabase.from("imobiliarias").update(dados).eq("id", id);
