@@ -62,7 +62,7 @@ async function montarFila(): Promise<Item[]> {
   // recentes primeiro (renovações e vigentes antes do histórico); apólice antes de proposta
   const ids = [...new Set(fila.map((f) => f.documento_id))]; const ini = new Map<string, string>();
   for (let i = 0; i < ids.length; i += 200) { const { data } = await sb.from("erp_documentos").select("id,vigencia_inicio").in("id", ids.slice(i, i + 200)); for (const d of data ?? []) ini.set(d.id as string, (d.vigencia_inicio as string) ?? "0000"); }
-  return fila.sort((a, b) => (ini.get(b.documento_id) ?? "").localeCompare(ini.get(a.documento_id) ?? "") || PRIORIDADE[a.tipo] - PRIORIDADE[b.tipo]);
+  return fila.sort((a, b) => (ini.get(b.documento_id ?? "") ?? "").localeCompare(ini.get(a.documento_id ?? "") ?? "") || PRIORIDADE[a.tipo] - PRIORIDADE[b.tipo]);
 }
 
 async function lerUm(it: Item, st: Record<string, number>) {
