@@ -33,13 +33,23 @@ function somarMeses(mes: string, n: number) {
 
 export type SecaoEstat = "geral" | "funil" | "preco" | "regiao" | "margem" | "parceiros";
 export type PeriodoEstat = "12" | "24" | "tudo";
-const SECOES: { k: SecaoEstat; t: string; admin?: boolean; periodo?: boolean }[] = [
-  { k: "geral", t: "Visão geral", periodo: true },
-  { k: "funil", t: "Funil de cotações", periodo: true },
-  { k: "preco", t: "Preço" },
-  { k: "regiao", t: "Região" },
-  { k: "margem", t: "Margem e repasse", admin: true },
-  { k: "parceiros", t: "Parceiros" },
+export type ProdutoEstat = "fianca" | "re" | "capitalizacao" | "automovel";
+const PRODUTOS_ESTAT: { k: ProdutoEstat; t: string }[] = [
+  { k: "fianca", t: "Seguro Fiança" },
+  { k: "re", t: "Incêndio" },
+  { k: "capitalizacao", t: "Capitalização" },
+  { k: "automovel", t: "Automóvel" },
+];
+export function lerProduto(v: string | undefined): ProdutoEstat {
+  return PRODUTOS_ESTAT.some((p) => p.k === v) ? (v as ProdutoEstat) : "fianca";
+}
+const SECOES: { k: SecaoEstat; t: string; admin?: boolean; periodo?: boolean; porProduto?: boolean }[] = [
+  { k: "geral", t: "Visão geral (todos os produtos)", periodo: true },
+  { k: "funil", t: "Funil de cotações", periodo: true, porProduto: true },
+  { k: "preco", t: "Preço", porProduto: true },
+  { k: "regiao", t: "Região", porProduto: true },
+  { k: "margem", t: "Margem e repasse (todos os produtos)", admin: true },
+  { k: "parceiros", t: "Parceiros", porProduto: true },
 ];
 const PERIODOS: { k: PeriodoEstat; t: string }[] = [
   { k: "12", t: "12 meses" },
@@ -82,14 +92,14 @@ function Barra({ valor, max, cor = "#00447E" }: { valor: number; max: number; co
 const Aviso = ({ children }: { children: ReactNode }) => <p className="text-[11px] leading-snug text-o2-cinza-medio">{children}</p>;
 const Erro = ({ msg }: { msg: string }) => <p className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">Não foi possível carregar agora ({msg}).</p>;
 
-export default async function DashboardEstatisticas({ verMargem, secao, periodo }: { verMargem: boolean; secao: SecaoEstat; periodo: PeriodoEstat }) {
+export default async function DashboardEstatisticas({ verMargem, secao, periodo, produto }: { verMargem: boolean; secao: SecaoEstat; periodo: PeriodoEstat; produto: ProdutoEstat }) {
   const ativa = SECOES.find((s) => s.k === secao && (!s.admin || verMargem)) ?? SECOES[0];
   const { de, ate } = janela(periodo);
-  const href = (s: SecaoEstat, p: PeriodoEstat) => `/?aba=estatisticas&sec=${s}&per=${p}`;
+  const href = (s: SecaoEstat, p: PeriodoEstat, pr: ProdutoEstat = produto) => `/?aba=estatisticas&sec=${s}&per=${p}&prod=${pr}`;
   return (
     <div className="space-y-5">
       <p className="text-xs text-o2-cinza-medio">
-        Visão de mercado dos seguros da <b>nossa carteira</b> (não é o mercado inteiro). Os números de Visão geral e Funil são os mesmos do Power BI (/producao).
+        Visão de mercado dos seguros da <b>nossa carteira</b> (não é o mercado inteiro). Os números de Visão geral e do quadro de eventos do Funil são os mesmos do Power BI (/producao).
       </p>
       <nav className="flex flex-wrap gap-1.5" aria-label="Assuntos">
         {SECOES.filter((s) => !s.admin || verMargem).map((s) => (
@@ -106,6 +116,22 @@ export default async function DashboardEstatisticas({ verMargem, secao, periodo 
           </Link>
         ))}
       </nav>
+      {ativa.porProduto && (
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-o2-cinza-medio">Produto:</span>
+          {PRODUTOS_ESTAT.map((p) => (
+            <Link
+              key={p.k}
+              href={href(ativa.k, periodo, p.k)}
+              scroll={false}
+              aria-current={produto === p.k ? "true" : undefined}
+              className={`rounded-md px-2.5 py-1 font-medium ${produto === p.k ? "bg-o2-navy text-white" : "text-o2-cinza-escuro hover:text-o2-navy"}`}
+            >
+              {p.t}
+            </Link>
+          ))}
+        </div>
+      )}
       {ativa.periodo ? (
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <span className="text-o2-cinza-medio">Período (meses fechados):</span>
@@ -126,11 +152,11 @@ export default async function DashboardEstatisticas({ verMargem, secao, periodo 
         <p className="text-[11px] text-o2-cinza-medio">Este assunto tem janela própria, indicada em cada quadro (o filtro de período vale para Visão geral e Funil).</p>
       )}
       {ativa.k === "geral" && <Geral de={de} ate={ate} verMargem={verMargem} />}
-      {ativa.k === "funil" && <Funil de={de} ate={ate} />}
-      {ativa.k === "preco" && <Preco />}
-      {ativa.k === "regiao" && <Regiao />}
+      {ativa.k === "funil" && (produto === "fianca" ? <FunilFianca de={de} ate={ate} /> : <FunilOutro produto={produto} de={de} ate={ate} />)}
+      {ativa.k === "preco" && (produto === "fianca" ? <PrecoFianca /> : <PrecoOutro produto={produto} />)}
+      {ativa.k === "regiao" && (produto === "fianca" ? <RegiaoFianca /> : produto === "re" ? <RegiaoRe /> : <SemEndereco produto={produto} />)}
       {ativa.k === "margem" && verMargem && <Margem />}
-      {ativa.k === "parceiros" && <Parceiros />}
+      {ativa.k === "parceiros" && (produto === "fianca" ? <ParceirosFianca /> : <ParceirosOutro produto={produto} />)}
     </div>
   );
 }
@@ -262,7 +288,7 @@ async function Geral({ de, ate, verMargem }: { de: string; ate: string; verMarge
 type Fx = { mes: string; faixa: string; ordem: number; decididas: number; fechadas: number; recusadas: number; perdidas: number };
 type MesCoorte = { mes: string; decididas: number; fechadas: number };
 
-async function Funil({ de, ate }: { de: string; ate: string }) {
+async function FunilFianca({ de, ate }: { de: string; ate: string }) {
   const sb = await createClient();
   const { k, erro } = await kpisDoPeriodo(de, ate);
   // Coorte: os 2 meses mais recentes ficam de fora (ainda há cotações em andamento e a taxa apareceria baixa/recusa alta demais).
@@ -394,7 +420,7 @@ async function Funil({ de, ate }: { de: string; ate: string }) {
 type Preco = { seguradora: string; apolices: number; premio_alugueis_mediana: number; premio_alugueis_p25: number; premio_alugueis_p75: number };
 type Part = { ano: number; seguradora: string; apolices: number; pct: number };
 
-async function Preco() {
+async function PrecoFianca() {
   const sb = await createClient();
   const [preco, part] = await Promise.all([
     sb.from("analise_preco_seguradora").select("*").order("premio_alugueis_mediana"),
@@ -484,7 +510,7 @@ async function Preco() {
 // ───────────────────────── Região ─────────────────────────
 type Regiao = { cep5?: string; cidade: string | null; uf?: string | null; bairro?: string | null; n: number; p25: number; mediana: number; p75: number };
 
-async function Regiao() {
+async function RegiaoFianca() {
   const sb = await createClient();
   const [cidades, ceps] = await Promise.all([
     sb.from("analise_aluguel_cidade").select("*").order("n", { ascending: false }).limit(10),
@@ -526,7 +552,7 @@ async function Regiao() {
 // ───────────────────────── Parceiros ─────────────────────────
 type Imob = { chave: string; decididas_24m: number; fechadas_24m: number };
 
-async function Parceiros() {
+async function ParceirosFianca() {
   const sb = await createClient();
   const { data, error } = await sb.from("analise_visita_imob").select("chave, decididas_24m, fechadas_24m").eq("tipo", "i").gte("decididas_24m", 100);
   if (error) return <Erro msg={error.message} />;
@@ -650,5 +676,359 @@ async function Margem() {
         </Secao>
       )}
     </>
+  );
+}
+
+// ───────────────────────── Outros produtos (Incêndio, Capitalização, Automóvel) ─────────────────────────
+const ROTULO_PROD: Record<string, string> = { fianca: "Fiança", re: "Incêndio", capitalizacao: "Capitalização", automovel: "Automóvel" };
+const BASE_FAIXA: Record<string, string> = { re: "aluguel do imóvel", capitalizacao: "valor do título" };
+type FxP = { mes: string; faixa: string; ordem: number; decididas: number; fechadas: number; perdidas: number };
+
+async function FunilOutro({ produto, de, ate }: { produto: ProdutoEstat; de: string; ate: string }) {
+  const sb = await createClient();
+  const { k, erro } = await kpisDoPeriodo(de, ate);
+  const hoje = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }).slice(0, 7);
+  const fimCoorte = ate < somarMeses(hoje, -2) ? ate : somarMeses(hoje, -2);
+  const [fx, mot] = await Promise.all([
+    sb.from("analise_prod_mes_faixa").select("mes, faixa, ordem, decididas, fechadas, perdidas").eq("produto", produto).gte("mes", `${de}-01`).lte("mes", `${fimCoorte}-28`),
+    produto === "capitalizacao" ? sb.from("analise_prod_motivo").select("motivo, n").eq("produto", produto).order("n", { ascending: false }) : Promise.resolve({ data: [] as { motivo: string; n: number }[], error: null }),
+  ]);
+  if (!k || fx.error || mot.error) return <Erro msg={erro ?? fx.error?.message ?? mot.error?.message ?? "sem dados"} />;
+  const c = k.funil_por_produto.find((x) => x.produto === produto);
+  const linhas = (fx.data ?? []) as FxP[];
+  const porFaixa = new Map<string, { ordem: number; d: number; f: number }>();
+  const porMes = new Map<string, { d: number; f: number }>();
+  for (const r of linhas) {
+    const a = porFaixa.get(r.faixa) ?? { ordem: r.ordem, d: 0, f: 0 };
+    a.d += r.decididas;
+    a.f += r.fechadas;
+    porFaixa.set(r.faixa, a);
+    const m = porMes.get(r.mes) ?? { d: 0, f: 0 };
+    m.d += r.decididas;
+    m.f += r.fechadas;
+    porMes.set(r.mes, m);
+  }
+  const faixas = [...porFaixa.entries()].sort((a, b) => a[1].ordem - b[1].ordem);
+  const tot = faixas.reduce((t, [, v]) => ({ d: t.d + v.d, f: t.f + v.f }), { d: 0, f: 0 });
+  const maxFaixa = Math.max(...faixas.map(([, v]) => (v.d >= MIN_AMOSTRA ? (pct(v.f, v.d) ?? 0) : 0)), 1);
+  const minMes = produto === "re" ? 60 : 20;
+  const serie = [...porMes.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).filter(([, v]) => v.d >= minMes).slice(-36);
+  const maxSerie = Math.max(...serie.map(([, v]) => pct(v.f, v.d) ?? 0), 1);
+  const motivos = (mot.data ?? []) as { motivo: string; n: number }[];
+  const totMot = motivos.reduce((t, m) => t + m.n, 0);
+  const nome = ROTULO_PROD[produto];
+  return (
+    <>
+      {c && (
+        <Secao titulo={`${nome}: funil do período`} legenda="Mesma conta do Power BI (/producao): cada evento conta no mês em que aconteceu. A conversão usa a régua do painel do produto.">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Cartao rotulo="Recebidas" valor={inteiro.format(c.entradas)} linhas={[produto === "re" ? "itens (cada endereço)" : "cotações novas"]} />
+            <Cartao rotulo="Perdidas" valor={inteiro.format(c.perdas)} linhas={[]} />
+            <Cartao rotulo="Convertidas" valor={inteiro.format(c.conversoes)} linhas={[`conversão ${fpn(...PRODUTOS[produto].calc(c))} (${PRODUTOS[produto].regua})`]} />
+          </div>
+        </Secao>
+      )}
+      {produto === "automovel" ? (
+        <Aviso>Automóvel tem poucas cotações com histórico e não guarda valor do bem nem prêmio das perdidas; por isso não há quebra por faixa. Acompanhe o funil acima.</Aviso>
+      ) : (
+        <>
+          <Secao
+            titulo={`${nome}: fechamento por faixa de ${BASE_FAIXA[produto]} (coorte de entrada)`}
+            legenda={`Cada cotação conta no mês em que ENTROU e só entram as já decididas (fechada ou perdida), por isso as taxas diferem do quadro de eventos acima. Mostra como o fechamento muda com o ${BASE_FAIXA[produto]}. Os 2 meses mais recentes ficam de fora (cotações em andamento). Faixas com menos de 30 casos mostram só o número. "Sem informação" = cotações sem esse dado na planilha.`}
+          >
+            <p className="text-xs text-o2-cinza-escuro">
+              No período: <b>{fpn(tot.f, tot.d)}</b> fecham ({inteiro.format(tot.d)} decididas, {rotuloMes(de)} a {rotuloMes(fimCoorte)}).
+            </p>
+            {faixas.length === 0 ? (
+              <Aviso>Sem cotações decididas neste período.</Aviso>
+            ) : (
+              <div className="space-y-2">
+                {faixas.map(([nomeF, v]) => (
+                  <div key={nomeF} className="grid grid-cols-[7.5rem_1fr_9rem] items-center gap-3 text-xs">
+                    <span className="text-o2-cinza-escuro">{nomeF === "Sem informação" ? nomeF : `R$ ${nomeF}`}</span>
+                    <Barra valor={v.d >= MIN_AMOSTRA ? (pct(v.f, v.d) ?? 0) : 0} max={maxFaixa} />
+                    <span className="tabular-nums text-o2-navy">
+                      <b>{fpn(v.f, v.d)}</b> <span className="text-o2-cinza-medio">· n={inteiro.format(v.d)}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Secao>
+          <Secao titulo={`${nome}: fechamento mês a mês (coorte de entrada)`} legenda={`% das cotações decididas que fecharam, por mês em que a cotação entrou. Só meses com ${minMes} ou mais decididas; os 2 meses mais recentes ficam de fora. Passe o mouse nas barras para ver o mês.`}>
+            {serie.length === 0 ? (
+              <Aviso>Sem meses suficientes neste período.</Aviso>
+            ) : (
+              <>
+                <div className="flex h-28 items-end gap-0.5">
+                  {serie.map(([mes, v]) => {
+                    const t = pct(v.f, v.d) ?? 0;
+                    return (
+                      <div key={mes} className="group flex h-full flex-1 flex-col justify-end" title={`${rotuloMes(mes)}: ${dec1.format(t)}% (${v.f} de ${v.d})`}>
+                        <div className="rounded-t bg-o2-navy/80 group-hover:bg-o2-coral" style={{ height: `${(t / maxSerie) * 100}%` }} />
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex justify-between text-[10px] text-o2-cinza-medio">
+                  <span>{rotuloMes(serie[0][0])}</span>
+                  <span>{rotuloMes(serie[serie.length - 1][0])}</span>
+                </div>
+              </>
+            )}
+          </Secao>
+        </>
+      )}
+      {produto === "re" && <SegmentoRe />}
+      {produto === "capitalizacao" && motivos.length > 0 && (
+        <Secao
+          titulo="Capitalização: por que as cotações se perdem"
+          legenda="Motivo de desistência registrado nas planilhas das cotações perdidas (todo o histórico, desde 2021; só as que têm motivo preenchido)."
+        >
+          <div className="space-y-2">
+            {motivos.map((m) => (
+              <div key={m.motivo} className="grid grid-cols-[11rem_1fr_6rem] items-center gap-3 text-xs">
+                <span className="text-o2-cinza-escuro">{titulo(m.motivo)}</span>
+                <Barra valor={m.n} max={motivos[0].n} cor="#B42318" />
+                <span className="tabular-nums text-o2-navy">
+                  <b>{fp(pct(m.n, totMot))}</b> <span className="text-o2-cinza-medio">· {inteiro.format(m.n)}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </Secao>
+      )}
+    </>
+  );
+}
+
+async function SegmentoRe() {
+  const sb = await createClient();
+  const { data, error } = await sb.from("analise_prod_segmento").select("*").eq("produto", "re");
+  if (error || !data?.length) return null;
+  const linhas = data as { segmento: string; decididas: number; fechadas: number; premio_med: number | null; k_med: number | null }[];
+  return (
+    <Secao
+      titulo="Incêndio: residencial x comercial (24 meses)"
+      legenda="Ocupação do imóvel informada na cotação. Residencial = apartamento, casa e condomínio residencial; comercial/serviços = lojas, escritórios, consultórios e demais atividades. Prêmio = mediana das fechadas; relação = prêmio ÷ aluguel."
+    >
+      <table className="w-full text-xs">
+        <thead className="text-left uppercase tracking-wide text-o2-cinza-medio">
+          <tr>
+            <th className="py-1">Tipo</th>
+            <th className="py-1 text-right">Decididas</th>
+            <th className="py-1 text-right">Fecham</th>
+            <th className="py-1 text-right">Prêmio mediano</th>
+            <th className="py-1 text-right">Prêmio ÷ aluguel</th>
+          </tr>
+        </thead>
+        <tbody>
+          {linhas.map((l) => (
+            <tr key={l.segmento} className="border-t border-gray-100">
+              <td className="py-1.5 font-medium text-o2-navy">{l.segmento}</td>
+              <td className="py-1.5 text-right tabular-nums text-o2-cinza-medio">{inteiro.format(l.decididas)}</td>
+              <td className="py-1.5 text-right font-semibold tabular-nums">{fpn(l.fechadas, l.decididas)}</td>
+              <td className="py-1.5 text-right tabular-nums">{l.premio_med == null ? "—" : reais.format(Number(l.premio_med))}</td>
+              <td className="py-1.5 text-right tabular-nums">{l.k_med == null ? "—" : fp(Number(l.k_med) * 100)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Secao>
+  );
+}
+
+type PrecoP = { seguradora: string; n: number; premio_med: number | null; premio_p25: number | null; premio_p75: number | null; k_med: number | null; titulo_med: number | null; com_pct_med: number | null };
+type PartP = { ano: number; seguradora: string; n: number; pct: number };
+
+async function PrecoOutro({ produto }: { produto: ProdutoEstat }) {
+  const sb = await createClient();
+  const [pr, pa] = await Promise.all([
+    sb.from("analise_prod_preco").select("*").eq("produto", produto).order("n", { ascending: false }),
+    sb.from("analise_prod_seg_ano").select("ano, seguradora, n, pct").eq("produto", produto).gte("ano", 2022).order("ano"),
+  ]);
+  if (pr.error || pa.error) return <Erro msg={pr.error?.message ?? pa.error?.message ?? ""} />;
+  const precos = ((pr.data ?? []) as PrecoP[]).filter((p) => p.n >= 10);
+  const parts = (pa.data ?? []) as PartP[];
+  const anos = [...new Set(parts.map((p) => p.ano))];
+  const nAno = new Map<number, number>();
+  for (const p of parts) nAno.set(p.ano, (nAno.get(p.ano) ?? 0) + p.n);
+  const ult = anos.at(-1);
+  const segs = [...new Set(parts.map((p) => p.seguradora))].sort((a, b) => (parts.find((p) => p.seguradora === b && p.ano === ult)?.pct ?? 0) - (parts.find((p) => p.seguradora === a && p.ano === ult)?.pct ?? 0));
+  const nome = ROTULO_PROD[produto];
+  const ehCap = produto === "capitalizacao";
+  const ehRe = produto === "re";
+  return (
+    <>
+      <Aviso>
+        <b>Atenção:</b> o preço só é conhecido para cotações que <b>fecharam</b> (a perdida não guarda prêmio). Janela de 24 meses; seguradoras com menos de 10 fechadas ficam de fora.
+        {ehRe && " Na planilha de Incêndio muitas cotações trazem só “Segimob” como seguradora (a seguradora efetiva não foi informada); elas aparecem separadas, sem presumir qual é."}
+      </Aviso>
+      {precos.length === 0 ? (
+        <Aviso>Sem fechadas com prêmio suficiente neste produto.</Aviso>
+      ) : (
+        <Secao
+          titulo={`${nome}: preço praticado por seguradora`}
+          legenda={
+            ehCap
+              ? "Capitalização: o 'prêmio' é o valor do título. Mostra o valor mediano do título e a comissão ÷ valor, por seguradora, das cotações fechadas."
+              : ehRe
+                ? "Incêndio: prêmio anual mediano das cotações fechadas (metade fica entre o 25% e o 75%), a relação prêmio ÷ aluguel mensal do imóvel e a comissão sobre o prêmio."
+                : "Prêmio mediano das cotações de Automóvel fechadas. Amostra pequena: use como referência, não como regra."
+          }
+        >
+          <table className="w-full text-xs">
+            <thead className="text-left uppercase tracking-wide text-o2-cinza-medio">
+              <tr>
+                <th className="py-1">Seguradora</th>
+                <th className="py-1 text-right">Fechadas</th>
+                <th className="py-1 text-right">{ehCap ? "Valor do título" : "Prêmio mediano"}</th>
+                {!ehCap && <th className="py-1 text-right">Faixa (25%–75%)</th>}
+                {ehRe && <th className="py-1 text-right">Prêmio ÷ aluguel</th>}
+                <th className="py-1 text-right">Comissão ÷ prêmio</th>
+              </tr>
+            </thead>
+            <tbody>
+              {precos.map((p) => (
+                <tr key={p.seguradora} className="border-t border-gray-100">
+                  <td className="py-1.5 font-medium text-o2-navy">{p.seguradora}</td>
+                  <td className="py-1.5 text-right tabular-nums text-o2-cinza-medio">{inteiro.format(p.n)}</td>
+                  <td className="py-1.5 text-right tabular-nums">{p.premio_med == null ? "—" : reais.format(Number(p.premio_med))}</td>
+                  {!ehCap && <td className="py-1.5 text-right tabular-nums text-o2-cinza-medio">{p.premio_p25 == null ? "—" : `${reais.format(Number(p.premio_p25))} a ${reais.format(Number(p.premio_p75))}`}</td>}
+                  {ehRe && <td className="py-1.5 text-right tabular-nums">{p.k_med == null ? "—" : fp(Number(p.k_med) * 100)}</td>}
+                  <td className="py-1.5 text-right tabular-nums">{p.com_pct_med == null ? "—" : fp(Number(p.com_pct_med) * 100)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Secao>
+      )}
+      {anos.length > 0 && (
+        <Secao titulo={`${nome}: participação de cada seguradora nas fechadas`} legenda="% das cotações fechadas em cada ano (pelo ano da cotação), por seguradora. Células com menos de 30 casos aparecem como 'n baixo'.">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="text-left uppercase tracking-wide text-o2-cinza-medio">
+                <tr>
+                  <th className="py-1">Seguradora</th>
+                  {anos.map((a) => (
+                    <th key={a} className="py-1 text-right">
+                      {a}
+                      <span className="block text-[10px] font-normal normal-case">{inteiro.format(nAno.get(a) ?? 0)} fech.</span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {segs.map((sg) => (
+                  <tr key={sg} className="border-t border-gray-100">
+                    <td className="py-1.5 font-medium text-o2-navy">{sg}</td>
+                    {anos.map((a) => {
+                      const x = parts.find((p) => p.seguradora === sg && p.ano === a);
+                      return (
+                        <td key={a} className="py-1.5 text-right tabular-nums text-o2-cinza-escuro">
+                          {x == null ? "—" : x.n >= MIN_AMOSTRA ? fp(Number(x.pct)) : "n baixo"}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Secao>
+      )}
+    </>
+  );
+}
+
+function SemEndereco({ produto }: { produto: ProdutoEstat }) {
+  return <Aviso>{ROTULO_PROD[produto]} não registra o endereço do imóvel nas cotações, então não há análise por região. Veja Fiança ou Incêndio.</Aviso>;
+}
+
+type RegP = { cep5: string; cidade: string | null; bairro: string | null; n: number; p25: number; mediana: number; p75: number; premio_med: number | null };
+
+async function RegiaoRe() {
+  const sb = await createClient();
+  const { data, error } = await sb.from("analise_prod_regiao").select("cep5, cidade, bairro, n, p25, mediana, p75, premio_med").eq("produto", "re").gte("n", 15).order("n", { ascending: false }).limit(12);
+  if (error) return <Erro msg={error.message} />;
+  const linhas = (data ?? []) as RegP[];
+  if (linhas.length === 0) return <Aviso>Sem regiões com 15 ou mais cotações de Incêndio com CEP.</Aviso>;
+  return (
+    <Secao
+      titulo="Incêndio: aluguel e prêmio por bairro (24 meses, CEP)"
+      legenda="Cotações de Incêndio com CEP válido, agrupadas pelos 5 primeiros dígitos (bairro). Aluguel = o do imóvel segurado; prêmio = mediana das fechadas. Só regiões com 15 ou mais cotações. Carteira da O2, não o mercado inteiro."
+    >
+      <table className="w-full text-xs">
+        <thead className="text-left uppercase tracking-wide text-o2-cinza-medio">
+          <tr>
+            <th className="py-1">Bairro</th>
+            <th className="py-1 text-right">Cotações</th>
+            <th className="py-1 text-right">Aluguel</th>
+            <th className="py-1 text-right">Prêmio</th>
+          </tr>
+        </thead>
+        <tbody>
+          {linhas.map((l) => (
+            <tr key={l.cep5} className="border-t border-gray-100">
+              <td className="py-1.5 font-medium text-o2-navy">
+                {l.bairro ? titulo(l.bairro) : `CEP ${l.cep5}-***`}
+                <span className="block text-[10px] font-normal text-o2-cinza-medio">{titulo(l.cidade)}</span>
+              </td>
+              <td className="py-1.5 text-right tabular-nums text-o2-cinza-medio">{inteiro.format(l.n)}</td>
+              <td className="py-1.5 text-right tabular-nums">
+                {reais.format(Number(l.mediana))}
+                <span className="block text-[10px] text-o2-cinza-medio">
+                  {reais.format(Number(l.p25))} a {reais.format(Number(l.p75))}
+                </span>
+              </td>
+              <td className="py-1.5 text-right tabular-nums">{l.premio_med == null ? "—" : reais.format(Number(l.premio_med))}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Secao>
+  );
+}
+
+async function ParceirosOutro({ produto }: { produto: ProdutoEstat }) {
+  if (produto === "automovel") return <Aviso>Automóvel não tem imobiliária vinculada às cotações.</Aviso>;
+  const sb = await createClient();
+  const minimo = produto === "re" ? 60 : 30;
+  const { data, error } = await sb.from("analise_prod_imob").select("imobiliaria_id, decididas, fechadas").eq("produto", produto).gte("decididas", minimo);
+  if (error) return <Erro msg={error.message} />;
+  const ordenadas = ((data ?? []) as { imobiliaria_id: string; decididas: number; fechadas: number }[]).map((i) => ({ ...i, conv: (100 * i.fechadas) / i.decididas })).sort((a, b) => b.conv - a.conv);
+  if (ordenadas.length < 6) return <Aviso>Poucas imobiliárias com {minimo} ou mais cotações decididas em 24 meses neste produto.</Aviso>;
+  const destaques = [...ordenadas.slice(0, 5), ...ordenadas.slice(-5)];
+  const { data: nomesRows } = await sb.from("imobiliarias").select("id, nome, apelido").in("id", destaques.map((d) => d.imobiliaria_id));
+  const nome = new Map((nomesRows ?? []).map((r: { id: string; nome: string; apelido: string | null }) => [r.id, r.apelido || r.nome]));
+  return (
+    <Secao
+      titulo={`${ROTULO_PROD[produto]}: imobiliárias que mais e que menos fecham (24 meses)`}
+      legenda={`Imobiliárias com ${minimo} ou mais cotações decididas (fechada ou perdida) em 24 meses, ordenadas pela taxa de fechamento. Para a ficha completa de uma imobiliária, peça no chat interno.`}
+    >
+      <div className="grid gap-5 sm:grid-cols-2">
+        {[
+          { rotulo: "Mais fecham", lista: ordenadas.slice(0, 5) },
+          { rotulo: "Menos fecham", lista: ordenadas.slice(-5).reverse() },
+        ].map((g) => (
+          <div key={g.rotulo}>
+            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-o2-cinza-medio">{g.rotulo}</p>
+            <table className="w-full text-xs">
+              <tbody>
+                {g.lista.map((i) => (
+                  <tr key={i.imobiliaria_id} className="border-t border-gray-100 first:border-0">
+                    <td className="py-1.5 text-o2-navy">
+                      {titulo(nome.get(i.imobiliaria_id) ?? "?")}
+                      <span className="block text-[10px] text-o2-cinza-medio">{inteiro.format(i.decididas)} decididas</span>
+                    </td>
+                    <td className="py-1.5 text-right font-semibold tabular-nums">{fp(i.conv)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
+      </div>
+    </Secao>
   );
 }

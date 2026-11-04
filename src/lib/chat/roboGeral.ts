@@ -75,6 +75,13 @@ const TABELAS_DESCRICAO: Record<string, string> = {
   analise_aluguel_cidade: "Aluguel de Fiança (24 meses) por cidade: n, p25, mediana, p75. Carteira da O2.",
   analise_preco_seguradora: "Preço praticado por seguradora na Fiança: prêmio anual em número de aluguéis (premio_alugueis_mediana, p25, p75) das apólices fechadas de 2024 em diante. Parcela mensal = prêmio / 12.",
   analise_conv_faixa: "Taxa de fechamento das cotações de Fiança (contratação nova, 24 meses) por faixa de aluguel: decididas e conv (%).",
+  analise_prod_mes_faixa: "Funil por mês e faixa de valor (coorte de entrada) de Incêndio (re), Capitalização e Automóvel: decididas, fechadas, perdidas. Faixa = aluguel (re) ou valor do título (capitalizacao). Carteira da O2.",
+  analise_prod_preco: "Preço praticado por seguradora em Incêndio/Capitalização/Automóvel (cotações fechadas, 24 meses): premio_med, k_med (prêmio ÷ aluguel, Incêndio), titulo_med (Capitalização), com_pct_med (comissão ÷ prêmio).",
+  analise_prod_seg_ano: "Participação (pct) de cada seguradora nas cotações fechadas por ano, por produto (re, capitalizacao, automovel).",
+  analise_prod_regiao: "Aluguel e prêmio por região (CEP de 5 dígitos) de Incêndio: cidade, bairro, n, p25, mediana, p75, premio_med.",
+  analise_prod_motivo: "Motivos de desistência das cotações perdidas de Capitalização (planilhas, desde 2021).",
+  analise_prod_segmento: "Incêndio residencial x comercial: decididas, fechadas, prêmio mediano, prêmio ÷ aluguel.",
+  analise_prod_imob: "Cotações decididas e fechadas por imobiliária e produto (re, capitalizacao), 24 meses.",
   analise_visita_imob: "Resumo por imobiliária (tipo i) ou grupo (tipo g; chave = id): cotações em 24 meses, aluguel p25/mediana/p75, conversão esperada, base (propria/bairros/sem_dados). Prefira a ferramenta ficha_visita.",
   analise_margem: "Margem por apólice: por imobiliária, ano de vigência, produto e seguradora: apolices, premio_liquido, comissao, repasse (inclui pró-labore), pro_labore, pro_labore_inferido. Margem = comissao - repasse. Só apólices vigentes/vencidas; é margem de comissão, não lucro.",
   // --- Imobiliárias (banco único)

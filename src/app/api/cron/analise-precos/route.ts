@@ -26,5 +26,7 @@ export async function GET(request: NextRequest) {
   if (mercado.error) return NextResponse.json({ erro: "mercado: " + mercado.error.message }, { status: 500 });
   const faixa = await sb.rpc("atualizar_analise_mercado_faixa");
   if (faixa.error) return NextResponse.json({ erro: "faixa: " + faixa.error.message }, { status: 500 });
-  return NextResponse.json({ ok: true, linhas_faixa: faixa.data, linhas_margem: margem.data, entidades_visita: visita.data, meses_mercado: mercado.data });
+  const produtos = await sb.rpc("atualizar_analise_produtos");
+  if (produtos.error) return NextResponse.json({ erro: "produtos: " + produtos.error.message }, { status: 500 });
+  return NextResponse.json({ ok: true, linhas_produtos: produtos.data, linhas_faixa: faixa.data, linhas_margem: margem.data, entidades_visita: visita.data, meses_mercado: mercado.data });
 }
