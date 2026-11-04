@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buscarItem } from "@/lib/bitrix/client";
 import { auditarCardFianca, ENTITY_TYPE_FIANCA } from "@/lib/bitrix/auditoriaContratoCard";
+import { createClient } from "@/lib/supabase/server";
+import { isEquipe } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -9,9 +11,14 @@ export const maxDuration = 300;
 // cards informados (?cards=3550,3128) e NÃO escreve nada no Bitrix. O gatilho por etapa (Contrato Recebido + 30 min) e o
 // comentário no card só entram depois do OK do Matheus. Protegida por CRON_SECRET.
 export async function GET(request: NextRequest) {
+  // Autorização: CRON_SECRET (cron) OU login da equipe O2 (teste manual feito logado).
   const segredo = process.env.CRON_SECRET;
-  if (!segredo) return NextResponse.json({ erro: "CRON_SECRET não configurada" }, { status: 500 });
-  if (request.headers.get("authorization") !== `Bearer ${segredo}`) return NextResponse.json({ erro: "não autorizado" }, { status: 401 });
+  const porSegredo = !!segredo && request.headers.get("authorization") === `Bearer ${segredo}`;
+  if (!porSegredo) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!isEquipe(user?.email)) return NextResponse.json({ erro: "não autorizado" }, { status: 401 });
+  }
 
   const ids = (request.nextUrl.searchParams.get("cards") ?? "").split(",").map((s) => Number(s.trim())).filter((n) => Number.isInteger(n) && n > 0).slice(0, 3);
   if (!ids.length) return NextResponse.json({ erro: "informe ?cards=ID,ID (máx. 3 por chamada)" }, { status: 400 });
