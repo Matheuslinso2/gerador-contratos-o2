@@ -41,6 +41,7 @@ import EmailsDaCampanha, { type EmailFilho } from "./metas/EmailsDaCampanha";
 import ExportarEste from "@/components/ExportarEste";
 import { createServiceClient } from "@/lib/supabase/service";
 import CardsBitrixSecao from "./CardsBitrixSecao";
+import ImpactoCampanha from "./ImpactoCampanha";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -534,6 +535,9 @@ export default async function CampanhaDetalhePage({
         />
 
         {!campanhaPai && <CardsBitrixSecao campanha={campanha} db={createServiceClient()} />}
+
+        {/* Impacto da campanha (03/11/2026): dropdown sempre fechado, só aparece com foto de partida. */}
+        {!campanhaPai && <ImpactoCampanha campanhaId={id} db={createServiceClient()} />}
 
         {/* Produção gerada -- sempre presente (mesmo motivo do Resumo do
             envio acima). Desde 22/10/2026 é automática (funil + Corp), com

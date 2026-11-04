@@ -142,6 +142,9 @@ async function main() {
   const razao = e25 > 0 && c25 > 0 && c26 > 0 && e26 > 0 ? e26 / e25 / (c26 / c25) : null;
   const se = razao ? Math.sqrt(1 / e26 + 1 / e25 + 1 / c26 + 1 / c25) : null;
   console.log(`\nPROVISÓRIO (${lanc} a ${hoje} contra as mesmas datas de 2025): Elite ${e25}→${e26} (${e25 ? Math.round((e26 / e25 - 1) * 100) : "—"}%) | comparação ${c25}→${c26} (${c25 ? Math.round((c26 / c25 - 1) * 100) : "—"}%)`);
+  const agregado = { ate: hoje, elite: { ano_anterior: e25, atual: e26 }, comparacao: { ano_anterior: c25, atual: c26, unidades: ctrl.length }, razao, intervalo: razao && se ? [Math.exp(Math.log(razao) - 1.96 * se), Math.exp(Math.log(razao) + 1.96 * se)] : null };
+  const { error: eAgr } = await db.from("campanhas_foto_partida").upsert({ campanha_id: campanhaId, unidade: "__agregado__", nome: "Leitura provisória (agregado)", imobiliaria_ids: [], periodo_inicio: lanc, periodo_fim: hoje, meta: null, tendencia: "agregado", dados: agregado }, { onConflict: "campanha_id,unidade" });
+  if (eAgr) throw new Error(eAgr.message);
   if (razao && se) console.log(`  razão de razões (Elite ÷ comparação) = ${razao.toFixed(2)}  [95%: ${Math.exp(Math.log(razao) - 1.96 * se).toFixed(2)} a ${Math.exp(Math.log(razao) + 1.96 * se).toFixed(2)}]`);
 }
 main().catch((e) => {
