@@ -24,10 +24,12 @@ const EMAILS = process.argv.includes("--emails");
 // PDFs anexados aos e-mails das caixas da O2 (já classificados em erp_email_anexos): entram SEM documento; o vínculo vem depois, provado pelo conteúdo.
 async function montarFilaEmails(): Promise<Item[]> {
   const feitos = new Set((await paginar<{ fonte_pdf: string }>((a, b) => sb.from("erp_apolice_pdf_texto").select("fonte_pdf").like("fonte_pdf", "email:%").order("id").range(a, b))).map((x) => x.fonte_pdf));
-  const ax = await paginar<{ id: string; storage_bucket: string; storage_path: string; classe: string; seguradora: string | null; documento_id: string | null; criado_em: string }>((a, b) =>
-    sb.from("erp_email_anexos").select("id,storage_bucket,storage_path,classe,seguradora,documento_id,criado_em").in("classe", TIPOS_ERP).not("storage_path", "is", null).order("id").range(a, b));
-  return ax.filter((x) => !feitos.has(`email:${x.storage_path}`))
-    .sort((a, b) => b.criado_em.localeCompare(a.criado_em) || PRIORIDADE[a.classe] - PRIORIDADE[b.classe])
+  // e-mail: lê também boletos e "outros" (Matheus 04/11: nenhuma base sem tabelar) — boleto traz apólice/endosso/vencimento/valor
+  const classesEmail = [...new Set([...TIPOS_ERP, "boleto", "outro"])];
+  const ax = await paginar<{ id: string; storage_bucket: string; storage_path: string; classe: string; seguradora: string | null; documento_id: string | null; criado_em: string; mime: string | null; nome: string | null }>((a, b) =>
+    sb.from("erp_email_anexos").select("id,storage_bucket,storage_path,classe,seguradora,documento_id,criado_em,mime,nome").in("classe", classesEmail).not("storage_path", "is", null).order("id").range(a, b));
+  return ax.filter((x) => !feitos.has(`email:${x.storage_path}`) && /pdf/i.test(`${x.mime ?? ""} ${x.nome ?? ""} ${x.storage_path}`))
+    .sort((a, b) => b.criado_em.localeCompare(a.criado_em) || (PRIORIDADE[a.classe] ?? 9) - (PRIORIDADE[b.classe] ?? 9))
     .map((x) => ({ documento_id: x.documento_id, origem: "email" as const, bucket: x.storage_bucket, path: x.storage_path, tipo: x.classe, nosso: null, email_anexo_id: x.id, seguradora: x.seguradora }));
 }
 
@@ -95,19 +97,37 @@ async function lerUm(it: Item, st: Record<string, number>) {
   st[ok ? "lido" : "sem_texto"]++;
 }
 
-async function rodada(): Promise<number> {
-  let fila = EMAILS ? await montarFilaEmails() : await montarFila(); if (isFinite(LIMITE)) fila = fila.slice(0, LIMITE);
+const rodadaEmails = () => rodada(true);
+async function rodada(emails = EMAILS): Promise<number> {
+  let fila = emails ? await montarFilaEmails() : await montarFila(); if (isFinite(LIMITE)) fila = fila.slice(0, LIMITE);
   console.log(new Date().toISOString(), "a ler:", fila.length);
   const st: Record<string, number> = { lido: 0, sem_texto: 0, erro_download: 0, erro: 0 }; let i = 0;
   const worker = async () => { while (i < fila.length) { const it = fila[i++]; try { await lerUm(it, st); } catch (e) { st.erro++; console.log("erro", it.path, String(e).slice(0, 80)); } if (i % 200 === 0) console.log(i, "/", fila.length, JSON.stringify(st)); } };
   await Promise.all([worker(), worker(), worker(), worker(), worker()]);
   console.log("rodada concluída", JSON.stringify(st));
   // aplica os parsers por modelo e os vínculos sobre o texto recém-guardado (erp_pdf_pipeline, no banco)
-  if (fila.length) { const { data, error } = await sb.rpc("erp_pdf_pipeline"); console.log("pipeline", error ? "ERRO " + error.message : JSON.stringify(data)); }
+  if (fila.length && !HORAS) await pipeline();
   return fila.length;
 }
 
+async function pipeline() {
+  const { data, error } = await sb.rpc("erp_pdf_pipeline");
+  console.log(new Date().toISOString(), "pipeline", error ? "ERRO " + error.message : JSON.stringify(data));
+}
+
+// --horas N (Matheus 04/11: "rodar por 24 horas a identificação das apólices"): a cada 10 min lê o que chegou do ERP/Corp
+// E dos e-mails e roda o pipeline de vínculos (mesmo sem PDF novo: extratos, faturas e cards novos também geram vínculos)
+const HORAS = arg("--horas") ? +arg("--horas")! : 0;
+
 async function main() {
+  if (HORAS) {
+    const fim = Date.now() + HORAS * 3600_000;
+    while (Date.now() < fim) {
+      await rodada(); await rodadaEmails(); await pipeline();
+      await new Promise((r) => setTimeout(r, 10 * 60 * 1000));
+    }
+    console.log("FIM (", HORAS, "h )"); return;
+  }
   let vazias = 0;
   do {
     const n = await rodada();
