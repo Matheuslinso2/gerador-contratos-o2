@@ -66,6 +66,8 @@ const TABELAS_DESCRICAO: Record<string, string> = {
   erp_emails: "E-mails das 34 caixas da O2 ligados a imobiliária/documento: de, para, cc, assunto, trecho, data (sem o corpo).",
   imobiliaria_contatos: "Contatos feitos com imobiliárias (canal, data, quem fez).",
   campanhas_grupos_contatos: "Contatos dos grupos de campanha (nome, cpf_cnpj, e-mail).",
+  producao_itens: "Itens (um endereço por linha) das planilhas de lote anexadas aos cards de Ramos Elementares: locador, locatário, CPF/CNPJ, CEP, endereço, bairro, cidade, ocupação, atividade, aluguel, m² e extras (todas as colunas da planilha). Ligue ao card por bitrix_item_id (= origem_bitrix_id em producao_resolvida).",
+  erp_email_ligacoes: "Ligações SUGERIDAS e-mail -> documento do ERP ou cotação (tipo documento|cotacao, alvo_id, motivo cpf_locatario|numero_apolice). São sugestões, não vínculos confirmados; ligue a erp_emails por email_id.",
   erp_clientes_mesclados: "Clientes mesclados (duplicidades unidas).",
   erp_contato_cliente_log: "Registro de contatos feitos com clientes.",
   // --- Estatística de mercado (carteira O2; tabelas prontas, 1x por dia)
@@ -137,12 +139,12 @@ const TABELAS_DESCRICAO: Record<string, string> = {
 
 // Equipe O2 trabalha com CPF, telefone, e-mail e nomes todo dia (Matheus, 01/11/2026): esses campos estão LIBERADOS. Seguem bloqueados só credenciais, corpo de e-mail, observações do Corp (têm senhas), dados bancários de terceiros e textos livres.
 const COLUNA_SENSIVEL = /senha|password|token|secret|api_?key|corpo|html|observa|favorecido_(banco|agencia|conta)|ciencia_texto|(^|_)nota(s)?$|(^|_)texto$|parcela_texto/i;
-const JSON_PERMITIDO = new Set(["erp_origens.dados_legiveis"]);
+const JSON_PERMITIDO = new Set(["erp_origens.dados_legiveis", "producao_itens.extras"]);
 const COLUNA_PERMITIDA_APESAR = new Set(["imobiliaria_texto"]);
 const TIPOS_BLOQUEADOS = new Set(["jsonb", "json", "bytea"]);
 // Quem não é admin não vê comissão, repasse, saldo, imposto, desconto, premiação.
 const COLUNA_FINANCEIRA = /comiss|repasse|premiacao|pro_?labore|saldo|imposto|desconto/i;
-const TABELA_FINANCEIRA = /^(erp_(repasse|baixa|comissao|comissoes|corp_comissoes|nibo|extrato|saldo|previsao|imposto|desconto|descontos|estorno|gestao)|repasses|producao_(?!unificada|resolvida)|corp_|campanhas_producao|campanhas_metas|faturas|erp_fatura|analise_margem)/i;
+const TABELA_FINANCEIRA = /^(erp_(repasse|baixa|comissao|comissoes|corp_comissoes|nibo|extrato|saldo|previsao|imposto|desconto|descontos|estorno|gestao)|repasses|producao_(?!unificada|resolvida|itens)|corp_|campanhas_producao|campanhas_metas|faturas|erp_fatura|analise_margem)/i;
 
 let cacheColunas: { em: number; mapa: Map<string, { coluna: string; tipo: string }[]> } | null = null;
 
