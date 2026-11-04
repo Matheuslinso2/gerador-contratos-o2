@@ -168,6 +168,10 @@
       "schedule": "54 * * * *"
     },
     {
+      "path": "/api/cron/sinistros-ponte-corp",
+      "schedule": "35 * * * *"
+    },
+    {
       "path": "/api/cron/chat-cubo",
       "schedule": "59 * * * *"
     },

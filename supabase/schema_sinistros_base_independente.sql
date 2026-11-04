@@ -4,3 +4,8 @@
 --   Indenizado = soma de sinistro_indenizacoes quando existe; senão o histórico. 3.486 linhas = 3.467 históricos + 19 abertos só no Workspace; sem duplicidade.
 -- chat_cubo_sinistros (MV) agora lê de sinistros_base_v e liga à apólice por documento_id.
 -- LACUNA: corp_sinistros (feed SharePoint/Power BI) tem 35 sinistros fora da carga; sinistros do Corp após 20/10/2026 não entram na base até existir a ponte (decisão pendente).
+-- 04/11/2026 (migrações sinistros_ponte_corp_para_erp, sinistros_ponte_corp_v2_sem_duplicata_e_partes): PONTE TEMPORÁRIA Corp -> base própria.
+-- sinistros_ponte_corp(p_gravar boolean default false): lê o feed corp_sinistros (Power BI/SharePoint); para o que não está no arquivo (compara nosso nº + nº do sinistro sem sufixo F, ou nosso nº + ocorrência com número vazio/prefixo),
+--   confere a apólice no ERP e classifica: sem_apolice_no_erp (não cria), ligar (já existe no módulo), novo_card (aberto A/P dentro de 2 anos + 1 dia: cria card origem corp), so_arquivo, revisar_sem_data.
+--   Sempre grava no arquivo sinistros_corp (fontes powerbi_sharepoint) e escreve sinistro_historico (autor sistema). Idempotente. Cron: /api/cron/sinistros-ponte-corp (hora cheia + 35).
+--   Códigos do feed: situação A/P/E/I = EM ANDAMENTO/PENDENTE/ENCERRADO SEM INDENIZAÇÃO/INDENIZADO. DESLIGAR no desligamento do Corp.

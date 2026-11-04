@@ -123,7 +123,7 @@ const TABELAS_DESCRICAO: Record<string, string> = {
   repasses_envios: "Envios de comprovantes de repasse.",
   // --- Sinistros
   sinistros: "Sinistros abertos pelas imobiliárias/equipe (etapa, desfecho, valores avisados).",
-  sinistros_base_v: "BASE ÚNICA DE SINISTROS (independente do Corp; use esta): módulo Sinistros do Workspace + histórico do Corp até 20/10/2026, uma linha por sinistro, com origem (workspace|corp_historico), produto, situação, seguradora, cobertura, datas, valores avisado/indenizado/despesas e documento_id do ERP. Sinistros que o Corp registrou depois de 20/10/2026 ainda não entram.",
+  sinistros_base_v: "BASE ÚNICA DE SINISTROS (independente do Corp; use esta): módulo Sinistros do Workspace + histórico do Corp até 20/10/2026, uma linha por sinistro, com origem (workspace|corp_historico), produto, situação, seguradora, cobertura, datas, valores avisado/indenizado/despesas e documento_id do ERP. Sinistros novos do Corp entram por uma ponte temporária, conferidos com o ERP (atraso de algumas horas).",
   sinistros_corp: "CORP, carga histórica congelada em 19-20/10/2026 (consulte sinistros_base_v): sinistros importados do Corp (todo sinistro conta, inclusive resgate de capitalização).",
   sinistro_historico: "Histórico de cada sinistro.",
   sinistro_debitos: "Débitos do sinistro.",

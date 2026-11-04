@@ -135,7 +135,7 @@ export async function consultarCuboSinistros(e: EntradaSin): Promise<string> {
   const r = data as { linhas: Linha[]; total: Record<string, number>; atualizadoEm: string | null };
   const t = r.total ?? {};
   const aviso: string[] = [
-    "Base única de sinistros (sinistros_base_v), independente do Corp: o módulo Sinistros do Workspace é a fonte; o histórico do Corp (carga de 19-20/10/2026) só completa o que o módulo não tem, e onde o sinistro existe nos dois vale o dado do Workspace. ATENÇÃO: sinistros que o Corp registrou depois de 20/10/2026 ainda não entram nesta base (só os abertos no Workspace). A ligação com a apólice é o documento_id do ERP (cerca de 91% dos históricos e todos os do módulo ligam). Valor indenizado = soma das indenizações lançadas no Workspace quando existem, senão o valor do histórico do Corp; valor avisado = o que foi pedido no aviso.",
+    "Base única de sinistros (sinistros_base_v), independente do Corp: o módulo Sinistros do Workspace é a fonte; o histórico do Corp (carga de 19-20/10/2026) só completa o que o módulo não tem, e onde o sinistro existe nos dois vale o dado do Workspace. Sinistros novos registrados no Corp são conferidos com o ERP e criados na base própria automaticamente (ponte temporária, de hora em hora, enquanto o Corp existir); pode haver algumas horas de atraso. A ligação com a apólice é o documento_id do ERP (cerca de 91% dos históricos e todos os do módulo ligam). Valor indenizado = soma das indenizações lançadas no Workspace quando existem, senão o valor do histórico do Corp; valor avisado = o que foi pedido no aviso.",
     "'capitalizacao' no Corp são resgates de título, não sinistro de risco.",
   ];
   let linhas = r.linhas ?? [];
