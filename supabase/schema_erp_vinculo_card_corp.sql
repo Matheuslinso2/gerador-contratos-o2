@@ -36,3 +36,8 @@
 -- Liga cada nº do campo de apólices dos 63 cartões de LOTE do Bitrix ao documento próprio (Corp/API): 1.114 únicos, 3 escolhidos entre endossos, 2 a conferir, 4 sem documento.
 -- Varredura: dos 15 documentos da API unidos ao Corp, 14 linhas de extrato foram movidas para a parcela do documento do Corp (mesmo nº de parcela) e 8 quitações copiadas.
 -- Pendente: 1 linha de extrato + parcelas/previsões (erp_comissoes) que ficaram no documento duplicado, e o doc 132688 (Corp com 1 parcela estimada x apólice com 11).
+
+-- 03/11/2026: erp_fatura_thread_mes (imobiliaria_id, seguradora_id, ramo, mes_envio, apolices, valor, entradas, saidas, base relatorio|sem_base; RLS equipe).
+-- Tabela de APOIO da thread da fatura (não substitui erp_faturas): lida dos 386 relatórios de fatura dos e-mails da Nathalie (apólices distintas por mês,
+-- documento mais recente por nº da apólice). Entradas/saídas = diferença de conjuntos com o mês anterior; sem relatório anterior = 'sem_base'.
+-- 1ª carga: 628 linhas, 114 imobiliárias, 382 meses com movimento, 246 sem base.
