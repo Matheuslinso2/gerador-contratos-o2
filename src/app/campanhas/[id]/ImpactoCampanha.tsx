@@ -1,4 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import SubmitButton from "@/components/SubmitButton";
+import { atualizarAndamento } from "./impactoActions";
 
 // Quadro "Impacto da campanha" (03/11/2026): foto de partida CONGELADA de cada participante
 // (tendência de produção, baseline do que produziria sem a campanha, engajamento prévio) e a
@@ -13,9 +15,11 @@ type Dados = {
   matriz: { quadrante: string; acao: string };
   controles: { qtd: number; medianaVariacao: number | null; qtdClassificaveis: number };
   provisorio: { ate: string; realizado: number; esperadoAteAgora: number; diasDecorridos: number; diasPeriodo: number };
+  andamento?: { ate: string; realizado: number; esperado: number; diasDecorridos: number; diasPeriodo: number; atualizadoEm: string; parcial: number | null }[];
 };
 type Linha = { unidade: string; nome: string; periodo_inicio: string; periodo_fim: string; meta: number | null; tendencia: string; dados: Dados; criado_em: string };
-type Agregado = { ate: string; elite: { ano_anterior: number; atual: number }; comparacao: { ano_anterior: number; atual: number; unidades: number }; razao: number | null; intervalo: [number, number] | null };
+type PontoRazao = { ate: string; elite: [number, number]; comparacao: [number, number]; razao: number | null; intervalo: [number, number] | null; atualizadoEm: string; parcial: number | null };
+type Agregado = { ate: string; elite: { ano_anterior: number; atual: number }; comparacao: { ano_anterior: number; atual: number; unidades: number }; razao: number | null; intervalo: [number, number] | null; historico?: PontoRazao[] };
 
 const dm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 const dmy = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
@@ -28,6 +32,18 @@ const COR_TENDENCIA: Record<string, string> = {
   Queda: "bg-red-100 text-red-800",
   "Dados insuficientes": "bg-amber-50 text-amber-800",
 };
+
+// Compara a produção até agora com a margem do esperado (a margem do baseline proporcional aos dias decorridos).
+function situacaoDoAndamento(d: Dados): { texto: string; cor: string } {
+  const a = d.andamento?.[d.andamento.length - 1];
+  const fracao = a ? a.diasDecorridos / a.diasPeriodo : d.provisorio.diasDecorridos / d.provisorio.diasPeriodo;
+  const realizado = a?.realizado ?? d.provisorio.realizado;
+  const [baixo, alto] = d.baseline.intervalo.map((v) => v * fracao);
+  if (d.tendencia.tendencia === "Dados insuficientes" && d.baseline.usado < 2) return { texto: "sem base para comparar", cor: "text-gray-500" };
+  if (realizado > alto) return { texto: "acima da margem do esperado", cor: "text-green-700" };
+  if (realizado < baixo) return { texto: "abaixo da margem do esperado", cor: "text-red-700" };
+  return { texto: "dentro da margem do esperado", cor: "text-gray-600" };
+}
 
 function leituraDoAgregado(a: Agregado): string {
   if (!a.razao || !a.intervalo) return "Ainda não há casos suficientes para comparar.";
@@ -44,6 +60,8 @@ export default async function ImpactoCampanha({ campanhaId, db }: { campanhaId: 
   const linhas = (todas.filter((l) => l.unidade !== "__agregado__") as Linha[]).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
   const contagem = (t: string) => linhas.filter((l) => l.tendencia === t).length;
   const criada = linhas.reduce((m, l) => (l.criado_em > m ? l.criado_em : m), "");
+  const atualizadoEm = linhas.reduce((m, l) => { const a = l.dados.andamento?.[l.dados.andamento.length - 1]?.atualizadoEm ?? ""; return a > m ? a : m; }, "");
+  const atualizadoTxt = atualizadoEm ? new Date(atualizadoEm).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" }) : null;
 
   return (
     <details id="impacto" className="group rounded-2xl border border-o2-navy/10 bg-quadro shadow-sm">
@@ -74,9 +92,23 @@ export default async function ImpactoCampanha({ campanhaId, db }: { campanhaId: 
               </p>
             )}
             <p className="mt-1 font-medium">{leituraDoAgregado(agregado)}</p>
+            {agregado.historico && agregado.historico.length > 1 && (
+              <p className="mt-1 text-xs text-gray-600">
+                Evolução da razão: {agregado.historico.map((h) => `${dm(h.ate)}: ${h.razao ? h.razao.toFixed(2).replace(".", ",") : "—"}${h.parcial ? ` (parcial ${h.parcial})` : ""}`).join(" → ")}.
+              </p>
+            )}
             <p className="mt-1 text-xs text-gray-500">Poucos dias e poucos casos: é um indício, não uma conclusão. O Elite foi escolhido entre as imobiliárias mais engajadas, o que pode inflar a diferença.</p>
           </div>
         )}
+
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-gray-500">Andamento atualizado {atualizadoTxt ? `em ${atualizadoTxt}` : "na data da foto"} — se atualiza sozinho a cada parcial enviada.</p>
+          <form action={atualizarAndamento.bind(null, campanhaId)}>
+            <SubmitButton className="rounded-full border border-o2-navy/30 px-4 py-1.5 text-xs font-medium text-o2-navy transition hover:bg-white" textoCarregando="Atualizando...">
+              Atualizar andamento agora
+            </SubmitButton>
+          </form>
+        </div>
 
         <div className="flex flex-wrap gap-2 text-xs">
           {["Crescimento", "Estagnação", "Queda", "Dados insuficientes"].map((t) => (
@@ -97,12 +129,15 @@ export default async function ImpactoCampanha({ campanhaId, db }: { campanhaId: 
                 <th className="px-2 py-2 text-right">Meta ÷ baseline</th>
                 <th className="px-2 py-2">Engajamento prévio</th>
                 <th className="px-2 py-2">Leitura</th>
-                <th className="px-2 py-2 text-right">Na data da foto</th>
+                <th className="px-2 py-2 text-right">Andamento</th>
               </tr>
             </thead>
             <tbody>
               {linhas.map((l) => {
                 const d = l.dados;
+                const a = d.andamento?.[d.andamento.length - 1];
+                const andamento = a ? { ate: a.ate, realizado: a.realizado, esperado: a.esperado } : { ate: d.provisorio.ate, realizado: d.provisorio.realizado, esperado: d.provisorio.esperadoAteAgora };
+                const sit = situacaoDoAndamento(d);
                 return (
                   <tr key={l.unidade} className="border-b align-top last:border-0">
                     <td className="px-2 py-2 font-medium text-o2-navy">{l.nome}</td>
@@ -129,8 +164,9 @@ export default async function ImpactoCampanha({ campanhaId, db }: { campanhaId: 
                       <div className="text-gray-500">{d.matriz.acao}</div>
                     </td>
                     <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums">
-                      {d.provisorio.realizado} <span className="text-gray-500">de {num(d.provisorio.esperadoAteAgora)} esperadas</span>
-                      <div className="text-gray-500">em {dm(d.provisorio.ate)}</div>
+                      {andamento.realizado} <span className="text-gray-500">de {num(andamento.esperado)} esperadas</span>
+                      <div className="text-gray-500">até {dm(andamento.ate)}</div>
+                      <div className={sit.cor}>{sit.texto}</div>
                     </td>
                   </tr>
                 );
@@ -155,7 +191,7 @@ export default async function ImpactoCampanha({ campanhaId, db }: { campanhaId: 
               <strong>Engajamento prévio:</strong> últimos 90 dias antes da campanha. Resposta = a imobiliária procurou ou respondeu a O2; esforço = a O2 procurou a imobiliária. Níveis pelo percentil na carteira ativa.
             </li>
             <li>
-              <strong>Leitura:</strong> cruza a tendência com o engajamento e sugere a ação. A foto é <strong>congelada</strong> (gerada em {criada ? dmy(criada.slice(0, 10)) : "—"}) e não recalcula; o efeito só pode ser afirmado quando a campanha avançar e a comparação superar o acaso.
+              <strong>Leitura:</strong> cruza a tendência com o engajamento e sugere a ação. A foto de partida é <strong>congelada</strong> (gerada em {criada ? dmy(criada.slice(0, 10)) : "—"}) e não recalcula; só o andamento se atualiza. O efeito só pode ser afirmado quando a campanha avançar e a comparação superar o acaso.
             </li>
           </ul>
         </details>

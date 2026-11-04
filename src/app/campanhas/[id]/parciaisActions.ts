@@ -12,6 +12,7 @@ import { limparNomeRemetente, nomeExibidoRemetente } from "@/lib/campanhas/remet
 import { enderecoDaImagem, dataBr, formatarValor, type DadosPanorama } from "@/lib/campanhas/panoramaCampanha";
 import { montarEmailParcial, TEXTO_PADRAO_PARCIAL_HTML } from "@/lib/campanhas/parcialCampanha";
 import { dispararCampanha } from "@/lib/campanhas/dispararCampanha";
+import { recalcularAndamento } from "@/lib/campanhas/impactoCampanha";
 import { ENDERECO_REMETENTE_CAMPANHAS, montarHtmlCampanha, type CampanhaRow } from "@/lib/campanhas/processarLote";
 import { linkDescadastro } from "@/lib/campanhas/unsubscribeToken";
 
@@ -178,6 +179,14 @@ export async function enviarParciais(campanhaId: string, loteId: string, formDat
     const c = await comentarNosCards(db, campanhaId, l);
     falhasCard += c.falhas;
     cardsComentados += c.comentados;
+  }
+  // Andamento do quadro Impacto da campanha: atualiza a cada parcial enviada (nunca atrapalha o envio).
+  if (enviadas > 0) {
+    try {
+      await recalcularAndamento(db, campanhaId, { parcial: Math.max(...linhas.map((l) => l.versao)) });
+    } catch (e) {
+      console.error("Andamento do impacto não atualizado após a parcial:", e);
+    }
   }
   // Quem foi desmarcado na revisão não recebe parcial e sua prévia sai da lista.
   await db.from("campanhas_panoramas").update({ status: "descartada" }).eq("campanha_id", campanhaId).eq("lote_id", loteId).eq("status", "previa");
