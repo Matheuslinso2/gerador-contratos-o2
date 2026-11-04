@@ -30,5 +30,7 @@ export async function GET(request: NextRequest) {
   if (produtos.error) return NextResponse.json({ erro: "produtos: " + produtos.error.message }, { status: 500 });
   const oport = await sb.rpc("atualizar_analise_oportunidades");
   if (oport.error) return NextResponse.json({ erro: "oportunidades: " + oport.error.message }, { status: 500 });
-  return NextResponse.json({ ok: true, oportunidades: oport.data, linhas_produtos: produtos.data, linhas_faixa: faixa.data, linhas_margem: margem.data, entidades_visita: visita.data, meses_mercado: mercado.data });
+  const vc = await sb.rpc("atualizar_analise_oportunidades_vc");
+  if (vc.error) return NextResponse.json({ erro: "venda cruzada: " + vc.error.message }, { status: 500 });
+  return NextResponse.json({ ok: true, venda_cruzada: vc.data, oportunidades: oport.data, linhas_produtos: produtos.data, linhas_faixa: faixa.data, linhas_margem: margem.data, entidades_visita: visita.data, meses_mercado: mercado.data });
 }
