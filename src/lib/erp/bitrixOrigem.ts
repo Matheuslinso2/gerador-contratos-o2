@@ -146,7 +146,13 @@ export const CONFIGS: ConfigSpa[] = [
         // no endosso, "Apolice" é a apólice-mãe (liga o endosso a ela no ERP)
         nnCorp: num(r.ufCrm10_1778258392), numeroApolice: endosso ? texto(r.ufCrm10_1778258366) : null, numeroProposta: null,
         anterior: { apolice: texto(r.ufCrm10_1790800677), proposta: null },
-        cliente: { documento: cpf1, nome: texto(r.ufCrm10_1776354897), email: texto(r.ufCrm10_1783366659), telefone: texto(r.ufCrm10_1783366668) },
+        // Fiança: o cliente do documento é o SEGURADO = locador/proprietário (Matheus 27/10 e 04/11). O card é a análise do locatário
+        // e quase nunca traz o locador; sem ele, a proposta fica sem cliente até o documento oficial. O locatário vai em `partes`.
+        cliente: {
+          documento: documento(r.ufCrm10_1793306050964),
+          nome: texto(r.ufCrm10_1793306022767) ?? texto(r.ufCrm10_1783366608),
+          email: texto(r.ufCrm10_1783366629), telefone: texto(r.ufCrm10_1783366640),
+        },
         imobTexto: texto(r.ufCrm10_1783371296),
         tipoContratacao: it.companyId ? "indicacao_imobiliaria" : voceE.includes("Pretendente") || voceE.includes("Proprietário") ? "venda_direta" : null,
         canalVenda: null, modoCobranca: modoDaForma(rotulo(defs, "ufCrm10_1793209055151", r.ufCrm10_1793209055151)) ?? "nao_informado", formaPagamento: rotulo(defs, "ufCrm10_1793209055151", r.ufCrm10_1793209055151),
