@@ -9,3 +9,8 @@
 --   confere a apólice no ERP e classifica: sem_apolice_no_erp (não cria), ligar (já existe no módulo), novo_card (aberto A/P dentro de 2 anos + 1 dia: cria card origem corp), so_arquivo, revisar_sem_data.
 --   Sempre grava no arquivo sinistros_corp (fontes powerbi_sharepoint) e escreve sinistro_historico (autor sistema). Idempotente. Cron: /api/cron/sinistros-ponte-corp (hora cheia + 35).
 --   Códigos do feed: situação A/P/E/I = EM ANDAMENTO/PENDENTE/ENCERRADO SEM INDENIZAÇÃO/INDENIZADO. DESLIGAR no desligamento do Corp.
+-- 04/11/2026 (migração sinistros_ponte_corp_atualizar; backup sinistros_corp_backup_0411, sinistros_backup_0411, sinistro_indenizacoes_backup_0411 com RLS, só service_role, apagáveis após conferência):
+-- sinistros_ponte_corp_atualizar(p_gravar boolean default false): para cada linha do feed que corresponde SEM AMBIGUIDADE a um registro do arquivo, o espelho do Corp acompanha o Corp (situação, valores, encerramento);
+--   card ainda ABERTO cujo sinistro o Corp encerrou: encerra (desfecho indenizado/sem_indenizacao, motivo 'Encerrado no Corp', histórico) e, se indenizado e sem indenização lançada, cria UMA indenização com o valor acumulado (observação explica);
+--   card já encerrado/cancelado no Workspace não é tocado; reaberto no Corp só é contado. Primeira execução (04/11): 175 registros, 25 cards encerrados (21 indenizados = R$ 221.841,35), indenizado do espelho 37,94 -> 38,20 milhões.
+--   Chamada pelo mesmo cron (/api/cron/sinistros-ponte-corp) depois da criação. Desligar junto com a ponte.
