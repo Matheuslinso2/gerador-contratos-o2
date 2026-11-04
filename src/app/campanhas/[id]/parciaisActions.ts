@@ -10,7 +10,8 @@ import { gerarPreviaParciais } from "@/lib/campanhas/previaParciais";
 import { produtosDaCampanha } from "@/lib/campanhas/produtos";
 import { limparNomeRemetente, nomeExibidoRemetente } from "@/lib/campanhas/remetente";
 import { enderecoDaImagem, dataBr, formatarValor, type DadosPanorama } from "@/lib/campanhas/panoramaCampanha";
-import { montarEmailParcial, TEXTO_PADRAO_PARCIAL_HTML } from "@/lib/campanhas/parcialCampanha";
+import { campanhaComPremiacaoPorCliente, montarEmailParcial, normalizarTextoParcial, TEXTO_PADRAO_PARCIAL_HTML } from "@/lib/campanhas/parcialCampanha";
+import { premiacoesDaCampanha, restaurarPremiacaoPadrao, salvarPremiacaoPersonalizada } from "@/lib/campanhas/premiacaoPersonalizada";
 import { dispararCampanha } from "@/lib/campanhas/dispararCampanha";
 import { recalcularAndamento } from "@/lib/campanhas/impactoCampanha";
 import { ENDERECO_REMETENTE_CAMPANHAS, montarHtmlCampanha, type CampanhaRow } from "@/lib/campanhas/processarLote";
@@ -49,36 +50,69 @@ export async function descartarParciais(campanhaId: string, loteId: string) {
   irParaCampanha(campanhaId, "ok", "Prévia das parciais descartada. Nada foi enviado.");
 }
 
-type PanoramaRow = { id: string; participante_id: string; imobiliaria_ids: string[]; nome: string; versao: number; token: string; dados: DadosPanorama };
+type PanoramaRow = { id: string; participante_id: string; imobiliaria_ids: string[]; nome: string; versao: number; token: string; dados: DadosPanorama; texto: string | null };
 
+// Texto do e-mail e premiações usados na prévia, no teste e no envio: sempre a mesma composição.
+// O editor só preenche o campo depois de mexer nele; sem isso, vale o texto já salvo na revisão
+// (antes de 04/11/2026 cair no texto padrão fazia o envio sair diferente da prévia).
 async function carregarLote(campanhaId: string, loteId: string, formData: FormData) {
   const db = createServiceClient();
-  const { data } = await db.from("campanhas_panoramas").select("id, participante_id, imobiliaria_ids, nome, versao, token, dados").eq("campanha_id", campanhaId).eq("lote_id", loteId).eq("status", "previa");
+  const { data } = await db.from("campanhas_panoramas").select("id, participante_id, imobiliaria_ids, nome, versao, token, dados, texto").eq("campanha_id", campanhaId).eq("lote_id", loteId).eq("status", "previa");
+  const todas = (data ?? []) as PanoramaRow[];
   const excluidos = new Set(formData.getAll("excluir").map(String));
-  const linhas = ((data ?? []) as PanoramaRow[]).filter((l) => !excluidos.has(l.id)).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
-  const texto = String(formData.get("texto") ?? "").trim() || TEXTO_PADRAO_PARCIAL_HTML;
-  return { db, linhas, texto };
+  const linhas = todas.filter((l) => !excluidos.has(l.id)).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+  const informado = String(formData.get("texto") ?? "").trim();
+  const texto = normalizarTextoParcial(informado || todas.find((l) => l.texto)?.texto || TEXTO_PADRAO_PARCIAL_HTML);
+  const premiacoes = await premiacoesDaCampanha(db, campanhaId);
+  return { db, linhas, texto, premiacoes };
 }
 
 // Salva o texto editado e volta para a revisão, onde cada imobiliária mostra o e-mail
 // como será recebido (03/11/2026). Não envia nada.
 export async function atualizarPreviaParciais(campanhaId: string, loteId: string, formData: FormData) {
   await exigirEquipe();
-  const texto = String(formData.get("texto") ?? "").trim() || TEXTO_PADRAO_PARCIAL_HTML;
-  await createServiceClient().from("campanhas_panoramas").update({ texto }).eq("campanha_id", campanhaId).eq("lote_id", loteId).eq("status", "previa");
+  const informado = String(formData.get("texto") ?? "").trim();
+  // Editor intocado = campo vazio: mantém o texto já salvo em vez de voltar ao padrão.
+  if (informado) {
+    await createServiceClient().from("campanhas_panoramas").update({ texto: normalizarTextoParcial(informado) }).eq("campanha_id", campanhaId).eq("lote_id", loteId).eq("status", "previa");
+  }
   irParaParciais(campanhaId, loteId, "ok", "Texto salvo. As prévias abaixo já mostram cada e-mail como será recebido. Nada foi enviado.");
+}
+
+// Premiação personalizada do cliente (04/11/2026, só Campanha Elite). Chamadas direto da tela, sem
+// redirecionar: o texto do modelo que estiver sendo editado na página não se perde. Não enviam nada.
+type RespostaPremiacao = { ok: boolean; mensagem: string };
+async function exigirCampanhaElite(campanhaId: string): Promise<string | null> {
+  const { data } = await createServiceClient().from("campanhas").select("nome").eq("id", campanhaId).maybeSingle();
+  return campanhaComPremiacaoPorCliente(data?.nome) ? null : "A premiação por cliente existe só na Campanha Elite.";
+}
+
+export async function salvarPremiacaoDoCliente(campanhaId: string, participanteId: string, html: string): Promise<RespostaPremiacao> {
+  await exigirEquipe();
+  const bloqueio = await exigirCampanhaElite(campanhaId);
+  if (bloqueio) return { ok: false, mensagem: bloqueio };
+  const r = await salvarPremiacaoPersonalizada(createServiceClient(), campanhaId, participanteId, html);
+  return r.ok ? { ok: true, mensagem: "Premiação personalizada salva só para este cliente. Nada foi enviado." } : { ok: false, mensagem: r.erro };
+}
+
+export async function restaurarPremiacaoDoCliente(campanhaId: string, participanteId: string): Promise<RespostaPremiacao> {
+  await exigirEquipe();
+  const bloqueio = await exigirCampanhaElite(campanhaId);
+  if (bloqueio) return { ok: false, mensagem: bloqueio };
+  const r = await restaurarPremiacaoPadrao(createServiceClient(), campanhaId, participanteId);
+  return r.ok ? { ok: true, mensagem: "Premiação padrão restaurada para este cliente. Nada foi enviado." } : { ok: false, mensagem: r.erro };
 }
 
 // Teste: o e-mail da primeira imobiliária da lista, para quem está logado.
 export async function enviarTesteParciais(campanhaId: string, loteId: string, formData: FormData) {
   const { user } = await exigirEquipe();
-  const { linhas, texto } = await carregarLote(campanhaId, loteId, formData);
+  const { linhas, texto, premiacoes } = await carregarLote(campanhaId, loteId, formData);
   if (!linhas.length) irParaParciais(campanhaId, loteId, "erro", "Não há nenhuma imobiliária marcada para enviar.");
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
   if (!siteUrl || !user.email) irParaParciais(campanhaId, loteId, "erro", "Não consegui montar o teste (endereço do site ou e-mail do usuário ausente).");
   const remetente = limparNomeRemetente(formData.get("remetente_nome"));
   const l = linhas[0];
-  const e = montarEmailParcial(l.dados, texto, enderecoDaImagem(l.token), l.token);
+  const e = montarEmailParcial(l.dados, texto, enderecoDaImagem(l.token), l.token, premiacoes.get(l.participante_id));
   const row: CampanhaRow = { id: campanhaId, assunto: e.assunto, template: "comunicado", titulo: e.titulo, introducao: e.introducao, valido_de: l.dados.inicio, valido_ate: l.dados.fim, corpo_html: e.corpoHtml, cta_texto: null, cta_href: null, personalizacao: "nenhuma", remetente_nome: remetente };
   try {
     await enviarEmail({
@@ -121,7 +155,7 @@ async function comentarNosCards(db: ReturnType<typeof createServiceClient>, camp
 
 export async function enviarParciais(campanhaId: string, loteId: string, formData: FormData) {
   const { supabase, user } = await exigirEquipe();
-  const { db, linhas, texto } = await carregarLote(campanhaId, loteId, formData);
+  const { db, linhas, texto, premiacoes } = await carregarLote(campanhaId, loteId, formData);
   if (!linhas.length) irParaParciais(campanhaId, loteId, "erro", "Não há nenhuma imobiliária marcada para enviar.");
   const { data: campanha } = await supabase.from("campanhas").select("*").eq("id", campanhaId).maybeSingle();
   if (!campanha) redirect("/campanhas");
@@ -141,7 +175,7 @@ export async function enviarParciais(campanhaId: string, loteId: string, formDat
   let cardsComentados = 0;
   const problemas: string[] = [];
   for (const l of linhas) {
-    const e = montarEmailParcial(l.dados, texto, enderecoDaImagem(l.token), l.token);
+    const e = montarEmailParcial(l.dados, texto, enderecoDaImagem(l.token), l.token, premiacoes.get(l.participante_id));
     const { data: filho, error } = await db
       .from("campanhas")
       .insert({

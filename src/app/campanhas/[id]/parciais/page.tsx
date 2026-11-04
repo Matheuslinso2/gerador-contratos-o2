@@ -8,7 +8,17 @@ import AppHeader from "@/components/AppHeader";
 import PageHeader from "@/components/PageHeader";
 import SubmitButton from "@/components/SubmitButton";
 import { IconMail } from "@/components/icons";
-import { TEXTO_PADRAO_PARCIAL_HTML, TOKEN_PANORAMA, montarEmailParcial } from "@/lib/campanhas/parcialCampanha";
+import {
+  PREMIACAO_PADRAO_LINHAS,
+  TEXTO_PADRAO_PARCIAL_HTML,
+  TOKEN_PANORAMA,
+  aplicarPremiacao,
+  campanhaComPremiacaoPorCliente,
+  montarEmailParcial,
+  normalizarTextoParcial,
+} from "@/lib/campanhas/parcialCampanha";
+import { premiacoesDaCampanha } from "@/lib/campanhas/premiacaoPersonalizada";
+import PremiacaoCliente from "./PremiacaoCliente";
 import { contagemOportunidades, dataBr, enderecoDaImagem, formatarValor, type DadosPanorama } from "@/lib/campanhas/panoramaCampanha";
 import { imobiliariasDaCampanha } from "@/lib/campanhas/imobiliariasDaCampanha";
 import { participantesDaCampanha } from "@/lib/campanhas/metasCampanha";
@@ -21,7 +31,7 @@ import { atualizarPreviaParciais, descartarParciais, enviarParciais, enviarTeste
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-type Linha = { id: string; nome: string; versao: number; token: string; imobiliaria_ids: string[]; dados: DadosPanorama; texto: string | null };
+type Linha = { id: string; participante_id: string; nome: string; versao: number; token: string; imobiliaria_ids: string[]; dados: DadosPanorama; texto: string | null };
 
 // Revisão das parciais antes de enviar (30/10/2026; refeita em 03/11/2026): texto
 // editável já preenchido, quadro de conferência de TODOS os participantes e a
@@ -40,7 +50,7 @@ export default async function ParciaisPage({ params, searchParams }: { params: P
   const db = createServiceClient();
   const [{ data: campanha }, { data: linhasBrutas }] = await Promise.all([
     supabase.from("campanhas").select("id, nome, remetente_nome, premiacao_descricao").eq("id", id).maybeSingle(),
-    db.from("campanhas_panoramas").select("id, nome, versao, token, imobiliaria_ids, dados, texto").eq("campanha_id", id).eq("lote_id", lote).eq("status", "previa"),
+    db.from("campanhas_panoramas").select("id, participante_id, nome, versao, token, imobiliaria_ids, dados, texto").eq("campanha_id", id).eq("lote_id", lote).eq("status", "previa"),
   ]);
   if (!campanha) redirect("/campanhas");
   const linhas = ((linhasBrutas ?? []) as Linha[]).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
@@ -66,11 +76,16 @@ export default async function ParciaisPage({ params, searchParams }: { params: P
     for (const g of (data ?? []) as { id: string; nome: string }[]) nomeSemMeta.set(g.id, `${g.nome} (grupo)`);
   }
   const posicao = linhas[0].dados.posicaoEm;
-  const textoAtual = linhas.find((l) => l.texto)?.texto ?? TEXTO_PADRAO_PARCIAL_HTML;
+  const textoAtual = normalizarTextoParcial(linhas.find((l) => l.texto)?.texto ?? TEXTO_PADRAO_PARCIAL_HTML);
+  // Premiação por cliente (só Campanha Elite): exceção salva na linha de meta do participante.
+  const comPremiacaoPorCliente = campanhaComPremiacaoPorCliente(campanha.nome);
+  const premiacoes = comPremiacaoPorCliente ? await premiacoesDaCampanha(db, id) : new Map<string, string>();
+  const textoSemMarcadorPremiacao = comPremiacaoPorCliente && aplicarPremiacao(textoAtual, null).semMarcador;
+  const premiacaoPadraoHtml = PREMIACAO_PADRAO_LINHAS.join("");
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
 
   const htmlDoEmail = (l: Linha) => {
-    const e = montarEmailParcial(l.dados, textoAtual, enderecoDaImagem(l.token), l.token);
+    const e = montarEmailParcial(l.dados, textoAtual, enderecoDaImagem(l.token), l.token, premiacoes.get(l.participante_id));
     const row: CampanhaRow = {
       id,
       assunto: e.assunto,
@@ -116,8 +131,9 @@ export default async function ParciaisPage({ params, searchParams }: { params: P
           <h2 className="font-semibold">Confira antes de enviar</h2>
           <ul className="list-disc space-y-1 pl-5">
             <li>
-              <strong>Premiação.</strong> O texto sugerido fala em “Troféu Exclusivo O2 Elite – 2026” e “vídeo de marketing (gravação profissional no escritório sobre a trajetória da imobiliária)”. A premiação cadastrada na campanha é:{" "}
-              <em>{campanha.premiacao_descricao ?? "(nenhuma cadastrada)"}</em>. Há uma só premiação por campanha no Workspace: não consigo confirmar se Adjuve, Expan e Silvério (campanha de 2 meses) têm a mesma. Ajuste o texto se for diferente.
+              <strong>Premiação.</strong> O texto padrão fala em “Troféu Exclusivo O2 Elite – 2026” e “vídeo de marketing (gravação profissional no escritório sobre a trajetória da imobiliária)”. A premiação cadastrada na campanha é:{" "}
+              <em>{campanha.premiacao_descricao ?? "(nenhuma cadastrada)"}</em>.
+              {comPremiacaoPorCliente ? " Quem tem premiação própria aparece com a indicação “Premiação personalizada”." : " Há uma só premiação por campanha no Workspace: confira se vale para todos os participantes e ajuste o texto se não valer."}
             </li>
             {individuais.length > 0 && (
               <li>
@@ -132,6 +148,16 @@ export default async function ParciaisPage({ params, searchParams }: { params: P
               </li>
             )}
             {semMarcador && <li>O texto não tem o marcador do panorama: ele será colocado no fim do e-mail. Use “Inserir panorama” para escolher o lugar.</li>}
+            {comPremiacaoPorCliente && (
+              <li>
+                <strong>Premiação por cliente.</strong> {premiacoes.size} cliente(s) com premiação personalizada: o bloco entre <code>{"{{premiacao}}"}</code> e <code>{"{{/premiacao}}"}</code> do texto é trocado só para eles; os demais recebem o bloco padrão que está entre os marcadores. O restante do texto é comum a todos.
+              </li>
+            )}
+            {textoSemMarcadorPremiacao && (
+              <li className="font-semibold text-red-700">
+                O texto perdeu os marcadores <code>{"{{premiacao}}"}</code> e <code>{"{{/premiacao}}"}</code>: as premiações personalizadas NÃO estão sendo aplicadas. Recoloque os marcadores em volta do bloco de premiação antes de enviar.
+              </li>
+            )}
             <li>
               <strong>Oportunidades</strong> = cotações <em>aprovadas</em> e títulos de Capitalização <em>solicitados</em> (os mesmos de “Títulos solicitados” do painel de Capitalização) ainda não contratados, renovações fora, recebidos desde 2 meses antes do início de cada campanha. Nesta parcial: {oportunidadesTotal} cotação(ões) aprovada(s) e {titulosSolicitadosTotal} título(s) solicitado(s). Não somam na produção: só viram resultado depois da contratação.
             </li>
@@ -174,6 +200,7 @@ export default async function ParciaisPage({ params, searchParams }: { params: P
                   <td className="py-1 pr-3 text-right tabular-nums">{l.dados.oportunidades.length}</td>
                   <td className="py-1 text-gray-600">
                     {[
+                      premiacoes.has(l.participante_id) ? "premiação personalizada" : null,
                       l.dados.capValorMinimo ? `Capitalização a partir de ${formatarValor(l.dados.capValorMinimo, true)}${l.dados.capForaDoMinimo ? ` (${l.dados.capForaDoMinimo} abaixo, fora)` : ""}` : null,
                       l.dados.dadosStatus !== "ok" ? "dados indisponíveis" : null,
                       l.dados.encerrada ? "campanha encerrada" : null,
@@ -235,7 +262,10 @@ export default async function ParciaisPage({ params, searchParams }: { params: P
                 <div key={l.id} className="rounded-xl border border-gray-200 bg-white p-3">
                   <div className="mb-2 flex items-start justify-between gap-2">
                     <div>
-                      <p className="text-sm font-semibold text-o2-navy">{l.nome}</p>
+                      <p className="text-sm font-semibold text-o2-navy">
+                        {l.nome}
+                        {premiacoes.has(l.participante_id) && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 align-middle text-[11px] font-medium text-amber-800">Premiação personalizada</span>}
+                      </p>
                       <p className="text-xs text-gray-500">
                         Parcial nº {l.versao} · campanha de {dataBr(l.dados.inicio)} a {dataBr(l.dados.fim)}
                         {l.dados.periodoIndividual ? " (período individual)" : ""} · {l.imobiliaria_ids.length > 1 ? `${l.imobiliaria_ids.length} unidades` : "1 unidade"} ·{" "}
@@ -254,6 +284,17 @@ export default async function ParciaisPage({ params, searchParams }: { params: P
                       <iframe title={`E-mail de ${l.nome}`} srcDoc={htmlDoEmail(l)} sandbox="" loading="lazy" className="h-[760px] w-full rounded-b-lg border-t border-gray-200 bg-white" />
                     </details>
                   </div>
+                  {comPremiacaoPorCliente && (
+                    <div className="mt-3">
+                      <PremiacaoCliente
+                        campanhaId={id}
+                        participanteId={l.participante_id}
+                        nome={l.dados.participante}
+                        personalizada={premiacoes.get(l.participante_id) ?? null}
+                        padraoHtml={premiacaoPadraoHtml}
+                      />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

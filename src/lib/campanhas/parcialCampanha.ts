@@ -23,14 +23,36 @@ const linha = (conteudo: string) => `<tr><td style="${ESTILO_LINHA}">${conteudo}
 const BOTAO = (texto: string, href: string) =>
   `<a href="${href}" contenteditable="false" data-botao="1" style="display:inline-block;background:${O2_LARANJA};color:#ffffff;font-family:${FONTE};font-weight:700;font-size:14px;text-decoration:none;padding:12px 28px;border-radius:999px;margin:8px 0;">${texto}</a>`;
 
+export const MARCADOR_PREMIACAO_INICIO = "{{premiacao}}";
+export const MARCADOR_PREMIACAO_FIM = "{{/premiacao}}";
+export const TITULO_PREMIACAO_PADRAO = "Ao atingir a meta, vocês conquistam:";
+export const TITULO_PREMIACAO_PERSONALIZADA = "Confira a premiação da sua campanha:";
+
+const marcadorPremiacao = (valor: string) => `<span class="merge-token" contenteditable="false">${valor}</span>`;
+
+/** Linhas do e-mail (<tr><td>) a partir do HTML de cada linha: mesmo formato que o editor grava. */
+export const linhasDoEmail = (conteudos: string[]) => conteudos.map(linha).join("");
+
+export const PREMIACAO_PADRAO_LINHAS = [
+  linha("🏆 <b>Troféu Exclusivo O2 Elite – 2026</b>"),
+  linha("🎥 <b>Vídeo de marketing:</b> gravação profissional no escritório de vocês sobre a trajetória da imobiliária, para uso nas redes e mídias da O2."),
+];
+
+/** A premiação por cliente existe só na Campanha Elite (04/11/2026). */
+export const campanhaComPremiacaoPorCliente = (nome: string | null | undefined) => /elite/i.test(nome ?? "");
+
 // Texto inicial (pedido de 03/11/2026). Fica no editor para ser alterado antes do envio.
 export const TEXTO_PADRAO_PARCIAL_HTML = [
   linha("<b>Olá, parceiro O2!</b>"),
   linha("Segue o acompanhamento da <b>{nome}</b> na campanha <b>{campanha}</b>, com os números até <b>{data}</b>."),
   linha("Cada nova contratação aproxima vocês da meta! Aproveitem as próximas locações para oferecer Capitalização e Seguro Fiança aos clientes."),
-  linha("<b>Ao atingir a meta, vocês conquistam:</b>"),
-  linha("🏆 <b>Troféu Exclusivo O2 Elite – 2026</b>"),
-  linha("🎥 <b>Vídeo de marketing:</b> gravação profissional no escritório de vocês sobre a trajetória da imobiliária, para uso nas redes e mídias da O2."),
+  // Bloco de premiação (04/11/2026): entre os marcadores fica a premiação PADRÃO, editável aqui como qualquer
+  // outro trecho. Quem tem premiação personalizada (campanhas_metas) recebe o título novo e o texto próprio NO
+  // LUGAR do que está entre os marcadores; todo o resto do texto continua sendo o do modelo.
+  linha(marcadorPremiacao(MARCADOR_PREMIACAO_INICIO)),
+  linha(`<b>${TITULO_PREMIACAO_PADRAO}</b>`),
+  ...PREMIACAO_PADRAO_LINHAS,
+  linha(marcadorPremiacao(MARCADOR_PREMIACAO_FIM)),
   linha("📊 <b>Confira sua parcial abaixo:</b>"),
   linha(`<span class="merge-token" contenteditable="false">${TOKEN_PANORAMA}</span>`),
   linha(BOTAO("Falar com a nossa equipe", LINK_PADRAO_BOTAO)),
@@ -90,10 +112,61 @@ function blocoPanorama(d: DadosPanorama, imagemUrl: string): string {
     </tr>`;
 }
 
+const escReg = (s: string) => s.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+const semTexto = (l: string) => l.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim().length === 0;
+
+/** Tira o marcador de uma linha; a linha some se só ele estava nela. */
+function tirarMarcador(l: string, marcador: string): string {
+  if (!l.includes(marcador)) return l;
+  const resto = l.replace(new RegExp(String.raw`<span[^>]*merge-token[^>]*>\s*` + escReg(marcador) + String.raw`\s*</span>`, "gi"), "").split(marcador).join("");
+  return semTexto(resto) ? "" : resto;
+}
+
+/** Textos salvos antes de 04/11/2026 não têm os marcadores da premiação: coloca-os em volta do bloco padrão
+ *  (do título "Ao atingir a meta…" até antes de "Confira sua parcial"). Sem achar o bloco, devolve como está. */
+export function normalizarTextoParcial(html: string): string {
+  if (html.includes(MARCADOR_PREMIACAO_INICIO) && html.includes(MARCADOR_PREMIACAO_FIM)) return html;
+  const linhas = html.split(/(?<=<\/tr>)/i);
+  if (linhas.length < 2) return html;
+  const plano = (l: string) => l.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ");
+  const titulo = linhas.findIndex((l) => /ao atingir a meta,\s+voc[eê]s conquistam/i.test(plano(l)));
+  if (titulo < 0) return html;
+  let fim = linhas.findIndex((l, i) => i > titulo && (l.includes(TOKEN_PANORAMA) || /confira sua parcial/i.test(plano(l))));
+  if (fim < 0) fim = Math.min(linhas.length, titulo + 3);
+  return [
+    ...linhas.slice(0, titulo),
+    linha(marcadorPremiacao(MARCADOR_PREMIACAO_INICIO)),
+    ...linhas.slice(titulo, fim),
+    linha(marcadorPremiacao(MARCADOR_PREMIACAO_FIM)),
+    ...linhas.slice(fim),
+  ].join("");
+}
+
+/** Troca o bloco entre os marcadores da premiação pela premiação PERSONALIZADA do cliente (com o título próprio);
+ *  sem personalização, só tira os marcadores e deixa a padrão. `semMarcador`: o texto não tem os dois marcadores,
+ *  então a personalização não pôde ser aplicada. */
+export function aplicarPremiacao(html: string, personalizada: string | null | undefined): { html: string; semMarcador: boolean } {
+  const linhas = html.split(/(?<=<\/tr>)/i);
+  const ini = linhas.findIndex((l) => l.includes(MARCADOR_PREMIACAO_INICIO));
+  const fim = linhas.findIndex((l, i) => i >= Math.max(ini, 0) && l.includes(MARCADOR_PREMIACAO_FIM));
+  if (ini < 0 || fim < 0) return { html, semMarcador: true };
+  if (!personalizada || semTexto(personalizada)) {
+    return { html: linhas.map((l) => tirarMarcador(tirarMarcador(l, MARCADOR_PREMIACAO_INICIO), MARCADOR_PREMIACAO_FIM)).join(""), semMarcador: false };
+  }
+  return { html: linhas.slice(0, ini).join("") + linha(`<b>${TITULO_PREMIACAO_PERSONALIZADA}</b>`) + personalizada + linhas.slice(fim + 1).join(""), semMarcador: false };
+}
+
 /** Texto (linhas <tr>) com o marcador {{panorama}} trocado pelo panorama; sem marcador, o panorama vai ao fim do texto.
  *  Marcador repetido nunca aparece cru: só o primeiro vira o panorama, os demais somem. */
-export function montarCorpoParcial(textoHtml: string, d: DadosPanorama, imagemUrl: string, token?: string): { corpoHtml: string; semMarcador: boolean } {
-  const preenchido0 = aplicarTexto(textoHtml, d);
+export function montarCorpoParcial(
+  textoHtml: string,
+  d: DadosPanorama,
+  imagemUrl: string,
+  token?: string,
+  premiacaoPersonalizada?: string | null
+): { corpoHtml: string; semMarcador: boolean; semMarcadorPremiacao: boolean } {
+  const { html: comPremiacao, semMarcador: semMarcadorPremiacao } = aplicarPremiacao(textoHtml, premiacaoPersonalizada);
+  const preenchido0 = aplicarTexto(comPremiacao, d);
   // Com token, os botões passam pelo rastreador (clique registrado só depois do envio real).
   const preenchido = token ? rastrearBotoes(preenchido0, token) : preenchido0;
   const bloco = blocoPanorama(d, imagemUrl);
@@ -108,11 +181,11 @@ export function montarCorpoParcial(textoHtml: string, d: DadosPanorama, imagemUr
     achou = true;
     return sobra + bloco;
   });
-  return { corpoHtml: (achou ? saida.join("") : saida.join("") + bloco) + `<tr><td style="padding:12px 0 0;"></td></tr>`, semMarcador: !achou };
+  return { corpoHtml: (achou ? saida.join("") : saida.join("") + bloco) + `<tr><td style="padding:12px 0 0;"></td></tr>`, semMarcador: !achou, semMarcadorPremiacao };
 }
 
-export function montarEmailParcial(d: DadosPanorama, textoHtml: string, imagemUrl: string, token?: string) {
-  const { corpoHtml } = montarCorpoParcial(textoHtml, d, imagemUrl, token);
+export function montarEmailParcial(d: DadosPanorama, textoHtml: string, imagemUrl: string, token?: string, premiacaoPersonalizada?: string | null) {
+  const { corpoHtml } = montarCorpoParcial(textoHtml, d, imagemUrl, token, premiacaoPersonalizada);
   return {
     nome: `Parcial ${d.versao} — ${d.campanha} — ${d.participante} (${dataBr(d.posicaoEm).slice(0, 5)})`,
     assunto: `Parcial da campanha ${d.campanha} — ${d.participante}`,
