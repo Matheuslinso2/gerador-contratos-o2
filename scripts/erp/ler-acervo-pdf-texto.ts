@@ -18,7 +18,18 @@ const CONTINUO = process.argv.includes("--continuo");
 const dig = (s: string) => s.replace(/\D/g, "");
 const PRIORIDADE: Record<string, number> = { apolice: 0, certificado: 1, endosso: 2, proposta: 3, cotacao: 4 };
 
-type Item = { documento_id: string; origem: "erp" | "corp"; bucket: string; path: string; tipo: string; nosso: number | null };
+type Item = { documento_id: string | null; origem: "erp" | "corp" | "email"; bucket: string; path: string; tipo: string; nosso: number | null; email_anexo_id?: string; seguradora?: string | null };
+const EMAILS = process.argv.includes("--emails");
+
+// PDFs anexados aos e-mails das caixas da O2 (já classificados em erp_email_anexos): entram SEM documento; o vínculo vem depois, provado pelo conteúdo.
+async function montarFilaEmails(): Promise<Item[]> {
+  const feitos = new Set((await paginar<{ fonte_pdf: string }>((a, b) => sb.from("erp_apolice_pdf_texto").select("fonte_pdf").like("fonte_pdf", "email:%").order("id").range(a, b))).map((x) => x.fonte_pdf));
+  const ax = await paginar<{ id: string; storage_bucket: string; storage_path: string; classe: string; seguradora: string | null; documento_id: string | null; criado_em: string }>((a, b) =>
+    sb.from("erp_email_anexos").select("id,storage_bucket,storage_path,classe,seguradora,documento_id,criado_em").in("classe", TIPOS_ERP).not("storage_path", "is", null).order("id").range(a, b));
+  return ax.filter((x) => !feitos.has(`email:${x.storage_path}`))
+    .sort((a, b) => b.criado_em.localeCompare(a.criado_em) || PRIORIDADE[a.classe] - PRIORIDADE[b.classe])
+    .map((x) => ({ documento_id: x.documento_id, origem: "email" as const, bucket: x.storage_bucket, path: x.storage_path, tipo: x.classe, nosso: null, email_anexo_id: x.id, seguradora: x.seguradora }));
+}
 
 async function paginar<T>(f: (de: number, ate: number) => PromiseLike<{ data: T[] | null }>): Promise<T[]> {
   const out: T[] = [];
@@ -37,13 +48,14 @@ async function montarFila(): Promise<Item[]> {
   const mapa: Record<string, string> = { "Apólice": "apolice", "Certificado": "certificado", "Proposta": "proposta", "Endosso": "endosso" };
   const rotulos = new Map((tipos ?? []).filter((t) => mapa[t.tipo as string] && TIPOS_ERP.includes(mapa[t.tipo as string])).map((t) => [t.rotulo_id as string, mapa[t.tipo as string]]));
   const corp = await paginar<{ nosso_numero: number; storage_path: string; rotulo_id: string; mime: string | null }>((a, b) => sb.from("corp_anexos").select("nosso_numero,storage_path,rotulo_id,mime").order("id").range(a, b));
-  const porNosso = new Map<number, string>();
-  const nossos = [...new Set(corp.filter((c) => rotulos.has(c.rotulo_id)).map((c) => c.nosso_numero))];
-  for (let i = 0; i < nossos.length; i += 200) { const { data } = await sb.from("erp_documentos").select("id,nosso_numero_corp").in("nosso_numero_corp", nossos.slice(i, i + 200)).neq("situacao", "duplicado"); for (const d of data ?? []) porNosso.set(d.nosso_numero_corp as number, d.id as string); }
+  // chave sempre em texto: corp_anexos.nosso_numero e erp_documentos.nosso_numero_corp têm tipos diferentes (o Map não casava 8 mil anexos)
+  const porNosso = new Map<string, string>();
+  const nossos = [...new Set(corp.filter((c) => rotulos.has(c.rotulo_id)).map((c) => String(c.nosso_numero)))];
+  for (let i = 0; i < nossos.length; i += 200) { const { data } = await sb.from("erp_documentos").select("id,nosso_numero_corp").in("nosso_numero_corp", nossos.slice(i, i + 200)).neq("situacao", "duplicado"); for (const d of data ?? []) porNosso.set(String(d.nosso_numero_corp), d.id as string); }
   let semDoc = 0;
   for (const c of corp) {
     const tp = rotulos.get(c.rotulo_id); if (!tp || !String(c.mime ?? "pdf").toLowerCase().includes("pdf")) continue;
-    const did = porNosso.get(c.nosso_numero); if (!did) { semDoc++; continue; }
+    const did = porNosso.get(String(c.nosso_numero)); if (!did) { semDoc++; continue; }
     if (!feitos.has(`${did}|corp:${c.storage_path}`)) fila.push({ documento_id: did, origem: "corp", bucket: "corp-anexos", path: c.storage_path, tipo: tp, nosso: c.nosso_numero });
   }
   if (semDoc) console.log(`(${semDoc} anexos do Corp sem documento correspondente no ERP: ficam para quando o documento entrar)`);
@@ -58,7 +70,7 @@ async function lerUm(it: Item, st: Record<string, number>) {
   if (!data) { st.erro_download++; return; }
   const buf = Buffer.from(await data.arrayBuffer());
   let t = ((await abrirTextoPdfComSenha(buf, []))?.texto ?? "").replace(/\s+/g, " ");
-  if (t.length < 200) {
+  if (t.length < 200 && it.documento_id) {
     const cpfs: string[] = [];
     const { data: d } = await sb.from("erp_documentos").select("locatario_id").eq("id", it.documento_id).maybeSingle();
     if (d?.locatario_id) { const { data: l } = await sb.from("locatarios").select("cpf").eq("id", d.locatario_id).maybeSingle(); if (l?.cpf) cpfs.push(String(l.cpf)); }
@@ -67,23 +79,31 @@ async function lerUm(it: Item, st: Record<string, number>) {
     const r2 = await textoDoPdf(buf, [...new Set(cpfs.map(dig).filter((c) => c.length >= 11))]);
     if (r2.t && r2.t.length > t.length) t = r2.t.replace(/\s+/g, " ");
   }
-  const { data: seg } = await sb.from("erp_documentos").select("seguradora:erp_seguradoras(abreviacao)").eq("id", it.documento_id).maybeSingle();
-  const s0 = (seg as unknown as { seguradora: { abreviacao: string } | { abreviacao: string }[] | null } | null)?.seguradora;
-  const chave = (Array.isArray(s0) ? s0[0] : s0)?.abreviacao ?? null;
+  let chave: string | null = it.seguradora ?? null;
+  if (it.documento_id) {
+    const { data: seg } = await sb.from("erp_documentos").select("seguradora:erp_seguradoras(abreviacao)").eq("id", it.documento_id).maybeSingle();
+    const s0 = (seg as unknown as { seguradora: { abreviacao: string } | { abreviacao: string }[] | null } | null)?.seguradora;
+    chave = (Array.isArray(s0) ? s0[0] : s0)?.abreviacao ?? chave;
+  }
   t = t.replace(/\u0000/g, "").replace(/[\uD800-\uDFFF]/g, "");
   const ok = t.length >= 200;
-  const { error: eUp } = await sb.from("erp_apolice_pdf_texto").upsert({ documento_id: it.documento_id, seguradora_chave: chave, texto: ok ? t : null, metodo: ok ? "texto_nativo" : "sem_texto", fonte_pdf: `${it.origem}:${it.path}`, tipo_anexo: it.tipo, nosso_numero_corp: it.nosso, leitor_versao: LEITOR_VERSAO }, { onConflict: "documento_id,fonte_pdf" });
+  const linha = { documento_id: it.documento_id, seguradora_chave: chave, texto: ok ? t : null, metodo: ok ? "texto_nativo" : "sem_texto", fonte_pdf: `${it.origem}:${it.path}`, tipo_anexo: it.tipo, nosso_numero_corp: it.nosso, leitor_versao: LEITOR_VERSAO, email_anexo_id: it.email_anexo_id ?? null };
+  const { error: eUp } = it.documento_id
+    ? await sb.from("erp_apolice_pdf_texto").upsert(linha, { onConflict: "documento_id,fonte_pdf" })
+    : await sb.from("erp_apolice_pdf_texto").insert(linha);
   if (eUp) { st.erro++; console.log("erro ao gravar", it.path, eUp.message.slice(0, 120)); return; }
   st[ok ? "lido" : "sem_texto"]++;
 }
 
 async function rodada(): Promise<number> {
-  let fila = await montarFila(); if (isFinite(LIMITE)) fila = fila.slice(0, LIMITE);
+  let fila = EMAILS ? await montarFilaEmails() : await montarFila(); if (isFinite(LIMITE)) fila = fila.slice(0, LIMITE);
   console.log(new Date().toISOString(), "a ler:", fila.length);
   const st: Record<string, number> = { lido: 0, sem_texto: 0, erro_download: 0, erro: 0 }; let i = 0;
   const worker = async () => { while (i < fila.length) { const it = fila[i++]; try { await lerUm(it, st); } catch (e) { st.erro++; console.log("erro", it.path, String(e).slice(0, 80)); } if (i % 200 === 0) console.log(i, "/", fila.length, JSON.stringify(st)); } };
   await Promise.all([worker(), worker(), worker(), worker(), worker()]);
   console.log("rodada concluída", JSON.stringify(st));
+  // aplica os parsers por modelo e os vínculos sobre o texto recém-guardado (erp_pdf_pipeline, no banco)
+  if (fila.length) { const { data, error } = await sb.rpc("erp_pdf_pipeline"); console.log("pipeline", error ? "ERRO " + error.message : JSON.stringify(data)); }
   return fila.length;
 }
 
