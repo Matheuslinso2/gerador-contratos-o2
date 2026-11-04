@@ -31,3 +31,8 @@
 
 -- 03/11/2026 (Matheus): parcela em fatura é controlada na aba Faturas. erp_cobranca_resumo e erp_resumo_parcelas passam a ignorar via_fatura=true
 -- (5.799 parcelas na tabela pronta, 375 das 2.745 em aberto) e /erp/parcelas/cobranca filtra via_fatura=false.
+
+-- 03/11/2026: erp_lote_itens (lote_documento_id, numero_apolice, documento_id, fatura_item_id, casamento, mesma_imobiliaria, mesma_seguradora, nivel; RLS equipe).
+-- Liga cada nº do campo de apólices dos 63 cartões de LOTE do Bitrix ao documento próprio (Corp/API): 1.114 únicos, 3 escolhidos entre endossos, 2 a conferir, 4 sem documento.
+-- Varredura: dos 15 documentos da API unidos ao Corp, 14 linhas de extrato foram movidas para a parcela do documento do Corp (mesmo nº de parcela) e 8 quitações copiadas.
+-- Pendente: 1 linha de extrato + parcelas/previsões (erp_comissoes) que ficaram no documento duplicado, e o doc 132688 (Corp com 1 parcela estimada x apólice com 11).
