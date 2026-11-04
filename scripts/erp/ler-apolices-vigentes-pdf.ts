@@ -64,7 +64,10 @@ async function carregarDocs(filtro: string | undefined, reler: boolean): Promise
   const abrev = new Map((segs ?? []).map((s) => [s.id as string, s.abreviacao as string]));
   const docs: Doc[] = [];
   for (let off = 0; ; off += 1000) {
-    const { data } = await sb.from("erp_documentos").select("id,numero_apolice,vigencia_inicio,vigencia_fim,nosso_numero_corp,seguradora_id,imobiliaria_principal_id,locatario_id").eq("situacao", "vigente").eq("tipo", "A").order("id").range(off, off + 999);
+    // --todas (03/11/2026, Matheus: "todas as apólices ainda não lidas devem ser lidas"): vigentes, vencidas e canceladas, não só as vigentes
+    let q = sb.from("erp_documentos").select("id,numero_apolice,vigencia_inicio,vigencia_fim,nosso_numero_corp,seguradora_id,imobiliaria_principal_id,locatario_id").eq("tipo", "A");
+    q = process.argv.includes("--todas") ? q.in("situacao", ["vigente", "vencido", "cancelado"]) : q.eq("situacao", "vigente");
+    const { data } = await q.order("id").range(off, off + 999);
     if (!data?.length) break;
     for (const d of data) docs.push({ ...(d as unknown as Doc), abrev: abrev.get(d.seguradora_id as string) ?? "?" });
     if (data.length < 1000) break;
