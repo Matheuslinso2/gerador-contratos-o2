@@ -505,11 +505,14 @@ export async function sincronizarSpa(sb: SupabaseClient, cfg: ConfigSpa, o: Opco
         docId = novo.id;
         if (imobId) await sb.from("erp_documento_produtores").insert({ documento_id: docId, imobiliaria_id: imobId, agente: "imob", principal: true, pct_participacao: 100, repasse_pct: x.repassePct ?? 0, repasse_valor_previsto: x.repassePct ? Math.round(premio * x.repassePct) / 100 : 0 });
       } else if (o.gravar) {
-        const { data: atual } = await sb.from("erp_documentos").select("origem, locatario_id, imobiliaria_principal_id, tipo_contratacao, seguradora_id, numero_apolice, numero_proposta").eq("id", docId).single();
+        const { data: atual } = await sb.from("erp_documentos").select("origem, situacao, locatario_id, imobiliaria_principal_id, tipo_contratacao, seguradora_id, numero_apolice, numero_proposta, vigencia_inicio, vigencia_fim, qtd_parcelas").eq("id", docId).single();
         const patch: Record<string, unknown> = {};
         if (atual?.origem === "bitrix") {
-          Object.assign(patch, { tipo_corp: x.tipo_corp, ...(x.tipo_corp === "END" ? { tipo: x.tipoEndosso ?? "C" } : {}), situacao: sit.situacao, motivo_cancelamento: sit.motivo ?? null, vigencia_inicio: x.vigIni, vigencia_fim: x.vigFim, seguradora_id: seg ?? atual.seguradora_id, qtd_parcelas: x.parcelas, numero_apolice: x.numeroApolice ?? atual.numero_apolice, numero_proposta: x.numeroProposta ?? atual.numero_proposta });
-          if (premio) { patch.premio_liquido = sep.liquido; patch.iof = sep.iof; patch.premio_total = sep.total; patch.comissao_valor = Math.round(premio * comissaoPct) / 100; }
+          // documento que já virou apólice (consolidado com a gêmea do Corp / documento oficial) não volta a "proposta"
+          // e não perde vigência nem prêmio oficial para o valor do card (o card de Auto não tem vigência e guarda o total com IOF)
+          const jaEmitido = ["vigente", "vencido", "cancelado", "duplicado"].includes(String(atual.situacao));
+          Object.assign(patch, { tipo_corp: x.tipo_corp, ...(x.tipo_corp === "END" ? { tipo: x.tipoEndosso ?? "C" } : {}), ...(jaEmitido ? {} : { situacao: sit.situacao, motivo_cancelamento: sit.motivo ?? null }), vigencia_inicio: x.vigIni ?? atual.vigencia_inicio, vigencia_fim: x.vigFim ?? atual.vigencia_fim, seguradora_id: seg ?? atual.seguradora_id, qtd_parcelas: x.parcelas ?? atual.qtd_parcelas, numero_apolice: x.numeroApolice ?? atual.numero_apolice, numero_proposta: x.numeroProposta ?? atual.numero_proposta });
+          if (premio && !jaEmitido) { patch.premio_liquido = sep.liquido; patch.iof = sep.iof; patch.premio_total = sep.total; patch.comissao_valor = Math.round(premio * comissaoPct) / 100; }
           if (comissaoPct) patch.comissao_pct = comissaoPct;
           // forma de pagamento escolhida no card (Matheus 29/10): vira o modo de cobrança (fatura só vale com imobiliária)
           if (x.formaPagamento) { patch.modo_cobranca = x.modoCobranca === "fatura" && !(atual?.imobiliaria_principal_id || imobId) ? "nao_informado" : x.modoCobranca; patch.forma_pagamento = x.formaPagamento; }
