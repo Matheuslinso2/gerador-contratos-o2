@@ -1,6 +1,7 @@
 import { validarPassePanorama } from "@/lib/bitrix/sessaoPanorama";
 import { buscarCardPanorama } from "@/lib/bitrix/panoramaFianca";
 import { createServiceClient } from "@/lib/supabase/service";
+import { textoDeErroSeguro } from "@/lib/erroSeguro";
 import type { CabecalhoPanorama, FormaPagamento, LinhaPanorama } from "@/lib/panoramaFiancaConstantes";
 import Montador, { type VersaoSalva } from "@/app/seguro-fianca/panoramas/[cardId]/Montador";
 
@@ -47,7 +48,7 @@ export default async function PanoramaNoBitrixPage({
     return (
       <>
         {esconderExtras}
-        <Aviso texto={`Não consegui ler o card ${cardId} no Bitrix: ${(e as Error).message}`} />
+        <Aviso texto={`Não consegui ler o card ${cardId} no Bitrix: ${textoDeErroSeguro((e as Error).message)}`} />
       </>
     );
   }

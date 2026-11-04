@@ -6,6 +6,7 @@ import PanoramaVisual from "../PanoramaVisual";
 import JanelaEnvioEmail, { type DadosEnvio } from "./JanelaEnvioEmail";
 import { gerarVersaoPanorama } from "../actions";
 import type { CardPanorama } from "@/lib/bitrix/panoramaFianca";
+import { textoDeErroSeguro } from "@/lib/erroSeguro";
 import {
   LINHAS_PANORAMA,
   LMI_BASICO,
@@ -459,7 +460,7 @@ export default function Montador({
 
       {mensagem && (
         <p className={`rounded-lg p-3 text-sm ${mensagem.tipo === "ok" ? "bg-green-50 text-green-800" : "bg-red-50 text-red-700"}`}>
-          {mensagem.texto}
+          {textoDeErroSeguro(mensagem.texto)}
         </p>
       )}
 

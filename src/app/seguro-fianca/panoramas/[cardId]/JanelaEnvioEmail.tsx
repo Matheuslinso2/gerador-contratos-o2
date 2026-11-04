@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { textoDeErroSeguro } from "@/lib/erroSeguro";
 import { buscarContatosEnvio, buscarConversasEnvio, prepararUploadCarta, procurarConversasGmail, vincularConversaDoGmail } from "../actions";
 import { createClient as criarSupabaseNavegador } from "@/lib/supabase/browser";
 import type { LinhaPanorama, LinhaStatus } from "@/lib/panoramaFiancaConstantes";
@@ -595,7 +596,7 @@ export default function JanelaEnvioEmail({
               As respostas a este e-mail já voltam para o card automaticamente.
             </div>
 
-            {erro && <p className="rounded bg-red-50 p-2 text-sm text-red-700">{erro}</p>}
+            {erro && <p className="rounded bg-red-50 p-2 text-sm text-red-700">{textoDeErroSeguro(erro)}</p>}
             <div className="flex justify-end gap-2">
               <button type="button" onClick={onFechar} disabled={enviando} className="rounded-lg px-4 py-2 text-sm text-gray-600">
                 Cancelar

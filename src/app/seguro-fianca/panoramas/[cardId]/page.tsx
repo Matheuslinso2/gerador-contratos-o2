@@ -9,6 +9,7 @@ import { IconShield } from "@/components/icons";
 import { buscarCardPanorama } from "@/lib/bitrix/panoramaFianca";
 import type { CabecalhoPanorama, FormaPagamento, LinhaPanorama } from "@/lib/panoramaFiancaConstantes";
 import Montador, { type VersaoSalva } from "./Montador";
+import { textoDeErroSeguro } from "@/lib/erroSeguro";
 
 export const dynamic = "force-dynamic";
 
@@ -63,7 +64,7 @@ export default async function MontarPanoramaPage({ params }: { params: Promise<{
 
         {erro || !card ? (
           <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-            Não consegui ler o card {cardId} no Bitrix. {erro}
+            Não consegui ler o card {cardId} no Bitrix. {textoDeErroSeguro(erro)}
           </p>
         ) : (
           <Montador card={card} versoes={versoes} />
