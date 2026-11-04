@@ -26,7 +26,16 @@ function emailConvite(titulo: string, corpo: string) {
     </div></div>`;
 }
 
-export async function criarEEnviarConvite(opts: { imobiliariaId: string; email: string; enviadoPor: string; origem: string }): Promise<Resultado> {
+// Convite da equipe O2 (primeiro acesso da imobiliária) ou do usuário MASTER da imobiliária (o titular da ficha convida os colaboradores
+// dele: mesmo processo -- link, código no e-mail e senha --, e o convidado fica vinculado à ficha e a todas as fichas do master).
+export async function criarEEnviarConvite(opts: {
+  imobiliariaId: string;
+  email: string;
+  enviadoPor: string;
+  origem: string;
+  fichasExtras?: string[];
+  convidante?: { userId: string; email: string };
+}): Promise<Resultado> {
   const email = opts.email.trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, erro: "E-mail inválido." };
   const sb = createServiceClient();
@@ -40,7 +49,15 @@ export async function criarEEnviarConvite(opts: { imobiliariaId: string; email: 
   const expira = new Date(Date.now() + DIAS_VALIDADE_CONVITE * 24 * 3600 * 1000);
   const { data: linha, error } = await sb
     .from("imobiliaria_convites")
-    .insert({ imobiliaria_id: imob.id, email, token_hash: sha(token), expira_em: expira.toISOString(), enviado_por: opts.enviadoPor.toLowerCase() })
+    .insert({
+      imobiliaria_id: imob.id,
+      imobiliaria_ids: [...new Set([imob.id, ...(opts.fichasExtras ?? [])])],
+      convidado_por_user: opts.convidante?.userId ?? null,
+      email,
+      token_hash: sha(token),
+      expira_em: expira.toISOString(),
+      enviado_por: opts.enviadoPor.toLowerCase(),
+    })
     .select("id")
     .single();
   if (error || !linha) return { ok: false, erro: error?.message ?? "Não foi possível criar o convite." };
@@ -53,7 +70,11 @@ export async function criarEEnviarConvite(opts: { imobiliariaId: string; email: 
       throwSeFalhar: true,
       html: emailConvite(
         "Você foi convidado para o Workspace O2",
-        `<p>A O2 Seguros liberou o acesso da <strong>${esc(imob.nome)}</strong> ao Workspace O2.</p>
+        `${
+          opts.convidante
+            ? `<p><strong>${esc(opts.convidante.email)}</strong> convidou você para acessar o Workspace O2 da <strong>${esc(imob.nome)}</strong>.</p>`
+            : `<p>A O2 Seguros liberou o acesso da <strong>${esc(imob.nome)}</strong> ao Workspace O2.</p>`
+        }
          <p>Para criar sua senha e fazer o primeiro acesso, clique no botão abaixo. Por segurança, você vai receber um código de 6 números neste mesmo e-mail para confirmar.</p>
          <p style="margin:20px 0;"><a href="${link}" style="background:#F8540D;color:#fff;text-decoration:none;padding:12px 22px;border-radius:999px;font-weight:bold;">Criar minha senha</a></p>
          <p style="font-size:12px;color:#8d8683;">O convite vale por ${DIAS_VALIDADE_CONVITE} dias. Se você não esperava este e-mail, pode ignorá-lo.</p>`
@@ -66,7 +87,16 @@ export async function criarEEnviarConvite(opts: { imobiliariaId: string; email: 
   return { ok: true };
 }
 
-export type ConviteValido = { id: string; email: string; imobiliariaId: string; imobiliariaNome: string; tokenHash: string; codigoEnviado: boolean };
+export type ConviteValido = {
+  id: string;
+  email: string;
+  imobiliariaId: string;
+  imobiliariaNome: string;
+  tokenHash: string;
+  codigoEnviado: boolean;
+  fichas: string[];
+  porMaster: boolean;
+};
 
 export async function lerConvite(token: string): Promise<{ convite: ConviteValido } | { erro: string }> {
   if (!/^[A-Za-z0-9_-]{20,80}$/.test(token)) return { erro: "Convite inválido." };
@@ -84,6 +114,8 @@ export async function lerConvite(token: string): Promise<{ convite: ConviteValid
       imobiliariaNome: imob?.nome ?? "sua imobiliária",
       tokenHash: c.token_hash,
       codigoEnviado: !!c.codigo_hash && !!c.codigo_expira_em && new Date(c.codigo_expira_em).getTime() > Date.now(),
+      fichas: (c.imobiliaria_ids as string[] | null)?.length ? (c.imobiliaria_ids as string[]) : [c.imobiliaria_id],
+      porMaster: !!c.convidado_por_user,
     },
   };
 }
@@ -120,7 +152,7 @@ export async function enviarCodigoDoConvite(token: string): Promise<Resultado> {
   return { ok: true };
 }
 
-export async function concluirConvite(opts: { token: string; codigo: string; senha: string }): Promise<{ ok: true; email: string } | { ok: false; erro: string }> {
+export async function concluirConvite(opts: { token: string; codigo: string; senha: string }): Promise<{ ok: true; email: string; contaExistente: boolean } | { ok: false; erro: string }> {
   const r = await lerConvite(opts.token);
   if ("erro" in r) return { ok: false, erro: r.erro };
   const { convite } = r;
@@ -139,20 +171,26 @@ export async function concluirConvite(opts: { token: string; codigo: string; sen
     return { ok: false, erro: "Código incorreto. Confira o e-mail e tente de novo." };
   }
 
+  // A pessoa provou ser dona do e-mail (código). Se já tem conta no Workspace, só ganha o acesso à ficha; senão a conta nasce agora.
+  let contaExistente = false;
+  let userId: string | null = null;
   const { data: criado, error } = await sb.auth.admin.createUser({ email: convite.email, password: opts.senha, email_confirm: true });
-  if (error || !criado.user) {
-    if (/already|registered|exists/i.test(error?.message ?? "")) return { ok: false, erro: "Já existe uma conta com este e-mail. Entre com seu e-mail e senha (ou use \"Esqueci minha senha\")." };
-    if (/weak|known to be/i.test(error?.message ?? "")) return { ok: false, erro: "Essa senha já apareceu em vazamentos na internet. Escolha outra." };
-    return { ok: false, erro: "Não foi possível criar sua conta agora. Tente novamente em instantes." };
-  }
+  if (criado?.user) userId = criado.user.id;
+  else if (/already|registered|exists/i.test(error?.message ?? "")) contaExistente = true;
+  else if (/weak|known to be/i.test(error?.message ?? "")) return { ok: false, erro: "Essa senha já apareceu em vazamentos na internet. Escolha outra." };
+  else return { ok: false, erro: "Não foi possível criar sua conta agora. Tente novamente em instantes." };
 
-  // Liga a conta à ficha: titular se a ficha ainda não tem login; senão entra como funcionário (membro).
-  const { data: ficha } = await sb.from("imobiliarias").select("id, user_id").eq("id", convite.imobiliariaId).single();
-  if (ficha && !ficha.user_id) {
-    await sb.from("imobiliarias").update({ user_id: criado.user.id, email: convite.email, autorizado: true, autorizado_em: new Date().toISOString() }).eq("id", ficha.id);
-  } else {
-    await sb.from("imobiliaria_membros").insert({ imobiliaria_id: convite.imobiliariaId, email: convite.email });
+  // Vínculo com a(s) ficha(s): titular (master) só no convite da O2 e em ficha ainda sem login; nos demais casos entra como colaborador (membro).
+  for (const [indice, fichaId] of convite.fichas.entries()) {
+    const { data: ficha } = await sb.from("imobiliarias").select("id, user_id").eq("id", fichaId).maybeSingle();
+    if (!ficha) continue;
+    if (!convite.porMaster && userId && !ficha.user_id && indice === 0) {
+      await sb.from("imobiliarias").update({ user_id: userId, email: convite.email, autorizado: true, autorizado_em: new Date().toISOString() }).eq("id", ficha.id);
+    } else {
+      const { data: ja } = await sb.from("imobiliaria_membros").select("id").eq("imobiliaria_id", fichaId).eq("email", convite.email).maybeSingle();
+      if (!ja) await sb.from("imobiliaria_membros").insert({ imobiliaria_id: fichaId, email: convite.email });
+    }
   }
   await sb.from("imobiliaria_convites").update({ usado_em: new Date().toISOString(), codigo_hash: null }).eq("id", convite.id);
-  return { ok: true, email: convite.email };
+  return { ok: true, email: convite.email, contaExistente };
 }

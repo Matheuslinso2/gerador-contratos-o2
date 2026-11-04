@@ -10,6 +10,8 @@ import { prepararTextoBase } from "@/lib/limparTextoBase";
 import { validarCNPJ } from "@/lib/validacoesBr";
 import { buscarImobiliariaDoUsuario } from "@/lib/imobiliariaDoUsuario";
 import { origem } from "@/lib/origem";
+import { criarEEnviarConvite, DIAS_VALIDADE_CONVITE } from "@/lib/convites";
+import { createServiceClient } from "@/lib/supabase/service";
 import { apenasDigitos } from "@/lib/pdfComSenha";
 
 export async function salvarImobiliaria(formData: FormData) {
@@ -236,9 +238,9 @@ export async function salvarImobiliaria(formData: FormData) {
   redirect("/imobiliaria?sucesso=1");
 }
 
-// Acesso completo, igual ao titular: qualquer pessoa que já acessa o
-// cadastro (titular ou membro) pode convidar/remover outros membros --
-// mantém simples, sem sistema de papéis/permissões separado.
+// Usuário MASTER (titular da ficha = o primeiro que aceitou o convite da O2) convida os colaboradores pelo mesmo processo da O2:
+// link no e-mail + código de 6 números + senha. O convidado fica vinculado a esta ficha e a todas as fichas do master.
+// Só o master convida e remove; colaboradores (membros) têm acesso completo ao cadastro, mas não gerenciam acessos.
 export async function adicionarMembroImobiliaria(formData: FormData) {
   const supabase = await createClient();
   const {
@@ -246,45 +248,44 @@ export async function adicionarMembroImobiliaria(formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const email = String(formData.get("email") ?? "")
-    .trim()
-    .toLowerCase();
-  if (!email || !email.includes("@")) {
-    redirect(`/imobiliaria?erro=${encodeURIComponent("E-mail inválido.")}`);
-  }
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  if (!email || !email.includes("@")) redirect(`/imobiliaria?erro=${encodeURIComponent("E-mail inválido.")}`);
 
   const imobiliaria = await buscarImobiliariaDoUsuario(supabase, user);
-  if (!imobiliaria) {
-    redirect(`/imobiliaria?erro=${encodeURIComponent("Complete o cadastro da imobiliária antes de convidar funcionários.")}`);
-  }
-  if (email === user.email?.toLowerCase()) {
-    redirect(`/imobiliaria?erro=${encodeURIComponent("Esse já é o seu próprio e-mail de login.")}`);
-  }
+  if (!imobiliaria) redirect(`/imobiliaria?erro=${encodeURIComponent("Complete o cadastro da imobiliária antes de convidar funcionários.")}`);
+  if (imobiliaria.user_id !== user.id) redirect(`/imobiliaria?erro=${encodeURIComponent("Só o usuário master da imobiliária pode convidar colaboradores.")}`);
+  if (email === user.email?.toLowerCase()) redirect(`/imobiliaria?erro=${encodeURIComponent("Esse já é o seu próprio e-mail de login.")}`);
 
-  const { error } = await supabase
-    .from("imobiliaria_membros")
-    .insert({ imobiliaria_id: imobiliaria.id, email, convidado_por: user.id });
-  if (error) {
-    const mensagem = error.code === "23505" ? "Esse e-mail já foi convidado." : error.message;
-    redirect(`/imobiliaria?erro=${encodeURIComponent(mensagem)}`);
-  }
+  const { data: jaTem } = await supabase.from("imobiliaria_membros").select("id").eq("imobiliaria_id", imobiliaria.id).eq("email", email).maybeSingle();
+  if (jaTem) redirect(`/imobiliaria?erro=${encodeURIComponent("Esse e-mail já tem acesso.")}`);
 
-  const link = `${await origem()}/signup`;
-  await enviarEmail({
-    para: email,
-    assunto: `Você foi convidado para acessar ${imobiliaria.nome} no Workspace O2`,
-    html: `
-      <h2>Convite para o Workspace O2</h2>
-      <p>${user.email} deu a você acesso ao cadastro de <strong>${imobiliaria.nome}</strong> no Workspace O2
-      (geração de contratos, auditoria e demais ferramentas da imobiliária).</p>
-      <p>Crie sua conta usando exatamente este e-mail (${email}) em
-      <a href="${link}">${link}</a> -- assim que confirmar o cadastro, o acesso libera automaticamente.
-      Se você já tiver conta com esse e-mail, é só entrar normalmente.</p>
-    `,
+  // Todas as fichas a que o master tem acesso (a dele como titular + as que acessa como membro, ex: várias fichas da mesma imobiliária/grupo).
+  const { data: minhasFichas } = await supabase.rpc("imobiliarias_do_usuario");
+  const r = await criarEEnviarConvite({
+    imobiliariaId: imobiliaria.id,
+    email,
+    enviadoPor: user.email ?? "",
+    origem: await origem(),
+    fichasExtras: ((minhasFichas ?? []) as string[]).filter(Boolean),
+    convidante: { userId: user.id, email: user.email ?? "" },
   });
+  if (!r.ok) redirect(`/imobiliaria?erro=${encodeURIComponent(r.erro)}`);
 
   revalidatePath("/imobiliaria");
-  redirect("/imobiliaria?sucesso=1");
+  redirect(`/imobiliaria?sucesso=${encodeURIComponent(`Convite enviado para ${email}. Vale por ${DIAS_VALIDADE_CONVITE} dias.`)}`);
+}
+
+// Cancela um convite ainda não aceito (só do master que o enviou).
+export async function cancelarConviteColaborador(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+  const conviteId = String(formData.get("convite_id") ?? "").trim();
+  if (conviteId) await createServiceClient().from("imobiliaria_convites").delete().eq("id", conviteId).eq("convidado_por_user", user.id).is("usado_em", null);
+  revalidatePath("/imobiliaria");
+  redirect(`/imobiliaria?sucesso=${encodeURIComponent("Convite cancelado.")}`);
 }
 
 export async function removerMembroImobiliaria(formData: FormData) {
@@ -298,7 +299,7 @@ export async function removerMembroImobiliaria(formData: FormData) {
   if (!membroId) redirect("/imobiliaria");
 
   const imobiliaria = await buscarImobiliariaDoUsuario(supabase, user);
-  if (!imobiliaria) redirect("/imobiliaria");
+  if (!imobiliaria || imobiliaria.user_id !== user.id) redirect(`/imobiliaria?erro=${encodeURIComponent("Só o usuário master da imobiliária pode remover acessos.")}`);
 
   // RLS já impede mexer em membro de outra imobiliária -- o filtro por
   // imobiliaria_id aqui é só reforço, não a única barreira.

@@ -20,6 +20,7 @@ export async function criarSenhaConvite(formData: FormData) {
   const r = await concluirConvite({ token, codigo, senha });
   if (!r.ok) redirect(`/convite/${token}?enviado=1&erro=${encodeURIComponent(r.erro)}`);
 
+  if (r.contaExistente) redirect(`/login?aviso=${encodeURIComponent("Acesso liberado! Você já tinha conta: entre com seu e-mail e a sua senha de sempre.")}`);
   // Conta criada: já entra logado (primeiro acesso).
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({ email: r.email, password: senha });

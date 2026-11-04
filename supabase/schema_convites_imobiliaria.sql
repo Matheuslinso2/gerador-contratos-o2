@@ -38,3 +38,9 @@ create table if not exists public.imobiliaria_pedidos_acesso (
 alter table public.imobiliaria_pedidos_acesso enable row level security;
 drop policy if exists "pedidos equipe" on public.imobiliaria_pedidos_acesso;
 create policy "pedidos equipe" on public.imobiliaria_pedidos_acesso for all to authenticated using (is_equipe_o2()) with check (is_equipe_o2());
+
+-- Convite do usuário MASTER (04/11/2026): o titular da ficha convida os colaboradores pelo mesmo processo (link + código + senha).
+-- imobiliaria_ids = todas as fichas que o convite libera (a do master + as que ele acessa como membro); convidado_por_user = master.
+alter table public.imobiliaria_convites
+  add column if not exists imobiliaria_ids uuid[] not null default '{}',
+  add column if not exists convidado_por_user uuid;

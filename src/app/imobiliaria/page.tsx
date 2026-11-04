@@ -9,7 +9,8 @@ import BackLink from "@/components/BackLink";
 import CampoCnpj from "@/components/CampoCnpj";
 import CampoEndereco from "@/components/CampoEndereco";
 import { buscarImobiliariaDoUsuario } from "@/lib/imobiliariaDoUsuario";
-import { adicionarMembroImobiliaria, removerMembroImobiliaria } from "./actions";
+import { adicionarMembroImobiliaria, removerMembroImobiliaria, cancelarConviteColaborador } from "./actions";
+import { createServiceClient } from "@/lib/supabase/service";
 import RascunhoAutomatico from "@/components/RascunhoAutomatico";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +30,12 @@ export default async function ImobiliariaPage({
 
   const { data: membros } = imobiliaria
     ? await supabase.from("imobiliaria_membros").select("id, email, criado_em").eq("imobiliaria_id", imobiliaria.id).order("criado_em")
+    : { data: null };
+
+  // Usuário master = titular da ficha (primeiro a aceitar o convite da O2): só ele convida/remove colaboradores.
+  const ehMaster = !!imobiliaria && !!user && (imobiliaria as { user_id?: string | null }).user_id === user.id;
+  const { data: convitesPendentes } = ehMaster
+    ? await createServiceClient().from("imobiliaria_convites").select("id, email, expira_em").eq("imobiliaria_id", imobiliaria!.id).eq("convidado_por_user", user!.id).is("usado_em", null).order("criado_em", { ascending: false })
     : { data: null };
 
   return (
@@ -339,8 +346,9 @@ export default async function ImobiliariaPage({
         <section className="space-y-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Funcionários com acesso</h2>
           <p className="text-xs text-gray-500">
-            Adicione o e-mail de quem mais na imobiliária deve acessar esse cadastro — assim que a pessoa criar
-            conta (ou já tiver uma) com esse e-mail exato, ela passa a ver e editar tudo por aqui, igual a você.
+            {ehMaster
+              ? "Você é o usuário master desta imobiliária. Convide os colaboradores pelo e-mail: cada um recebe um convite, confirma com um código enviado ao mesmo e-mail e cria a própria senha. Depois disso, vê e edita tudo por aqui, igual a você."
+              : "Estas pessoas têm acesso a este cadastro. Quem convida e remove acessos é o usuário master da imobiliária."}
           </p>
 
           <ul className="space-y-1">
@@ -348,16 +356,25 @@ export default async function ImobiliariaPage({
             {(membros ?? []).map((m) => (
               <li key={m.id} className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm">
                 <span className="text-o2-navy">{m.email}</span>
+                {ehMaster && (
                 <form action={removerMembroImobiliaria}>
                   <input type="hidden" name="membro_id" value={m.id} />
                   <button type="submit" className="text-xs font-medium text-red-600 hover:underline">
                     Remover
                   </button>
                 </form>
+                )}
+              </li>
+            ))}
+            {(convitesPendentes ?? []).map((c) => (
+              <li key={c.id} className="flex items-center justify-between rounded-lg border border-dashed border-gray-300 bg-white px-3 py-2 text-sm">
+                <span className="text-o2-navy">{c.email} <span className="text-xs text-gray-500">· convite enviado, aguardando o primeiro acesso (vale até {new Date(c.expira_em).toLocaleDateString("pt-BR")})</span></span>
+                <form action={cancelarConviteColaborador}><input type="hidden" name="convite_id" value={c.id} /><button type="submit" className="text-xs font-medium text-red-600 hover:underline">Cancelar</button></form>
               </li>
             ))}
           </ul>
 
+          {ehMaster && (
           <form action={adicionarMembroImobiliaria} className="flex gap-2">
             <input
               type="email"
@@ -373,6 +390,7 @@ export default async function ImobiliariaPage({
               Convidar
             </button>
           </form>
+          )}
         </section>
       )}
       </main>
