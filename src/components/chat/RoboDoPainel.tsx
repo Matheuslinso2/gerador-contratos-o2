@@ -48,42 +48,45 @@ type Troca = {
 const brl = (v: number | null) => (v === null ? "—" : v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
 const hora = (iso: string) => new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 
-function MenuCards({ troca, painelId, competencia }: { troca: Troca; painelId: string; competencia: string }) {
-  const cards = troca.cards ?? [];
+// Um único botão, fechado: ao abrir, já lista TODOS os cards citados nas perguntas feitas neste painel (04/11/2026).
+function ListaCardsSolicitados({ trocas, painelId, competencia }: { trocas: Troca[]; painelId: string; competencia: string }) {
+  // Todos os cards de todas as respostas, sem repetir (o mais recente primeiro).
+  const cards = useMemo(() => {
+    const vistos = new Set<string>();
+    const lista: CardLista[] = [];
+    for (const t of trocas) for (const c of t.cards ?? []) {
+      const k = `${c.produto}:${c.id}`;
+      if (!vistos.has(k)) {
+        vistos.add(k);
+        lista.push(c);
+      }
+    }
+    return lista;
+  }, [trocas]);
   const [aberto, setAberto] = useState(false);
-  const [marcados, setMarcados] = useState<Set<number>>(new Set());
-  const [lista, setLista] = useState<CardLista[] | null>(null);
   const [protocolo, setProtocolo] = useState<string | null>(null);
-  const [gravando, setGravando] = useState(false);
-  const todos = marcados.size === cards.length && cards.length > 0;
+  const registrado = useRef<string>("");
+  const chave = cards.map((c) => `${c.produto}:${c.id}`).join(",");
 
-  function alternar(id: number) {
-    setMarcados((atual) => {
-      const novo = new Set(atual);
-      if (novo.has(id)) novo.delete(id);
-      else novo.add(id);
-      return novo;
-    });
-  }
-
-  async function ver() {
-    const escolhidos = cards.filter((c) => marcados.has(c.id));
-    if (!escolhidos.length) return;
-    setLista(escolhidos);
-    setAberto(false);
+  // Ao abrir, registra o protocolo (e o caminho) dessa lista; reabrir com a mesma lista não gera outro.
+  async function aoAbrir() {
+    const novoEstado = !aberto;
+    setAberto(novoEstado);
+    if (!novoEstado || registrado.current === chave) return;
+    registrado.current = chave;
     setProtocolo(null);
-    setGravando(true);
+    const ultima = trocas.find((t) => t.cards?.length && t.conversa);
     try {
       const r = await fetch("/api/chat/robo/protocolo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           painel: { id: painelId, competencia },
-          conversa: troca.conversa,
-          logica: troca.logica,
-          fontes: troca.fontes,
-          cardsSelecionados: escolhidos.map((c) => ({ id: c.id, produto: c.produto })),
-          todosOsCards: escolhidos.length === cards.length,
+          conversa: ultima?.conversa,
+          logica: ultima?.logica,
+          fontes: ultima?.fontes,
+          cardsSelecionados: cards.map((c) => ({ id: c.id, produto: c.produto })),
+          todosOsCards: true,
           totalCardsDaResposta: cards.length,
         }),
       });
@@ -91,56 +94,24 @@ function MenuCards({ troca, painelId, competencia }: { troca: Troca; painelId: s
       if (r.ok && j.protocolo) setProtocolo(j.protocolo);
     } catch {
       /* a lista aparece mesmo sem protocolo */
-    } finally {
-      setGravando(false);
     }
   }
 
+  if (!cards.length) return null;
   return (
     <div className="mt-3 rounded-xl border border-o2-navy/15 bg-white p-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-semibold text-o2-navy">
-          {cards.length === 1 ? "1 card citado" : `${cards.length} cards citados`} — ver todas as informações?
-        </span>
-        <div className="relative">
-          <button type="button" onClick={() => setAberto((v) => !v)} aria-expanded={aberto} className="rounded-full border border-o2-navy/30 px-3 py-1 text-xs font-semibold text-o2-navy hover:bg-o2-navy/5">
-            Cards da resposta ▾ {marcados.size > 0 && <span className="ml-1 text-o2-coral">({marcados.size})</span>}
-          </button>
-          {aberto && (
-            <div className="absolute left-0 z-20 mt-1 max-h-72 w-80 max-w-[85vw] overflow-auto rounded-xl border border-gray-200 bg-white p-2 text-xs shadow-xl">
-              <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 font-semibold hover:bg-gray-50">
-                <input type="checkbox" checked={todos} onChange={() => setMarcados(todos ? new Set() : new Set(cards.map((c) => c.id)))} />
-                Todos os cards ({cards.length})
-              </label>
-              <div className="my-1 border-t border-gray-100" />
-              {cards.map((c) => (
-                <label key={c.id} className="flex cursor-pointer items-start gap-2 rounded-lg px-2 py-1.5 hover:bg-gray-50">
-                  <input type="checkbox" checked={marcados.has(c.id)} onChange={() => alternar(c.id)} className="mt-0.5" />
-                  <span>
-                    <span className="font-semibold">#{c.id}</span> · {c.produtoRotulo}
-                    <span className="block text-gray-500">{c.nome} · {c.etapa}</span>
-                  </span>
-                </label>
-              ))}
-              <button type="button" onClick={() => void ver()} disabled={!marcados.size} className="mt-2 w-full rounded-full bg-o2-coral px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">
-                Ver informações dos cards marcados
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {lista && (
+      <button type="button" onClick={() => void aoAbrir()} aria-expanded={aberto} className="rounded-full border border-o2-navy/30 px-4 py-1.5 text-xs font-semibold text-o2-navy hover:bg-o2-navy/5">
+        {cards.length === 1 ? "Card solicitado (1)" : `Cards solicitados (${cards.length})`} {aberto ? "▴" : "▾"}
+      </button>
+      {aberto && (
         <div className="mt-3">
-          {protocolo ? (
+          {protocolo && (
             <p className="mb-2 text-[11px] text-gray-500">
               Protocolo <strong className="select-all text-o2-navy">{protocolo}</strong> · pedido por você; o caminho desta lista ficou guardado.
             </p>
-          ) : gravando ? (
-            <p className="mb-2 text-[11px] text-gray-500">Registrando o protocolo…</p>
-          ) : null}
-          {lista.length === 1 ? (
-            <DetalheCard c={lista[0]} />
+          )}
+          {cards.length === 1 ? (
+            <DetalheCard c={cards[0]} />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[820px] text-left text-[11.5px]">
@@ -159,8 +130,8 @@ function MenuCards({ troca, painelId, competencia }: { troca: Troca; painelId: s
                   </tr>
                 </thead>
                 <tbody>
-                  {lista.map((c) => (
-                    <tr key={c.id} className="border-t border-gray-100 align-top">
+                  {cards.map((c) => (
+                    <tr key={`${c.produto}:${c.id}`} className="border-t border-gray-100 align-top">
                       <td className="p-1.5">
                         <a href={c.url} target="_blank" rel="noopener noreferrer" className="font-semibold text-o2-blue underline">
                           #{c.id}
@@ -186,8 +157,7 @@ function MenuCards({ troca, painelId, competencia }: { troca: Troca; painelId: s
                 </tbody>
               </table>
               <p className="mt-1 text-[10px] text-gray-400">
-                Etapa lida no Bitrix em {hora(lista[0].atualizadoEm)}. Valores: efetivado quando o card já virou proposta; previsto nos demais; “—” quando o card não guarda o valor.
-                O repasse só existe por card em Ramos Elementares.
+                Etapa lida no Bitrix em {hora(cards[0].atualizadoEm)}. Valores: efetivado quando o card já virou proposta; previsto nos demais; “—” quando o card não guarda o valor. O repasse só existe por card em Ramos Elementares.
               </p>
             </div>
           )}
@@ -384,7 +354,6 @@ export default function RoboDoPainel({ painelId, competencia }: { painelId: stri
                   <p className="mt-1 whitespace-pre-wrap leading-relaxed">
                     <ComLinks texto={t.resposta} escuro={false} />
                   </p>
-                  {t.cards && t.cards.length > 0 && <MenuCards troca={t} painelId={painelId} competencia={competencia} />}
                   <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-gray-500">
                     {t.dadosPessoais && !t.cards?.length && <span>Tem dados pessoais: fica só em texto (sem PDF).</span>}
                     {t.pdfPermitido && (
@@ -420,6 +389,8 @@ export default function RoboDoPainel({ painelId, competencia }: { painelId: stri
           ))}
         </div>
       )}
+
+      <ListaCardsSolicitados trocas={trocas} painelId={painelId} competencia={competencia} />
     </section>
   );
 }

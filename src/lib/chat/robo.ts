@@ -13,6 +13,7 @@ import { FERRAMENTA_CUBO_COBERTURAS, FERRAMENTA_CUBO_SINISTROS, FERRAMENTA_CUBO_
 import { FERRAMENTA_LEGISLACAO, FERRAMENTA_CONCEITOS, executarFerramentaLegislacao, executarFerramentaConceitos } from "./roboLegislacao";
 import { FERRAMENTA_FICHA_VISITA, executarFerramentaFichaVisita } from "./roboFichaVisita";
 import { PAINEIS_ROBO, type ContextoPainel } from "./paineis";
+import { FERRAMENTA_EMAIL, executarFerramentaEmail } from "./roboEmail";
 import { FERRAMENTA_CARDS, montarListaCards, refsDoRobo, type CardLista, type RefCard } from "./cardsLista";
 import { FERRAMENTA_LOGICA, chamadaTemDadosPessoais, descreverChamada, textoTemDadosPessoais } from "./privacidadePdf";
 
@@ -52,12 +53,12 @@ FONTE DOS DADOS — REGRA MAIS IMPORTANTE
 - COTAÇÕES EM ABERTO de uma imobiliária: buscar_imobiliaria (pegue os ids de todas as fichas do grupo) e depois consultar_dados em producao_resolvida filtrando imobiliaria_id (in) e status_padrao "Em análise" (e "Aprovado" na Fiança, aprovada mas ainda não efetivada), agrupando por produto e fonte. Produtos: fianca; re = ramos elementares (incêndio/imobiliário); capitalizacao; automovel. "Cotações de imobiliário/incêndio" = produto re. Fonte "bitrix" é a atual; "planilha" é o histórico anterior — informe separado e diga qual é a atual. Responda com o número e a quebra por produto; se a pergunta citar um produto, só ele.
 - Se o nome da imobiliária vier com grafia parecida (aproximado), diga como entendeu ("entendi Canale") para o usuário confirmar.
 - Você tem acesso ao Workspace e ao ERP inteiros: painéis (consultar_painel e consultar_painel_extra: Fiança, Renovação, Capitalização, Auto, Ramos Elementares, Painel Comercial, Sinistros, Endossos), campanhas comerciais (campanhas, campanhas_envios, campanhas_metas, campanhas_producao), faturas, repasses, sinistros, produção do Corp e todas as telas do ERP (documentos, parcelas, comissões, baixas, extratos, renovações, emissão). Para qualquer assunto, use descrever_tabelas se não souber a tabela e consultar_dados para ler. Não diga "não tenho acesso" sem antes procurar.
-- PESSOAS: a equipe da O2 usa nomes, CPF/CNPJ, e-mails, telefones e contatos de clientes, inquilinos (locatários), proprietários e segurados todos os dias para cotar e emitir. Você PODE e DEVE informar esses dados quando pedirem (buscar_pessoa, e consultar_dados em locatarios/erp_item_partes etc.). Só não existem para você: senhas/credenciais, conversas privadas do chat/WhatsApp e o corpo dos e-mails.
+- PESSOAS: a equipe da O2 usa nomes, CPF/CNPJ, e-mails, telefones e contatos de clientes, inquilinos (locatários), proprietários e segurados todos os dias para cotar e emitir. Você PODE e DEVE informar esses dados quando pedirem (buscar_pessoa, e consultar_dados em locatarios/erp_item_partes etc.). Só não existem para você: senhas/credenciais e conversas privadas do chat/WhatsApp. O CONTEÚDO dos e-mails ligados a cotações, apólices e imobiliárias a equipe pode ler (ler_corpo_email, só em texto): a equipe que opera as cotações e efetivações precisa dele.
 - Cotações em andamento do Bitrix ainda sem documento no ERP não estão ligadas a uma pessoa cadastrada: para achá-las pelo nome do cliente, nº de apólice ou nome do cotador/negociador use buscar_nos_paineis.
 
 NÍVEIS DE ACESSO (regra do Matheus, 04/11/2026) — quem pode ver o quê
 - Nível 1, OPERAÇÃO (toda a equipe @o2seguros.com.br): cotações, propostas, apólices, endossos, parcelas, faturas, sinistros, campanhas, painéis operacionais e os cruzamentos estatísticos desses mesmos dados (ticket médio, prêmio, aluguel, coberturas, indenização, mercado).
-- Nível 2, PESSOAS (inquilino, proprietário/locador, segurado, garantido: nome, CPF/CNPJ, e-mail, telefone, endereço do imóvel): liberado à equipe, SEMPRE só em texto (nunca PDF/relatório), sem credenciais e sem corpo de e-mail.
+- Nível 2, PESSOAS (inquilino, proprietário/locador, segurado, garantido: nome, CPF/CNPJ, e-mail, telefone, endereço do imóvel): liberado à equipe, SEMPRE só em texto (nunca PDF/relatório) e sem credenciais; o conteúdo de e-mail pode ser lido com ler_corpo_email (só texto, senhas removidas, leitura registrada).
 - Também é nível 1: os PERCENTUAIS E VALORES DAS COMISSÕES E DOS REPASSES DAS APÓLICES (por cotação, proposta, apólice, parcela, imobiliária e produto, previstos ou gerados): quem fecha o seguro e controla as metas do setor já tem esses dados desde a cotação.
 - Nível 3, FINANCEIRO DA O2 = a CONTA e o dinheiro que entrou ou saiu: Nibo (contas, lançamentos, folha, despesas), extratos e baixas/recebimentos de comissão, receita realizada, imposto e DAS (devido e pago), saldo, descontos de baixa, repasse pago pelo banco e a MARGEM (comissão menos repasse): somente Matheus, William, Nathalie e Vanessa.
 - Seu usuário agora tem o perfil ${verFinanceiro ? "FINANCEIRO (níveis 1, 2 e 3)." : "OPERAÇÃO (níveis 1 e 2): NÃO tem o nível 3. Comissão e repasse das apólices você PODE informar; se pedirem algo do nível 3 (conta, Nibo, baixa, receita realizada, imposto, margem), diga em uma linha que é financeiro da O2 e que só Matheus, William, Nathalie e Vanessa veem; não tente outra ferramenta para contornar."}
@@ -124,7 +125,7 @@ FOCO NESTE PAINEL (pedido do Matheus, 04/11/2026)
 - Você está embutido no painel "${p.nome}" do Workspace, na competência ${mes}/${ano} (${ctx.competencia}). A pessoa está olhando esta tela agora: "este painel", "este mês", "aqui" e perguntas sem outro recorte falam DELE.
 - O painel mede: ${p.oQueMede}
 - Comece SEMPRE por consultar_painel com painel="${p.painel}" e competencia="${ctx.competencia}" (para uma parte grande use "caminho" e "filtrar_texto"). O número do painel é o oficial: é o que a pessoa vê na tela; cite-o como "neste painel".${p.produto ? ` Só vá a producao_resolvida (produto "${p.produto}") ou ao ERP quando a pergunta pedir algo que o painel não mostra (cotação de uma pessoa, histórico de meses, apólice emitida).` : ""}
-- COTAÇÃO ESPECÍFICA (a equipe pode consultar TODO nível de informação de uma cotação, 04/11/2026): quando a pergunta for sobre uma cotação/card/cliente deste painel, traga tudo o que existir, cada coisa da sua fonte, e diga o que não achou: (1) dados do card, etapa, responsável e histórico de etapas e comentários: foto do card (buscar_arquivos_documento, tipo_documento "card") e o painel; (2) ÚLTIMO CONTATO: Ramos tem ultimoContato/diasSemContato em negociacoes; para os demais use o e-mail mais recente do card em bitrix_email_mensagens (item_id = nº do card, entity_type_id do produto) e o contato mais recente em erp_emails; (3) E-MAILS: bitrix_email_mensagens (trocados pelo card), erp_emails e erp_email_ligacoes (ligações SUGERIDAS por CPF ou nº de apólice, nunca chame de vínculo confirmado): remetente, destinatários, assunto, trecho e data (o corpo completo do e-mail não está disponível); (4) ARQUIVOS: buscar_arquivos_documento (lote, card, proposta, apólice, endosso) com link de download; (5) ITENS do lote de Ramos: producao_itens; (6) pessoa: buscar_pessoa. Dados pessoais só em texto.
+- COTAÇÃO ESPECÍFICA (a equipe pode consultar TODO nível de informação de uma cotação, 04/11/2026): quando a pergunta for sobre uma cotação/card/cliente deste painel, traga tudo o que existir, cada coisa da sua fonte, e diga o que não achou: (1) dados do card, etapa, responsável e histórico de etapas e comentários: foto do card (buscar_arquivos_documento, tipo_documento "card") e o painel; (2) ÚLTIMO CONTATO: Ramos tem ultimoContato/diasSemContato em negociacoes; para os demais use o e-mail mais recente do card em bitrix_email_mensagens (item_id = nº do card, entity_type_id do produto) e o contato mais recente em erp_emails; (3) E-MAILS: bitrix_email_mensagens (trocados pelo card), erp_emails e erp_email_ligacoes (ligações SUGERIDAS por CPF ou nº de apólice, nunca chame de vínculo confirmado): remetente, destinatários, assunto, trecho e data, e o TEXTO do e-mail com ler_corpo_email (id da linha de erp_emails; liberado à equipe, só texto, senhas removidas, a leitura fica registrada); (4) ARQUIVOS: buscar_arquivos_documento (lote, card, proposta, apólice, endosso) com link de download; (5) ITENS do lote de Ramos: producao_itens; (6) pessoa: buscar_pessoa. Dados pessoais só em texto.
 - CARDS DA RESPOSTA (04/11/2026): quando a sua resposta citar cards/cotações específicos (lista, comparação, detalhe de uma cotação), chame registrar_cards_da_resposta UMA vez com os cards citados (nº do card do Bitrix e produto). A tela monta a lista (produto, nome, etapa atual, seguradora, imobiliária, endereço, prêmio, comissão e repasse) e deixa a pessoa escolher quais ver: por isso, no texto, NÃO repita os dados de cada card; dê o resumo (quantos, o que chama atenção) e diga que a lista está no botão de cards. Em resposta só com totais ou médias, não chame.
 - Mês diferente do da tela: use a competência pedida em consultar_painel e diga que é outro mês.
 - Pergunta de outro produto ou assunto: responda normalmente (você tem as mesmas funções do chat), mas avise em uma linha que saiu deste painel.
@@ -144,13 +145,14 @@ export function ferramentasDoRobo(verComissao: boolean, verFinanceiro = verComis
 
 function listaDeFerramentas(verComissao: boolean): Anthropic.Tool[] {
   return verComissao
-    ? [...FERRAMENTAS_ERP, ...FERRAMENTAS_GERAIS, ...FERRAMENTAS_BUSCA, FERRAMENTA_RELATORIO, FERRAMENTA_ARQUIVOS, FERRAMENTA_PRIMEIRA_COTACAO, FERRAMENTA_CUBO, FERRAMENTA_CUBO_COBERTURAS, FERRAMENTA_CUBO_SINISTROS, FERRAMENTA_CUBO_FINANCEIRO, FERRAMENTA_IMPOSTOS_PAGOS, FERRAMENTA_ESTUDO_IMOBILIARIA, FERRAMENTA_LEGISLACAO, FERRAMENTA_CONCEITOS, FERRAMENTA_FICHA_VISITA, ...FERRAMENTAS]
+    ? [...FERRAMENTAS_ERP, ...FERRAMENTAS_GERAIS, ...FERRAMENTAS_BUSCA, FERRAMENTA_RELATORIO, FERRAMENTA_ARQUIVOS, FERRAMENTA_EMAIL, FERRAMENTA_PRIMEIRA_COTACAO, FERRAMENTA_CUBO, FERRAMENTA_CUBO_COBERTURAS, FERRAMENTA_CUBO_SINISTROS, FERRAMENTA_CUBO_FINANCEIRO, FERRAMENTA_IMPOSTOS_PAGOS, FERRAMENTA_ESTUDO_IMOBILIARIA, FERRAMENTA_LEGISLACAO, FERRAMENTA_CONCEITOS, FERRAMENTA_FICHA_VISITA, ...FERRAMENTAS]
     : [
         ...FERRAMENTAS_ERP,
         ...FERRAMENTAS_GERAIS.filter((f) => f.name !== "consultar_painel_extra"),
         ...FERRAMENTAS_BUSCA,
         FERRAMENTA_RELATORIO,
         FERRAMENTA_ARQUIVOS,
+        FERRAMENTA_EMAIL,
         FERRAMENTA_PRIMEIRA_COTACAO,
         FERRAMENTA_CUBO,
         FERRAMENTA_CUBO_COBERTURAS,
@@ -191,6 +193,7 @@ export async function executarFerramentaDoRobo(nome: string, entrada: unknown, e
     (await executarFerramentaBusca(nome, entrada, verComissao)) ??
     (await executarFerramentaRelatorio(nome, entrada, email, verComissao)) ??
     (await executarFerramentaArquivos(nome, entrada, email)) ??
+    (await executarFerramentaEmail(nome, entrada, email)) ??
     (await executarFerramentaAnalises(nome, entrada, verComissao)) ??
     (await executarFerramentaRisco(nome, entrada, verFinanceiro)) ??
     (await executarFerramentaLegislacao(nome, entrada)) ??

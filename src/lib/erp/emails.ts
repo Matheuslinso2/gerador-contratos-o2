@@ -318,6 +318,33 @@ export async function indexarEmailsDeImobiliarias(
   return resumo;
 }
 
+/** Texto do corpo de um e-mail de uma caixa O2 (só leitura, na hora; nada é copiado para o banco). Usado pelo Robô O2 (04/11/2026). HTML vira texto simples. */
+export async function lerCorpoDoEmail(caixa: string, messageId: string): Promise<string | null> {
+  const g = clienteDaCaixa(caixa);
+  let id: string | null = null;
+  const sintetico = /^gmail:[^:]+:(.+)$/.exec(messageId);
+  if (sintetico) id = sintetico[1];
+  else { const r = await comRetry(() => g.users.messages.list({ userId: "me", q: `rfc822msgid:${messageId.replace(/^<|>$/g, "")}`, maxResults: 1 })); id = r.data.messages?.[0]?.id ?? null; }
+  if (!id) return null;
+  const m = await comRetry(() => g.users.messages.get({ userId: "me", id: id!, format: "full" }));
+  let plano = "";
+  let html = "";
+  const percorrer = (p?: gmail_v1.Schema$MessagePart) => {
+    if (!p) return;
+    if (p.body?.data && /^text\/plain/i.test(p.mimeType ?? "")) plano += Buffer.from(p.body.data, "base64url").toString("utf8") + "\n";
+    else if (p.body?.data && /^text\/html/i.test(p.mimeType ?? "")) html += Buffer.from(p.body.data, "base64url").toString("utf8") + "\n";
+    (p.parts ?? []).forEach(percorrer);
+  };
+  percorrer(m.data.payload);
+  const doHtml = html
+    .replace(/<(style|script)[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<br\s*\/?>|<\/(p|div|tr|li)>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"');
+  const texto = (plano.trim() ? plano : doHtml).replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n").trim();
+  return texto || null;
+}
+
 export type AnexoPdf = { nome: string; buffer: Buffer };
 
 /** Links (href) do corpo do e-mail que casam com o host informado. SÓ LEITURA; usado para os e-mails da Tokio "Apólice Digital", que trazem links do portal em vez de anexo. */
@@ -387,4 +414,25 @@ export async function baixarAnexosDoEmail(caixa: string, messageId: string, maxB
     if (a.data.data) pdfs.push({ idx: idx++, nome: p.filename!, mime: p.mimeType ?? "application/pdf", buffer: Buffer.from(a.data.data, "base64url") });
   }
   return { achou: true, pdfs, outros, grandes };
+}
+
+/** Planilhas (.csv/.xls/.xlsx) anexadas a uma mensagem (só leitura): usado para os relatórios de fatura por imobiliária. */
+export async function baixarPlanilhasDoEmail(caixa: string, messageId: string, maxBytes = 15 * 1024 * 1024): Promise<{ achou: boolean; planilhas: AnexoBaixado[]; grandes: number }> {
+  const g = clienteDaCaixa(caixa);
+  let id: string | null = null;
+  const sintetico = /^gmail:[^:]+:(.+)$/.exec(messageId);
+  if (sintetico) id = sintetico[1];
+  else { const r = await comRetry(() => g.users.messages.list({ userId: "me", q: `rfc822msgid:${messageId.replace(/^<|>$/g, "")}`, maxResults: 1 })); id = r.data.messages?.[0]?.id ?? null; }
+  if (!id) return { achou: false, planilhas: [], grandes: 0 };
+  const m = await comRetry(() => g.users.messages.get({ userId: "me", id: id!, format: "full" }));
+  const partes: gmail_v1.Schema$MessagePart[] = [];
+  const percorrer = (p?: gmail_v1.Schema$MessagePart) => { if (!p) return; if (p.filename && p.body?.attachmentId && /\.(csv|xlsx?|xlsm)$/i.test(p.filename)) partes.push(p); (p.parts ?? []).forEach(percorrer); };
+  percorrer(m.data.payload);
+  const planilhas: AnexoBaixado[] = []; let grandes = 0, idx = 200;
+  for (const p of partes) {
+    if ((p.body?.size ?? 0) > maxBytes) { grandes++; continue; }
+    const a = await comRetry(() => g.users.messages.attachments.get({ userId: "me", messageId: id!, id: p.body!.attachmentId! }));
+    if (a.data.data) planilhas.push({ idx: idx++, nome: p.filename!, mime: p.mimeType ?? "application/octet-stream", buffer: Buffer.from(a.data.data, "base64url") });
+  }
+  return { achou: true, planilhas, grandes };
 }

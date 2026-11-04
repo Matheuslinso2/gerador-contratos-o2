@@ -48,7 +48,7 @@ const PARTES_PESSOAIS = new Set([
 
 export function chamadaTemDadosPessoais(nome: string, entrada: unknown): boolean {
   const e = (entrada ?? {}) as Record<string, unknown>;
-  if (nome === "buscar_pessoa" || nome === "buscar_nos_paineis" || nome === "listar_cotacoes_com_pessoa" || nome === "buscar_arquivos_documento") return true;
+  if (nome === "buscar_pessoa" || nome === "buscar_nos_paineis" || nome === "listar_cotacoes_com_pessoa" || nome === "buscar_arquivos_documento" || nome === "ler_corpo_email") return true;
   if (nome === "consultar_dados" || nome === "consultar_tabela") {
     const tabela = String(e.tabela ?? "");
     if (TABELAS_PESSOAIS.has(tabela)) return true;
@@ -92,6 +92,7 @@ export function descreverChamada(nome: string, entrada: unknown): string | null 
   const e = (entrada ?? {}) as Record<string, unknown>;
   const lista = (v: unknown) => (Array.isArray(v) ? v.map(String).join(", ") : String(v ?? ""));
   if (nome === "buscar_imobiliaria") return `Imobiliária (banco único, inclui o grupo): ${String(e.nome ?? "")}`;
+  if (nome === "ler_corpo_email") return "Conteúdo de e-mail ligado à cotação (leitura registrada)";
   if (nome === "contar_documentos_erp") {
     const p: string[] = ["Documentos do ERP"];
     if (e.imobiliaria) p.push(`da imobiliária/grupo ${String(e.imobiliaria)}`);
