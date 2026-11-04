@@ -129,6 +129,13 @@ export function enderecoDaImagem(token: string): string {
   return `${base.replace(/\/$/, "")}/api/campanhas/panorama/${token}`;
 }
 
+/** Endereço rastreado do botão i do e-mail (redireciona para o destino que está no texto salvo da parcial). */
+export function enderecoDoClique(token: string, indice: number): string {
+  const base = process.env.NEXT_PUBLIC_SITE_URL;
+  if (!base) throw new Error("NEXT_PUBLIC_SITE_URL não configurada");
+  return base.replace(/\/$/, "") + "/api/campanhas/clique/" + token + "?b=" + indice;
+}
+
 /** Resumo em texto dos mesmos números da imagem (vai abaixo dela, para quem bloqueia imagens). */
 export function resumoEmTexto(d: DadosPanorama): string {
   const u = d.moeda || !d.unidade ? "" : ` ${d.unidade}`;

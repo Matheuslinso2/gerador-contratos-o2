@@ -92,11 +92,22 @@ function Oportunidades({ d }: { d: DadosPanorama }) {
   );
 }
 
-export async function GET(_request: Request, { params }: { params: Promise<{ token: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   if (!/^[a-f0-9]{16,64}$/.test(token)) return new Response("Não encontrado", { status: 404 });
-  const { data } = await createServiceClient().from("campanhas_panoramas").select("dados, status").eq("token", token).maybeSingle();
+  const db = createServiceClient();
+  const { data } = await db.from("campanhas_panoramas").select("id, dados, status").eq("token", token).maybeSingle();
   if (!data || data.status === "descartada") return new Response("Não encontrado", { status: 404 });
+  // Parcial lida (03/11/2026): a imagem carregou no e-mail da imobiliária. Só conta depois do envio real e
+  // nunca para visualização interna (?interno=1). Proxy do Gmail marcado: abertura por proxy é sinal fraco.
+  if (data.status === "enviada" && !new URL(request.url).searchParams.has("interno")) {
+    const ua = request.headers.get("user-agent") ?? "";
+    try {
+      await db.from("campanhas_panoramas_eventos").insert({ panorama_id: data.id, tipo: "imagem", agente: /GoogleImageProxy/i.test(ua) ? "google_proxy" : "outro" });
+    } catch {
+      // registrar nunca impede a imagem
+    }
+  }
   const d = data.dados as DadosPanorama;
 
   const indisponivel = d.dadosStatus !== "ok";

@@ -77,7 +77,7 @@ export async function enviarTesteParciais(campanhaId: string, loteId: string, fo
   if (!siteUrl || !user.email) irParaParciais(campanhaId, loteId, "erro", "Não consegui montar o teste (endereço do site ou e-mail do usuário ausente).");
   const remetente = limparNomeRemetente(formData.get("remetente_nome"));
   const l = linhas[0];
-  const e = montarEmailParcial(l.dados, texto, enderecoDaImagem(l.token));
+  const e = montarEmailParcial(l.dados, texto, enderecoDaImagem(l.token), l.token);
   const row: CampanhaRow = { id: campanhaId, assunto: e.assunto, template: "comunicado", titulo: e.titulo, introducao: e.introducao, valido_de: l.dados.inicio, valido_ate: l.dados.fim, corpo_html: e.corpoHtml, cta_texto: null, cta_href: null, personalizacao: "nenhuma", remetente_nome: remetente };
   try {
     await enviarEmail({
@@ -104,7 +104,7 @@ async function comentarNosCards(db: ReturnType<typeof createServiceClient>, camp
     (d.meta ? ` de ${formatarValor(d.meta, d.moeda)}${u} (${Math.round(d.percentual ?? 0)}% da meta)` : "") +
     (d.faltam && d.faltam > 0 ? `, faltam ${formatarValor(d.faltam, d.moeda)}${u}` : "") +
     (d.diasRestantes > 0 ? `, ${d.diasRestantes} dias até o fim` : ", campanha encerrada") +
-    `. Panorama enviado: ${enderecoDaImagem(l.token)}`;
+    `. Panorama enviado: ${enderecoDaImagem(l.token)}?interno=1`;
   let comentados = 0;
   let falhas = 0;
   for (const r of (data ?? []) as { bitrix_deal_id: number }[]) {
@@ -140,7 +140,7 @@ export async function enviarParciais(campanhaId: string, loteId: string, formDat
   let cardsComentados = 0;
   const problemas: string[] = [];
   for (const l of linhas) {
-    const e = montarEmailParcial(l.dados, texto, enderecoDaImagem(l.token));
+    const e = montarEmailParcial(l.dados, texto, enderecoDaImagem(l.token), l.token);
     const { data: filho, error } = await db
       .from("campanhas")
       .insert({

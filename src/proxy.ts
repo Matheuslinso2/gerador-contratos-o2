@@ -87,6 +87,8 @@ const ROTAS_PUBLICAS = [
   // aleatório de 36 caracteres) e a imagem só mostra os números da própria
   // imobiliária (ver src/app/api/campanhas/panorama/[token]/route.tsx).
   "/api/campanhas/panorama",
+  // Clique no botão do e-mail de parcial (03/11/2026): redireciona só para destinos guardados no texto da parcial.
+  "/api/campanhas/clique",
   // Webhook do Resend (abertura/clique de campanha) -- chamado direto pelo
   // Resend, sem cookie de sessão. Valida a própria assinatura Svix/HMAC
   // (ver src/app/api/campanhas/webhook-resend/route.ts), mesmo padrão dos

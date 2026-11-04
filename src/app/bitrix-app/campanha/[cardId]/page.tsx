@@ -139,7 +139,7 @@ export default async function PanoramaCampanhaCard({ params, searchParams }: { p
                       <td className="py-1 pr-3 text-right tabular-nums">{v.dados.faltam === null ? "—" : formatarValor(v.dados.faltam, v.dados.moeda)}</td>
                       <td className="py-1 pr-3">{quando(v.enviadoEm)}</td>
                       <td className="py-1 text-right">
-                        <a href={`/api/campanhas/panorama/${v.token}`} target="_blank" rel="noreferrer" className="text-o2-coral hover:underline">
+                        <a href={`/api/campanhas/panorama/${v.token}?interno=1`} target="_blank" rel="noreferrer" className="text-o2-coral hover:underline">
                           ver
                         </a>
                       </td>
@@ -151,7 +151,7 @@ export default async function PanoramaCampanhaCard({ params, searchParams }: { p
                 <details>
                   <summary className="cursor-pointer text-xs font-medium text-o2-navy">Ver o panorama enviado por último (parcial nº {ultima.versao})</summary>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={`/api/campanhas/panorama/${ultima.token}`} alt={`Panorama enviado, parcial ${ultima.versao}`} className="mt-2 w-full max-w-xl rounded-lg border border-gray-200" loading="lazy" />
+                  <img src={`/api/campanhas/panorama/${ultima.token}?interno=1`} alt={`Panorama enviado, parcial ${ultima.versao}`} className="mt-2 w-full max-w-xl rounded-lg border border-gray-200" loading="lazy" />
                 </details>
               )}
             </>

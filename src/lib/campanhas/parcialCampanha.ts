@@ -1,5 +1,5 @@
 import { FONTE, O2_CINZA_ESCURO, O2_CINZA_MEDIO, O2_LARANJA } from "@/lib/integracoes/emailO2";
-import { dataBr, resumoEmTexto, type DadosPanorama } from "./panoramaCampanha";
+import { dataBr, enderecoDoClique, resumoEmTexto, type DadosPanorama } from "./panoramaCampanha";
 
 // E-mail de PARCIAL de uma campanha com metas: um texto da equipe + a imagem do
 // PANORAMA da imobiliária (versão gravada em campanhas_panoramas) + os mesmos
@@ -36,6 +36,35 @@ export const TEXTO_PADRAO_PARCIAL_HTML = [
   linha(BOTAO("Falar com a nossa equipe", LINK_PADRAO_BOTAO)),
 ].join("");
 
+/** Destinos (href) dos botões do texto, na ordem em que aparecem. Só botões marcados com data-botao. */
+export function extrairBotoes(html: string): string[] {
+  const destinos: string[] = [];
+  const re = /<a\b[^>]*>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html))) {
+    if (!/data-botao/i.test(m[0])) continue;
+    const href = m[0].match(/href\s*=\s*"([^"]*)"/i);
+    destinos.push(href ? href[1].replace(/&amp;/g, "&") : "");
+  }
+  return destinos;
+}
+
+/** Destino permitido para redirecionar (nunca um esquema perigoso como javascript:). */
+export function destinoSeguro(url: string): string | null {
+  const u = url.trim();
+  return /^(https?:\/\/|mailto:|tel:)/i.test(u) ? u : null;
+}
+
+/** Faz cada botão passar pelo endereço rastreado do panorama (o destino real fica no texto salvo). */
+function rastrearBotoes(html: string, token: string): string {
+  let i = 0;
+  return html.replace(/<a\b[^>]*>/gi, (tag) => {
+    if (!/data-botao/i.test(tag)) return tag;
+    const novo = enderecoDoClique(token, i++);
+    return /href\s*=\s*"[^"]*"/i.test(tag) ? tag.replace(/href\s*=\s*"[^"]*"/i, 'href="' + novo + '"') : tag;
+  });
+}
+
 /** Trechos entre ** viram negrito (e os asteriscos somem). */
 export function aplicarNegrito(html: string): string {
   return html.replace(/\*\*([^*][\s\S]*?)\*\*/g, "<b>$1</b>");
@@ -63,8 +92,10 @@ function blocoPanorama(d: DadosPanorama, imagemUrl: string): string {
 
 /** Texto (linhas <tr>) com o marcador {{panorama}} trocado pelo panorama; sem marcador, o panorama vai ao fim do texto.
  *  Marcador repetido nunca aparece cru: só o primeiro vira o panorama, os demais somem. */
-export function montarCorpoParcial(textoHtml: string, d: DadosPanorama, imagemUrl: string): { corpoHtml: string; semMarcador: boolean } {
-  const preenchido = aplicarTexto(textoHtml, d);
+export function montarCorpoParcial(textoHtml: string, d: DadosPanorama, imagemUrl: string, token?: string): { corpoHtml: string; semMarcador: boolean } {
+  const preenchido0 = aplicarTexto(textoHtml, d);
+  // Com token, os botões passam pelo rastreador (clique registrado só depois do envio real).
+  const preenchido = token ? rastrearBotoes(preenchido0, token) : preenchido0;
   const bloco = blocoPanorama(d, imagemUrl);
   const tira = (l: string) => l.replace(/<span[^>]*merge-token[^>]*>\s*\{\{panorama\}\}\s*<\/span>/gi, "").split(TOKEN_PANORAMA).join("");
   const temTexto = (l: string) => l.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim().length > 0;
@@ -80,8 +111,8 @@ export function montarCorpoParcial(textoHtml: string, d: DadosPanorama, imagemUr
   return { corpoHtml: (achou ? saida.join("") : saida.join("") + bloco) + `<tr><td style="padding:12px 0 0;"></td></tr>`, semMarcador: !achou };
 }
 
-export function montarEmailParcial(d: DadosPanorama, textoHtml: string, imagemUrl: string) {
-  const { corpoHtml } = montarCorpoParcial(textoHtml, d, imagemUrl);
+export function montarEmailParcial(d: DadosPanorama, textoHtml: string, imagemUrl: string, token?: string) {
+  const { corpoHtml } = montarCorpoParcial(textoHtml, d, imagemUrl, token);
   return {
     nome: `Parcial ${d.versao} — ${d.campanha} — ${d.participante} (${dataBr(d.posicaoEm).slice(0, 5)})`,
     assunto: `Parcial da campanha ${d.campanha} — ${d.participante}`,

@@ -52,7 +52,7 @@ export default async function ParciaisPage({ params, searchParams }: { params: P
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
 
   const htmlDoEmail = (l: Linha) => {
-    const e = montarEmailParcial(l.dados, textoAtual, enderecoDaImagem(l.token));
+    const e = montarEmailParcial(l.dados, textoAtual, enderecoDaImagem(l.token), l.token);
     const row: CampanhaRow = {
       id,
       assunto: e.assunto,
@@ -209,7 +209,7 @@ export default async function ParciaisPage({ params, searchParams }: { params: P
                   </div>
                   <div className="grid gap-3 lg:grid-cols-2">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={`/api/campanhas/panorama/${l.token}`} alt={`Panorama de ${l.nome}`} className="w-full rounded-lg border border-gray-100" loading="lazy" />
+                    <img src={`/api/campanhas/panorama/${l.token}?interno=1`} alt={`Panorama de ${l.nome}`} className="w-full rounded-lg border border-gray-100" loading="lazy" />
                     <details className="rounded-lg border border-gray-200">
                       <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-o2-navy">Ver o e-mail como será recebido</summary>
                       <iframe title={`E-mail de ${l.nome}`} srcDoc={htmlDoEmail(l)} sandbox="" loading="lazy" className="h-[760px] w-full rounded-b-lg border-t border-gray-200 bg-white" />
