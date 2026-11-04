@@ -91,3 +91,13 @@
 --   no portão; aplicar só aprova o extrato quando não sobra linha identificada (não estorno) sem recebimento (corrige fechamento indevido do extrato Bradesco de set/26).
 --   1ª rodada: ALLI 5, ICAT 8, SUHA 10, ZURI 8 extratos fechados; 44 linhas baixadas (29 Zurich, 11 Suhai).
 -- 04/11 erp_extratos_duplicado_de: erp_extratos_seguradora.duplicado_de_id liga as cópias 'IGNORADO 28/10' (Drive) ao extrato original (portal/e-mail). Atenção: a marca IGNORADO pode estar no MEIO da observação.
+
+-- ============================================================================
+-- 04/11/2026 — comissão paga em VÁRIAS linhas do mesmo extrato (ex.: Alfa, uma linha por cobertura)
+-- O motor SOMA as linhas: 1 recebimento por comissão (valor somado; o repasse é gerado por recebimento a partir da base da comissão,
+-- então 2 recebimentos duplicariam o repasse) e cada linha fica em erp_comissao_recebimento_partes. Aplicado por migrations:
+--   erp_baixa_varias_linhas_por_comissao_partes (tabela + view erp_baixa_linha_estado.ja_baixada_erp conta a parte),
+--   erp_baixa_processar_base_soma_de_linhas (erp_baixa_erp: tolerância/regra pela SOMA do grupo; diferença só na 1ª linha),
+--   erp_baixa_aplicar_rodar_assumir_soma_de_linhas + erp_assumir_baixa_aprovados_soma_so_do_mesmo_extrato (aplicar/rodar/assumir).
+-- Teste em transação revertida: 2 linhas (metades) da mesma comissão de R$ 78,03 → 1 recebimento de 78,03, 2 partes, comissão recebida, 1 repasse.
+-- Para o fechamento do extrato, linha que é parte de recebimento somado conta como baixada.
