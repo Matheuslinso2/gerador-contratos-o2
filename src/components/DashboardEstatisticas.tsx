@@ -31,7 +31,7 @@ function somarMeses(mes: string, n: number) {
   return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, "0")}`;
 }
 
-export type SecaoEstat = "geral" | "funil" | "preco" | "regiao" | "margem" | "parceiros";
+export type SecaoEstat = "geral" | "funil" | "preco" | "regiao" | "margem" | "parceiros" | "oportunidades";
 export type PeriodoEstat = "12" | "24" | "tudo";
 export type ProdutoEstat = "fianca" | "re" | "capitalizacao" | "automovel";
 const PRODUTOS_ESTAT: { k: ProdutoEstat; t: string }[] = [
@@ -50,7 +50,17 @@ const SECOES: { k: SecaoEstat; t: string; admin?: boolean; periodo?: boolean; po
   { k: "regiao", t: "Região", porProduto: true },
   { k: "margem", t: "Margem e repasse (todos os produtos)", admin: true },
   { k: "parceiros", t: "Parceiros", porProduto: true },
+  { k: "oportunidades", t: "Oportunidades (venda cruzada)" },
 ];
+const PARES_OPORT: { k: string; base: string; alvo: string; t: string }[] = [
+  { k: "fi_inc", base: "Fiança", alvo: "Incêndio imobiliário", t: "Fiança → Incêndio" },
+  { k: "fi_cap", base: "Fiança", alvo: "Capitalização", t: "Fiança → Capitalização" },
+  { k: "inc_fi", base: "Incêndio imobiliário", alvo: "Fiança", t: "Incêndio → Fiança" },
+  { k: "inc_cap", base: "Incêndio imobiliário", alvo: "Capitalização", t: "Incêndio → Capitalização" },
+];
+export function lerPar(v: string | undefined): string {
+  return PARES_OPORT.some((p) => p.k === v) ? (v as string) : "fi_inc";
+}
 const PERIODOS: { k: PeriodoEstat; t: string }[] = [
   { k: "12", t: "12 meses" },
   { k: "24", t: "24 meses" },
@@ -92,7 +102,7 @@ function Barra({ valor, max, cor = "#00447E" }: { valor: number; max: number; co
 const Aviso = ({ children }: { children: ReactNode }) => <p className="text-[11px] leading-snug text-o2-cinza-medio">{children}</p>;
 const Erro = ({ msg }: { msg: string }) => <p className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">Não foi possível carregar agora ({msg}).</p>;
 
-export default async function DashboardEstatisticas({ verMargem, secao, periodo, produto }: { verMargem: boolean; secao: SecaoEstat; periodo: PeriodoEstat; produto: ProdutoEstat }) {
+export default async function DashboardEstatisticas({ verMargem, secao, periodo, produto, par }: { verMargem: boolean; secao: SecaoEstat; periodo: PeriodoEstat; produto: ProdutoEstat; par: string }) {
   const ativa = SECOES.find((s) => s.k === secao && (!s.admin || verMargem)) ?? SECOES[0];
   const { de, ate } = janela(periodo);
   const href = (s: SecaoEstat, p: PeriodoEstat, pr: ProdutoEstat = produto) => `/?aba=estatisticas&sec=${s}&per=${p}&prod=${pr}`;
@@ -157,6 +167,7 @@ export default async function DashboardEstatisticas({ verMargem, secao, periodo,
       {ativa.k === "regiao" && (produto === "fianca" ? <RegiaoFianca /> : produto === "re" ? <RegiaoRe /> : <SemEndereco produto={produto} />)}
       {ativa.k === "margem" && verMargem && <Margem />}
       {ativa.k === "parceiros" && (produto === "fianca" ? <ParceirosFianca /> : <ParceirosOutro produto={produto} />)}
+      {ativa.k === "oportunidades" && <Oportunidades par={par} href={(p) => `/?aba=estatisticas&sec=oportunidades&per=${periodo}&prod=${produto}&par=${p}`} />}
     </div>
   );
 }
@@ -1030,5 +1041,87 @@ async function ParceirosOutro({ produto }: { produto: ProdutoEstat }) {
         ))}
       </div>
     </Secao>
+  );
+}
+
+// ───────────────────────── Oportunidades (venda cruzada por imobiliária) ─────────────────────────
+type Oport = { imobiliaria_id: string; apolices_base: number; premio_base: number; cot_abertas_alvo: number; cot_perdidas_12m_alvo: number; cot_fechadas_12m_alvo: number; potencial_apolices_ano: number | null };
+
+async function Oportunidades({ par, href }: { par: string; href: (p: string) => string }) {
+  const sb = await createClient();
+  const atual = PARES_OPORT.find((p) => p.k === par) ?? PARES_OPORT[0];
+  const [op, rz] = await Promise.all([
+    sb.from("analise_oportunidades").select("imobiliaria_id, apolices_base, premio_base, cot_abertas_alvo, cot_perdidas_12m_alvo, cot_fechadas_12m_alvo, potencial_apolices_ano").eq("produto_base", atual.base).eq("produto_alvo", atual.alvo),
+    sb.from("analise_oportunidades_razao").select("razao, n").eq("produto_base", atual.base).eq("produto_alvo", atual.alvo).maybeSingle(),
+  ]);
+  if (op.error || rz.error) return <Erro msg={op.error?.message ?? rz.error?.message ?? ""} />;
+  const todas = ((op.data ?? []) as Oport[]).map((o) => ({ ...o, premio_base: Number(o.premio_base), potencial: o.potencial_apolices_ano == null ? 0 : Number(o.potencial_apolices_ano) }));
+  // Prioridade: interesse recente no produto-alvo (cotação aberta, depois perdida) e, dentro disso, porte no produto-base.
+  const lista = [...todas].sort((a, b) => b.cot_abertas_alvo - a.cot_abertas_alvo || b.cot_perdidas_12m_alvo - a.cot_perdidas_12m_alvo || b.apolices_base - a.apolices_base).slice(0, 15);
+  const { data: nomesRows } = lista.length ? await sb.from("imobiliarias").select("id, nome, apelido").in("id", lista.map((l) => l.imobiliaria_id)) : { data: [] };
+  const nome = new Map((nomesRows ?? []).map((r: { id: string; nome: string; apelido: string | null }) => [r.id, r.apelido || r.nome]));
+  const razao = rz.data?.razao == null ? null : Number(rz.data.razao);
+  const potTotal = todas.reduce((t, o) => t + o.potencial, 0);
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="text-o2-cinza-medio">Oportunidade:</span>
+        {PARES_OPORT.map((p) => (
+          <Link key={p.k} href={href(p.k)} scroll={false} aria-current={atual.k === p.k ? "true" : undefined} className={`rounded-md px-2.5 py-1 font-medium ${atual.k === p.k ? "bg-o2-navy text-white" : "text-o2-cinza-escuro hover:text-o2-navy"}`}>
+            {p.t}
+          </Link>
+        ))}
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Cartao rotulo="Imobiliárias nessa situação" valor={inteiro.format(todas.length)} linhas={[`têm ${atual.base}, ainda não têm ${atual.alvo}`]} />
+        <Cartao rotulo="Com cotação aberta ou perdida" valor={inteiro.format(todas.filter((o) => o.cot_abertas_alvo + o.cot_perdidas_12m_alvo > 0).length)} linhas={["de " + atual.alvo + " em 12 meses"]} />
+        <Cartao rotulo="Potencial estimado" valor={`${inteiro.format(potTotal)} apól./ano`} linhas={razao == null ? [] : [`razão típica: ${dec2.format(razao)} apólices de ${atual.alvo} por apólice de ${atual.base}`]} />
+      </div>
+      <Secao
+        titulo={`${atual.t}: imobiliárias para abordar`}
+        legenda={`Imobiliárias com 3 ou mais apólices de ${atual.base} em 2024-2026 e menos de 3 de ${atual.alvo}. Ordenadas por interesse recente (cotação aberta, depois perdida em 12 meses) e, em seguida, pelo porte no produto-base. Potencial = apólices/ano de ${atual.base} × a razão mediana observada nas imobiliárias que já têm os dois produtos; é ordem de grandeza, não previsão. Lista explicável, sem modelo estatístico: a amostra é pequena para isso.`}
+      >
+        {lista.length === 0 ? (
+          <Aviso>Nenhuma imobiliária nessa situação.</Aviso>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="text-left uppercase tracking-wide text-o2-cinza-medio">
+                <tr>
+                  <th className="py-1">Imobiliária</th>
+                  <th className="py-1 text-right">Apólices de {atual.base} (2025-26)</th>
+                  <th className="py-1 text-right">Cotações de {atual.alvo} (12 meses)</th>
+                  <th className="py-1 text-right">Potencial (apól./ano)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lista.map((o) => (
+                  <tr key={o.imobiliaria_id} className="border-t border-gray-100">
+                    <td className="py-1.5 font-medium text-o2-navy">{titulo(nome.get(o.imobiliaria_id) ?? "?")}</td>
+                    <td className="py-1.5 text-right tabular-nums">
+                      {inteiro.format(o.apolices_base)}
+                      <span className="block text-[10px] text-o2-cinza-medio">{reais.format(o.premio_base)} de prêmio</span>
+                    </td>
+                    <td className="py-1.5 text-right tabular-nums">
+                      {o.cot_abertas_alvo + o.cot_perdidas_12m_alvo + o.cot_fechadas_12m_alvo === 0 ? (
+                        <span className="text-o2-cinza-medio">nenhuma</span>
+                      ) : (
+                        <>
+                          {o.cot_abertas_alvo > 0 && <span className="font-semibold text-o2-navy">{o.cot_abertas_alvo} aberta(s) </span>}
+                          {o.cot_perdidas_12m_alvo > 0 && <span>{o.cot_perdidas_12m_alvo} perdida(s) </span>}
+                          {o.cot_fechadas_12m_alvo > 0 && <span className="text-o2-cinza-medio">{o.cot_fechadas_12m_alvo} fechada(s)</span>}
+                        </>
+                      )}
+                    </td>
+                    <td className="py-1.5 text-right tabular-nums">{o.potencial > 0 ? dec1.format(o.potencial) : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <Aviso>Para a ficha completa de uma imobiliária da lista (aluguel da região, preço do seguro, margem), peça no chat interno. “Fechada(s)” = cotação fechada nos últimos 12 meses em imobiliária que ainda tem menos de 3 apólices do produto.</Aviso>
+      </Secao>
+    </>
   );
 }

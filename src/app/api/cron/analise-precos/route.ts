@@ -28,5 +28,7 @@ export async function GET(request: NextRequest) {
   if (faixa.error) return NextResponse.json({ erro: "faixa: " + faixa.error.message }, { status: 500 });
   const produtos = await sb.rpc("atualizar_analise_produtos");
   if (produtos.error) return NextResponse.json({ erro: "produtos: " + produtos.error.message }, { status: 500 });
-  return NextResponse.json({ ok: true, linhas_produtos: produtos.data, linhas_faixa: faixa.data, linhas_margem: margem.data, entidades_visita: visita.data, meses_mercado: mercado.data });
+  const oport = await sb.rpc("atualizar_analise_oportunidades");
+  if (oport.error) return NextResponse.json({ erro: "oportunidades: " + oport.error.message }, { status: 500 });
+  return NextResponse.json({ ok: true, oportunidades: oport.data, linhas_produtos: produtos.data, linhas_faixa: faixa.data, linhas_margem: margem.data, entidades_visita: visita.data, meses_mercado: mercado.data });
 }
