@@ -41,3 +41,9 @@
 -- Tabela de APOIO da thread da fatura (não substitui erp_faturas): lida dos 386 relatórios de fatura dos e-mails da Nathalie (apólices distintas por mês,
 -- documento mais recente por nº da apólice). Entradas/saídas = diferença de conjuntos com o mês anterior; sem relatório anterior = 'sem_base'.
 -- 1ª carga: 628 linhas, 114 imobiliárias, 382 meses com movimento, 246 sem base.
+
+-- 03/11/2026 — Índice de não renovação: view erp_renovacao_desfecho + função erp_renovacao_indice(p_de, p_ate)
+-- (migrations erp_renovacao_desfecho_indice / _provavel). Renovar = continuar com a O2 como corretora, mesmo trocando de seguradora.
+-- renovada = apólice nova ligada (documento_renovado_id; Corp "Apólice Não Nova" = tipo_corp RENV); renovacao_provavel = mesmo titular+produto,
+-- início de -30 a +60 dias do fim, sem ligação gravada (só sugestão, nada é gravado); nao_renovada = venceu há >30 dias sem nenhuma das duas;
+-- aguardando_decisao = venceu há <=30 dias; cancelada fora do índice. Motivo só com fonte (erp_renovacoes.motivo, e-mail 'nao_renovar').

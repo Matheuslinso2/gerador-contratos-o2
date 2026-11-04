@@ -179,6 +179,24 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
   const hojeR = new Date();
   const cicloRobo = (() => { const t = hojeR.getUTCFullYear() * 12 + hojeR.getUTCMonth() + 2; return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, "0")}`; })();
 
+  // Índice de não renovação (Matheus 03/11): desfecho de cada apólice vencida; "Apólice Não Nova" do Corp (RENV) prova a renovação, sem apólice nova = não renovada
+  type LinhaIndice = { mes: string; seguradora: string; produto: string | null; imobiliaria: string | null; vencidas: number; renovadas: number; provaveis: number; nao_renovadas: number; aguardando: number; canceladas: number; em_vigor: number; premio_nao_renovado: number };
+  const linhasIdx: LinhaIndice[] = [];
+  for (let p = 0; p < 6; p++) {
+    const { data } = await supabase.rpc("erp_renovacao_indice", { p_de: "2026-09-01", p_ate: per.ate }).range(p * 1000, p * 1000 + 999);
+    linhasIdx.push(...((data ?? []) as LinhaIndice[]));
+    if ((data ?? []).length < 1000) break;
+  }
+  const somaIdx = (l: LinhaIndice[]) => l.reduce((a, x) => ({ vencidas: a.vencidas + Number(x.vencidas), renovadas: a.renovadas + Number(x.renovadas), provaveis: a.provaveis + Number(x.provaveis), nao: a.nao + Number(x.nao_renovadas), aguardando: a.aguardando + Number(x.aguardando), canceladas: a.canceladas + Number(x.canceladas), premio: a.premio + Number(x.premio_nao_renovado) }), { vencidas: 0, renovadas: 0, provaveis: 0, nao: 0, aguardando: 0, canceladas: 0, premio: 0 });
+  const idxPorMes = [...new Set(linhasIdx.map((x) => x.mes))].sort().reverse().map((m) => ({ mes: m, ...somaIdx(linhasIdx.filter((x) => x.mes === m)) }));
+  const idxMesAtual = linhasIdx.filter((x) => x.mes === per.mes);
+  const idxPorSeg = [...new Set(idxMesAtual.map((x) => x.seguradora))].map((s2) => ({ seguradora: s2, ...somaIdx(idxMesAtual.filter((x) => x.seguradora === s2)) })).filter((x) => x.vencidas > 0).sort((a, b) => b.nao - a.nao);
+  const pctNao = (nao: number, renov: number) => (nao + renov > 0 ? `${((100 * nao) / (nao + renov)).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%` : "—");
+  type NaoRenov = { documento_id: string; nosso_numero: number; numero_apolice: string | null; vigencia_fim: string; seguradora: string; produto: string | null; imobiliaria: string | null; premio_liquido: number | null; desfecho: string; motivo: string | null };
+  const { data: nrRaw } = await supabase.from("erp_renovacao_desfecho").select("documento_id, nosso_numero, numero_apolice, vigencia_fim, seguradora, produto, imobiliaria, premio_liquido, desfecho, motivo")
+    .eq("mes_vencimento", per.mes).in("desfecho", ["nao_renovada", "aguardando_decisao"]).order("vigencia_fim").limit(400);
+  const naoRenov = (nrRaw ?? []) as NaoRenov[];
+
   // atalhos de mês: o mês atual +1 até +4
   const hoje = new Date();
   const atalhos = [1, 2, 3, 4].map((n) => {
@@ -225,6 +243,83 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
           {periodoDoMes(cicloRobo).rotulo} (vencimentos tratados no dia 25)
         </Link>
       </div>
+
+      {idxPorMes.length > 0 && (
+        <section className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+          <h2 className="text-base font-semibold text-gray-900">
+            Índice de não renovação
+            <InfoLegenda titulo="Índice de não renovação">
+              Não renovar é normal e fica registrado. Para cada apólice que venceu a partir de setembro/2026: renovada = existe apólice nova ligada a ela (o Corp marca a nova como “Apólice Não Nova”), mesmo em outra seguradora, pois renovar é continuar com a O2 como corretora; renovação provável = sem ligação gravada, mas há apólice nova do mesmo titular e produto começando de 30 dias antes a 60 dias depois do fim (conta como renovação no índice, a confirmar); não renovada = venceu há mais de 30 dias e não tem apólice nova; aguardando decisão = venceu há até 30 dias e ainda pode ser renovada; cancelada = apólice cancelada ou com endosso de cancelamento (fora do índice). Índice = não renovadas ÷ (renovadas + prováveis + não renovadas). O motivo só aparece quando há fonte (e-mail com sinal de não renovar ou motivo registrado); sem fonte, fica “sem motivo informado”. Nada é apagado.
+            </InfoLegenda>
+          </h2>
+          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+                <tr><th className="px-3 py-2">Vencimento</th><th className="px-3 py-2 text-right">Vencidas</th><th className="px-3 py-2 text-right">Renovadas</th><th className="px-3 py-2 text-right">Renovação provável (sem ligação)</th><th className="px-3 py-2 text-right">Não renovadas</th><th className="px-3 py-2 text-right">Aguardando decisão</th><th className="px-3 py-2 text-right">Canceladas</th><th className="px-3 py-2 text-right">Índice de não renovação</th><th className="px-3 py-2 text-right">Prêmio líquido não renovado</th></tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {idxPorMes.map((m) => (
+                  <tr key={m.mes} className={m.mes === per.mes ? "bg-amber-50" : "hover:bg-gray-50"}>
+                    <td className="px-3 py-1.5 font-medium capitalize"><Link href={`/erp/renovacao?mes=${m.mes}`} className="text-o2-navy hover:underline">{periodoDoMes(m.mes).rotulo}</Link></td>
+                    <td className="px-3 py-1.5 text-right">{m.vencidas}</td>
+                    <td className="px-3 py-1.5 text-right">{m.renovadas}</td>
+                    <td className="px-3 py-1.5 text-right text-gray-600">{m.provaveis}</td>
+                    <td className="px-3 py-1.5 text-right font-medium">{m.nao}</td>
+                    <td className="px-3 py-1.5 text-right">{m.aguardando}</td>
+                    <td className="px-3 py-1.5 text-right text-gray-500">{m.canceladas}</td>
+                    <td className="px-3 py-1.5 text-right font-semibold">{pctNao(m.nao, m.renovadas + m.provaveis)}</td>
+                    <td className="px-3 py-1.5 text-right">{formatarReais(m.premio)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {idxPorSeg.length > 0 && (
+            <details className="rounded-xl border border-slate-200 bg-white">
+              <summary className="cursor-pointer px-4 py-2 text-xs font-medium capitalize text-gray-900">{periodoDoMes(per.mes).rotulo}: índice por seguradora</summary>
+              <div className="overflow-x-auto border-t border-gray-100">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+                    <tr><th className="px-3 py-2">Seguradora</th><th className="px-3 py-2 text-right">Renovadas</th><th className="px-3 py-2 text-right">Não renovadas</th><th className="px-3 py-2 text-right">Aguardando</th><th className="px-3 py-2 text-right">Índice</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {idxPorSeg.map((s2) => (
+                      <tr key={s2.seguradora} className="hover:bg-gray-50"><td className="px-3 py-1.5">{s2.seguradora}</td><td className="px-3 py-1.5 text-right">{s2.renovadas}</td><td className="px-3 py-1.5 text-right font-medium">{s2.nao}</td><td className="px-3 py-1.5 text-right">{s2.aguardando}</td><td className="px-3 py-1.5 text-right font-semibold">{pctNao(s2.nao, s2.renovadas + s2.provaveis)}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          )}
+          {naoRenov.length > 0 && (
+            <details className="rounded-xl border border-slate-200 bg-white">
+              <summary className="cursor-pointer px-4 py-2 text-xs font-medium capitalize text-gray-900">{periodoDoMes(per.mes).rotulo}: registro de não renovadas e aguardando decisão ({naoRenov.length}{naoRenov.length >= 400 ? "+" : ""})</summary>
+              <div className="overflow-x-auto border-t border-gray-100">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+                    <tr><th className="px-3 py-2">Código O2 do documento</th><th className="px-3 py-2">Nº da apólice</th><th className="px-3 py-2">Imobiliária</th><th className="px-3 py-2">Seguradora</th><th className="px-3 py-2">Produto</th><th className="px-3 py-2">Venceu em</th><th className="px-3 py-2 text-right">Pr. líquido</th><th className="px-3 py-2">Situação</th><th className="px-3 py-2">Motivo</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {naoRenov.map((x) => (
+                      <tr key={x.documento_id} className="hover:bg-gray-50">
+                        <td className="px-3 py-1.5 font-medium"><Link href={`/erp/documentos/${x.documento_id}`} className="text-o2-navy hover:underline">{x.nosso_numero}</Link></td>
+                        <td className="px-3 py-1.5">{x.numero_apolice ?? "—"}</td>
+                        <td className="px-3 py-1.5">{x.imobiliaria ?? "—"}</td>
+                        <td className="px-3 py-1.5">{x.seguradora}</td>
+                        <td className="px-3 py-1.5">{x.produto ?? "—"}</td>
+                        <td className="px-3 py-1.5">{formatarData(x.vigencia_fim)}</td>
+                        <td className="px-3 py-1.5 text-right">{formatarReais(x.premio_liquido)}</td>
+                        <td className="px-3 py-1.5">{x.desfecho === "nao_renovada" ? "Não renovada" : "Aguardando decisão"}</td>
+                        <td className="px-3 py-1.5">{x.motivo ?? <span className="text-gray-400">sem motivo informado</span>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          )}
+        </section>
+      )}
 
       {heranca.length > 0 && (
         <section className="space-y-2 rounded-xl border border-orange-200 bg-orange-50/60 p-4">
