@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { chatVisivelPara } from "@/lib/chat/acesso";
+import { roboLiberadoPara } from "@/lib/chat/niveisAcesso";
 import { gerarPdfDaResposta } from "@/lib/chat/relatorioResposta";
 import { textoTemDadosPessoais } from "@/lib/chat/privacidadePdf";
 
@@ -12,7 +13,7 @@ export async function POST(req: Request) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user?.email || !chatVisivelPara(user.email)) return NextResponse.json({ erro: "sem acesso" }, { status: 403 });
+  if (!user?.email || !chatVisivelPara(user.email) || !roboLiberadoPara(user.email)) return NextResponse.json({ erro: "sem acesso" }, { status: 403 });
 
   const corpo = (await req.json().catch(() => null)) as { pergunta?: string; resposta?: string; logica?: string | null; fontes?: string[] } | null;
   if (!corpo?.resposta || typeof corpo.resposta !== "string") return NextResponse.json({ erro: "resposta vazia" }, { status: 400 });

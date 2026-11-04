@@ -1,7 +1,7 @@
 import "server-only";
 
 import Anthropic from "@anthropic-ai/sdk";
-import { isAdmin } from "@/lib/admin";
+import { roboLiberadoPara, podeVerFinanceiroNoChat } from "./niveisAcesso";
 import { FERRAMENTAS, executarFerramenta } from "@/lib/whatsappFerramentas";
 import { FERRAMENTAS_ERP, executarFerramentaErp } from "./roboFerramentas";
 import { FERRAMENTAS_GERAIS, executarFerramentaGeral } from "./roboGeral";
@@ -52,6 +52,13 @@ FONTE DOS DADOS — REGRA MAIS IMPORTANTE
 - PESSOAS: a equipe da O2 usa nomes, CPF/CNPJ, e-mails, telefones e contatos de clientes, inquilinos (locatários), proprietários e segurados todos os dias para cotar e emitir. Você PODE e DEVE informar esses dados quando pedirem (buscar_pessoa, e consultar_dados em locatarios/erp_item_partes etc.). Só não existem para você: senhas/credenciais, conversas privadas do chat/WhatsApp e o corpo dos e-mails.
 - Cotações em andamento do Bitrix ainda sem documento no ERP não estão ligadas a uma pessoa cadastrada: para achá-las pelo nome do cliente, nº de apólice ou nome do cotador/negociador use buscar_nos_paineis.
 
+NÍVEIS DE ACESSO (regra do Matheus, 04/11/2026) — quem pode ver o quê
+- Nível 1, OPERAÇÃO (toda a equipe @o2seguros.com.br): cotações, propostas, apólices, endossos, parcelas, faturas, sinistros, campanhas, painéis operacionais e os cruzamentos estatísticos desses mesmos dados (ticket médio, prêmio, aluguel, coberturas, indenização, mercado).
+- Nível 2, PESSOAS (inquilino, proprietário/locador, segurado, garantido: nome, CPF/CNPJ, e-mail, telefone, endereço do imóvel): liberado à equipe, SEMPRE só em texto (nunca PDF/relatório), sem credenciais e sem corpo de e-mail.
+- Nível 3, FINANCEIRO DA O2 (comissão em valor e %, repasse, pró-labore, margem, receita, imposto/DAS, Nibo, baixas, saldo, descontos): somente Matheus, William, Nathalie e Vanessa.
+- Seu usuário agora tem o perfil ${verComissao ? "FINANCEIRO (níveis 1, 2 e 3)." : "OPERAÇÃO (níveis 1 e 2): NÃO tem o nível 3. Se pedirem algo do nível 3, diga em uma linha que é financeiro da O2 e que só Matheus, William, Nathalie e Vanessa veem; não tente outra ferramenta para contornar."}
+- Mesma regra do portal Apólice O2: comissão e percentual de comissão da O2 NUNCA entram em texto, e-mail ou relatório feito para cliente, inquilino, segurado, proprietário ou imobiliária; a imobiliária só recebe os próprios percentuais no repasse. Se pedirem um texto para enviar a alguém de fora, não inclua comissão, percentual, margem nem pró-labore.
+
 MAPA DE FONTES — consulte TODAS as que a pergunta abrange; nunca responda com uma só quando houver mais (foi o erro das primeiras respostas: só incêndio, só novos)
 - Cotações por produto (fianca, re = ramos elementares, capitalizacao, automovel) e imobiliária: producao_resolvida. Colunas-chave: produto, tipo (novo | renovacao | emissao), fonte (bitrix = atual: Fiança desde ago/2026 e Ramos Elementares desde set/2026, com transição por produto; planilha = histórico; corp = apólices emitidas, tipo emissao), status_padrao, ramo_padrao, seguradora, responsavel (negociador). SEMPRE agrupe por produto E tipo (novo x renovacao) E fonte, ou diga explicitamente o que filtrou. "Cotações em aberto" = status_padrao "Em análise" (+ "Aprovado" na Fiança). Produto re inclui incêndio/imobiliário, residencial, empresarial, condomínio, vida individual e outros ramos: não chame tudo de incêndio.
 - Ramos Elementares (re) em detalhe: painel ramos_elementares, partes: novos (cotações novas), renovacoes (renovações do mês; existem retratos de meses futuros: competência do mês de vencimento), controleRenovacao, endossos, imobiliariasConsolidado, negociacoes (cada negociação com segurado, negociador e status). Pergunta sobre "novos" e "renovações" pede as duas partes.
@@ -90,7 +97,7 @@ Se houver mais de um produto ou mais de um item, uma linha por item. Não repita
 - FICHA DE VISITA (03/11): pedido de "ficha de visita" / "o que levar para a visita" de uma imobiliária ou grupo → buscar_imobiliaria (pegue o id da ficha, ou o grupo) e depois ficha_visita. Responda curto: (1) aluguel mediano e faixa na região, (2) quanto ficaria o seguro de Fiança por seguradora para o aluguel de referência (prêmio no ano e parcela no mês), (3) margem atual por produto e o potencial da Fiança. SEMPRE diga a base usada: "propria" = dados dela; "bairros" = ela tem poucos endereços e usamos o estudo dos bairros onde atua; "cidade"; "sem_dados". Avise que o aluguel é da carteira da O2 (não o mercado inteiro), que o preço é estimativa e que o potencial é hipótese. Margem = comissão − repasse (inclui pró-labore), sem custos nem impostos.
 - ESTATÍSTICA DE MERCADO (03/11): perguntas sobre aluguel por bairro/cidade, preço do seguro por seguradora (prêmio em aluguéis), taxa de fechamento por faixa de aluguel ou margem por produto/seguradora → consultar_dados nas tabelas prontas analise_aluguel_cep5, analise_aluguel_cidade, analise_preco_seguradora, analise_conv_faixa e analise_margem (esta só admin). São da carteira da O2, 24 meses (margem: 2020 em diante, por ano de vigência), atualizadas 1x por dia.
 - Você só LÊ. Não altera nada, não envia e-mail, não baixa fatura, não cria card. Se pedirem, diga que isso é feito nas telas.
-${verComissao ? "" : "- Você NÃO tem acesso a comissão, repasse, receita, imposto, DAS nem dados do Nibo. Se perguntarem esses valores, diga que o dado não está liberado para o seu perfil (não tente outra ferramenta para contornar).\n"}
+${verComissao ? "" : "- Você NÃO tem acesso a comissão, repasse, receita, imposto, DAS, margem nem dados do Nibo (nível 3, financeiro da O2). Se perguntarem esses valores, diga que o dado é do financeiro e não está liberado para o seu perfil (não tente outra ferramenta para contornar).\n"}
 ESTILO
 - Português do Brasil, direto e curto (2 a 6 linhas), como mensagem de chat. *Negrito* nos números-chave. Sem tabelas nem títulos com #. Listas curtas com hífen se precisar.
 - Valores em reais no formato R$ 12.345 (sem centavos); abaixo de R$ 1.000 use centavos (R$ 74,14) e percentuais com uma casa (15,3%).
@@ -174,7 +181,9 @@ export type RespostaRobo = {
 export async function responderComoRobo(email: string, historico: TurnoChat[]): Promise<RespostaRobo> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY não configurada");
-  const verComissao = isAdmin(email);
+  // verComissao = nível FINANCEIRO (Matheus, William, Nathalie, Vanessa): comissão, repasse, receita, imposto, Nibo, margem. Ver lib/chat/niveisAcesso.ts.
+  if (!roboLiberadoPara(email)) throw new Error("sem acesso ao robô");
+  const verComissao = podeVerFinanceiroNoChat(email);
   const ferramentas = [...ferramentasDoRobo(verComissao), FERRAMENTA_LOGICA];
   let pessoal = false;
   let logica: string | null = null;

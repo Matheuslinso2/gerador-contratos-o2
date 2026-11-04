@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { chatVisivelPara } from "@/lib/chat/acesso";
+import { roboLiberadoPara } from "@/lib/chat/niveisAcesso";
 import { responderComoRobo, type TurnoChat } from "@/lib/chat/robo";
 
 export const maxDuration = 120;
@@ -14,7 +15,8 @@ export async function POST(req: Request) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user?.email || !chatVisivelPara(user.email)) return NextResponse.json({ erro: "sem acesso" }, { status: 403 });
+  // Robô O2 só para e-mail @o2seguros.com.br (níveis em lib/chat/niveisAcesso.ts); o chat entre pessoas segue com o gate do balão.
+  if (!user?.email || !chatVisivelPara(user.email) || !roboLiberadoPara(user.email)) return NextResponse.json({ erro: "sem acesso" }, { status: 403 });
 
   const corpo = (await req.json().catch(() => null)) as { mensagens?: TurnoChat[] } | null;
   const turnos = (corpo?.mensagens ?? [])
