@@ -1,0 +1,8 @@
+-- Seguradora do documento nas cotações sem seguradora (Matheus, 04/11/2026).
+-- atualizar_analise_produtos() passa a trocar seg = 'Não informada' pela seguradora do documento quando há
+-- vínculo EXATO em erp_cotacao_documento (cotacao_ref = id da cotação, 'bitrix:1046:<item>' do Incêndio ou
+-- 'planilha:<arquivo>:<aba>:<linha>'). Vínculo 'provavel' (e erp_cotacao_seguradora_provavel) NÃO entra:
+-- só com confirmação do Matheus. Segimob não é seguradora. Aplicado via migrations
+-- analise_produtos_seguradora_do_documento e analise_produtos_vinculo_planilha_exato (editam a função in loco:
+-- ver a definição viva com pg_get_functiondef('atualizar_analise_produtos'::regproc)).
+-- Efeito: Incêndio 2026, convertidas "Não informada" 619 -> 199.
