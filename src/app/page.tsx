@@ -9,12 +9,12 @@ import PainelCategorias from "@/components/PainelCategorias";
 import DashboardProducao from "@/components/DashboardProducao";
 import DashboardOperacao from "@/components/DashboardOperacao";
 import RankingImobiliarias from "@/components/RankingImobiliarias";
-import DashboardEstatisticas from "@/components/DashboardEstatisticas";
+import DashboardEstatisticas, { lerPeriodo, lerSecao } from "@/components/DashboardEstatisticas";
 import { PRODUTOS_LANDING_PAGE } from "@/lib/produtosLandingPage";
 import { buscarImobiliariaDoUsuario } from "@/lib/imobiliariaDoUsuario";
 
-export default async function Home({ searchParams }: { searchParams: Promise<{ aba?: string; rank?: string }> }) {
-  const { aba, rank } = await searchParams;
+export default async function Home({ searchParams }: { searchParams: Promise<{ aba?: string; rank?: string; sec?: string; per?: string }> }) {
+  const { aba, rank, sec, per } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -450,7 +450,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ a
         {verKpis && abaAtiva === "kpis" && <DashboardOperacao />}
         {verKpis && abaAtiva === "kpis" && <RankingImobiliarias mes={rank === "anterior" ? "anterior" : "atual"} />}
 
-        {verKpis && abaAtiva === "estatisticas" && <DashboardEstatisticas verMargem={isAdmin(user.email)} />}
+        {verKpis && abaAtiva === "estatisticas" && <DashboardEstatisticas verMargem={isAdmin(user.email)} secao={lerSecao(sec)} periodo={lerPeriodo(per)} />}
 
         {abaAtiva === "ferramentas" && <PainelCategorias categorias={categorias} />}
       </main>

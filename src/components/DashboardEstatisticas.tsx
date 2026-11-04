@@ -1,31 +1,67 @@
+import Link from "next/link";
+import type { ReactNode } from "react";
 import { createClient } from "@/lib/supabase/server";
 import InfoLegenda from "@/components/InfoLegenda";
 import { Cartao } from "./kpiUi";
 
-// Aba "Dados estatísticos O2" do Início (Matheus, 03/11/2026): visão de mercado dos
-// seguros da nossa carteira, a partir do que foi levantado na análise de preços e
-// fechamento (Fiança) e de margem por apólice. Tudo vem de tabelas prontas analise_*
-// (supabase/schema_*.sql), remontadas 1x por dia — a tela só lê. É a carteira da O2,
-// não o mercado inteiro. A parte de margem (comissão − repasse) só aparece para admin.
+// Aba "Dados estatísticos O2" do Início (Matheus, 03-04/11/2026): visão de mercado dos
+// seguros da NOSSA carteira (não é o mercado inteiro). Organizada em sub-abas por assunto:
+//   Visão geral (todos os produtos) · Funil de cotações · Preço · Região · Margem e repasse
+//   (admin) · Parceiros.
+// "Um número, uma resposta": Visão geral e Funil usam a MESMA fonte e a mesma conta do Power BI
+// (/producao) e da Imobiliária 360 (RPC kpis_producao: cada evento no mês em que aconteceu).
+// As visões por coorte (faixa de aluguel, mês a mês) contam a cotação no mês em que ENTROU e são
+// avisadas na tela. Preço, Região, Margem e Parceiros leem tabelas prontas analise_* (1x por dia),
+// cada uma com a janela indicada no próprio bloco. O filtro de período vale para Visão geral e Funil.
 
 const inteiro = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
 const dec1 = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const dec2 = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const reais = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 const MES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+const MIN_AMOSTRA = 30; // abaixo disso o percentual é ruído: mostra só o número de casos
 const pct = (a: number, b: number) => (b > 0 ? (100 * a) / b : null);
 const fp = (v: number | null) => (v == null ? "—" : `${dec1.format(v)}%`);
+const fpn = (a: number, b: number) => (b >= MIN_AMOSTRA ? fp(pct(a, b)) : "n baixo");
 const titulo = (s: string | null) => (s ? s.toLowerCase().replace(/(^|\s|-)\S/g, (c) => c.toUpperCase()) : "—");
+const rotuloMes = (m: string) => `${MES[Number(m.slice(5, 7)) - 1]}/${m.slice(0, 4)}`;
+function somarMeses(mes: string, n: number) {
+  const [a, m] = mes.split("-").map(Number);
+  const t = a * 12 + (m - 1) + n;
+  return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, "0")}`;
+}
 
-type Mes = { mes: string; cotacoes: number; decididas: number; fechadas: number; recusadas: number; perdidas: number; atualizado_em: string };
-type Faixa = { faixa: string; ordem: number; decididas: number; fechadas: number; recusadas: number; perdidas: number };
-type Preco = { seguradora: string; apolices: number; premio_alugueis_mediana: number; premio_alugueis_p25: number; premio_alugueis_p75: number };
-type Part = { ano: number; seguradora: string; apolices: number; pct: number };
-type Regiao = { cep5?: string; cidade: string | null; uf?: string | null; bairro?: string | null; n: number; p25: number; mediana: number; p75: number };
-type Imob = { chave: string; decididas_24m: number; fechadas_24m: number; base: string };
-type Margem = { produto: string; seguradora: string; ano: number; apolices: number; comissao: number; repasse: number };
+export type SecaoEstat = "geral" | "funil" | "preco" | "regiao" | "margem" | "parceiros";
+export type PeriodoEstat = "12" | "24" | "tudo";
+const SECOES: { k: SecaoEstat; t: string; admin?: boolean; periodo?: boolean }[] = [
+  { k: "geral", t: "Visão geral", periodo: true },
+  { k: "funil", t: "Funil de cotações", periodo: true },
+  { k: "preco", t: "Preço" },
+  { k: "regiao", t: "Região" },
+  { k: "margem", t: "Margem e repasse", admin: true },
+  { k: "parceiros", t: "Parceiros" },
+];
+const PERIODOS: { k: PeriodoEstat; t: string }[] = [
+  { k: "12", t: "12 meses" },
+  { k: "24", t: "24 meses" },
+  { k: "tudo", t: "Desde 2020" },
+];
 
-function Secao({ titulo: t, legenda, children }: { titulo: string; legenda?: string; children: React.ReactNode }) {
+export function lerSecao(v: string | undefined): SecaoEstat {
+  return SECOES.some((s) => s.k === v) ? (v as SecaoEstat) : "geral";
+}
+export function lerPeriodo(v: string | undefined): PeriodoEstat {
+  return v === "12" || v === "tudo" ? v : "24";
+}
+// Meses FECHADOS: o período termina no mês anterior ao atual (mês aberto distorceria taxas).
+function janela(per: PeriodoEstat) {
+  const hoje = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }).slice(0, 7);
+  const ate = somarMeses(hoje, -1);
+  const de = per === "tudo" ? "2020-01" : somarMeses(ate, per === "12" ? -11 : -23);
+  return { de, ate, hoje };
+}
+
+function Secao({ titulo: t, legenda, children }: { titulo: string; legenda?: string; children: ReactNode }) {
   return (
     <section className="space-y-3 rounded-2xl border border-gray-200 bg-white p-5">
       <h2 className="flex items-center gap-1 text-sm font-semibold uppercase tracking-wide text-o2-navy">
@@ -36,7 +72,6 @@ function Secao({ titulo: t, legenda, children }: { titulo: string; legenda?: str
     </section>
   );
 }
-
 function Barra({ valor, max, cor = "#00447E" }: { valor: number; max: number; cor?: string }) {
   return (
     <div className="h-2 w-full rounded-full bg-gray-100">
@@ -44,131 +79,351 @@ function Barra({ valor, max, cor = "#00447E" }: { valor: number; max: number; co
     </div>
   );
 }
+const Aviso = ({ children }: { children: ReactNode }) => <p className="text-[11px] leading-snug text-o2-cinza-medio">{children}</p>;
+const Erro = ({ msg }: { msg: string }) => <p className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">Não foi possível carregar agora ({msg}).</p>;
 
-export default async function DashboardEstatisticas({ verMargem }: { verMargem: boolean }) {
-  const sb = await createClient();
-  const [mes, faixa, preco, part, cidades, ceps, imobs, margem] = await Promise.all([
-    sb.from("analise_mercado_mes").select("*").order("mes"),
-    sb.from("analise_mercado_faixa").select("*").order("ordem"),
-    sb.from("analise_preco_seguradora").select("*").order("premio_alugueis_mediana"),
-    sb.from("analise_mercado_seguradora_ano").select("*").gte("ano", 2022).order("ano"),
-    sb.from("analise_aluguel_cidade").select("*").order("n", { ascending: false }).limit(10),
-    sb.from("analise_aluguel_cep5").select("*").gte("n", 30).order("n", { ascending: false }).limit(10),
-    sb.from("analise_visita_imob").select("chave, decididas_24m, fechadas_24m, base").eq("tipo", "i").gte("decididas_24m", 100),
-    verMargem ? sb.from("analise_margem").select("produto, seguradora, ano, apolices, comissao, repasse").in("ano", [2025, 2026]) : Promise.resolve({ data: [] as Margem[], error: null }),
-  ]);
-  const erro = [mes, faixa, preco, part, cidades, ceps, imobs, margem].find((r) => r.error)?.error?.message;
-  const meses = (mes.data ?? []) as Mes[];
-  if (erro || meses.length === 0) {
-    return <p className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">Não foi possível carregar os dados estatísticos agora{erro ? ` (${erro})` : ""}.</p>;
-  }
-  const faixas = (faixa.data ?? []) as Faixa[];
-  const precos = (preco.data ?? []) as Preco[];
-  const parts = (part.data ?? []) as Part[];
-  const dCid = (cidades.data ?? []) as Regiao[];
-  const dCep = (ceps.data ?? []) as Regiao[];
-  const dImob = (imobs.data ?? []) as Imob[];
-  const dMarg = ((margem.data ?? []) as Margem[]).map((m) => ({ ...m, comissao: Number(m.comissao), repasse: Number(m.repasse) }));
-
-  // Cartões: últimos 24 meses (mesma janela da tabela por faixa).
-  const tot = faixas.reduce((t, f) => ({ d: t.d + f.decididas, f: t.f + f.fechadas, r: t.r + f.recusadas, p: t.p + f.perdidas }), { d: 0, f: 0, r: 0, p: 0 });
-  const apolicesPreco = precos.reduce((t, p) => t + p.apolices, 0);
-  const premioTipico = apolicesPreco ? precos.reduce((t, p) => t + p.premio_alugueis_mediana * p.apolices, 0) / apolicesPreco : null;
-
-  // Série mensal (36 últimos meses com 100+ decididas).
-  // Os 2 meses mais recentes ficam de fora: ainda há cotações em andamento e a taxa aparece artificialmente baixa.
-  const corte = new Date();
-  corte.setDate(1);
-  corte.setMonth(corte.getMonth() - 2);
-  const serie = meses.filter((m) => m.decididas >= 100 && new Date(m.mes + "T12:00:00") <= corte).slice(-36);
-
-  // Imobiliárias: nomes do banco único.
-  const ordenadas = dImob.map((i) => ({ ...i, conv: (100 * i.fechadas_24m) / i.decididas_24m })).sort((a, b) => b.conv - a.conv);
-  const destaques = [...ordenadas.slice(0, 5), ...ordenadas.slice(-5)];
-  const { data: nomesRows } = destaques.length ? await sb.from("imobiliarias").select("id, nome, apelido").in("id", destaques.map((d) => d.chave)) : { data: [] };
-  const nome = new Map((nomesRows ?? []).map((r: { id: string; nome: string; apelido: string | null }) => [r.id, r.apelido || r.nome]));
-
-  // Margem (admin): por produto e Fiança por seguradora.
-  const porProduto = new Map<string, { ap: number; com: number; rep: number }>();
-  const fiancaSeg = new Map<string, { ap: number; com: number; rep: number }>();
-  for (const m of dMarg) {
-    const a = porProduto.get(m.produto) ?? { ap: 0, com: 0, rep: 0 };
-    a.ap += m.apolices; a.com += m.comissao; a.rep += m.repasse; porProduto.set(m.produto, a);
-    if (m.produto === "Fiança") {
-      const b = fiancaSeg.get(m.seguradora) ?? { ap: 0, com: 0, rep: 0 };
-      b.ap += m.apolices; b.com += m.comissao; b.rep += m.repasse; fiancaSeg.set(m.seguradora, b);
-    }
-  }
-  const produtos = [...porProduto.entries()].map(([p, v]) => ({ p, ...v, margem: v.com - v.rep })).sort((a, b) => b.margem - a.margem).filter((x) => x.ap >= 20);
-  const fiancaMargemApolice = porProduto.get("Fiança") ? (porProduto.get("Fiança")!.com - porProduto.get("Fiança")!.rep) / porProduto.get("Fiança")!.ap : null;
-  const atualizado = meses[meses.length - 1]?.atualizado_em;
-
-  const anos = [...new Set(parts.map((p) => p.ano))];
-  const segs = [...new Set(parts.map((p) => p.seguradora))].sort((a, b) => (parts.find((p) => p.seguradora === b && p.ano === anos.at(-1))?.pct ?? 0) - (parts.find((p) => p.seguradora === a && p.ano === anos.at(-1))?.pct ?? 0));
-  const maxFaixa = Math.max(...faixas.map((f) => pct(f.fechadas, f.decididas) ?? 0), 1);
-  const maxSerie = Math.max(...serie.map((m) => pct(m.fechadas, m.decididas) ?? 0), 1);
-
+export default async function DashboardEstatisticas({ verMargem, secao, periodo }: { verMargem: boolean; secao: SecaoEstat; periodo: PeriodoEstat }) {
+  const ativa = SECOES.find((s) => s.k === secao && (!s.admin || verMargem)) ?? SECOES[0];
+  const { de, ate } = janela(periodo);
+  const href = (s: SecaoEstat, p: PeriodoEstat) => `/?aba=estatisticas&sec=${s}&per=${p}`;
   return (
     <div className="space-y-5">
       <p className="text-xs text-o2-cinza-medio">
-        Visão de mercado dos seguros da <b>nossa carteira</b> (Fiança de contratação nova; não é o mercado inteiro). Últimos 24 meses, salvo onde indicado.
-        {atualizado ? ` Atualizado em ${new Date(atualizado).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}.` : ""}
+        Visão de mercado dos seguros da <b>nossa carteira</b> (não é o mercado inteiro). Os números de Visão geral e Funil são os mesmos do Power BI (/producao).
       </p>
-
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Cartao rotulo="Cotações que fecham" valor={fp(pct(tot.f, tot.d))} linhas={[`${inteiro.format(tot.f)} de ${inteiro.format(tot.d)} decididas`]} />
-        <Cartao rotulo="Recusadas pela seguradora" valor={fp(pct(tot.r, tot.d))} linhas={[`${inteiro.format(tot.r)} recusas`]} />
-        <Cartao rotulo="Fecham se aprovadas" valor={fp(pct(tot.f, tot.f + tot.p))} linhas={[`${inteiro.format(tot.p)} aprovadas que não fecharam`]} />
-        <Cartao
-          rotulo="Prêmio típico do ano"
-          valor={premioTipico == null ? "—" : `${dec2.format(premioTipico)} aluguéis`}
-          linhas={premioTipico == null ? [] : [`parcela mensal ≈ ${fp(((premioTipico / 12) * 100))} do aluguel`]}
-        />
-      </div>
-
-      <Secao
-        titulo="Fechamento por faixa de aluguel"
-        legenda="Das cotações de Fiança (contratação nova) já decididas nos últimos 24 meses, quantas fecharam, por faixa de aluguel. Quanto maior o aluguel, menos fecha. A recusa pela seguradora tem formato de U: maior nos aluguéis muito baixos e muito altos."
-      >
-        <div className="space-y-2">
-          {faixas.map((f) => (
-            <div key={f.faixa} className="grid grid-cols-[6.5rem_1fr_9rem] items-center gap-3 text-xs">
-              <span className="text-o2-cinza-escuro">R$ {f.faixa}</span>
-              <Barra valor={pct(f.fechadas, f.decididas) ?? 0} max={maxFaixa} />
-              <span className="tabular-nums text-o2-navy">
-                <b>{fp(pct(f.fechadas, f.decididas))}</b> fecha · <span className="text-o2-cinza-medio">{fp(pct(f.recusadas, f.decididas))} recusa</span>
-              </span>
-            </div>
+      <nav className="flex flex-wrap gap-1.5" aria-label="Assuntos">
+        {SECOES.filter((s) => !s.admin || verMargem).map((s) => (
+          <Link
+            key={s.k}
+            href={href(s.k, periodo)}
+            scroll={false}
+            aria-current={ativa.k === s.k ? "page" : undefined}
+            className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+              ativa.k === s.k ? "border-o2-navy bg-o2-navy text-white" : "border-gray-300 text-o2-cinza-escuro hover:border-o2-navy"
+            }`}
+          >
+            {s.t}
+          </Link>
+        ))}
+      </nav>
+      {ativa.periodo ? (
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-o2-cinza-medio">Período (meses fechados):</span>
+          {PERIODOS.map((p) => (
+            <Link
+              key={p.k}
+              href={href(ativa.k, p.k)}
+              scroll={false}
+              aria-current={periodo === p.k ? "true" : undefined}
+              className={`rounded-md px-2.5 py-1 font-medium ${periodo === p.k ? "bg-o2-coral/15 text-o2-navy" : "text-o2-cinza-medio hover:text-o2-navy"}`}
+            >
+              {p.t}
+            </Link>
           ))}
+          <span className="text-o2-cinza-medio">· {rotuloMes(de)} a {rotuloMes(ate)}</span>
         </div>
-      </Secao>
+      ) : (
+        <p className="text-[11px] text-o2-cinza-medio">Este assunto tem janela própria, indicada em cada quadro (o filtro de período vale para Visão geral e Funil).</p>
+      )}
+      {ativa.k === "geral" && <Geral de={de} ate={ate} verMargem={verMargem} />}
+      {ativa.k === "funil" && <Funil de={de} ate={ate} />}
+      {ativa.k === "preco" && <Preco />}
+      {ativa.k === "regiao" && <Regiao />}
+      {ativa.k === "margem" && verMargem && <Margem />}
+      {ativa.k === "parceiros" && <Parceiros />}
+    </div>
+  );
+}
 
+// ───────────────────────── Visão geral e Funil (fonte do Power BI) ─────────────────────────
+type Valores = { propostas: number; premio: number; comissao: number };
+type Cot = { produto: string; entradas: number; aprovacoes: number; recusas: number; perdas: number; conversoes: number; premio_convertido: number };
+type Ren = { produto: string; entradas: number; conversoes: number; perdas: number; premio_convertido: number };
+type Kpis = {
+  resumo: Valores;
+  resumo_ano_anterior: Valores;
+  por_produto: (Valores & { produto: string; premio_ano_anterior: number })[];
+  funil_por_produto: Cot[];
+  renovacoes_por_produto: Ren[];
+};
+const PRODUTOS: Record<string, { rotulo: string; cor: string; regua: string; calc: (p: Cot) => [number, number] }> = {
+  fianca: { rotulo: "Seguro Fiança", cor: "#F8540D", regua: "convertidas ÷ recebidas", calc: (p) => [p.conversoes, p.entradas] },
+  re: { rotulo: "Incêndio / Ramos elementares", cor: "#01192e", regua: "efetivadas ÷ recebidas", calc: (p) => [p.conversoes, p.entradas] },
+  capitalizacao: { rotulo: "Capitalização", cor: "#2E6FB7", regua: "emitidos ÷ (emitidos + perdidos)", calc: (p) => [p.conversoes, p.conversoes + p.perdas] },
+  automovel: { rotulo: "Automóvel", cor: "#9CA3AF", regua: "convertidas ÷ (convertidas + perdidas)", calc: (p) => [p.conversoes, p.conversoes + p.perdas] },
+};
+const ORDEM = ["fianca", "re", "capitalizacao", "automovel"];
+
+async function kpisDoPeriodo(de: string, ate: string) {
+  const sb = await createClient();
+  const { data, error } = await sb.rpc("kpis_producao", { p_de: de, p_ate: ate, p_produtos: null, p_grupos: null, p_imobs: null, p_seguradoras: null });
+  return { k: data as Kpis | null, erro: error?.message ?? null };
+}
+const variacao = (atual: number, anterior: number) => (anterior > 0 ? `${atual >= anterior ? "+" : "−"}${dec1.format(Math.abs((atual / anterior - 1) * 100))}% vs ano anterior` : "sem base no ano anterior");
+
+async function Geral({ de, ate, verMargem }: { de: string; ate: string; verMargem: boolean }) {
+  const { k, erro } = await kpisDoPeriodo(de, ate);
+  if (!k) return <Erro msg={erro ?? "sem dados"} />;
+  const cot = ORDEM.map((p) => k.funil_por_produto.find((x) => x.produto === p)).filter((x): x is Cot => !!x);
+  const ren = ORDEM.map((p) => k.renovacoes_por_produto.find((x) => x.produto === p)).filter((x): x is Ren => !!x && x.entradas + x.conversoes + x.perdas > 0);
+  const entradas = cot.reduce((t, p) => t + p.entradas, 0);
+  const conv = cot.reduce((t, p) => t + p.conversoes, 0);
+  const premioTotal = k.por_produto.reduce((t, p) => t + p.premio, 0) || 1;
+  return (
+    <>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Cartao rotulo="Cotações recebidas" valor={inteiro.format(entradas)} linhas={[`${inteiro.format(conv)} convertidas`]} />
+        <Cartao rotulo="Apólices efetivadas (Corp)" valor={inteiro.format(k.resumo.propostas)} linhas={[variacao(k.resumo.propostas, k.resumo_ano_anterior.propostas)]} />
+        <Cartao rotulo="Prêmio líquido" valor={reais.format(k.resumo.premio)} linhas={[variacao(k.resumo.premio, k.resumo_ano_anterior.premio)]} />
+        {verMargem && <Cartao rotulo="Comissão" valor={reais.format(k.resumo.comissao)} linhas={[variacao(k.resumo.comissao, k.resumo_ano_anterior.comissao)]} />}
+      </div>
       <Secao
-        titulo="Fechamento mês a mês"
-        legenda="% das cotações decididas que fecharam, por mês em que a cotação ENTROU (difere do painel da Fiança, que conta cada evento no mês em que acontece). Só meses com 100 ou mais decididas; os 2 meses mais recentes ficam de fora, porque ainda há cotações em andamento e a taxa apareceria baixa demais."
+        titulo="Todos os produtos"
+        legenda="Mesma fonte e mesma conta do Power BI (/producao) e da Imobiliária 360. Cotação conta no mês em que entrou; conversão e perda, no mês em que aconteceram. Apólices = documentos efetivados no Corp pelo mês de início de vigência. Cada produto usa a régua de conversão do próprio painel."
       >
-        <div className="flex h-28 items-end gap-0.5">
-          {serie.map((m) => {
-            const v = pct(m.fechadas, m.decididas) ?? 0;
-            const d = new Date(m.mes + "T12:00:00");
-            return (
-              <div key={m.mes} className="group flex h-full flex-1 flex-col justify-end" title={`${MES[d.getMonth()]}/${d.getFullYear()}: ${dec1.format(v)}% (${m.fechadas} de ${m.decididas})`}>
-                <div className="rounded-t bg-o2-navy/80 group-hover:bg-o2-coral" style={{ height: `${(v / maxSerie) * 100}%` }} />
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="text-left uppercase tracking-wide text-o2-cinza-medio">
+              <tr>
+                <th className="py-1">Produto</th>
+                <th className="py-1 text-right">Cotações recebidas</th>
+                <th className="py-1 text-right">Convertidas</th>
+                <th className="py-1 text-right">Conversão</th>
+                <th className="py-1 text-right">Apólices</th>
+                <th className="py-1 text-right">Prêmio</th>
+                <th className="py-1 text-right">Parte do prêmio</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ORDEM.map((p) => {
+                const c = cot.find((x) => x.produto === p);
+                const a = k.por_produto.find((x) => x.produto === p);
+                if (!c && !a) return null;
+                const [x, y] = c ? PRODUTOS[p].calc(c) : [0, 0];
+                return (
+                  <tr key={p} className="border-t border-gray-100">
+                    <td className="py-1.5 font-medium text-o2-navy">{PRODUTOS[p].rotulo}</td>
+                    <td className="py-1.5 text-right tabular-nums">{c ? inteiro.format(c.entradas) : "—"}</td>
+                    <td className="py-1.5 text-right tabular-nums">{c ? inteiro.format(c.conversoes) : "—"}</td>
+                    <td className="py-1.5 text-right tabular-nums">
+                      {fpn(x, y)}
+                      <span className="block text-[10px] text-o2-cinza-medio">{PRODUTOS[p].regua}</span>
+                    </td>
+                    <td className="py-1.5 text-right tabular-nums">{a ? inteiro.format(a.propostas) : "—"}</td>
+                    <td className="py-1.5 text-right tabular-nums">
+                      {a ? reais.format(a.premio) : "—"}
+                      {a && <span className="block text-[10px] text-o2-cinza-medio">{variacao(a.premio, a.premio_ano_anterior)}</span>}
+                    </td>
+                    <td className="w-24 py-1.5 pl-3">
+                      {a && <Barra valor={a.premio} max={premioTotal} cor={PRODUTOS[p].cor} />}
+                      {a && <span className="text-[10px] text-o2-cinza-medio">{fp(pct(a.premio, premioTotal))}</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <Aviso>Automóvel não tem imobiliária vinculada; entra só nos totais. Incêndio conta itens (cada endereço), como no painel de Ramos Elementares.</Aviso>
+      </Secao>
+      {ren.length > 0 && (
+        <Secao
+          titulo="Renovações"
+          legenda="Série separada das cotações novas. Taxa = renovadas ÷ (renovadas + não renovadas), a mesma régua dos painéis de renovação (Fiança e Ramos Elementares)."
+        >
+          <table className="w-full text-xs">
+            <thead className="text-left uppercase tracking-wide text-o2-cinza-medio">
+              <tr>
+                <th className="py-1">Produto</th>
+                <th className="py-1 text-right">Recebidas</th>
+                <th className="py-1 text-right">Renovadas</th>
+                <th className="py-1 text-right">Não renovadas</th>
+                <th className="py-1 text-right">Taxa</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ren.map((r) => (
+                <tr key={r.produto} className="border-t border-gray-100">
+                  <td className="py-1.5 font-medium text-o2-navy">{PRODUTOS[r.produto]?.rotulo ?? r.produto}</td>
+                  <td className="py-1.5 text-right tabular-nums">{inteiro.format(r.entradas)}</td>
+                  <td className="py-1.5 text-right tabular-nums">{inteiro.format(r.conversoes)}</td>
+                  <td className="py-1.5 text-right tabular-nums">{inteiro.format(r.perdas)}</td>
+                  <td className="py-1.5 text-right font-semibold tabular-nums">{fpn(r.conversoes, r.conversoes + r.perdas)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Secao>
+      )}
+    </>
+  );
+}
+
+type Fx = { mes: string; faixa: string; ordem: number; decididas: number; fechadas: number; recusadas: number; perdidas: number };
+type MesCoorte = { mes: string; decididas: number; fechadas: number };
+
+async function Funil({ de, ate }: { de: string; ate: string }) {
+  const sb = await createClient();
+  const { k, erro } = await kpisDoPeriodo(de, ate);
+  // Coorte: os 2 meses mais recentes ficam de fora (ainda há cotações em andamento e a taxa apareceria baixa/recusa alta demais).
+  const hoje = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }).slice(0, 7);
+  const corteCoorte = somarMeses(hoje, -2);
+  const fimCoorte = ate < corteCoorte ? ate : corteCoorte;
+  const [fx, ms] = await Promise.all([
+    sb.from("analise_mercado_mes_faixa").select("mes, faixa, ordem, decididas, fechadas, recusadas, perdidas").gte("mes", `${de}-01`).lte("mes", `${fimCoorte}-28`),
+    sb.from("analise_mercado_mes").select("mes, decididas, fechadas").gte("mes", `${de}-01`).lte("mes", `${fimCoorte}-28`).order("mes"),
+  ]);
+  if (!k || fx.error || ms.error) return <Erro msg={erro ?? fx.error?.message ?? ms.error?.message ?? "sem dados"} />;
+  const f = k.funil_por_produto.find((x) => x.produto === "fianca");
+  const cot = ORDEM.map((p) => k.funil_por_produto.find((x) => x.produto === p)).filter((x): x is Cot => !!x);
+
+  const porFaixa = new Map<string, { ordem: number; d: number; f: number; r: number; p: number }>();
+  for (const r of (fx.data ?? []) as Fx[]) {
+    const a = porFaixa.get(r.faixa) ?? { ordem: r.ordem, d: 0, f: 0, r: 0, p: 0 };
+    a.d += r.decididas; a.f += r.fechadas; a.r += r.recusadas; a.p += r.perdidas; porFaixa.set(r.faixa, a);
+  }
+  const faixas = [...porFaixa.entries()].sort((a, b) => a[1].ordem - b[1].ordem);
+  const totC = faixas.reduce((t, [, v]) => ({ d: t.d + v.d, f: t.f + v.f, r: t.r + v.r, p: t.p + v.p }), { d: 0, f: 0, r: 0, p: 0 });
+  const maxFaixa = Math.max(...faixas.map(([, v]) => pct(v.f, v.d) ?? 0), 1);
+  const serie = ((ms.data ?? []) as MesCoorte[]).filter((m) => m.decididas >= 100).slice(-36);
+  const maxSerie = Math.max(...serie.map((m) => pct(m.fechadas, m.decididas) ?? 0), 1);
+
+  return (
+    <>
+      {f && (
+        <Secao
+          titulo="Seguro Fiança: funil do período"
+          legenda="Mesma conta do painel /seguro-fianca e do Power BI: cada evento conta no mês em que aconteceu (entrada, aprovação, recusa, perda, conversão). As taxas são razões entre eventos do período, a régua do painel (convertidas ÷ recebidas). Para comparar perfis de cotação use a visão por coorte, mais abaixo."
+        >
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            <Cartao rotulo="Recebidas" valor={inteiro.format(f.entradas)} linhas={["cotações novas"]} />
+            <Cartao rotulo="Aprovadas" valor={inteiro.format(f.aprovacoes)} linhas={[`${fp(pct(f.aprovacoes, f.entradas))} das recebidas`]} />
+            <Cartao rotulo="Recusadas" valor={inteiro.format(f.recusas)} linhas={[`${fp(pct(f.recusas, f.entradas))} das recebidas`]} />
+            <Cartao rotulo="Perdidas" valor={inteiro.format(f.perdas)} linhas={[`${fp(pct(f.perdas, f.entradas))} das recebidas`]} />
+            <Cartao rotulo="Convertidas" valor={inteiro.format(f.conversoes)} linhas={[`${fp(pct(f.conversoes, f.entradas))} das recebidas`]} />
+          </div>
+        </Secao>
+      )}
+      <Secao
+        titulo="Todos os produtos"
+        legenda="Funil de cotações novas de cada produto, na régua de conversão do painel dele. Incêndio conta itens (cada endereço)."
+      >
+        <table className="w-full text-xs">
+          <thead className="text-left uppercase tracking-wide text-o2-cinza-medio">
+            <tr>
+              <th className="py-1">Produto</th>
+              <th className="py-1 text-right">Recebidas</th>
+              <th className="py-1 text-right">Aprovadas</th>
+              <th className="py-1 text-right">Recusadas</th>
+              <th className="py-1 text-right">Perdidas</th>
+              <th className="py-1 text-right">Convertidas</th>
+              <th className="py-1 text-right">Conversão</th>
+            </tr>
+          </thead>
+          <tbody>
+            {cot.map((c) => {
+              const [x, y] = PRODUTOS[c.produto].calc(c);
+              return (
+                <tr key={c.produto} className="border-t border-gray-100">
+                  <td className="py-1.5 font-medium text-o2-navy">{PRODUTOS[c.produto].rotulo}</td>
+                  <td className="py-1.5 text-right tabular-nums">{inteiro.format(c.entradas)}</td>
+                  <td className="py-1.5 text-right tabular-nums text-o2-cinza-medio">{c.aprovacoes ? inteiro.format(c.aprovacoes) : "—"}</td>
+                  <td className="py-1.5 text-right tabular-nums text-o2-cinza-medio">{c.recusas ? inteiro.format(c.recusas) : "—"}</td>
+                  <td className="py-1.5 text-right tabular-nums">{inteiro.format(c.perdas)}</td>
+                  <td className="py-1.5 text-right tabular-nums">{inteiro.format(c.conversoes)}</td>
+                  <td className="py-1.5 text-right font-semibold tabular-nums">
+                    {fpn(x, y)}
+                    <span className="block text-[10px] font-normal text-o2-cinza-medio">{PRODUTOS[c.produto].regua}</span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </Secao>
+      <Secao
+        titulo="Fiança: fechamento por faixa de aluguel (coorte de entrada)"
+        legenda="Aqui cada cotação conta no mês em que ENTROU e só entram as já decididas (fechada, perdida ou recusada), por isso as taxas diferem das do quadro acima (que soma eventos do mês). Serve para comparar perfis: quanto maior o aluguel, menos fecha; a recusa pela seguradora é maior nos aluguéis muito baixos e muito altos. Os 2 meses mais recentes ficam de fora (cotações ainda em andamento). Faixas com menos de 30 casos mostram só o número."
+      >
+        <p className="text-xs text-o2-cinza-escuro">
+          No período: <b>{fpn(totC.f, totC.d)}</b> fecham, <b>{fpn(totC.r, totC.d)}</b> são recusadas pela seguradora e, das aprovadas, <b>{fpn(totC.f, totC.f + totC.p)}</b> fecham ({inteiro.format(totC.d)} cotações decididas, {rotuloMes(de)} a {rotuloMes(fimCoorte)}).
+        </p>
+        {faixas.length === 0 ? (
+          <Aviso>Sem cotações decididas neste período.</Aviso>
+        ) : (
+          <div className="space-y-2">
+            {faixas.map(([nome, v]) => (
+              <div key={nome} className="grid grid-cols-[6.5rem_1fr_11rem] items-center gap-3 text-xs">
+                <span className="text-o2-cinza-escuro">R$ {nome}</span>
+                <Barra valor={v.d >= MIN_AMOSTRA ? (pct(v.f, v.d) ?? 0) : 0} max={maxFaixa} />
+                <span className="tabular-nums text-o2-navy">
+                  <b>{fpn(v.f, v.d)}</b> fecha · <span className="text-o2-cinza-medio">{fpn(v.r, v.d)} recusa · n={inteiro.format(v.d)}</span>
+                </span>
               </div>
-            );
-          })}
-        </div>
-        <div className="flex justify-between text-[10px] text-o2-cinza-medio">
-          <span>{serie[0] ? `${MES[new Date(serie[0].mes + "T12:00:00").getMonth()]}/${new Date(serie[0].mes + "T12:00:00").getFullYear()}` : ""}</span>
-          <span>passe o mouse nas barras para ver o mês</span>
-          <span>{serie.at(-1) ? `${MES[new Date(serie.at(-1)!.mes + "T12:00:00").getMonth()]}/${new Date(serie.at(-1)!.mes + "T12:00:00").getFullYear()}` : ""}</span>
-        </div>
+            ))}
+          </div>
+        )}
       </Secao>
+      <Secao titulo="Fiança: fechamento mês a mês (coorte de entrada)" legenda="% das cotações decididas que fecharam, por mês em que a cotação entrou. Só meses com 100 ou mais decididas; os 2 meses mais recentes ficam de fora porque ainda há cotações em andamento. Passe o mouse nas barras para ver o mês.">
+        {serie.length === 0 ? (
+          <Aviso>Sem meses suficientes neste período.</Aviso>
+        ) : (
+          <>
+            <div className="flex h-28 items-end gap-0.5">
+              {serie.map((m) => {
+                const v = pct(m.fechadas, m.decididas) ?? 0;
+                return (
+                  <div key={m.mes} className="group flex h-full flex-1 flex-col justify-end" title={`${rotuloMes(m.mes)}: ${dec1.format(v)}% (${m.fechadas} de ${m.decididas})`}>
+                    <div className="rounded-t bg-o2-navy/80 group-hover:bg-o2-coral" style={{ height: `${(v / maxSerie) * 100}%` }} />
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex justify-between text-[10px] text-o2-cinza-medio">
+              <span>{rotuloMes(serie[0].mes)}</span>
+              <span>{rotuloMes(serie[serie.length - 1].mes)}</span>
+            </div>
+          </>
+        )}
+      </Secao>
+    </>
+  );
+}
 
+// ───────────────────────── Preço ─────────────────────────
+type Preco = { seguradora: string; apolices: number; premio_alugueis_mediana: number; premio_alugueis_p25: number; premio_alugueis_p75: number };
+type Part = { ano: number; seguradora: string; apolices: number; pct: number };
+
+async function Preco() {
+  const sb = await createClient();
+  const [preco, part] = await Promise.all([
+    sb.from("analise_preco_seguradora").select("*").order("premio_alugueis_mediana"),
+    sb.from("analise_mercado_seguradora_ano").select("*").gte("ano", 2022).order("ano"),
+  ]);
+  if (preco.error || part.error) return <Erro msg={preco.error?.message ?? part.error?.message ?? ""} />;
+  const precos = (preco.data ?? []) as Preco[];
+  const parts = (part.data ?? []) as Part[];
+  const anos = [...new Set(parts.map((p) => p.ano))];
+  const nAno = new Map<number, number>();
+  for (const p of parts) nAno.set(p.ano, (nAno.get(p.ano) ?? 0) + p.apolices);
+  const ult = anos.at(-1);
+  const segs = [...new Set(parts.map((p) => p.seguradora))].sort((a, b) => (parts.find((p) => p.seguradora === b && p.ano === ult)?.pct ?? 0) - (parts.find((p) => p.seguradora === a && p.ano === ult)?.pct ?? 0));
+  const apolicesPreco = precos.reduce((t, p) => t + p.apolices, 0);
+  const tipico = apolicesPreco ? precos.reduce((t, p) => t + p.premio_alugueis_mediana * p.apolices, 0) / apolicesPreco : null;
+  return (
+    <>
+      <Aviso>
+        <b>Atenção:</b> o preço só é conhecido para cotações que <b>fecharam</b> (a seguradora e o prêmio das perdidas e recusadas não ficam guardados nas planilhas). Desde novembro/2026 o sistema passou a guardar a oferta de cada seguradora também nas perdidas (Bitrix); quando houver volume, entra aqui a comparação entre ofertas.
+      </Aviso>
       <Secao
-        titulo="Preço praticado por seguradora"
-        legenda="Prêmio anual em número de aluguéis (mediana das apólices de Fiança fechadas de 2024 em diante; metade fica entre o 25% e o 75%). A parcela mensal é o prêmio ÷ 12. O preço de cada seguradora é o que ela efetivamente cobrou nas apólices fechadas, não uma tabela."
+        titulo="Fiança: preço praticado por seguradora"
+        legenda="Prêmio anual em número de aluguéis (mediana das apólices de Fiança fechadas de 2024 em diante; metade fica entre o 25% e o 75%). Parcela mensal = prêmio ÷ 12. É o que cada seguradora cobrou nas apólices fechadas, não uma tabela de preços."
       >
+        {tipico != null && (
+          <p className="text-xs text-o2-cinza-escuro">
+            Preço típico da carteira: cerca de <b>{dec2.format(tipico)} aluguéis por ano</b> (média das medianas, ponderada pelo número de apólices), isto é, parcela mensal ≈ {fp((tipico / 12) * 100)} do aluguel.
+          </p>
+        )}
         <table className="w-full text-xs">
           <thead className="text-left uppercase tracking-wide text-o2-cinza-medio">
             <tr>
@@ -192,16 +447,15 @@ export default async function DashboardEstatisticas({ verMargem }: { verMargem: 
           </tbody>
         </table>
       </Secao>
-
       {anos.length > 0 && (
-        <Secao titulo="Participação de cada seguradora nas apólices fechadas" legenda="% das cotações de Fiança fechadas em cada ano (pelo ano da cotação) por seguradora. Mostra a migração da carteira entre seguradoras.">
+        <Secao titulo="Fiança: participação de cada seguradora nas apólices fechadas" legenda="% das cotações de Fiança fechadas em cada ano (pelo ano da cotação) por seguradora. Mostra a migração da carteira. Anos com menos de 30 apólices de uma seguradora aparecem como 'n baixo'.">
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="text-left uppercase tracking-wide text-o2-cinza-medio">
                 <tr>
                   <th className="py-1">Seguradora</th>
                   {anos.map((a) => (
-                    <th key={a} className="py-1 text-right">{a}</th>
+                    <th key={a} className="py-1 text-right">{a}<span className="block text-[10px] font-normal normal-case">{inteiro.format(nAno.get(a) ?? 0)} apól.</span></th>
                   ))}
                 </tr>
               </thead>
@@ -210,9 +464,9 @@ export default async function DashboardEstatisticas({ verMargem }: { verMargem: 
                   <tr key={s} className="border-t border-gray-100">
                     <td className="py-1.5 font-medium text-o2-navy">{s}</td>
                     {anos.map((a) => {
-                      const v = parts.find((p) => p.seguradora === s && p.ano === a)?.pct;
+                      const x = parts.find((p) => p.seguradora === s && p.ano === a);
                       return (
-                        <td key={a} className="py-1.5 text-right tabular-nums text-o2-cinza-escuro">{v == null ? "—" : fp(v)}</td>
+                        <td key={a} className="py-1.5 text-right tabular-nums text-o2-cinza-escuro">{x == null ? "—" : x.apolices >= MIN_AMOSTRA ? fp(x.pct) : "n baixo"}</td>
                       );
                     })}
                   </tr>
@@ -220,101 +474,181 @@ export default async function DashboardEstatisticas({ verMargem }: { verMargem: 
               </tbody>
             </table>
           </div>
+          <Aviso>{ult ? `${ult}: dados até o último dia atualizado.` : ""}</Aviso>
         </Secao>
       )}
+    </>
+  );
+}
 
-      <div className="grid gap-5 lg:grid-cols-2">
-        <Secao titulo="Aluguel por cidade" legenda="Aluguel das cotações de Fiança (contratação nova, 24 meses) da carteira da O2 nas 10 cidades com mais cotações. Mediana e faixa em que cai metade dos contratos (25% a 75%).">
-          <table className="w-full text-xs">
-            <tbody>
-              {dCid.map((c) => (
-                <tr key={`${c.cidade}${c.uf}`} className="border-t border-gray-100 first:border-0">
-                  <td className="py-1.5 font-medium text-o2-navy">{titulo(c.cidade)}<span className="block text-[10px] font-normal text-o2-cinza-medio">{inteiro.format(c.n)} cotações</span></td>
-                  <td className="py-1.5 text-right tabular-nums">{reais.format(c.mediana)}<span className="block text-[10px] text-o2-cinza-medio">{reais.format(c.p25)} a {reais.format(c.p75)}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Secao>
-        <Secao titulo="Aluguel por bairro (CEP)" legenda="Mesma base, agrupada pelos 5 primeiros dígitos do CEP (bairro). Só regiões com 30 ou mais cotações; o nome do bairro é o mais frequente nas cotações.">
-          <table className="w-full text-xs">
-            <tbody>
-              {dCep.map((c) => (
-                <tr key={c.cep5} className="border-t border-gray-100 first:border-0">
-                  <td className="py-1.5 font-medium text-o2-navy">{c.bairro ? titulo(c.bairro) : `CEP ${c.cep5}-***`}<span className="block text-[10px] font-normal text-o2-cinza-medio">{titulo(c.cidade)} · {inteiro.format(c.n)} cotações</span></td>
-                  <td className="py-1.5 text-right tabular-nums">{reais.format(c.mediana)}<span className="block text-[10px] text-o2-cinza-medio">{reais.format(c.p25)} a {reais.format(c.p75)}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Secao>
-      </div>
+// ───────────────────────── Região ─────────────────────────
+type Regiao = { cep5?: string; cidade: string | null; uf?: string | null; bairro?: string | null; n: number; p25: number; mediana: number; p75: number };
 
-      {destaques.length > 0 && (
-        <Secao titulo="Imobiliárias: quem mais e quem menos fecha" legenda="Imobiliárias com 100 ou mais cotações de Fiança decididas em 24 meses, ordenadas pela taxa de fechamento. O número depende também do perfil de aluguel e da recusa pela seguradora de cada uma.">
-          <div className="grid gap-5 sm:grid-cols-2">
-            {[
-              { rotulo: "Mais fecham", lista: ordenadas.slice(0, 5) },
-              { rotulo: "Menos fecham", lista: ordenadas.slice(-5).reverse() },
-            ].map((g) => (
-              <div key={g.rotulo}>
-                <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-o2-cinza-medio">{g.rotulo}</p>
-                <table className="w-full text-xs">
-                  <tbody>
-                    {g.lista.map((i) => (
-                      <tr key={i.chave} className="border-t border-gray-100 first:border-0">
-                        <td className="py-1.5 text-o2-navy">{titulo(nome.get(i.chave) ?? "?")}<span className="block text-[10px] text-o2-cinza-medio">{inteiro.format(i.decididas_24m)} decididas</span></td>
-                        <td className="py-1.5 text-right font-semibold tabular-nums">{fp(i.conv)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+async function Regiao() {
+  const sb = await createClient();
+  const [cidades, ceps] = await Promise.all([
+    sb.from("analise_aluguel_cidade").select("*").order("n", { ascending: false }).limit(10),
+    sb.from("analise_aluguel_cep5").select("*").gte("n", 30).order("n", { ascending: false }).limit(10),
+  ]);
+  if (cidades.error || ceps.error) return <Erro msg={cidades.error?.message ?? ceps.error?.message ?? ""} />;
+  const dCid = (cidades.data ?? []) as Regiao[];
+  const dCep = (ceps.data ?? []) as Regiao[];
+  return (
+    <div className="grid gap-5 lg:grid-cols-2">
+      <Secao titulo="Aluguel por cidade (24 meses)" legenda="Aluguel das cotações de Fiança (contratação nova, 24 meses) da carteira da O2 nas 10 cidades com mais cotações. Mediana e faixa em que cai metade dos contratos (25% a 75%). Não é o mercado inteiro.">
+        <table className="w-full text-xs">
+          <tbody>
+            {dCid.map((c) => (
+              <tr key={`${c.cidade}${c.uf}`} className="border-t border-gray-100 first:border-0">
+                <td className="py-1.5 font-medium text-o2-navy">{titulo(c.cidade)}<span className="block text-[10px] font-normal text-o2-cinza-medio">{inteiro.format(c.n)} cotações</span></td>
+                <td className="py-1.5 text-right tabular-nums">{reais.format(c.mediana)}<span className="block text-[10px] text-o2-cinza-medio">{reais.format(c.p25)} a {reais.format(c.p75)}</span></td>
+              </tr>
             ))}
-          </div>
-        </Secao>
-      )}
-
-      {verMargem && produtos.length > 0 && (
-        <Secao
-          titulo="Margem por apólice vendida (2025-2026)"
-          legenda="Margem = comissão da apólice − repasse previsto à imobiliária (inclui o pró-labore, que é repasse negociado). Apólices vigentes ou vencidas, pelo início da vigência, 2025 e 2026 até agora. É margem de comissão: não desconta custos nem impostos. Só administradores veem."
-        >
-          <div className="grid gap-3 sm:grid-cols-3">
-            {produtos.slice(0, 3).map((p) => (
-              <Cartao key={p.p} rotulo={p.p} valor={reais.format(p.com - p.rep)} linhas={[`${inteiro.format(p.ap)} apólices`, `${reais.format((p.com - p.rep) / p.ap)} por apólice`, `repasse = ${fp(pct(p.rep, p.com))} da comissão`]} />
+          </tbody>
+        </table>
+      </Secao>
+      <Secao titulo="Aluguel por bairro (24 meses, CEP)" legenda="Mesma base, agrupada pelos 5 primeiros dígitos do CEP (bairro). Só regiões com 30 ou mais cotações; o nome do bairro é o mais frequente nas cotações.">
+        <table className="w-full text-xs">
+          <tbody>
+            {dCep.map((c) => (
+              <tr key={c.cep5} className="border-t border-gray-100 first:border-0">
+                <td className="py-1.5 font-medium text-o2-navy">{c.bairro ? titulo(c.bairro) : `CEP ${c.cep5}-***`}<span className="block text-[10px] font-normal text-o2-cinza-medio">{titulo(c.cidade)} · {inteiro.format(c.n)} cotações</span></td>
+                <td className="py-1.5 text-right tabular-nums">{reais.format(c.mediana)}<span className="block text-[10px] text-o2-cinza-medio">{reais.format(c.p25)} a {reais.format(c.p75)}</span></td>
+              </tr>
             ))}
-          </div>
-          {fiancaSeg.size > 0 && (
+          </tbody>
+        </table>
+      </Secao>
+    </div>
+  );
+}
+
+// ───────────────────────── Parceiros ─────────────────────────
+type Imob = { chave: string; decididas_24m: number; fechadas_24m: number };
+
+async function Parceiros() {
+  const sb = await createClient();
+  const { data, error } = await sb.from("analise_visita_imob").select("chave, decididas_24m, fechadas_24m").eq("tipo", "i").gte("decididas_24m", 100);
+  if (error) return <Erro msg={error.message} />;
+  const ordenadas = ((data ?? []) as Imob[]).map((i) => ({ ...i, conv: (100 * i.fechadas_24m) / i.decididas_24m })).sort((a, b) => b.conv - a.conv);
+  const destaques = [...ordenadas.slice(0, 5), ...ordenadas.slice(-5)];
+  const { data: nomesRows } = destaques.length ? await sb.from("imobiliarias").select("id, nome, apelido").in("id", destaques.map((d) => d.chave)) : { data: [] };
+  const nome = new Map((nomesRows ?? []).map((r: { id: string; nome: string; apelido: string | null }) => [r.id, r.apelido || r.nome]));
+  if (ordenadas.length === 0) return <Aviso>Nenhuma imobiliária com 100 ou mais cotações decididas em 24 meses.</Aviso>;
+  return (
+    <Secao titulo="Imobiliárias: quem mais e quem menos fecha (24 meses)" legenda="Imobiliárias com 100 ou mais cotações de Fiança decididas em 24 meses, ordenadas pela taxa de fechamento. O número depende também do perfil de aluguel e da recusa pela seguradora de cada uma. Para a ficha completa de uma imobiliária, peça no chat interno.">
+      <div className="grid gap-5 sm:grid-cols-2">
+        {[
+          { rotulo: "Mais fecham", lista: ordenadas.slice(0, 5) },
+          { rotulo: "Menos fecham", lista: ordenadas.slice(-5).reverse() },
+        ].map((g) => (
+          <div key={g.rotulo}>
+            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-o2-cinza-medio">{g.rotulo}</p>
             <table className="w-full text-xs">
-              <thead className="text-left uppercase tracking-wide text-o2-cinza-medio">
-                <tr>
-                  <th className="py-1">Fiança por seguradora</th>
-                  <th className="py-1 text-right">Apólices</th>
-                  <th className="py-1 text-right">Margem</th>
-                  <th className="py-1 text-right">Por apólice</th>
-                  <th className="py-1 text-right">Repasse / comissão</th>
-                </tr>
-              </thead>
               <tbody>
-                {[...fiancaSeg.entries()]
-                  .filter(([, v]) => v.ap >= 30)
-                  .sort((a, b) => b[1].com - b[1].rep - (a[1].com - a[1].rep))
-                  .map(([s, v]) => (
-                    <tr key={s} className="border-t border-gray-100">
-                      <td className="py-1.5 font-medium text-o2-navy">{titulo(s)}</td>
-                      <td className="py-1.5 text-right tabular-nums">{inteiro.format(v.ap)}</td>
-                      <td className="py-1.5 text-right tabular-nums">{reais.format(v.com - v.rep)}</td>
-                      <td className="py-1.5 text-right tabular-nums">{reais.format((v.com - v.rep) / v.ap)}</td>
-                      <td className="py-1.5 text-right tabular-nums text-o2-cinza-medio">{fp(pct(v.rep, v.com))}</td>
-                    </tr>
-                  ))}
+                {g.lista.map((i) => (
+                  <tr key={i.chave} className="border-t border-gray-100 first:border-0">
+                    <td className="py-1.5 text-o2-navy">{titulo(nome.get(i.chave) ?? "?")}<span className="block text-[10px] text-o2-cinza-medio">{inteiro.format(i.decididas_24m)} decididas</span></td>
+                    <td className="py-1.5 text-right font-semibold tabular-nums">{fp(i.conv)}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
-          )}
-          {fiancaMargemApolice != null && <p className="text-[11px] text-o2-cinza-medio">Margem média por apólice de Fiança: {reais.format(fiancaMargemApolice)}.</p>}
+          </div>
+        ))}
+      </div>
+    </Secao>
+  );
+}
+
+// ───────────────────────── Margem e repasse (admin) ─────────────────────────
+type Margem = { produto: string; seguradora: string; ano: number; apolices: number; premio_liquido: number; comissao: number; repasse: number };
+
+async function Margem() {
+  const sb = await createClient();
+  const { data, error } = await sb.from("analise_margem").select("produto, seguradora, ano, apolices, premio_liquido, comissao, repasse").gte("ano", 2022);
+  if (error) return <Erro msg={error.message} />;
+  const m = ((data ?? []) as Margem[]).map((x) => ({ ...x, premio_liquido: Number(x.premio_liquido), comissao: Number(x.comissao), repasse: Number(x.repasse) }));
+  type Ac = { ap: number; prem: number; com: number; rep: number };
+  const soma = (linhas: Margem[]): Ac => linhas.reduce((t, x) => ({ ap: t.ap + x.apolices, prem: t.prem + x.premio_liquido, com: t.com + x.comissao, rep: t.rep + x.repasse }), { ap: 0, prem: 0, com: 0, rep: 0 });
+  const recentes = m.filter((x) => x.ano >= 2025);
+  const porProduto = [...new Set(recentes.map((x) => x.produto))]
+    .map((p) => ({ p, ...soma(recentes.filter((x) => x.produto === p)) }))
+    .filter((x) => x.ap >= 20)
+    .sort((a, b) => b.com - b.rep - (a.com - a.rep));
+  const fiancaSeg = [...new Set(recentes.filter((x) => x.produto === "Fiança").map((x) => x.seguradora))]
+    .map((s) => ({ s, ...soma(recentes.filter((x) => x.produto === "Fiança" && x.seguradora === s)) }))
+    .filter((x) => x.ap >= 30)
+    .sort((a, b) => b.com - b.rep - (a.com - a.rep));
+  const anos = [2022, 2023, 2024, 2025, 2026];
+  const principais = ["Fiança", "Incêndio imobiliário", "Capitalização"];
+  return (
+    <>
+      <Aviso>Margem = comissão − repasse previsto à imobiliária (inclui o pró-labore, que é repasse negociado). Apólices vigentes ou vencidas, pelo ano de início de vigência. É margem de comissão: não desconta custos nem impostos. Só administradores veem esta parte.</Aviso>
+      <Secao titulo="Margem por produto (2025–2026)" legenda="Soma de 2025 e 2026 (até agora). Mostra quanto cada produto deixa depois do repasse e quanto sobra por apólice.">
+        <div className="grid gap-3 sm:grid-cols-3">
+          {porProduto.slice(0, 3).map((p) => (
+            <Cartao key={p.p} rotulo={p.p} valor={reais.format(p.com - p.rep)} linhas={[`${inteiro.format(p.ap)} apólices`, `${reais.format((p.com - p.rep) / p.ap)} por apólice`, `repasse = ${fp(pct(p.rep, p.com))} da comissão`]} />
+          ))}
+        </div>
+      </Secao>
+      <Secao titulo="Evolução por ano" legenda="Para cada produto principal: comissão sobre o prêmio, repasse sobre a comissão e margem por apólice, ano a ano (2026 até agora). Mostra como o negócio mudou: por exemplo, o repasse do Incêndio imobiliário caiu muito desde 2020.">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="text-left uppercase tracking-wide text-o2-cinza-medio">
+              <tr>
+                <th className="py-1">Produto · indicador</th>
+                {anos.map((a) => (
+                  <th key={a} className="py-1 text-right">{a}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {principais.flatMap((p) => {
+                const porAno = anos.map((a) => soma(m.filter((x) => x.produto === p && x.ano === a)));
+                return [
+                  { k: `${p}|a`, rot: `${p} · comissão / prêmio`, v: porAno.map((s) => (s.ap >= 20 ? fp(pct(s.com, s.prem)) : "—")) },
+                  { k: `${p}|b`, rot: `${p} · repasse / comissão`, v: porAno.map((s) => (s.ap >= 20 ? fp(pct(s.rep, s.com)) : "—")) },
+                  { k: `${p}|c`, rot: `${p} · margem por apólice`, v: porAno.map((s) => (s.ap >= 20 ? reais.format((s.com - s.rep) / s.ap) : "—")) },
+                ].map((l) => (
+                  <tr key={l.k} className="border-t border-gray-100">
+                    <td className="py-1.5 text-o2-navy">{l.rot}</td>
+                    {l.v.map((x, i) => (
+                      <td key={i} className="py-1.5 text-right tabular-nums text-o2-cinza-escuro">{x}</td>
+                    ))}
+                  </tr>
+                ));
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Secao>
+      {fiancaSeg.length > 0 && (
+        <Secao titulo="Fiança: margem por seguradora (2025–2026)" legenda="Seguradoras com 30 ou mais apólices de Fiança no período.">
+          <table className="w-full text-xs">
+            <thead className="text-left uppercase tracking-wide text-o2-cinza-medio">
+              <tr>
+                <th className="py-1">Seguradora</th>
+                <th className="py-1 text-right">Apólices</th>
+                <th className="py-1 text-right">Margem</th>
+                <th className="py-1 text-right">Por apólice</th>
+                <th className="py-1 text-right">Repasse / comissão</th>
+              </tr>
+            </thead>
+            <tbody>
+              {fiancaSeg.map((v) => (
+                <tr key={v.s} className="border-t border-gray-100">
+                  <td className="py-1.5 font-medium text-o2-navy">{titulo(v.s)}</td>
+                  <td className="py-1.5 text-right tabular-nums">{inteiro.format(v.ap)}</td>
+                  <td className="py-1.5 text-right tabular-nums">{reais.format(v.com - v.rep)}</td>
+                  <td className="py-1.5 text-right tabular-nums">{reais.format((v.com - v.rep) / v.ap)}</td>
+                  <td className="py-1.5 text-right tabular-nums text-o2-cinza-medio">{fp(pct(v.rep, v.com))}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </Secao>
       )}
-    </div>
+    </>
   );
 }
