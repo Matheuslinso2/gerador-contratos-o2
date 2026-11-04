@@ -9,4 +9,9 @@
 -- Gatilho erp_negocio_garantir_trg (erp_documentos): apólice nova ganha negócio + código na hora; mudança de documento_renovado_id
 --   atualiza negocio_anterior_id. Cotação e duplicado não recebem código (código só existe depois de entrar no ERP; regra 28/10).
 -- View erp_documento_negocio: código de qualquer documento (endosso e demais herdam da apólice-mãe via documento_pai_id),
---   com código do ciclo anterior e da renovação. Fatura não tem código próprio de negócio (agrupa várias apólices).
+--   com código do ciclo anterior e da renovação. Fatura não tem código de negócio (agrupa várias apólices): tem o seu próprio, abaixo.
+--
+-- Código da fatura (Matheus 04/11, migration erp_fatura_codigo_serie_dv): erp_faturas.codigo FAT-NNNNNN-D (mesmo DV), série
+--   erp_fatura_codigo_seq, gatilho erp_fatura_codigo_trg dá código a fatura nova. Mês da fatura = código/competência (FAT-000197-0/2026-09).
+--   View erp_fatura_codigos: cada item e movimentação com o código da fatura, do mês e do negócio da apólice cobrada.
+--   Funções genéricas: erp_codigo_formatar(prefixo, seq), erp_codigo_valido(codigo).
