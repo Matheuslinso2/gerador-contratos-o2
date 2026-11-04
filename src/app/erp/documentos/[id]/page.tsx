@@ -5,6 +5,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import EmailsDoDocumento from "./EmailsDoDocumento";
 import CabecalhoDocumento from "../CabecalhoDocumento";
+import NumeroApolice from "../NumeroApolice";
 import { dataDoRepasse, repasseEhFixo, repassePorParcela } from "@/lib/erp/repasseParcelas";
 import { formatarData, formatarReais } from "@/lib/sinistros/regras";
 import RascunhoAutomatico from "@/components/RascunhoAutomatico";
@@ -238,7 +239,7 @@ export default async function ErpDocumentoFichaPage({ params, searchParams }: { 
             </div>
             <Campo rotulo="Dt. proposta" valor={formatarData(d.dt_proposta)} />
             <Campo rotulo="Dt. emissão" valor={formatarData(d.dt_emissao)} />
-            <Campo rotulo="Nº da apólice" valor={d.numero_apolice ?? "0 (não emitida)"} />
+            <Campo rotulo="Nº da apólice" valor={<NumeroApolice numero={d.numero_apolice} vazio="0 (não emitida)" />} />
             <Campo rotulo="Nº endosso / proposta" info="Primeiro o número do endosso (0 quando o documento não é endosso), depois o número da proposta, quando houver." valor={`${d.numero_endosso ?? "0"} / ${d.numero_proposta ?? "—"}`} />
             <Campo rotulo="Vigência" valor={`${formatarData(d.vigencia_inicio)} a ${formatarData(d.vigencia_fim)}`} />
             <Campo rotulo="Competência" info="Data de competência gravada no documento (vem do Corp). Define a que mês o documento pertence nas contas por mês." valor={formatarData(d.competencia)} />

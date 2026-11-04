@@ -1,6 +1,7 @@
 import { formatarData } from "@/lib/sinistros/regras";
 import { SITUACOES, tipoDoCabecalho } from "@/lib/erp/documentos";
 import InfoLegenda from "@/components/InfoLegenda";
+import NumeroApolice, { numerosDoLote } from "./NumeroApolice";
 
 // ERP O2 — cabeçalho padrão do documento (Matheus 28/10/2026): compacto, com o que identifica o seguro de relance:
 // Tipo de documento · Titular do seguro · Produto · Seguradora · Vigência. O mesmo padrão vale nas listas e nas demais telas.
@@ -58,7 +59,7 @@ export default function CabecalhoDocumento({ c }: { c: DadosCabecalho }) {
           Código O2 do documento <strong className="text-gray-900">{c.nosso_numero}</strong>
         </span>
         <span className="text-sm text-gray-600">
-          Nº da apólice <strong className="text-gray-900">{c.numero_apolice ?? "não emitida"}</strong>
+          {numerosDoLote(c.numero_apolice).length > 1 ? "Apólices" : "Nº da apólice"} <strong className="text-gray-900"><NumeroApolice numero={c.numero_apolice} /></strong>
         </span>
         <span className="text-xs text-gray-500">{c.nosso_numero_corp ? `Nosso nº do Corp ${c.nosso_numero_corp}` : "nasceu no ERP"}</span>
         <span className="ml-auto flex flex-wrap items-center gap-1.5">

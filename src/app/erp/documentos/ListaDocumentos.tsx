@@ -10,6 +10,7 @@ import { lerFiltros, VISOES } from "@/lib/erp/filtros";
 import { codigoCliente } from "@/lib/erp/clientes";
 import FiltrosErp from "../FiltrosErp";
 import BotaoVerDocumento from "../BotaoVerDocumento";
+import NumeroApolice from "./NumeroApolice";
 import InfoLegenda from "@/components/InfoLegenda";
 import PainelResumoAba from "@/app/erp/PainelResumoAba";
 import NavegadorMes from "@/app/erp/NavegadorMes";
@@ -204,7 +205,7 @@ export default async function ListaDocumentos({
                         </Link>
                         {d.nosso_numero_corp ? <span className="block text-xs font-normal text-gray-400">Corp {d.nosso_numero_corp}</span> : null}
                       </td>
-                      <td className="px-3 py-2">{d.numero_apolice ?? <span className="text-gray-400">0</span>}</td>
+                      <td className="px-3 py-2">{d.numero_apolice ? <NumeroApolice numero={d.numero_apolice} /> : <span className="text-gray-400">0</span>}</td>
                       <td className="px-3 py-2">
                         {d.imobiliaria_id ? (
                           <Link href={`/admin/imobiliarias/${d.imobiliaria_id}`} className="hover:underline">
