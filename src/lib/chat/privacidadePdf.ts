@@ -48,7 +48,7 @@ const PARTES_PESSOAIS = new Set([
 
 export function chamadaTemDadosPessoais(nome: string, entrada: unknown): boolean {
   const e = (entrada ?? {}) as Record<string, unknown>;
-  if (nome === "buscar_pessoa" || nome === "buscar_nos_paineis" || nome === "buscar_arquivos_documento") return true;
+  if (nome === "buscar_pessoa" || nome === "buscar_nos_paineis" || nome === "listar_cotacoes_com_pessoa" || nome === "buscar_arquivos_documento") return true;
   if (nome === "consultar_dados" || nome === "consultar_tabela") {
     const tabela = String(e.tabela ?? "");
     if (TABELAS_PESSOAIS.has(tabela)) return true;

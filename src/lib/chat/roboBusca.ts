@@ -24,6 +24,23 @@ export const FERRAMENTAS_BUSCA: Anthropic.Tool[] = [
       "Procura um texto (nome de segurado/titular/locatário, nº da apólice, nome do negociador/cotador, imobiliária) dentro dos cards e negociações dos retratos dos painéis (Ramos Elementares, Fiança, Renovação de Fiança, Capitalização, Auto) nos últimos meses, incluindo meses futuros de renovação. É o jeito de achar uma cotação em andamento pelo nome do cliente ou saber o que um cotador está trabalhando.",
     input_schema: { type: "object", properties: { termo: { type: "string" } }, required: ["termo"] },
   },
+  {
+    name: "listar_cotacoes_com_pessoa",
+    description:
+      "Lista as cotações do Bitrix (producao_resolvida, fonte bitrix) de uma ou mais fichas de imobiliária, JÁ COM o nome do INQUILINO analisado (Seguro Fiança) ou do SEGURADO/titular (outros ramos: Ramos Elementares etc.), tirado do título do card. Use quando o pedido for uma lista de cotações/efetivadas/convertidas 'com o inquilino' ou 'com o segurado'. Informe imobiliaria_ids (pegue com buscar_imobiliaria, todas as fichas do grupo), produto (fianca, re, capitalizacao, automovel; opcional), campo_data ('efetivacao' = data em que virou proposta, ou 'recebimento') com de/ate (AAAA-MM-DD) e opcionalmente status_padrao. Capitalização e Automóvel ainda não têm o nome ligado à cotação: o retorno diz 'nome não disponível'. Resposta com nome de pessoa NÃO vira PDF.",
+    input_schema: {
+      type: "object",
+      properties: {
+        imobiliaria_ids: { type: "array", items: { type: "string" } },
+        produto: { type: "string" },
+        campo_data: { type: "string", enum: ["efetivacao", "recebimento"] },
+        de: { type: "string" },
+        ate: { type: "string", description: "Inclusive." },
+        status_padrao: { type: "string", description: "Ex.: Convertido (efetivada), Em análise, Aprovado, Perdido, Recusado." },
+      },
+      required: ["imobiliaria_ids", "de", "ate"],
+    },
+  },
 ];
 
 type Pessoa = { id: string; cpf: string | null; nome: string | null; email: string | null; telefone: string | null; codigo_cliente: number | string | null; codigo_corp_cliente: number | string | null; tipo_documento: string | null };
@@ -292,9 +309,66 @@ async function buscarNosPaineis(termoOriginal: string, verComissao: boolean): Pr
   });
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const DATA_RE = /^\d{4}-\d{2}-\d{2}$/;
+// Funil do card que guarda a cotação de cada produto (o item_id se repete entre funis, por isso a preferência).
+const FUNIL_POR_PRODUTO: Record<string, number> = { fianca: 1042, re: 1046, capitalizacao: 1048, automovel: 1050 };
+
+async function listarCotacoesComPessoa(entrada: unknown, verComissao: boolean): Promise<string> {
+  const e = (entrada ?? {}) as { imobiliaria_ids?: unknown; produto?: string; campo_data?: string; de?: string; ate?: string; status_padrao?: string };
+  const ids = (Array.isArray(e.imobiliaria_ids) ? e.imobiliaria_ids.map(String) : []).filter((x) => UUID_RE.test(x));
+  if (!ids.length) return JSON.stringify({ erro: "Informe imobiliaria_ids válidos (use buscar_imobiliaria)." });
+  if (!e.de || !e.ate || !DATA_RE.test(e.de) || !DATA_RE.test(e.ate)) return JSON.stringify({ erro: "Informe de e ate no formato AAAA-MM-DD." });
+  const campo = e.campo_data === "recebimento" ? "data_recebimento" : "data_efetivacao";
+  const sb = createServiceClient();
+  let q = sb
+    .from("producao_resolvida")
+    .select("produto, tipo, fonte, status_padrao, seguradora, data_recebimento, data_efetivacao, responsavel, premio, comissao, aluguel, origem_bitrix_id, imobiliaria_exibicao")
+    .eq("fonte", "bitrix")
+    .in("imobiliaria_id", ids)
+    .gte(campo, e.de)
+    .lte(campo, e.ate)
+    .order(campo, { ascending: true })
+    .limit(300);
+  if (e.produto) q = q.eq("produto", e.produto);
+  if (e.status_padrao) q = q.eq("status_padrao", e.status_padrao);
+  const { data, error } = await q;
+  if (error) return `Erro ao consultar: ${error.message}`;
+  const linhas = (data ?? []) as Record<string, unknown>[];
+  const itens = [...new Set(linhas.map((l) => Number(l.origem_bitrix_id)).filter((n) => Number.isFinite(n)))];
+  const titulos = new Map<number, { funil: number; titulo: string }[]>();
+  if (itens.length) {
+    const { data: origens } = await sb.from("erp_origens").select("item_id, entity_type_id, titulo").in("item_id", itens).ilike("sistema", "bitrix%");
+    for (const o of (origens ?? []) as { item_id: number; entity_type_id: number; titulo: string | null }[]) {
+      if (!o.titulo) continue;
+      const l = titulos.get(o.item_id) ?? [];
+      l.push({ funil: o.entity_type_id, titulo: o.titulo });
+      titulos.set(o.item_id, l);
+    }
+  }
+  const saida = linhas.map((l) => {
+    const { origem_bitrix_id: card, ...resto } = l;
+    const cand = titulos.get(Number(card)) ?? [];
+    const preferido = cand.find((c) => c.funil === FUNIL_POR_PRODUTO[String(l.produto)]);
+    const nome = preferido?.titulo ?? null;
+    return {
+      ...resto,
+      card,
+      pessoa: nome ?? "nome não disponível",
+      ...(nome ? {} : cand.length ? { avisoNome: "o card com esse número está em outro funil; nome não confiável" } : {}),
+    };
+  });
+  return compacto({
+    total: saida.length,
+    cotacoes: verComissao ? saida : semCamposFinanceiros(saida),
+    nota: "'pessoa' = título do card: no Seguro Fiança é o inquilino (às vezes com o cônjuge/co-inquilino separados por /); nos demais ramos é o segurado/titular. Campo 'tipo': novo, renovacao ou emissao (emissao = apólice do Corp, não é cotação).",
+  });
+}
+
 export async function executarFerramentaBusca(nome: string, entrada: unknown, verComissao: boolean): Promise<string | null> {
   try {
     if (nome === "buscar_pessoa") return await buscarPessoa((entrada as { termo: string }).termo ?? "", verComissao);
+    if (nome === "listar_cotacoes_com_pessoa") return await listarCotacoesComPessoa(entrada, verComissao);
     if (nome === "buscar_nos_paineis") return await buscarNosPaineis((entrada as { termo: string }).termo ?? "", verComissao);
     return null;
   } catch (err) {
