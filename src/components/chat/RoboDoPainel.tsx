@@ -1,12 +1,36 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ComLinks } from "./textoRobo";
 import { PAINEIS_ROBO } from "@/lib/chat/paineis";
+import { createClient } from "@/lib/supabase/browser";
 
 // Campo do Robô O2 DENTRO de cada painel (pedido do Matheus, 04/11/2026): não é outro chat, é uma caixa de
 // pergunta no próprio painel. A pergunta vai para o mesmo robô do chat da equipe (mesmas ferramentas e mesmos
 // níveis de acesso), mas com o foco neste painel e neste mês. Somente leitura.
+//
+// Quando a resposta cita cards, aparece o menu "Cards da resposta" (Todos os cards ou só alguns) e a lista de
+// uma linha por card. Cada lista ou PDF ganha um protocolo (RO2-AAAAMMDD-XXXXXX) com o caminho guardado no banco.
+
+type CardLista = {
+  id: number;
+  produto: string;
+  produtoRotulo: string;
+  nome: string;
+  papelNome: string;
+  etapa: string;
+  etapaAoVivo: boolean;
+  funil: string | null;
+  seguradora: string | null;
+  imobiliaria: string | null;
+  endereco: string | null;
+  premio: number | null;
+  comissao: number | null;
+  repasse: number | null;
+  valores: "efetivado" | "previsto" | "sem_valor";
+  url: string;
+  atualizadoEm: string;
+};
 
 type Troca = {
   id: string;
@@ -17,15 +41,212 @@ type Troca = {
   dadosPessoais?: boolean;
   logica?: string | null;
   fontes?: string[];
+  cards?: CardLista[];
+  conversa?: { role: "user" | "assistant"; content: string }[];
 };
+
+const brl = (v: number | null) => (v === null ? "—" : v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
+const hora = (iso: string) => new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+
+function MenuCards({ troca, painelId, competencia }: { troca: Troca; painelId: string; competencia: string }) {
+  const cards = troca.cards ?? [];
+  const [aberto, setAberto] = useState(false);
+  const [marcados, setMarcados] = useState<Set<number>>(new Set());
+  const [lista, setLista] = useState<CardLista[] | null>(null);
+  const [protocolo, setProtocolo] = useState<string | null>(null);
+  const [gravando, setGravando] = useState(false);
+  const todos = marcados.size === cards.length && cards.length > 0;
+
+  function alternar(id: number) {
+    setMarcados((atual) => {
+      const novo = new Set(atual);
+      if (novo.has(id)) novo.delete(id);
+      else novo.add(id);
+      return novo;
+    });
+  }
+
+  async function ver() {
+    const escolhidos = cards.filter((c) => marcados.has(c.id));
+    if (!escolhidos.length) return;
+    setLista(escolhidos);
+    setAberto(false);
+    setProtocolo(null);
+    setGravando(true);
+    try {
+      const r = await fetch("/api/chat/robo/protocolo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          painel: { id: painelId, competencia },
+          conversa: troca.conversa,
+          logica: troca.logica,
+          fontes: troca.fontes,
+          cardsSelecionados: escolhidos.map((c) => ({ id: c.id, produto: c.produto })),
+          todosOsCards: escolhidos.length === cards.length,
+          totalCardsDaResposta: cards.length,
+        }),
+      });
+      const j = (await r.json().catch(() => ({}))) as { protocolo?: string };
+      if (r.ok && j.protocolo) setProtocolo(j.protocolo);
+    } catch {
+      /* a lista aparece mesmo sem protocolo */
+    } finally {
+      setGravando(false);
+    }
+  }
+
+  return (
+    <div className="mt-3 rounded-xl border border-o2-navy/15 bg-white p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold text-o2-navy">
+          {cards.length === 1 ? "1 card citado" : `${cards.length} cards citados`} — ver todas as informações?
+        </span>
+        <div className="relative">
+          <button type="button" onClick={() => setAberto((v) => !v)} aria-expanded={aberto} className="rounded-full border border-o2-navy/30 px-3 py-1 text-xs font-semibold text-o2-navy hover:bg-o2-navy/5">
+            Cards da resposta ▾ {marcados.size > 0 && <span className="ml-1 text-o2-coral">({marcados.size})</span>}
+          </button>
+          {aberto && (
+            <div className="absolute left-0 z-20 mt-1 max-h-72 w-80 max-w-[85vw] overflow-auto rounded-xl border border-gray-200 bg-white p-2 text-xs shadow-xl">
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 font-semibold hover:bg-gray-50">
+                <input type="checkbox" checked={todos} onChange={() => setMarcados(todos ? new Set() : new Set(cards.map((c) => c.id)))} />
+                Todos os cards ({cards.length})
+              </label>
+              <div className="my-1 border-t border-gray-100" />
+              {cards.map((c) => (
+                <label key={c.id} className="flex cursor-pointer items-start gap-2 rounded-lg px-2 py-1.5 hover:bg-gray-50">
+                  <input type="checkbox" checked={marcados.has(c.id)} onChange={() => alternar(c.id)} className="mt-0.5" />
+                  <span>
+                    <span className="font-semibold">#{c.id}</span> · {c.produtoRotulo}
+                    <span className="block text-gray-500">{c.nome} · {c.etapa}</span>
+                  </span>
+                </label>
+              ))}
+              <button type="button" onClick={() => void ver()} disabled={!marcados.size} className="mt-2 w-full rounded-full bg-o2-coral px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">
+                Ver informações dos cards marcados
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {lista && (
+        <div className="mt-3">
+          {protocolo ? (
+            <p className="mb-2 text-[11px] text-gray-500">
+              Protocolo <strong className="select-all text-o2-navy">{protocolo}</strong> · pedido por você; o caminho desta lista ficou guardado.
+            </p>
+          ) : gravando ? (
+            <p className="mb-2 text-[11px] text-gray-500">Registrando o protocolo…</p>
+          ) : null}
+          {lista.length === 1 ? (
+            <DetalheCard c={lista[0]} />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[820px] text-left text-[11.5px]">
+                <thead className="text-[10px] uppercase tracking-wide text-gray-500">
+                  <tr>
+                    <th className="p-1.5">Card</th>
+                    <th className="p-1.5">Produto</th>
+                    <th className="p-1.5">Nome</th>
+                    <th className="p-1.5">Etapa (SPA)</th>
+                    <th className="p-1.5">Seguradora</th>
+                    <th className="p-1.5">Imobiliária</th>
+                    <th className="p-1.5">Endereço</th>
+                    <th className="p-1.5 text-right">Prêmio</th>
+                    <th className="p-1.5 text-right">Comissão</th>
+                    <th className="p-1.5 text-right">Repasse</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lista.map((c) => (
+                    <tr key={c.id} className="border-t border-gray-100 align-top">
+                      <td className="p-1.5">
+                        <a href={c.url} target="_blank" rel="noopener noreferrer" className="font-semibold text-o2-blue underline">
+                          #{c.id}
+                        </a>
+                      </td>
+                      <td className="p-1.5">{c.produtoRotulo}</td>
+                      <td className="p-1.5">
+                        {c.nome}
+                        <span className="block text-[10px] text-gray-400">{c.papelNome}</span>
+                      </td>
+                      <td className="p-1.5">
+                        {c.etapa}
+                        {!c.etapaAoVivo && <span className="block text-[10px] text-amber-700">cópia do banco</span>}
+                      </td>
+                      <td className="p-1.5">{c.seguradora ?? "—"}</td>
+                      <td className="p-1.5">{c.imobiliaria ?? "—"}</td>
+                      <td className="p-1.5">{c.endereco ?? "—"}</td>
+                      <td className="p-1.5 text-right tabular-nums">{brl(c.premio)}</td>
+                      <td className="p-1.5 text-right tabular-nums">{brl(c.comissao)}</td>
+                      <td className="p-1.5 text-right tabular-nums">{brl(c.repasse)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="mt-1 text-[10px] text-gray-400">
+                Etapa lida no Bitrix em {hora(lista[0].atualizadoEm)}. Valores: efetivado quando o card já virou proposta; previsto nos demais; “—” quando o card não guarda o valor.
+                O repasse só existe por card em Ramos Elementares.
+              </p>
+            </div>
+          )}
+          <p className="mt-1 text-[10px] text-gray-400">Lista com nome de pessoa fica só na tela (sem PDF).</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DetalheCard({ c }: { c: CardLista }) {
+  const campos: [string, string][] = [
+    ["Card", `#${c.id} (abrir no Bitrix)`],
+    ["Produto", c.produtoRotulo],
+    [`Nome (${c.papelNome})`, c.nome],
+    ["Etapa atual no SPA", `${c.etapa}${c.etapaAoVivo ? "" : " (cópia do banco)"}`],
+    ["Seguradora", c.seguradora ?? "—"],
+    ["Imobiliária", c.imobiliaria ?? "—"],
+    ["Endereço", c.endereco ?? "—"],
+    [`Prêmio${c.valores === "previsto" ? " (previsto)" : c.valores === "efetivado" ? " (efetivado)" : ""}`, brl(c.premio)],
+    ["Comissão da corretora", brl(c.comissao)],
+    ["Repasse", brl(c.repasse)],
+  ];
+  return (
+    <dl className="grid gap-x-6 gap-y-1.5 text-xs sm:grid-cols-2">
+      {campos.map(([k, v]) => (
+        <div key={k}>
+          <dt className="text-[10px] uppercase tracking-wide text-gray-500">{k}</dt>
+          <dd className="font-medium">
+            {k === "Card" ? (
+              <a href={c.url} target="_blank" rel="noopener noreferrer" className="text-o2-blue underline">
+                {v}
+              </a>
+            ) : (
+              v
+            )}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
 
 export default function RoboDoPainel({ painelId, competencia }: { painelId: string; competencia: string }) {
   const painel = PAINEIS_ROBO[painelId];
+  const supabase = useMemo(() => createClient(), []);
   const [texto, setTexto] = useState("");
   const [trocas, setTrocas] = useState<Troca[]>([]);
   const [pensando, setPensando] = useState(false);
-  const [pdfs, setPdfs] = useState<Record<string, { estado: "gerando" | "pronto" | "erro"; url?: string }>>({});
+  const [pdfs, setPdfs] = useState<Record<string, { estado: "gerando" | "pronto" | "erro"; url?: string; protocolo?: string | null }>>({});
+  const [ehMatheus, setEhMatheus] = useState(false);
+  const [codigo, setCodigo] = useState("");
+  const [aviso, setAviso] = useState<string | null>(null);
   const entrada = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    void supabase.auth.getUser().then(({ data }) => setEhMatheus(data.user?.email?.toLowerCase() === "matheus@o2seguros.com.br"));
+  }, [supabase]);
+
   if (!painel) return null;
 
   async function perguntar(pergunta: string) {
@@ -35,6 +256,7 @@ export default function RoboDoPainel({ painelId, competencia }: { painelId: stri
     const anteriores = trocas.filter((t) => t.resposta).slice(-4);
     setTrocas((atual) => [{ id, pergunta: p }, ...atual]);
     setTexto("");
+    setAviso(null);
     setPensando(true);
     try {
       const mensagens = [
@@ -49,10 +271,14 @@ export default function RoboDoPainel({ painelId, competencia }: { painelId: stri
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mensagens, painel: { id: painelId, competencia } }),
       });
-      const j = (await r.json().catch(() => ({}))) as { resposta?: string; pdfPermitido?: boolean; dadosPessoais?: boolean; logica?: string | null; fontes?: string[] };
+      const j = (await r.json().catch(() => ({}))) as { resposta?: string; pdfPermitido?: boolean; dadosPessoais?: boolean; logica?: string | null; fontes?: string[]; cards?: CardLista[] };
       if (!r.ok || !j.resposta) throw new Error("falha");
       setTrocas((atual) =>
-        atual.map((t) => (t.id === id ? { ...t, resposta: j.resposta, pdfPermitido: !!j.pdfPermitido, dadosPessoais: !!j.dadosPessoais, logica: j.logica ?? null, fontes: j.fontes ?? [] } : t))
+        atual.map((t) =>
+          t.id === id
+            ? { ...t, resposta: j.resposta, pdfPermitido: !!j.pdfPermitido, dadosPessoais: !!j.dadosPessoais, logica: j.logica ?? null, fontes: j.fontes ?? [], cards: j.cards ?? [], conversa: [...mensagens, { role: "assistant" as const, content: j.resposta! }] }
+            : t
+        )
       );
     } catch {
       setTrocas((atual) => atual.map((t) => (t.id === id ? { ...t, erro: true } : t)));
@@ -67,14 +293,30 @@ export default function RoboDoPainel({ painelId, competencia }: { painelId: stri
       const r = await fetch("/api/chat/robo/relatorio", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pergunta: t.pergunta, resposta: t.resposta, logica: t.logica, fontes: t.fontes }),
+        body: JSON.stringify({ pergunta: t.pergunta, resposta: t.resposta, logica: t.logica, fontes: t.fontes, painel: { id: painelId, competencia }, conversa: t.conversa?.slice(0, -1) }),
       });
-      const j = (await r.json().catch(() => ({}))) as { url?: string };
+      const j = (await r.json().catch(() => ({}))) as { url?: string; protocolo?: string | null };
       if (!r.ok || !j.url) throw new Error("falha");
-      setPdfs((p) => ({ ...p, [t.id]: { estado: "pronto", url: j.url } }));
+      setPdfs((p) => ({ ...p, [t.id]: { estado: "pronto", url: j.url, protocolo: j.protocolo } }));
     } catch {
       setPdfs((p) => ({ ...p, [t.id]: { estado: "erro" } }));
     }
+  }
+
+  // Só o Matheus (por enquanto): cola o protocolo e a pergunta original volta para o campo, para refazer a pesquisa (mesmo padrão ou trocando imobiliária/época).
+  async function carregarProtocolo() {
+    const c = codigo.trim().toUpperCase();
+    if (!c) return;
+    setAviso(null);
+    const r = await fetch(`/api/chat/robo/protocolo?codigo=${encodeURIComponent(c)}`);
+    const j = (await r.json().catch(() => ({}))) as { pergunta?: string; erro?: string; painel_id?: string; competencia?: string; email?: string };
+    if (!r.ok || !j.pergunta) {
+      setAviso(j.erro ?? "Não consegui abrir esse protocolo.");
+      return;
+    }
+    setTexto(j.pergunta);
+    setAviso(`Protocolo ${c}: pergunta original de ${j.email ?? "?"} (${j.painel_id ?? "painel"}, ${j.competencia ?? "mês"}) carregada no campo. Altere o que quiser (outra imobiliária, outro mês) e clique em Perguntar.`);
+    entrada.current?.focus();
   }
 
   return (
@@ -102,6 +344,17 @@ export default function RoboDoPainel({ painelId, competencia }: { painelId: stri
           {pensando ? "Consultando…" : "Perguntar"}
         </button>
       </form>
+
+      {ehMatheus && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-gray-500">Refazer por protocolo:</span>
+          <input value={codigo} onChange={(e) => setCodigo(e.target.value)} placeholder="RO2-20261104-ABC234" className="w-52 rounded-full border border-gray-300 px-3 py-1 text-xs outline-none focus:border-o2-coral" />
+          <button type="button" onClick={() => void carregarProtocolo()} disabled={!codigo.trim()} className="rounded-full border border-o2-navy/30 px-3 py-1 font-semibold text-o2-navy disabled:opacity-50">
+            Carregar
+          </button>
+        </div>
+      )}
+      {aviso && <p className="mt-1 text-xs text-gray-600">{aviso}</p>}
 
       {!trocas.length && (
         <div className="mt-2 flex flex-wrap gap-2">
@@ -131,8 +384,9 @@ export default function RoboDoPainel({ painelId, competencia }: { painelId: stri
                   <p className="mt-1 whitespace-pre-wrap leading-relaxed">
                     <ComLinks texto={t.resposta} escuro={false} />
                   </p>
+                  {t.cards && t.cards.length > 0 && <MenuCards troca={t} painelId={painelId} competencia={competencia} />}
                   <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-gray-500">
-                    {t.dadosPessoais && <span>Tem dados pessoais: fica só em texto (sem PDF).</span>}
+                    {t.dadosPessoais && !t.cards?.length && <span>Tem dados pessoais: fica só em texto (sem PDF).</span>}
                     {t.pdfPermitido && (
                       <>
                         {!pdfs[t.id] && (
@@ -142,9 +396,16 @@ export default function RoboDoPainel({ painelId, competencia }: { painelId: stri
                         )}
                         {pdfs[t.id]?.estado === "gerando" && <span>Gerando o PDF…</span>}
                         {pdfs[t.id]?.estado === "pronto" && (
-                          <a href={pdfs[t.id].url} target="_blank" rel="noopener noreferrer" className="font-semibold text-o2-blue underline">
-                            📄 Abrir o relatório (PDF)
-                          </a>
+                          <>
+                            <a href={pdfs[t.id].url} target="_blank" rel="noopener noreferrer" className="font-semibold text-o2-blue underline">
+                              📄 Abrir o relatório (PDF)
+                            </a>
+                            {pdfs[t.id].protocolo && (
+                              <span>
+                                Protocolo <strong className="select-all text-o2-navy">{pdfs[t.id].protocolo}</strong>
+                              </span>
+                            )}
+                          </>
                         )}
                         {pdfs[t.id]?.estado === "erro" && <span className="text-red-700">Não consegui gerar o PDF.</span>}
                       </>

@@ -25,7 +25,7 @@ function trechos(linha: string): Trecho[] {
     .map((p) => (/^\*[^*\n]+\*$/.test(p) ? { texto: p.slice(1, -1), negrito: true } : { texto: p, negrito: false }));
 }
 
-export async function gerarPdfDaResposta(p: { pergunta: string; resposta: string; email: string; logica?: string | null; fontes?: string[] }): Promise<{ url: string } | { erro: string }> {
+export async function gerarPdfDaResposta(p: { pergunta: string; resposta: string; email: string; logica?: string | null; fontes?: string[]; protocolo?: string | null }): Promise<{ url: string } | { erro: string }> {
   const pergunta = limpar(p.pergunta).slice(0, 600);
   const resposta = limpar(p.resposta).slice(0, 8000);
   if (!resposta.trim()) return { erro: "Resposta vazia." };
@@ -77,6 +77,11 @@ export async function gerarPdfDaResposta(p: { pergunta: string; resposta: string
   y -= 18;
   pagina.drawText(limpar(`Gerado em ${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })} por ${p.email}`), { x: MARGEM, y, size: 9, font: fonte, color: cinza });
   y -= 14;
+  // Protocolo (04/11/2026): código que identifica este relatório e o login que o pediu; serve para refazer a pesquisa.
+  if (p.protocolo) {
+    pagina.drawText(limpar(`Protocolo: ${p.protocolo}  |  Solicitante: ${p.email}`), { x: MARGEM, y, size: 9, font: negrito, color: navy });
+    y -= 14;
+  }
   // Lógica do filtro: frase pequena, em cinza (menor destaque que o título), como pedido pelo Matheus.
   const frase = limpar(p.logica?.trim() ? `Filtro aplicado: ${p.logica.trim().slice(0, 700)}` : p.fontes?.length ? `Consultas feitas: ${p.fontes.slice(0, 8).join(" | ").slice(0, 700)}` : "");
   if (frase) {
@@ -123,6 +128,7 @@ export async function gerarPdfDaResposta(p: { pergunta: string; resposta: string
   const paginas = pdf.getPages();
   paginas.forEach((pg, i) => {
     pg.drawText(limpar(`Resposta gerada pelo Robô O2 com dados do Workspace e do ERP · uso interno da O2 Seguros · página ${i + 1} de ${paginas.length}`), { x: MARGEM, y: 28, size: 7.5, font: fonte, color: cinza });
+    if (p.protocolo) pg.drawText(limpar(`Protocolo ${p.protocolo}`), { x: LARGURA - MARGEM - 120, y: 40, size: 7.5, font: negrito, color: cinza });
   });
 
   const sb = createServiceClient();

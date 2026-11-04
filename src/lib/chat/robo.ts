@@ -13,6 +13,7 @@ import { FERRAMENTA_CUBO_COBERTURAS, FERRAMENTA_CUBO_SINISTROS, FERRAMENTA_CUBO_
 import { FERRAMENTA_LEGISLACAO, FERRAMENTA_CONCEITOS, executarFerramentaLegislacao, executarFerramentaConceitos } from "./roboLegislacao";
 import { FERRAMENTA_FICHA_VISITA, executarFerramentaFichaVisita } from "./roboFichaVisita";
 import { PAINEIS_ROBO, type ContextoPainel } from "./paineis";
+import { FERRAMENTA_CARDS, montarListaCards, refsDoRobo, type CardLista, type RefCard } from "./cardsLista";
 import { FERRAMENTA_LOGICA, chamadaTemDadosPessoais, descreverChamada, textoTemDadosPessoais } from "./privacidadePdf";
 
 // Robô O2 do chat da equipe (Fase 2, 29/10/2026). Mesmo "cérebro" da IA do WhatsApp (painéis + tabelas do
@@ -124,6 +125,7 @@ FOCO NESTE PAINEL (pedido do Matheus, 04/11/2026)
 - O painel mede: ${p.oQueMede}
 - Comece SEMPRE por consultar_painel com painel="${p.painel}" e competencia="${ctx.competencia}" (para uma parte grande use "caminho" e "filtrar_texto"). O número do painel é o oficial: é o que a pessoa vê na tela; cite-o como "neste painel".${p.produto ? ` Só vá a producao_resolvida (produto "${p.produto}") ou ao ERP quando a pergunta pedir algo que o painel não mostra (cotação de uma pessoa, histórico de meses, apólice emitida).` : ""}
 - COTAÇÃO ESPECÍFICA (a equipe pode consultar TODO nível de informação de uma cotação, 04/11/2026): quando a pergunta for sobre uma cotação/card/cliente deste painel, traga tudo o que existir, cada coisa da sua fonte, e diga o que não achou: (1) dados do card, etapa, responsável e histórico de etapas e comentários: foto do card (buscar_arquivos_documento, tipo_documento "card") e o painel; (2) ÚLTIMO CONTATO: Ramos tem ultimoContato/diasSemContato em negociacoes; para os demais use o e-mail mais recente do card em bitrix_email_mensagens (item_id = nº do card, entity_type_id do produto) e o contato mais recente em erp_emails; (3) E-MAILS: bitrix_email_mensagens (trocados pelo card), erp_emails e erp_email_ligacoes (ligações SUGERIDAS por CPF ou nº de apólice, nunca chame de vínculo confirmado): remetente, destinatários, assunto, trecho e data (o corpo completo do e-mail não está disponível); (4) ARQUIVOS: buscar_arquivos_documento (lote, card, proposta, apólice, endosso) com link de download; (5) ITENS do lote de Ramos: producao_itens; (6) pessoa: buscar_pessoa. Dados pessoais só em texto.
+- CARDS DA RESPOSTA (04/11/2026): quando a sua resposta citar cards/cotações específicos (lista, comparação, detalhe de uma cotação), chame registrar_cards_da_resposta UMA vez com os cards citados (nº do card do Bitrix e produto). A tela monta a lista (produto, nome, etapa atual, seguradora, imobiliária, endereço, prêmio, comissão e repasse) e deixa a pessoa escolher quais ver: por isso, no texto, NÃO repita os dados de cada card; dê o resumo (quantos, o que chama atenção) e diga que a lista está no botão de cards. Em resposta só com totais ou médias, não chame.
 - Mês diferente do da tela: use a competência pedida em consultar_painel e diga que é outro mês.
 - Pergunta de outro produto ou assunto: responda normalmente (você tem as mesmas funções do chat), mas avise em uma linha que saiu deste painel.
 - Resposta curta, com o número-chave em negrito e uma frase de leitura (o que chama atenção). Sem repetir a tela inteira.`;
@@ -210,6 +212,8 @@ export type RespostaRobo = {
   logica: string | null;
   /** Consultas feitas, em linguagem simples (rodapé "fontes" do relatório). */
   fontes: string[];
+  /** Só no campo do painel: cards citados pela resposta, com os dados já montados. */
+  cards: CardLista[];
 };
 
 export async function responderComoRobo(email: string, historico: TurnoChat[], painel?: ContextoPainel | null): Promise<RespostaRobo> {
@@ -220,7 +224,8 @@ export async function responderComoRobo(email: string, historico: TurnoChat[], p
   if (!roboLiberadoPara(email)) throw new Error("sem acesso ao robô");
   const verComissao = podeVerComissaoNoChat(email);
   const verFinanceiro = podeVerFinanceiroNoChat(email);
-  const ferramentas = [...ferramentasDoRobo(verComissao, verFinanceiro), FERRAMENTA_LOGICA];
+  const ferramentas = [...ferramentasDoRobo(verComissao, verFinanceiro), FERRAMENTA_LOGICA, ...(painel ? [FERRAMENTA_CARDS] : [])];
+  let refsCards: RefCard[] = [];
   let pessoal = false;
   let logica: string | null = null;
   const fontes: string[] = [];
@@ -252,6 +257,10 @@ export async function responderComoRobo(email: string, historico: TurnoChat[], p
           if (t) logica = t.slice(0, 700);
           return { type: "tool_result" as const, tool_use_id: c.id, content: "registrado" };
         }
+        if (c.name === FERRAMENTA_CARDS.name) {
+          refsCards = refsDoRobo(c.input);
+          return { type: "tool_result" as const, tool_use_id: c.id, content: `registrado (${refsCards.length} cards)` };
+        }
         if (chamadaTemDadosPessoais(c.name, c.input)) pessoal = true;
         const d = descreverChamada(c.name, c.input);
         if (d && !fontes.includes(d) && fontes.length < 8) fontes.push(d);
@@ -266,7 +275,7 @@ export async function responderComoRobo(email: string, historico: TurnoChat[], p
     mensagens.push({ role: "user", content: resultados });
   }
 
-  if (resposta?.stop_reason === "refusal") return { texto: "Não consigo responder essa pergunta por aqui.", pdfPermitido: false, dadosPessoais: false, logica: null, fontes: [] };
+  if (resposta?.stop_reason === "refusal") return { texto: "Não consigo responder essa pergunta por aqui.", pdfPermitido: false, dadosPessoais: false, logica: null, fontes: [], cards: [] };
   const textoDe = (r: Anthropic.Message | null) =>
     (r?.content ?? [])
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
@@ -297,9 +306,11 @@ export async function responderComoRobo(email: string, historico: TurnoChat[], p
     }
   }
   const texto = restaurarLinksAssinados(bruto, linksAssinados);
-  if (!texto) return { texto: "Não consegui montar uma resposta agora. Tente de novo em instantes.", pdfPermitido: false, dadosPessoais: false, logica: null, fontes: [] };
+  if (!texto) return { texto: "Não consegui montar uma resposta agora. Tente de novo em instantes.", pdfPermitido: false, dadosPessoais: false, logica: null, fontes: [], cards: [] };
   // Sem nenhuma consulta de dados (conversa) ou com dado pessoal/documento no texto: sem PDF.
-  const dadosPessoais = pessoal || textoTemDadosPessoais(texto);
+  // Lista de cards: nome da pessoa é dado pessoal, então a resposta com lista fica só na tela (sem PDF).
+  const cards = refsCards.length ? await montarListaCards(refsCards).catch(() => []) : [];
+  const dadosPessoais = pessoal || textoTemDadosPessoais(texto) || cards.length > 0;
   const pdfPermitido = fontes.length > 0 && !dadosPessoais;
-  return { texto, pdfPermitido, dadosPessoais, logica, fontes };
+  return { texto, pdfPermitido, dadosPessoais, logica, fontes, cards };
 }

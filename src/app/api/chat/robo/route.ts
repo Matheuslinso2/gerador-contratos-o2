@@ -32,7 +32,7 @@ export async function POST(req: Request) {
 
   try {
     const r = await responderComoRobo(user.email, turnos, painel);
-    return NextResponse.json({ resposta: r.texto, pdfPermitido: r.pdfPermitido, dadosPessoais: r.dadosPessoais, logica: r.logica, fontes: r.fontes });
+    return NextResponse.json({ resposta: r.texto, pdfPermitido: r.pdfPermitido, dadosPessoais: r.dadosPessoais, logica: r.logica, fontes: r.fontes, cards: r.cards });
   } catch (e) {
     console.error("[chat/robo]", e);
     return NextResponse.json({ erro: "falha" }, { status: 500 });
