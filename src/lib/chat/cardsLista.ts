@@ -197,7 +197,9 @@ export async function montarListaCards(refs: RefCard[]): Promise<CardLista[]> {
             nome = nome || texto(item["ufCrm14CapLocatPfNome"]) || texto(item["ufCrm14CapLocatPjRazao"]);
             imobiliaria = texto(item["ufCrm14CapImobAdmin"]) || imobiliaria;
             seguradora = texto(item["ufCrm14CapSeguradora"]) || seguradora;
-            endereco = texto(item["ufCrm14CapImovelCep"]) ? [texto((item["ufCrm14CapImovelEnd"] as string | undefined)?.toString?.().split("|")[0]), texto(item["ufCrm14CapImovelBairro"]), texto(item["ufCrm14CapImovelCidade"])].filter(Boolean).join(", ") || null : null;
+            // Endereço: o campo já traz bairro e cidade na maioria dos cards; só soma o que ainda não está no texto.
+            const partes = [texto(String(item["ufCrm14CapImovelEnd"] ?? "").split("|")[0]), texto(item["ufCrm14CapImovelBairro"]), texto(item["ufCrm14CapImovelCidade"])].filter(Boolean);
+            endereco = partes.reduce<string[]>((acc, x) => (acc.some((y) => y.toLowerCase().includes(x.toLowerCase())) ? acc : [...acc, x]), []).join(", ") || null;
           }
           premio = premio ?? (banco?.premio as number | null) ?? null;
           comissao = comissao ?? (banco?.comissao as number | null) ?? null;
