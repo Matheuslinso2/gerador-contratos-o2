@@ -25,7 +25,7 @@ const MESES_ABREV = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "se
 
 type Linha = { mes?: string; ano?: number; grupo: Grupo; docs: number; base: number; com: number };
 type Dia = { d: string; docs: number; base: number; com: number };
-type Retorno = { mensal: Linha[]; anual: Linha[]; diario: Dia[]; meta: { mes: string; com: number }[]; propostas_mensal?: { mes: string; docs: number; base: number; com: number }[]; duvida_mensal?: { mes: string; docs: number; base: number; com: number }[]; com_propostas?: boolean; meta_ok: boolean; gerado_em: string };
+type Retorno = { mensal: Linha[]; anual: Linha[]; diario: Dia[]; meta: { mes: string; com: number }[]; propostas_mensal?: { mes: string; docs: number; base: number; com: number }[]; duvida_mensal?: { mes: string; docs: number; base: number; com: number }[]; propostas_classif?: { mes: string; cat: string; docs: number; com: number }[]; com_propostas?: boolean; meta_ok: boolean; gerado_em: string };
 type Soma = Record<Grupo, { docs: number; base: number; com: number }>;
 type Rank = { nome: string; grupo: Grupo; docs: number; base: number; com: number };
 
@@ -168,6 +168,9 @@ export default async function PainelProducao({ params, caminho = "/erp" }: { par
   // quanto do período vem de proposta efetivada ainda sem Corp (já dentro do total quando comProp)
   const propsPeriodo = (dados.propostas_mensal ?? []).filter((x) => (anual ? x.mes.startsWith(String(ano)) : x.mes === `${ano}-${pad(mes!)}`)).reduce((s, x) => ({ docs: s.docs + num(x.docs), base: s.base + num(x.base), com: s.com + num(x.com) }), { docs: 0, base: 0, com: 0 });
   const duvidaPeriodo = (dados.duvida_mensal ?? []).filter((x) => (anual ? x.mes.startsWith(String(ano)) : x.mes === `${ano}-${pad(mes!)}`)).reduce((s, x) => ({ docs: s.docs + num(x.docs), base: s.base + num(x.base), com: s.com + num(x.com) }), { docs: 0, base: 0, com: 0 });
+  // verificação de emissão (erp_proposta_emissao_classif): 3 = emitida com prova, 1 = sem prova, "sem" = ainda não verificada
+  const classifDo = (cat: string) => (dados.propostas_classif ?? []).filter((x) => x.cat === cat && (anual ? x.mes.startsWith(String(ano)) : x.mes === `${ano}-${pad(mes!)}`)).reduce((s, x) => ({ docs: s.docs + num(x.docs), com: s.com + num(x.com) }), { docs: 0, com: 0 });
+  const classifPeriodo = { emitidas: classifDo("3"), semProva: classifDo("1"), semClassif: classifDo("sem") };
   const filtrosAtivos = [seg && `seguradora ${seg}`, ramo && `ramo ${ramo}`, prod && PRODUTOS[prod], grp && `grupo “${grp}”`, imob && `imobiliária “${imob}”`].filter(Boolean).join(" · ");
 
   return (
@@ -226,7 +229,7 @@ export default async function PainelProducao({ params, caminho = "/erp" }: { par
         </div>
         {comProp && (propsPeriodo.docs > 0 || duvidaPeriodo.docs > 0) ? (
           <p className="border-b border-gray-100 bg-amber-50 px-4 py-1.5 text-xs text-amber-900">
-            {rotuloPeriodo}: {propsPeriodo.docs > 0 ? <>inclui <b>{inteiro(propsPeriodo.docs)}</b> proposta(s) efetivada(s) ainda sem Nosso nº do Corp (comissão R$ {dec(propsPeriodo.com)}). </> : null}{duvidaPeriodo.docs > 0 ? <><b>{inteiro(duvidaPeriodo.docs)}</b> proposta(s) com possível equivalente no Corp (comissão R$ {dec(duvidaPeriodo.com)}) ficam FORA do total até o vínculo, para o mesmo seguro não contar como proposta e como apólice. </> : null}Ou é proposta ou é apólice: quando o Corp cadastra, o documento só troca de estado. “Só Corp / Power BI” mostra o número sem elas.
+            {rotuloPeriodo}: {propsPeriodo.docs > 0 ? <>inclui <b>{inteiro(propsPeriodo.docs)}</b> proposta(s) efetivada(s) ainda sem o documento oficial no ERP (comissão R$ {dec(propsPeriodo.com)}){classifPeriodo.emitidas.docs > 0 || classifPeriodo.semProva.docs > 0 ? <>: <b>{inteiro(classifPeriodo.emitidas.docs)}</b> já emitida(s) pela seguradora, com prova em extrato, portal, PDF ou comissão (R$ {dec(classifPeriodo.emitidas.com)}), e <b>{inteiro(classifPeriodo.semProva.docs)}</b> sem prova de emissão em nenhuma fonte (R$ {dec(classifPeriodo.semProva.com)}){classifPeriodo.semClassif.docs > 0 ? <>; {inteiro(classifPeriodo.semClassif.docs)} ainda não verificada(s)</> : null}</> : null}. </> : null}{duvidaPeriodo.docs > 0 ? <><b>{inteiro(duvidaPeriodo.docs)}</b> proposta(s) cujo documento oficial já está no ERP e falta vincular (comissão R$ {dec(duvidaPeriodo.com)}) contam pelo documento oficial, não pela proposta. </> : null}“Só Corp / Power BI” mostra o número sem as propostas.
           </p>
         ) : null}
 
