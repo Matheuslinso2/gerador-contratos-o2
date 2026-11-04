@@ -21,7 +21,7 @@ while True:
     off += 1000
 
 m = pd.read_pickle('analise-precos/margem.pkl')
-for c in ['premio_liquido', 'comissao', 'repasse', 'pro_labore']: m[c] = m[c].astype(float)
+for c in ['premio_liquido', 'comissao', 'repasse', 'pro_labore', 'pro_labore_inferido']: m[c] = m[c].astype(float)
 m['margem'] = m.comissao - m.repasse
 
 def res(g):
@@ -88,7 +88,7 @@ for t in [
     f"<b>O repasse caiu ao longo dos anos:</b> {n(por_ano.loc[2020].repasse_pct_com, 0)}% da comissão em 2020 contra {n(por_ano.loc[2025].repasse_pct_com, 0)}% em 2025. Pode ser mudança de acordos, mas também falta de registro do repasse previsto nos anos antigos; vale conferir antes de usar a série histórica.",
 ]: P('• ' + t)
 P('Limites (leia antes de usar)', H)
-P(f'1) É margem de <b>comissão</b>, não lucro: não desconta custos da operação nem impostos. 2) O repasse é o <b>previsto</b> nas regras do ERP, não o efetivamente pago. O pró-labore entra como % do prêmio líquido, lido do extrato Segimob ou da regra confirmada da imobiliária com a seguradora (R$ {n(r.pro_labore.sum())} em 2025-2026); {n(r.sem_pct_pro_labore.sum())} apólices têm pró-labore indicado mas sem % lido e ficaram com valor zero, o que pode superestimar a margem delas. 3) Apólices canceladas ficam de fora (cerca de 1/3 dos documentos desde 2020). 4) Uma apólice com mais de um produtor soma todos os repasses. 5) Vínculo com a imobiliária pelo cadastro único (imobiliaria_principal); 595 das 21.070 apólices de 2025-2026 não têm imobiliária (clientes diretos).')
+P(f'1) É margem de <b>comissão</b>, não lucro: não desconta custos da operação nem impostos. 2) O repasse é o <b>previsto</b> nas regras do ERP, não o efetivamente pago. O pró-labore entra como % do prêmio líquido, lido do extrato Segimob ou da regra confirmada da imobiliária com a seguradora (R$ {n(r.pro_labore.sum())} em 2025-2026); Em {n(r.apolices_pl_inferido.sum())} apólices o % não estava lido e usei a taxa fixa negociada daquela imobiliária com a seguradora no produto (vista nos extratos: 78 de 106 combinações têm uma taxa só); são R$ {n(r.pro_labore_inferido.sum())}, marcados como inferidos. {n(r.sem_pct_pro_labore.sum())} apólices têm pró-labore indicado e nenhuma taxa conhecida: ficaram com zero, o que pode superestimar a margem delas. 3) Apólices canceladas ficam de fora (cerca de 1/3 dos documentos desde 2020). 4) Uma apólice com mais de um produtor soma todos os repasses. 5) Vínculo com a imobiliária pelo cadastro único (imobiliaria_principal); 595 das 21.070 apólices de 2025-2026 não têm imobiliária (clientes diretos).')
 el.append(PageBreak())
 P('1. Por produto (2025-2026)', H)
 el.append(Image('analise-precos/img/margem_prod.png', 15 * cm, 6.4 * cm))
