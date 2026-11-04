@@ -101,11 +101,15 @@ const porId = async (tabela: string, colunas: string, ids: string[]) => (await P
     const ef = String(dl["Data da mudança de etapa"] ?? ld?.dt_proposta ?? "").slice(0, 10) || null;
     const meus = itensRen.filter((i) => i.documento_lote_id === l.documento_id);
     const res = { qtd: Number(dl["Quantidade de endereços"] ?? 0) || null, contratados: Number(dl["Endereços contratados"] ?? 0) || null, itens: 0, emitidos_vinculaveis: 0, emitidos_sem_documento: 0, nao_emitidos: 0, tipo: meus.length ? "renovação" : "novos" };
+    const usadas = new Set<string>();
     if (meus.length) {
       for (const it of meus) {
         const a = anteriores.find((x) => x.id === it.documento_anterior_id); if (!a) continue;
         const loc = locs.get(a.locatario_id); const prod = produto.get(a.ramo_id);
-        const nova = (porRenovado.get(a.id) ?? [])[0] ?? (porLoc.get(a.locatario_id) ?? []).find((n) => n.id !== a.id && produto.get(n.ramo_id) === prod && Math.abs(dias(n.vigencia_inicio, a.vigencia_fim)) <= 30 && dias(n.vigencia_inicio, a.vigencia_fim) >= -20);
+        // cada apólice nova responde por UM item (segurado com vários imóveis no lote não pode reaproveitar a mesma)
+        const livre = (n: any) => !usadas.has(n.id);
+        const nova = (porRenovado.get(a.id) ?? []).find(livre) ?? (porLoc.get(a.locatario_id) ?? []).find((n) => livre(n) && n.id !== a.id && produto.get(n.ramo_id) === prod && Math.abs(dias(n.vigencia_inicio, a.vigencia_fim)) <= 30 && dias(n.vigencia_inicio, a.vigencia_fim) >= -20);
+        if (nova) usadas.add(nova.id);
         let cat: 1 | 2 | 3, rot: string, provas: any[] = [], num: string | null = null;
         if (nova) { cat = 2; rot = nova.seguradora_id !== a.seguradora_id ? "renovado em outra seguradora (apólice nova no ERP)" : "renovado (apólice nova no ERP)"; num = nova.numero_apolice; }
         else { provas = provasDo(dig(loc?.cpf), loc?.nome ?? "", a.vigencia_fim);
