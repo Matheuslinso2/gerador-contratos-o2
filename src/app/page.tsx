@@ -9,6 +9,7 @@ import PainelCategorias from "@/components/PainelCategorias";
 import DashboardProducao from "@/components/DashboardProducao";
 import DashboardOperacao from "@/components/DashboardOperacao";
 import RankingImobiliarias from "@/components/RankingImobiliarias";
+import DashboardEstatisticas from "@/components/DashboardEstatisticas";
 import { PRODUTOS_LANDING_PAGE } from "@/lib/produtosLandingPage";
 import { buscarImobiliariaDoUsuario } from "@/lib/imobiliariaDoUsuario";
 
@@ -390,7 +391,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ a
   // Aba padrão: KPIs pra quem tem login @o2seguros.com.br; Ferramentas pra
   // todo o resto (imobiliárias, Nichoos), que não tem a aba de KPIs.
   const verKpis = !!user.email?.toLowerCase().endsWith(DOMINIO_O2);
-  const abaAtiva: "kpis" | "ferramentas" = verKpis && aba !== "ferramentas" ? "kpis" : "ferramentas";
+  const abaAtiva: "kpis" | "estatisticas" | "ferramentas" = !verKpis || aba === "ferramentas" ? "ferramentas" : aba === "estatisticas" ? "estatisticas" : "kpis";
 
   return (
     <>
@@ -398,7 +399,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ a
       <main className="mx-auto max-w-4xl flex-1 space-y-6 p-8">
         <h1 className="text-xl font-semibold text-o2-navy">Painel</h1>
 
-        {/* Duas abas (pedido do Matheus, 09/10/2026): KPIs de produção (só @o2seguros.com.br) e Ferramentas. Quem não vê os KPIs não vê as abas. */}
+        {/* Abas (pedido do Matheus, 09/10/2026): KPIs de produção e Dados estatísticos O2 (só @o2seguros.com.br) e Ferramentas. Quem não vê os KPIs não vê as abas. */}
         {verKpis && (
           <nav className="flex gap-1 border-b border-gray-200" aria-label="Seções da página inicial">
             <Link
@@ -410,6 +411,17 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ a
               }`}
             >
               Painel de KPIs
+            </Link>
+            {/* Terceira aba (Matheus, 03/11/2026): visão de mercado da carteira, a partir da análise de preços e fechamento. */}
+            <Link
+              href="/?aba=estatisticas"
+              scroll={false}
+              aria-current={abaAtiva === "estatisticas" ? "page" : undefined}
+              className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition ${
+                abaAtiva === "estatisticas" ? "border-o2-coral text-o2-navy" : "border-transparent text-o2-cinza-medio hover:text-o2-navy"
+              }`}
+            >
+              Dados estatísticos O2
             </Link>
             <Link
               href="/?aba=ferramentas"
@@ -437,6 +449,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ a
         {verKpis && abaAtiva === "kpis" && <DashboardProducao />}
         {verKpis && abaAtiva === "kpis" && <DashboardOperacao />}
         {verKpis && abaAtiva === "kpis" && <RankingImobiliarias mes={rank === "anterior" ? "anterior" : "atual"} />}
+
+        {verKpis && abaAtiva === "estatisticas" && <DashboardEstatisticas verMargem={isAdmin(user.email)} />}
 
         {abaAtiva === "ferramentas" && <PainelCategorias categorias={categorias} />}
       </main>
