@@ -79,6 +79,11 @@ export default function LinhaMeta({
     <tr className="border-b align-top last:border-0" data-filtro-nome={normalizarBusca(`${linha.nome} ${linha.unidades.join(" ")}`)} data-filtro-status={statusEnvio?.chave ?? "aguardando"} data-filtro-responsavel={linha.responsavelEmail ?? ""}>
       <td className="p-2">
         <div className="max-w-[260px] font-semibold text-o2-navy">{linha.nome}</div>
+        {linha.capValorMinimo && (
+          <div className="mt-0.5 inline-block rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800" title="Regra desta campanha: título de Capitalização abaixo deste valor não entra na apuração nem nas oportunidades.">
+            Capitalização a partir de {brl.format(linha.capValorMinimo)}
+          </div>
+        )}
         {linha.tipo === "grupo" && <div className="text-xs text-gray-500">{linha.unidades.length} unidade(s): {linha.unidades.join(", ")}</div>}
         {statusEnvio && statusEnvio.emails.length > 0 && (
           <details className="mt-0.5">

@@ -1,15 +1,17 @@
 // Foto de partida de uma campanha: tendência de produção, baseline, engajamento prévio e grupo de
 // comparação de cada participante. Só leitura (grava a foto em campanhas_foto_partida).
-//   NODE_PATH="$TEMP/stub" npx tsx scripts/campanhas/foto-de-partida.ts <campanha_id>
+//   NODE_PATH="$TEMP/stub" npx tsx scripts/campanhas/foto-de-partida.ts <campanha_id> [nomes,separados,por,vírgula]
+// Com nomes, refaz só esses participantes (o andamento já gravado é preservado e a leitura agregada não é tocada).
 process.loadEnvFile(".env.local");
 import { createClient } from "@supabase/supabase-js";
 import { participantesDaCampanha } from "../../src/lib/campanhas/metasCampanha";
 import { imobiliariasDaCampanha } from "../../src/lib/campanhas/imobiliariasDaCampanha";
 import { produtosBaseDaCampanha } from "../../src/lib/campanhas/desempenho";
 import { produtosDaCampanha } from "../../src/lib/campanhas/produtos";
+import { aplicarMinimoCapitalizacao } from "../../src/lib/campanhas/minimoCapitalizacao";
 import { baselineDoPeriodo, classificarTendencia, contarNoPeriodo, datasDeContratacao, matrizDeAcao, mesesDeHistorico, somarAnos, somarDias, type LinhaFunilBruta } from "../../src/lib/campanhas/tendencia";
 
-type Linha = LinhaFunilBruta & { imobiliaria_id: string };
+type Linha = LinhaFunilBruta & { imobiliaria_id: string; produto: string; herdada: boolean | null; valor_titulo: number | null };
 type Ficha = { id: string; nome: string; apelido: string | null; grupo_id: string | null };
 const mediana = (v: number[]) => {
   if (!v.length) return null;
@@ -39,7 +41,7 @@ async function main() {
   const { participantes } = await participantesDaCampanha(db, campanha.id, idsImobs);
   const comMeta = participantes.filter((p) => p.meta !== null && Number(p.meta) > 0);
 
-  type Unid = { chave: string; nome: string; fichas: string[]; meta: number; inicio: string; fim: string };
+  type Unid = { chave: string; nome: string; fichas: string[]; meta: number; inicio: string; fim: string; capMinimo: number | null };
   const part: Unid[] = comMeta.map((p) => {
     const f = p.imobiliaria_id ? ficha.get(p.imobiliaria_id) : undefined;
     return {
@@ -49,6 +51,7 @@ async function main() {
       meta: Number(p.meta),
       inicio: p.periodo_inicio || (campanha.valido_de as string),
       fim: p.periodo_fim || (campanha.valido_ate as string),
+      capMinimo: Number(p.cap_valor_minimo) > 0 ? Number(p.cap_valor_minimo) : null,
     };
   });
   // Grupos que têm ao menos uma ficha participante ficam fora da comparação (a rede toda é "tocada" pela campanha).
@@ -77,9 +80,14 @@ async function main() {
     }
   }
   console.log(`linhas de funil lidas: ${linhas.length}`);
+  // Valor mínimo do título de Capitalização (Campanha Elite): mesma regra do painel.
+  const minimoPorFicha = new Map<string, number>();
+  for (const u of part) if (u.capMinimo) for (const f of u.fichas) minimoPorFicha.set(f, u.capMinimo);
+  const { linhas: linhasValidas, descartados } = aplicarMinimoCapitalizacao(linhas, minimoPorFicha);
+  if (descartados.length) console.log(`títulos de Capitalização abaixo do mínimo, fora da foto: ${descartados.length}`);
   const linhasPorUnidade = new Map<string, Linha[]>(); // comparação: rede inteira
   const linhasPorFicha = new Map<string, Linha[]>(); // participante: só as suas fichas (igual ao painel)
-  for (const l of linhas) {
+  for (const l of linhasValidas) {
     const u = unidadeDe(l.imobiliaria_id);
     linhasPorUnidade.set(u, [...(linhasPorUnidade.get(u) ?? []), l]);
     linhasPorFicha.set(l.imobiliaria_id, [...(linhasPorFicha.get(l.imobiliaria_id) ?? []), l]);
@@ -95,10 +103,16 @@ async function main() {
     return { chave: c, datas: d, n12: contarNoPeriodo(d, somarAnos(lanc, -1), somarDias(lanc, -1)), t: classificarTendencia(d, lanc) };
   });
 
+  // Nomes na linha de comando: refaz só esses participantes e preserva o andamento já gravado.
+  const filtroNomes = (process.argv[3] ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  const escolhido = (u: Unid) => !filtroNomes.length || filtroNomes.some((n) => u.nome.toLowerCase().includes(n));
+  const { data: existentes } = await db.from("campanhas_foto_partida").select("unidade, dados").eq("campanha_id", campanhaId);
+  const andamentoGravado = new Map(((existentes ?? []) as { unidade: string; dados: { andamento?: unknown } | null }[]).map((r) => [r.unidade, r.dados?.andamento]));
+
   const linhasOut: Record<string, unknown>[] = [];
   let e26 = 0;
   let e25 = 0;
-  for (const u of part.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))) {
+  for (const u of part.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")).filter(escolhido)) {
     const datas = datasDoParticipante(u);
     const t = classificarTendencia(datas, u.inicio);
     const meses = mesesDeHistorico(datas, somarDias(u.inicio, -1));
@@ -124,6 +138,7 @@ async function main() {
       matriz: mat,
       controles: { qtd: pares.length, medianaVariacao: mediana(variacoes), qtdClassificaveis: variacoes.length },
       provisorio: { ate, realizado, esperadoAteAgora, diasDecorridos: decorridos, diasPeriodo: diasP },
+      ...(andamentoGravado.get(u.chave) ? { andamento: andamentoGravado.get(u.chave) } : {}),
     };
     linhasOut.push({ campanha_id: campanhaId, unidade: u.chave, nome: u.nome, imobiliaria_ids: u.fichas, periodo_inicio: u.inicio, periodo_fim: u.fim, meta: u.meta, tendencia: t.tendencia, dados });
     console.log(
@@ -135,6 +150,10 @@ async function main() {
     if (error) throw new Error(error.message);
   }
   console.log(`\nfoto de partida gravada: ${linhasOut.length} participantes`);
+  if (filtroNomes.length) {
+    console.log("Refeita só para os nomes informados: a leitura provisória agregada não foi alterada (ela se atualiza no próximo andamento).");
+    return;
+  }
 
   // Leitura PROVISÓRIA (poucos dias e poucos casos): Elite x carteira de comparação nas mesmas datas.
   const c26 = ctrl.reduce((s, c) => s + contarNoPeriodo(c.datas, lanc, hoje), 0);

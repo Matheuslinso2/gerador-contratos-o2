@@ -16,10 +16,20 @@ export type PontoHistorico = { versao: number; data: string; realizado: number }
 export type OportunidadePanorama = {
   pretendente: string | null;
   produto: string; // "Seguro Fiança" | "Capitalização"
+  // 04/11/2026: Capitalização entra como TÍTULO SOLICITADO (mesmos cards de "Títulos solicitados" do
+  // painel de Capitalização). Ausente nas versões antigas = cotação aprovada.
+  tipo?: "cotacao_aprovada" | "titulo_solicitado";
+  etapa?: string | null; // etapa do card (títulos solicitados)
   aprovadaEm: string | null; // YYYY-MM-DD, só quando a fonte tem
-  entrada: string; // YYYY-MM-DD (entrada da cotação)
-  diasAguardando: number | null; // desde a aprovação, quando há data
+  entrada: string; // YYYY-MM-DD (entrada da cotação ou solicitação do título)
+  diasAguardando: number | null; // desde a aprovação (cotação) ou desde a solicitação (título), quando há data
 };
+
+/** Quantas oportunidades de cada tipo (versões antigas só têm cotações aprovadas). */
+export function contagemOportunidades(oportunidades: OportunidadePanorama[]): { cotacoes: number; titulos: number } {
+  const titulos = oportunidades.filter((o) => o.tipo === "titulo_solicitado").length;
+  return { cotacoes: oportunidades.length - titulos, titulos };
+}
 
 export type DadosPanorama = {
   campanha: string;
@@ -43,6 +53,9 @@ export type DadosPanorama = {
   oportunidades: OportunidadePanorama[]; // aprovadas e ainda não contratadas
   emAnalise: number; // cotações em análise (não aprovadas)
   oportunidadesDesde: string; // entradas a partir desta data
+  // Regra exclusiva da Campanha Elite (Expan e Adjuve): só título de Capitalização a partir deste valor.
+  capValorMinimo?: number | null;
+  capForaDoMinimo?: number; // títulos que ficaram de fora por ela no período
   farol: Farol;
   premiacao: string | null;
   historico: PontoHistorico[]; // parciais anteriores já enviadas (mais antiga primeiro)
@@ -72,6 +85,7 @@ export function dadosDoPanorama(
   const hoje = desempenho.hoje;
   const novas = linha.oportunidades.filter((o) => o.tipo === "novo");
   const aprovadas = novas.filter((o) => o.status === "Aprovado");
+  const solicitados = novas.filter((o) => o.status === "Solicitado");
   return {
     campanha: config.nome,
     participante: linha.nome.replace(/ \(grupo\)$/, ""),
@@ -91,17 +105,33 @@ export function dadosDoPanorama(
     diasRestantes: Math.max(0, linha.diasRestantes),
     encerrada: hoje > linha.fim,
     dadosStatus: linha.dadosStatus,
-    oportunidades: aprovadas
-      .map((o) => ({
-        pretendente: o.pretendente,
-        produto: rotuloProdutoBase(o.produto),
-        aprovadaEm: o.aprovadaEm ?? null,
-        entrada: o.entrada,
-        diasAguardando: o.aprovadaEm ? Math.max(0, diasEntre(o.aprovadaEm, hoje)) : null,
-      }))
-      .sort((a, b) => (b.diasAguardando ?? -1) - (a.diasAguardando ?? -1) || a.entrada.localeCompare(b.entrada)),
-    emAnalise: novas.length - aprovadas.length,
+    oportunidades: [
+      ...aprovadas.map(
+        (o): OportunidadePanorama => ({
+          pretendente: o.pretendente,
+          produto: rotuloProdutoBase(o.produto),
+          tipo: "cotacao_aprovada",
+          aprovadaEm: o.aprovadaEm ?? null,
+          entrada: o.entrada,
+          diasAguardando: o.aprovadaEm ? Math.max(0, diasEntre(o.aprovadaEm, hoje)) : null,
+        })
+      ),
+      ...solicitados.map(
+        (o): OportunidadePanorama => ({
+          pretendente: o.pretendente,
+          produto: rotuloProdutoBase(o.produto),
+          tipo: "titulo_solicitado",
+          etapa: o.etapa ?? null,
+          aprovadaEm: null,
+          entrada: o.entrada,
+          diasAguardando: Math.max(0, diasEntre(o.entrada, hoje)),
+        })
+      ),
+    ].sort((a, b) => (b.diasAguardando ?? -1) - (a.diasAguardando ?? -1) || a.entrada.localeCompare(b.entrada)),
+    emAnalise: novas.filter((o) => o.status === "Em análise").length,
     oportunidadesDesde: linha.abertosDesde,
+    capValorMinimo: linha.capValorMinimo,
+    capForaDoMinimo: linha.capDescartados.total,
     farol: linha.farol,
     premiacao: config.premiacao_descricao,
     historico,
@@ -144,6 +174,9 @@ export function resumoEmTexto(d: DadosPanorama): string {
   if (d.percentual !== null) partes.push(`${Math.round(d.percentual)}% da meta`);
   if (d.faltam !== null) partes.push(d.faltam > 0 ? `Faltam: ${formatarValor(d.faltam, d.moeda)}${u}` : "Meta atingida");
   partes.push(d.encerrada ? `Campanha encerrada em ${dataBr(d.fim)}` : `${d.diasRestantes} dias até ${dataBr(d.fim)}`);
-  if (d.oportunidades.length) partes.push(`${d.oportunidades.length} cotação(ões) aprovada(s) aguardando contratação`);
+  const opp = contagemOportunidades(d.oportunidades);
+  if (opp.cotacoes) partes.push(`${opp.cotacoes} cotação(ões) aprovada(s) aguardando contratação`);
+  if (opp.titulos) partes.push(`${opp.titulos} título(s) de Capitalização solicitado(s) aguardando contratação`);
+  if (d.capValorMinimo) partes.push(`Capitalização: contam títulos a partir de ${formatarValor(d.capValorMinimo, true)}`);
   return partes.join(" · ");
 }

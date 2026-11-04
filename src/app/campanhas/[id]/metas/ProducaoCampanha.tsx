@@ -259,7 +259,7 @@ export default async function ProducaoCampanha({
             <Cartao
               rotulo="No ritmo"
               valor={`${t.noRitmoOuAtingida} de ${t.participantesComMeta}`}
-              linhas={[`${t.participantesComAlerta} com alerta`, contatosPorImob ? `${semContato} sem contato há ${DIAS_SEM_CONTATO_ALERTA}+ dias` : "contatos do Bitrix indisponíveis agora", `${inteiro.format(t.oportunidades)} cotação(ões) em aberto`]}
+              linhas={[`${t.participantesComAlerta} com alerta`, contatosPorImob ? `${semContato} sem contato há ${DIAS_SEM_CONTATO_ALERTA}+ dias` : "contatos do Bitrix indisponíveis agora", `${inteiro.format(t.oportunidades)} oportunidade(s) em aberto`]}
             />
             <Cartao rotulo="Conferência Corp" valor={`${inteiro.format(t.corp.documentos)} doc.`} linhas={[`Prêmio líquido: ${brl.format(t.corp.premio)}`, `Funil: ${inteiro.format(t.funil.contratacoes)} contratação(ões)`]} />
             <Cartao
@@ -404,7 +404,7 @@ export default async function ProducaoCampanha({
               <h3 className="text-xs font-semibold text-o2-navy">
                 Oportunidades em aberto
                 <InfoLegenda titulo="Oportunidades em aberto">
-                  Cotações das imobiliárias da campanha que ainda não fecharam: aprovadas primeiro, depois em análise, das mais antigas para as mais novas. Pretendente = nome do card no Bitrix (ou do locatário, nas planilhas); &quot;—&quot; quando a origem não informa o nome. Renovações aparecem marcadas e não contam na meta. O link abre o card no Bitrix.
+                  Cotações das imobiliárias da campanha que ainda não fecharam: aprovadas primeiro, depois em análise, das mais antigas para as mais novas. Em Capitalização, o &quot;Solicitado&quot; é o título pedido que ainda não foi contratado (os mesmos cards de &quot;Títulos solicitados&quot; do painel de Capitalização, com a etapa do card). Oportunidade NÃO é produção: só vira resultado da campanha depois da contratação. Pretendente = nome do card no Bitrix (ou do locatário, nas planilhas); &quot;—&quot; quando a origem não informa o nome. Renovações aparecem marcadas e não contam na meta. O link abre o card no Bitrix.
                 </InfoLegenda>
               </h3>
               {desempenho.linhas
@@ -418,7 +418,9 @@ export default async function ProducaoCampanha({
                     className="rounded-lg border border-o2-navy/10 bg-white px-3 py-2"
                   >
                     <summary className="cursor-pointer text-sm text-o2-navy">
-                      <b>{l.nome}</b> — {l.oportunidades.length} em aberto ({l.oportunidades.filter((o) => o.status === "Aprovado").length} aprovada(s))
+                      <b>{l.nome}</b> — {l.oportunidades.length} em aberto ({l.oportunidades.filter((o) => o.status === "Aprovado").length} aprovada(s)
+                      {l.oportunidades.some((o) => o.status === "Solicitado") ? `, ${l.oportunidades.filter((o) => o.status === "Solicitado").length} título(s) solicitado(s)` : ""})
+                      {l.capValorMinimo ? <span className="ml-2 rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800">Capitalização a partir de {brl.format(l.capValorMinimo)}</span> : null}
                       {l.faltam !== null && l.faltam > 0 && <span className="ml-2 text-xs text-gray-500">faltam {fmt(l.faltam)} para a meta</span>}
                     </summary>
                     <div className="mt-2 overflow-x-auto">
@@ -442,7 +444,10 @@ export default async function ProducaoCampanha({
                               <td className="py-1 pr-3">{rotuloProdutoBase(o.produto)}</td>
                               <td className="py-1 pr-3 text-xs text-gray-600">{o.tipo === "renovacao" ? "Renovação" : "Novo"}</td>
                               <td className="py-1 pr-3">
-                                <span className={`rounded-full px-2 py-0.5 text-xs ${o.status === "Aprovado" ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-700"}`}>{o.status}</span>
+                                <span className={`rounded-full px-2 py-0.5 text-xs ${o.status === "Aprovado" ? "bg-green-100 text-green-800" : o.status === "Solicitado" ? "bg-blue-50 text-blue-800" : "bg-gray-100 text-gray-700"}`}>
+                                  {o.status}
+                                  {o.etapa ? ` · ${o.etapa}` : ""}
+                                </span>
                               </td>
                               <td className="py-1 pr-3">{dataBr(o.entrada)}</td>
                               <td className={`py-1 pr-3 text-right tabular-nums ${o.status === "Aprovado" && o.dias >= DIAS_APROVADA_PARADA ? "font-semibold text-red-700" : ""}`}>{o.dias}</td>

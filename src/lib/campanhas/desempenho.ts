@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buscarEmLotes } from "@/lib/supabase/emLotes";
 import { buscarCodigosCorp } from "@/lib/baseUnica/codigosCorp";
+import { aplicarMinimoCapitalizacao } from "./minimoCapitalizacao";
 
 // Metas e produção automática da CAMPANHA (22/10/2026). A campanha comercial
 // tem período, produtos, metas individuais por imobiliária (ou por grupo/rede),
@@ -101,6 +102,9 @@ export type ParticipanteRow = {
   // Gestor da conta (27/10/2026): pessoa da O2 que cuida da conta, distinta
   // do responsável pela imobiliária na campanha. Fica na linha de meta.
   gestor_conta_email: string | null;
+  // Regra exclusiva da Campanha Elite (04/11/2026): só conta título de Capitalização
+  // com valor igual ou superior a este (Expan e Adjuve: R$ 4.000). Vazio = sem regra.
+  cap_valor_minimo?: number | null;
   // Período INDIVIDUAL do participante (03/11/2026); vazio = vale o da campanha.
   periodo_inicio?: string | null;
   periodo_fim?: string | null;
@@ -138,7 +142,11 @@ export type NumerosFunil = ContagemFunil & { renovacoes: ContagemFunil };
 // Fase 2 (22/10/2026): oportunidades em aberto e alertas por participante.
 export type Oportunidade = {
   produto: string;
+  // "Aprovado" / "Em análise" (cotações) ou "Solicitado" (título de Capitalização pedido e
+  // ainda não contratado -- mesmos cards de "Títulos solicitados" do painel de Capitalização).
   status: string;
+  // Etapa do card no Bitrix (Capitalização: "Proposta", "Liberado para cadastro"...); preenchida em pretendentes.ts.
+  etapa?: string | null;
   entrada: string; // YYYY-MM-DD
   dias: number; // desde a entrada
   valor: number | null; // prêmio cotado (ou valor do título, na Capitalização)
@@ -182,6 +190,9 @@ export type LinhaDesempenho = {
   observacao: string | null;
   responsavelEmail: string | null;
   gestorContaEmail: string | null;
+  // Valor mínimo do título de Capitalização (Campanha Elite) e o que ficou de fora por ele.
+  capValorMinimo: number | null;
+  capDescartados: { total: number; convertidos: number; semValor: number };
   custoPremiacao: number;
   realizado: number; // no período todo da campanha, só contratos novos
   realizadoMes: number; // no mês de referência (ver DesempenhoCampanha.janelaMes), só novos
@@ -347,7 +358,8 @@ function numerosPorImobiliaria(linhas: LinhaFunil[], de: string, ate: string, ab
           const lista = oportunidades.get(imob) ?? [];
           lista.push({
             produto: atual.produto,
-            status: casos.some((c) => c.status_padrao === "Aprovado") ? "Aprovado" : "Em análise",
+            // Capitalização não tem "aprovação": o título aberto é um título SOLICITADO (04/11/2026).
+            status: atual.produto === "capitalizacao" ? "Solicitado" : casos.some((c) => c.status_padrao === "Aprovado") ? "Aprovado" : "Em análise",
             entrada,
             dias: Math.max(0, diasEntre(entrada, ate)),
             valor: Number(atual.premio) || Number(atual.valor_titulo) || null,
@@ -517,12 +529,21 @@ export async function montarDesempenhoCampanha(
 
   // Funil (planilhas + Bitrix) desde o início da base de comparação. Falha de
   // consulta PROPAGA o erro (nunca vira zero): quem chama mostra "dados indisponíveis".
-  const linhasFunil =
+  const linhasFunilBrutas =
     todosIds.length && produtos.length
       ? await lerTodasPaginas<LinhaFunil>((de, ate) =>
           db.rpc("campanha_programa_funil", { p_imobs: todosIds, p_produtos: produtos, p_desde: baseDesde }).range(de, ate)
         )
       : [];
+
+  // Valor mínimo do título de Capitalização por participante (Campanha Elite, 04/11/2026): o
+  // título abaixo do mínimo sai de tudo -- cotações, contratações, base e oportunidades.
+  const minimoPorFicha = new Map<string, number>();
+  for (const p of participantes) {
+    const minimo = Number(p.cap_valor_minimo);
+    if (Number.isFinite(minimo) && minimo > 0) for (const u of unidadesDe(p)) minimoPorFicha.set(u.id, minimo);
+  }
+  const { linhas: linhasFunil, descartados: capDescartados } = aplicarMinimoCapitalizacao(linhasFunilBrutas, minimoPorFicha);
 
   // Vínculo com a FONTE DE PRODUÇÃO (Bitrix/planilhas): ficha sem nenhum vínculo
   // confirmado não tem como mostrar produção -- é "sem vínculo", não "zero".
@@ -641,6 +662,16 @@ export async function montarDesempenhoCampanha(
       }
     }
     if (!unidades.length) avisos.push("Nenhuma imobiliária encontrada para este participante.");
+    const capMinimo = Number(p.cap_valor_minimo) > 0 ? Number(p.cap_valor_minimo) : null;
+    const idsDaLinha = new Set(unidades.map((u) => u.id));
+    const foraDoMinimo = capMinimo
+      ? capDescartados.filter((d) => idsDaLinha.has(d.imobiliariaId) && d.data !== null && d.data >= ctx.inicio && d.data <= ctx.fimEfetivo)
+      : [];
+    if (capMinimo && foraDoMinimo.length) {
+      avisos.push(
+        `${foraDoMinimo.length} título(s) de Capitalização abaixo de ${capMinimo.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} ficaram fora da apuração${foraDoMinimo.some((d) => d.semValor) ? ` (${foraDoMinimo.filter((d) => d.semValor).length} sem valor informado)` : ""}. A conferência do Corp não separa por valor.`
+      );
+    }
     const vinculoProducao = unidades.some((u) => comVinculoProducao.has(u.id));
     const dadosStatus: DadosStatus = !unidades.length ? "sem_vinculo" : !vinculoProducao ? "sem_vinculo_producao" : "ok";
     if (dadosStatus === "sem_vinculo_producao") avisos.push("Nenhuma ficha deste participante tem vínculo confirmado com a fonte de produção (Bitrix/planilhas): o zero não é confiável.");
@@ -677,6 +708,8 @@ export async function montarDesempenhoCampanha(
       observacao: p.observacao,
       responsavelEmail: p.responsavel_email,
       gestorContaEmail: p.gestor_conta_email ?? null,
+      capValorMinimo: capMinimo,
+      capDescartados: { total: foraDoMinimo.length, convertidos: foraDoMinimo.filter((d) => d.convertido).length, semValor: foraDoMinimo.filter((d) => d.semValor).length },
       custoPremiacao: Number(p.custo_premiacao) || 0,
       realizado,
       realizadoMes,

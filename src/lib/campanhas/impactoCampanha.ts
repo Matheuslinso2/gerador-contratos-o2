@@ -4,16 +4,17 @@ import { imobiliariasDaCampanha } from "./imobiliariasDaCampanha";
 import { participantesDaCampanha } from "./metasCampanha";
 import { produtosBaseDaCampanha } from "./desempenho";
 import { produtosDaCampanha } from "./produtos";
+import { aplicarMinimoCapitalizacao } from "./minimoCapitalizacao";
 import { contarNoPeriodo, datasDeContratacao, somarAnos, somarDias, type LinhaFunilBruta } from "./tendencia";
 
 // Impacto da campanha (03/11/2026): unidades participantes e carteira de comparação, e a
 // atualização do ANDAMENTO (produção até hoje contra o que seria esperado sem a campanha) a cada
 // parcial enviada. A foto de partida (tendência e baseline) continua CONGELADA; só o andamento muda.
 
-type Linha = LinhaFunilBruta & { imobiliaria_id: string };
+type Linha = LinhaFunilBruta & { imobiliaria_id: string; produto: string; herdada: boolean | null; valor_titulo: number | null };
 type Ficha = { id: string; nome: string; apelido: string | null; grupo_id: string | null };
 
-export type UnidadeParticipante = { chave: string; nome: string; fichas: string[]; meta: number; inicio: string; fim: string };
+export type UnidadeParticipante = { chave: string; nome: string; fichas: string[]; meta: number; inicio: string; fim: string; capMinimo: number | null };
 
 export type ContextoCampanha = {
   participantes: UnidadeParticipante[];
@@ -43,6 +44,7 @@ export async function contextoDaCampanha(db: SupabaseClient, campanha: Record<st
         meta: Number(p.meta),
         inicio: p.periodo_inicio || (campanha.valido_de as string),
         fim: p.periodo_fim || (campanha.valido_ate as string),
+        capMinimo: Number(p.cap_valor_minimo) > 0 ? Number(p.cap_valor_minimo) : null,
       };
     });
   // Redes com ao menos uma ficha participante ficam fora da comparação (a rede toda é "tocada").
@@ -93,7 +95,10 @@ export async function recalcularAndamento(db: SupabaseClient, campanhaId: string
   const menorInicio = participantesFoto.reduce((m, f) => (f.periodo_inicio < m ? f.periodo_inicio : m), campanha.valido_de as string);
   const desde = somarDias(somarAnos(menorInicio, -1), -120); // folga para não cortar casos que começaram antes
   const todasFichas = [...new Set([...participantesFoto.flatMap((f) => f.imobiliaria_ids), ...[...ctx.controles.values()].flat()])];
-  const linhas = await lerFunil(db, todasFichas, produtos, desde);
+  // Valor mínimo do título de Capitalização (Campanha Elite): mesma regra do painel.
+  const minimoPorFicha = new Map<string, number>();
+  for (const u of ctx.participantes) if (u.capMinimo) for (const f of u.fichas) minimoPorFicha.set(f, u.capMinimo);
+  const linhas = aplicarMinimoCapitalizacao(await lerFunil(db, todasFichas, produtos, desde), minimoPorFicha).linhas;
   const porFicha = new Map<string, Linha[]>();
   const porUnidade = new Map<string, Linha[]>();
   for (const l of linhas) {

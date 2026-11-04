@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { ImageResponse } from "next/og";
 import { createServiceClient } from "@/lib/supabase/service";
-import { dataBr, formatarValor, type DadosPanorama } from "@/lib/campanhas/panoramaCampanha";
+import { contagemOportunidades, dataBr, formatarValor, type DadosPanorama } from "@/lib/campanhas/panoramaCampanha";
 
 export const dynamic = "force-dynamic";
 
@@ -66,28 +66,29 @@ function Evolucao({ d }: { d: DadosPanorama }) {
 function Oportunidades({ d }: { d: DadosPanorama }) {
   const lista = d.oportunidades.slice(0, MAX_OPORTUNIDADES_NA_IMAGEM);
   const resto = d.oportunidades.length - lista.length;
+  const quantas = contagemOportunidades(d.oportunidades);
+  const partesTitulo = [quantas.cotacoes ? `${quantas.cotacoes} cotação(ões) aprovada(s)` : null, quantas.titulos ? `${quantas.titulos} título(s) de Capitalização solicitado(s)` : null].filter(Boolean);
   return (
     <div style={{ display: "flex", flexDirection: "column", marginTop: 22, borderTop: `2px solid ${CINZA_CLARO}`, paddingTop: 16 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", fontSize: 24, fontWeight: 700, color: AZUL }}>
-          {d.oportunidades.length
-            ? `Oportunidades: ${d.oportunidades.length} cotação(ões) aprovada(s) aguardando contratação`
-            : "Oportunidades: nenhuma cotação aprovada aguardando contratação"}
+        <div style={{ display: "flex", fontSize: 22, fontWeight: 700, color: AZUL }}>
+          {partesTitulo.length ? `Oportunidades: ${partesTitulo.join(" · ")}` : "Oportunidades: nenhuma cotação aprovada ou título solicitado aguardando contratação"}
         </div>
       </div>
       <div style={{ display: "flex", fontSize: 16, color: CINZA_MEDIO, marginTop: 2 }}>
-        {`Não entram na produção até virarem contratação · cotações recebidas desde ${dataBr(d.oportunidadesDesde)}`}
+        {`Não entram na produção até virarem contratação · recebidas desde ${dataBr(d.oportunidadesDesde)}`}
         {d.emAnalise > 0 ? ` · ${d.emAnalise} em análise` : ""}
+        {d.capValorMinimo ? ` · Capitalização: títulos a partir de ${formatarValor(d.capValorMinimo, true)}` : ""}
       </div>
       {lista.map((o, i) => (
         <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8, padding: "8px 16px", background: i % 2 === 0 ? "#f4f7fb" : "#ffffff", borderRadius: 10 }}>
           <div style={{ display: "flex", fontSize: 20, fontWeight: 600, color: NAVY, width: 470 }}>{cortar(o.pretendente ?? "Pretendente não identificado", 34)}</div>
           <div style={{ display: "flex", fontSize: 18, color: CINZA_ESCURO, width: 210 }}>{o.produto}</div>
-          <div style={{ display: "flex", fontSize: 18, color: CINZA_ESCURO, width: 260 }}>{o.aprovadaEm ? `aprovada em ${dataBr(o.aprovadaEm).slice(0, 5)}` : "aprovação: data indisponível"}</div>
+          <div style={{ display: "flex", fontSize: 18, color: CINZA_ESCURO, width: 260 }}>{o.tipo === "titulo_solicitado" ? `solicitado em ${dataBr(o.entrada).slice(0, 5)}${o.etapa ? ` · ${cortar(o.etapa, 18)}` : ""}` : o.aprovadaEm ? `aprovada em ${dataBr(o.aprovadaEm).slice(0, 5)}` : "aprovação: data indisponível"}</div>
           <div style={{ display: "flex", fontSize: 18, fontWeight: 600, color: LARANJA, width: 120, justifyContent: "flex-end" }}>{o.diasAguardando !== null ? `${o.diasAguardando} dia(s)` : "—"}</div>
         </div>
       ))}
-      {resto > 0 && <div style={{ display: "flex", fontSize: 17, color: CINZA_MEDIO, marginTop: 8 }}>{`+ ${resto} outra(s) cotação(ões) aprovada(s)`}</div>}
+      {resto > 0 && <div style={{ display: "flex", fontSize: 17, color: CINZA_MEDIO, marginTop: 8 }}>{`+ ${resto} outra(s) oportunidade(s)`}</div>}
     </div>
   );
 }

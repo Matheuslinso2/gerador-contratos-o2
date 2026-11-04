@@ -42,8 +42,9 @@ export async function gerarPreviaParciais(
     return { ok: false, erro: `Falha ao consultar a produção (${e instanceof Error ? e.message : "erro desconhecido"}). Nada foi gerado: tente de novo em instantes.` };
   }
   const historico = await historicoPorParticipante(db, campanha.id);
-  // Oportunidades = cotações APROVADAS ainda não contratadas: data de aprovação e nome do pretendente.
-  const aprovadas = desempenho.linhas.flatMap((l) => l.oportunidades.filter((o) => o.tipo === "novo" && o.status === "Aprovado"));
+  // Oportunidades = cotações APROVADAS e títulos de Capitalização SOLICITADOS, ainda não contratados:
+  // data de aprovação (cotações), etapa (títulos) e nome do pretendente. Não somam na produção.
+  const aprovadas = desempenho.linhas.flatMap((l) => l.oportunidades.filter((o) => o.tipo === "novo" && (o.status === "Aprovado" || o.status === "Solicitado")));
   await resolverAprovacoes(db, aprovadas);
   await resolverPretendentes(db, aprovadas);
 

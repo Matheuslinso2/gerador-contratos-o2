@@ -65,8 +65,26 @@ export async function resolverPretendentes(db: SupabaseClient, oportunidades: Op
     }
   }
 
+  // Etapa do título de Capitalização solicitado (Proposta, Liberado para cadastro...), da base única.
+  const etapasCap = new Map<string, string>();
+  const idsCap = [...new Set(oportunidades.filter((o) => o.produto === "capitalizacao" && o.ref?.fonte === "bitrix" && o.ref.bitrixId).map((o) => o.ref!.bitrixId!))];
+  for (let i = 0; i < idsCap.length; i += 200) {
+    try {
+      const { data } = await db
+        .from("producao_unificada")
+        .select("origem_bitrix_id, status_original")
+        .eq("fonte", "bitrix")
+        .eq("produto", "capitalizacao")
+        .in("origem_bitrix_id", idsCap.slice(i, i + 200));
+      for (const r of (data ?? []) as { origem_bitrix_id: string; status_original: string | null }[]) if (r.status_original) etapasCap.set(r.origem_bitrix_id, r.status_original);
+    } catch {
+      // sem a etapa: a oportunidade aparece só como "Solicitado"
+    }
+  }
+
   for (const o of oportunidades) {
     const ref = o.ref;
+    if (o.produto === "capitalizacao" && ref?.bitrixId) o.etapa = etapasCap.get(ref.bitrixId) ?? null;
     if (ref) {
       if (ref.fonte === "bitrix" && ref.bitrixId) o.pretendente = titulos.get(`${ENTIDADE_BITRIX[o.produto]}:${ref.bitrixId}`) ?? null;
       else if (ref.locatarioId) o.pretendente = nomesLocatario.get(ref.locatarioId) ?? null;
