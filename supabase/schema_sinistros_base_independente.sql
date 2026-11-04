@@ -1,0 +1,6 @@
+-- Sinistros independentes do Corp (04/11/2026). Migrações sinistros_documento_id_erp, sinistros_base_v_independente, chat_cubo_sinistros_v2_base_independente.
+-- sinistros.documento_id e sinistros_corp.documento_id: documento (apólice) do ERP; backfill pelo nosso nº do Corp e, na falta, pelo nº da apólice único. Daqui em diante a ligação é o documento_id.
+-- sinistros_base_v: base única de leitura. Origem 'workspace' = módulo Sinistros (public.sinistros), vale campo a campo; origem 'corp_historico' = sinistros_corp (carga de 19-20/10/2026, congelada) só para o que o módulo não tem.
+--   Indenizado = soma de sinistro_indenizacoes quando existe; senão o histórico. 3.486 linhas = 3.467 históricos + 19 abertos só no Workspace; sem duplicidade.
+-- chat_cubo_sinistros (MV) agora lê de sinistros_base_v e liga à apólice por documento_id.
+-- LACUNA: corp_sinistros (feed SharePoint/Power BI) tem 35 sinistros fora da carga; sinistros do Corp após 20/10/2026 não entram na base até existir a ponte (decisão pendente).
