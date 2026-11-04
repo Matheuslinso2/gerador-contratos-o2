@@ -11,6 +11,8 @@ const ROTAS_PUBLICAS = [
   "/oauth/consent",
   "/login",
   "/signup",
+  // Primeiro acesso por convite da O2 (link com token secreto + código por e-mail).
+  "/convite",
   "/termos",
   "/esqueci-senha",
   "/redefinir-senha",

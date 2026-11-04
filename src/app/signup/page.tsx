@@ -1,7 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { signUp } from "./actions";
-import CampoSenha from "@/components/CampoSenha";
+import { solicitarAcesso } from "./actions";
 import SubmitButton from "@/components/SubmitButton";
 
 export default async function SignupPage({
@@ -17,32 +16,23 @@ export default async function SignupPage({
         <Image src="/marca-o2/o2-logo-oficial.png" alt="O2 Seguros" width={140} height={77} priority />
       </div>
       <div className="text-center">
-        <h1 className="text-xl font-semibold text-o2-navy">Criar conta</h1>
-        <p className="mt-1 text-sm text-gray-600">Cada conta representa uma imobiliária/administradora.</p>
+        <h1 className="text-xl font-semibold text-o2-navy">Pedir acesso</h1>
+        <p className="mt-1 text-sm text-gray-600">O acesso ao Workspace é liberado pela O2. Envie os dados abaixo: se aprovado, você recebe um convite no e-mail informado para criar sua senha.</p>
       </div>
 
       {erro && (
         <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">⚠️ {erro}</p>
       )}
 
-      <form action={signUp} className="space-y-3">
+      <form action={solicitarAcesso} className="space-y-3">
         <label htmlFor="email" className="sr-only">E-mail</label>
         <input
           id="email"
           name="email"
           type="email"
-          placeholder="E-mail"
+          placeholder="E-mail da imobiliária (receberá o convite)"
           required
           className="w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:border-o2-coral focus:outline-none"
-        />
-        <label htmlFor="password" className="sr-only">Senha</label>
-        <CampoSenha
-          id="password"
-          name="password"
-          placeholder="Senha (mín. 8 caracteres)"
-          required
-          minLength={8}
-          autoComplete="new-password"
         />
 
         <div className="border-t border-gray-100 pt-3">
@@ -87,12 +77,6 @@ export default async function SignupPage({
           </div>
         </div>
 
-        <p className="rounded-lg border border-o2-coral/30 bg-o2-coral/5 p-3 text-xs text-o2-navy">
-          Sua conta funciona livremente por 3 dias enquanto a O2 Seguros analisa o cadastro. Depois disso, ferramentas
-          que usam IA (Auditor de Contrato, Gerador de Contrato, Assistente Fiança) ficam limitadas até a autorização —
-          o resto do Workspace continua liberado normalmente.
-        </p>
-
         <label className="flex items-start gap-2 text-sm text-gray-600">
           <input type="checkbox" name="aceite_termos" required className="mt-0.5" />
           <span>
@@ -105,10 +89,10 @@ export default async function SignupPage({
         </label>
 
         <SubmitButton
-          textoCarregando="Criando conta…"
+          textoCarregando="Enviando…"
           className="w-full rounded-full bg-o2-coral px-4 py-2.5 font-medium text-white transition hover:opacity-90"
         >
-          Criar conta
+          Enviar pedido de acesso
         </SubmitButton>
       </form>
 

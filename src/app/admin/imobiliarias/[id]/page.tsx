@@ -11,7 +11,7 @@ import VinculosWhatsapp, { type ContatoWhatsappImobiliaria } from "../VinculosWh
 import FontesVinculos from "../FontesVinculos";
 import { ProdutoresCorp, buscarProdutoresCorp } from "../ProdutoresCorp";
 import { buscarFontesDaFicha, buscarNomesSoltos, type RegistroFonte } from "@/lib/baseUnica/revisao";
-import { atualizarImobiliariaAdmin, adicionarMembroImobiliariaAdmin, removerMembroImobiliariaAdmin } from "../actions";
+import { atualizarImobiliariaAdmin, adicionarMembroImobiliariaAdmin, removerMembroImobiliariaAdmin, enviarConviteImobiliariaAdmin } from "../actions";
 import RascunhoAutomatico from "@/components/RascunhoAutomatico";
 
 export const dynamic = "force-dynamic";
@@ -44,6 +44,9 @@ export default async function AdminImobiliariaDetalhePage({
       supabase.from("whatsapp_contatos").select("id, nome, numero, ativo").eq("imobiliaria_id", id).order("criado_em"),
     ]);
   if (!imobiliaria) redirect("/admin/imobiliarias");
+
+  // Convites de acesso enviados (login verificado, 04/11/2026).
+  const { data: convites } = await supabase.from("imobiliaria_convites").select("id, email, expira_em, usado_em, criado_em, enviado_por").eq("imobiliaria_id", id).order("criado_em", { ascending: false }).limit(10);
 
   // Base Única — revisão uma a uma (Fase 2): fontes, sugestões e grupo.
   const buscaTermo = (buscar_nome ?? "").trim();
@@ -257,6 +260,31 @@ export default async function AdminImobiliariaDetalhePage({
             contatos={(whatsapps ?? []) as ContatoWhatsappImobiliaria[]}
             voltarPara={voltarPara}
           />
+        </section>
+
+        <section className="space-y-3 rounded-xl border border-o2-coral/40 bg-o2-coral/5 p-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Convite de acesso (login verificado)</h2>
+          <p className="text-xs text-gray-600">
+            Envie o convite para o e-mail combinado com a imobiliária. Ela cria a senha em um link seguro (vale 7 dias) e confirma com um código de 6 números enviado ao mesmo e-mail.
+            {imobiliaria.user_id ? " Esta ficha já tem titular: quem aceitar entra como funcionário." : " A primeira pessoa a aceitar vira o titular da ficha."}
+          </p>
+          <ul className="space-y-1">
+            {(convites ?? []).map((c) => {
+              const vencido = !c.usado_em && new Date(c.expira_em).getTime() < Date.now();
+              const situacao = c.usado_em ? "aceito" : vencido ? "vencido" : "aguardando";
+              return (
+                <li key={c.id} className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm">
+                  <span className="text-o2-navy">{c.email}</span>
+                  <span className="text-xs text-gray-500">{situacao} · enviado em {new Date(c.criado_em).toLocaleDateString("pt-BR")} por {c.enviado_por}</span>
+                </li>
+              );
+            })}
+          </ul>
+          <form action={enviarConviteImobiliariaAdmin} className="flex gap-2">
+            <input type="hidden" name="imobiliaria_id" value={imobiliaria.id} />
+            <input type="email" name="email" required defaultValue={imobiliaria.email ?? ""} placeholder="e-mail combinado com a imobiliária" className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-o2-coral focus:outline-none" />
+            <button type="submit" className="rounded-lg bg-o2-coral px-4 py-2 text-sm font-medium text-white transition hover:opacity-90">Enviar convite</button>
+          </form>
         </section>
 
         <section className="space-y-3 rounded-xl border border-gray-200 bg-gray-50 p-4">

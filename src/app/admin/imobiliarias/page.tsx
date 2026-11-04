@@ -10,7 +10,7 @@ import { apenasDigitos } from "@/lib/pdfComSenha";
 import { type ImobiliariaAdminRow } from "./ImobiliariaCard";
 import MesclarDuplicidade, { type ImobiliariaDuplicadaLinha } from "./MesclarDuplicidade";
 import ListaImobiliarias from "./ListaImobiliarias";
-import { autorizarImobiliaria } from "./actions";
+import { autorizarImobiliaria, aprovarPedidoAcesso, recusarPedidoAcesso } from "./actions";
 import NomesSemImobiliaria from "./NomesSemImobiliaria";
 import { buscarNomesSemImobiliaria, volumePorFicha } from "@/lib/baseUnica/revisao";
 
@@ -49,6 +49,7 @@ export default async function AdminImobiliariasPage({
       supabase.from("faturas_esperadas").select("imobiliaria_id"),
       supabase.from("imobiliaria_membros").select("imobiliaria_id"),
     ]);
+  const { data: pedidosAcesso } = await supabase.from("imobiliaria_pedidos_acesso").select("id, nome, cnpj, endereco, responsavel, email, criado_em").eq("status", "pendente").order("criado_em");
   const [volumes, semImobiliaria] = await Promise.all([volumePorFicha(supabase), buscarNomesSemImobiliaria(supabase)]);
 
   const contratosPorId = contarPorImobiliaria(contratosData);
@@ -115,6 +116,27 @@ export default async function AdminImobiliariasPage({
         {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
         {sucesso && <p className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-700">{sucesso}</p>}
 
+        {(pedidosAcesso ?? []).length > 0 && (
+          <section className="space-y-3">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">Pedidos de acesso ({(pedidosAcesso ?? []).length})</h2>
+            <p className="text-xs text-gray-500">Imobiliárias que pediram acesso em /signup. Aprovar liga o pedido à ficha pelo CNPJ (ou cria a ficha) e envia o convite para o e-mail informado.</p>
+            <div className="space-y-2">
+              {(pedidosAcesso ?? []).map((pd) => (
+                <div key={pd.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-o2-coral/40 bg-o2-coral/5 p-4">
+                  <div className="min-w-0 text-sm">
+                    <p className="font-medium text-o2-navy">{pd.nome}</p>
+                    <p className="text-xs text-gray-600">CNPJ/CPF {pd.cnpj} · {pd.responsavel} · {pd.email}</p>
+                    <p className="text-xs text-gray-500">{pd.endereco} · pedido em {new Date(pd.criado_em).toLocaleDateString("pt-BR")}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <form action={aprovarPedidoAcesso}><input type="hidden" name="pedido_id" value={pd.id} /><button type="submit" className="rounded-full bg-o2-coral px-4 py-1.5 text-sm font-medium text-white hover:opacity-90">Aprovar e enviar convite</button></form>
+                    <form action={recusarPedidoAcesso}><input type="hidden" name="pedido_id" value={pd.id} /><button type="submit" className="rounded-full border border-gray-300 px-4 py-1.5 text-sm text-gray-600 hover:bg-gray-100">Recusar</button></form>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
         {pendentesAutorizacao.length > 0 && (
           <section className="space-y-3">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">
