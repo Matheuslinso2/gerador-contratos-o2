@@ -22,8 +22,7 @@ import PremiacaoCliente from "./PremiacaoCliente";
 import { contagemOportunidades, dataBr, enderecoDaImagem, formatarValor, type DadosPanorama } from "@/lib/campanhas/panoramaCampanha";
 import { imobiliariasDaCampanha } from "@/lib/campanhas/imobiliariasDaCampanha";
 import { participantesDaCampanha } from "@/lib/campanhas/metasCampanha";
-import { ENDERECO_REMETENTE_CAMPANHAS, montarHtmlCampanha, type CampanhaRow } from "@/lib/campanhas/processarLote";
-import { linkDescadastro } from "@/lib/campanhas/unsubscribeToken";
+import { ENDERECO_REMETENTE_CAMPANHAS, LINK_DESCADASTRO_MENSAGEM_UNICA, montarHtmlCampanha, type CampanhaRow } from "@/lib/campanhas/processarLote";
 import { EditorCorpo } from "../../EditorCorpo";
 import { ConfirmarDisparoButton } from "../ConfirmarDisparoButton";
 import { atualizarPreviaParciais, descartarParciais, enviarParciais, enviarTesteParciais } from "../parciaisActions";
@@ -82,7 +81,6 @@ export default async function ParciaisPage({ params, searchParams }: { params: P
   const premiacoes = comPremiacaoPorCliente ? await premiacoesDaCampanha(db, id) : new Map<string, string>();
   const textoSemMarcadorPremiacao = comPremiacaoPorCliente && aplicarPremiacao(textoAtual, null).semMarcador;
   const premiacaoPadraoHtml = PREMIACAO_PADRAO_LINHAS.join("");
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
 
   const htmlDoEmail = (l: Linha) => {
     const e = montarEmailParcial(l.dados, textoAtual, enderecoDaImagem(l.token), l.token, premiacoes.get(l.participante_id));
@@ -100,7 +98,7 @@ export default async function ParciaisPage({ params, searchParams }: { params: P
       personalizacao: "nenhuma",
       remetente_nome: campanha.remetente_nome,
     };
-    return montarHtmlCampanha(row, linkDescadastro(user?.email ?? "previa@o2seguros.com.br", siteUrl, id));
+    return montarHtmlCampanha(row, LINK_DESCADASTRO_MENSAGEM_UNICA);
   };
 
   const semMarcador = !textoAtual.includes(TOKEN_PANORAMA);
@@ -269,7 +267,7 @@ export default async function ParciaisPage({ params, searchParams }: { params: P
                       <p className="text-xs text-gray-500">
                         Parcial nº {l.versao} · campanha de {dataBr(l.dados.inicio)} a {dataBr(l.dados.fim)}
                         {l.dados.periodoIndividual ? " (período individual)" : ""} · {l.imobiliaria_ids.length > 1 ? `${l.imobiliaria_ids.length} unidades` : "1 unidade"} ·{" "}
-                        {l.imobiliaria_ids.some((i) => comCard.has(i)) ? "tem card no Bitrix (recebe comentário)" : "sem card no Bitrix"}
+                        {l.imobiliaria_ids.some((i) => comCard.has(i)) ? "tem card no Bitrix: entra na conversa de e-mail do card" : "sem card no Bitrix: sai sem thread"}
                       </p>
                     </div>
                     <label className="flex shrink-0 items-center gap-1 text-xs text-gray-600">
@@ -317,7 +315,7 @@ export default async function ParciaisPage({ params, searchParams }: { params: P
               Enviar teste para mim
             </button>
             <ConfirmarDisparoButton
-              mensagemConfirmacao={`Enviar a parcial para as imobiliárias marcadas (${linhas.length} no máximo)? Cada uma recebe só o próprio panorama, e os cards do Bitrix recebem um comentário. Confirma?`}
+              mensagemConfirmacao={`Enviar a parcial para as imobiliárias marcadas (${linhas.length} no máximo)? Cada uma recebe só o próprio panorama, em uma mensagem só para todos os endereços dela, dentro da conversa de e-mail do card no Bitrix. Confirma?`}
               textoCarregando="Enviando..."
               className="rounded-full bg-o2-coral px-6 py-2 text-sm font-medium text-white transition hover:opacity-90"
             >

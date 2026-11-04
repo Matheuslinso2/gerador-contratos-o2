@@ -5,6 +5,8 @@ import { linkDescadastro, linkDescadastroApi } from "./unsubscribeToken";
 import { aplicarApelido, type ModoPersonalizacao } from "./personalizacao";
 import { nomeParaComunicacao } from "@/lib/nomeParaComunicacao";
 import { nomeExibidoRemetente } from "./remetente";
+import { bccDoCard, continuarConversa, gravarDestinatarios } from "@/lib/bitrix/conversasEmail";
+import { ENTITY_TYPE_ID_DEAL } from "@/lib/bitrix/entidadesCard";
 
 // Endereço separado do transacional (avisos@...) -- rejeições/denúncias de
 // marketing não podem contaminar a reputação do domínio usado hoje por
@@ -53,6 +55,66 @@ export function personalizarCampanha(campanha: CampanhaRow, nome: string | null)
 }
 
 export type ResultadoLote = { processados: number; restantes: number; concluida: boolean };
+
+// Parcial na conversa única da imobiliária (04/11/2026): UMA mensagem para todos os endereços
+// dela, para a thread encadear de verdade. Sem rodapé de descadastro por pessoa (a mensagem é uma
+// só): o link abre um e-mail para a equipe, que faz o descadastro.
+export const LINK_DESCADASTRO_MENSAGEM_UNICA = "mailto:comercial@o2seguros.com.br?subject=Descadastrar%20de%20campanhas";
+
+type EnvioReivindicado = { id: string; email: string; tentativas: number | null };
+
+async function enviarMensagemUnica(
+  supabase: ReturnType<typeof createServiceClient>,
+  campanha: CampanhaRow,
+  pendentes: EnvioReivindicado[],
+  cardDealId: number | null
+) {
+  // Descadastro entre a fila ser montada e o envio: esse endereço sai da mensagem.
+  const { data: descadastrados } = await supabase.from("campanhas_descadastros").select("email").in("email", pendentes.map((p) => p.email));
+  const fora = new Set((descadastrados ?? []).map((d) => String(d.email).toLowerCase()));
+  const saem = pendentes.filter((p) => fora.has(p.email.toLowerCase()));
+  const vao = pendentes.filter((p) => !fora.has(p.email.toLowerCase()));
+  if (saem.length) await supabase.from("campanhas_envios").update({ status: "descadastrado" }).in("id", saem.map((p) => p.id));
+  if (!vao.length) return;
+
+  try {
+    // Com card: entra SEMPRE na conversa mais recente dele (Re: + In-Reply-To) e leva o endereço do
+    // card em cópia oculta, como o "E-mail no card". Sem card (ou sem conversa ainda): abre a conversa.
+    let assunto = campanha.assunto;
+    let headers: Record<string, string> | undefined;
+    let bcc: string[] | undefined;
+    if (cardDealId) {
+      const continuacao = await continuarConversa(ENTITY_TYPE_ID_DEAL, cardDealId);
+      if (continuacao) {
+        assunto = continuacao.assunto;
+        headers = continuacao.headers;
+      }
+      bcc = [bccDoCard(ENTITY_TYPE_ID_DEAL, cardDealId)];
+    }
+    const { id: resendEmailId } = await enviarEmail({
+      para: vao.map((p) => p.email),
+      bcc,
+      assunto,
+      html: montarHtmlCampanha(campanha, LINK_DESCADASTRO_MENSAGEM_UNICA),
+      remetente: nomeExibidoRemetente(campanha.remetente_nome),
+      enderecoRemetente: ENDERECO_REMETENTE_CAMPANHAS,
+      headers,
+      throwSeFalhar: true,
+    });
+    // Mesmo id nos endereços da mensagem: a abertura vale para a imobiliária (um e-mail só).
+    await supabase.from("campanhas_envios").update({ status: "enviado", enviado_em: new Date().toISOString(), resend_email_id: resendEmailId }).in("id", vao.map((p) => p.id));
+    // "E-mail no card" abre com esses endereços já preenchidos para a equipe continuar a conversa.
+    if (cardDealId) await gravarDestinatarios(ENTITY_TYPE_ID_DEAL, cardDealId, { para: vao.map((p) => p.email), cc: [] }, "envio");
+  } catch (erro) {
+    for (const p of vao) {
+      const tentativas = (p.tentativas ?? 0) + 1;
+      await supabase
+        .from("campanhas_envios")
+        .update({ tentativas, erro_detalhe: erro instanceof Error ? erro.message : String(erro), status: tentativas >= MAX_TENTATIVAS ? "falhou" : "pendente" })
+        .eq("id", p.id);
+    }
+  }
+}
 
 // Compartilhada entre o loop de envio real (abaixo) e o botão de "enviar
 // teste" da tela de revisão -- garante que o teste mostra exatamente o HTML
@@ -130,7 +192,13 @@ export async function processarLote(campanhaId: string, limite = TAMANHO_LOTE_PA
   }
 
   let processados = 0;
-  for (const envio of pendentes ?? []) {
+  const { data: modo } = await supabase.from("campanhas").select("mensagem_unica, card_deal_id").eq("id", campanhaId).single();
+  const mensagemUnica = !!modo?.mensagem_unica;
+  if (mensagemUnica && pendentes?.length) {
+    processados = pendentes.length;
+    await enviarMensagemUnica(supabase, campanha, pendentes as EnvioReivindicado[], modo?.card_deal_id ? Number(modo.card_deal_id) : null);
+  }
+  for (const envio of mensagemUnica ? [] : (pendentes ?? [])) {
     processados++;
 
     // Pode ter havido descadastro entre a fila ser montada e o envio de

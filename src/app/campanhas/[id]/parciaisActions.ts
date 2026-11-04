@@ -5,17 +5,15 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { enviarEmail } from "@/lib/email";
-import { chamarBitrix } from "@/lib/bitrix/client";
 import { gerarPreviaParciais } from "@/lib/campanhas/previaParciais";
 import { produtosDaCampanha } from "@/lib/campanhas/produtos";
 import { limparNomeRemetente, nomeExibidoRemetente } from "@/lib/campanhas/remetente";
-import { enderecoDaImagem, dataBr, formatarValor, type DadosPanorama } from "@/lib/campanhas/panoramaCampanha";
+import { enderecoDaImagem, type DadosPanorama } from "@/lib/campanhas/panoramaCampanha";
 import { campanhaComPremiacaoPorCliente, montarEmailParcial, normalizarTextoParcial, TEXTO_PADRAO_PARCIAL_HTML } from "@/lib/campanhas/parcialCampanha";
 import { premiacoesDaCampanha, restaurarPremiacaoPadrao, salvarPremiacaoPersonalizada } from "@/lib/campanhas/premiacaoPersonalizada";
 import { dispararCampanha } from "@/lib/campanhas/dispararCampanha";
 import { recalcularAndamento } from "@/lib/campanhas/impactoCampanha";
-import { ENDERECO_REMETENTE_CAMPANHAS, montarHtmlCampanha, type CampanhaRow } from "@/lib/campanhas/processarLote";
-import { linkDescadastro } from "@/lib/campanhas/unsubscribeToken";
+import { ENDERECO_REMETENTE_CAMPANHAS, LINK_DESCADASTRO_MENSAGEM_UNICA, montarHtmlCampanha, type CampanhaRow } from "@/lib/campanhas/processarLote";
 
 // "Enviar parciais" (30/10/2026), em 2 passos: (1) gera a PRÉVIA, que já grava
 // uma versão do panorama por imobiliária com os números de agora; (2) a equipe
@@ -118,7 +116,7 @@ export async function enviarTesteParciais(campanhaId: string, loteId: string, fo
     await enviarEmail({
       para: [user.email!],
       assunto: `[TESTE] ${e.assunto}`,
-      html: montarHtmlCampanha(row, linkDescadastro(user.email!, siteUrl!, campanhaId)),
+      html: montarHtmlCampanha(row, LINK_DESCADASTRO_MENSAGEM_UNICA),
       remetente: nomeExibidoRemetente(remetente),
       enderecoRemetente: ENDERECO_REMETENTE_CAMPANHAS,
       throwSeFalhar: true,
@@ -129,28 +127,12 @@ export async function enviarTesteParciais(campanhaId: string, loteId: string, fo
   irParaParciais(campanhaId, loteId, "ok", `E-mail de teste (${l.nome}) enviado para ${user.email}.`);
 }
 
-async function comentarNosCards(db: ReturnType<typeof createServiceClient>, campanhaId: string, l: PanoramaRow): Promise<{ comentados: number; falhas: number }> {
-  const { data } = await db.from("campanhas_cards_bitrix").select("bitrix_deal_id").eq("campanha_id", campanhaId).in("imobiliaria_id", l.imobiliaria_ids);
-  const d = l.dados;
-  const u = d.moeda || !d.unidade ? "" : ` ${d.unidade}`;
-  const texto =
-    `Parcial nº ${d.versao} da campanha ${d.campanha} enviada em ${dataBr(d.posicaoEm)}: ` +
-    `realizado ${formatarValor(d.realizado, d.moeda)}${u}` +
-    (d.meta ? ` de ${formatarValor(d.meta, d.moeda)}${u} (${Math.round(d.percentual ?? 0)}% da meta)` : "") +
-    (d.faltam && d.faltam > 0 ? `, faltam ${formatarValor(d.faltam, d.moeda)}${u}` : "") +
-    (d.diasRestantes > 0 ? `, ${d.diasRestantes} dias até o fim` : ", campanha encerrada") +
-    `. Panorama enviado: ${enderecoDaImagem(l.token)}?interno=1`;
-  let comentados = 0;
-  let falhas = 0;
-  for (const r of (data ?? []) as { bitrix_deal_id: number }[]) {
-    try {
-      await chamarBitrix("crm.timeline.comment.add", { "fields[ENTITY_ID]": r.bitrix_deal_id, "fields[ENTITY_TYPE]": "deal", "fields[COMMENT]": texto });
-      comentados++;
-    } catch {
-      falhas++;
-    }
-  }
-  return { comentados, falhas };
+// Card (negócio do funil Campanhas) da imobiliária, cuja conversa de e-mail a parcial continua.
+// Mais de um card na mesma linha (grupo): vale o de menor número, sempre o mesmo. Sem card: sem thread.
+async function dealDoCard(db: ReturnType<typeof createServiceClient>, campanhaId: string, l: PanoramaRow): Promise<number | null> {
+  const { data } = await db.from("campanhas_cards_bitrix").select("bitrix_deal_id").eq("campanha_id", campanhaId).in("imobiliaria_id", l.imobiliaria_ids).order("bitrix_deal_id", { ascending: true }).limit(1);
+  const id = Number((data as { bitrix_deal_id: number }[] | null)?.[0]?.bitrix_deal_id);
+  return Number.isFinite(id) && id > 0 ? id : null;
 }
 
 export async function enviarParciais(campanhaId: string, loteId: string, formData: FormData) {
@@ -171,11 +153,14 @@ export async function enviarParciais(campanhaId: string, loteId: string, formDat
 
   const produtos = produtosDaCampanha(campanha);
   let enviadas = 0;
-  let falhasCard = 0;
-  let cardsComentados = 0;
+  let emThread = 0;
+  const semCard: string[] = [];
   const problemas: string[] = [];
   for (const l of linhas) {
     const e = montarEmailParcial(l.dados, texto, enderecoDaImagem(l.token), l.token, premiacoes.get(l.participante_id));
+    // Conversa única da imobiliária (04/11/2026): a parcial é UMA mensagem para todos os endereços,
+    // na conversa do card (Re: + In-Reply-To + cópia oculta para o card); não grava comentário no Bitrix.
+    const cardDealId = await dealDoCard(db, campanhaId, l);
     const { data: filho, error } = await db
       .from("campanhas")
       .insert({
@@ -197,6 +182,8 @@ export async function enviarParciais(campanhaId: string, loteId: string, formDat
         criado_por_email: user.email,
         status: agendadoPara ? "agendada" : "rascunho",
         agendado_para: agendadoPara,
+        mensagem_unica: true,
+        card_deal_id: cardDealId,
       })
       .select("id")
       .single();
@@ -210,9 +197,8 @@ export async function enviarParciais(campanhaId: string, loteId: string, formDat
     }
     await db.from("campanhas_panoramas").update({ status: "enviada", enviado_em: new Date().toISOString(), email_campanha_id: filho.id, texto }).eq("id", l.id);
     enviadas++;
-    const c = await comentarNosCards(db, campanhaId, l);
-    falhasCard += c.falhas;
-    cardsComentados += c.comentados;
+    if (cardDealId) emThread++;
+    else semCard.push(l.nome);
   }
   // Andamento do quadro Impacto da campanha: atualiza a cada parcial enviada (nunca atrapalha o envio).
   if (enviadas > 0) {
@@ -226,8 +212,9 @@ export async function enviarParciais(campanhaId: string, loteId: string, formDat
   await db.from("campanhas_panoramas").update({ status: "descartada" }).eq("campanha_id", campanhaId).eq("lote_id", loteId).eq("status", "previa");
 
   const resumo =
-    `${enviadas} parcial(is) ${agendadoPara ? "agendada(s)" : "em envio"}. As versões do panorama foram gravadas` +
-    (falhasCard ? ` (${falhasCard} comentário(s) nos cards do Bitrix não puderam ser registrados)` : cardsComentados ? ` e registradas em ${cardsComentados} card(s) do Bitrix` : "") +
+    `${enviadas} parcial(is) ${agendadoPara ? "agendada(s)" : "em envio"}, cada uma em uma mensagem só para a imobiliária. As versões do panorama foram gravadas` +
+    (emThread ? `; ${emThread} entram na conversa de e-mail do card no Bitrix` : "") +
+    (semCard.length ? `; sem card (saem sem thread): ${semCard.slice(0, 6).join(", ")}${semCard.length > 6 ? "…" : ""}` : "") +
     ".";
   if (problemas.length) irParaCampanha(campanhaId, "erro", `${resumo} Com problema: ${problemas.slice(0, 4).join("; ")}.`);
   irParaCampanha(campanhaId, "ok", resumo);

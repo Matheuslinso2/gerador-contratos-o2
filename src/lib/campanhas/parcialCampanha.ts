@@ -188,7 +188,8 @@ export function montarEmailParcial(d: DadosPanorama, textoHtml: string, imagemUr
   const { corpoHtml } = montarCorpoParcial(textoHtml, d, imagemUrl, token, premiacaoPersonalizada);
   return {
     nome: `Parcial ${d.versao} — ${d.campanha} — ${d.participante} (${dataBr(d.posicaoEm).slice(0, 5)})`,
-    assunto: `Parcial da campanha ${d.campanha} — ${d.participante}`,
+    // Assunto fixo da imobiliária: é ele que abre a conversa única; as próximas parciais entram nela como "Re: …".
+    assunto: `Campanha ${d.campanha} — ${d.participante}`,
     titulo: d.campanha,
     introducao: `Campanha de ${dataBr(d.inicio)} a ${dataBr(d.fim)} · produção apurada até ${dataBr(d.apuradoAte)}`,
     corpoHtml,
