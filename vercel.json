@@ -120,6 +120,10 @@
       "schedule": "52 * * * *"
     },
     {
+      "path": "/api/cron/analise-precos",
+      "schedule": "30 8 * * *"
+    },
+    {
       "path": "/api/cron/erp-bitrix?spa=1042",
       "schedule": "20 * * * *"
     },

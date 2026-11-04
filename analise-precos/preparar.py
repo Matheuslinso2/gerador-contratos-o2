@@ -13,6 +13,10 @@ def seg_norm(s):
     return None
 def carregar():
     df=pd.read_pickle('analise-precos/fianca.pkl')
+    # 1 linha = 1 caso: a planilha repete o caso nos meses seguintes (herdada); fica o estado mais avançado.
+    ordem={'Convertido':6,'Perdido':5,'Recusado':4,'Cancelado':3,'Aprovado':2,'Em análise':1}
+    df['_r']=df.status_padrao.map(ordem).fillna(0)
+    df=df.sort_values(['_r','herdada'],ascending=[False,True]).drop_duplicates('chave_caso').drop(columns='_r').reset_index(drop=True)
     x=pd.json_normalize(df.extras.apply(lambda e:e or {}))
     for c in ['pacote_locacao','condominio','iptu','tipo_locacao','cep','bairro','cidade']:
         df[c]=x[c] if c in x else None

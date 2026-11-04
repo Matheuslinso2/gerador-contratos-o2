@@ -56,16 +56,18 @@ def P(t, s=B): el.append(Paragraph(t, s))
 
 cob = R['cobertura']
 P('Fiança: fechamento e preço (Etapa 1)', S['Title'])
-P(f"Base: {n(R['n_total'])} cotações de Fiança (planilhas 2020-2026 + Bitrix 2026). Foram analisadas {n(R['n_dec'])} cotações já decididas (fechada, perdida ou recusada) com aluguel válido (R$ 300 a R$ 40.000). Taxa geral de fechamento: <b>{n(R['tx_global'] * 100, 1)}%</b>.")
+P(f"Base: {n(R['n_total'])} cotações de Fiança de contratação nova (planilhas 2020-2026 + Bitrix 2026), cada caso contado uma vez (renovações e cópias repetidas de um mês para o outro ficam de fora). Foram analisadas {n(R['n_dec'])} cotações já decididas (fechada, perdida ou recusada) com aluguel válido (R$ 300 a R$ 40.000). Taxa geral de fechamento: <b>{n(R['tx_global'] * 100, 1)}%</b>.")
 P('O que descobri (resumo)', H)
+ft_=R['t_faixa']; fa=R['t_ano']; sg=R['t_seg'].set_index('seguradora'); im_=R['t_imob']
+pct=lambda v: n(v,1)+'%'
 for t in [
-    'Quanto maior o aluguel, menos fecha: de 29,6% (aluguel abaixo de R$ 1.000) para 13,0% (acima de R$ 8.000). A diferença é grande e não é acaso (as margens de erro não se tocam).',
-    'A recusa pela seguradora tem formato de "U": recusa mais nos aluguéis muito baixos (43%) e muito altos (45%); no meio fica perto de 30%. Já a perda (cliente aprovado que não fecha) sobe sempre com o aluguel.',
-    'Entre as aprovadas, a chance de fechar cai de 52% (aluguel baixo) para 23% (aluguel alto). É aí que o preço da parcela mais pesa.',
-    'A conversão caiu em 2023-2025 (cerca de 22%) e voltou a 28% em 2026. Descontando aluguel e imobiliária, 2023-2025 tiveram cerca de 30% menos chance de fechar que 2020.',
-    'A imobiliária importa muito: Monte Alegre, Teruszkin e R&S fecham 40-47%; Rafael Penna (6%), AG Rio (3%), O2 direto (9,5%) e Renascença Campo Grande (9%) fecham quase nada (na maioria, por recusa ou perda). Tabela na seção 3.',
-    'Preço: o prêmio anual mediano é de 3,3 a 3,8 aluguéis nas seguradoras principais (Tokio 3,84; Porto Tradicional 3,42; Pottencial Tradicional 3,26) e 1,5 aluguel na Pottencial Taxa Fixa. A parcela mensal (prêmio/12) pesa cerca de 27% a 32% do aluguel, e 12% na Taxa Fixa.',
-    'Sobre o pacote de locação (aluguel + condomínio + IPTU), a parcela pesa menos: 19% a 28%.']:
+    f"Quanto maior o aluguel, menos fecha: de {pct(ft_.iloc[0]['conversao_%'])} (aluguel abaixo de R$ 1.000) para {pct(ft_.iloc[4]['conversao_%'])} (R$ 3.000 a 5.000) e {pct(ft_.iloc[6]['conversao_%'])} (acima de R$ 8.000). A diferença é grande e não é acaso (as margens de erro não se tocam).",
+    f"A recusa pela seguradora tem formato de \"U\": {pct(ft_.iloc[0]['recusa_%'])} nos aluguéis abaixo de R$ 1.000, perto de {pct(ft_.iloc[3]['recusa_%'])} no meio e {pct(ft_.iloc[6]['recusa_%'])} acima de R$ 8.000. Já a perda (cliente aprovado que não fecha) sobe sempre com o aluguel.",
+    f"Entre as aprovadas, a chance de fechar cai de {pct(ft_.iloc[0]['fecha_se_aprovada_%'])} (aluguel baixo) para {pct(ft_.iloc[6]['fecha_se_aprovada_%'])} (alto). É aí que o preço da parcela mais pesa.",
+    f"No tempo: 2020 a 2022 fechavam cerca de 29% a 31%; desde 2023 ficou em torno de 22% ({pct(fa.loc[2023,'conversao_%'])} em 2023, {pct(fa.loc[2026,'conversao_%'])} em 2026), sem recuperação. Descontando aluguel e imobiliária, 2023 a 2026 têm cerca de 30% a 35% menos chance de fechar que 2020.",
+    f"A imobiliária importa muito: Teruszkin ({pct(im_.loc['TERUSZKIN','conversao_%'])}) e Monte Alegre ({pct(im_.loc['MONTE ALEGRE','conversao_%'])}) fecham quase metade; Rafael Penna ({pct(im_.loc['RAFAEL PENNA','conversao_%'])}), AG Rio ({pct(im_.loc['AG RIO','conversao_%'])}), O2 direto ({pct(im_.loc['O2','conversao_%'])}) e Renascença Campo Grande ({pct(im_[im_.index.str.startswith('RENASCEN') & im_.index.str.contains('CAMPO GRANDE')]['conversao_%'].iloc[0])}) fecham quase nada, na maioria por recusa ou perda. Tabela na seção 3.",
+    f"Preço: o prêmio anual mediano é de {n(sg.loc['Pottencial Tradicional','premio_em_alugueis_mediano'],1)} aluguéis na Pottencial Tradicional a {n(sg.loc['Too','premio_em_alugueis_mediano'],1)} na Too (Tokio {n(sg.loc['Tokio','premio_em_alugueis_mediano'],1)}; Porto Tradicional {n(sg.loc['Porto Tradicional','premio_em_alugueis_mediano'],1)}; Pottencial Taxa Fixa {n(sg.loc['Pottencial Taxa Fixa','premio_em_alugueis_mediano'],1)}). A parcela mensal (prêmio/12) pesa de {n(sg['parcela_mensal_sobre_aluguel_pct'].min(),0)}% a {n(sg['parcela_mensal_sobre_aluguel_pct'].max(),0)}% do aluguel.",
+    f"Sobre o pacote de locação (aluguel + condomínio + IPTU), a parcela pesa menos: {n(sg['parcela_sobre_pacote_pct'].min(),0)}% a {n(sg['parcela_sobre_pacote_pct'].max(),0)}%."]:
     P('• ' + t)
 P('Duas limitações importantes (leia antes de usar os números)', H)
 P('1) <b>A seguradora só está preenchida nas cotações fechadas</b> (97% das fechadas, ~1% das perdidas e 0% das recusadas). Por isso não dá para calcular "a conversão de cada seguradora" nem medir diretamente o quanto o preço de cada uma derruba o fechamento. O que dá para medir é o efeito do <b>aluguel</b> (que define o prêmio) e da imobiliária. Para medir preço de verdade, as cotações perdidas precisam guardar a seguradora e o prêmio oferecidos (hoje os cards perdidos do Bitrix não trazem prêmio).')
@@ -93,11 +95,11 @@ P('"Ajustado" puxa levemente imobiliárias com poucas cotações para a média, 
 el.append(PageBreak())
 
 P('4. Modelo da chance de fechar (regressão logística)', H)
-P(f"Variáveis: aluguel (escala logarítmica), residencial/comercial, ano e as 20 imobiliárias com mais cotações. Testado <b>para frente no tempo</b>: treinei com dados até 2025 e testei em 2026. Poder de acerto (AUC) = <b>{n(R['aucA'], 2)}</b> (0,5 = chute; 1 = perfeito). É modesto: aluguel e imobiliária explicam parte do fechamento, mas o resto depende de fatores que não estão na base (perfil do cliente, concorrência, atendimento). Serve para entender tendências, não para prever uma cotação individual.")
+P(f"Variáveis: aluguel (escala logarítmica), residencial/comercial, ano e as 20 imobiliárias com mais cotações. Testado <b>para frente no tempo</b>: treinei com dados até 2025 e testei em 2026. Poder de acerto (AUC) = <b>{n(R['aucA'], 2)}</b> (0,5 = chute; 1 = perfeito). É baixo, quase um chute: aluguel e imobiliária explicam parte do fechamento, mas o resto depende de fatores que não estão na base (perfil do cliente, concorrência, atendimento). Serve para entender tendências, não para prever uma cotação individual.")
 el.append(Image('analise-precos/img/modelo.png', 15 * cm, 6.4 * cm))
 gg = R['grade'].copy(); gg.columns = ['Aluguel (R$)', 'Chance de fechar % (todas)', 'Chance de fechar % (se aprovada)']
 gg['Aluguel (R$)'] = gg['Aluguel (R$)'].astype(int).astype(str); el.append(tbl(br(gg)))
-P('Cliente de referência: locação residencial em 2026, imobiliária fora das 20 maiores. A cada vez que o aluguel dobra, a chance de fechar cai cerca de 20% em termos relativos (razão de chances de cerca de 0,72 por dobro, ajustada). Só entre as aprovadas o efeito é mais forte (cerca de 0,60 por dobro): o preço da parcela pesa na decisão do cliente.')
+P('Cliente de referência: locação residencial em 2026, imobiliária fora das 20 maiores. A cada vez que o aluguel dobra, a chance de fechar cai cerca de 20% a 25% em termos relativos (razão de chances de cerca de 0,74 por dobro, ajustada). Só entre as aprovadas o efeito é mais forte (cerca de 0,62 por dobro): o preço da parcela pesa na decisão do cliente.')
 el.append(PageBreak())
 
 P('5. Preço praticado por seguradora', H)
@@ -109,7 +111,7 @@ P('"Prêmio em aluguéis" = prêmio anual ÷ aluguel (fechadas de 2024-2026, rep
 sh = R['share'].reset_index(); sh['ano'] = sh.ano.astype(int).astype(str)
 P('Participação de cada seguradora nas apólices fechadas (%), por ano:')
 el.append(tbl(br(sh), fs=7))
-P('A Pottencial Tradicional caiu de ~54% (2020) para 26% (2026); a Pottencial Taxa Fixa já é 21% em 2026; Tokio subiu para 15%. "Porto Essencial" reúne Porto Essencial e Essencial 20/30.')
+P('A Pottencial Tradicional caiu de ~55% (2020) para 37% (2026); a Pottencial Taxa Fixa chegou a 10% em 2026; a Tokio subiu para 20%. "Porto Essencial" reúne Porto Essencial e Essencial 20/30.')
 
 SimpleDocTemplate('analise-precos/Etapa1_Fianca_fechamento_e_preco.pdf', pagesize=A4, leftMargin=1.8 * cm, rightMargin=1.8 * cm, topMargin=1.5 * cm, bottomMargin=1.5 * cm).build(el)
 for k, nm in [('t_mes', 'fechamento_mes'), ('t_imob', 'fechamento_imobiliaria'), ('t_faixa', 'fechamento_faixa'), ('t_seg', 'preco_seguradora')]:

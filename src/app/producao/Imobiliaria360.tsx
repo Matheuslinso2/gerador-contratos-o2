@@ -15,6 +15,7 @@ import InfoLegenda from "@/components/InfoLegenda";
 import BarrasMensais from "./BarrasMensais";
 import type { OpcaoImob } from "./FiltrosProducao";
 import Seletor360 from "./Seletor360";
+import FichaVisita, { type FichaVisitaDados } from "./FichaVisita";
 import { ProdutoresCorp, buscarProdutoresCorp, type LinhaProdutorCorp } from "../admin/imobiliarias/ProdutoresCorp";
 import ExportarEste from "@/components/ExportarEste";
 
@@ -165,9 +166,11 @@ export async function Imobiliaria360({
   opcoes: OpcaoImob[];
 }) {
   const alvo = grupo ? `g:${grupo}` : `i:${imob}`;
-  const [v, k] = await Promise.all([
+  const [v, k, fv] = await Promise.all([
     supabase.rpc("visao_360_imobiliaria", { p_tipo: grupo ? "grupo" : "imobiliaria", p_id: grupo ?? imob, p_de: de, p_ate: ate }),
     supabase.rpc("kpis_producao", { p_de: de, p_ate: ate, p_produtos: null, p_grupos: grupo ? [grupo] : null, p_imobs: imob ? [imob] : null, p_seguradoras: null }),
+    // Ficha de visita: tabelas prontas (analise_*), não depende do período escolhido.
+    supabase.rpc("ficha_visita", { p_tipo: grupo ? "grupo" : "imobiliaria", p_id: grupo ?? imob }),
   ]);
   const visao = v.data as Visao | null;
   const kpis = k.data as Kpis | null;
@@ -187,7 +190,9 @@ export async function Imobiliaria360({
         ← Voltar à visão da O2 inteira (todas as imobiliárias e o ranking)
       </Link>
       {erro && <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">Não foi possível montar a visão agora ({erro}).</p>}
-      {visao?.alvo && kpis && <Visao360 visao={visao} kpis={kpis} de={de} ate={ate} linkCom={linkCom} produtoresCorp={produtoresCorp} />}
+      {visao?.alvo && kpis && (
+        <Visao360 visao={visao} kpis={kpis} de={de} ate={ate} linkCom={linkCom} produtoresCorp={produtoresCorp} ficha={fv.data as FichaVisitaDados | null} erroFicha={fv.error?.message ?? null} />
+      )}
     </>
   );
 }
@@ -237,6 +242,8 @@ function Visao360({
   ate,
   linkCom,
   produtoresCorp,
+  ficha,
+  erroFicha,
 }: {
   visao: Visao;
   kpis: Kpis;
@@ -244,6 +251,8 @@ function Visao360({
   ate: string;
   linkCom: (t: Record<string, string>) => string;
   produtoresCorp: LinhaProdutorCorp[];
+  ficha: FichaVisitaDados | null;
+  erroFicha: string | null;
 }) {
   const alvo = visao.alvo!;
   const us = visao.unidades;
@@ -366,6 +375,9 @@ function Visao360({
           legenda="Auditor de contrato + Gerador de contrato usados pela imobiliária no período."
         />
       </div>
+
+      {/* Ficha de visita (Matheus, 03/11/2026) */}
+      <FichaVisita ficha={ficha} erro={erroFicha} />
 
       {/* Cotações */}
       <Bloco titulo="Cotações" cor="#F8540D" legenda="Tomadas de preço: a cotação conta no mês em que entrou; a conversão e a perda, no mês em que aconteceram. Automóvel não tem imobiliária.">
