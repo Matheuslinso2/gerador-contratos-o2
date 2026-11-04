@@ -20,9 +20,6 @@ const TABELAS_PESSOAIS = new Set([
   "campanhas_grupos_contatos",
   "erp_emails",
   "erp_email_ligacoes",
-  "erp_origens", // título do card costuma trazer o nome do cliente
-  "cotacoes_cache", // nome_pessoa
-  "producao_erp", // cliente_nome / cliente_cpf_cnpj
   "sinistros", // locador/locatário/favorecido
   "sinistros_corp", // segurado, e-mail
   "leads_site_o2seguros",
@@ -30,6 +27,12 @@ const TABELAS_PESSOAIS = new Set([
   "erp_extrato_linhas",
   "erp_corp_comissoes",
 ]);
+
+// Tabelas de COTAÇÕES (Matheus, 04/11/2026: dados das cotações entram no relatório em PDF). Só deixam de gerar PDF quando a consulta traz a coluna que
+// identifica a pessoa (nome do cliente, CPF/CNPJ, título do card, campos livres) ou, nas tabelas que misturam nome, não escolhe colunas (devolveria tudo).
+// Agregado (contagem, soma, agrupamento) e listas só com data, produto, seguradora, imobiliária, status, prêmio, comissão e responsável da O2 viram PDF.
+const TABELAS_COTACAO = new Set(["producao_resolvida", "cotacoes_cache", "erp_origens", "producao_erp"]);
+const COLUNA_PESSOAL_COTACAO = /cpf|cnpj|e?mail|telefone|documento|cliente|segurado|titular|locador|favorecido|nome_pessoa|contato|titulo|dados_legiveis|extras|^locatario$/i;
 
 // Tabelas de empresas com CNPJ/e-mail/telefone: só são pessoais quando essas colunas são pedidas (ou quando nenhuma coluna é escolhida).
 const TABELAS_EMPRESA_COM_DOCUMENTO = new Set(["imobiliarias", "imobiliarias_conhecidas", "erp_corretoras", "erp_seguradoras", "relatorios_prospeccao", "faturas_esperadas"]);
@@ -51,6 +54,11 @@ export function chamadaTemDadosPessoais(nome: string, entrada: unknown): boolean
     if (TABELAS_PESSOAIS.has(tabela)) return true;
     const colunas = (Array.isArray(e.colunas) ? e.colunas : []).map(String);
     const agregando = !!e.agrupar_por || (Array.isArray(e.somar) && e.somar.length > 0) || e.apenas_contar === true;
+    if (TABELAS_COTACAO.has(tabela)) {
+      if (agregando) return false;
+      if (tabela === "producao_resolvida") return colunas.some((c) => COLUNA_PESSOAL_COTACAO.test(c));
+      return colunas.length === 0 || colunas.some((c) => COLUNA_PESSOAL_COTACAO.test(c));
+    }
     if (TABELAS_EMPRESA_COM_DOCUMENTO.has(tabela)) {
       if (agregando) return false;
       return colunas.length === 0 || colunas.some((c) => COLUNA_PESSOAL.test(c));
