@@ -19,6 +19,13 @@ const AVISO: Record<string, string> = { criado: "Cliente cadastrado.", salvo: "A
 
 type Doc = { id: string; nosso_numero: number; tipo: string; tipo_corp: string | null; situacao: string; numero_apolice: string | null; vigencia_inicio: string | null; premio_total: number | null; seguradora: { abreviacao: string } | null; ramo: { abreviacao: string } | null; imobiliaria: { nome: string } | null };
 type Kpis = { documentos: number; vigentes: number; produtos: string[]; premio_total: number; comissao: number; desde: string | null };
+type Cotacao = { card: string; desfecho: string; motivo: string | null; etapa: string | null; produto: string | null; titulo: string | null; url: string | null; documento_id: string | null; card_criado_em: string | null };
+const DESFECHO: Record<string, { nome: string; cor: string }> = {
+  efetivada: { nome: "Efetivada", cor: "bg-green-100 text-green-800" },
+  em_andamento: { nome: "Em andamento", cor: "bg-blue-100 text-blue-800" },
+  recusada: { nome: "Recusada", cor: "bg-red-100 text-red-800" },
+  perdida: { nome: "Perdida", cor: "bg-gray-200 text-gray-700" },
+};
 
 export default async function ErpClienteFichaPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ erro?: string; aviso?: string }> }) {
   const { id } = await params;
@@ -30,12 +37,16 @@ export default async function ErpClienteFichaPage({ params, searchParams }: { pa
   const { data: c } = await supabase.from("locatarios").select("id, codigo_cliente, nome, cpf, email, telefone, primeira_fonte, created_at, codigo_corp_cliente, contatos_anteriores, cadastro_incompleto").eq("id", id).maybeSingle();
   if (!c) redirect("/erp/clientes");
 
-  const [{ data: kpiBruto }, { data: proprios }, { data: comoSegurado }] = await Promise.all([
+  const [{ data: kpiBruto }, { data: proprios }, { data: comoSegurado }, { data: cotacoesBrutas }] = await Promise.all([
     supabase.rpc("erp_cliente_kpis", { p_pessoa: id }),
     // ERP mostra da proposta efetivada em diante (Matheus 04/11): cotação/recusado/perdido ficam no workspace e no Bitrix
     supabase.from("erp_documentos").select("id").eq("locatario_id", id).not("situacao", "in", "(cotacao,recusado,perdido,duplicado)").limit(300),
     supabase.from("erp_doc_partes_acervo").select("documento_id").eq("locatario_id", id).limit(300),
+    // histórico de cotações (Matheus 04/11): o que foi cotado e como terminou; não é documento do ERP
+    supabase.from("erp_cotacoes_historico_v").select("card, desfecho, motivo, etapa, produto, titulo, url, documento_id, card_criado_em").eq("locatario_id", id).order("card_criado_em", { ascending: false }).limit(200),
   ]);
+  const cotacoes = (cotacoesBrutas ?? []) as Cotacao[];
+  const porDesfecho = (k: string) => cotacoes.filter((x) => x.desfecho === k).length;
   const ids = [...new Set([...(proprios ?? []).map((d: { id: string }) => d.id), ...(comoSegurado ?? []).map((d: { documento_id: string }) => d.documento_id)])];
   const { data: docsBrutos } = ids.length
     ? await supabase
@@ -118,7 +129,7 @@ export default async function ErpClienteFichaPage({ params, searchParams }: { pa
         <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">
           Documentos deste cliente
           <InfoLegenda titulo="Documentos deste cliente">
-            Documentos em que o cliente é o titular ou aparece como parte (segurado ou garantido) lida da apólice, do início de vigência mais recente para o mais antigo, no máximo 200; os duplicados ficam de fora. Por isso a lista pode incluir cotações e propostas, que não entram nos números do quadro de cima. Titular do seguro: na Fiança é o proprietário (com o inquilino em baixo); nos demais produtos é o segurado. Prêmio total é o valor gravado no documento. Clique em Ver documento ou no Código O2 do documento para abrir a ficha.
+            Documentos em que o cliente é o titular ou aparece como parte (segurado ou garantido) lida da apólice, do início de vigência mais recente para o mais antigo, no máximo 200. Só da proposta efetivada em diante: cotações, recusadas e perdidas estão no Histórico de cotações, abaixo; duplicados ficam de fora. Titular do seguro: na Fiança é o proprietário (com o inquilino em baixo); nos demais produtos é o segurado. Prêmio total é o valor gravado no documento. Clique em Ver documento ou no Código O2 do documento para abrir a ficha.
           </InfoLegenda>
         </h2>
         {docs.length === 0 ? (
@@ -155,6 +166,47 @@ export default async function ErpClienteFichaPage({ params, searchParams }: { pa
               </tbody>
             </table>
           </div>
+        )}
+      </section>
+
+      <section className="space-y-2 rounded-xl border border-gray-200 bg-white p-4">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-o2-navy">
+          Histórico de cotações
+          <InfoLegenda titulo="Histórico de cotações">
+            Tudo o que foi cotado para este cliente nos funis do Bitrix e como terminou: Efetivada (virou proposta ou apólice), Em andamento, Recusada (a seguradora recusou) ou Perdida (o negócio não aconteceu). Não são documentos do ERP: a cotação vive no Workspace e no Bitrix, e fica aqui para mostrar o histórico do cliente. Cards encerrados continuam guardados mesmo que saiam do funil. Clique no card para abrir no Bitrix; na efetivada, em Ver documento.
+          </InfoLegenda>
+        </h2>
+        {cotacoes.length === 0 ? (
+          <p className="text-xs text-gray-500">Nenhuma cotação do Bitrix ligada a este cliente.</p>
+        ) : (
+          <>
+            <p className="text-xs text-gray-600">
+              {cotacoes.length} cotação(ões): {porDesfecho("efetivada")} efetivada(s) · {porDesfecho("em_andamento")} em andamento · {porDesfecho("recusada")} recusada(s) · {porDesfecho("perdida")} perdida(s)
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="text-left text-xs uppercase tracking-wide text-gray-500">
+                  <tr><th className="py-1 pr-3">Card do Bitrix</th><th className="py-1 pr-3">Desfecho</th><th className="py-1 pr-3">Produto</th><th className="py-1 pr-3">Título do card</th><th className="py-1 pr-3">Motivo</th><th className="py-1 pr-3">Criado em</th><th className="py-1 pr-3">Documento</th></tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {cotacoes.map((x) => {
+                    const d = DESFECHO[x.desfecho] ?? { nome: x.desfecho, cor: "bg-gray-100 text-gray-700" };
+                    return (
+                      <tr key={x.card} className="hover:bg-gray-50">
+                        <td className="py-1.5 pr-3 font-medium">{x.url ? <a href={x.url} target="_blank" rel="noreferrer" className="text-o2-navy hover:underline">{x.card}</a> : x.card}</td>
+                        <td className="py-1.5 pr-3"><span className={`whitespace-nowrap rounded px-1.5 py-0.5 text-xs font-semibold ${d.cor}`}>{d.nome}</span></td>
+                        <td className="py-1.5 pr-3">{x.produto ?? "—"}</td>
+                        <td className="py-1.5 pr-3">{x.titulo ?? "—"}</td>
+                        <td className="py-1.5 pr-3">{x.motivo ?? <span className="text-gray-300">—</span>}</td>
+                        <td className="whitespace-nowrap py-1.5 pr-3">{formatarData(x.card_criado_em)}</td>
+                        <td className="py-1.5 pr-3">{x.documento_id && x.desfecho === "efetivada" ? <BotaoVerDocumento id={x.documento_id} /> : <span className="text-gray-300">—</span>}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </section>
     </PaginaErp>
