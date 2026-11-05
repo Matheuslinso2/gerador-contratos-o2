@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
       modalidade: "Residencial",
       coberturas,
       email,
-      solicitante: normalizarPerfil(get("perfil") || get("perfil_texto")),
+      solicitante: normalizarPerfil(get("perfil") || get("perfil_escolhido") || get("perfil_texto")),
       finsLocacao: "Não informado",
       nomeProprietario: teste ? `[TESTE - apagar] ${nome}` : nome,
       cpfProprietario: cpf,
