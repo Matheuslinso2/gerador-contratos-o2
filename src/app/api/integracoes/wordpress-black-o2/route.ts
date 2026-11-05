@@ -15,11 +15,19 @@ export const maxDuration = 60;
 const CAMPANHA = { nome: "Black O2", url: "https://o2seguros.com.br/black-o2/", detalhe: "Seguro Incêndio com 20% OFF (página black-o2)" };
 const EMAIL_DESTINO_INCENDIO = "incendio@o2seguros.com.br";
 
+// Confere a senha da URL. Falha momentânea do banco NÃO pode virar "senha errada" (achado 05/11/2026: um envio de teste levou 401 e o lead se
+// perdeu, porque o AFI não repete o envio): tenta 3 vezes e, se o banco continuar fora, lança erro (resposta 503, não 401).
 async function autorizado(request: NextRequest): Promise<boolean> {
   const secret = request.nextUrl.searchParams.get("secret");
   if (!secret) return false;
-  const { data } = await createServiceClient().from("wordpress_leads_tokens").select("id").eq("token", secret).maybeSingle();
-  return Boolean(data);
+  let ultimoErro: unknown = null;
+  for (let tentativa = 0; tentativa < 3; tentativa++) {
+    const { data, error } = await createServiceClient().from("wordpress_leads_tokens").select("id").eq("token", secret).maybeSingle();
+    if (!error) return Boolean(data);
+    ultimoErro = error;
+    await new Promise((r) => setTimeout(r, 800 * (tentativa + 1)));
+  }
+  throw new Error(`banco indisponível ao conferir a senha: ${(ultimoErro as { message?: string })?.message ?? "erro"}`);
 }
 
 // Elementor/Advanced Form Integration manda os campos soltos na raiz, ou dentro de "fields"/"form_fields" (cada um como texto ou como
@@ -74,7 +82,14 @@ const COBERTURAS: { chave: string; label: string; int: string; valor?: string }[
 export async function POST(request: NextRequest) {
   // Responde sempre 200 ao WordPress (não atrapalha quem preenche); o que falhar fica no log e no lead salvo.
   try {
-    if (!(await autorizado(request))) return NextResponse.json({ ok: false, erro: "não autorizado" }, { status: 401 });
+    let liberado = false;
+    try {
+      liberado = await autorizado(request);
+    } catch (e) {
+      console.error("[black-o2]", e);
+      return NextResponse.json({ ok: false, erro: "serviço indisponível, tente de novo" }, { status: 503 });
+    }
+    if (!liberado) return NextResponse.json({ ok: false, erro: "não autorizado" }, { status: 401 });
     const teste = request.nextUrl.searchParams.get("teste") === "1";
     const bruto = await request.json().catch(() => ({}));
     const c = achatar(bruto);
