@@ -189,6 +189,15 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
   // Lotes de renovação (proposta criada do card) × apólices anteriores, item a item (Matheus 03/11): confirmado = linha da planilha da equipe achada no ERP + imobiliária + seguradora + vigência
   const loteRaw = await pLotes;
   const lotesResumo = ((loteRaw ?? []) as LoteResumo[]).sort((a, b) => (a.imobiliaria ?? "").localeCompare(b.imobiliaria ?? ""));
+  // Radar (Matheus 05/11): apólices ainda VIGENTES que se aproximam do fim, com o alerta de cada uma (sem card, card parado na entrada, card perdido)
+  type Radar = { documento_id: string; nosso_numero: number; numero_apolice: string | null; produto: string; seguradora: string | null; cliente: string | null; imobiliaria: string | null; vigencia_fim: string; dias_para_vencer: number; bitrix_card_id: string | null; etapa: string; alerta: string; regra_dias_card: number; regra_confirmada: boolean };
+  const { data: radarRaw } = await supabase.rpc("erp_renovacao_radar", { p_hoje: new Date().toISOString().slice(0, 10), p_horizonte: 75 });
+  const radar = (radarRaw ?? []) as Radar[];
+  const ROT_ALERTA: Record<string, string> = { sem_card: "Sem card", parado_na_entrada: "Card parado na entrada", card_perdido: "Card perdido, apólice vigente" };
+  const COR_ALERTA: Record<string, string> = { sem_card: "bg-red-100 text-red-700", parado_na_entrada: "bg-orange-100 text-orange-800", card_perdido: "bg-gray-200 text-gray-700" };
+  const radarAlertas = radar.filter((r) => r.alerta !== "ok");
+  const radarPorAlerta = new Map<string, Radar[]>();
+  for (const r of radarAlertas) radarPorAlerta.set(r.alerta, [...(radarPorAlerta.get(r.alerta) ?? []), r]);
   // mês do ciclo do robô de renovações: no dia 25 ele trata os vencimentos de M+2
   const hojeR = new Date();
   const cicloRobo = (() => { const t = hojeR.getUTCFullYear() * 12 + hojeR.getUTCMonth() + 2; return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, "0")}`; })();
@@ -324,6 +333,55 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
               </div>
             </details>
           )}
+        </section>
+      )}
+
+      {radarAlertas.length > 0 && (
+        <section className="space-y-2 rounded-2xl border border-red-200 bg-red-50/60 p-4">
+          <h2 className="text-base font-semibold text-gray-900">
+            Radar: apólices vigentes perto do fim
+            <InfoLegenda titulo="Radar de renovação">
+              Apólices ainda vigentes que vencem nos próximos 75 dias e precisam de ação. Sem card: está dentro da janela de renovação do produto e ainda não tem card no Bitrix. Card parado na entrada: o card existe, mas segue em Entrada ou Preparação perto do fim (a cotação deve sair cerca de 22 dias antes). Card perdido: o card foi para perdido e a apólice ainda está vigente (conferir). Os prazos por produto ficam na tabela de regras e ainda são propostos, a confirmar.
+            </InfoLegenda>
+          </h2>
+          <p className="text-xs text-gray-600">
+            {radarAlertas.length} apólice(s) com alerta{radar.some((r) => !r.regra_confirmada) ? " · prazos por produto ainda propostos, não confirmados" : ""}.
+          </p>
+          <div className="flex flex-wrap gap-2 text-xs">
+            {[...radarPorAlerta.entries()].map(([a, l]) => (
+              <span key={a} className={`rounded-full px-3 py-1 font-medium ${COR_ALERTA[a] ?? "bg-gray-100"}`}>{ROT_ALERTA[a] ?? a}: {l.length}</span>
+            ))}
+          </div>
+          {[...radarPorAlerta.entries()].filter(([a]) => a !== "card_perdido").map(([a, l]) => (
+            <details key={a} className="rounded-xl border border-gray-200 bg-white">
+              <summary className="cursor-pointer px-4 py-2 text-sm font-medium text-gray-900">{ROT_ALERTA[a] ?? a} · {l.length} apólice(s) · as 60 mais próximas do fim</summary>
+              <div className="overflow-x-auto border-t border-gray-100">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+                    <tr><th className="px-3 py-2">Dias para vencer</th><th className="px-3 py-2">Código O2 do documento</th><th className="px-3 py-2">Nº da apólice</th><th className="px-3 py-2">Produto</th><th className="px-3 py-2">Seg.</th><th className="px-3 py-2">Cliente</th><th className="px-3 py-2">Imobiliária</th><th className="px-3 py-2">Vence em</th><th className="px-3 py-2">Card</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {l.slice(0, 60).map((r) => {
+                      const [ent, cid] = (r.bitrix_card_id ?? "").split(":").map(Number);
+                      return (
+                        <tr key={r.documento_id} className="hover:bg-gray-50">
+                          <td className="px-3 py-1.5 font-semibold">{r.dias_para_vencer}</td>
+                          <td className="px-3 py-1.5 font-medium"><Link href={`/erp/documentos/${r.documento_id}`} className="text-o2-navy hover:underline">{r.nosso_numero}</Link></td>
+                          <td className="px-3 py-1.5">{r.numero_apolice ?? "—"}</td>
+                          <td className="px-3 py-1.5">{r.produto}</td>
+                          <td className="px-3 py-1.5">{r.seguradora ?? "—"}</td>
+                          <td className="px-3 py-1.5">{r.cliente ?? "—"}</td>
+                          <td className="px-3 py-1.5">{r.imobiliaria ?? "—"}</td>
+                          <td className="px-3 py-1.5">{formatarData(r.vigencia_fim)}</td>
+                          <td className="px-3 py-1.5">{ent && cid ? <a href={urlCard(ent, cid)} target="_blank" rel="noreferrer" className="text-o2-navy hover:underline">#{cid} {r.etapa}</a> : <span className="text-gray-300">sem card</span>}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          ))}
         </section>
       )}
 
