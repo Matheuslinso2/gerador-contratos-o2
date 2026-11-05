@@ -259,6 +259,16 @@ export default function RoboDoPainel({ painelId, competencia }: { painelId: stri
     }
   }
 
+  // Limpa a busca (perguntas, respostas, PDFs e lista de cards) para começar outra do zero (pedido do Matheus, 05/11/2026).
+  function limparBusca() {
+    if (pensando) return;
+    setTrocas([]);
+    setPdfs({});
+    setTexto("");
+    setAviso(null);
+    entrada.current?.focus();
+  }
+
   async function gerarPdf(t: Troca) {
     setPdfs((p) => ({ ...p, [t.id]: { estado: "gerando" } }));
     try {
@@ -330,6 +340,11 @@ export default function RoboDoPainel({ painelId, competencia }: { painelId: stri
         <button type="submit" disabled={pensando || !texto.trim()} className="rounded-full bg-o2-coral px-5 py-2 text-sm font-semibold text-white disabled:opacity-50">
           {pensando ? "Consultando…" : "Perguntar"}
         </button>
+        {(trocas.length > 0 || texto.trim() !== "") && (
+          <button type="button" onClick={limparBusca} disabled={pensando} className="rounded-full border border-o2-navy/30 px-4 py-2 text-sm font-semibold text-o2-navy hover:bg-o2-navy/5 disabled:opacity-50">
+            Limpar busca
+          </button>
+        )}
       </form>
 
       {ehMatheus && (
