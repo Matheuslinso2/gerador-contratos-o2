@@ -63,7 +63,12 @@ function mesSeguinte(competencia: string): string {
   return `${data.getUTCFullYear()}-${String(data.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
+// A partir de novembro/2026 o painel é 100% cards do Bitrix (confirmado pelo Matheus em 05/11/2026): nem a planilha mensal
+// (que não foi criada para novembro; a RN NOVEMBRO da planilha de outubro já está nos cards) nem a de endossos entram.
+const PRIMEIRA_COMPETENCIA_SO_BITRIX = "2026-11";
+
 export async function lerFonteRamosElementaresHibrida(competencia: string): Promise<FonteRamosBruta> {
+  if (competencia >= PRIMEIRA_COMPETENCIA_SO_BITRIX) return lerFonteRamosElementaresBitrix(competencia);
   const [google, bitrix] = await Promise.all([
     lerFonteRamosElementares(competencia).catch((erro) => {
       if (erro instanceof PlanilhaDaCompetenciaNaoEncontradaError) return null;
@@ -140,7 +145,7 @@ export async function lerFonteRamosElementaresHibrida(competencia: string): Prom
     // endossos caem no Bitrix quando a planilha não tem a aba -- então o aviso
     // "aba não encontrada" dessas abas seria só ruído.
     avisos: [
-      ...(competencia >= "2026-09" ? [AVISO_TRANSICAO] : []),
+      ...(competencia >= "2026-09" && competencia < PRIMEIRA_COMPETENCIA_SO_BITRIX ? [AVISO_TRANSICAO] : []),
       ...bitrix.avisos,
       ...google.avisos.filter(
         (aviso) =>

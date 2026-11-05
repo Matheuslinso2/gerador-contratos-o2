@@ -1867,7 +1867,7 @@ export default function PainelRamosElementares({
 }: {
   analise: AnaliseRamosElementares;
   competencia: string;
-  origem: "planilha" | "hibrida" | "snapshot" | "indisponivel";
+  origem: "planilha" | "hibrida" | "bitrix" | "snapshot" | "indisponivel";
   erroFonte: string | null;
   emailsConfirmacao: EmailConfirmacao[];
   imobiliariasVisao?: ImobiliariaUnificada[];
@@ -1966,7 +1966,9 @@ export default function PainelRamosElementares({
       >
         <div>
           <strong>
-            {origem === "hibrida"
+            {origem === "bitrix"
+              ? "Dados lidos diretamente dos cards do Bitrix24 (novos, renovações e endossos)"
+              : origem === "hibrida"
               ? "Dados lidos diretamente do Bitrix24 (novos) e da planilha (renovações/endossos)"
               : origem === "planilha"
                 ? "Dados lidos diretamente da planilha"

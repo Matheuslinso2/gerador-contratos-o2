@@ -90,7 +90,8 @@ export default async function RamosElementaresPage({
 
   let analise: AnaliseRamosElementares;
   const usarHibrido = competencia >= COMPETENCIA_INICIO_HIBRIDO;
-  let origem: "planilha" | "hibrida" | "snapshot" | "indisponivel" = usarHibrido ? "hibrida" : "planilha";
+  // De nov/2026 em diante o painel é 100% cards do Bitrix (fonteHibrida.ts devolve só o Bitrix).
+  let origem: "planilha" | "hibrida" | "bitrix" | "snapshot" | "indisponivel" = competencia >= "2026-11" ? "bitrix" : usarHibrido ? "hibrida" : "planilha";
   let erroFonte: string | null = null;
 
   // Caminho rápido: retrato salvo de até 10 min (ver lib/retratoPaineis.ts).
