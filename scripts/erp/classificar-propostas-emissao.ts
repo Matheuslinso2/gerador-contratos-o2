@@ -131,7 +131,7 @@ type Prova = { fonte: string; chave: string; ref: string; data?: string | null; 
     const efetivado = String(dl["Data da mudança de etapa"] ?? d.dt_proposta ?? "").slice(0, 10) || null;
     const ref = d.vigencia_inicio ?? efetivado;
     const cc = d.nosso_numero_corp ? clienteCorp.get(String(d.nosso_numero_corp)) : undefined;
-    if (cc) minhasPartes.push({ nome: cc.nome, documento_numero: cc.cpf, papel: "cliente Corp" });
+    if (cc) minhasPartes.push({ nome: cc.nome, documento_numero: cc.cpf, papel: "cliente Corp", item_id: null });
     const cpfs = [...new Set([dig(loc?.cpf), ...minhasPartes.map((p) => dig(p.documento_numero))].filter((c) => (c.length === 11 || c.length === 14) && !naoIdentifica.has(c)))];
     const tituloNome = norm(String(o?.titulo ?? "").replace(/^\s*(NOVO|RENOVA\S*( AUTO)?|ENDOSSO|LOTE[^-]*)\s*-\s*/i, "").split(" - ")[0].replace(/\(.*?\)/g, ""));
     const nomes = [...new Set([norm(loc?.nome), ...minhasPartes.map((p) => norm(p.nome)), tituloNome].filter((n) => tokens(n).length >= 2))];
