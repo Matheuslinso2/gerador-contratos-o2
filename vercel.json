@@ -32,10 +32,6 @@
       "schedule": "1-59/20 11-22 * * 1-5"
     },
     {
-      "path": "/api/cron/coletar-noticias",
-      "schedule": "0 9 * * *"
-    },
-    {
       "path": "/api/cron/congelar-paineis",
       "schedule": "0 3 1 * *"
     },
@@ -46,14 +42,6 @@
     {
       "path": "/api/cron/renovar-token-instagram",
       "schedule": "0 8 * * *"
-    },
-    {
-      "path": "/api/cron/publicar-social-media",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/cron/atualizar-metricas-instagram",
-      "schedule": "0 10 * * *"
     },
     {
       "path": "/api/cron/atualizar-paineis?painel=fianca",
