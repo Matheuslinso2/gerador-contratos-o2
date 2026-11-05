@@ -64,6 +64,31 @@ export const LINK_DESCADASTRO_MENSAGEM_UNICA = "mailto:comercial@o2seguros.com.b
 
 type EnvioReivindicado = { id: string; email: string; tentativas: number | null };
 
+/**
+ * Campanha com cards ligados (05/11/2026): quem tem card sai em UMA mensagem por imobiliária, dentro da conversa do card; os demais
+ * (sem card, contatos de prospecção, equipe interna) seguem um por um, como sempre. Pura, para poder ser testada sem enviar nada.
+ */
+export function agruparPorCard(
+  envios: EnvioReivindicado[],
+  imobiliariaDoEnvio: Map<string, string | null>,
+  cardDaImobiliaria: Map<string, number>
+): { grupos: { dealId: number; imobiliariaId: string; envios: EnvioReivindicado[] }[]; individuais: EnvioReivindicado[] } {
+  const grupos = new Map<string, { dealId: number; imobiliariaId: string; envios: EnvioReivindicado[] }>();
+  const individuais: EnvioReivindicado[] = [];
+  for (const e of envios) {
+    const imob = imobiliariaDoEnvio.get(e.id) ?? null;
+    const deal = imob ? cardDaImobiliaria.get(imob) : undefined;
+    if (!imob || !deal) {
+      individuais.push(e);
+      continue;
+    }
+    const g = grupos.get(imob) ?? { dealId: deal, imobiliariaId: imob, envios: [] };
+    g.envios.push(e);
+    grupos.set(imob, g);
+  }
+  return { grupos: [...grupos.values()], individuais };
+}
+
 async function enviarMensagemUnica(
   supabase: ReturnType<typeof createServiceClient>,
   campanha: CampanhaRow,
@@ -203,13 +228,38 @@ export async function processarLote(campanhaId: string, limite = TAMANHO_LOTE_PA
   }
 
   let processados = 0;
-  const { data: modo } = await supabase.from("campanhas").select("mensagem_unica, card_deal_id").eq("id", campanhaId).single();
+  const { data: modo } = await supabase.from("campanhas").select("mensagem_unica, card_deal_id, campanha_pai_id, reenvio_de").eq("id", campanhaId).single();
   const mensagemUnica = !!modo?.mensagem_unica;
   if (mensagemUnica && pendentes?.length) {
     processados = pendentes.length;
     await enviarMensagemUnica(supabase, campanha, pendentes as EnvioReivindicado[], modo?.card_deal_id ? Number(modo.card_deal_id) : null);
   }
-  for (const envio of mensagemUnica ? [] : (pendentes ?? [])) {
+
+  // Cards ligados à campanha (ou à campanha-mãe / à original, no caso de e-mail filho e de reenvio): quem tem card entra na conversa dele.
+  let individuais: EnvioReivindicado[] = mensagemUnica ? [] : ((pendentes ?? []) as EnvioReivindicado[]);
+  if (individuais.length) {
+    // Raiz dos cards: a campanha-mãe (e-mail filho); no reenvio, a original -- ou a mãe dela, se a original era um filho.
+    let raiz = (modo?.campanha_pai_id as string | null) ?? null;
+    if (!raiz && modo?.reenvio_de) {
+      const { data: original } = await supabase.from("campanhas").select("campanha_pai_id").eq("id", modo.reenvio_de as string).maybeSingle();
+      raiz = (original?.campanha_pai_id as string | null) ?? (modo.reenvio_de as string);
+    }
+    raiz = raiz ?? campanhaId;
+    const { data: cardsRows } = await supabase.from("campanhas_cards_bitrix").select("imobiliaria_id, bitrix_deal_id").eq("campanha_id", raiz);
+    const cardDaImobiliaria = new Map(((cardsRows ?? []) as { imobiliaria_id: string; bitrix_deal_id: number }[]).map((c) => [c.imobiliaria_id, Number(c.bitrix_deal_id)]));
+    if (cardDaImobiliaria.size) {
+      const { data: vinc } = await supabase.from("campanhas_envios").select("id, imobiliaria_id").in("id", individuais.map((e) => e.id));
+      const imobiliariaDoEnvio = new Map(((vinc ?? []) as { id: string; imobiliaria_id: string | null }[]).map((v) => [v.id, v.imobiliaria_id]));
+      const { grupos, individuais: restantes } = agruparPorCard(individuais, imobiliariaDoEnvio, cardDaImobiliaria);
+      individuais = restantes;
+      for (const g of grupos) {
+        processados += g.envios.length;
+        await enviarMensagemUnica(supabase, personalizarCampanha(campanha, nomePorEnvio.get(g.envios[0].id) ?? null), g.envios, g.dealId);
+        await aguardar(INTERVALO_ENTRE_ENVIOS_MS);
+      }
+    }
+  }
+  for (const envio of individuais) {
     processados++;
 
     // Pode ter havido descadastro entre a fila ser montada e o envio de
