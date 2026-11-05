@@ -61,5 +61,6 @@ export function periodoDoMes(param?: string | null): PeriodoMes {
 }
 
 /** Idade máxima do retrato: mês aberto = 15 min; mês fechado = nunca refaz (congelado). */
-export const IDADE_RETRATO_ABERTO = "00:15:00";
+// 60 min: o cron erp-baixa-automatica renova os retratos usados às :55; com 15 min o painel recalculava na hora para o 1º visitante (lentidão 04/11)
+export const IDADE_RETRATO_ABERTO = "01:00:00";
 export const IDADE_RETRATO_FECHADO = "36500 days";

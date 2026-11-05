@@ -56,9 +56,11 @@ export default async function NiboPage({ searchParams }: { searchParams: Promise
   const aba = ABAS.find((a) => a.chave === sp.aba)?.chave ?? "consolidado";
 
   const sb = createServiceClient();
-  const { data, error } = await sb.rpc("erp_nibo_painel", { p_ano: ano, p_empresa: aba });
+  const [{ data, error }, { data: sinc }] = await Promise.all([
+    sb.rpc("erp_nibo_painel", { p_ano: ano, p_empresa: aba }),
+    sb.from("erp_nibo_lancamentos").select("sincronizado_em").order("sincronizado_em", { ascending: false }).limit(1),
+  ]);
   const linhas = ((data ?? []) as Linha[]).slice().sort((a, b) => a.bloco_ordem - b.bloco_ordem || a.ordem - b.ordem);
-  const { data: sinc } = await sb.from("erp_nibo_lancamentos").select("sincronizado_em").order("sincronizado_em", { ascending: false }).limit(1);
   const ultimaSync = sinc?.[0]?.sincronizado_em ? new Date(sinc[0].sincronizado_em).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : null;
 
   const doMes = (t: Linha["linha_tipo"], bloco?: string) => linhas.find((l) => l.linha_tipo === t && (!bloco || l.bloco === bloco));
