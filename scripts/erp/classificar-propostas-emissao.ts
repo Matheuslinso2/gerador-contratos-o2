@@ -46,8 +46,15 @@ type Prova = { fonte: string; chave: string; ref: string; data?: string | null; 
   };
   const segNome = new Map(segs.map((s) => [s.id, s.abreviacao]));
 
-  // ---------- alvo: propostas efetivadas vindas do Bitrix
-  const alvo = await todas<any>("erp_documentos", "id, tipo, tipo_corp, seguradora_id, ramo_id, locatario_id, numero_proposta, numero_apolice, documento_pai_id, vigencia_inicio, premio_liquido, premio_total, dt_proposta", (q) => q.eq("situacao", "proposta").eq("origem", "bitrix"));
+  // ---------- alvo: propostas efetivadas vindas do Bitrix (e, com --corp, também as propostas importadas do Corp)
+  const comCorp = process.argv.includes("--corp");
+  const alvo = await todas<any>("erp_documentos", "id, origem, tipo, tipo_corp, seguradora_id, ramo_id, locatario_id, numero_proposta, numero_apolice, documento_pai_id, documento_renovado_id, nosso_numero_corp, vigencia_inicio, premio_liquido, premio_total, dt_proposta", (q) =>
+    comCorp ? q.eq("situacao", "proposta").or(`origem.eq.bitrix,and(origem.eq.corp_import,vigencia_inicio.gte.${DESDE})`) : q.eq("situacao", "proposta").eq("origem", "bitrix"));
+  // proposta do Corp (grade) vem sem cliente: herda o cliente e o nº da apólice que ela renova
+  const renovIds = [...new Set(alvo.map((d) => d.documento_renovado_id).filter(Boolean))];
+  const renovados = new Map<string, any>();
+  for (const c of chunk(renovIds, 200)) for (const r of (await sb.from("erp_documentos").select("id, locatario_id, numero_apolice").in("id", c)).data ?? []) renovados.set(r.id, r);
+  for (const d of alvo) { const r = renovados.get(d.documento_renovado_id); if (!d.locatario_id && r?.locatario_id) d.locatario_id = r.locatario_id; d.numero_anterior = r?.numero_apolice ?? null; }
   const ids = alvo.map((d) => d.id);
   const origens = (await Promise.all(chunk(ids, 200).map((c) => sb.from("erp_origens").select("documento_id, entity_type_id, item_id, categoria_id, etapa_id, titulo, dados, dados_legiveis, comentarios").in("documento_id", c)))).flatMap((r) => r.data ?? []);
   const itens = (await Promise.all(chunk(ids, 200).map((c) => sb.from("erp_documento_itens").select("id, documento_id").in("documento_id", c)))).flatMap((r) => r.data ?? []);
@@ -68,11 +75,14 @@ type Prova = { fonte: string; chave: string; ref: string; data?: string | null; 
   const portalCom = await todas<any>("erp_portal_comissoes", "id, seguradora_id, pago_em");
   const portalComPor = new Map(portalCom.map((p) => [p.id, p]));
   const portalLinhas = await todas<any>("erp_portal_comissao_linhas", "id, comissao_id, numero_apolice, endosso, cliente, valor_comissao, motivo");
-  const portalApo = await todas<any>("erp_portal_apolices", "id, seguradora_id, numero_apolice, segurado, dt_emissao, vigencia_inicio, tipo_emissao");
+  const portalApo = await todas<any>("erp_portal_apolices", "id, seguradora_id, numero_apolice, segurado, dt_emissao, vigencia_inicio, tipo_emissao, premio_liquido");
   const portalParc = await todas<any>("erp_portal_parcelas", "id, seguradora_id, segurado_exibido, cpf_cnpj, numero_apolice_chave, numero_documento_portal, vencimento, status_portal");
   const portalLeit = await todas<any>("erp_portal_seguradora_leitura", "id, seguradora, numero_proposta, numero_apolice, cpf_cnpj_cliente, vigencia_inicio");
   const emitidas = await todas<any>("erp_seguradora_emitidas", "id, seguradora_id, numero_apolice, numero_proposta, nome_segurado, cpf_cnpj, vigencia_inicio, dt_emissao, documento_id");
-  const corpCom = await todas<any>("erp_corp_comissoes", "id, situacao, seg_abrev, cliente, cpf_cnpj, apolice, endosso, inicio_vig, dt_emissao, valor", (q) => q.gte("inicio_vig", DESDE));
+  const corpCom = await todas<any>("erp_corp_comissoes", "id, situacao, seg_abrev, cliente, cpf_cnpj, apolice, endosso, inicio_vig, dt_emissao, valor, nosso_numero_corp", (q) => q.gte("inicio_vig", DESDE));
+  // cliente da proposta do Corp pelo Nosso nº (a comissão "pendente" traz nome e CPF, mesmo sem apólice)
+  const clienteCorp = new Map<string, { nome: string; cpf: string }>();
+  for (const c of corpCom) if (c.nosso_numero_corp && (c.cliente || c.cpf_cnpj)) clienteCorp.set(String(c.nosso_numero_corp), { nome: c.cliente, cpf: c.cpf_cnpj });
   const pdfApo = await todas<any>("erp_apolice_pdf_identidade", "fonte_pdf, documento_id, seg, numero_pdf, cpfs, vig_ini", (q) => q.gte("vig_ini", DESDE), "fonte_pdf");
   const pdfProp = await todas<any>("erp_proposta_pdf_identidade", "fonte_pdf, seg_texto, numero_proposta, cpfs, vig_ini, documento_id", undefined, "fonte_pdf");
   const pdfEnd = await todas<any>("erp_endosso_pdf_identidade", "fonte_pdf, seg_texto, numero_apolice, numero_endosso, data_endosso, mae_id, endosso_id", undefined, "fonte_pdf");
@@ -90,6 +100,10 @@ type Prova = { fonte: string; chave: string; ref: string; data?: string | null; 
   const idx = <T,>(xs: T[], chaves: (x: T) => (string | null | undefined)[]) => { const m = new Map<string, T[]>(); for (const x of xs) for (const k of chaves(x)) if (k && k.length >= 6) m.set(k, [...(m.get(k) ?? []), x]); return m; };
   const docsPorCpf = idx(docsErp, (d) => [dig(locDocs.get(d.locatario_id)?.cpf)]);
   const docsPorNum = idx(docsErp, (d) => [semZero(d.numero_apolice), semZero(d.numero_proposta)]);
+  // proposta sem cliente (grade do Corp): mesma seguradora + mesmo início de vigência + mesmo prêmio líquido (centavos)
+  const chaveVP = (sid: unknown, vig: unknown, premio: unknown) => (sid && vig && Number(premio) > 0 ? `${sid}|${vig}|${Math.round(Number(premio) * 100)}` : "");
+  const docsPorVP = idx(docsErp, (d) => [chaveVP(d.seguradora_id, d.vigencia_inicio, d.premio_liquido)]);
+  const portalPorVP = idx(portalApo, (a) => [chaveVP(a.seguradora_id, a.vigencia_inicio, a.premio_liquido)]);
   const docsPorNome = idx(docsErp, (d) => [norm(locDocs.get(d.locatario_id)?.nome)]);
 
   // documentos que NÃO identificam o cliente: CNPJ de imobiliária (estipulante), da O2/corretoras e qualquer CPF/CNPJ presente em muitas apólices
@@ -110,6 +124,8 @@ type Prova = { fonte: string; chave: string; ref: string; data?: string | null; 
     const dl = (o?.dados_legiveis ?? {}) as Record<string, unknown>;
     const efetivado = String(dl["Data da mudança de etapa"] ?? d.dt_proposta ?? "").slice(0, 10) || null;
     const ref = d.vigencia_inicio ?? efetivado;
+    const cc = d.nosso_numero_corp ? clienteCorp.get(String(d.nosso_numero_corp)) : undefined;
+    if (cc) minhasPartes.push({ nome: cc.nome, documento_numero: cc.cpf, papel: "cliente Corp" });
     const cpfs = [...new Set([dig(loc?.cpf), ...minhasPartes.map((p) => dig(p.documento_numero))].filter((c) => (c.length === 11 || c.length === 14) && !naoIdentifica.has(c)))];
     const tituloNome = norm(String(o?.titulo ?? "").replace(/^\s*(NOVO|RENOVA\S*( AUTO)?|ENDOSSO|LOTE[^-]*)\s*-\s*/i, "").split(" - ")[0].replace(/\(.*?\)/g, ""));
     const nomes = [...new Set([norm(loc?.nome), ...minhasPartes.map((p) => norm(p.nome)), tituloNome].filter((n) => tokens(n).length >= 2))];
@@ -132,6 +148,8 @@ type Prova = { fonte: string; chave: string; ref: string; data?: string | null; 
     for (const c of cpfs) for (const x of docsPorCpf.get(c) ?? []) cands.set(x.id, { ...x, via: "CPF" });
     for (const n of nums) for (const x of docsPorNum.get(n) ?? []) cands.set(x.id, { ...x, via: "número" });
     for (const n of nomes) for (const x of docsPorNome.get(n) ?? []) if (x.seguradora_id === d.seguradora_id) cands.set(x.id, cands.get(x.id) ?? { ...x, via: "nome+seguradora" });
+    const vp = chaveVP(d.seguradora_id, d.vigencia_inicio, d.premio_liquido);
+    for (const x of docsPorVP.get(vp) ?? []) cands.set(x.id, cands.get(x.id) ?? { ...x, via: "seguradora+vigência+prêmio" });
     for (const x of cands.values()) {
       const endossoX = !["A", "F"].includes(x.tipo);
       if (endossoX !== ehEndosso || !segOk(x.seguradora_id) || !naJanela(x.vigencia_inicio, 45, 60)) continue;
@@ -143,6 +161,7 @@ type Prova = { fonte: string; chave: string; ref: string; data?: string | null; 
     for (const l of extLinhas) { const e = extPor.get(l.extrato_id); if (!e || Number(l.valor_comissao) <= 0) continue; const k = casa(l.cpf_cnpj, l.cliente, [l.apolice, l.proposta], e.seguradora_id); if (k && naJanela(e.pago_em ?? e.competencia, 10, 200)) provas.push({ fonte: "extrato da seguradora (comissão paga)", chave: k, ref: l.id, data: e.pago_em ?? e.competencia, numero: l.apolice, valor: Number(l.valor_comissao) }); }
     for (const l of portalLinhas) { const c = portalComPor.get(l.comissao_id); if (!c || Number(l.valor_comissao) <= 0) continue; const k = casa(null, l.cliente, [l.numero_apolice], c.seguradora_id); if (k && naJanela(c.pago_em, 10, 200)) provas.push({ fonte: "portal da seguradora: comissão", chave: k, ref: l.id, data: c.pago_em, numero: l.numero_apolice, valor: Number(l.valor_comissao) }); }
     for (const a of portalApo) { const k = casa(null, a.segurado, [a.numero_apolice], a.seguradora_id); if (k && naJanela(a.vigencia_inicio, 45, 90)) provas.push({ fonte: "portal da seguradora: apólice/endosso emitido", chave: k, ref: a.id, data: a.dt_emissao, numero: a.numero_apolice }); }
+    for (const a of portalPorVP.get(vp) ?? []) if ((a.tipo_emissao === "Endosso") === ehEndosso) provas.push({ fonte: "portal da seguradora: apólice/endosso emitido", chave: "vigência+prêmio", ref: a.id, data: a.dt_emissao, numero: a.numero_apolice });
     for (const p of portalParc) { const k = casa(p.cpf_cnpj, p.segurado_exibido, [p.numero_apolice_chave, p.numero_documento_portal], p.seguradora_id); if (k && naJanela(p.vencimento, 10, 400)) provas.push({ fonte: `portal da seguradora: parcela (${p.status_portal})`, chave: k, ref: p.id, data: p.vencimento, numero: p.numero_apolice_chave }); }
     for (const p of portalLeit) { const k = casa(p.cpf_cnpj_cliente, null, [p.numero_proposta, p.numero_apolice], segDoTexto(p.seguradora)); if (k && p.numero_apolice) provas.push({ fonte: "portal da seguradora: leitura da proposta/apólice", chave: k, ref: p.id, data: p.vigencia_inicio, numero: p.numero_apolice }); }
     for (const s of emitidas) { const k = casa(s.cpf_cnpj, s.nome_segurado, [s.numero_proposta, s.numero_apolice], s.seguradora_id); if (k && naJanela(s.vigencia_inicio, 45, 90)) provas.push({ fonte: "relatório de emitidas da seguradora", chave: k, ref: s.id, data: s.dt_emissao, numero: s.numero_apolice }); }
@@ -180,6 +199,7 @@ type Prova = { fonte: string; chave: string; ref: string; data?: string | null; 
     let categoria: 1 | 2 | 3; let rotulo: string;
     if (candBons.length) { categoria = 2; rotulo = candBons.length === 1 ? "emitiu e não foi vinculado (1 documento oficial candidato)" : `emitiu e não foi vinculado (${candBons.length} candidatos — escolher pelo documento)`; }
     else if (fortes.length || unicas.length) { categoria = 3; rotulo = fortes.length ? "emitiu, sem documento no ERP (prova forte)" : "emitiu, sem documento no ERP (só indício: card/e-mail)"; }
+    else if (!cpfs.length && !nums.length && !nomes.length) { categoria = 1; rotulo = "sem identificação do cliente (sem CPF, nome ou nº): não dá para verificar a emissão"; }
     else { categoria = 1; rotulo = perda.length ? "não emitiu (há sinal de perda/desistência)" : "não emitiu (nenhuma prova em nenhuma fonte)"; }
     // nº da apólice só de fonte com número confiável (o "número" do anexo de e-mail pode ser código genérico); vários números → anota
     const numerosFortes = [...new Set(fortes.filter((p) => !/^anexo de e-mail/.test(p.fonte)).map((p) => semZero(p.numero)).filter((n) => n.length >= 5))];
