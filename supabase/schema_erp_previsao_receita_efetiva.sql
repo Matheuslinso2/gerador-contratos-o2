@@ -11,7 +11,8 @@ language sql stable security invoker set search_path = public as $$
   with b as (
     select to_char(c.previsao_recebimento,'YYYY-MM') mes, coalesce(co.apelido,'?') corretora, c.valor_previsto v, c.status,
       c.previsao_recebimento prev, p.quitada_em, p.vencimento,
-      (d.situacao = 'cancelado' and (d.cancelado_em is null or p.vencimento >= d.cancelado_em) and p.quitada_em is null) fant_canc,
+      (d.situacao = 'cancelado' and (d.cancelado_em is null or p.vencimento >= d.cancelado_em) and p.quitada_em is null
+        and not exists (select 1 from erp_parcelas p2 where p2.documento_id = d.id and p2.quitada_em is not null and (d.cancelado_em is null or p2.vencimento >= d.cancelado_em))) fant_canc, -- v2 05/11: cancelada COM parcela paga depois do cancelamento rodou de fato (o pagamento prevalece), não é fantasma
       (d.situacao = 'duplicado') fant_dup
     from erp_comissoes c
     join erp_parcelas p on p.id = c.parcela_id
