@@ -5,6 +5,7 @@ import { extrairTextoPdfComPaginas } from "@/lib/extrairTextoPdf";
 import { extrairTextoDocx } from "@/lib/extrairTextoDocx";
 import { auditarContrato, type ClausulaReferencia, type DocumentoAuditoria, type RelatorioAuditoria, type StatusChecklist } from "@/lib/auditorContrato";
 import { createServiceClient } from "@/lib/supabase/service";
+import { baixarArquivoDeComentario, comentariosComArquivos, comentarioDoContrato, type ComentarioComArquivos } from "./contratoNoComentario";
 
 // Auditoria automática do contrato de locação a partir do card do Seguro Fiança (decisão do Matheus, 04/11/2026): quando o card
 // entra em "Contrato Recebido", ~30 min depois o sistema procura no Gmail (caixa que recebe fianca@) o contrato pelo NOME DO
@@ -42,7 +43,75 @@ async function paraDocumento(tipo: DocumentoAuditoria["tipo"], nome: string, buf
   return { tipo, nomeArquivo: nome, fonte: { tipo: "texto", texto } };
 }
 
-export async function localizarDocumentosDoCard(card: { titulo: string; endereco?: string | null }): Promise<DocumentosLocalizados> {
+const SEGURADORAS = ["pottencial", "porto", "tokio", "allianz", "yelum", "liberty", "sulamerica", "junto"];
+const semAcento = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+const dataCurta = (iso: string) => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "America/Sao_Paulo" });
+};
+
+// Contrato anexado em COMENTÁRIO do card (05/11/2026): é onde a equipe do Fiança coloca o contrato recebido. Vem primeiro; o Gmail é a reserva.
+//  - null  = não há contrato em comentário (segue para o Gmail);
+//  - documentos vazios + aviso = o contrato está no comentário, mas a cópia ainda não está disponível: a rodada tenta de novo, sem comentar
+//    e sem cair num e-mail antigo.
+async function documentosDoComentario(itemId: number): Promise<DocumentosLocalizados | null> {
+  let comentarios: ComentarioComArquivos[];
+  try {
+    comentarios = await comentariosComArquivos(ENTITY_TYPE_FIANCA, itemId);
+  } catch (erro) {
+    console.warn("Auditoria do card: não consegui ler os comentários, segue pelo Gmail:", erro);
+    return null;
+  }
+  const alvo = comentarioDoContrato(comentarios);
+  if (!alvo) return null;
+  const legiveis = alvo.arquivos.filter((a) => ehArquivoLegivel(a.nome) && (a.tamanho === 0 || a.tamanho >= 20_000));
+  const certificado = legiveis.find((a) => REGEX_CERTIFICADO.test(a.nome));
+  const contratos = legiveis.filter((a) => !REGEX_CERTIFICADO.test(a.nome) && !(REGEX_COTACAO.test(a.nome) && !/contrat/i.test(a.nome)) && !REGEX_NAO_CONTRATO.test(a.nome));
+  if (!contratos.length) return null;
+
+  const origem = `comentário do card de ${dataCurta(alvo.criadoEm)}`.trim();
+  const documentos: DocumentoAuditoria[] = [];
+  const arquivos: DocumentosLocalizados["arquivos"] = [];
+  const avisos: string[] = [];
+  for (const c of contratos.slice(0, 3)) {
+    const buffer = await baixarArquivoDeComentario(c.id);
+    if (!buffer) {
+      return { documentos: [], arquivos: [], avisos: [`O contrato está anexado no comentário do card ("${c.nome}"), mas a cópia ainda não está disponível para a auditoria; nova tentativa na próxima rodada.`] };
+    }
+    documentos.push(await paraDocumento("contrato", c.nome, buffer));
+    arquivos.push({ papel: "contrato", nome: c.nome, deEmail: origem });
+  }
+  if (certificado) {
+    const buffer = await baixarArquivoDeComentario(certificado.id);
+    if (buffer) {
+      documentos.push(await paraDocumento("certificado", certificado.nome, buffer));
+      arquivos.push({ papel: "certificado", nome: certificado.nome, deEmail: origem });
+    }
+  }
+  if (!documentos.some((d) => d.tipo === "certificado")) avisos.push("Certificado de assinatura eletrônica não encontrado no comentário do contrato (pode estar dentro do próprio PDF).");
+
+  // Cotação: PDFs de outros comentários cujo nome cita a seguradora do contrato (ex: "… - Porto cm 10.pdf"); até 2, os mais recentes.
+  const textoContrato = semAcento(documentos.filter((d) => d.tipo === "contrato" && d.fonte.tipo === "texto").map((d) => (d.fonte as { texto: string }).texto).join(" "));
+  const seguradoras = SEGURADORAS.filter((s) => textoContrato.includes(s));
+  const candidatas = comentarios
+    .filter((c) => c.id !== alvo.id)
+    .sort((a, b) => b.id - a.id)
+    .flatMap((c) => c.arquivos.filter((a) => ehArquivoLegivel(a.nome) && (a.tamanho === 0 || a.tamanho >= 20_000) && seguradoras.some((s) => semAcento(a.nome).includes(s))).map((a) => ({ a, c })));
+  for (const { a, c } of candidatas.slice(0, 2)) {
+    const buffer = await baixarArquivoDeComentario(a.id);
+    if (!buffer) continue;
+    documentos.push(await paraDocumento("cotacao", a.nome, buffer));
+    arquivos.push({ papel: "cotacao", nome: a.nome, deEmail: `comentário do card de ${dataCurta(c.criadoEm)}`.trim() });
+  }
+  if (!documentos.some((d) => d.tipo === "cotacao")) avisos.push("Cotação/proposta da seguradora não encontrada nos comentários do card.");
+  return { documentos, arquivos, avisos };
+}
+
+export async function localizarDocumentosDoCard(card: { id?: number; titulo: string; endereco?: string | null }): Promise<DocumentosLocalizados> {
+  if (card.id) {
+    const doComentario = await documentosDoComentario(card.id);
+    if (doComentario) return doComentario;
+  }
   const avisos: string[] = [];
   // Locatários múltiplos aparecem no título separados por "/" (ex: "LUCAS DOS REIS / DENISE DA COSTA"): busca pelo primeiro nome completo.
   const nome = card.titulo.split("/")[0].replace(/[^\p{L}\p{N} .'-]/gu, " ").replace(/\s+/g, " ").trim();
@@ -135,7 +204,7 @@ export function formatarParecerBitrix(r: RelatorioAuditoria, arquivos: Documento
   if (r.pontos_criticos?.length) partes.push(`[B]PONTOS CRÍTICOS[/B]\n${r.pontos_criticos.map((p) => `• ${p}`).join("\n")}`);
   const paragrafos = (r.paragrafos_texto_oficial ?? []).filter((p) => p.situacao === "divergente" || p.situacao === "ausente");
   if (paragrafos.length) partes.push(`[B]TEXTO OFICIAL DA SEGURADORA — PARÁGRAFOS A REVISAR[/B]\n${paragrafos.map((p) => `• ${p.assunto} (${p.situacao}): ${p.observacao ?? ""}`).join("\n")}`);
-  partes.push(`Arquivos analisados (do e-mail): ${arquivos.map((a) => `${a.nome} [${a.papel}]`).join("; ")}`);
+  partes.push(`Arquivos analisados (do comentário do card ou do e-mail): ${arquivos.map((a) => `${a.nome} [${a.papel}]`).join("; ")}`);
   if (avisos.length) partes.push(`Observações: ${avisos.join(" ")}`);
   partes.push("Análise feita pelo Auditor de Contrato do Workspace O2 — apoio à conferência, não substitui a revisão da equipe.");
   return partes.join("\n\n");
