@@ -195,7 +195,7 @@ export async function reenviarCampanha(formData: FormData) {
   const { data: original } = await supabase
     .from("campanhas")
     .select(
-      "nome, assunto, template, personalizacao, titulo, introducao, valido_de, valido_ate, produto, produtos, corpo_html, cta_texto, cta_href, imobiliarias_selecionadas, contatos_externos_selecionados, incluir_equipe_interna, remetente_nome, status"
+      "nome, assunto, template, personalizacao, titulo, introducao, valido_de, valido_ate, produto, produtos, corpo_html, cta_texto, cta_href, imobiliarias_selecionadas, contatos_externos_selecionados, incluir_equipe_interna, remetente_nome, status, mensagem_unica, card_deal_id"
     )
     .eq("id", campanhaId)
     .single();
@@ -228,6 +228,9 @@ export async function reenviarCampanha(formData: FormData) {
       contatos_externos_selecionados: original.contatos_externos_selecionados,
       incluir_equipe_interna: original.incluir_equipe_interna,
       remetente_nome: original.remetente_nome,
+      // Reenvio de uma parcial (05/11/2026): continua na MESMA conversa de e-mail do card da imobiliária, em uma mensagem só.
+      mensagem_unica: original.mensagem_unica ?? false,
+      card_deal_id: original.card_deal_id ?? null,
       status: "rascunho",
       criado_por: user.id,
       criado_por_email: user.email,
