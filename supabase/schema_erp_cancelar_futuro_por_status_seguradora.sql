@@ -1,0 +1,6 @@
+-- 05/11/2026 (Matheus): a seguradora é o registro correto. Apólice cancelada no portal => cancela parcelas, previsão de receita e repasse FUTUROS
+-- (o que já foi pago/conciliado não volta atrás). Remove só parcela em aberto, vencida a partir de cancelado_em, sem recebimento/extrato/fatura/
+-- repasse/portal ligado; a comissão prevista e a previsão de receita saem em cascata. Log reversível em erp_cancelamento_endosso_log (lote).
+-- Função: erp_cancelar_futuro_por_status_seguradora(p_docs uuid[], p_aplicar boolean default false, p_lote text default null) — só service_role.
+-- (corpo aplicado via migração erp_cancelar_futuro_por_status_seguradora; endosso_id do log passou a aceitar null.)
+-- Lotes aplicados: canc-seguradora-porto-20261105 (40 docs, 289 parcelas), canc-seguradora-porto-cancelados-20261105b (203 docs, 1.455 parcelas).
