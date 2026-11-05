@@ -5,31 +5,31 @@
   "crons": [
     {
       "path": "/api/cron/atualizar-paineis?painel=fianca&frequente=1",
-      "schedule": "0-59/10 11-22 * * 1-5"
+      "schedule": "0-59/20 11-22 * * 1-5"
     },
     {
       "path": "/api/cron/atualizar-paineis?painel=fianca-renovacao&frequente=1",
-      "schedule": "2-59/10 11-22 * * 1-5"
+      "schedule": "2-59/20 11-22 * * 1-5"
     },
     {
       "path": "/api/cron/atualizar-paineis?painel=comercial&frequente=1",
-      "schedule": "4-59/10 11-22 * * 1-5"
+      "schedule": "4-59/20 11-22 * * 1-5"
     },
     {
       "path": "/api/cron/atualizar-painel-comercial",
-      "schedule": "5-59/10 11-22 * * 1-5"
+      "schedule": "5-59/20 11-22 * * 1-5"
     },
     {
       "path": "/api/cron/atualizar-paineis?painel=capitalizacao&frequente=1",
-      "schedule": "6-59/10 11-22 * * 1-5"
+      "schedule": "6-59/20 11-22 * * 1-5"
     },
     {
       "path": "/api/cron/atualizar-paineis?painel=seguro-auto&frequente=1",
-      "schedule": "8-59/10 11-22 * * 1-5"
+      "schedule": "8-59/20 11-22 * * 1-5"
     },
     {
       "path": "/api/cron/atualizar-paineis?painel=ramos-elementares&frequente=1",
-      "schedule": "1-59/10 11-22 * * 1-5"
+      "schedule": "1-59/20 11-22 * * 1-5"
     },
     {
       "path": "/api/cron/coletar-noticias",
@@ -89,7 +89,7 @@
     },
     {
       "path": "/api/cron/base-unica-bitrix",
-      "schedule": "40 * * * *"
+      "schedule": "7 * * * *"
     },
     {
       "path": "/api/cron/corp-sharepoint",
@@ -97,27 +97,27 @@
     },
     {
       "path": "/api/cron/base-unica-vinculos",
-      "schedule": "50 * * * *"
+      "schedule": "34 * * * *"
     },
     {
       "path": "/api/cron/base-unica-bitrix?produto=capitalizacao",
-      "schedule": "42 * * * *"
+      "schedule": "9 * * * *"
     },
     {
       "path": "/api/cron/base-unica-bitrix?produto=automovel",
-      "schedule": "44 * * * *"
+      "schedule": "17 * * * *"
     },
     {
       "path": "/api/cron/base-unica-bitrix?produto=re",
-      "schedule": "46 * * * *"
+      "schedule": "19 * * * *"
     },
     {
       "path": "/api/cron/base-unica-bitrix?produto=fianca-renovacao",
-      "schedule": "48 * * * *"
+      "schedule": "27 * * * *"
     },
     {
       "path": "/api/cron/base-unica-bitrix?produto=re-renovacao",
-      "schedule": "52 * * * *"
+      "schedule": "29 * * * *"
     },
     {
       "path": "/api/cron/analise-precos",
@@ -157,11 +157,11 @@
     },
     {
       "path": "/api/cron/erp-baixa-automatica",
-      "schedule": "55 * * * *"
+      "schedule": "36 * * * *"
     },
     {
       "path": "/api/cron/erp-repasse-resumo",
-      "schedule": "58 * * * *"
+      "schedule": "38 * * * *"
     },
     {
       "path": "/api/cron/base-unica-lotes-re",

@@ -7,7 +7,7 @@ export const maxDuration = 60;
 
 // Base Única — liga sozinho os nomes novos das fontes (empresas do Bitrix,
 // nomes das planilhas, produtores do Corp) às fichas de imobiliária, de hora
-// em hora, depois da leitura do Bitrix (:40). Regras em
+// em hora, depois da leitura do Bitrix (:07 a :29, desde 05/11; esta rotina roda às :34). Regras em
 // lib/baseUnica/vinculosAutomaticos.ts (pedido do Matheus, 21/10/2026).
 //
 // Protegida por CRON_SECRET — mesmo padrão de base-unica-bitrix/route.ts.

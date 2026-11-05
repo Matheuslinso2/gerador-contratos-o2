@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 // ERP O2 — baixa automática dos extratos das seguradoras×empresas com a baixa LIGADA (erp_baixa_automatica_config).
-// Roda depois da leitura dos extratos (erp-extratos-drive, :40). Só baixa linhas exatas; o resto fica para tratar à mão em /erp/baixas/gestao.
+// Roda depois da leitura dos extratos (erp-extratos-drive, :18; esta rotina roda às :36 desde 05/11). Só baixa linhas exatas; o resto fica para tratar à mão em /erp/baixas/gestao.
 export async function GET(request: NextRequest) {
   const segredo = process.env.CRON_SECRET;
   if (!segredo) return NextResponse.json({ erro: "CRON_SECRET não configurada" }, { status: 500 });

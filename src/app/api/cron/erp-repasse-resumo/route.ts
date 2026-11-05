@@ -4,7 +4,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-// ERP O2 — refaz o retrato da tela de Repasses (erp_repasse_resumo_pronto) dos meses abertos, depois da baixa automática (:55).
+// ERP O2 — refaz o retrato da tela de Repasses (erp_repasse_resumo_pronto) dos meses abertos, depois da baixa automática (:36; esta rotina roda às :38 desde 05/11).
 export async function GET(request: NextRequest) {
   const segredo = process.env.CRON_SECRET;
   if (!segredo) return NextResponse.json({ erro: "CRON_SECRET não configurada" }, { status: 500 });
