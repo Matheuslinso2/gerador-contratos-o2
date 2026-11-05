@@ -55,11 +55,26 @@ export async function POST(req: Request) {
 }
 
 // Consulta de um protocolo para refazer a pesquisa: por enquanto só o Matheus (pedido de 04/11/2026).
+// Com ?lista=1&painel=ID devolve a LISTA dos protocolos da própria pessoa naquele painel (05/11/2026): só código, pergunta, mês e hora.
 export async function GET(req: Request) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  const url = new URL(req.url);
+  if (url.searchParams.get("lista") === "1") {
+    if (!user?.email || !chatVisivelPara(user.email) || !roboLiberadoPara(user.email)) return NextResponse.json({ erro: "sem acesso" }, { status: 403 });
+    const painelId = url.searchParams.get("painel") ?? "";
+    if (!contextoPainelValido({ id: painelId, competencia: "2000-01" })) return NextResponse.json({ erro: "painel inválido" }, { status: 400 });
+    const { data } = await createServiceClient()
+      .from("robo_protocolos")
+      .select("protocolo, pergunta, competencia, tipo, criado_em")
+      .eq("email", user.email.toLowerCase())
+      .eq("painel_id", painelId)
+      .order("criado_em", { ascending: false })
+      .limit(40);
+    return NextResponse.json({ itens: data ?? [] });
+  }
   if (!isMatheus(user?.email)) return NextResponse.json({ erro: "sem acesso" }, { status: 403 });
   const codigo = new URL(req.url).searchParams.get("codigo")?.trim().toUpperCase() ?? "";
   if (!REGEX_PROTOCOLO.test(codigo)) return NextResponse.json({ erro: "Protocolo inválido. O formato é RO2-AAAAMMDD-XXXXXX." }, { status: 400 });

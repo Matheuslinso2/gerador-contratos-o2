@@ -4,6 +4,7 @@ import { chatVisivelPara } from "@/lib/chat/acesso";
 import { roboLiberadoPara } from "@/lib/chat/niveisAcesso";
 import { responderComoRobo, type TurnoChat } from "@/lib/chat/robo";
 import { contextoPainelValido } from "@/lib/chat/paineis";
+import { registrarProtocolo } from "@/lib/chat/protocolo";
 
 export const maxDuration = 120;
 
@@ -32,7 +33,28 @@ export async function POST(req: Request) {
 
   try {
     const r = await responderComoRobo(user.email, turnos, painel);
-    return NextResponse.json({ resposta: r.texto, pdfPermitido: r.pdfPermitido, dadosPessoais: r.dadosPessoais, logica: r.logica, fontes: r.fontes, cards: r.cards });
+    // Campo do painel: cada pergunta respondida ganha um protocolo guardado na lista da pessoa (05/11/2026); falha ao guardar não derruba a resposta.
+    let protocolo: string | null = null;
+    if (painel) {
+      try {
+        protocolo = await registrarProtocolo({
+          email: user.email,
+          tipo: "resposta",
+          painelId: painel.id,
+          competencia: painel.competencia,
+          pergunta: turnos[turnos.length - 1].content,
+          conversa: [...turnos, { role: "assistant", content: r.texto }],
+          logica: r.logica,
+          fontes: r.fontes,
+          cardsSelecionados: [],
+          todosOsCards: false,
+          totalCardsDaResposta: r.cards.length,
+        });
+      } catch (e) {
+        console.error("[chat/robo] protocolo", e);
+      }
+    }
+    return NextResponse.json({ resposta: r.texto, pdfPermitido: r.pdfPermitido, dadosPessoais: r.dadosPessoais, logica: r.logica, fontes: r.fontes, cards: r.cards, protocolo });
   } catch (e) {
     console.error("[chat/robo]", e);
     return NextResponse.json({ erro: "falha" }, { status: 500 });

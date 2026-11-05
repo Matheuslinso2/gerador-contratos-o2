@@ -43,7 +43,10 @@ type Troca = {
   fontes?: string[];
   cards?: CardLista[];
   conversa?: { role: "user" | "assistant"; content: string }[];
+  protocolo?: string | null;
 };
+
+type ItemProtocolo = { protocolo: string; pergunta: string; competencia: string | null; tipo: string; criado_em: string };
 
 const brl = (v: number | null) => (v === null ? "—" : v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
 const hora = (iso: string) => new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
@@ -213,6 +216,10 @@ export default function RoboDoPainel({ painelId, competencia }: { painelId: stri
   const [aviso, setAviso] = useState<string | null>(null);
   // Regra do Matheus (04/11/2026): o Robô do painel já nasce RECOLHIDO (dropdown); abre só quando a pessoa quiser. As perguntas e respostas ficam guardadas na tela enquanto recolhido.
   const [aberto, setAberto] = useState(false);
+  // Lista dos protocolos da pessoa neste painel: dropdown SEMPRE fechado (nasce fechado e volta a fechar a cada pergunta nova).
+  const [listaAberta, setListaAberta] = useState(false);
+  const [itensProtocolo, setItensProtocolo] = useState<ItemProtocolo[] | null>(null);
+  const [carregandoLista, setCarregandoLista] = useState(false);
   const entrada = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -225,30 +232,28 @@ export default function RoboDoPainel({ painelId, competencia }: { painelId: stri
     const p = pergunta.trim();
     if (!p || pensando) return;
     const id = crypto.randomUUID();
-    const anteriores = trocas.filter((t) => t.resposta).slice(-4);
-    setTrocas((atual) => [{ id, pergunta: p }, ...atual]);
+    // RESET (pedido do Matheus, 05/11/2026): cada pergunta começa do zero. A tela mostra só a pergunta atual (a tela não cresce),
+    // o robô não leva a conversa anterior e a lista de protocolos guarda o histórico.
+    setTrocas([{ id, pergunta: p }]);
+    setPdfs({});
+    setListaAberta(false);
+    setItensProtocolo(null);
     setTexto("");
     setAviso(null);
     setPensando(true);
     try {
-      const mensagens = [
-        ...anteriores.flatMap((t) => [
-          { role: "user" as const, content: t.pergunta },
-          { role: "assistant" as const, content: t.resposta! },
-        ]),
-        { role: "user" as const, content: p },
-      ];
+      const mensagens = [{ role: "user" as const, content: p }];
       const r = await fetch("/api/chat/robo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mensagens, painel: { id: painelId, competencia } }),
       });
-      const j = (await r.json().catch(() => ({}))) as { resposta?: string; pdfPermitido?: boolean; dadosPessoais?: boolean; logica?: string | null; fontes?: string[]; cards?: CardLista[] };
+      const j = (await r.json().catch(() => ({}))) as { resposta?: string; pdfPermitido?: boolean; dadosPessoais?: boolean; logica?: string | null; fontes?: string[]; cards?: CardLista[]; protocolo?: string | null };
       if (!r.ok || !j.resposta) throw new Error("falha");
       setTrocas((atual) =>
         atual.map((t) =>
           t.id === id
-            ? { ...t, resposta: j.resposta, pdfPermitido: !!j.pdfPermitido, dadosPessoais: !!j.dadosPessoais, logica: j.logica ?? null, fontes: j.fontes ?? [], cards: j.cards ?? [], conversa: [...mensagens, { role: "assistant" as const, content: j.resposta! }] }
+            ? { ...t, resposta: j.resposta, pdfPermitido: !!j.pdfPermitido, dadosPessoais: !!j.dadosPessoais, logica: j.logica ?? null, fontes: j.fontes ?? [], cards: j.cards ?? [], protocolo: j.protocolo ?? null, conversa: [...mensagens, { role: "assistant" as const, content: j.resposta! }] }
             : t
         )
       );
@@ -256,6 +261,22 @@ export default function RoboDoPainel({ painelId, competencia }: { painelId: stri
       setTrocas((atual) => atual.map((t) => (t.id === id ? { ...t, erro: true } : t)));
     } finally {
       setPensando(false);
+    }
+  }
+
+  async function alternarLista() {
+    const novo = !listaAberta;
+    setListaAberta(novo);
+    if (!novo || itensProtocolo || carregandoLista) return;
+    setCarregandoLista(true);
+    try {
+      const r = await fetch(`/api/chat/robo/protocolo?lista=1&painel=${encodeURIComponent(painelId)}`);
+      const j = (await r.json().catch(() => ({}))) as { itens?: ItemProtocolo[] };
+      setItensProtocolo(r.ok ? (j.itens ?? []) : []);
+    } catch {
+      setItensProtocolo([]);
+    } finally {
+      setCarregandoLista(false);
     }
   }
 
@@ -358,6 +379,44 @@ export default function RoboDoPainel({ painelId, competencia }: { painelId: stri
       )}
       {aviso && <p className="mt-1 text-xs text-gray-600">{aviso}</p>}
 
+      <div className="mt-2">
+        <button type="button" onClick={() => void alternarLista()} aria-expanded={listaAberta} className="rounded-full border border-o2-navy/30 px-4 py-1.5 text-xs font-semibold text-o2-navy hover:bg-o2-navy/5">
+          Protocolos salvos {listaAberta ? "▴" : "▾"}
+        </button>
+        {listaAberta && (
+          <div className="mt-2 rounded-xl border border-gray-200 bg-white p-2 text-xs">
+            {carregandoLista && <p className="p-1 text-gray-500">Carregando…</p>}
+            {!carregandoLista && itensProtocolo && itensProtocolo.length === 0 && <p className="p-1 text-gray-500">Nenhum protocolo salvo ainda neste painel.</p>}
+            {!carregandoLista && itensProtocolo && itensProtocolo.length > 0 && (
+              <ul className="max-h-64 divide-y divide-gray-100 overflow-y-auto">
+                {itensProtocolo.map((i) => (
+                  <li key={i.protocolo} className="flex flex-wrap items-start gap-2 p-1.5">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-gray-800">{i.pergunta}</p>
+                      <p className="text-[10px] text-gray-500">
+                        <strong className="select-all text-o2-navy">{i.protocolo}</strong> · {hora(i.criado_em)}
+                        {i.competencia ? ` · mês ${i.competencia}` : ""} · {i.tipo === "pdf" ? "PDF" : i.tipo === "lista" ? "lista de cards" : "resposta"}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTexto(i.pergunta);
+                        setListaAberta(false);
+                        entrada.current?.focus();
+                      }}
+                      className="rounded-full border border-o2-navy/30 px-3 py-1 font-semibold text-o2-navy hover:bg-o2-navy/5"
+                    >
+                      Refazer
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
+
       {!trocas.length && (
         <div className="mt-2 flex flex-wrap gap-2">
           {painel.sugestoes.map((s) => (
@@ -410,6 +469,11 @@ export default function RoboDoPainel({ painelId, competencia }: { painelId: stri
                         )}
                         {pdfs[t.id]?.estado === "erro" && <span className="text-red-700">Não consegui gerar o PDF.</span>}
                       </>
+                    )}
+                    {t.protocolo && (
+                      <span>
+                        Protocolo <strong className="select-all text-o2-navy">{t.protocolo}</strong>
+                      </span>
                     )}
                     {t.fontes && t.fontes.length > 0 && <span title={t.fontes.join(" · ")}>Fontes consultadas: {t.fontes.length}</span>}
                   </div>

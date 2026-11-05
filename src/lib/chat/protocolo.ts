@@ -22,7 +22,7 @@ export const REGEX_PROTOCOLO = /^RO2-\d{8}-[A-Z2-9]{6}$/;
 
 export type DadosProtocolo = {
   email: string;
-  tipo: "lista" | "pdf";
+  tipo: "resposta" | "lista" | "pdf";
   painelId: string | null;
   competencia: string | null;
   pergunta: string;
@@ -40,7 +40,7 @@ export function montarCaminho(codigo: string, d: DadosProtocolo): string {
   const linhas = [
     `PROTOCOLO ${codigo}`,
     `SOLICITANTE: ${d.email}`,
-    `GERADO EM: ${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })} (${d.tipo === "pdf" ? "relatório em PDF" : "lista de cards na tela"})`,
+    `GERADO EM: ${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })} (${d.tipo === "pdf" ? "relatório em PDF" : d.tipo === "resposta" ? "resposta do robô na tela" : "lista de cards na tela"})`,
     `PAINEL: ${painel ? `${painel.nome} (${d.painelId})` : "chat geral"} | COMPETÊNCIA: ${d.competencia ?? "—"}`,
     `PERGUNTA (exata): ${d.pergunta}`,
   ];
