@@ -27,8 +27,13 @@ export async function registrarAtividadeEmail(params: {
   corpo: string;
   direcao: "enviado" | "recebido";
   enderecoEnvolvido: string;
+  /** Todos os endereços da mensagem (se vazio, só `enderecoEnvolvido`). */
+  enderecosEnvolvidos?: string[];
+  /** Data/hora (ISO) em que o e-mail saiu de verdade, para registrar depois do envio sem mudar a data do histórico. */
+  quando?: string;
 }) {
-  const { entityTypeId, itemId, assunto, corpo, direcao, enderecoEnvolvido } = params;
+  const { entityTypeId, itemId, assunto, corpo, direcao, enderecoEnvolvido, enderecosEnvolvidos, quando } = params;
+  const enderecos = enderecosEnvolvidos?.length ? enderecosEnvolvidos : [enderecoEnvolvido];
 
   await chamarBitrixComoApp("crm.activity.add", {
     fields: {
@@ -40,7 +45,8 @@ export async function registrarAtividadeEmail(params: {
       DESCRIPTION_TYPE: 3, // 3 = HTML
       DIRECTION: direcao === "enviado" ? 2 : 1, // 1 = recebido, 2 = enviado (padrão CRM_ACTIVITY_DIRECTION)
       COMPLETED: "N",
-      COMMUNICATIONS: [{ VALUE: enderecoEnvolvido, TYPE: "EMAIL" }],
+      ...(quando ? { START_TIME: quando, END_TIME: quando } : {}),
+      COMMUNICATIONS: enderecos.map((e) => ({ VALUE: e, TYPE: "EMAIL" })),
     },
   });
 }

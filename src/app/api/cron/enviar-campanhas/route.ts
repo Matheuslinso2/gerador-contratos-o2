@@ -50,18 +50,25 @@ export async function GET(request: NextRequest) {
     })
   );
 
-  const { data: campanhas } = await supabase.from("campanhas").select("id").eq("status", "enviando");
+  const { data: campanhas } = await supabase.from("campanhas").select("id, mensagem_unica").eq("status", "enviando");
 
-  const resultados = await Promise.all(
-    (campanhas ?? []).map(async (c) => {
-      try {
-        const resultado = await processarLote(c.id);
-        return { campanhaId: c.id, ok: true, ...resultado };
-      } catch (erro) {
-        return { campanhaId: c.id, ok: false, erro: erro instanceof Error ? erro.message : String(erro) };
-      }
-    })
-  );
+  const processar = async (c: { id: string }) => {
+    try {
+      const resultado = await processarLote(c.id);
+      return { campanhaId: c.id, ok: true, ...resultado };
+    } catch (erro) {
+      return { campanhaId: c.id, ok: false, erro: erro instanceof Error ? erro.message : String(erro) };
+    }
+  };
+  // Parciais (mensagem única, uma por imobiliária) saem UMA A UMA, espaçadas: 28 de uma vez estouravam o
+  // limite do Resend (10 por segundo) e várias falharam em 04/11. As demais campanhas seguem em paralelo.
+  const unicas = (campanhas ?? []).filter((c) => c.mensagem_unica);
+  const demais = (campanhas ?? []).filter((c) => !c.mensagem_unica);
+  const resultados = await Promise.all(demais.map(processar));
+  for (const c of unicas) {
+    resultados.push(await processar(c));
+    await new Promise((r) => setTimeout(r, 500));
+  }
 
   // Cards no funil Campanhas do Bitrix (30/10/2026): só para campanha com o
   // interruptor ligado, e só depois de os e-mails iniciais terem saído
