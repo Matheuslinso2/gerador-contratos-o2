@@ -38,6 +38,29 @@ async function todas<T>(tabela: string, cols: string, ordem: string[], filtro?: 
   return out;
 }
 
+// Trava de saúde (05/11): antes de começar e a cada 25 arquivos consulta plataforma_saude(); se as conexões passarem de 60%, houver consulta longa
+// ou bloqueio, pausa 60 s e reavalia; se não melhorar em 10 min, PARA (o que já foi baixado fica; é só rodar de novo para retomar).
+const LIMITE_CONEXOES_PCT = 60;
+async function saudeOk(): Promise<{ ok: boolean; motivo: string }> {
+  const { data, error } = await sb.rpc("plataforma_saude_leve");
+  if (error) return { ok: false, motivo: `plataforma_saude_leve falhou: ${error.message}` };
+  const s = data as { conexoes_pct?: number; consultas_longas?: number; bloqueios?: number } | null;
+  const pct = Number(s?.conexoes_pct ?? 0), longas = Number(s?.consultas_longas ?? 0), bloq = Number(s?.bloqueios ?? 0);
+  if (pct > LIMITE_CONEXOES_PCT) return { ok: false, motivo: `conexões em ${pct}% (limite ${LIMITE_CONEXOES_PCT}%)` };
+  if (longas > 0) return { ok: false, motivo: `${longas} consulta(s) longa(s) no banco` };
+  if (bloq > 0) return { ok: false, motivo: `${bloq} bloqueio(s) no banco` };
+  return { ok: true, motivo: `conexões ${pct}%` };
+}
+async function esperarSaude(): Promise<boolean> {
+  for (let t = 0; t < 10; t++) {
+    const s = await saudeOk();
+    if (s.ok) { if (t > 0) console.log(new Date().toISOString(), "TRAVA: banco saudável de novo,", s.motivo); return true; }
+    console.log(new Date().toISOString(), "TRAVA: pausado —", s.motivo);
+    await new Promise((r) => setTimeout(r, 60_000));
+  }
+  return false;
+}
+
 // --sincronizar: antes de baixar, relê os comentários SÓ dos cards alterados no Bitrix desde a última varredura (por SPA), para o agendamento de hora em hora.
 const mascarar = (t: string) => t.replace(/(senha|password|pwd)(\s*[:=-]?\s*)\S+/gi, "$1$2***");
 const tratativa = (t: string) => /(?:^|\n)\s*TRATATIVA\s*:\s*([^\n]+)/i.exec(t.replace(/\[IMG[^\]]*\][\s\S]*?\[\/IMG\]/gi, "").replace(/\[\/?[A-Z*]+[^\]]*\]/gi, ""))?.[1]?.trim().slice(0, 300) ?? null;
@@ -84,8 +107,10 @@ async function capturarAlterados(): Promise<void> {
   console.log(new Date().toISOString(), "arquivos nos comentários:", coms.reduce((s, c) => s + (c.arquivos?.length ?? 0), 0), "| a baixar:", fila.length);
   const r = { baixados: 0, erro: 0, pdfLidos: 0, anexosFicha: 0, comDocumento: 0 };
   let n = 0;
+  if (!(await esperarSaude())) { console.log("TRAVA: banco não ficou saudável em 10 min; nada foi baixado nesta rodada."); return; }
   for (const { c, a } of fila) {
     if (n++ >= LIMITE) break;
+    if (n % 25 === 0 && !(await esperarSaude())) { console.log("TRAVA: banco não ficou saudável em 10 min; parando aqui. Rode de novo para retomar.", JSON.stringify(r)); return; }
     const nome = a.name ?? `arquivo-${a.id}`;
     const ext = (nome.split(".").pop() ?? "").toLowerCase();
     const tipo = tipoDoArquivo(nome, c.comentario ?? "");
