@@ -275,8 +275,13 @@ export default async function ParciaisPage({ params, searchParams }: { params: P
                     </label>
                   </div>
                   <div className="grid gap-3 lg:grid-cols-2">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={`/api/campanhas/panorama/${l.token}?interno=1`} alt={`Panorama de ${l.nome}`} className="w-full rounded-lg border border-gray-100" loading="lazy" />
+                    <div className="space-y-1">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={`/api/campanhas/panorama/${l.token}?interno=1`} alt={`Panorama de ${l.nome}`} className="w-full rounded-lg border border-gray-100" loading="lazy" />
+                      <a href={`/api/campanhas/panorama/${l.token}?baixar=1`} className="inline-block text-xs font-medium text-o2-coral hover:underline">
+                        Baixar imagem (para enviar também pelo WhatsApp)
+                      </a>
+                    </div>
                     <details className="rounded-lg border border-gray-200">
                       <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-o2-navy">Ver o e-mail como será recebido</summary>
                       <iframe title={`E-mail de ${l.nome}`} srcDoc={htmlDoEmail(l)} sandbox="" loading="lazy" className="h-[760px] w-full rounded-b-lg border-t border-gray-200 bg-white" />

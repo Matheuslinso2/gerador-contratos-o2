@@ -42,6 +42,7 @@ import ExportarEste from "@/components/ExportarEste";
 import { createServiceClient } from "@/lib/supabase/service";
 import CardsBitrixSecao from "./CardsBitrixSecao";
 import ImpactoCampanha from "./ImpactoCampanha";
+import ParciaisParaWhatsApp from "./ParciaisParaWhatsApp";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -538,6 +539,9 @@ export default async function CampanhaDetalhePage({
 
         {/* Impacto da campanha (03/11/2026): dropdown sempre fechado, só aparece com foto de partida. */}
         {!campanhaPai && <ImpactoCampanha campanhaId={id} db={createServiceClient()} />}
+
+        {/* Imagens das parciais para WhatsApp (04/11/2026): dropdown fechado, só aparece com parciais geradas. */}
+        {!campanhaPai && <ParciaisParaWhatsApp campanhaId={id} db={createServiceClient()} />}
 
         {/* Produção gerada -- sempre presente (mesmo motivo do Resumo do
             envio acima). Desde 22/10/2026 é automática (funil + Corp), com

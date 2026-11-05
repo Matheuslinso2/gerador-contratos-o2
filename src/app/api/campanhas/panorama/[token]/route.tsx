@@ -97,11 +97,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
   const { token } = await params;
   if (!/^[a-f0-9]{16,64}$/.test(token)) return new Response("Não encontrado", { status: 404 });
   const db = createServiceClient();
-  const { data } = await db.from("campanhas_panoramas").select("id, dados, status").eq("token", token).maybeSingle();
+  const { data } = await db.from("campanhas_panoramas").select("id, participante_id, dados, status").eq("token", token).maybeSingle();
   if (!data || data.status === "descartada") return new Response("Não encontrado", { status: 404 });
+  const url = new URL(request.url);
+  // ?baixar=1 (04/11/2026): a equipe baixa a imagem para mandar por WhatsApp da imobiliária. Uso interno:
+  // como ?interno=1, não conta como parcial lida.
+  const baixar = url.searchParams.has("baixar");
+  // Quem tem premiação personalizada na campanha não leva no rodapé a premiação geral (ela vai no e-mail).
+  const { data: metaDoCliente } = await db.from("campanhas_metas").select("premiacao_personalizada_html").eq("id", data.participante_id).maybeSingle();
+  const premiacaoPersonalizada = !!metaDoCliente?.premiacao_personalizada_html?.trim();
   // Parcial lida (03/11/2026): a imagem carregou no e-mail da imobiliária. Só conta depois do envio real e
   // nunca para visualização interna (?interno=1). Proxy do Gmail marcado: abertura por proxy é sinal fraco.
-  if (data.status === "enviada" && !new URL(request.url).searchParams.has("interno")) {
+  if (data.status === "enviada" && !url.searchParams.has("interno") && !baixar) {
     const ua = request.headers.get("user-agent") ?? "";
     try {
       await db.from("campanhas_panoramas_eventos").insert({ panorama_id: data.id, tipo: "imagem", agente: /GoogleImageProxy/i.test(ua) ? "google_proxy" : "outro" });
@@ -176,7 +183,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 48px", height: 74, background: "#fff4ee", borderTop: `2px solid ${CINZA_CLARO}` }}>
         <div style={{ display: "flex", fontSize: 18, color: NAVY, fontWeight: 600, maxWidth: 900 }}>
-          {d.premiacao ? `Ao atingir a meta: ${cortar(d.premiacao, 150)}` : `Produção: novas contratações de Seguro Fiança e Capitalização (renovações não contam)`}
+          {d.premiacao && !premiacaoPersonalizada ? `Ao atingir a meta: ${cortar(d.premiacao, 150)}` : `Produção: novas contratações de Seguro Fiança e Capitalização (renovações não contam)`}
         </div>
         <div style={{ display: "flex", fontSize: 18, color: LARANJA, fontWeight: 700 }}>#SomosTodosO2</div>
       </div>
@@ -195,6 +202,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
     });
     // A versão nunca muda depois de gravada: pode ficar em cache por muito tempo.
     resposta.headers.set("cache-control", "public, max-age=31536000, immutable");
+    if (baixar) {
+      const slug = d.participante.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "imobiliaria";
+      resposta.headers.set("content-disposition", `attachment; filename="parcial-${slug}-${d.posicaoEm}.png"`);
+    }
     return resposta;
   } catch (erro) {
     console.error("Falha ao gerar a imagem do panorama", token, erro);

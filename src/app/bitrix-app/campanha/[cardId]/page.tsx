@@ -142,6 +142,10 @@ export default async function PanoramaCampanhaCard({ params, searchParams }: { p
                         <a href={`/api/campanhas/panorama/${v.token}?interno=1`} target="_blank" rel="noreferrer" className="text-o2-coral hover:underline">
                           ver
                         </a>
+                        <span className="px-1 text-gray-300">·</span>
+                        <a href={`/api/campanhas/panorama/${v.token}?baixar=1`} target="_blank" rel="noreferrer" className="text-o2-coral hover:underline">
+                          baixar
+                        </a>
                       </td>
                     </tr>
                   ))}
