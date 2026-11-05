@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buscarItem } from "@/lib/bitrix/client";
 import { auditarCardFianca, ENTITY_TYPE_FIANCA } from "@/lib/bitrix/auditoriaContratoCard";
+import { rodarAuditoriaAutomatica } from "@/lib/bitrix/auditoriaAutomatica";
 import { createClient } from "@/lib/supabase/server";
 import { isEquipe } from "@/lib/admin";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -8,9 +9,10 @@ import { createServiceClient } from "@/lib/supabase/service";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-// Auditoria automática do contrato nos cards do Seguro Fiança (04/11/2026) -- MODO TESTE: devolve o parecer em JSON para os
-// cards informados (?cards=3550,3128) e NÃO escreve nada no Bitrix. O gatilho por etapa (Contrato Recebido + 30 min) e o
-// comentário no card só entram depois do OK do Matheus. Protegida por CRON_SECRET.
+// Auditoria do contrato nos cards do Seguro Fiança (04-05/11/2026).
+//  - SEM ?cards (chamada do cron, com CRON_SECRET): rotina AUTOMÁTICA -- cards que entraram em "Contrato Recebido" há 30+ min
+//    recebem o parecer completo como comentário (ver lib/bitrix/auditoriaAutomatica.ts). Com ?simular=1 só lista o que faria.
+//  - COM ?cards=3550,3128: MODO TESTE -- devolve o parecer em JSON e NÃO escreve nada no Bitrix.
 export async function GET(request: NextRequest) {
   // Autorização: CRON_SECRET (cron) OU login da equipe O2 (teste manual feito logado).
   const segredo = process.env.CRON_SECRET;
@@ -21,6 +23,12 @@ export async function GET(request: NextRequest) {
     if (!isEquipe(user?.email)) return NextResponse.json({ erro: "não autorizado" }, { status: 401 });
   }
 
+  if (!request.nextUrl.searchParams.get("cards")) {
+    const simular = request.nextUrl.searchParams.get("simular") === "1";
+    // Comentar nos cards só pelo cron (CRON_SECRET); a equipe logada só consegue simular.
+    if (!porSegredo && !simular) return NextResponse.json({ erro: "informe ?cards=ID,ID (teste) ou ?simular=1" }, { status: 400 });
+    return NextResponse.json({ modo: simular ? "simulação (nada analisado nem comentado)" : "automático", ...(await rodarAuditoriaAutomatica({ simular })) });
+  }
   const ids = (request.nextUrl.searchParams.get("cards") ?? "").split(",").map((s) => Number(s.trim())).filter((n) => Number.isInteger(n) && n > 0).slice(0, 3);
   if (!ids.length) return NextResponse.json({ erro: "informe ?cards=ID,ID (máx. 3 por chamada)" }, { status: 400 });
 
