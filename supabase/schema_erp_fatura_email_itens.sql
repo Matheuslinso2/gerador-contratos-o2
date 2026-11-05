@@ -1,0 +1,8 @@
+-- ERP · Itens dos relatórios de fatura enviados às imobiliárias (e-mail) ligados às parcelas · 05/11/2026.
+-- Origem (só leitura): erp_email_anexos fonte='email_planilha' classe='relatorio_fatura' (conversa EMAILS), campos->'itens' (apólice, parcela, prêmio; o vencimento quase nunca vem no relatório).
+-- Migrations já aplicadas: erp_fatura_email_itens, erp_fatura_email_itens_zeros_esquerda, erp_repasse_caixa_visoes.
+--   erp_fatura_email_itens   um item por linha do relatório (anexo_id+linha), com imobiliaria_id do e-mail, apólice, parcela, prêmio e as chaves do ERP: documento_id, parcela_id, valor_parcela_erp, diferenca;
+--                            vinculo_status ligado|parcial|pendente (+ motivo em erp_dominios.motivo_vinculo_pendente). Liga só com 1 documento tipo A (Nº da apólice com/sem zeros à esquerda) + parcela existente.
+--   erp_carregar_fatura_email_itens()  carrega itens novos e liga; idempotente; só O2 (recusa logado que não seja colaborador).
+--   05/11: 20.076 itens (1.193 relatórios, R$ 2,33 mi): 19.488 ligados, 533 parciais (TODOS estornos, prêmio negativo, −R$ 63,3 mil, 443 apólices, sem parcela no ERP), 23 sem documento, 32 sem Nº de apólice (notação científica).
+--   erp_repasse_pendente_caixa / erp_repasse_previsto_caixa: repasse pendente e previsto por mês e por empresa (corretora do documento), para o caixa do financeiro. security_invoker; sem acesso anônimo.
