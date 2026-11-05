@@ -384,7 +384,7 @@ function CampoUploadPlanilha({ responseId, path, setPath, nome, setNome }: { res
   );
 }
 
-function SeguroIncendioFormInterno({ aoConcluirNova }: { aoConcluirNova: () => void }) {
+function SeguroIncendioFormInterno({ aoConcluirNova, campanha }: { aoConcluirNova: () => void; campanha?: string }) {
   const [estado, formAction, enviando] = useActionState<EstadoEnvioSeguroIncendio, FormData>(enviarFichaSeguroIncendio, null);
   const [responseId] = useState(() => crypto.randomUUID());
   const [modalidade, setModalidade] = useState<ModalidadeIncendio>("Residencial");
@@ -398,12 +398,15 @@ function SeguroIncendioFormInterno({ aoConcluirNova }: { aoConcluirNova: () => v
   // alugado, por definição. Só o Proprietário pode estar segurando o
   // próprio imóvel (sem aluguel envolvido) -- por isso só nesse caso a
   // pergunta extra decide se pede metragem/valor do aluguel.
+  // Em campanha (ex: Black O2) a ficha é de proprietário/fiador de imóvel residencial: sem escolha de modalidade e sem planilha.
+  const naCampanha = !!campanha;
+  const nSecao = (n: number) => (naCampanha ? n - 1 : n);
   const precisaDadosAluguel =
     solicitante === "Inquilino" || solicitante === "Imobiliária/Administradora" || (solicitante === "Proprietário" && finsLocacao === "Sim");
 
   if (estado?.ok) {
     // Enviada: o rascunho guardado no navegador não serve mais.
-    limparRascunho("seguro-incendio");
+    limparRascunho(campanha ? `seguro-incendio-${campanha}` : "seguro-incendio");
     return (
       <div className="rounded-xl border border-green-300 bg-green-50 p-6 text-center">
         <p className="text-lg font-semibold" style={{ color: O2_NAVY }}>
@@ -433,13 +436,17 @@ function SeguroIncendioFormInterno({ aoConcluirNova }: { aoConcluirNova: () => v
 
   return (
     <form action={formAction} className="space-y-4">
-      <RascunhoAutomatico chave="seguro-incendio" />
+      <RascunhoAutomatico chave={campanha ? `seguro-incendio-${campanha}` : "seguro-incendio"} />
       <input type="hidden" name="response_id" value={responseId} />
+      {naCampanha && <input type="hidden" name="campanha" value={campanha} />}
+      {naCampanha && <input type="hidden" name="modalidade" value="Residencial" />}
       {estado?.erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">⚠️ {estado.erro}</p>}
 
-      <Secao numero={1} titulo="Modalidade" subtitulo="Qual tipo de seguro incêndio você quer cotar?">
-        <SeletorModalidade valor={modalidade} aoMudar={setModalidade} />
-      </Secao>
+      {!naCampanha && (
+        <Secao numero={1} titulo="Modalidade" subtitulo="Qual tipo de seguro incêndio você quer cotar?">
+          <SeletorModalidade valor={modalidade} aoMudar={setModalidade} />
+        </Secao>
+      )}
 
       {modalidade === "Imobiliario" ? (
         <Secao numero={2} titulo="Dados da imobiliária e planilha">
@@ -453,12 +460,12 @@ function SeguroIncendioFormInterno({ aoConcluirNova }: { aoConcluirNova: () => v
         </Secao>
       ) : (
         <>
-          <Secao numero={2} titulo="Quem está solicitando?">
+          <Secao numero={nSecao(2)} titulo="Quem está solicitando?">
             <SeletorUnico
               name="solicitante"
               label="Você é"
               required
-              opcoes={["Proprietário", "Inquilino", "Imobiliária/Administradora"]}
+              opcoes={naCampanha ? ["Proprietário", "Fiador com imóvel próprio"] : ["Proprietário", "Inquilino", "Imobiliária/Administradora"]}
               valor={solicitante}
               aoMudar={(v) => {
                 setSolicitante(v);
@@ -477,7 +484,7 @@ function SeguroIncendioFormInterno({ aoConcluirNova }: { aoConcluirNova: () => v
             )}
           </Secao>
 
-          <Secao numero={3} titulo="Dados do proprietário">
+          <Secao numero={nSecao(3)} titulo={naCampanha ? "Seus dados" : "Dados do proprietário"}>
             <div className="grid grid-cols-2 gap-2">
               <Campo name="nome_proprietario" label="Nome completo do proprietário" required className="col-span-2" />
               <CampoCpf name="cpf_proprietario" label="CPF do proprietário" required />
@@ -494,8 +501,13 @@ function SeguroIncendioFormInterno({ aoConcluirNova }: { aoConcluirNova: () => v
             </div>
           </Secao>
 
-          <Secao numero={4} titulo="Imóvel">
+          <Secao numero={nSecao(4)} titulo="Imóvel">
             <CamposImovel />
+            {naCampanha && !precisaDadosAluguel && (
+              <div className="grid grid-cols-2 gap-2">
+                <Campo name="metragem" label="Metragem do imóvel (m²)" type="number" min="1" step="1" required />
+              </div>
+            )}
             {precisaDadosAluguel && (
               <div className="grid grid-cols-2 gap-2">
                 <Campo name="metragem" label="Metragem do imóvel (m²)" type="number" min="1" step="1" required />
@@ -505,7 +517,7 @@ function SeguroIncendioFormInterno({ aoConcluirNova }: { aoConcluirNova: () => v
           </Secao>
 
           <Secao
-            numero={5}
+            numero={nSecao(5)}
             titulo="Coberturas"
             subtitulo="Opcional — informe o valor que tiver em mente ou marque que tem interesse e nossa equipe te orienta a chegar no valor (toque no “i” para ver como calcular)."
           >
@@ -516,16 +528,25 @@ function SeguroIncendioFormInterno({ aoConcluirNova }: { aoConcluirNova: () => v
             </div>
           </Secao>
 
-          <Secao numero={6} titulo="Administração">
-            <SeletorUnico
-              name="administrado_por_imobiliaria"
-              label="Será administrado por imobiliária?"
-              required
-              opcoes={["Sim", "Não"]}
-              valor={administradoPorImobiliaria}
-              aoMudar={setAdministradoPorImobiliaria}
-            />
-            {administradoPorImobiliaria === "Sim" && <Campo name="nome_imobiliaria" label="Nome da imobiliária/administradora" required />}
+          <Secao numero={nSecao(6)} titulo={naCampanha ? "Indicação" : "Administração"}>
+            {naCampanha ? (
+              <>
+                <input type="hidden" name="administrado_por_imobiliaria" value="Sim" />
+                <Campo name="nome_imobiliaria" label="Qual imobiliária te indicou?" required />
+              </>
+            ) : (
+              <>
+                <SeletorUnico
+                  name="administrado_por_imobiliaria"
+                  label="Será administrado por imobiliária?"
+                  required
+                  opcoes={["Sim", "Não"]}
+                  valor={administradoPorImobiliaria}
+                  aoMudar={setAdministradoPorImobiliaria}
+                />
+                {administradoPorImobiliaria === "Sim" && <Campo name="nome_imobiliaria" label="Nome da imobiliária/administradora" required />}
+              </>
+            )}
             <div>
               <label className={labelClass}>Preferências (cobertura específica, assistência 24h, etc. — opcional)</label>
               <textarea name="preferencias" rows={2} className={inputClass} />
@@ -557,7 +578,7 @@ function SeguroIncendioFormInterno({ aoConcluirNova }: { aoConcluirNova: () => v
   );
 }
 
-export default function SeguroIncendioForm() {
+export default function SeguroIncendioForm({ campanha }: { campanha?: string } = {}) {
   const [instancia, setInstancia] = useState(0);
-  return <SeguroIncendioFormInterno key={instancia} aoConcluirNova={() => setInstancia((n) => n + 1)} />;
+  return <SeguroIncendioFormInterno key={instancia} campanha={campanha} aoConcluirNova={() => setInstancia((n) => n + 1)} />;
 }

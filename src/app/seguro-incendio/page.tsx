@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import AppHeader from "@/components/AppHeader";
 import LinkPublicoCompartilhavel from "@/components/LinkPublicoCompartilhavel";
 import { signOut } from "@/app/actions";
+import { CAMPANHAS_INCENDIO } from "@/lib/integracoes/seguroIncendio";
 
 export const metadata: Metadata = {
   title: "Seguro Incêndio O2 Seguros — Ficha Online",
@@ -16,7 +17,9 @@ export const metadata: Metadata = {
   },
 };
 
-export default async function SeguroIncendioPage() {
+export default async function SeguroIncendioPage({ searchParams }: { searchParams: Promise<{ campanha?: string }> }) {
+  const { campanha: chaveCampanha } = await searchParams;
+  const campanha = chaveCampanha && CAMPANHAS_INCENDIO[chaveCampanha] ? chaveCampanha : undefined;
   const supabase = await createClient();
   const {
     data: { user },
@@ -34,18 +37,20 @@ export default async function SeguroIncendioPage() {
           </div>
           <div>
             <span className="inline-block rounded-full px-3 py-1 text-xs font-semibold text-white" style={{ background: "#F8540D" }}>
-              Seguro Incêndio
+              {campanha ? "Black O2 · Seguro Incêndio" : "Seguro Incêndio"}
             </span>
             <h1 className="mt-2 text-xl font-semibold" style={{ color: "#01192e" }}>
-              Ficha Online — Seguro Incêndio
+              {campanha ? "Cote seu Seguro Incêndio com 20% OFF" : "Ficha Online — Seguro Incêndio"}
             </h1>
             <p className="mt-1 text-sm text-gray-600">
-              Preencha seus dados básicos de maneira simples e aguarde a proposta que será enviada para o seu e-mail.
+              {campanha
+                ? "Para proprietários e fiadores indicados pela sua imobiliária. Preencha seus dados e aguarde a proposta com 20% OFF no seu e-mail."
+                : "Preencha seus dados básicos de maneira simples e aguarde a proposta que será enviada para o seu e-mail."}
             </p>
           </div>
         </div>
 
-        <SeguroIncendioForm />
+        <SeguroIncendioForm campanha={campanha} />
       </main>
     </>
   );

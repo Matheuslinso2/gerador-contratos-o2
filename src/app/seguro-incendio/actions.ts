@@ -10,6 +10,7 @@ import {
   type CoberturaSelecionada,
   type SeguroIncendioPayload,
   type ModalidadeIncendio,
+  CAMPANHAS_INCENDIO,
 } from "@/lib/integracoes/seguroIncendio";
 import { EMAIL_COMERCIAL_O2 } from "@/lib/integracoes/emailO2";
 import { enviarEmail } from "@/lib/email";
@@ -23,7 +24,7 @@ function campo(formData: FormData, name: string): string {
 }
 
 const MODALIDADES_VALIDAS: ModalidadeIncendio[] = ["Residencial", "Empresarial", "Imobiliario"];
-const SOLICITANTES_VALIDOS = ["Proprietário", "Inquilino", "Imobiliária/Administradora"];
+const SOLICITANTES_VALIDOS = ["Proprietário", "Inquilino", "Imobiliária/Administradora", "Fiador com imóvel próprio"];
 
 // Mesma lógica do formatarMoedaDigitada (validacoesBr.ts), mas server-side:
 // o valor já chega mascarado ("2.000,00") pelo CampoMoeda, então basta
@@ -60,6 +61,7 @@ export async function enviarFichaSeguroIncendio(
   formData: FormData
 ): Promise<EstadoEnvioSeguroIncendio> {
   const responseId = campo(formData, "response_id") || randomUUID();
+  const campanha = CAMPANHAS_INCENDIO[campo(formData, "campanha")];
   const modalidadeBruta = campo(formData, "modalidade");
   const modalidade: ModalidadeIncendio = MODALIDADES_VALIDAS.includes(modalidadeBruta as ModalidadeIncendio)
     ? (modalidadeBruta as ModalidadeIncendio)
@@ -103,6 +105,7 @@ export async function enviarFichaSeguroIncendio(
     qtdEnderecos: campo(formData, "qtd_enderecos"),
     anexoPlanilha: campo(formData, "anexo_planilha"),
     anexoPlanilhaNome: campo(formData, "anexo_planilha_nome"),
+    campanha,
   };
 
   if (modalidade === "Imobiliario") {
@@ -132,6 +135,13 @@ export async function enviarFichaSeguroIncendio(
       payload.solicitante === "Inquilino" ||
       payload.solicitante === "Imobiliária/Administradora" ||
       (payload.solicitante === "Proprietário" && payload.finsLocacao === "Sim");
+    // Na campanha (proprietário/fiador) a metragem é sempre pedida: ela entra na cotação mesmo sem aluguel.
+    if (campanha && (!payload.metragem || paraNumero(payload.metragem) <= 0)) {
+      return { ok: false, erro: "Informe a metragem do imóvel (maior que zero)." };
+    }
+    if (campanha && !payload.nomeImobiliaria) {
+      return { ok: false, erro: "Informe qual imobiliária te indicou." };
+    }
     if (precisaDadosAluguel) {
       if (!payload.metragem || paraNumero(payload.metragem) <= 0) {
         return { ok: false, erro: "Informe a metragem do imóvel (maior que zero)." };

@@ -53,6 +53,12 @@ const FIELD = {
 
 export type ModalidadeIncendio = "Residencial" | "Empresarial" | "Imobiliario";
 
+// Campanhas que usam esta ficha (/seguro-incendio?campanha=<chave>): o card sai com a Fonte/origem da campanha. Só chaves desta lista valem
+// (um endereço forjado com outra chave é ignorado).
+export const CAMPANHAS_INCENDIO: Record<string, { nome: string; url: string; detalhe: string }> = {
+  "black-o2": { nome: "Black O2", url: "https://o2seguros.com.br/black-o2/", detalhe: "Seguro Incêndio com 20% OFF (página black-o2)" },
+};
+
 const PRODUTO_POR_MODALIDADE: Record<ModalidadeIncendio, string> = {
   Residencial: "Incêndio Individual Residencial",
   Empresarial: "Incêndio Individual Empresarial",
