@@ -6,3 +6,5 @@
 --   erp_carregar_fatura_email_itens()  carrega itens novos e liga; idempotente; só O2 (recusa logado que não seja colaborador).
 --   05/11: 20.076 itens (1.193 relatórios, R$ 2,33 mi): 19.488 ligados, 533 parciais (TODOS estornos, prêmio negativo, −R$ 63,3 mil, 443 apólices, sem parcela no ERP), 23 sem documento, 32 sem Nº de apólice (notação científica).
 --   erp_repasse_pendente_caixa / erp_repasse_previsto_caixa: repasse pendente e previsto por mês e por empresa (corretora do documento), para o caixa do financeiro. security_invoker; sem acesso anônimo.
+--   CORREÇÃO 05/11 (migration erp_fatura_email_itens_dedupe_sha256): o mesmo CSV chega a várias caixas; sha256 + duplicada marcam as cópias (1 original por sha256, o de menor anexo_id). Sem duplicatas: 1.050 arquivos, 18.244 linhas (R$ 2,18 mi),
+--   17.724 ligadas, 469 parciais (estornos), 51 pendentes; estornos 470 linhas/−R$ 60,9 mil. Toda soma deve filtrar duplicada = false.
