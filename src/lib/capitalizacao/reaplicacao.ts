@@ -53,8 +53,29 @@ export type KpisGrupoReaplicacao = {
 };
 export type KpisPorOrigemReaplicacao = { novos: KpisGrupoReaplicacao; heranca: KpisGrupoReaplicacao; geral: KpisGrupoReaplicacao };
 
+// Quadro "Reaplicações por mês de vigência" (pedido do Matheus, 05/11/2026): os cards do fluxo
+// do mês fatiados pelo mês em que o título VENCE e será reaplicado. Sem isso, as ~127 reaplicações
+// importadas de uma vez aparecem como um volume único, sem dizer quando cada lote será reaplicado
+// nem por que já está sendo controlado antes do vencimento. Cada linha é um lote de vigência;
+// renovadas + não renovaram + em andamento = cards (situação até o fim da competência).
+export type LinhaVigenciaReaplicacao = {
+  mes: string | null; // "2026-11"; null = card sem data de vencimento
+  cards: number;
+  renovadas: number;
+  naoRenovaram: number;
+  emAndamento: number;
+  taxaRenovacao: number | null;
+  valorTitulos: number;
+  valorRenovado: number;
+  comissaoPotencial: number;
+  comissaoRenovada: number;
+  criadosEm: string[]; // meses em que os cards do lote foram lançados (ordem crescente)
+};
+
 export type PainelReaplicacao = {
   competencia: string;
+  // Retratos antigos não têm: a tela só não mostra o quadro por vigência.
+  porVigencia?: LinhaVigenciaReaplicacao[];
   // Retratos antigos não têm: a tela cai nos indicadores simples (kpis).
   porOrigem?: KpisPorOrigemReaplicacao;
   porOrigemAnterior?: KpisPorOrigemReaplicacao;
@@ -191,6 +212,33 @@ function kpisGrupo(grupo: CardReaplicacao[], competencia: string): KpisGrupoReap
   };
 }
 
+function porVigencia(cards: CardReaplicacao[], competencia: string): LinhaVigenciaReaplicacao[] {
+  const lotes = new Map<string, CardReaplicacao[]>();
+  for (const c of recorte(cards, competencia)) {
+    const chave = c.vigenciaMes ?? "";
+    lotes.set(chave, [...(lotes.get(chave) ?? []), c]);
+  }
+  return [...lotes.entries()]
+    .map(([chave, grupo]): LinhaVigenciaReaplicacao => {
+      const renovadas = grupo.filter((c) => c.semantica === "S" && !!c.concluidoEm && mesDe(c.concluidoEm) <= competencia);
+      const naoRenovaram = grupo.filter((c) => c.semantica === "F" && !!c.concluidoEm && mesDe(c.concluidoEm) <= competencia).length;
+      return {
+        mes: chave || null,
+        cards: grupo.length,
+        renovadas: renovadas.length,
+        naoRenovaram,
+        emAndamento: grupo.length - renovadas.length - naoRenovaram,
+        taxaRenovacao: renovadas.length + naoRenovaram > 0 ? renovadas.length / (renovadas.length + naoRenovaram) : null,
+        valorTitulos: grupo.reduce((s, c) => s + c.valorTitulo, 0),
+        valorRenovado: renovadas.reduce((s, c) => s + c.valorTitulo, 0),
+        comissaoPotencial: grupo.reduce((s, c) => s + c.comissao, 0),
+        comissaoRenovada: renovadas.reduce((s, c) => s + c.comissao, 0),
+        criadosEm: [...new Set(grupo.map((c) => mesDe(c.criadoEm)))].sort(),
+      };
+    })
+    .sort((a, b) => (a.mes === null ? 1 : b.mes === null ? -1 : a.mes.localeCompare(b.mes)));
+}
+
 function kpisPorOrigem(cards: CardReaplicacao[], competencia: string): KpisPorOrigemReaplicacao {
   const novos = cards.filter((c) => mesDe(c.criadoEm) === competencia);
   const heranca = cards.filter((c) => mesDe(c.criadoEm) < competencia && (!c.concluidoEm || mesDe(c.concluidoEm) >= competencia));
@@ -247,6 +295,7 @@ export function montarReaplicacao(itensSpa: BitrixItemRaw[], competencia: string
   const doFluxo = recorte(cards, competencia);
   return {
     competencia,
+    porVigencia: porVigencia(cards, competencia),
     porOrigem: kpisPorOrigem(cards, competencia),
     porOrigemAnterior: kpisPorOrigem(cards, mesAnteriorDe(competencia)),
     kpis: kpis(cards, competencia),

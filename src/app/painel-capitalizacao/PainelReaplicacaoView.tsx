@@ -119,7 +119,7 @@ function QuadroOrigemReap({
 // Aba "Reaplicação" do painel de Capitalização (funil Reaplicações, categoria 38). Competência =
 // mês da vigência do título; o fluxo do mês é fatiado em vigência neste mês x outros meses.
 export default function PainelReaplicacaoView({ painel, imobiliarias }: { painel: PainelReaplicacao; imobiliarias?: LinhaStatusCapUnificada[] }) {
-  const { kpis, kpisAnterior, funil, statusSeguradoras, titulos, porOrigem: po, porOrigemAnterior: poAnt } = painel;
+  const { kpis, kpisAnterior, funil, statusSeguradoras, titulos, porOrigem: po, porOrigemAnterior: poAnt, porVigencia } = painel;
   const linhasImob: LinhaStatus[] = imobiliarias ?? painel.statusImobiliarias;
   const mesAnterior = rotuloMes(kpisAnterior.competencia);
   const maior = Math.max(1, ...funil.map((e) => e.quantidadeAtual));
@@ -198,6 +198,121 @@ export default function PainelReaplicacaoView({ painel, imobiliarias }: { painel
               sub={`${n(kpis.vigenciaNoMes.renovadas)} renovadas · ${n(kpis.vigenciaOutrosMeses.total)} com vigência em outros meses (${n(kpis.vigenciaOutrosMeses.renovadas)} renovadas)`}
               tone="info"
             />
+          </div>
+        </section>
+      )}
+
+      {porVigencia && porVigencia.length > 0 && (
+        <section id="quadro-reap-vigencia" className={styles.section}>
+          <div className={styles.sectionHead}>
+            <h2>
+              Reaplicações por mês de vigência
+              <InfoLegenda titulo="Reaplicações por mês de vigência">
+                Os mesmos cards do quadro geral (novos + herança), separados pelo mês em que o título vence e será reaplicado (o &ldquo;VENCE dd/mm/aaaa&rdquo; do card). Cada linha é um lote: renovadas + não renovaram + em andamento = cards, pela situação no fim do mês. Os cards são lançados antes do vencimento: a planilha do lote é enviada às imobiliárias cerca de um mês antes e o controle começa aí, até a reaplicação acontecer. A meta consolida por vigência, então some as linhas do mês que interessa. Valor = valor atualizado do título, quando preenchido, senão o valor do título.
+              </InfoLegenda>
+            </h2>
+            <ExportarQuadro
+              quadroId="quadro-reap-vigencia-tabela"
+              corFundo="#f7f8fa"
+              nomeArquivo={arquivo("vigencia")}
+              dadosExcel={porVigencia.map((l) => ({
+                vigencia: l.mes ?? "sem data",
+                lancados_em: l.criadosEm.join(", "),
+                cards: l.cards,
+                renovadas: l.renovadas,
+                nao_renovaram: l.naoRenovaram,
+                em_andamento: l.emAndamento,
+                taxa_renovacao: pct(l.taxaRenovacao),
+                valor_dos_titulos: l.valorTitulos,
+                valor_renovado: l.valorRenovado,
+                comissao_potencial: l.comissaoPotencial,
+                comissao_renovada: l.comissaoRenovada,
+              }))}
+              nomeAbaExcel="Por vigência"
+            />
+          </div>
+          <p style={{ fontSize: 11.5, color: "var(--ink-muted, #5b6b7c)", margin: "0 0 8px" }}>
+            Quando cada lote de reaplicações será (ou deveria ter sido) reaplicado, e como ele está. Os cards já são controlados antes do vencimento porque a planilha do lote é enviada às imobiliárias com antecedência.
+          </p>
+          <div className={styles.panel}>
+            <div id="quadro-reap-vigencia-tabela" className={styles.tableWrap}>
+              <table className={styles.data}>
+                <thead>
+                  <tr>
+                    <th>Vigência</th>
+                    <th>Situação do lote</th>
+                    <th>Lançados em</th>
+                    <th className={styles.numCol}>Cards</th>
+                    <th className={styles.numCol}>Renovadas</th>
+                    <th className={styles.numCol}>Não renovaram</th>
+                    <th className={styles.numCol}>Em andamento</th>
+                    <th className={styles.numCol}>Taxa</th>
+                    <th className={styles.numCol}>Valor dos títulos</th>
+                    <th className={styles.numCol}>Valor renovado</th>
+                    <th className={styles.numCol}>Comissão potencial</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {porVigencia.map((l) => {
+                    const situacao =
+                      l.mes === null
+                        ? "Sem data de vencimento"
+                        : l.mes < painel.competencia
+                          ? "Vigência já passou"
+                          : l.mes === painel.competencia
+                            ? "Vence neste mês"
+                            : `Antecipado — vence em ${rotuloMes(l.mes)}`;
+                    const atrasado = l.mes !== null && l.mes < painel.competencia && l.emAndamento > 0;
+                    return (
+                      <tr key={l.mes ?? "sem-data"}>
+                        <td>
+                          <strong>{l.mes ? rotuloMes(l.mes) : "—"}</strong>
+                        </td>
+                        <td className={atrasado ? styles.warning : undefined}>{situacao}</td>
+                        <td>{l.criadosEm.map(rotuloMes).join(", ")}</td>
+                        <td className={`${styles.numCol} ${styles.num}`}>{n(l.cards)}</td>
+                        <td className={`${styles.numCol} ${styles.num}`}>{n(l.renovadas)}</td>
+                        <td className={`${styles.numCol} ${styles.num}`}>{n(l.naoRenovaram)}</td>
+                        <td className={`${styles.numCol} ${styles.num}`}>{n(l.emAndamento)}</td>
+                        <td className={`${styles.numCol} ${styles.num}`}>{pct(l.taxaRenovacao)}</td>
+                        <td className={`${styles.numCol} ${styles.num}`}>{brl(l.valorTitulos)}</td>
+                        <td className={`${styles.numCol} ${styles.num}`}>{brl(l.valorRenovado)}</td>
+                        <td className={`${styles.numCol} ${styles.num}`}>{brl(l.comissaoPotencial)}</td>
+                      </tr>
+                    );
+                  })}
+                  <tr>
+                    <td>
+                      <strong>Total</strong>
+                    </td>
+                    <td />
+                    <td />
+                    <td className={`${styles.numCol} ${styles.num}`}>
+                      <strong>{n(porVigencia.reduce((s, l) => s + l.cards, 0))}</strong>
+                    </td>
+                    <td className={`${styles.numCol} ${styles.num}`}>
+                      <strong>{n(porVigencia.reduce((s, l) => s + l.renovadas, 0))}</strong>
+                    </td>
+                    <td className={`${styles.numCol} ${styles.num}`}>
+                      <strong>{n(porVigencia.reduce((s, l) => s + l.naoRenovaram, 0))}</strong>
+                    </td>
+                    <td className={`${styles.numCol} ${styles.num}`}>
+                      <strong>{n(porVigencia.reduce((s, l) => s + l.emAndamento, 0))}</strong>
+                    </td>
+                    <td />
+                    <td className={`${styles.numCol} ${styles.num}`}>
+                      <strong>{brl(porVigencia.reduce((s, l) => s + l.valorTitulos, 0))}</strong>
+                    </td>
+                    <td className={`${styles.numCol} ${styles.num}`}>
+                      <strong>{brl(porVigencia.reduce((s, l) => s + l.valorRenovado, 0))}</strong>
+                    </td>
+                    <td className={`${styles.numCol} ${styles.num}`}>
+                      <strong>{brl(porVigencia.reduce((s, l) => s + l.comissaoPotencial, 0))}</strong>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
       )}
