@@ -101,3 +101,11 @@
 --   erp_baixa_aplicar_rodar_assumir_soma_de_linhas + erp_assumir_baixa_aprovados_soma_so_do_mesmo_extrato (aplicar/rodar/assumir).
 -- Teste em transação revertida: 2 linhas (metades) da mesma comissão de R$ 78,03 → 1 recebimento de 78,03, 2 partes, comissão recebida, 1 repasse.
 -- Para o fechamento do extrato, linha que é parte de recebimento somado conta como baixada.
+
+-- ============================================================================
+-- 05/11/2026 — BAIXA LINHA POR LINHA (regra do Matheus: "linha identificada, sem duplicidade e sem inconsistência pode ser baixada")
+-- erp_baixa_erp_processar_base: nova regra 'linha_identificada' = linha 'divergente' com parcela identificada, valor > 0 e documento não cancelado/duplicado
+-- baixa pelo valor recebido SEM exigir a confirmação do banco do extrato inteiro (diferença anotada no motivo 'a conferir'); com banco continua 'vinculo_confirmado'.
+-- Duplicidade segue bloqueando (erp_baixa_erp_marcar_duplicadas: mesma parcela+valor em outro extrato em até 10 dias); estorno/valor<=0, sem parcela e 'cheia' fora de R$ 6 seguem travados.
+-- erp_baixa_automatica_rodar: antes de assumir as linhas de extratos JÁ aprovados, reprocessa (erp_baixa_erp_processar) as linhas ainda sem baixa — a análise antiga ficava velha
+-- (ex.: 425 linhas da Porto estavam 'fora_tolerancia' por motivo antigo e hoje são 'vinculo_confirmado').
