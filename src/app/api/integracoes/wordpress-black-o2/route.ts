@@ -53,6 +53,14 @@ async function viaCep(cep: string): Promise<{ bairro: string; cidade: string; uf
   }
 }
 
+// Perfil vindo do formulário ("Proprietário" / "Fiador" ...): aceita o texto como a página enviar e padroniza; vazio = não informado.
+function normalizarPerfil(v: string): string {
+  const t = v.trim().toLowerCase();
+  if (t.startsWith("fiador")) return "Fiador com imóvel próprio";
+  if (t.startsWith("propriet")) return "Proprietário";
+  return "Proprietário ou fiador (perfil não informado)";
+}
+
 const COBERTURAS: { chave: string; label: string; int: string; valor?: string }[] = [
   { chave: "incendio", label: "Incêndio, raio e explosão", int: "int_incendio", valor: "valor_incendio" },
   { chave: "danosEletricos", label: "Danos elétricos", int: "int_eletricos", valor: "valor_eletricos" },
@@ -116,7 +124,7 @@ export async function POST(request: NextRequest) {
       modalidade: "Residencial",
       coberturas,
       email,
-      solicitante: get("perfil") || "Proprietário ou fiador (perfil não informado)",
+      solicitante: normalizarPerfil(get("perfil") || get("perfil_texto")),
       finsLocacao: "Não informado",
       nomeProprietario: teste ? `[TESTE - apagar] ${nome}` : nome,
       cpfProprietario: cpf,
