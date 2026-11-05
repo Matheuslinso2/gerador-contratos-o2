@@ -8,3 +8,6 @@
 --   erp_repasse_pendente_caixa / erp_repasse_previsto_caixa: repasse pendente e previsto por mês e por empresa (corretora do documento), para o caixa do financeiro. security_invoker; sem acesso anônimo.
 --   CORREÇÃO 05/11 (migration erp_fatura_email_itens_dedupe_sha256): o mesmo CSV chega a várias caixas; sha256 + duplicada marcam as cópias (1 original por sha256, o de menor anexo_id). Sem duplicatas: 1.050 arquivos, 18.244 linhas (R$ 2,18 mi),
 --   17.724 ligadas, 469 parciais (estornos), 51 pendentes; estornos 470 linhas/−R$ 60,9 mil. Toda soma deve filtrar duplicada = false.
+--   RELEITURA v2 (05/11, migrations erp_fatura_email_itens_releitura_v2, erp_fatura_calendario_imobiliaria): vencimento real da fatura em 18.243 das 18.244 linhas únicas; colunas competencia_nome, imovel, juros, multa, apolice_notacao_cientifica (17), seguradora_id (pelo documento ligado).
+--   Medição (Tokio, 17.708 linhas ligadas): vencimento da fatura = vencimento da parcela no ERP em só 34,8%; 51,7% no mesmo mês (dia 15) e 45,4% no mês anterior (dia 28 mais comum). O calendário é por imobiliária (dias 9, 15, 20, 22, 23, 28):
+--   view erp_fatura_calendario_imobiliaria (100 imobiliárias: 73 pagam a fatura no mês da parcela, 26 no mês anterior). Não altera parcela nem vencimento do ERP.
