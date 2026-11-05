@@ -7,6 +7,7 @@ import { nomeParaComunicacao } from "@/lib/nomeParaComunicacao";
 import { nomeExibidoRemetente } from "./remetente";
 import { bccDoCard, continuarConversa, gravarDestinatarios } from "@/lib/bitrix/conversasEmail";
 import { ENTITY_TYPE_ID_DEAL } from "@/lib/bitrix/entidadesCard";
+import { registrarAtividadeEmail } from "@/lib/bitrix/atividades";
 
 // Endereço separado do transacional (avisos@...) -- rejeições/denúncias de
 // marketing não podem contaminar a reputação do domínio usado hoje por
@@ -91,11 +92,12 @@ async function enviarMensagemUnica(
       }
       bcc = [bccDoCard(ENTITY_TYPE_ID_DEAL, cardDealId)];
     }
+    const html = montarHtmlCampanha(campanha, LINK_DESCADASTRO_MENSAGEM_UNICA);
     const { id: resendEmailId } = await enviarEmail({
       para: vao.map((p) => p.email),
       bcc,
       assunto,
-      html: montarHtmlCampanha(campanha, LINK_DESCADASTRO_MENSAGEM_UNICA),
+      html,
       remetente: nomeExibidoRemetente(campanha.remetente_nome),
       enderecoRemetente: ENDERECO_REMETENTE_CAMPANHAS,
       headers,
@@ -105,6 +107,15 @@ async function enviarMensagemUnica(
     await supabase.from("campanhas_envios").update({ status: "enviado", enviado_em: new Date().toISOString(), resend_email_id: resendEmailId }).in("id", vao.map((p) => p.id));
     // "E-mail no card" abre com esses endereços já preenchidos para a equipe continuar a conversa.
     if (cardDealId) await gravarDestinatarios(ENTITY_TYPE_ID_DEAL, cardDealId, { para: vao.map((p) => p.email), cc: [] }, "envio");
+    // Registro no campo de e-mails do próprio card (atividade de e-mail enviado), como o "E-mail no card".
+    // O e-mail já saiu: se o Bitrix falhar aqui, só avisa nos logs -- nunca refaz o envio.
+    if (cardDealId) {
+      try {
+        await registrarAtividadeEmail({ entityTypeId: ENTITY_TYPE_ID_DEAL, itemId: cardDealId, assunto, corpo: html, direcao: "enviado", enderecoEnvolvido: vao[0].email });
+      } catch (erroAtividade) {
+        console.error("Parcial enviada, mas falhou ao registrar o e-mail no card do Bitrix:", erroAtividade);
+      }
+    }
   } catch (erro) {
     for (const p of vao) {
       const tentativas = (p.tentativas ?? 0) + 1;
