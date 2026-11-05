@@ -11,6 +11,10 @@ import type Anthropic from "@anthropic-ai/sdk";
 // Tabelas cujas linhas são, por natureza, dados de pessoas (nomes, documentos, contatos de clientes).
 const TABELAS_PESSOAIS = new Set([
   "locatarios",
+  "erp_portal_tokio_apolices", // CPF/CNPJ e nome do segurado
+  "erp_portal_porto_apolices",
+  "erp_portal_porto_detalhe",
+  "erp_portal_brasilcap_garantias", // titular e documento
   "erp_planilha_registro", // segurado/locatário/locador e CPF das planilhas
   "producao_itens", // itens dos lotes de RE: nomes e CPF/CNPJ de locador e locatário
   "erp_item_partes",
