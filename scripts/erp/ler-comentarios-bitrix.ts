@@ -11,7 +11,10 @@ const sb = createServiceClient();
 const RELER = process.argv.includes("--reler");
 const TIPOS: [string, number][] = [["dynamic_1042", 1042], ["dynamic_1046", 1046], ["dynamic_1048", 1048], ["dynamic_1050", 1050], ["deal", 2]];
 
-type Comentario = { ID: string; ENTITY_ID: string; CREATED?: string; AUTHOR_ID?: string; COMMENT?: string };
+type Arquivo = { id: number; name?: string; size?: number; date?: string; authorName?: string };
+type Comentario = { ID: string; ENTITY_ID: string; CREATED?: string; AUTHOR_ID?: string; COMMENT?: string; FILES?: Record<string, Arquivo> | Arquivo[] };
+// só os tipos pedidos (ex.: --so 1042); sem o argumento lê todos os funis
+const SO = process.argv.includes("--so") ? process.argv[process.argv.indexOf("--so") + 1].split(",").map(Number) : null;
 
 const mascarar = (t: string) => t.replace(/(senha|password|pwd)(\s*[:=-]?\s*)\S+/gi, "$1$2***");
 // tira imagens/formatação do Bitrix ([IMG]...[/IMG], [B], [LIST]...) antes de procurar "TRATATIVA: <assunto>"
@@ -56,9 +59,12 @@ async function lerTipo(tipo: string, entityTypeId: number) {
     const r = await chamarBitrix<{ result: { result: Record<string, Comentario[]> } }>("batch", params);
     const linhas = Object.values(r.result?.result ?? {}).flat().map((c) => {
       const texto = mascarar(String(c.COMMENT ?? "")).replace(/\u0000/g, "");
+      // anexos do comentário (propostas, apólices, distratos…): guarda só id/nome/tamanho/data/autor; o arquivo é baixado depois, se preciso
+      const lista = (Array.isArray(c.FILES) ? c.FILES : Object.values(c.FILES ?? {})) as Arquivo[];
+      const arquivos = lista.length ? lista.map((f) => ({ id: Number(f.id), name: f.name ?? null, size: f.size ?? null, date: f.date ?? null, autor: f.authorName ?? null })) : null;
       return {
         id: Number(c.ID), entity_type: tipo, entity_type_id: entityTypeId, item_id: Number(c.ENTITY_ID),
-        criado: c.CREATED || null, autor_id: c.AUTHOR_ID ? Number(c.AUTHOR_ID) : null, comentario: texto, tratativa: tratativa(texto),
+        criado: c.CREATED || null, autor_id: c.AUTHOR_ID ? Number(c.AUTHOR_ID) : null, comentario: texto, tratativa: tratativa(texto), arquivos,
       };
     });
     if (linhas.length) {
@@ -75,6 +81,7 @@ async function lerTipo(tipo: string, entityTypeId: number) {
 
 async function main() {
   for (const [tipo, id] of TIPOS) {
+    if (SO && !SO.includes(id)) continue;
     try { await lerTipo(tipo, id); } catch (e) { console.error(String(e)); }
   }
 }
