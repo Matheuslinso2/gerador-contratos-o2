@@ -1,0 +1,76 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Calendário de cargas e rotinas — O2</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+@page { size: A4; margin: 16mm 14mm; }
+body { font-family: 'Poppins', Arial, sans-serif; color: #01192e; font-size: 9.5pt; line-height: 1.45; }
+h1 { font-size: 20pt; margin: 0 0 2mm; } h2 { font-size: 13pt; color: #F8540D; margin: 8mm 0 2mm; border-bottom: 2px solid #F8540D; padding-bottom: 1mm; }
+.sub { color: #444440; margin-bottom: 4mm; }
+table { border-collapse: collapse; width: 100%; margin: 2mm 0 3mm; } th { background: #01192e; color: #fff; text-align: left; padding: 1.5mm 2mm; font-size: 8.5pt; }
+td { border-bottom: 1px solid #d9d9d9; padding: 1.3mm 2mm; vertical-align: top; } tr { page-break-inside: avoid; }
+.caixa { border-left: 4px solid #F8540D; background: #f6f6f6; padding: 2mm 3mm; margin: 2mm 0; page-break-inside: avoid; }
+.pesado { background: #ffe9e0; } .medio { background: #fff6d9; } .leve { background: #e6f3ea; }
+small { color: #8d8683; }
+</style></head><body>
+<h1>Calendário de cargas e rotinas do banco</h1>
+<div class="sub">O2 Seguros · ERP / Workspace · gerado em 05/11/2026 · horários de Brasília (BRT)</div>
+
+<h2>1. Por que existe este calendário</h2>
+<p>Em 04/11 (16h33) e em 05/11 (≈09h30) o banco do Supabase parou de aceitar conexões e a plataforma caiu. O banco é uma máquina pequena (1 GB de memória, 60 conexões). Nos dois casos havia várias rotinas e cargas ao mesmo tempo. O objetivo é que cada carga tenha hora, limite e dono, e que nada pesado rode por cima de outra carga nem no horário de uso.</p>
+
+<h2>2. Janelas de carga</h2>
+<table><tr><th>Janela</th><th>Quando (BRT)</th><th>O que pode rodar</th></tr>
+<tr class="leve"><td><b>Horário de uso</b></td><td>seg–sex, 08h–19h</td><td>Só o leve: sincronizações incrementais que terminam em segundos e painéis em cache. Nada de carga em lote, reclassificação, reimportação, criação de índice ou atualização grande.</td></tr>
+<tr class="medio"><td><b>Intermediária</b></td><td>seg–sex 19h–22h; fins de semana 06h–22h</td><td>Os ciclos médios já existentes: robôs do Corp, extratos, baixa dos robôs de seguradoras.</td></tr>
+<tr class="pesado"><td><b>Noite</b></td><td>todos os dias, 22h–06h</td><td>O pesado, <b>uma carga por vez</b>: download em massa de arquivos, reclassificação de emissão (≈10 min), reimportações do Corp, recarga de portais, atualizações de mais de 500 linhas, atualização das views.</td></tr></table>
+
+<h2>3. Regras de proteção (valem para tudo que escreve no banco)</h2>
+<div class="caixa"><b>1. Trava:</b> só uma carga pesada por vez; a seguinte espera ou pula (como o pipeline de vínculos já faz).<br>
+<b>2. Orçamento:</b> cada carga tem limite de tempo e de linhas por rodada e para sozinha ao estourar.<br>
+<b>3. Saúde antes e durante:</b> consulta leve (<code>plataforma_saude()</code>) antes de começar e entre os lotes; se passar de 70% das conexões ou houver consulta longa/bloqueio, a carga para e avisa.<br>
+<b>4. Registro:</b> tabela <code>cargas_log</code> (quem rodou, quando, duração, linhas) <small>— ainda a criar</small>, para a pergunta “o que estava rodando?” ter resposta.<br>
+<b>5. Liberação manual:</b> o Matheus pode liberar uma carga fora da janela; a checagem de saúde continua valendo.<br>
+<b>6. Rotina nova:</b> nunca entra entre :40 e :59 e passa por este calendário antes de ser agendada.</div>
+
+<h2>4. Rotinas da Vercel (43 entradas)</h2>
+<p class="sub">Alterações de 05/11: 9 rotinas saíram do intervalo :40–:59 (ordem da cadeia preservada); painéis de 10 para 20 min; desligadas a pesquisa de notícias, a publicação agendada de redes sociais e as métricas do Instagram (há botão manual na tela). O limite de tempo é o máximo que a função pode rodar, não a duração média.</p>
+<table><tr><th>Rotina</th><th>Quando</th><th>Tipo (limite de tempo)</th></tr><tr><td>Painéis (Fiança, Renovação, Comercial, Capitalização, Auto, Ramos Elementares) (fianca)</td><td>a cada 20 min, 08h às 19h59, seg–sex</td><td>curta (até 60 s)</td></tr><tr><td>Painéis (Fiança, Renovação, Comercial, Capitalização, Auto, Ramos Elementares) (fianca-renovacao)</td><td>a cada 20 min, 08h às 19h59, seg–sex</td><td>curta (até 60 s)</td></tr><tr><td>Painéis (Fiança, Renovação, Comercial, Capitalização, Auto, Ramos Elementares) (comercial)</td><td>a cada 20 min, 08h às 19h59, seg–sex</td><td>curta (até 60 s)</td></tr><tr><td>Painel Comercial (negociações do Bitrix)</td><td>a cada 20 min, 08h às 19h59, seg–sex</td><td>curta (até 60 s)</td></tr><tr><td>Painéis (Fiança, Renovação, Comercial, Capitalização, Auto, Ramos Elementares) (capitalizacao)</td><td>a cada 20 min, 08h às 19h59, seg–sex</td><td>curta (até 60 s)</td></tr><tr><td>Painéis (Fiança, Renovação, Comercial, Capitalização, Auto, Ramos Elementares) (seguro-auto)</td><td>a cada 20 min, 08h às 19h59, seg–sex</td><td>curta (até 60 s)</td></tr><tr><td>Painéis (Fiança, Renovação, Comercial, Capitalização, Auto, Ramos Elementares) (ramos-elementares)</td><td>a cada 20 min, 08h às 19h59, seg–sex</td><td>curta (até 60 s)</td></tr><tr><td>Congelar painéis do mês fechado</td><td>dia 1 do mês, 00:00</td><td>curta (até 60 s)</td></tr><tr><td>Envio de campanhas (e-mail)</td><td>a cada 5 min, 24 h, todos os dias</td><td>curta (até 60 s)</td></tr><tr><td>Renovar token do Instagram</td><td>05:00, todos os dias</td><td>curta (até 30 s)</td></tr><tr><td>Painéis (Fiança, Renovação, Comercial, Capitalização, Auto, Ramos Elementares) (fianca)</td><td>06:00, seg–sex</td><td>curta (até 60 s)</td></tr><tr><td>Painéis (Fiança, Renovação, Comercial, Capitalização, Auto, Ramos Elementares) (capitalizacao)</td><td>06:05, seg–sex</td><td>curta (até 60 s)</td></tr><tr><td>Painéis (Fiança, Renovação, Comercial, Capitalização, Auto, Ramos Elementares) (seguro-auto)</td><td>06:10, seg–sex</td><td>curta (até 60 s)</td></tr><tr><td>Painéis (Fiança, Renovação, Comercial, Capitalização, Auto, Ramos Elementares) (ramos-elementares)</td><td>06:15, seg–sex</td><td>curta (até 60 s)</td></tr><tr><td>Relatório diário no WhatsApp</td><td>08:00, seg–sex</td><td>curta (até 60 s)</td></tr><tr><td>Base única: e-mails</td><td>1×/hora, no minuto :15, todos os dias</td><td>curta (até 60 s)</td></tr><tr><td>Base de sinistros</td><td>03:30, todos os dias</td><td>curta (até 60 s)</td></tr><tr><td>Alertas de sinistros</td><td>08:00, todos os dias</td><td>curta (até 60 s)</td></tr><tr><td>Base única: leitura do Bitrix</td><td>1×/hora, no minuto :07, todos os dias</td><td>curta (até 60 s)</td></tr><tr><td>Corp: leitura do SharePoint</td><td>a cada 3 h (das 07h às 20h), no minuto :25</td><td>longa (até 300 s)</td></tr><tr><td>Base única: vínculos (pipeline)</td><td>1×/hora, no minuto :34, todos os dias</td><td>curta (até 60 s)</td></tr><tr><td>Base única: leitura do Bitrix (capitalizacao)</td><td>1×/hora, no minuto :09, todos os dias</td><td>curta (até 60 s)</td></tr><tr><td>Base única: leitura do Bitrix (automovel)</td><td>1×/hora, no minuto :17, todos os dias</td><td>curta (até 60 s)</td></tr><tr><td>Base única: leitura do Bitrix (re)</td><td>1×/hora, no minuto :19, todos os dias</td><td>curta (até 60 s)</td></tr><tr><td>Base única: leitura do Bitrix (fianca-renovacao)</td><td>1×/hora, no minuto :27, todos os dias</td><td>curta (até 60 s)</td></tr><tr><td>Base única: leitura do Bitrix (re-renovacao)</td><td>1×/hora, no minuto :29, todos os dias</td><td>curta (até 60 s)</td></tr><tr><td>Análise de preços</td><td>05:30, todos os dias</td><td>curta (até 60 s)</td></tr><tr><td>ERP: cards do Bitrix → documentos (1042)</td><td>1×/hora, no minuto :20, todos os dias</td><td>curta (até 60 s)</td></tr><tr><td>ERP: cards do Bitrix → documentos (1046)</td><td>1×/hora, no minuto :24, todos os dias</td><td>curta (até 60 s)</td></tr><tr><td>ERP: cards do Bitrix → documentos (1048)</td><td>1×/hora, no minuto :28, todos os dias</td><td>curta (até 60 s)</td></tr><tr><td>ERP: cards do Bitrix → documentos (1050)</td><td>1×/hora, no minuto :32, todos os dias</td><td>curta (até 60 s)</td></tr><tr><td>ERP: extratos de comissão do Drive</td><td>1×/hora, no minuto :18, todos os dias</td><td>longa (até 300 s)</td></tr><tr><td>ERP: sincronização com o Nibo</td><td>1×/hora, no minuto :25, todos os dias</td><td>longa (até 300 s)</td></tr><tr><td>ERP: inadimplência</td><td>1×/hora, no minuto :05, todos os dias</td><td>longa (até 300 s)</td></tr><tr><td>ERP: faturas</td><td>1×/hora, no minuto :10, todos os dias</td><td>longa (até 300 s)</td></tr><tr><td>ERP: baixa automática + renovação dos retratos</td><td>1×/hora, no minuto :36, todos os dias</td><td>longa (até 300 s)</td></tr><tr><td>ERP: resumo de repasses</td><td>1×/hora, no minuto :38, todos os dias</td><td>média (até 120 s)</td></tr><tr><td>Base única: lotes de RE</td><td>1×/hora, no minuto :02, todos os dias</td><td>média (até 120 s)</td></tr><tr><td>Sinistros: ponte com o Corp</td><td>1×/hora, no minuto :35, todos os dias</td><td>curta (até 60 s)</td></tr><tr><td>Chat: cubo de dados</td><td>1×/hora, no minuto :13, todos os dias</td><td>média (até 120 s)</td></tr><tr><td>ERP: cobrança pronta</td><td>a cada 10 min, 04h às 19h59, todos os dias</td><td>média (até 120 s)</td></tr><tr><td>ERP: fechamento do mês</td><td>dia 1 do mês, 03:20</td><td>longa (até 300 s)</td></tr><tr><td>Encerrar acessos temporários</td><td>a cada 10 min, 24 h, todos os dias</td><td>curta (até 60 s)</td></tr></table>
+<div class="caixa"><b>Cadeia de ordem (não inverter):</b> extratos do Drive (:18) → leitura do Bitrix (:07, :09, :17, :19, :27, :29) → vínculos (:34) → baixa automática (:36) → resumo de repasses (:38).</div>
+
+<h2>5. Rotinas desta máquina (robôs e Agendador do Windows)</h2>
+<table><tr><th>Rotina</th><th>Quando</th><th>O que faz</th></tr>
+<tr><td>Robô Corp</td><td>12:00 e 20:00, ≈30 min</td><td>Exportação do Corp (usa o login do Corp).</td></tr>
+<tr><td>Ciclo de comissões</td><td>08, 10, 14, 16 e 18h, seg–sex, ≈12 min</td><td>Comissões recebidas e pendentes do Corp → ERP (carga por diferença).</td></tr>
+<tr><td>Robô de baixa (worker principal)</td><td>seg–sex, 08h–19h, contínuo</td><td>Baixa de comissão no Corp; cede o login ao ciclo de comissões.</td></tr>
+<tr><td>Pós-processamento do Corp</td><td>03, 09, 15 e 21h</td><td>Telas, OCR, anexos, leitura de PDFs, tabelas prontas.</td></tr>
+<tr><td>Robô Corp Anexos</td><td>21:00 diário; fim de semana 06:40 e 12:30</td><td>Baixa de anexos do Corp.</td></tr>
+<tr><td>Robô Seguradoras</td><td>20:30 diário</td><td>Extratos de comissão dos portais → ERP (só depois das 20h).</td></tr>
+<tr><td>Sincronização Bitrix da Fiança (planilha)</td><td>07:45 diário</td><td>Planilha de Garantias.</td></tr>
+<tr><td>Antivírus de anexos</td><td>a cada 30 min</td><td>Varredura dos anexos recebidos.</td></tr>
+<tr><td>Orquestrador e Vigia</td><td>contínuos (reinício 00:05)</td><td>Controlam a grade de 24 h e vigiam o login do Corp.</td></tr>
+<tr><td>Criação de cards de renovação RE 12/2026</td><td>uma vez (sem data fixa)</td><td>Ação do Bitrix; só roda por decisão do Matheus.</td></tr></table>
+
+<h2>6. Cargas pesadas e manuais (só na janela da noite)</h2>
+<table><tr><th>Carga</th><th>Tamanho / duração</th><th>Como roda</th></tr>
+<tr><td>Download dos arquivos dos cards do Bitrix (4 SPAs)</td><td>2.238 arquivos, ≈1,9 GB; horas</td><td>Retomável, um arquivo por vez; <b>pausado</b>, retoma à noite.</td></tr>
+<tr><td>Captura incremental dos arquivos dos cards</td><td>segundos a minutos</td><td>De hora em hora depois do download completo; tarefa do Windows <small>(a criar)</small>.</td></tr>
+<tr><td>Reclassificação de emissão das propostas</td><td>≈10 min</td><td>Uma vez por noite, com trava.</td></tr>
+<tr><td>Recargas dos portais (Tokio, Porto, Alfa, Yelum, SulAmérica)</td><td>minutos</td><td>Quando houver leitura nova; nova carga, nunca sobrescreve.</td></tr>
+<tr><td>Atualizações em lote de documentos (vínculos, promoções)</td><td>centenas de linhas</td><td>Em blocos de até 500 linhas, com checagem de saúde entre os blocos.</td></tr>
+<tr><td>Índices, <code>explain analyze</code> e diagnósticos longos</td><td>—</td><td>Nunca no horário de uso.</td></tr></table>
+
+<h2>7. Pontos de atenção</h2>
+<ul>
+<li>Horas cheias de dia útil acumulam o ciclo de comissões (08, 10, 14, 16, 18h) com o robô de baixa e os painéis; a regra de pausa do robô de baixa já cobre o login do Corp, mas não o banco.</li>
+<li>Das 20h às 21h há três rotinas em sequência (Robô Corp 20:00, Robô Seguradoras 20:30, Anexos 21:00): estão na janela intermediária e devem continuar sem sobrepor.</li>
+<li>A <code>erp-cobranca-pronta</code> roda a cada 10 min das 04h às 19h; é candidata a 20 min se o banco voltar a pesar.</li>
+<li>O banco tem 6,8 GB, dos quais a auditoria ocupa 3 GB e cresce cerca de 295 mil linhas por dia (era 400 mil).</li>
+</ul>
+
+<h2>8. Decisões pendentes do Matheus</h2>
+<ul>
+<li>Subir a máquina do banco (Micro → Small ou Medium).</li>
+<li>Arquivar a auditoria com mais de 90 dias.</li>
+<li>Alerta automático (e-mail ou WhatsApp) quando o banco ficar mais de 2 minutos sem responder.</li>
+<li>Onde agendar a captura incremental dos arquivos: tarefa do Windows (recomendado) ou Vercel.</li>
+</ul>
+</body></html>
