@@ -13,7 +13,7 @@ import BotaoVerDocumento from "../BotaoVerDocumento";
 import InfoLegenda from "@/components/InfoLegenda";
 import PainelResumoAba from "@/app/erp/PainelResumoAba";
 import NavegadorMes from "../NavegadorMes";
-import { periodoDoMes } from "@/lib/erp/periodo";
+import { periodoDoMes, IDADE_RETRATO_ABERTO } from "@/lib/erp/periodo";
 import PaginaErp from "../PaginaErp";
 
 export const dynamic = "force-dynamic";
@@ -67,6 +67,29 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
   const { data: { user } } = await supabase.auth.getUser();
   if (!isAdmin(user?.email) && !isColaboradorO2(user?.email)) redirect("/");
 
+  // Consultas independentes disparam juntas (antes rodavam em série: ~2,8 s no banco); a cadeia de documentos segue em paralelo com elas
+  type Aberta = { bitrix_card_id: string; status: string; vence_em: string; doc: { id: string; nosso_numero: number; numero_apolice: string | null; situacao: string; loc: { nome: string } | { nome: string }[] | null; ramo: { produto: string } | { produto: string }[] | null } | null };
+  type Herdada = { documento_id: string; nosso_numero: number; numero_apolice: string | null; produto: string; ramo: string; seguradora: string | null; cliente_id: string | null; cliente: string | null; imobiliaria: string | null; vigencia_fim: string; dias_desde_vencimento: number; mes_origem: string; bitrix_card_id: string | null; status_renovacao: string | null; situacao_renovacao: string };
+  type LoteResumo = { documento_id: string; nosso_numero: number; origem_ref: string; imobiliaria: string | null; seguradora: string | null; mes: string; confirmados: number; sugestoes: number };
+  type LinhaIndice = { mes: string; seguradora: string; produto: string | null; imobiliaria: string | null; vencidas: number; renovadas: number; provaveis: number; nao_renovadas: number; aguardando: number; canceladas: number; em_vigor: number; premio_nao_renovado: number };
+  type NaoRenov = { documento_id: string; nosso_numero: number; numero_apolice: string | null; vigencia_fim: string; seguradora: string; produto: string | null; imobiliaria: string | null; premio_liquido: number | null; desfecho: string; motivo: string | null };
+  const pAbertas = (async () => (await supabase
+    .from("erp_renovacoes")
+    .select("bitrix_card_id, status, vence_em, doc:erp_documentos!erp_renovacoes_documento_id_fkey(id, nosso_numero, numero_apolice, situacao, loc:locatarios!erp_documentos_locatario_id_fkey(nome), ramo:erp_ramos(produto))")
+    .in("status", ["a_renovar", "em_cotacao"])
+    .not("bitrix_card_id", "is", null)
+    .order("vence_em")
+    .limit(1500)).data)();
+  const pHeranca = (async () => (await supabase.rpc("erp_renovacao_heranca", { p_de: per.de, p_dias: 90 })).data)();
+  const pLotes = (async () => (await supabase.rpc("erp_renovacao_lotes_resumo", { p_de: per.de, p_ate: per.ate })).data)();
+  // retrato de 60 min (erp_retrato): a view do índice custa ~1,1 s; o cron renova os retratos usados
+  const pIndice = (async () => {
+    const { data } = await supabase.rpc("erp_retrato", { p_funcao: "erp_renovacao_indice", p_de: "2026-09-01", p_ate: per.ate, p_max_idade: IDADE_RETRATO_ABERTO });
+    return ((data ?? []) as LinhaIndice[]);
+  })();
+  const pNaoRenov = (async () => (await supabase.from("erp_renovacao_desfecho").select("documento_id, nosso_numero, numero_apolice, vigencia_fim, seguradora, produto, imobiliaria, premio_liquido, desfecho, motivo")
+    .eq("mes_vencimento", per.mes).in("desfecho", ["nao_renovada", "aguardando_decisao"]).order("vigencia_fim").limit(400)).data)();
+
   const docs: Doc[] = [];
   for (let p = 0; p < 4; p++) {
     const { data, error } = await supabase
@@ -84,15 +107,15 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
   // cabeçalho padrão (Matheus 28/10): tipo, titular, produto, seguradora e vigência
   const cab = await dadosDeCabecalhoPorId(supabase, ids);
   for (const l of lotes(ids, 120)) {
-    const [{ data: dd }, { data: pp }] = await Promise.all([
+    const [{ data: dd }, { data: pp }, { data: rn }] = await Promise.all([
       supabase.from("erp_documentos").select("id, nosso_numero_corp, ramo:erp_ramos(abreviacao)").in("id", l),
       supabase.from("erp_documento_produtores").select("documento_id, produtor_corp_nome").in("documento_id", l),
+      supabase.from("erp_renovacoes").select("documento_id, bitrix_card_id").in("documento_id", l).not("bitrix_card_id", "is", null),
     ]);
     for (const x of (dd ?? []) as unknown as { id: string; nosso_numero_corp: number | null; ramo: { abreviacao: string } | { abreviacao: string }[] | null }[]) {
       const r = Array.isArray(x.ramo) ? x.ramo[0] : x.ramo;
       extra.set(x.id, { corp: x.nosso_numero_corp, abrev: r?.abreviacao ?? "", canais: [], card: null });
     }
-    const { data: rn } = await supabase.from("erp_renovacoes").select("documento_id, bitrix_card_id").in("documento_id", l).not("bitrix_card_id", "is", null);
     for (const r of (rn ?? []) as { documento_id: string; bitrix_card_id: string }[]) {
       const [entity, id] = r.bitrix_card_id.split(":").map(Number);
       const e = extra.get(r.documento_id);
@@ -150,14 +173,7 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
   const cards = [...porChave.values()].sort((a, b) => a.fim.localeCompare(b.fim) || a.titulo.localeCompare(b.titulo));
 
   // Renovações ainda SEM DESFECHO de apólices que já não estão vigentes: continuam sendo acompanhadas até Renovado ou Não renovado (Matheus 28/10/2026)
-  type Aberta = { bitrix_card_id: string; status: string; vence_em: string; doc: { id: string; nosso_numero: number; numero_apolice: string | null; situacao: string; loc: { nome: string } | { nome: string }[] | null; ramo: { produto: string } | { produto: string }[] | null } | null };
-  const { data: abertasRaw } = await supabase
-    .from("erp_renovacoes")
-    .select("bitrix_card_id, status, vence_em, doc:erp_documentos!erp_renovacoes_documento_id_fkey(id, nosso_numero, numero_apolice, situacao, loc:locatarios!erp_documentos_locatario_id_fkey(nome), ramo:erp_ramos(produto))")
-    .in("status", ["a_renovar", "em_cotacao"])
-    .not("bitrix_card_id", "is", null)
-    .order("vence_em")
-    .limit(1500);
+  const abertasRaw = await pAbertas;
   const abertasCand = ((abertasRaw ?? []) as unknown as Aberta[]).filter((a) => a.doc && a.doc.situacao !== "vigente" && a.doc.situacao !== "cancelado");
   const abertasCancel = await comCancelamento(abertasCand.map((a) => a.doc!.id));
   const abertas = abertasCand.filter((a) => !abertasCancel.has(a.doc!.id));
@@ -165,36 +181,26 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
   for (const a of abertas) abertasPorCard.set(a.bitrix_card_id, [...(abertasPorCard.get(a.bitrix_card_id) ?? []), a]);
 
   // Herança (Matheus 01/11): apólices que venceram nos 90 dias antes do mês escolhido e ainda sem desfecho — separada e rotulada, com os dias desde o vencimento
-  type Herdada = { documento_id: string; nosso_numero: number; numero_apolice: string | null; produto: string; ramo: string; seguradora: string | null; cliente_id: string | null; cliente: string | null; imobiliaria: string | null; vigencia_fim: string; dias_desde_vencimento: number; mes_origem: string; bitrix_card_id: string | null; status_renovacao: string | null; situacao_renovacao: string };
-  const { data: herdRaw } = await supabase.rpc("erp_renovacao_heranca", { p_de: per.de, p_dias: 90 });
+  const herdRaw = await pHeranca;
   const heranca = ((herdRaw ?? []) as Herdada[]).sort((a, b) => b.vigencia_fim.localeCompare(a.vigencia_fim)).slice(0, 300);
   const herancaMap = new Map<string, Herdada[]>();
   for (const h of heranca) herancaMap.set(h.mes_origem, [...(herancaMap.get(h.mes_origem) ?? []), h]);
   const herancaMeses = [...herancaMap.entries()].sort((x, y) => y[0].localeCompare(x[0]));
   // Lotes de renovação (proposta criada do card) × apólices anteriores, item a item (Matheus 03/11): confirmado = linha da planilha da equipe achada no ERP + imobiliária + seguradora + vigência
-  type LoteResumo = { documento_id: string; nosso_numero: number; origem_ref: string; imobiliaria: string | null; seguradora: string | null; mes: string; confirmados: number; sugestoes: number };
-  const { data: loteRaw } = await supabase.rpc("erp_renovacao_lotes_resumo", { p_de: per.de, p_ate: per.ate });
+  const loteRaw = await pLotes;
   const lotesResumo = ((loteRaw ?? []) as LoteResumo[]).sort((a, b) => (a.imobiliaria ?? "").localeCompare(b.imobiliaria ?? ""));
   // mês do ciclo do robô de renovações: no dia 25 ele trata os vencimentos de M+2
   const hojeR = new Date();
   const cicloRobo = (() => { const t = hojeR.getUTCFullYear() * 12 + hojeR.getUTCMonth() + 2; return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, "0")}`; })();
 
   // Índice de não renovação (Matheus 03/11): desfecho de cada apólice vencida; "Apólice Não Nova" do Corp (RENV) prova a renovação, sem apólice nova = não renovada
-  type LinhaIndice = { mes: string; seguradora: string; produto: string | null; imobiliaria: string | null; vencidas: number; renovadas: number; provaveis: number; nao_renovadas: number; aguardando: number; canceladas: number; em_vigor: number; premio_nao_renovado: number };
-  const linhasIdx: LinhaIndice[] = [];
-  for (let p = 0; p < 6; p++) {
-    const { data } = await supabase.rpc("erp_renovacao_indice", { p_de: "2026-09-01", p_ate: per.ate }).range(p * 1000, p * 1000 + 999);
-    linhasIdx.push(...((data ?? []) as LinhaIndice[]));
-    if ((data ?? []).length < 1000) break;
-  }
+  const linhasIdx = await pIndice;
   const somaIdx = (l: LinhaIndice[]) => l.reduce((a, x) => ({ vencidas: a.vencidas + Number(x.vencidas), renovadas: a.renovadas + Number(x.renovadas), provaveis: a.provaveis + Number(x.provaveis), nao: a.nao + Number(x.nao_renovadas), aguardando: a.aguardando + Number(x.aguardando), canceladas: a.canceladas + Number(x.canceladas), premio: a.premio + Number(x.premio_nao_renovado) }), { vencidas: 0, renovadas: 0, provaveis: 0, nao: 0, aguardando: 0, canceladas: 0, premio: 0 });
   const idxPorMes = [...new Set(linhasIdx.map((x) => x.mes))].sort().reverse().map((m) => ({ mes: m, ...somaIdx(linhasIdx.filter((x) => x.mes === m)) }));
   const idxMesAtual = linhasIdx.filter((x) => x.mes === per.mes);
   const idxPorSeg = [...new Set(idxMesAtual.map((x) => x.seguradora))].map((s2) => ({ seguradora: s2, ...somaIdx(idxMesAtual.filter((x) => x.seguradora === s2)) })).filter((x) => x.vencidas > 0).sort((a, b) => b.nao - a.nao);
   const pctNao = (nao: number, renov: number) => (nao + renov > 0 ? `${((100 * nao) / (nao + renov)).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%` : "—");
-  type NaoRenov = { documento_id: string; nosso_numero: number; numero_apolice: string | null; vigencia_fim: string; seguradora: string; produto: string | null; imobiliaria: string | null; premio_liquido: number | null; desfecho: string; motivo: string | null };
-  const { data: nrRaw } = await supabase.from("erp_renovacao_desfecho").select("documento_id, nosso_numero, numero_apolice, vigencia_fim, seguradora, produto, imobiliaria, premio_liquido, desfecho, motivo")
-    .eq("mes_vencimento", per.mes).in("desfecho", ["nao_renovada", "aguardando_decisao"]).order("vigencia_fim").limit(400);
+  const nrRaw = await pNaoRenov;
   const naoRenov = (nrRaw ?? []) as NaoRenov[];
 
   // atalhos de mês: o mês atual +1 até +4

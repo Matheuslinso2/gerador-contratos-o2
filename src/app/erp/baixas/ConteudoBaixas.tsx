@@ -17,6 +17,7 @@ import { avaliarBaixaAutomatica, bancoDoExtrato } from "@/lib/erp/baixaAutomatic
 import PainelControleBloco from "./gestao/PainelControleBloco";
 import ControleExtrato from "./gestao/ControleExtrato";
 import PainelResumoAba from "@/app/erp/PainelResumoAba";
+import { IDADE_RETRATO_ABERTO, IDADE_RETRATO_FECHADO } from "@/lib/erp/periodo";
 
 export const dynamic = "force-dynamic";
 
@@ -429,7 +430,7 @@ export default async function ConteudoBaixas({ searchParams, modo }: { searchPar
         ? supabase.from("erp_baixa_linha_estado").select("linha_id, estado, idade_dias, fora_tipo, candidato_imobiliaria, candidato_cliente, ja_no_corp").eq("extrato_id", extratoAberto)
         : Promise.resolve({ data: null }),
       // endossos que aparecem no extrato e não estão cadastrados na apólice no ERP (retrato de 15 min: a consulta leva ~2,7 s)
-      supabase.rpc("erp_retrato", { p_funcao: "erp_endossos_pendentes_cadastro", p_de: `${mesSel}-01`, p_ate: new Date(Date.UTC(aE, mE, 0)).toISOString().slice(0, 10) }),
+      supabase.rpc("erp_retrato", { p_funcao: "erp_endossos_pendentes_cadastro", p_de: `${mesSel}-01`, p_ate: new Date(Date.UTC(aE, mE, 0)).toISOString().slice(0, 10), p_max_idade: mesSel < mesAtual ? IDADE_RETRATO_FECHADO : IDADE_RETRATO_ABERTO }),
       // entradas do Nibo no mês que NÃO são receita de seguros (empréstimo, estorno, transferência…): ficam fora de todos os totais
       supabase.from("erp_nibo_lancamentos").select("categoria, valor").eq("tipo", "recebimento").gte("data", `${mesSel}-01`).lte("data", new Date(Date.UTC(aN, mN, 0)).toISOString().slice(0, 10)).neq("categoria", "1.1 - RECEITA DE SEGUROS").limit(2000),
     ]);

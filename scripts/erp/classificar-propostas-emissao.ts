@@ -104,6 +104,12 @@ type Prova = { fonte: string; chave: string; ref: string; data?: string | null; 
   const chaveVP = (sid: unknown, vig: unknown, premio: unknown) => (sid && vig && Number(premio) > 0 ? `${sid}|${vig}|${Math.round(Number(premio) * 100)}` : "");
   const docsPorVP = idx(docsErp, (d) => [chaveVP(d.seguradora_id, d.vigencia_inicio, d.premio_liquido)]);
   const portalPorVP = idx(portalApo, (a) => [chaveVP(a.seguradora_id, a.vigencia_inicio, a.premio_liquido)]);
+  // vigência(s) conhecida(s) de cada nº de apólice (todas as apólices do ERP, qualquer ano) — para recusar prova de outra vigência
+  const vigPorNumero = new Map<string, string[]>();
+  for (const x of await todas<any>("erp_documentos", "id, numero_apolice, vigencia_inicio", (q) => q.in("tipo", ["A", "F"]).not("numero_apolice", "is", null).not("vigencia_inicio", "is", null).neq("situacao", "duplicado"))) {
+    const k = semZero(x.numero_apolice); if (k.length >= 5) vigPorNumero.set(k, [...(vigPorNumero.get(k) ?? []), x.vigencia_inicio]);
+  }
+  for (const p of pdfApo) { const k = semZero(p.numero_pdf); if (k.length >= 5 && p.vig_ini) vigPorNumero.set(k, [...(vigPorNumero.get(k) ?? []), p.vig_ini]); }
   const docsPorNome = idx(docsErp, (d) => [norm(locDocs.get(d.locatario_id)?.nome)]);
 
   // documentos que NÃO identificam o cliente: CNPJ de imobiliária (estipulante), da O2/corretoras e qualquer CPF/CNPJ presente em muitas apólices
@@ -130,7 +136,12 @@ type Prova = { fonte: string; chave: string; ref: string; data?: string | null; 
     const tituloNome = norm(String(o?.titulo ?? "").replace(/^\s*(NOVO|RENOVA\S*( AUTO)?|ENDOSSO|LOTE[^-]*)\s*-\s*/i, "").split(" - ")[0].replace(/\(.*?\)/g, ""));
     const nomes = [...new Set([norm(loc?.nome), ...minhasPartes.map((p) => norm(p.nome)), tituloNome].filter((n) => tokens(n).length >= 2))];
     const numsCard = Object.entries(dl).filter(([k]) => /propost|ap[oó]lice|or[cç]amento|certificad|t[ií]tulo/i.test(k)).map(([, v]) => semZero(v)).filter((v) => v.length >= 6);
-    const nums = [...new Set([semZero(d.numero_proposta), semZero(d.numero_apolice), ...numsCard].filter((v) => v.length >= 6))];
+    // nº de proposta da seguradora ESCOLHIDA no card (Processo - Porto/Tokio/Pottencial) e o que vem escrito nas observações ("numero da proposta - 22-000000018902300")
+    const escolhida = norm(dl["Seguradora Escolhida"]);
+    const chaveProc = /PORTO/.test(escolhida) ? ["Processo - Porto"] : /TOO|TOKIO/.test(escolhida) ? ["Processo - Too", "Processo - Tokio"] : /POTT/.test(escolhida) ? ["Processo - Pottencial"] : [];
+    const numsProc = chaveProc.map((k) => semZero(dl[k])).filter((v) => v.length >= 6);
+    const numsObs = [...String(dl["Observações Adicionais"] ?? "").matchAll(/\d[\d.\-/]{6,}\d/g)].map((m) => semZero(m[0])).filter((v) => v.length >= 6);
+    const nums = [...new Set([semZero(d.numero_proposta), semZero(d.numero_apolice), ...numsCard, ...numsProc, ...numsObs, ...numsProc.map((v) => semZero(v.replace(/^22/, ""))), ...numsObs.map((v) => semZero(v.replace(/^22/, "")))].filter((v) => v.length >= 6))];
     const ehEndosso = !["A", "F"].includes(d.tipo) || o?.categoria_id === 24;
     const nomeCasa = (t: unknown) => { const n = norm(t); if (!n) return false; return nomes.some((x) => x === n || (tokens(x).length >= 3 && tokens(x).every((tk) => n.includes(tk))) || (tokens(n).length >= 3 && tokens(n).every((tk) => x.includes(tk)))); };
     const segOk = (sid: string | null | undefined) => !d.seguradora_id || !sid || sid === d.seguradora_id;
@@ -192,7 +203,14 @@ type Prova = { fonte: string; chave: string; ref: string; data?: string | null; 
     if (o?.entity_type_id === 1048 && /EMITIDO/i.test(String(o?.etapa_id))) provas.push({ fonte: "etapa do card = Emitido (Capitalização)", chave: "card", ref: `${o.entity_type_id}:${o.item_id}` });
 
     // dedup e decisão
-    const unicas = [...new Map(provas.map((p) => [`${p.fonte}|${p.ref}`, p])).values()];
+    // prova com nº de apólice que já é de OUTRA vigência (ex.: parcela paga da apólice anterior do mesmo cliente) não prova a emissão desta proposta
+    const refutada = (p: Prova) => {
+      if (ehEndosso || !ref) return false;
+      const k = semZero(p.numero); if (k.length < 5) return false;
+      const vs = vigPorNumero.get(k); if (!vs?.length) return false;
+      return vs.every((v) => Math.abs(dias(v, ref)) > 60);
+    };
+    const unicas = [...new Map(provas.filter((p) => !refutada(p)).map((p) => [`${p.fonte}|${p.ref}`, p])).values()];
     // indício (não basta sozinho): card, e-mail que cita, planilha de controle (na aba de renovação o nº pode ser o da apólice anterior)
     const fortes = unicas.filter((p) => p.chave !== "card" && !/^(e-mail cita|planilha de controle)/.test(p.fonte));
     const candBons = candidatos.filter((c) => c.via !== "nome+seguradora" || c.premio_igual);
