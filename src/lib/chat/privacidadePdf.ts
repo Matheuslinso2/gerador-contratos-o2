@@ -15,6 +15,8 @@ const TABELAS_PESSOAIS = new Set([
   "erp_portal_porto_apolices",
   "erp_portal_porto_detalhe",
   "erp_portal_brasilcap_garantias", // titular e documento
+  "erp_repasse_email_linha", // segurado_nome
+  "erp_repasse_email_comprovante", // favorecido e documentos
   "erp_planilha_registro", // segurado/locatário/locador e CPF das planilhas
   "producao_itens", // itens dos lotes de RE: nomes e CPF/CNPJ de locador e locatário
   "erp_item_partes",
