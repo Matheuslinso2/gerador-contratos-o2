@@ -190,7 +190,7 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
   const loteRaw = await pLotes;
   const lotesResumo = ((loteRaw ?? []) as LoteResumo[]).sort((a, b) => (a.imobiliaria ?? "").localeCompare(b.imobiliaria ?? ""));
   // Radar (Matheus 05/11): apólices ainda VIGENTES que se aproximam do fim, com o alerta de cada uma (sem card, card parado na entrada, card perdido)
-  type Radar = { documento_id: string; nosso_numero: number; numero_apolice: string | null; produto: string; seguradora: string | null; cliente: string | null; imobiliaria: string | null; vigencia_fim: string; dias_para_vencer: number; bitrix_card_id: string | null; etapa: string; alerta: string; regra_dias_card: number; regra_confirmada: boolean };
+  type Radar = { documento_id: string; nosso_numero: number; numero_apolice: string | null; produto: string; seguradora: string | null; cliente: string | null; imobiliaria: string | null; vigencia_fim: string; dias_para_vencer: number; bitrix_card_id: string | null; etapa: string; alerta: string; regra_dias_card: number; regra_confirmada: boolean; parceria_encerrada: boolean };
   const { data: radarRaw } = await supabase.rpc("erp_renovacao_radar", { p_hoje: new Date().toISOString().slice(0, 10), p_horizonte: 75 });
   const radar = (radarRaw ?? []) as Radar[];
   const ROT_ALERTA: Record<string, string> = { sem_card: "Sem card", parado_na_entrada: "Card parado na entrada", card_perdido: "Card perdido, apólice vigente", parceria_encerrada: "Parceria encerrada (não renova)" };
@@ -371,7 +371,7 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
                           <td className="px-3 py-1.5">{r.produto}</td>
                           <td className="px-3 py-1.5">{r.seguradora ?? "—"}</td>
                           <td className="px-3 py-1.5">{r.cliente ?? "—"}</td>
-                          <td className="px-3 py-1.5">{r.imobiliaria ?? "—"}</td>
+                          <td className="px-3 py-1.5">{r.imobiliaria ?? "—"}{r.parceria_encerrada && <span title="Parceria encerrada: comunicar a renovação ao segurado; sem previsão de receita de renovação" className="ml-1 rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-700">parceria encerrada</span>}</td>
                           <td className="px-3 py-1.5">{formatarData(r.vigencia_fim)}</td>
                           <td className="px-3 py-1.5">{ent && cid ? <a href={urlCard(ent, cid)} target="_blank" rel="noreferrer" className="text-o2-navy hover:underline">#{cid} {r.etapa}</a> : <span className="text-gray-300">sem card</span>}</td>
                         </tr>
