@@ -23,8 +23,8 @@ const FUNIL: Record<BlocoCriacao, { entity: number; categoria: number; etapa: st
 const CAMPO_APOLICE: Record<BlocoCriacao, string> = { re_lotes: "ufCrm12NumApolice", re_demais: "ufCrm12NumApolice", fianca: "ufCrm10_1790800677", cap: "ufCrm14_1792781102", auto: "" };
 const ITEM_UNICO = new Set<BlocoCriacao>(["fianca", "cap", "auto", "re_demais"]);
 // Responsável do card (Matheus 06/11/2026): Ramos Elementares = Kamila Pimenta (31); Capitalização e Seguro Fiança = Patricia da Silva (57);
-// Automóvel = "André Lucas" (ainda sem usuário confirmado no Bitrix: a criação do Automóvel fica bloqueada até definir o id).
-const RESPONSAVEL: Record<BlocoCriacao, number | undefined> = { re_lotes: 31, re_demais: 31, fianca: 57, cap: 57, auto: undefined };
+// Automóvel = André Lucas Lins, que no Bitrix é o usuário "Lucas Lins" (id 6134; o 25 é o pai, André Luiz Lins, CEO).
+const RESPONSAVEL: Record<BlocoCriacao, number | undefined> = { re_lotes: 31, re_demais: 31, fianca: 57, cap: 57, auto: 6134 };
 
 const NOME_SEG: Record<string, string> = { TOKI: "TOKIO", YELU: "YELLUM", PORT: "PORTO", ALLI: "ALLIANZ", ZURI: "ZURICH", ALF: "ALFA", BRAD: "BRADESCO" };
 const SEG_FIANCA: Record<string, string> = { TOKI: "Tokio", PORT: "Porto", POTT: "Pottencial", TOO: "Too", JUNT: "Junto" };
