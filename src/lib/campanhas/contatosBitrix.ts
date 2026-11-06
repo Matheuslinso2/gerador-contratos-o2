@@ -22,7 +22,20 @@ export type { ContatosImobiliaria, UltimosContatos } from "./contatosTipos";
 const JANELA_DIAS = 90;
 const MAX_EVENTOS_NA_TELA = 4;
 
-type Atividade = { OWNER_TYPE_ID: string; OWNER_ID: string; TYPE_ID: string; PROVIDER_ID: string | null; CREATED: string; RESPONSIBLE_ID: string | null };
+type Atividade = {
+  OWNER_TYPE_ID: string;
+  OWNER_ID: string;
+  TYPE_ID: string;
+  PROVIDER_ID: string | null;
+  CREATED: string;
+  RESPONSIBLE_ID: string | null;
+  START_TIME?: string | null;
+  DIRECTION?: string | null;
+};
+
+// Margem para reconhecer, entre os e-mails do Bitrix, os que são envios da própria campanha (registrados no card pelo
+// Workspace com a hora do envio em START_TIME).
+const MARGEM_ENVIO_CAMPANHA_MS = 10 * 60_000;
 
 function canalDaAtividade(a: Atividade): CanalContato | null {
   const provedor = a.PROVIDER_ID ?? "";
@@ -87,7 +100,7 @@ export async function ultimosContatosPorImobiliaria(
   for (const [imob, empresas] of empresasPorImob) for (const e of empresas) imobPorEmpresa.set(e, imob);
   const empresas = [...imobPorEmpresa.keys()];
 
-  const selecao = ["ID", "OWNER_TYPE_ID", "OWNER_ID", "TYPE_ID", "PROVIDER_ID", "CREATED", "RESPONSIBLE_ID"];
+  const selecao = ["ID", "OWNER_TYPE_ID", "OWNER_ID", "TYPE_ID", "PROVIDER_ID", "CREATED", "RESPONSIBLE_ID", "START_TIME", "DIRECTION"];
   const atividades: Atividade[] = [];
   const imobPorNegocio = new Map<number, string>();
 
@@ -137,6 +150,13 @@ export async function ultimosContatosPorImobiliaria(
     const imob = a.OWNER_TYPE_ID === "4" ? imobPorEmpresa.get(Number(a.OWNER_ID)) : imobPorNegocio.get(Number(a.OWNER_ID));
     const canal = canalDaAtividade(a);
     if (!imob || !canal) continue;
+    // E-mail enviado que coincide com um envio da campanha é o registro automático do card: já está no histórico da campanha,
+    // não é contato de uma pessoa (e não pode zerar o contador de dias sem contato).
+    if (canal === "email" && a.DIRECTION === "2") {
+      const quando = Date.parse(a.START_TIME ?? a.CREATED);
+      const dosEnvios = historicoDaCampanha.get(imob) ?? [];
+      if (dosEnvios.some((h) => Math.abs(Date.parse(h.data) - quando) <= MARGEM_ENVIO_CAMPANHA_MS)) continue;
+    }
     resultado.get(imob)?.eventos.push({
       id: null,
       data: new Date(a.CREATED).toISOString(),
