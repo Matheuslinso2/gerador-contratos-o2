@@ -136,13 +136,17 @@ export async function criarCardsRenovacao(
       const pcts = docs.map((d) => Number(d.comissao_pct ?? 0)).filter((x) => x > 0);
       const imobIds = [...new Set(docs.map((d) => d.imobiliaria_principal_id).filter(Boolean))] as string[];
       let companyId: number | null = null;
+      let empresaAmbigua = false;
       let imobNome: string | null = null;
       if (imobIds.length === 1) {
         const [{ data: emp }, { data: im }] = await Promise.all([
-          sb.from("imobiliaria_registros_fonte").select("chave_externa").eq("fonte", "bitrix_empresa").eq("situacao", "confirmado").eq("imobiliaria_id", imobIds[0]).limit(1),
+          sb.from("imobiliaria_registros_fonte").select("chave_externa, nome_original").eq("fonte", "bitrix_empresa").eq("situacao", "confirmado").eq("imobiliaria_id", imobIds[0]),
           sb.from("imobiliarias").select("nome").eq("id", imobIds[0]).limit(1),
         ]);
-        companyId = emp?.[0]?.chave_externa ? Number(emp[0].chave_externa) : null;
+        // uma ficha pode ter várias empresas no Bitrix (ex.: Renascença: Central + filiais). Com mais de uma, vale a Central/Matriz (como a equipe faz); sem Central, não chuta.
+        const unica = emp?.length === 1 ? emp[0] : emp?.find((e) => /CENTRAL|MATRIZ/i.test(String(e.nome_original ?? "")));
+        companyId = unica?.chave_externa ? Number(unica.chave_externa) : null;
+        if (!companyId && (emp?.length ?? 0) > 1) empresaAmbigua = true;
         imobNome = (im?.[0]?.nome as string | undefined) ?? null;
       }
       let parceriaEncerrada = false;
@@ -175,7 +179,7 @@ export async function criarCardsRenovacao(
           `Quantidade de itens: ${docs.length}`,
           numeros.length ? `Apólices: ${numeros.join("; ")}` : "Apólice sem número no ERP — conferir.",
           `Prêmio total do ano anterior: ${reais(premio)}.`, carimbo,
-          companyId ? "" : "Empresa do Bitrix não identificada pelo cadastro único — vincular à mão.", avisoParceria,
+          companyId ? "" : empresaAmbigua ? "A imobiliária tem mais de uma empresa no Bitrix e nenhuma Central — escolher a empresa à mão." : "Empresa do Bitrix não identificada pelo cadastro único — vincular à mão.", avisoParceria,
         ].filter(Boolean).join("\n");
         fields = {
           ...(companyId ? { companyId } : {}),
