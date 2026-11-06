@@ -33,7 +33,7 @@ import {
   type EnvioParaStatus,
   type ResumoStatusEnvio,
 } from "@/lib/campanhas/producaoStatus";
-import { listarDestinatariosReenvio, hojeSaoPauloISO } from "@/lib/campanhas/reenvio";
+import { listarGruposReenvio, hojeSaoPauloISO } from "@/lib/campanhas/reenvio";
 import { duplicarCampanha } from "../actions";
 import { cancelarAgendamentoCampanha } from "./actions";
 import ProducaoCampanha from "./metas/ProducaoCampanha";
@@ -162,27 +162,12 @@ export default async function CampanhaDetalhePage({
     ? Math.round(((campanha.total_enviados + campanha.total_falhas) / campanha.total_destinatarios) * 100)
     : 0;
 
-  const [{ data: enviosData }, { count: totalAbertos }, { count: totalCliques }, { count: totalDescadastros }, { data: filhosData }, { data: paiData }] =
+  const [{ data: enviosData }, { count: totalDescadastros }, { data: filhosData }, { data: paiData }] =
     await Promise.all([
       supabase
         .from("campanhas_envios")
-        .select("imobiliaria_id, email, status, enviado_em, aberto_em, clicado_em, erro_detalhe")
+        .select("imobiliaria_id, email, status, enviado_em, aberto_em, clicado_em, erro_detalhe, rodada")
         .eq("campanha_id", id),
-      // Só fora do grupo O2 (pedido do Matheus, 17/09/2026) -- a métrica é
-      // pra medir o impacto da campanha no cliente, não abertura/clique da
-      // própria equipe interna que também recebeu (ver equipeInterna.ts).
-      supabase
-        .from("campanhas_envios")
-        .select("id", { count: "exact", head: true })
-        .eq("campanha_id", id)
-        .not("aberto_em", "is", null)
-        .not("email", "ilike", `%${DOMINIO_O2}`),
-      supabase
-        .from("campanhas_envios")
-        .select("id", { count: "exact", head: true })
-        .eq("campanha_id", id)
-        .not("clicado_em", "is", null)
-        .not("email", "ilike", `%${DOMINIO_O2}`),
       supabase.from("campanhas_descadastros").select("id", { count: "exact", head: true }).eq("origem_campanha_id", id),
       // E-mails desta campanha (parciais, boas-vindas por imobiliária) e, se
       // este for um deles, a campanha principal (22/10/2026).
@@ -195,6 +180,29 @@ export default async function CampanhaDetalhePage({
         ? supabase.from("campanhas").select("id, nome").eq("id", campanha.campanha_pai_id).maybeSingle()
         : Promise.resolve({ data: null }),
     ]);
+  // Só fora do grupo O2 (pedido do Matheus, 17/09/2026) -- a métrica é pra medir o impacto da campanha no cliente, não
+  // abertura/clique da própria equipe interna que também recebeu (ver equipeInterna.ts). Com reenvios (várias rodadas) cada
+  // pessoa conta uma vez só: abriu/clicou em qualquer rodada.
+  const externosEnvios = (enviosData ?? []).filter((e) => !String(e.email).toLowerCase().endsWith(DOMINIO_O2));
+  const totalAbertos = new Set(externosEnvios.filter((e) => e.aberto_em).map((e) => String(e.email).toLowerCase())).size;
+  const totalCliques = new Set(externosEnvios.filter((e) => e.clicado_em).map((e) => String(e.email).toLowerCase())).size;
+  // Rodadas de envio (reenvios na mesma campanha, 06/11/2026): 1 = disparo original, 2+ = reenvios.
+  const rodadasResumo = [...new Set((enviosData ?? []).map((e) => Number(e.rodada ?? 1)))]
+    .sort((a, b) => a - b)
+    .map((r) => {
+      const dela = (enviosData ?? []).filter((e) => Number(e.rodada ?? 1) === r);
+      const externos = dela.filter((e) => !String(e.email).toLowerCase().endsWith(DOMINIO_O2));
+      const datas = dela.map((e) => e.enviado_em).filter((d): d is string => !!d).sort();
+      return {
+        rodada: r,
+        quando: datas[0] ?? null,
+        destinatarios: dela.length,
+        enviados: dela.filter((e) => e.status === "enviado").length,
+        falhas: dela.filter((e) => e.status === "falhou").length,
+        abriram: externos.filter((e) => e.aberto_em).length,
+        clicaram: externos.filter((e) => e.clicado_em).length,
+      };
+    });
   const filhosBrutos = (filhosData ?? []) as Omit<EmailFilho, "abertos" | "falhas" | "cliques">[];
   const { data: enviosFilhosData } = filhosBrutos.length
     ? await supabase
@@ -297,7 +305,7 @@ export default async function CampanhaDetalhePage({
 
   // Reenvio (pedido do Matheus, 02/10/2026) só faz sentido depois do disparo
   // terminar -- enquanto "enviando", ainda tem gente na fila.
-  const reenvio = campanha.status === "concluida" ? await listarDestinatariosReenvio(supabase, id) : null;
+  const gruposReenvio = campanha.status === "concluida" ? await listarGruposReenvio(supabase, id) : null;
   const validadeExpirada = !!campanha.valido_ate && campanha.valido_ate < hojeSaoPauloISO();
 
   const htmlEmail = montarHtmlCampanha(personalizarCampanha(campanha as CampanhaRow, NOME_EXEMPLO_PREVIA), "#");
@@ -448,11 +456,11 @@ export default async function CampanhaDetalhePage({
               <p className="text-xs text-gray-500">Abertura e clique contam só quem é de fora da O2</p>
               <div className="grid grid-cols-3 gap-1 overflow-hidden rounded-xl border border-o2-navy/10 bg-gray-200 shadow-sm">
                 <div className="bg-quadro p-4 text-center">
-                  <p className="text-2xl font-bold text-o2-navy">{totalAbertos ?? 0}</p>
+                  <p className="text-2xl font-bold text-o2-navy">{totalAbertos}</p>
                   <p className="text-xs text-gray-500">Abriram</p>
                 </div>
                 <div className="bg-quadro p-4 text-center">
-                  <p className="text-2xl font-bold text-o2-navy">{totalCliques ?? 0}</p>
+                  <p className="text-2xl font-bold text-o2-navy">{totalCliques}</p>
                   <p className="text-xs text-gray-500">Clicaram</p>
                 </div>
                 <div className="bg-quadro p-4 text-center">
@@ -491,11 +499,43 @@ export default async function CampanhaDetalhePage({
                 )}
               </dl>
 
-              {reenvio && (
+              {rodadasResumo.length > 1 && (
+                <div className="overflow-x-auto rounded-xl border border-o2-navy/10 bg-quadro p-4">
+                  <p className="mb-2 text-sm font-semibold text-o2-navy">Rodadas de envio</p>
+                  <table className="w-full text-xs">
+                    <thead className="text-left text-gray-500">
+                      <tr>
+                        <th className="pb-1 pr-4 font-medium">Rodada</th>
+                        <th className="pb-1 pr-4 font-medium">Quando</th>
+                        <th className="pb-1 pr-4 font-medium">Destinatários</th>
+                        <th className="pb-1 pr-4 font-medium">Enviados</th>
+                        <th className="pb-1 pr-4 font-medium">Falhas</th>
+                        <th className="pb-1 pr-4 font-medium">Abriram</th>
+                        <th className="pb-1 font-medium">Clicaram</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-o2-navy">
+                      {rodadasResumo.map((r) => (
+                        <tr key={r.rodada} className="border-t border-gray-200">
+                          <td className="py-1 pr-4">{r.rodada === 1 ? "Disparo original" : `Reenvio ${r.rodada - 1}`}</td>
+                          <td className="py-1 pr-4">{r.quando ? new Date(r.quando).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" }) : "—"}</td>
+                          <td className="py-1 pr-4">{r.destinatarios}</td>
+                          <td className="py-1 pr-4">{r.enviados}</td>
+                          <td className="py-1 pr-4">{r.falhas}</td>
+                          <td className="py-1 pr-4">{r.abriram}</td>
+                          <td className="py-1">{r.clicaram}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="mt-1 text-[11px] text-gray-400">Abriram e clicaram contam só quem é de fora da O2, por rodada.</p>
+                </div>
+              )}
+
+              {gruposReenvio && gruposReenvio.length > 0 && (
                 <ReenviarCampanha
                   campanhaId={id}
-                  totalTodos={reenvio.todos.length}
-                  totalNaoAbriram={reenvio.nao_abriram.length}
+                  grupos={gruposReenvio.map((g) => ({ chave: g.chave, rotulo: g.rotulo, emails: g.emails.length, abriu: g.abriu }))}
                   validadeExpirada={validadeExpirada}
                 />
               )}

@@ -14,8 +14,8 @@ import {
 import { contemApelido, NOME_EXEMPLO_PREVIA } from "@/lib/campanhas/personalizacao";
 import { linkDescadastro } from "@/lib/campanhas/unsubscribeToken";
 import { dispararCampanha } from "@/lib/campanhas/dispararCampanha";
-import { listarDestinatariosReenvio, type PublicoReenvio } from "@/lib/campanhas/reenvio";
-import { lerProdutosDoFormulario, produtosDaCampanha } from "@/lib/campanhas/produtos";
+import { listarGruposReenvio } from "@/lib/campanhas/reenvio";
+import { lerProdutosDoFormulario } from "@/lib/campanhas/produtos";
 import { limparNomeRemetente, nomeExibidoRemetente } from "@/lib/campanhas/remetente";
 
 // Fuso fixo -03:00 (Brasil não tem mais horário de verão desde 2019) --
@@ -173,16 +173,13 @@ export async function confirmarDisparoCampanha(formData: FormData) {
   redirect(`/campanhas/${campanhaId}`);
 }
 
-// Pedido do Matheus, 02/10/2026: reenviar uma campanha já concluída. Cria
-// uma campanha NOVA (cópia do conteúdo) em vez de reabrir a original --
-// campanhas_envios é único por (campanha, e-mail) e as métricas de
-// abertura/clique são por campanha, então reaproveitar a mesma linha
-// misturaria os dois disparos. Público: todos os que receberam, ou só quem
-// não abriu (abertura via pixel é aproximada -- clientes que bloqueiam
-// imagem não aparecem como "abriu", ver texto na tela).
+// Reenvio dentro da MESMA campanha (06/11/2026, correção do Matheus): não cria campanha nova no painel, é uma nova rodada
+// de envio. As linhas novas de campanhas_envios levam rodada = última + 1 (a unicidade é por campanha + e-mail + rodada) e a
+// campanha volta para "enviando"; o processamento é o mesmo do disparo original (inclusive a conversa do card de cada
+// imobiliária). Quem recebe é escolhido na tela: uma, algumas ou todas as imobiliárias que já receberam (valores "grupo").
 export async function reenviarCampanha(formData: FormData) {
   const campanhaId = String(formData.get("campanha_id") ?? "");
-  const publico: PublicoReenvio = formData.get("publico") === "nao_abriram" ? "nao_abriram" : "todos";
+  const escolhidos = new Set(formData.getAll("grupo").map(String));
   const supabase = await createClient();
   const {
     data: { user },
@@ -192,69 +189,29 @@ export async function reenviarCampanha(formData: FormData) {
 
   const voltar = (erro: string): never => redirect(`/campanhas/${campanhaId}?erro=${encodeURIComponent(erro)}`);
 
-  const { data: original } = await supabase
-    .from("campanhas")
-    .select(
-      "nome, assunto, template, personalizacao, titulo, introducao, valido_de, valido_ate, produto, produtos, corpo_html, cta_texto, cta_href, imobiliarias_selecionadas, contatos_externos_selecionados, incluir_equipe_interna, remetente_nome, status, mensagem_unica, card_deal_id, reenvio_de"
-    )
-    .eq("id", campanhaId)
-    .single();
+  const { data: original } = await supabase.from("campanhas").select("status, total_destinatarios").eq("id", campanhaId).single();
   if (!original) return voltar("Campanha não encontrada.");
   if (original.status !== "concluida") return voltar("Só dá pra reenviar uma campanha já concluída.");
+  if (!escolhidos.size) return voltar("Escolha ao menos uma imobiliária pro reenvio.");
 
-  const destinatarios = (await listarDestinatariosReenvio(supabase, campanhaId))[publico];
-  if (!destinatarios.length) return voltar("Nenhum destinatário elegível pro reenvio.");
+  const grupos = (await listarGruposReenvio(supabase, campanhaId)).filter((g) => escolhidos.has(g.chave));
+  if (!grupos.length) return voltar("Nenhum destinatário elegível entre os escolhidos.");
 
-  // Nasce como rascunho e só vira "enviando" depois das linhas de envio
-  // existirem: o cron de segurança processa qualquer campanha "enviando",
-  // e uma sem linhas pendentes seria marcada como concluída na hora.
-  const { data: copia, error } = await supabase
-    .from("campanhas")
-    .insert({
-      nome: `${original.nome} (reenvio)`,
-      assunto: original.assunto,
-      template: original.template,
-      personalizacao: original.personalizacao,
-      titulo: original.titulo,
-      introducao: original.introducao,
-      valido_de: original.valido_de,
-      valido_ate: original.valido_ate,
-      produto: original.produto,
-      produtos: produtosDaCampanha(original),
-      corpo_html: original.corpo_html,
-      cta_texto: original.cta_texto,
-      cta_href: original.cta_href,
-      imobiliarias_selecionadas: original.imobiliarias_selecionadas,
-      contatos_externos_selecionados: original.contatos_externos_selecionados,
-      incluir_equipe_interna: original.incluir_equipe_interna,
-      remetente_nome: original.remetente_nome,
-      // Reenvio de uma parcial (05/11/2026): continua na MESMA conversa de e-mail do card da imobiliária, em uma mensagem só.
-      mensagem_unica: original.mensagem_unica ?? false,
-      card_deal_id: original.card_deal_id ?? null,
-      // Aponta para a campanha original (os cards ficam ligados a ela): o reenvio entra na conversa do card de cada imobiliária.
-      reenvio_de: original.reenvio_de ?? campanhaId,
-      status: "rascunho",
-      criado_por: user.id,
-      criado_por_email: user.email,
-    })
-    .select("id")
-    .single();
-  if (error || !copia) return voltar(error?.message ?? "Falha ao criar o reenvio.");
+  const { data: ultima } = await supabase.from("campanhas_envios").select("rodada").eq("campanha_id", campanhaId).order("rodada", { ascending: false }).limit(1).maybeSingle();
+  const rodada = Number(ultima?.rodada ?? 1) + 1;
 
-  const { error: erroEnvios } = await supabase
-    .from("campanhas_envios")
-    .insert(destinatarios.map((d) => ({ campanha_id: copia.id, imobiliaria_id: d.imobiliaria_id, email: d.email })));
-  if (erroEnvios) {
-    await supabase.from("campanhas").delete().eq("id", copia.id);
-    return voltar(erroEnvios.message);
-  }
+  const linhas = grupos.flatMap((g) =>
+    g.emails.map((email) => ({ campanha_id: campanhaId, imobiliaria_id: g.chave.startsWith("email:") ? null : g.chave, email, rodada }))
+  );
+  const { error: erroEnvios } = await supabase.from("campanhas_envios").insert(linhas);
+  if (erroEnvios) return voltar(erroEnvios.message);
 
   await supabase
     .from("campanhas")
-    .update({ status: "enviando", total_destinatarios: destinatarios.length, disparada_em: new Date().toISOString() })
-    .eq("id", copia.id);
+    .update({ status: "enviando", total_destinatarios: Number(original.total_destinatarios ?? 0) + linhas.length, concluida_em: null })
+    .eq("id", campanhaId);
 
-  redirect(`/campanhas/${copia.id}`);
+  redirect(`/campanhas/${campanhaId}?ok=${encodeURIComponent(`Reenvio iniciado para ${grupos.length} destinatário(s) (rodada ${rodada}).`)}`);
 }
 
 // Item 9 da reunião de 15/09/2026: agenda o disparo pra mais tarde em vez

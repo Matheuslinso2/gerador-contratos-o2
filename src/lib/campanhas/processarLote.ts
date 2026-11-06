@@ -228,23 +228,19 @@ export async function processarLote(campanhaId: string, limite = TAMANHO_LOTE_PA
   }
 
   let processados = 0;
-  const { data: modo } = await supabase.from("campanhas").select("mensagem_unica, card_deal_id, campanha_pai_id, reenvio_de").eq("id", campanhaId).single();
+  const { data: modo } = await supabase.from("campanhas").select("mensagem_unica, card_deal_id, campanha_pai_id").eq("id", campanhaId).single();
   const mensagemUnica = !!modo?.mensagem_unica;
   if (mensagemUnica && pendentes?.length) {
     processados = pendentes.length;
     await enviarMensagemUnica(supabase, campanha, pendentes as EnvioReivindicado[], modo?.card_deal_id ? Number(modo.card_deal_id) : null);
   }
 
-  // Cards ligados à campanha (ou à campanha-mãe / à original, no caso de e-mail filho e de reenvio): quem tem card entra na conversa dele.
+  // Cards ligados à campanha (ou à campanha-mãe, no caso de e-mail filho): quem tem card entra na conversa dele. O reenvio é
+  // uma nova rodada da própria campanha, então segue o mesmo caminho do disparo original.
   let individuais: EnvioReivindicado[] = mensagemUnica ? [] : ((pendentes ?? []) as EnvioReivindicado[]);
   if (individuais.length) {
-    // Raiz dos cards: a campanha-mãe (e-mail filho); no reenvio, a original -- ou a mãe dela, se a original era um filho.
-    let raiz = (modo?.campanha_pai_id as string | null) ?? null;
-    if (!raiz && modo?.reenvio_de) {
-      const { data: original } = await supabase.from("campanhas").select("campanha_pai_id").eq("id", modo.reenvio_de as string).maybeSingle();
-      raiz = (original?.campanha_pai_id as string | null) ?? (modo.reenvio_de as string);
-    }
-    raiz = raiz ?? campanhaId;
+    // Raiz dos cards: a campanha-mãe (e-mail filho) ou a própria campanha.
+    const raiz = (modo?.campanha_pai_id as string | null) ?? campanhaId;
     const { data: cardsRows } = await supabase.from("campanhas_cards_bitrix").select("imobiliaria_id, bitrix_deal_id").eq("campanha_id", raiz);
     const cardDaImobiliaria = new Map(((cardsRows ?? []) as { imobiliaria_id: string; bitrix_deal_id: number }[]).map((c) => [c.imobiliaria_id, Number(c.bitrix_deal_id)]));
     if (cardDaImobiliaria.size) {

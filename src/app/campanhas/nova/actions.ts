@@ -6,6 +6,7 @@ import { isAdmin, isColaboradorO2 } from "@/lib/admin";
 import { lerProdutosDoFormulario } from "@/lib/campanhas/produtos";
 import { contemApelido } from "@/lib/campanhas/personalizacao";
 import { limparNomeRemetente } from "@/lib/campanhas/remetente";
+import { tipoDaQuery } from "@/lib/campanhas/tiposCampanha";
 
 export async function criarCampanha(formData: FormData) {
   const supabase = await createClient();
@@ -29,6 +30,12 @@ export async function criarCampanha(formData: FormData) {
   const ctaHref = String(formData.get("cta_href") ?? "").trim();
   const remetenteNome = limparNomeRemetente(formData.get("remetente_nome"));
   const campanhaPaiId = String(formData.get("campanha_pai_id") ?? "").trim() || null;
+  let tipo = tipoDaQuery(String(formData.get("tipo") ?? ""));
+  // E-mail de uma campanha existente: segue o tipo da campanha-mãe.
+  if (campanhaPaiId) {
+    const { data: pai } = await supabase.from("campanhas").select("tipo").eq("id", campanhaPaiId).maybeSingle();
+    if (pai?.tipo) tipo = tipoDaQuery(pai.tipo as string);
+  }
 
   // corpo_html vem do editor com formatação (EditorCorpo) já reembrulhado em
   // <tr><td> -- checa se sobra texto de verdade removendo as tags antes de
@@ -65,6 +72,7 @@ export async function criarCampanha(formData: FormData) {
       cta_texto: ctaTexto || null,
       cta_href: ctaHref || null,
       remetente_nome: remetenteNome,
+      tipo,
       criado_por: user.id,
       criado_por_email: user.email,
     })

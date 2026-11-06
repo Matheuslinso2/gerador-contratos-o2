@@ -12,6 +12,8 @@ import { duplicarCampanha, excluirCampanha, arquivarCampanha, desarquivarCampanh
 import { ExcluirCampanhaButton } from "./ExcluirCampanhaButton";
 import { EmailsEnviados } from "./EmailsEnviados";
 import { statusDoEnvio, type DetalheEmail } from "@/lib/campanhas/producaoStatus";
+import { ROTULO_NOVA_CAMPANHA, ROTULO_TIPO_CAMPANHA, tipoDaQuery } from "@/lib/campanhas/tiposCampanha";
+import { AbasCampanhas } from "./AbasCampanhas";
 
 export const dynamic = "force-dynamic";
 
@@ -32,9 +34,13 @@ type CampanhaRow = {
 export default async function CampanhasPage({
   searchParams,
 }: {
-  searchParams: Promise<{ erro?: string; arquivadas?: string; status?: string; produto?: string; busca?: string }>;
+  searchParams: Promise<{ erro?: string; arquivadas?: string; status?: string; produto?: string; busca?: string; tipo?: string }>;
 }) {
-  const { erro, arquivadas: verArquivadas, status: filtroStatus, produto: filtroProduto, busca: filtroBusca } = await searchParams;
+  const { erro, arquivadas: verArquivadas, status: filtroStatus, produto: filtroProduto, busca: filtroBusca, tipo: tipoBruto } = await searchParams;
+  const tipo = tipoDaQuery(tipoBruto);
+  // Mantém a sub-aba (Comerciais/Marketing) nos links da tela.
+  const sufixoTipo = tipo === "marketing" ? "tipo=marketing" : "";
+  const comTipo = (base: string) => (sufixoTipo ? (base.includes("?") ? `${base}&${sufixoTipo}` : `${base}?${sufixoTipo}`) : base);
   const mostrarArquivadas = verArquivadas === "1";
   const supabase = await createClient();
   const {
@@ -54,6 +60,8 @@ export default async function CampanhasPage({
     .is("campanha_pai_id", null)
     .order("created_at", { ascending: false });
   query = mostrarArquivadas ? query.not("arquivada_em", "is", null) : query.is("arquivada_em", null);
+  // Marketing x Comerciais (06/11/2026): o tipo fica gravado na campanha.
+  query = query.eq("tipo", tipo);
   // Pedido do Matheus, 01/10/2026: filtro por status/produto/nome na
   // listagem -- os mesmos campos já usados em todo o resto da tela.
   if (filtroStatus) query = query.eq("status", filtroStatus);
@@ -61,6 +69,13 @@ export default async function CampanhasPage({
   if (filtroBusca?.trim()) query = query.ilike("nome", `%${filtroBusca.trim()}%`);
   const { data: campanhasData } = await query;
   const todasCampanhas = (campanhasData ?? []) as CampanhaRow[];
+  // Contagem de cada sub-aba (campanhas principais, no mesmo recorte de ativas/arquivadas).
+  const contarTipo = async (t: "comercial" | "marketing") => {
+    let q = supabase.from("campanhas").select("id", { count: "exact", head: true }).is("campanha_pai_id", null).eq("tipo", t);
+    q = mostrarArquivadas ? q.not("arquivada_em", "is", null) : q.is("arquivada_em", null);
+    return (await q).count ?? 0;
+  };
+  const [totalComerciais, totalMarketing] = await Promise.all([contarTipo("comercial"), contarTipo("marketing")]);
   const { data: filhosData } = todasCampanhas.length
     ? await supabase.from("campanhas").select("id, campanha_pai_id").in("campanha_pai_id", todasCampanhas.map((c) => c.id))
     : { data: [] };
@@ -153,40 +168,56 @@ export default async function CampanhasPage({
     <>
       <AppHeader userEmail={user?.email} logoutAction={signOut} />
       <main className="mx-auto max-w-4xl flex-1 space-y-6 p-8">
-        <Link href={mostrarArquivadas ? "/campanhas" : "/"} className="text-sm font-medium text-o2-navy hover:underline">
+        <AbasCampanhas ativa="campanhas" />
+
+        <Link href={mostrarArquivadas ? comTipo("/campanhas") : "/"} className="text-sm font-medium text-o2-navy hover:underline">
           {mostrarArquivadas ? "← Voltar pra campanhas ativas" : "← Voltar ao início"}
         </Link>
+
+        <div className="flex gap-2">
+          {(["comercial", "marketing"] as const).map((t) => (
+            <Link
+              key={t}
+              href={`/campanhas?${t === "marketing" ? "tipo=marketing" : ""}${mostrarArquivadas ? (t === "marketing" ? "&" : "") + "arquivadas=1" : ""}`}
+              className={`whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-medium transition ${tipo === t ? "bg-o2-navy text-white" : "border border-o2-navy/30 text-o2-navy hover:bg-o2-navy/10"}`}
+            >
+              {ROTULO_TIPO_CAMPANHA[t]} ({t === "marketing" ? totalMarketing : totalComerciais})
+            </Link>
+          ))}
+        </div>
 
         <div className="flex flex-wrap items-center justify-between gap-4">
           <PageHeader
             icon={<IconMail />}
-            titulo={mostrarArquivadas ? "Campanhas arquivadas" : "Campanhas comerciais"}
+            titulo={mostrarArquivadas ? `Campanhas arquivadas — ${ROTULO_TIPO_CAMPANHA[tipo]}` : ROTULO_TIPO_CAMPANHA[tipo]}
             subtitulo={
               mostrarArquivadas
                 ? "Campanhas tiradas do radar do dia a dia — pode desarquivar quando quiser."
-                : "E-mails de campanha para a base de imobiliárias parceiras, via Resend."
+                : tipo === "marketing"
+                  ? "E-mails de marketing para a base, via Resend."
+                  : "E-mails de campanha para a base de imobiliárias parceiras, via Resend."
             }
           />
           <div className="flex items-center gap-3">
             {!mostrarArquivadas && (
               <>
-                <Link href="/campanhas?arquivadas=1" className="text-sm font-medium text-o2-navy hover:underline">
+                <Link href={comTipo("/campanhas?arquivadas=1")} className="text-sm font-medium text-o2-navy hover:underline">
                   Campanhas arquivadas
                 </Link>
                 <Link href="/campanhas/grupos" className="text-sm font-medium text-o2-navy hover:underline">
                   Grupos de imobiliárias
                 </Link>
                 <Link
-                  href="/campanhas/avisos-internos"
-                  className="whitespace-nowrap rounded-full border border-o2-navy px-4 py-1.5 text-sm font-medium text-o2-navy transition hover:bg-o2-navy hover:text-white"
-                >
-                  Avisos internos
-                </Link>
-                <Link
-                  href="/campanhas/nova"
+                  href="/campanhas/nova?tipo=comercial"
                   className="whitespace-nowrap rounded-full bg-o2-coral px-4 py-1.5 text-sm font-medium text-white transition hover:opacity-90"
                 >
-                  Nova campanha
+                  {ROTULO_NOVA_CAMPANHA.comercial}
+                </Link>
+                <Link
+                  href="/campanhas/nova?tipo=marketing"
+                  className="whitespace-nowrap rounded-full border border-o2-coral px-4 py-1.5 text-sm font-medium text-o2-coral transition hover:bg-o2-coral hover:text-white"
+                >
+                  {ROTULO_NOVA_CAMPANHA.marketing}
                 </Link>
               </>
             )}
@@ -222,6 +253,7 @@ export default async function CampanhasPage({
             página com os parâmetros escolhidos. */}
         <form className="flex flex-wrap items-end gap-2 rounded-xl border border-o2-navy/10 bg-quadro p-3">
           {mostrarArquivadas && <input type="hidden" name="arquivadas" value="1" />}
+          {tipo === "marketing" && <input type="hidden" name="tipo" value="marketing" />}
           <div>
             <label className="mb-0.5 block text-xs text-gray-500">Buscar por nome</label>
             <input
@@ -270,7 +302,7 @@ export default async function CampanhasPage({
           </button>
           {(filtroStatus || filtroProduto || filtroBusca) && (
             <Link
-              href={mostrarArquivadas ? "/campanhas?arquivadas=1" : "/campanhas"}
+              href={comTipo(mostrarArquivadas ? "/campanhas?arquivadas=1" : "/campanhas")}
               className="text-sm font-medium text-gray-500 hover:underline"
             >
               Limpar filtro

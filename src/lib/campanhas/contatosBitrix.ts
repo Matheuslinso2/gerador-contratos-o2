@@ -57,7 +57,8 @@ async function emailsDosUsuarios(ids: number[]): Promise<Map<number, string>> {
 export async function ultimosContatosPorImobiliaria(
   db: SupabaseClient,
   idsImobiliarias: string[],
-  emailsDaCampanha: Map<string, string> // imobiliária -> último e-mail da campanha enviado (ISO)
+  emailsDaCampanha: Map<string, string>, // imobiliária -> último e-mail da campanha enviado (ISO)
+  historicoDaCampanha: Map<string, { data: string; rotulo: string }[]> = new Map() // imobiliária -> cada e-mail da campanha enviado
 ): Promise<Map<string, ContatosImobiliaria>> {
   const resultado = new Map<string, ContatosImobiliaria>();
   if (!idsImobiliarias.length) return resultado;
@@ -125,7 +126,12 @@ export async function ultimosContatosPorImobiliaria(
   const emailPorUsuario = await emailsDosUsuarios(atividades.map((a) => Number(a.RESPONSIBLE_ID)));
 
   for (const imob of idsImobiliarias) {
-    resultado.set(imob, { eventos: [], emailCampanha: emailsDaCampanha.get(imob) ?? null, semEmpresaNoBitrix: !empresasPorImob.has(imob) });
+    resultado.set(imob, {
+      eventos: [],
+      emailCampanha: emailsDaCampanha.get(imob) ?? null,
+      historicoCampanha: (historicoDaCampanha.get(imob) ?? []).map((h) => ({ id: null, data: h.data, canal: "email", quem: null, origem: "campanha", observacao: h.rotulo })),
+      semEmpresaNoBitrix: !empresasPorImob.has(imob),
+    });
   }
   for (const a of atividades) {
     const imob = a.OWNER_TYPE_ID === "4" ? imobPorEmpresa.get(Number(a.OWNER_ID)) : imobPorNegocio.get(Number(a.OWNER_ID));
@@ -151,7 +157,10 @@ export async function ultimosContatosPorImobiliaria(
       observacao: m.observacao,
     });
   }
-  for (const c of resultado.values()) c.eventos.sort((a, b) => (a.data < b.data ? 1 : a.data > b.data ? -1 : 0));
+  for (const c of resultado.values()) {
+    c.eventos.sort((a, b) => (a.data < b.data ? 1 : a.data > b.data ? -1 : 0));
+    c.historicoCampanha.sort((a, b) => (a.data < b.data ? 1 : a.data > b.data ? -1 : 0));
+  }
   return resultado;
 }
 
@@ -173,6 +182,7 @@ export function resumirContatos(lista: ContatosImobiliaria[], responsavelEmail: 
     doResponsavel,
     eventos: naTela,
     emailCampanha: lista.map((c) => c.emailCampanha).reduce<string | null>((m, d) => maisRecente(m, d), null),
+    historicoCampanha: lista.flatMap((c) => c.historicoCampanha).sort((a, b) => (a.data < b.data ? 1 : a.data > b.data ? -1 : 0)),
     ultimo,
     diasSemContato: ultimo ? Math.max(0, Math.floor((Date.now() - Date.parse(ultimo)) / 86_400_000)) : null,
     semEmpresaNoBitrix: lista.every((c) => c.semEmpresaNoBitrix),

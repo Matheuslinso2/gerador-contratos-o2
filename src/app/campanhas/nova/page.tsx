@@ -11,6 +11,7 @@ import InfoLegenda from "@/components/InfoLegenda";
 import { SeletorProdutos } from "../SeletorProdutos";
 import { EditorCorpo } from "../EditorCorpo";
 import { criarCampanha } from "./actions";
+import { ROTULO_NOVA_CAMPANHA, tipoDaQuery } from "@/lib/campanhas/tiposCampanha";
 import RascunhoAutomatico from "@/components/RascunhoAutomatico";
 
 const inputClass =
@@ -19,9 +20,10 @@ const inputClass =
 export default async function NovaCampanhaPage({
   searchParams,
 }: {
-  searchParams: Promise<{ erro?: string; pai?: string }>;
+  searchParams: Promise<{ erro?: string; pai?: string; tipo?: string }>;
 }) {
-  const { erro, pai } = await searchParams;
+  const { erro, pai, tipo: tipoBruto } = await searchParams;
+  const tipo = tipoDaQuery(tipoBruto);
   const supabase = await createClient();
   const {
     data: { user },
@@ -42,12 +44,13 @@ export default async function NovaCampanhaPage({
           ← Voltar pra lista de campanhas
         </Link>
 
-        <PageHeader icon={<IconMail />} titulo="Nova campanha" subtitulo="Passo 1 de 2 — conteúdo do e-mail." />
+        <PageHeader icon={<IconMail />} titulo={ROTULO_NOVA_CAMPANHA[tipo]} subtitulo="Passo 1 de 2 — conteúdo do e-mail." />
 
         {erro && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
 
         <form action={criarCampanha} className="space-y-4 rounded-2xl border border-o2-navy/10 bg-quadro p-6 shadow-sm">
           <RascunhoAutomatico />
+          <input type="hidden" name="tipo" value={tipo} />
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">Nome interno da campanha</label>
             <input name="nome" required placeholder="Ex: Divulgação Seguro Fiança" className={inputClass} />

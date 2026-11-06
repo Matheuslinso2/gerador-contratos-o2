@@ -115,8 +115,36 @@ export default async function ProducaoCampanha({
       .pop();
     if (ultimo) emailsCampanha.set(id, ultimo);
   }
+  // Histórico dos e-mails da campanha na trilha de contato (06/11/2026): uma mensagem = um item (disparo, cada parcial,
+  // cada reenvio), sem substituir o anterior. Mensagem = campanha + rodada de uma imobiliária.
+  const historicoEmails = new Map<string, { data: string; rotulo: string }[]>();
+  if (idsContato.length) {
+    const { data: filhosCamp } = await db.from("campanhas").select("id, nome").eq("campanha_pai_id", campanha.id);
+    const nomePorCampanha = new Map<string, string>([[campanha.id, campanha.nome], ...((filhosCamp ?? []) as { id: string; nome: string }[]).map((f): [string, string] => [f.id, f.nome])]);
+    const idsCampanhas = [...nomePorCampanha.keys()];
+    const mensagens = new Map<string, { imob: string; campanhaId: string; rodada: number; data: string }>();
+    for (let i = 0; i < idsContato.length; i += 100) {
+      const { data: envios } = await db
+        .from("campanhas_envios")
+        .select("imobiliaria_id, campanha_id, rodada, enviado_em")
+        .in("campanha_id", idsCampanhas)
+        .in("imobiliaria_id", idsContato.slice(i, i + 100))
+        .eq("status", "enviado")
+        .not("enviado_em", "is", null);
+      for (const e of (envios ?? []) as { imobiliaria_id: string; campanha_id: string; rodada: number; enviado_em: string }[]) {
+        const chave = `${e.imobiliaria_id}|${e.campanha_id}|${e.rodada}`;
+        const atual = mensagens.get(chave);
+        if (!atual || e.enviado_em < atual.data) mensagens.set(chave, { imob: e.imobiliaria_id, campanhaId: e.campanha_id, rodada: e.rodada, data: e.enviado_em });
+      }
+    }
+    for (const m of mensagens.values()) {
+      const base = m.campanhaId === campanha.id ? "E-mail da campanha" : (nomePorCampanha.get(m.campanhaId) ?? "E-mail da campanha");
+      const rotulo = m.rodada > 1 ? `${base} (reenvio ${m.rodada - 1})` : base;
+      historicoEmails.set(m.imob, [...(historicoEmails.get(m.imob) ?? []), { data: m.data, rotulo }]);
+    }
+  }
   const contatosPorImob: Map<string, ContatosImobiliaria> | null = idsContato.length
-    ? await ultimosContatosPorImobiliaria(db, idsContato, emailsCampanha).catch(() => null)
+    ? await ultimosContatosPorImobiliaria(db, idsContato, emailsCampanha, historicoEmails).catch(() => null)
     : null;
   // Contador olha primeiro o responsável da imobiliária na campanha.
   const contatosDaLinha = (l: { unidadeIds: string[]; responsavelEmail: string | null }) =>

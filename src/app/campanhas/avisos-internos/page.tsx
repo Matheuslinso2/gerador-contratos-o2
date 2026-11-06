@@ -7,6 +7,7 @@ import AppHeader from "@/components/AppHeader";
 import PageHeader from "@/components/PageHeader";
 import { IconMail } from "@/components/icons";
 import { TEMPLATES_AVISO_INTERNO } from "@/lib/avisosInternos/templates";
+import { AbasCampanhas } from "../AbasCampanhas";
 
 export const dynamic = "force-dynamic";
 
@@ -45,9 +46,11 @@ export default async function AvisosInternosPage({
     <>
       <AppHeader userEmail={user?.email} logoutAction={signOut} />
       <main className="mx-auto max-w-3xl flex-1 space-y-6 p-8">
+        <AbasCampanhas ativa="avisos" />
+
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <Link href="/campanhas" className="text-sm font-medium text-o2-navy hover:underline">
-            ← Voltar pra campanhas
+          <Link href="/" className="text-sm font-medium text-o2-navy hover:underline">
+            ← Voltar ao início
           </Link>
           <Link href="/campanhas/avisos-internos/equipe" className="text-xs font-medium text-o2-navy hover:underline">
             Gerenciar e-mails da equipe

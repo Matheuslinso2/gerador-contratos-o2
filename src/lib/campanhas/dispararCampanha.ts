@@ -75,7 +75,7 @@ export async function dispararCampanha(
 
   const { error: erroInsert } = await supabase
     .from("campanhas_envios")
-    .upsert(linhas, { onConflict: "campanha_id,email", ignoreDuplicates: true });
+    .upsert(linhas.map((l) => ({ ...l, rodada: 1 })), { onConflict: "campanha_id,email,rodada", ignoreDuplicates: true });
   if (erroInsert) return { ok: false, erro: erroInsert.message };
 
   await supabase

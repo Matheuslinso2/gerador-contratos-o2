@@ -97,7 +97,23 @@ export default function ContatoImobiliaria({
               )}
             </div>
           ))}
-          {contatos.emailCampanha && <div className="whitespace-nowrap text-gray-400">✉ e-mail da campanha {ddmm(contatos.emailCampanha)}</div>}
+          {/* Histórico dos e-mails da campanha (disparo, parciais, reenvios): um item por mensagem, nenhum substitui o outro. */}
+          {contatos.historicoCampanha.length > 0 ? (
+            <details className="text-gray-400">
+              <summary className="cursor-pointer whitespace-nowrap">
+                ✉ e-mails da campanha ({contatos.historicoCampanha.length}) · último {ddmm(contatos.historicoCampanha[0].data)}
+              </summary>
+              <div className="mt-0.5 space-y-0.5">
+                {contatos.historicoCampanha.map((h, i) => (
+                  <div key={`${h.data}-${i}`} className="whitespace-nowrap">
+                    ✉ {ddmm(h.data)} · {h.observacao ?? "e-mail da campanha"}
+                  </div>
+                ))}
+              </div>
+            </details>
+          ) : (
+            contatos.emailCampanha && <div className="whitespace-nowrap text-gray-400">✉ e-mail da campanha {ddmm(contatos.emailCampanha)}</div>
+          )}
           {contatos.semEmpresaNoBitrix && <div className="text-amber-700">sem empresa ligada no Bitrix</div>}
         </>
       )}
