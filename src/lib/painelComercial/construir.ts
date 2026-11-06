@@ -31,6 +31,15 @@ export type EntradaConstrucao = {
   nomesEtapas12: Record<string, string>; // STATUS_ID -> nome atual (crm.dealcategory.stage.list id 12)
   metasPersonalizadas: Map<string, { meta: number | null; unidade: string | null; prazo: string | null }>; // por card
   mesesCongelados: Datasets; // kpi/equipe/camp_kpi de meses já fechados (retrato fixo)
+  /** Opcional: recebe a base já interpretada (cards, calls e resultado financeiro) para a comissão da equipe (nov/26). Não altera os datasets. */
+  coletarBase?: (base: BaseComissaoEquipe) => void;
+};
+
+/** Base interpretada do Bitrix para a regra de comissão por cotação/efetivação (06/11/2026). */
+export type BaseComissaoEquipe = {
+  cards: { card: string; empresaId: string; cliente: string; vendedora: string; funil: string; etapa: string; produtos: string[]; dataCotacao: string | null; situacaoCotacao: string | null; campanha: string | null }[];
+  calls: { card: string; empresaId: string; data: string; vendedora: string; funil: string; evento: string; resultadoId: string; resultado: string; realizada: boolean; treino: boolean }[];
+  fin: { empresaId: string; cliente: string; vendedora: string; apolices: number; comissao: number; data: string | null; mes: string | null }[];
 };
 
 // ---------------------------------------------------------------------------
@@ -61,7 +70,10 @@ const F = {
   reuniaoRealizada: "UF_CRM_6AA45191E7B9F",
   tipos: "UF_CRM_1792168723247",
   gestor: "UF_CRM_O2_GESTOR_CONTA",
+  dataCotacao: "UF_CRM_1793990836776", // "Data de cotação" (date) da Oportunidade comercial
+  situacaoCotacao: "UF_CRM_6ADF668BBCADB", // "Situação da cotação" (enumeração)
 };
+const SITUACAO_COTACAO: Record<string, string> = { "3540": "Sem demanda atual", "3542": "Dados pendentes", "3544": "Em elaboração", "3546": "Proposta enviada", "3548": "Contratada", "3550": "Não contratada" };
 const E = { apolices: "UF_CRM_1788467865683", comissao: "UF_CRM_1788467885830", dataResultado: "UF_CRM_1789589770952" };
 // Oportunidades geradas (30/10/2026): funil Sucesso, etapa Oportunidade (UC_ZX9NXX),
 // mês definido SÓ pelo campo "Data de entrada — Oportunidade comercial".
@@ -430,7 +442,7 @@ export function construirDatasets(entrada: EntradaConstrucao): Datasets {
   for (const c of cards) {
     if (c.empresaId && c.empresaId !== "0" && (!empresaVendedora.has(c.empresaId) || c.cat === 0)) empresaVendedora.set(c.empresaId, c.vendedora);
   }
-  type Fin = { cliente: string; vendedora: string; apolices: number; comissao: number; data: string | null; mes: string | null; fora: string | null };
+  type Fin = { empresaId: string; cliente: string; vendedora: string; apolices: number; comissao: number; data: string | null; mes: string | null; fora: string | null };
   const fin: Fin[] = [];
   for (const [id, vend] of empresaVendedora) {
     const e = empresas.get(id);
@@ -441,7 +453,7 @@ export function construirDatasets(entrada: EntradaConstrucao): Datasets {
     const data = dataSimples(e[E.dataResultado]);
     const titulo = str(e.TITLE);
     const excecao = Object.entries(EXCECAO_RESULTADO_FORA_DO_MES).find(([k]) => titulo.toUpperCase().includes(k));
-    fin.push({ cliente: titulo, vendedora: vend, apolices, comissao, data, mes: excecao ? excecao[1] : mesDe(data), fora: excecao ? excecao[1] : null });
+    fin.push({ empresaId: id, cliente: titulo, vendedora: vend, apolices, comissao, data, mes: excecao ? excecao[1] : mesDe(data), fora: excecao ? excecao[1] : null });
   }
   d.resultado_fin = fin
     .map((f) => ({
@@ -803,6 +815,22 @@ export function construirDatasets(entrada: EntradaConstrucao): Datasets {
       return { mes: m, rotulo: `${ROTULO_MES[mm - 1]} ${a}`, periodo: atual ? `01 a ${hoje.slice(8, 10)}/${hoje.slice(5, 7)} (parcial)` : "mês fechado", padrao: atual ? "Sim" : "Não" };
     });
   d.origens = origens(hoje);
+  entrada.coletarBase?.({
+    cards: cards.map((c) => ({
+      card: c.id,
+      empresaId: c.empresaId,
+      cliente: c.cliente,
+      vendedora: c.vendedora,
+      funil: c.funil,
+      etapa: c.etapa,
+      produtos: c.produtos,
+      dataCotacao: dataSimples(c.deal[F.dataCotacao]),
+      situacaoCotacao: SITUACAO_COTACAO[str(c.deal[F.situacaoCotacao])] ?? null,
+      campanha: c.campanha?.nome ?? null,
+    })),
+    calls: eventosCall.map((e) => ({ card: e.card, empresaId: donoAtual.get(e.card)?.empresaId ?? "", data: e.data, vendedora: e.vendedora, funil: e.funil, evento: e.evento, resultadoId: e.resultadoId, resultado: e.resultado, realizada: e.realizada, treino: e.treino })),
+    fin: fin.map((f) => ({ empresaId: f.empresaId, cliente: f.cliente, vendedora: f.vendedora, apolices: f.apolices, comissao: f.comissao, data: f.data, mes: f.mes })),
+  });
   return d;
 }
 
