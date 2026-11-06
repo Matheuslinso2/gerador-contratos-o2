@@ -68,3 +68,8 @@ create policy erp_nibo_painel_estrutura_o2 on public.erp_nibo_painel_estrutura f
 
 -- 03/11/2026 (11): só Matheus, Nathalie e William veem o Nibo (podeVerNibo, checado no servidor em /erp/nibo). No banco, as 8 funções financeiras (painel 2/3 args, analise, indicadores, dfc, financiamento_contrapartes, lanc_g, simples_estimativa)
 -- tiveram EXECUTE revogado de public/anon/authenticated e liberado só para service_role: nem outro colaborador O2 as chama direto pela API. Telas novas devem ler com createServiceClient() DEPOIS de checar podeVerNibo. Migração "erp_nibo_funcoes_so_servidor".
+
+-- 06/11/2026 (12): GUIAS DE TRIBUTOS lidas do Onvio (Portal do Cliente da Mover Contabilidade) — tabela erp_fin_guias_tributos(empresa, tributo, competencia, vencimento, valor_total, composicao jsonb, numero_documento, fonte, lido_em, pago_nibo_data, pago_nibo_valor, observacao),
+-- unique (empresa, tributo, competencia); RLS ligada SEM política (só service_role lê). Migração "erp_fin_guias_tributos". Leitura: documentos em Documentos > Fiscal > <ano>/<mês> (Capitalização) e Fiscal/2026/GUIAS PARA PAGAMENTO/<mês> (Corretora);
+-- API: GET /api/storage/v1/containers/documents?parentIds=<pasta>&pageSize=100 (customFields.dueDate = vencimento); visualização: /clientcenter/pt/documents/clients/<cliente>/folder/<pasta>/document/<doc>.
+-- Capitalização, DAS jan–set/2026 (devido R$ 208.644,67): só fev (14.515,07, pago 20/03) e mar (19.153,76, pago 20/04) têm pagamento no Nibo; em aberto R$ 174.975,84 (jan 21.843,33; abr 29.429,02; mai 32.437,45; jun 24.132,28; jul 22.071,02; ago 35.890,89; set 9.171,85), sem multa e juros.
