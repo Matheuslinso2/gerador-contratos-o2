@@ -89,6 +89,8 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
     const { data } = await supabase.rpc("erp_retrato", { p_funcao: "erp_renovacao_indice", p_de: "2026-09-01", p_ate: per.ate, p_max_idade: IDADE_RETRATO_ABERTO });
     return ((data ?? []) as LinhaIndice[]);
   })();
+  type FunilLinha = { situacao: string; status_planilha: string; linhas: number; cotadas: number; com_data_efetivacao: number; com_apolice_nova: number; sem_apolice_nova: number };
+  const pFunil = (async () => (await supabase.rpc("erp_renovacao_funil", { p_mes: per.mes })).data)();
   const pNaoRenov = (async () => (await supabase.from("erp_renovacao_desfecho").select("documento_id, nosso_numero, numero_apolice, vigencia_fim, seguradora, produto, imobiliaria, premio_liquido, desfecho, motivo")
     .eq("mes_vencimento", per.mes).in("desfecho", ["nao_renovada", "aguardando_decisao"]).order("vigencia_fim").limit(400)).data)();
 
@@ -175,6 +177,10 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
   const cards = [...porChave.values()].sort((a, b) => a.fim.localeCompare(b.fim) || a.titulo.localeCompare(b.titulo));
 
   // Renovações ainda SEM DESFECHO de apólices que já não estão vigentes: continuam sendo acompanhadas até Renovado ou Não renovado (Matheus 28/10/2026)
+  const funil = ((await pFunil) ?? []) as FunilLinha[];
+  const fTot = funil.reduce((s, l) => ({ linhas: s.linhas + Number(l.linhas), cotadas: s.cotadas + Number(l.cotadas), nova: s.nova + Number(l.com_apolice_nova) }), { linhas: 0, cotadas: 0, nova: 0 });
+  const fEfet = funil.filter((l) => l.situacao === "efetivada").reduce((s, l) => ({ linhas: s.linhas + Number(l.linhas), nova: s.nova + Number(l.com_apolice_nova), sem: s.sem + Number(l.sem_apolice_nova) }), { linhas: 0, nova: 0, sem: 0 });
+  const ROT_SIT: Record<string, string> = { em_andamento: "Em andamento", efetivada: "Efetivada", perdida: "Perdida / não efetivada" };
   const abertasRaw = await pAbertas;
   const abertasCand = ((abertasRaw ?? []) as unknown as Aberta[]).filter((a) => a.doc && a.doc.situacao !== "vigente" && a.doc.situacao !== "cancelado");
   const abertasCancel = await comCancelamento(abertasCand.map((a) => a.doc!.id));
@@ -384,6 +390,40 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
               </div>
             </details>
           ))}
+        </section>
+      )}
+
+      {funil.length > 0 && (
+        <section className="space-y-2 rounded-2xl border border-indigo-200 bg-indigo-50/60 p-4">
+          <h2 className="text-base font-semibold text-gray-900">
+            Funil da renovação em {per.rotulo}: planilha da equipe × apólice emitida
+            <InfoLegenda titulo="Funil da renovação">
+              A renovação nasce no Corp, vira uma linha na planilha da equipe (RN do mês), é cotada nas seguradoras, negociada com o cliente e efetivada. Cada linha mantém o histórico (cotador, data da cotação, negociação, efetivação e as versões da planilha). Cotada nem sempre efetiva (200 cotadas e 193 efetivadas, por exemplo, não é erro). A pendência real é a efetivada na planilha que ainda não tem apólice nova no ERP, e a apólice nova emitida que não tem linha na planilha. Fonte: abas RN das planilhas Cotação Diária RE, lidas por inteiro.
+            </InfoLegenda>
+          </h2>
+          <p className="text-xs text-gray-600">
+            {fTot.linhas} linha(s) na planilha · {fTot.cotadas} cotada(s) · {fEfet.linhas} efetivada(s), das quais {fEfet.nova} já têm apólice nova no ERP{fEfet.sem > 0 ? ` e ${fEfet.sem} ainda não têm (conferir emissão ou vínculo)` : ""}.
+          </p>
+          <div className="overflow-x-auto rounded-xl border border-indigo-100 bg-white">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+                <tr><th className="px-3 py-2">Fase</th><th className="px-3 py-2">Status na planilha</th><th className="px-3 py-2 text-right">Linhas</th><th className="px-3 py-2 text-right">Cotadas</th><th className="px-3 py-2 text-right">Com data de efetivação</th><th className="px-3 py-2 text-right">Com apólice nova no ERP</th><th className="px-3 py-2 text-right">Sem apólice nova</th></tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {funil.map((l) => (
+                  <tr key={`${l.situacao}|${l.status_planilha}`} className="hover:bg-gray-50">
+                    <td className="px-3 py-1.5">{ROT_SIT[l.situacao] ?? l.situacao}</td>
+                    <td className="px-3 py-1.5 font-medium">{l.status_planilha}</td>
+                    <td className="px-3 py-1.5 text-right">{l.linhas}</td>
+                    <td className="px-3 py-1.5 text-right">{l.cotadas}</td>
+                    <td className="px-3 py-1.5 text-right">{l.com_data_efetivacao}</td>
+                    <td className="px-3 py-1.5 text-right">{l.com_apolice_nova}</td>
+                    <td className={`px-3 py-1.5 text-right ${l.situacao === "efetivada" && Number(l.sem_apolice_nova) > 0 ? "font-semibold text-red-700" : "text-gray-500"}`}>{l.sem_apolice_nova}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       )}
 
