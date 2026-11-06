@@ -22,6 +22,9 @@ const FUNIL: Record<BlocoCriacao, { entity: number; categoria: number; etapa: st
 // campo do card que guarda o Nº da apólice anterior em cada funil (para não duplicar)
 const CAMPO_APOLICE: Record<BlocoCriacao, string> = { re_lotes: "ufCrm12NumApolice", re_demais: "ufCrm12NumApolice", fianca: "ufCrm10_1790800677", cap: "ufCrm14_1792781102", auto: "" };
 const ITEM_UNICO = new Set<BlocoCriacao>(["fianca", "cap", "auto", "re_demais"]);
+// Responsável do card (Matheus 06/11/2026): Ramos Elementares = Kamila Pimenta (31); Capitalização e Seguro Fiança = Patricia da Silva (57);
+// Automóvel = "André Lucas" (ainda sem usuário confirmado no Bitrix: a criação do Automóvel fica bloqueada até definir o id).
+const RESPONSAVEL: Record<BlocoCriacao, number | undefined> = { re_lotes: 31, re_demais: 31, fianca: 57, cap: 57, auto: undefined };
 
 const NOME_SEG: Record<string, string> = { TOKI: "TOKIO", YELU: "YELLUM", PORT: "PORTO", ALLI: "ALLIANZ", ZURI: "ZURICH", ALF: "ALFA", BRAD: "BRADESCO" };
 const SEG_FIANCA: Record<string, string> = { TOKI: "Tokio", PORT: "Porto", POTT: "Pottencial", TOO: "Too", JUNT: "Junto" };
@@ -86,7 +89,7 @@ export async function criarCardsRenovacao(
   const chavesExistentes = new Set<string>();
   const campoChave = CAMPO_APOLICE[ctx.bloco];
   if (campoChave) for (const i of existentes) for (const a of String(i[campoChave] ?? "").split(/[;,]/).map((x) => x.trim()).filter(Boolean)) chavesExistentes.add(a);
-  const responsavel = [...existentes].sort((a, b) => String(b.createdTime ?? "").localeCompare(String(a.createdTime ?? "")))[0]?.assignedById as number | undefined;
+  const responsavel = RESPONSAVEL[ctx.bloco];
 
   const registrar = async (r: ResultadoCard, ids: string[]) => {
     if (ctx.simular) return;
@@ -102,6 +105,7 @@ export async function criarCardsRenovacao(
     const base: ResultadoCard = { titulo: p.titulo, itens: ids.length, resultado: "ignorado" };
     try {
       if (!p.titulo.trim() || !ids.length) throw new Error("pedido inválido");
+      if (!responsavel) throw new Error("o responsável deste funil ainda não está definido (Automóvel: André Lucas); defina o usuário do Bitrix antes de criar");
       if ((ctx.bloco === "re_lotes" || ctx.bloco === "re_demais") && !/^RENOVAÇÃO - /.test(p.titulo)) throw new Error("título fora do padrão de Ramos Elementares");
       if (ITEM_UNICO.has(ctx.bloco) && ids.length !== 1) throw new Error("este funil tem 1 card por apólice");
       const { data: docsRaw } = await sb.from("erp_documentos")
@@ -234,7 +238,7 @@ export async function criarCardsRenovacao(
         };
         resumo = `Automóvel · funil padrão (SPA 1050) · apólice anterior ${docs[0].numero_apolice} · fim ${dataBr(docs[0].vigencia_fim)}`;
       }
-      fields = { title: p.titulo, categoryId: CATEGORIA, stageId: ETAPA, ...fields };
+      fields = { title: p.titulo, categoryId: CATEGORIA, stageId: ETAPA, assignedById: responsavel, ...fields };
 
       if (ctx.simular) { resultados.push({ ...base, resultado: "simulado", detalhe: `criaria: ${resumo}` }); continue; }
 
