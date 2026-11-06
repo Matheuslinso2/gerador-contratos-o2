@@ -15,8 +15,10 @@ import PainelResumoAba from "@/app/erp/PainelResumoAba";
 import NavegadorMes from "../NavegadorMes";
 import { periodoDoMes, IDADE_RETRATO_ABERTO } from "@/lib/erp/periodo";
 import PaginaErp from "../PaginaErp";
+import BotaoAutorizarCriacao from "./BotaoAutorizarCriacao";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 120; // a criação de cards (ação do botão) fala com o Bitrix card a card
 export const metadata = { title: "Renovação" };
 
 // ERP O2 — Renovação (Matheus 28/10/2026). PRÉVIA DE CRIAÇÃO DE CARDS: todas as apólices vigentes que vencem no período, já organizadas como serão os
@@ -528,7 +530,7 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
                 <h2 className="text-base font-semibold text-gray-900">
                   {b.titulo}
                   <InfoLegenda titulo={b.titulo}>
-                    {INFO_BLOCO[b.id]} Funil de destino no Bitrix: {b.funil}. Mostra quantos cards, quantas apólices e o prêmio líquido (conforme o Corp). As etiquetas coloridas apontam pendências a resolver antes de criar os cards (sem imobiliária, sem prêmio, sem Nº da apólice, cliente com cadastro incompleto) e quantas apólices já têm card no Bitrix ou já estão em andamento/renovadas. O botão está desligado: nada é criado ainda. Clique num card para ver as apólices dele.
+                    {INFO_BLOCO[b.id]} Funil de destino no Bitrix: {b.funil}. Mostra quantos cards, quantas apólices e o prêmio líquido (conforme o Corp). As etiquetas coloridas apontam pendências a resolver antes de criar os cards (sem imobiliária, sem prêmio, sem Nº da apólice, cliente com cadastro incompleto) e quantas apólices já têm card no Bitrix ou já estão em andamento/renovadas. Nos blocos de Ramos Elementares o botão Autorizar criação cria os cards no Bitrix só quando o setor responsável clicar (antes há "Conferir antes", que não cria nada); nos demais funis ele ainda está desligado. Clique num card para ver as apólices dele.
                   </InfoLegenda>
                 </h2>
                 <p className="text-xs text-gray-500">Destino: {b.funil} · {b.regra}</p>
@@ -545,12 +547,22 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
                   {jaRenov > 0 && <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">{jaRenov} já em andamento/renovada(s)</span>}
                 </div>
               </div>
-              <div className="text-right">
-                <button type="button" disabled title="A criação no Bitrix ainda não está ligada. Nesta fase a tela só mostra a prévia." className="cursor-not-allowed rounded-lg bg-gray-300 px-4 py-2 text-sm font-semibold text-white">
-                  Autorizar criação dos {cardsNovos} card(s) novo(s)
-                </button>
-                <p className="mt-1 max-w-[260px] text-xs text-gray-500">Autorização ainda não ligada ao Bitrix: nada é criado a partir desta tela.</p>
-              </div>
+              {b.id === "re_lotes" || b.id === "re_demais" ? (
+                <BotaoAutorizarCriacao
+                  bloco={b.id}
+                  de={de}
+                  ate={ate}
+                  cards={lista.filter((c) => c.docs.every((d) => !extra.get(d.documento_id)?.card)).map((c) => ({ titulo: c.titulo, documentoIds: c.docs.map((d) => d.documento_id) }))}
+                  itens={lista.filter((c) => c.docs.every((d) => !extra.get(d.documento_id)?.card)).reduce((s, c) => s + c.docs.length, 0)}
+                />
+              ) : (
+                <div className="text-right">
+                  <button type="button" disabled title="A criação por esta tela está ligada só aos Ramos Elementares. Este funil ainda é criado fora do ERP." className="cursor-not-allowed rounded-lg bg-gray-300 px-4 py-2 text-sm font-semibold text-white">
+                    Autorizar criação dos {cardsNovos} card(s) novo(s)
+                  </button>
+                  <p className="mt-1 max-w-[260px] text-xs text-gray-500">Ainda não ligado a este funil: nada é criado a partir desta tela.</p>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
