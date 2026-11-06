@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { enviarEmail } from "@/lib/email";
 import { EMAIL_COMERCIAL_O2, blocoSecao, botaoPill, envolverEmailO2, linhaCampo } from "@/lib/integracoes/emailO2";
+import { escolhasDoLead } from "@/lib/leadsSiteEscolhas";
 
 export const dynamic = "force-dynamic";
 
@@ -91,10 +92,20 @@ export async function POST(request: NextRequest) {
 
     // Aviso pro comercial a cada lead novo (pedido do Matheus, 05/10/2026).
     // enviarEmail só loga se falhar -- o lead já está salvo de qualquer forma.
+    const escolhas = escolhasDoLead(campos);
     const corpoHtml = [
       blocoSecao(
         "Contato",
         [linhaCampo("Nome", esc(nome)), linhaCampo("E-mail", esc(email)), linhaCampo("Telefone", esc(telefone))].join("")
+      ),
+      blocoSecao(
+        "Interesse do cliente",
+        // Se a pessoa não escolheu nada (ou o formulário não pergunta), diz
+        // isso em vez de omitir -- quem liga precisa saber que vai ter que
+        // descobrir o assunto na conversa.
+        escolhas.length
+          ? escolhas.map(([rotulo, valor]) => linhaCampo(rotulo, esc(valor))).join("")
+          : linhaCampo("Interesse", "Não preencheu")
       ),
       blocoSecao(
         "Origem",

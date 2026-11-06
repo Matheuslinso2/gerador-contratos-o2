@@ -9,6 +9,7 @@ import { IconReport } from "@/components/icons";
 import { buscarTrafegoSite } from "@/lib/cloudflareAnalytics";
 import { atualizarAcompanhamentoLead } from "./actions";
 import { cruzarLeadsComBitrix, mapaEtapasLead } from "@/lib/leadsSiteBitrix";
+import { resumoDasEscolhas } from "@/lib/leadsSiteEscolhas";
 
 export const dynamic = "force-dynamic";
 
@@ -39,28 +40,6 @@ type LeadRow = {
   atualizado_por: string | null;
   atualizado_em: string | null;
 };
-
-// Respostas "de escolha" do formulário (assunto de interesse etc.) -- o
-// plugin que manda o lead pro sistema só passa campos de texto, então o site
-// copia essas escolhas pra campos de texto escondidos com estes nomes (ver o
-// código "espelho" do formulário no WordPress). Aparece direto na linha do
-// lead, sem precisar abrir.
-const CAMPOS_DE_ESCOLHA: [string, string][] = [
-  ["interesse", "Interesse"],
-  ["tipo_solucao", "Procura"],
-  ["perfil_escolhido", "Perfil"],
-  ["contratos_escolhido", "Contratos ativos"],
-  ["empresa", "Imobiliária"],
-];
-
-function resumoDasEscolhas(campos: Record<string, unknown> | null): string {
-  const partes: string[] = [];
-  for (const [chave, rotulo] of CAMPOS_DE_ESCOLHA) {
-    const valor = campos?.[chave];
-    if (typeof valor === "string" && valor.trim()) partes.push(`${rotulo}: ${valor.trim()}`);
-  }
-  return partes.join(" · ");
-}
 
 const ROTULO_STATUS: Record<string, string> = {
   novo: "Novo",
