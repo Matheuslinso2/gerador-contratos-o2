@@ -33,17 +33,17 @@ export async function POST(req: Request) {
 
   try {
     const r = await responderComoRobo(user.email, turnos, painel);
-    // Campo do painel: cada pergunta respondida ganha um protocolo guardado na lista da pessoa (05/11/2026); falha ao guardar não derruba a resposta.
+    // Cada pergunta respondida ganha um protocolo guardado na lista da pessoa (painel: 05/11/2026; chat geral: 06/11/2026); falha ao guardar não derruba a resposta.
     let protocolo: string | null = null;
-    if (painel) {
+    {
       try {
         protocolo = await registrarProtocolo({
           email: user.email,
           tipo: "resposta",
-          painelId: painel.id,
-          competencia: painel.competencia,
+          painelId: painel?.id ?? null,
+          competencia: painel?.competencia ?? null,
           pergunta: turnos[turnos.length - 1].content,
-          conversa: [...turnos, { role: "assistant", content: r.texto }],
+          conversa: painel ? [...turnos, { role: "assistant", content: r.texto }] : [turnos[turnos.length - 1], { role: "assistant", content: r.texto }],
           logica: r.logica,
           fontes: r.fontes,
           cardsSelecionados: [],

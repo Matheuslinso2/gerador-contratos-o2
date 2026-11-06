@@ -65,14 +65,14 @@ export async function GET(req: Request) {
   if (url.searchParams.get("lista") === "1") {
     if (!user?.email || !chatVisivelPara(user.email) || !roboLiberadoPara(user.email)) return NextResponse.json({ erro: "sem acesso" }, { status: 403 });
     const painelId = url.searchParams.get("painel") ?? "";
-    if (!contextoPainelValido({ id: painelId, competencia: "2000-01" })) return NextResponse.json({ erro: "painel inválido" }, { status: 400 });
-    const { data } = await createServiceClient()
+    if (painelId && !contextoPainelValido({ id: painelId, competencia: "2000-01" })) return NextResponse.json({ erro: "painel inválido" }, { status: 400 });
+    let q = createServiceClient()
       .from("robo_protocolos")
       .select("protocolo, pergunta, competencia, tipo, criado_em")
-      .eq("email", user.email.toLowerCase())
-      .eq("painel_id", painelId)
-      .order("criado_em", { ascending: false })
-      .limit(40);
+      .eq("email", user.email.toLowerCase());
+    // sem painel = histórico do chat geral
+    q = painelId ? q.eq("painel_id", painelId) : q.is("painel_id", null);
+    const { data } = await q.order("criado_em", { ascending: false }).limit(40);
     return NextResponse.json({ itens: data ?? [] });
   }
   if (!isMatheus(user?.email)) return NextResponse.json({ erro: "sem acesso" }, { status: 403 });

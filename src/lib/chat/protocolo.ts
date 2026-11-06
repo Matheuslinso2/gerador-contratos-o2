@@ -18,6 +18,16 @@ function novoCodigo(): string {
   return `RO2-${dia}-${sufixo}`;
 }
 
+// Chat geral (sem painel): documentos, e-mails e telefones digitados na pergunta ficam mascarados no histórico guardado (06/11/2026).
+export function mascararPessoal(t: string): string {
+  return t
+    .replace(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/g, "***.***.***-**")
+    .replace(/\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/g, "**.***.***/****-**")
+    .replace(/(?<![\d.,])\d{11}(?![\d.,])/g, "***********")
+    .replace(/(?<![\d.,])\d{14}(?![\d.,])/g, "**************")
+    .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "***@***");
+}
+
 export const REGEX_PROTOCOLO = /^RO2-\d{8}-[A-Z2-9]{6}$/;
 
 export type DadosProtocolo = {
@@ -60,7 +70,8 @@ export function montarCaminho(codigo: string, d: DadosProtocolo): string {
   return linhas.join("\n");
 }
 
-export async function registrarProtocolo(d: DadosProtocolo): Promise<string> {
+export async function registrarProtocolo(dados: DadosProtocolo): Promise<string> {
+  const d: DadosProtocolo = dados.painelId ? dados : { ...dados, pergunta: mascararPessoal(dados.pergunta), conversa: dados.conversa.map((t) => ({ ...t, content: mascararPessoal(t.content) })) };
   const sb = createServiceClient();
   for (let tentativa = 0; tentativa < 4; tentativa++) {
     const codigo = novoCodigo();

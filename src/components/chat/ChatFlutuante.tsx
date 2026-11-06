@@ -38,6 +38,10 @@ export default function ChatFlutuante({ meuEmail }: { meuEmail: string }) {
   const [erro, setErro] = useState<string | null>(null);
   const [roboMsgs, setRoboMsgs] = useState<Mensagem[]>([]);
   const [roboPensando, setRoboPensando] = useState(false);
+  // Histórico do Robô no chat geral (protocolos guardados, só da própria pessoa): dropdown sempre fechado.
+  const [histAberto, setHistAberto] = useState(false);
+  const [histItens, setHistItens] = useState<{ protocolo: string; pergunta: string; criado_em: string }[] | null>(null);
+  const [histCarregando, setHistCarregando] = useState(false);
   const [pdfs, setPdfs] = useState<Record<string, { estado: "gerando" | "pronto" | "erro"; url?: string }>>({});
   const colegaPorConversa = useRef<Record<string, string>>({});
   const conversaAbertaRef = useRef<string | null>(null);
@@ -146,10 +150,28 @@ export default function ChatFlutuante({ meuEmail }: { meuEmail: string }) {
     }
   }
 
+  async function alternarHistorico() {
+    const novo = !histAberto;
+    setHistAberto(novo);
+    if (!novo || histCarregando) return;
+    setHistCarregando(true);
+    try {
+      const r = await fetch("/api/chat/robo/protocolo?lista=1");
+      const j = (await r.json().catch(() => ({}))) as { itens?: { protocolo: string; pergunta: string; criado_em: string }[] };
+      setHistItens(r.ok ? (j.itens ?? []) : []);
+    } catch {
+      setHistItens([]);
+    } finally {
+      setHistCarregando(false);
+    }
+  }
+
   async function perguntarAoRobo(t: string) {
     const nova: Mensagem = { id: crypto.randomUUID(), conversa_id: "robo", autor_email: meuEmail, texto: t, criado_em: new Date().toISOString() };
     const historico = [...roboMsgs, nova];
     setRoboMsgs(historico);
+    setHistAberto(false);
+    setHistItens(null); // a lista é recarregada na próxima abertura (inclui esta pergunta)
     setRoboPensando(true);
     setErro(null);
     try {
@@ -361,6 +383,43 @@ export default function ChatFlutuante({ meuEmail }: { meuEmail: string }) {
                 <div ref={fimRef} />
               </div>
               {erro && <p className="px-3 py-1 text-xs text-red-600">{erro}</p>}
+              {ehRobo && (
+                <div className="border-t border-black/10 px-2 pt-1.5">
+                  <button type="button" onClick={() => void alternarHistorico()} aria-expanded={histAberto} className="rounded-full border border-o2-navy/30 px-3 py-1 text-xs font-semibold text-o2-navy hover:bg-o2-navy/5">
+                    Histórico {histAberto ? "▴" : "▾"}
+                  </button>
+                  {histAberto && (
+                    <div className="mt-1.5 max-h-48 overflow-y-auto rounded-xl border border-black/10 bg-white p-1.5 text-xs">
+                      {histCarregando && <p className="p-1 text-o2-cinza-medio">Carregando…</p>}
+                      {!histCarregando && histItens && histItens.length === 0 && <p className="p-1 text-o2-cinza-medio">Nenhuma pergunta guardada ainda.</p>}
+                      {!histCarregando && histItens && histItens.length > 0 && (
+                        <ul className="divide-y divide-black/5">
+                          {histItens.map((i) => (
+                            <li key={i.protocolo} className="flex items-start gap-2 p-1">
+                              <div className="min-w-0 flex-1">
+                                <p className="break-words text-o2-navy">{i.pergunta}</p>
+                                <p className="text-[10px] text-o2-cinza-medio">
+                                  {i.protocolo} · {new Date(i.criado_em).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setTexto(i.pergunta);
+                                  setHistAberto(false);
+                                }}
+                                className="shrink-0 rounded-full border border-o2-navy/30 px-2.5 py-0.5 font-semibold text-o2-navy hover:bg-o2-navy/5"
+                              >
+                                Refazer
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
               <form onSubmit={enviar} className="flex gap-2 border-t border-black/10 p-2">
                 <input
                   value={texto}
