@@ -5,7 +5,7 @@ import { autorizarCriacaoCards } from "./actions";
 import type { PedidoCard, ResultadoCard } from "@/lib/erp/renovacaoCriarCards";
 
 // Botão de autorização de criação de cards (Ramos Elementares). Pede confirmação, mostra o que foi criado e o que foi ignorado (duplicidade, cancelada, já renovada).
-export default function BotaoAutorizarCriacao({ bloco, de, ate, cards, itens }: { bloco: "re_lotes" | "re_demais"; de: string; ate: string; cards: PedidoCard[]; itens: number }) {
+export default function BotaoAutorizarCriacao({ bloco, de, ate, cards, itens }: { bloco: "fianca" | "cap" | "auto" | "re_lotes" | "re_demais"; de: string; ate: string; cards: PedidoCard[]; itens: number }) {
   const [pendente, iniciar] = useTransition();
   const [resultados, setResultados] = useState<ResultadoCard[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);

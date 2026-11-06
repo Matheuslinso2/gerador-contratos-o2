@@ -161,7 +161,7 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
         bloco === "re_lotes" ? `RENOVAÇÃO - ${imob ?? "SEM IMOBILIÁRIA"} - ${segimob ? "SEG/" : ""}${nomeSeg(d.seguradora)} - ${mes}`
         : bloco === "fianca" ? `${cli}${imob ? ` - ${imob}` : ""}`
         : bloco === "cap" ? `VENCE ${formatarData(d.vigencia_fim)} | ${cli} | CORP ${ex?.corp ?? d.nosso_numero}`
-        : bloco === "auto" ? `RENOVAÇÃO - ${cli}`
+        : bloco === "auto" ? `RENOVAÇÃO - ${formatarData(d.vigencia_fim)} - ${cli}`
         : `RENOVAÇÃO - ${ex?.abrev || d.ramo} - ${cli}${imob && !cli.toUpperCase().startsWith(imob.toUpperCase().slice(0, 12)) ? ` - ${imob}` : ""} - ${mes}`;
       c = { chave: chaveCard, tipo: d.tipo_card, titulo, docs: [], fim: d.vigencia_fim, premio: 0, comissaoMin: null, segimob, canais: [], bloco };
       porChave.set(chaveCard, c);
@@ -530,7 +530,7 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
                 <h2 className="text-base font-semibold text-gray-900">
                   {b.titulo}
                   <InfoLegenda titulo={b.titulo}>
-                    {INFO_BLOCO[b.id]} Funil de destino no Bitrix: {b.funil}. Mostra quantos cards, quantas apólices e o prêmio líquido (conforme o Corp). As etiquetas coloridas apontam pendências a resolver antes de criar os cards (sem imobiliária, sem prêmio, sem Nº da apólice, cliente com cadastro incompleto) e quantas apólices já têm card no Bitrix ou já estão em andamento/renovadas. Nos blocos de Ramos Elementares o botão Autorizar criação cria os cards no Bitrix só quando o setor responsável clicar (antes há "Conferir antes", que não cria nada); nos demais funis ele ainda está desligado. Clique num card para ver as apólices dele.
+                    {INFO_BLOCO[b.id]} Funil de destino no Bitrix: {b.funil}. Mostra quantos cards, quantas apólices e o prêmio líquido (conforme o Corp). As etiquetas coloridas apontam pendências a resolver antes de criar os cards (sem imobiliária, sem prêmio, sem Nº da apólice, cliente com cadastro incompleto) e quantas apólices já têm card no Bitrix ou já estão em andamento/renovadas. O botão Autorizar criação cria os cards no Bitrix só quando o setor responsável clicar (antes há "Conferir antes", que não cria nada). Automóvel usa o funil padrão, com o título "RENOVAÇÃO - fim da vigência - nome do segurado". Clique num card para ver as apólices dele.
                   </InfoLegenda>
                 </h2>
                 <p className="text-xs text-gray-500">Destino: {b.funil} · {b.regra}</p>
@@ -547,22 +547,13 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
                   {jaRenov > 0 && <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">{jaRenov} já em andamento/renovada(s)</span>}
                 </div>
               </div>
-              {b.id === "re_lotes" || b.id === "re_demais" ? (
-                <BotaoAutorizarCriacao
-                  bloco={b.id}
-                  de={de}
-                  ate={ate}
-                  cards={lista.filter((c) => c.docs.every((d) => !extra.get(d.documento_id)?.card)).map((c) => ({ titulo: c.titulo, documentoIds: c.docs.map((d) => d.documento_id) }))}
-                  itens={lista.filter((c) => c.docs.every((d) => !extra.get(d.documento_id)?.card)).reduce((s, c) => s + c.docs.length, 0)}
-                />
-              ) : (
-                <div className="text-right">
-                  <button type="button" disabled title="A criação por esta tela está ligada só aos Ramos Elementares. Este funil ainda é criado fora do ERP." className="cursor-not-allowed rounded-lg bg-gray-300 px-4 py-2 text-sm font-semibold text-white">
-                    Autorizar criação dos {cardsNovos} card(s) novo(s)
-                  </button>
-                  <p className="mt-1 max-w-[260px] text-xs text-gray-500">Ainda não ligado a este funil: nada é criado a partir desta tela.</p>
-                </div>
-              )}
+              <BotaoAutorizarCriacao
+                bloco={b.id}
+                de={de}
+                ate={ate}
+                cards={lista.filter((c) => c.docs.every((d) => !extra.get(d.documento_id)?.card)).map((c) => ({ titulo: c.titulo, documentoIds: c.docs.map((d) => d.documento_id) }))}
+                itens={lista.filter((c) => c.docs.every((d) => !extra.get(d.documento_id)?.card)).reduce((s, c) => s + c.docs.length, 0)}
+              />
             </div>
 
             <div className="space-y-2">
