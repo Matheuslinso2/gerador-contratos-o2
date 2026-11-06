@@ -1,0 +1,6 @@
+-- ERP · Repasse FIXO por apólice · 06/11/2026 (migrations erp_repasse_fixo_por_apolice, erp_repasse_previsto_caixa_com_fixo).
+-- Achado: o Corp (erp_repasse_corp_controle) paga repasse FIXO por apólice (pct_rep = 0; R$ 50/100/150), só na 1ª parcela: 557 linhas nov/25–out/26 (~R$ 4 a 8 mil/mês); ex. Monte Alegre = 69 linhas de R$ 100, parcela 1.
+-- No ERP isso está em erp_documento_produtores.repasse_valor_previsto (1.237 produtores, 998 docs, 91 imobs, R$ 84,2 mil) e NENHUMA função de repasse o usava (só base × % × participação).
+--   erp_repasses.tipo ganha 'fixo' (erp_dominios.tipo_repasse); erp_regerar_repasse_da_baixa gera o fixo na baixa (extrato) da 1ª parcela: mês M→M+1, previsão dia 15, SEM desconto de 18% (regra 26/10), bloqueio respeitado.
+--   erp_autorizar_repasse soma 'fixo' como premiação (sem desconto); erp_aplicar_pro_labore_oficial só mexe em tipo 'comissao'. Backfill: 60 repasses fixos (out R$ 1.900, nov R$ 1.350, dez R$ 100). Modo teste: nenhum lote autorizado.
+--   erp_repasse_previsto_caixa inclui o fixo previsto (coluna do_qual_fixo_sem_desconto). A regra inferida de 5% em erp_repasse_regras (origem corp_import) para Fiança de Monte Alegre não vale: o valor real é fixo.
