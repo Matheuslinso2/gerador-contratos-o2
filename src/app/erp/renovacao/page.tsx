@@ -193,8 +193,8 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
   type Radar = { documento_id: string; nosso_numero: number; numero_apolice: string | null; produto: string; seguradora: string | null; cliente: string | null; imobiliaria: string | null; vigencia_fim: string; dias_para_vencer: number; bitrix_card_id: string | null; etapa: string; alerta: string; regra_dias_card: number; regra_confirmada: boolean };
   const { data: radarRaw } = await supabase.rpc("erp_renovacao_radar", { p_hoje: new Date().toISOString().slice(0, 10), p_horizonte: 75 });
   const radar = (radarRaw ?? []) as Radar[];
-  const ROT_ALERTA: Record<string, string> = { sem_card: "Sem card", parado_na_entrada: "Card parado na entrada", card_perdido: "Card perdido, apólice vigente" };
-  const COR_ALERTA: Record<string, string> = { sem_card: "bg-red-100 text-red-700", parado_na_entrada: "bg-orange-100 text-orange-800", card_perdido: "bg-gray-200 text-gray-700" };
+  const ROT_ALERTA: Record<string, string> = { sem_card: "Sem card", parado_na_entrada: "Card parado na entrada", card_perdido: "Card perdido, apólice vigente", parceria_encerrada: "Parceria encerrada (não renova)" };
+  const COR_ALERTA: Record<string, string> = { sem_card: "bg-red-100 text-red-700", parado_na_entrada: "bg-orange-100 text-orange-800", card_perdido: "bg-gray-200 text-gray-700", parceria_encerrada: "bg-slate-200 text-slate-700" };
   const radarAlertas = radar.filter((r) => r.alerta !== "ok");
   const radarPorAlerta = new Map<string, Radar[]>();
   for (const r of radarAlertas) radarPorAlerta.set(r.alerta, [...(radarPorAlerta.get(r.alerta) ?? []), r]);
@@ -352,7 +352,7 @@ export default async function ErpRenovacaoPage({ searchParams }: { searchParams:
               <span key={a} className={`rounded-full px-3 py-1 font-medium ${COR_ALERTA[a] ?? "bg-gray-100"}`}>{ROT_ALERTA[a] ?? a}: {l.length}</span>
             ))}
           </div>
-          {[...radarPorAlerta.entries()].filter(([a]) => a !== "card_perdido").map(([a, l]) => (
+          {[...radarPorAlerta.entries()].filter(([a]) => a !== "card_perdido" && a !== "parceria_encerrada").map(([a, l]) => (
             <details key={a} className="rounded-xl border border-gray-200 bg-white">
               <summary className="cursor-pointer px-4 py-2 text-sm font-medium text-gray-900">{ROT_ALERTA[a] ?? a} · {l.length} apólice(s) · as 60 mais próximas do fim</summary>
               <div className="overflow-x-auto border-t border-gray-100">
